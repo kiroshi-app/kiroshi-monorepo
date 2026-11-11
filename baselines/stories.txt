@@ -1524,9 +1524,11 @@ navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
 navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
+navigation-appsidebarconversationrow--icon-at-the-height-of-its-two-lines
 navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
 navigation-appsidebarconversationrow--long-title-and-preview-truncate
+navigation-appsidebarconversationrow--mission-capsules-are-inert
 navigation-appsidebarconversationrow--mixed-rooms-and-solo-conversations
 navigation-appsidebarconversationrow--monochrome-row
 navigation-appsidebarconversationrow--monochrome-row-dark
@@ -1781,15 +1783,13 @@ navigation-collapsedsidebar--e-3-empty-section-collapsed
 navigation-collapsedsidebar--every-open-state
 navigation-collapsedsidebar--hover-3-b
 navigation-collapsedsidebar--hover-on-conversation
-navigation-collapsedsidebar--keyboard-focus-on-mission
 navigation-collapsedsidebar--l-1-loading-collapsed
 navigation-collapsedsidebar--l-2-failed-collapsed
 navigation-collapsedsidebar--l-3-loading-more-collapsed
 navigation-collapsedsidebar--last-mission-completes
 navigation-collapsedsidebar--mission-thread-open
 navigation-collapsedsidebar--one-mission
-navigation-collapsedsidebar--overflow-with-popover-open
-navigation-collapsedsidebar--overflow-without-named-ticket
+navigation-collapsedsidebar--overflow-count-is-plain-text
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
@@ -1798,6 +1798,7 @@ navigation-collapsedsidebar--swipe-follows-the-fingers-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
 navigation-collapsedsidebar--swipe-with-one-space-does-nothing-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
+navigation-collapsedsidebar--tab-skips-the-mission-cells
 navigation-collapsedsidebar--trigger-connecting-collapsed
 navigation-collapsedsidebar--trigger-local-collapsed
 navigation-collapsedsidebar--trigger-offline-collapsed

@@ -252,6 +252,8 @@ const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
 const BARE_ROW_HEIGHT = 52
 
+const CONVERSATION_ROW_HEIGHT = 48
+
 const ROW_HEAD_HEIGHT = 40
 
 const STRIP_STEP = 28
@@ -587,7 +589,17 @@ const expectStripSpansRow = async (row: HTMLElement) => {
 	await expect(rowButton(row).contains(stripsIn(row)[0])).toBe(true)
 }
 
+const isConversationRow = (row: HTMLElement) =>
+	row.querySelector('[data-slot="conversation-subject-icon"]') !== null
+
 const expectAlignedRows = async (rows: HTMLElement[]) => {
+	const conversations = rows.filter(isConversationRow)
+	const companions = rows.filter((row) => !isConversationRow(row))
+	for (const kind of [conversations, companions])
+		if (kind.length > 0) await expectAlignedRowsOfOneKind(kind)
+}
+
+const expectAlignedRowsOfOneKind = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
@@ -5648,14 +5660,7 @@ export const ConversationParticipants = meta.story({
 				slotIn(crowd, "conversation-subject-icon").getBoundingClientRect()
 					.width,
 			),
-		).toBe(
-			Math.round(
-				slotIn(
-					rowFor(canvasElement, "Atlas"),
-					"bot-identity-avatar",
-				).getBoundingClientRect().width,
-			),
-		)
+		).toBe(36)
 	},
 })
 
@@ -5678,7 +5683,7 @@ export const ConversationOfOneBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The footprint is identical, so the column never moves. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
+					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The subject icon stands as tall as the room's two lines of text, 36px, beside the companion's 40px avatar. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
 			},
 		},
 	},
@@ -5695,9 +5700,8 @@ export const ConversationOfOneBot = meta.story({
 			bot.querySelector('[data-slot="conversation-bot-pile"]'),
 		).toBeNull()
 
-		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(
-			Math.round(loose.getBoundingClientRect().width),
-		)
+		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(36)
+		await expect(Math.round(loose.getBoundingClientRect().width)).toBe(40)
 		await expect(pileIn(room)).toHaveLength(1)
 		await expect(pileIn(room)[0].getBoundingClientRect().width).toBeLessThan(
 			loose.getBoundingClientRect().width,
@@ -5898,7 +5902,9 @@ export const WorkingLongSummary = meta.story({
 		await expect(preview.getBoundingClientRect().height).toBe(
 			quiet.getBoundingClientRect().height,
 		)
-		await expect(uniqueCount(rowHeights(rowsIn(canvasElement)))).toBe(1)
+		await expect(
+			uniqueCount(rowHeights(rowsIn(canvasElement).filter(isConversationRow))),
+		).toBe(1)
 	},
 })
 
@@ -5926,7 +5932,7 @@ export const ConversationMissionStrips = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 108px for its two missions while the rows with none keep their 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
+					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 104px for its two missions while the room with none keeps its 48px and the companion its 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
 			},
 		},
 	},
@@ -5944,9 +5950,9 @@ export const ConversationMissionStrips = meta.story({
 			),
 		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
-			heightForStrips(2),
-			heightForStrips(0),
-			heightForStrips(0),
+			CONVERSATION_ROW_HEIGHT + 2 * STRIP_STEP,
+			CONVERSATION_ROW_HEIGHT,
+			BARE_ROW_HEIGHT,
 		])
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
 			"Tue",

@@ -1096,12 +1096,15 @@ const expectMissionsRows = async ({
 		expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT),
 	)
 
-	first.focus()
-	await expect(first).toHaveFocus()
-	await expect(getComputedStyle(first).transitionDuration).toBe("0s")
-	first.click()
-	await expect(args.onOpenMission).toHaveBeenCalledWith("mission-OPE-512")
-	await expect(args.onSelectConversation).not.toHaveBeenCalled()
+	await expect(first.tabIndex).toBe(-1)
+	const capsule = first.getBoundingClientRect()
+	const onCapsule = document.elementFromPoint(
+		capsule.left + capsule.width / 2,
+		capsule.top + capsule.height / 2,
+	) as HTMLElement
+	await expect(onCapsule).toBe(head)
+	fireEvent.click(onCapsule, { detail: 1 })
+	await expect(args.onSelectConversation).toHaveBeenCalledTimes(1)
 
 	const padding = surface.getBoundingClientRect()
 	const hit = document.elementFromPoint(padding.left + 3, padding.bottom - 3)
@@ -1112,7 +1115,6 @@ export const ExpandedMissionsRows = meta.story({
 	...PAPER_ARTBOARD,
 	args: {
 		...MISSIONS_ROSTER,
-		onOpenMission: fn(),
 		onSelectConversation: fn(),
 	},
 	play: expectMissionsRows,
@@ -1122,7 +1124,6 @@ export const ExpandedMissionsRowsLight = meta.story({
 	parameters: PAPER_ARTBOARD.parameters,
 	args: {
 		...MISSIONS_ROSTER,
-		onOpenMission: fn(),
 		onSelectConversation: fn(),
 	},
 	play: async (context) => {

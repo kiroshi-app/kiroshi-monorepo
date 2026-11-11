@@ -1,6 +1,5 @@
 "use client"
 
-import { Menu } from "@base-ui/react/menu"
 import type { TFunction } from "i18next"
 import { Fragment, type ReactElement, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
@@ -97,15 +96,6 @@ const GROUP = "flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2"
 
 const OVERFLOW_COUNT =
 	"relative font-semibold text-[11px] text-foreground tabular-nums"
-
-const OVERFLOW_MENU =
-	"w-62 rounded-control bg-prompt-surface p-1 text-foreground shadow-rail-popover outline-none"
-
-const OVERFLOW_ROW =
-	"flex items-center gap-2 rounded-md p-2 text-xs/4 outline-none aria-[current=page]:bg-title-bar-chip data-highlighted:bg-title-bar-chip"
-
-const OVERFLOW_TICKET =
-	"w-15 shrink-0 truncate text-muted-foreground tabular-nums"
 
 const TIP = cn(
 	"max-w-xs flex-col items-start gap-0.5 rounded-md bg-prompt-surface p-2 text-foreground text-xs/4 shadow-rail-tooltip [&>[data-side]]:hidden",
@@ -396,89 +386,39 @@ const MissionGlyph = ({ state }: MissionGlyphProps) => (
 type MissionCellProps = {
 	mission: AppSidebarRowMission
 	isOpen: boolean
-	onOpen?: (missionId: string) => void
 }
 
-const MissionCell = ({ mission, isOpen, onOpen }: MissionCellProps) => (
+const MissionCell = ({ mission, isOpen }: MissionCellProps) => (
 	<RailTip content={<MissionTip mission={mission} />}>
-		<button
+		<span
 			aria-current={isOpen ? "page" : undefined}
-			aria-label={missionNameOf(mission)}
-			className={cn(ITEM, MISSION_ITEM, isOpen ? TILE_CURRENT : TILE_HOVER)}
+			className={cn(ITEM, MISSION_ITEM, isOpen && TILE_CURRENT)}
 			data-slot="collapsed-sidebar-mission"
 			data-state={mission.state}
-			onClick={() => onOpen?.(mission.id)}
-			type="button"
 		>
+			<span className="sr-only">{missionNameOf(mission)}</span>
 			<MissionGlyph state={mission.state} />
-		</button>
+		</span>
 	</RailTip>
 )
 
 type MissionOverflowProps = {
-	missions: AppSidebarRowMission[]
-	openMissionId?: string
-	onOpen?: (missionId: string) => void
+	count: number
 }
 
-const MissionOverflow = ({
-	missions,
-	openMissionId,
-	onOpen,
-}: MissionOverflowProps) => {
+const MissionOverflow = ({ count }: MissionOverflowProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
-		<Menu.Root>
-			<Menu.Trigger
-				aria-label={t("rail.moreMissions", { count: missions.length })}
-				className={cn(ITEM, MISSION_ITEM, TILE_CURRENT)}
-				data-slot="collapsed-sidebar-overflow"
-			>
-				<span className={OVERFLOW_COUNT}>
-					{t("roster.conversation.others", { count: missions.length })}
-				</span>
-			</Menu.Trigger>
-			<Menu.Portal>
-				<Menu.Positioner
-					align="start"
-					className="isolate z-50 outline-none"
-					side="right"
-					sideOffset={TIP_OFFSET}
-				>
-					<Menu.Popup
-						aria-label={t("rail.missions")}
-						className={OVERFLOW_MENU}
-						data-slot="collapsed-sidebar-overflow-menu"
-					>
-						{missions.map((mission) => {
-							const ticket = missionTicketOf(mission)
-
-							return (
-								<Menu.Item
-									aria-current={
-										mission.id === openMissionId ? "page" : undefined
-									}
-									className={OVERFLOW_ROW}
-									data-slot="collapsed-sidebar-overflow-row"
-									key={mission.id}
-									label={missionNameOf(mission)}
-									onClick={() => onOpen?.(mission.id)}
-								>
-									<MissionGlyph state={mission.state} />
-									{ticket ? (
-										<span className={OVERFLOW_TICKET}>{ticket}</span>
-									) : null}
-									<span className="min-w-0 flex-1 truncate">
-										{missionTitleOf(mission)}
-									</span>
-								</Menu.Item>
-							)
-						})}
-					</Menu.Popup>
-				</Menu.Positioner>
-			</Menu.Portal>
-		</Menu.Root>
+		<span
+			className={cn(ITEM, MISSION_ITEM)}
+			data-slot="collapsed-sidebar-overflow"
+		>
+			<span aria-hidden="true" className={OVERFLOW_COUNT}>
+				{t("roster.conversation.others", { count })}
+			</span>
+			<span className="sr-only">{t("rail.moreMissions", { count })}</span>
+		</span>
 	)
 }
 
@@ -518,7 +458,6 @@ type RailConversationProps = {
 	openConversationId?: string
 	openMissionId?: string
 	onOpenConversation?: (conversationId: string) => void
-	onOpenMission?: (missionId: string) => void
 }
 
 const RailConversation = ({
@@ -526,7 +465,6 @@ const RailConversation = ({
 	openConversationId,
 	openMissionId,
 	onOpenConversation,
-	onOpenMission,
 }: RailConversationProps) => {
 	const { t } = useTranslation("bots")
 	const missions = inRailOrder(conversation.missions)
@@ -588,15 +526,10 @@ const RailConversation = ({
 					isOpen={mission.id === openMissionId}
 					key={mission.id}
 					mission={mission}
-					onOpen={onOpenMission}
 				/>
 			))}
 			{isOverflowing ? (
-				<MissionOverflow
-					missions={missions.slice(CELLS_BEFORE_OVERFLOW)}
-					onOpen={onOpenMission}
-					openMissionId={openMissionId}
-				/>
+				<MissionOverflow count={missions.length - CELLS_BEFORE_OVERFLOW} />
 			) : null}
 		</div>
 	)
@@ -683,7 +616,6 @@ type RailListProps = Pick<
 	| "openConversationId"
 	| "openMissionId"
 	| "onOpenConversation"
-	| "onOpenMission"
 	| "onRetryList"
 >
 
@@ -858,7 +790,7 @@ const CollapsedSidebar = ({
 	onSelectLibrary,
 	onOpenSettings,
 	onOpenConversation,
-	onOpenMission,
+	onOpenMission: _onOpenMission,
 	onRetryList,
 	isSpaceSwitchingEnabled,
 	...switcher
@@ -908,7 +840,6 @@ const CollapsedSidebar = ({
 					listEnd={listEnd}
 					listStatus={listStatus}
 					onOpenConversation={onOpenConversation}
-					onOpenMission={onOpenMission}
 					onRetryList={onRetryList}
 					openConversationId={openConversationId}
 					openMissionId={openMissionId}

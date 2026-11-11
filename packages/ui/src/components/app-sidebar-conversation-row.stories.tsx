@@ -22,10 +22,7 @@ import {
 	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
-import type {
-	AppSidebarBot,
-	AppSidebarConversation,
-} from "@workspace/ui/components/app-sidebar"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
 	BEACON,
@@ -35,7 +32,11 @@ import {
 	SIDEBAR_SECTION,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
-import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
+import {
+	ConversationRosterRow,
+	ROW_ICON_SIDE,
+} from "@workspace/ui/components/app-sidebar-conversation-row"
+import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
@@ -161,9 +162,15 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 	const pile = boxOf(row, "conversation-bot-pile")
 	const previewLine = slotIn(row, "conversation-bot-pile")
 		.parentElement as HTMLElement
+	const nameLine = slotIn(row, "roster-row-name").parentElement as HTMLElement
 
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
-	await expect([cell.width, cell.height]).toEqual([40, 40])
+	await expect([cell.width, cell.height]).toEqual([36, 36])
+	await expect(cell.top).toBeCloseTo(nameLine.getBoundingClientRect().top, 1)
+	await expect(cell.bottom).toBeCloseTo(
+		previewLine.getBoundingClientRect().bottom,
+		1,
+	)
 	await expect(name.left - cell.right).toBe(10)
 	await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(1)
 	await expect(previewLine.getBoundingClientRect().height).toBe(16)
@@ -358,7 +365,7 @@ export const MonochromeRow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room with no colour, in the light theme. Check that the 40px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+					"A room with no colour, in the light theme. Check that the 36px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
 			},
 		},
 	},
@@ -371,7 +378,7 @@ export const MonochromeRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room with no colour, in the dark theme. Check that the 40px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+					"A room with no colour, in the dark theme. Check that the 36px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
 			},
 		},
 	},
@@ -386,7 +393,7 @@ export const MutedTintRow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured red with the shield key picked, in the light theme. Check that the 40px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+					"A room coloured red with the shield key picked, in the light theme. Check that the 36px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
 			},
 		},
 	},
@@ -403,7 +410,7 @@ export const MutedTintRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured red with the shield key picked, in the dark theme. Check that the 40px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+					"A room coloured red with the shield key picked, in the dark theme. Check that the 36px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
 			},
 		},
 	},
@@ -417,7 +424,7 @@ export const MutedTintRowFreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in the light theme. Check that the 40px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+					"A room coloured at a hue outside the eight presets, 210, in the light theme. Check that the 36px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
 			},
 		},
 	},
@@ -431,7 +438,7 @@ export const MutedTintRowFreeHueDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in the dark theme. Check that the 40px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+					"A room coloured at a hue outside the eight presets, 210, in the dark theme. Check that the 36px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
 			},
 		},
 	},
@@ -457,8 +464,6 @@ const MIXED_ROOMS_AND_SOLOS = [
 	soloWith(PICTURED_ATLAS),
 ]
 
-const ROW_MEDIA_SIDE = 40
-
 const mediaAvatarsIn = (row: HTMLElement) =>
 	slotsIn(row, "bot-identity-avatar").filter(
 		(avatar) => !avatar.closest('[data-slot="conversation-bot-pile"]'),
@@ -468,8 +473,8 @@ const expectMediaGeometry = async (row: HTMLElement, media: HTMLElement) => {
 	const cell = media.getBoundingClientRect()
 
 	await expect([cell.width, cell.height]).toEqual([
-		ROW_MEDIA_SIDE,
-		ROW_MEDIA_SIDE,
+		ROW_ICON_SIDE,
+		ROW_ICON_SIDE,
 	])
 	await expect(boxOf(row, "roster-row-name").left - cell.right).toBe(10)
 	await expect(boxOf(row, "conversation-bot-pile").height).toBe(16)
@@ -489,7 +494,7 @@ export const MixedRoomsAndSoloConversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A list mixing rooms and one-to-one conversations whose caller passes the agent. Check that each solo row leads with its agent's 40px hexagon, wearing the agent's working pose or uploaded picture, that each room leads with its subject icon, and that name, preview, pile and timestamp sit at the same place on both. Pick `SoloConversationRowDark` for the dark theme.",
+					"A list mixing rooms and one-to-one conversations whose caller passes the agent. Check that each solo row leads with its agent's 36px hexagon, wearing the agent's working pose or uploaded picture, that each room leads with its subject icon, and that name, preview, pile and timestamp sit at the same place on both. Pick `SoloConversationRowDark` for the dark theme.",
 			},
 		},
 	},
@@ -529,7 +534,7 @@ export const SoloConversationRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A one-to-one conversation whose caller passes its working agent, in the dark theme. Check that the agent's 40px hexagon leads the row in its writing pose, with no subject icon. Pick `MixedRoomsAndSoloConversations` for the light theme beside rooms.",
+					"A one-to-one conversation whose caller passes its working agent, in the dark theme. Check that the agent's 36px hexagon leads the row in its writing pose, with no subject icon. Pick `MixedRoomsAndSoloConversations` for the light theme beside rooms.",
 			},
 		},
 	},
@@ -644,44 +649,52 @@ export const KnockoutWearsTheRowAtRestAndHovered = meta.story({
 	},
 })
 
+const surfaceOf = (row: HTMLElement) =>
+	row.closest('[data-slot="context-menu-trigger"]') as HTMLElement
+
+const centreOf = (element: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	return [box.left + box.width / 2, box.top + box.height / 2] as const
+}
+
+const MISSIONS_ROOM: AppSidebarConversation = {
+	...roomOf([ATLAS, BEACON, CINDER]),
+	color: BLOT_HUES.blue,
+	icon: "Rocket",
+	missions: [
+		{
+			id: "m-waiting",
+			state: "waiting",
+			ticket: {
+				platform: "linear",
+				externalId: "OPE-512",
+				title: "Ship the release notes",
+			},
+		},
+		{
+			id: "m-working",
+			state: "working",
+			isLive: true,
+			ticket: {
+				platform: "linear",
+				externalId: "OPE-513",
+				title: "Rebuild the bundle",
+			},
+		},
+	],
+}
+
 export const OpenRowWithMissionCapsules = meta.story({
 	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	args: {
 		isSelected: true,
-		conversation: {
-			...roomOf([ATLAS, BEACON, CINDER]),
-			color: BLOT_HUES.blue,
-			icon: "Rocket",
-			missions: [
-				{
-					id: "m-waiting",
-					state: "waiting",
-					ticket: {
-						platform: "linear",
-						externalId: "OPE-512",
-						title: "Ship the release notes",
-					},
-				},
-				{
-					id: "m-working",
-					state: "working",
-					isLive: true,
-					ticket: {
-						platform: "linear",
-						externalId: "OPE-513",
-						title: "Rebuild the bundle",
-					},
-				},
-			],
-		},
+		conversation: MISSIONS_ROOM,
 	},
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expect(row).toHaveAttribute("aria-current", "page")
-		const surface = row.closest(
-			'[data-slot="context-menu-trigger"]',
-		) as HTMLElement
+		const surface = surfaceOf(row)
 		await expect(getComputedStyle(surface).backgroundColor).not.toBe(
 			TRANSPARENT,
 		)
@@ -697,6 +710,65 @@ export const OpenRowWithMissionCapsules = meta.story({
 				boxOf(row, "conversation-subject-icon").bottom,
 			)
 		}
+	},
+})
+
+export const MissionCapsulesAreInert = meta.story({
+	args: { conversation: MISSIONS_ROOM, onSelect: fn() },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A conversation with two open missions. Check each capsule is no button and no tab stop, keeps its state for a screen reader, and that a click, a Command click or a right click on it acts on the conversation row.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const surface = surfaceOf(row)
+		await expect(within(surface).getAllByRole("button")).toEqual([row])
+		const capsules = slotsIn(canvasElement, "mission-capsule")
+		await expect(capsules).toHaveLength(2)
+		await expect(capsules[0]).toHaveTextContent("waiting for you")
+		for (const capsule of capsules) {
+			await expect(capsule.tabIndex).toBe(-1)
+			await expect(getComputedStyle(capsule).pointerEvents).toBe("none")
+			await expect(document.elementFromPoint(...centreOf(capsule))).toBe(row)
+		}
+		const [first] = capsules
+		const hit = document.elementFromPoint(...centreOf(first)) as HTMLElement
+		fireEvent.click(hit, { detail: 1 })
+		await expect(args.onSelect).toHaveBeenLastCalledWith(
+			MISSIONS_ROOM.id,
+			NO_CLICK_MODIFIERS,
+		)
+		fireEvent.click(hit, { detail: 1, metaKey: true })
+		await expect(args.onSelect).toHaveBeenLastCalledWith(MISSIONS_ROOM.id, {
+			...NO_CLICK_MODIFIERS,
+			meta: true,
+		})
+		fireEvent.contextMenu(hit)
+		await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${MISSIONS_ROOM.name}`,
+			}),
+		)
+		await userEvent.keyboard("{Escape}")
+	},
+})
+
+export const IconAtTheHeightOfItsTwoLines = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Check the subject icon is 36px, the 20px name line plus the 16px preview line, and starts and ends with them.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectRowAnatomy(rowIn(canvasElement))
 	},
 })
 

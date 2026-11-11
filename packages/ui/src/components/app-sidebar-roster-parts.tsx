@@ -62,16 +62,17 @@ const missionStripsOf = (missions: AppSidebarRowMission[] | undefined) =>
 
 interface BotRowAvatarProps {
 	bot: AppSidebarBot
+	size?: number
 }
 
-const BotRowAvatar = ({ bot }: BotRowAvatarProps) => (
+const BotRowAvatar = ({ bot, size = ROW_AVATAR_SIZE }: BotRowAvatarProps) => (
 	<BotIdentityAvatar
 		hue={bot.blot}
 		image={bot.image}
 		kind={poseOf(bot)}
 		name={bot.name}
 		seed={bot.id}
-		size={ROW_AVATAR_SIZE}
+		size={size}
 		working={isBusy(bot)}
 	/>
 )
