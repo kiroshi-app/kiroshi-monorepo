@@ -13,11 +13,7 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
 import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
-import {
-	toRailSignals,
-	toSpaceBadges,
-	withBadges,
-} from "../chat/sidebar-badges"
+import { toSpaceBadges, withBadges } from "../chat/sidebar-badges"
 import { withNeedsYou } from "../conversations/host-state-rows"
 import { toRosterConversations } from "../conversations/roster-conversations"
 import {
@@ -51,7 +47,6 @@ type RosterListsInput = {
 	drivers: WorkspaceDrivers
 	rosterLines: RosterLines
 	rosterView: RosterView
-	waitingMissionCount: number
 }
 
 export const useRosterLists = ({
@@ -59,7 +54,6 @@ export const useRosterLists = ({
 	drivers,
 	rosterLines,
 	rosterView,
-	waitingMissionCount,
 }: RosterListsInput) => {
 	const { conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
@@ -219,20 +213,9 @@ export const useRosterLists = ({
 		isSkeletonShown: isSkeletonShown || roster.state.isRosterPending,
 	})
 
-	const railSignals = useMemo(
-		() =>
-			toRailSignals({
-				conversationsBySpaceId: rosterConversationsBySpace,
-				waitingMissionCount,
-				spaceId: rosteredSpaceId,
-			}),
-		[rosterConversationsBySpace, waitingMissionCount, rosteredSpaceId],
-	)
-
 	return {
 		badgesBySpaceId,
 		expandedListStatus,
-		railSignals,
 		rosterBots,
 		rosterBotsBySpace,
 		rosterConversations,
