@@ -33,6 +33,7 @@ export const MissionsRoute = () => {
 				onOpen={sidebarMissions.openMissionThread}
 				onRetry={feed.reload}
 				status={missionsPageStatusOf(feed)}
+				wrap={sidebarMissions.wrapPageRow}
 			/>
 		</ContentCard>
 	)

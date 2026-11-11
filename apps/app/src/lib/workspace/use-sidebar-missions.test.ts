@@ -17,6 +17,7 @@ import {
 	MissionMenu,
 	type MissionMenuProps,
 } from "@workspace/ui/components/mission-menu"
+import type { MissionsPageRowWrap } from "@workspace/ui/components/missions-page"
 import {
 	MissionsPanel,
 	type MissionsPanelMission,
@@ -222,6 +223,13 @@ const menuOn = (
 	wrap?.(
 		createElement(MissionCard, { ...mission, density: "row", onOpen: vi.fn() }),
 	) as ReactElement<MissionMenuProps>
+
+type MissionsPageRow = Parameters<MissionsPageRowWrap>[0]
+
+type MissionsPageRowState = MissionsPageRow["props"]["mission"]["state"]
+
+const pageRowOf = (id: string, state: MissionsPageRowState) =>
+	createElement("li", { mission: { id, state } }) as unknown as MissionsPageRow
 
 describe("useSidebarMissions", () => {
 	beforeEach(() => {
@@ -514,6 +522,38 @@ describe("useSidebarMissions", () => {
 			landing: "composer",
 		})
 		expect(panelOf(result.current).openMissionId).toBe("m-waiting")
+	})
+
+	it("wraps a Missions page row in the menu its sidebar row carries", async () => {
+		const { result, open } = renderSidebarMissions()
+		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
+		const [waiting] = panelOf(result.current).open
+
+		const pageMenu = result.current.wrapPageRow(
+			pageRowOf("m-waiting", "waiting_human"),
+		) as ReactElement<MissionMenuProps>
+		const sidebarMenu = menuOn(waiting, panelOf(result.current).wrap)
+
+		expect(pageMenu.type).toBe(MissionMenu)
+		const { children: _page, ...pageProps } = pageMenu.props
+		const { children: _sidebar, ...sidebarProps } = sidebarMenu.props
+		expect(Object.keys(pageProps)).toEqual(Object.keys(sidebarProps))
+		expect(pageProps.state).toBe(sidebarProps.state)
+		act(() => pageMenu.props.onAnswer())
+		expect(open).toHaveBeenCalledWith({
+			missionId: "m-waiting",
+			rowId: BOT.id,
+			spaceId: "s-1",
+			landing: "composer",
+		})
+	})
+
+	it("leaves a Missions page row without a menu when the feed holds no such mission", async () => {
+		const { result } = renderSidebarMissions()
+		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
+		const row = pageRowOf("m-unknown", "working")
+
+		expect(result.current.wrapPageRow(row)).toBe(row)
 	})
 
 	it("reads the feed again once a row menu closes a mission", async () => {

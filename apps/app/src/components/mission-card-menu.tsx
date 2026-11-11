@@ -1,7 +1,12 @@
 import { useMemo } from "react"
 
+import type { MissionState } from "@workspace/ui/components/mission"
 import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
-import { MissionMenu } from "@workspace/ui/components/mission-menu"
+import {
+	MissionMenu,
+	type MissionMenuTrigger,
+} from "@workspace/ui/components/mission-menu"
+import type { MissionsPageRowWrap } from "@workspace/ui/components/missions-page"
 
 import type { ConversationController } from "@/lib/conversations/conversation-controller"
 import { openInBrowser } from "@/lib/links/use-external-links"
@@ -26,14 +31,19 @@ type MissionCardMenusInput = {
 	onChanged: () => void
 }
 
+type MissionMenus = {
+	wrapCard: MissionCardWrap
+	wrapPageRow: MissionsPageRowWrap
+}
+
 const writeClipboard = (text: string) => navigator.clipboard.writeText(text)
 
-export const useMissionCardMenus = ({
+export const useMissionMenus = ({
 	missions,
 	runtimes,
 	onOpenMission,
 	onChanged,
-}: MissionCardMenusInput): MissionCardWrap =>
+}: MissionCardMenusInput): MissionMenus =>
 	useMemo(() => {
 		const missionById = new Map(
 			missions.map((mission) => [mission.id, mission]),
@@ -50,10 +60,14 @@ export const useMissionCardMenus = ({
 			onChanged,
 		}
 
-		return (card) => {
-			const mission = missionById.get(card.props.id)
+		const menuOn = (
+			missionId: string,
+			state: MissionState,
+			trigger: MissionMenuTrigger,
+		) => {
+			const mission = missionById.get(missionId)
 			if (!mission) {
-				return card
+				return trigger
 			}
 
 			return (
@@ -62,10 +76,20 @@ export const useMissionCardMenus = ({
 					hasBranch={mission.branch !== null}
 					hasPullRequest={mission.pullRequestUrl !== null}
 					hasWorkspacePath={mission.workspacePath !== null}
-					state={card.props.state}
+					state={state}
 				>
-					{card}
+					{trigger}
 				</MissionMenu>
 			)
 		}
+
+		return {
+			wrapCard: (card) => menuOn(card.props.id, card.props.state, card),
+			wrapPageRow: (row) =>
+				menuOn(row.props.mission.id, row.props.mission.state, row),
+		}
 	}, [missions, runtimes, onOpenMission, onChanged])
+
+export const useMissionCardMenus = (
+	input: MissionCardMenusInput,
+): MissionCardWrap => useMissionMenus(input).wrapCard
