@@ -196,6 +196,8 @@ const COMPLETED = conversationOf(
 
 const DARK = { theme: "dark", theme_layout: "single" }
 
+const LIGHT = { theme: "light", theme_layout: "single" }
+
 const OPEN_CONVERSATION = fn()
 
 const RETRY = fn()
@@ -295,6 +297,24 @@ const missionCellNamed = (canvasElement: HTMLElement, name: string) =>
 
 const groupOf = (cell: HTMLElement) =>
 	cell.closest('[data-slot="collapsed-sidebar-group"]') as HTMLElement
+
+const RELEASE_TRAIN_GROUP =
+	'[data-slot="collapsed-sidebar-group"]:has([aria-label="Release train"])'
+
+const releaseTrainIn = (canvasElement: HTMLElement) =>
+	rail(canvasElement).getByRole("button", { name: "Release train" })
+
+const expectGroupFill = async (group: HTMLElement, fillClass: string) => {
+	await expect(tileOf(group).backgroundColor).toBe(
+		tokenStyleIn(group, fillClass, "backgroundColor"),
+	)
+	await withMotionAllowed(async () => {
+		await expect(tileOf(group).transitionDuration).toBe("0s")
+	})
+}
+
+const expectNoOwnTile = (item: HTMLElement) =>
+	expect(tileOf(item).backgroundColor).toBe("rgba(0, 0, 0, 0)")
 
 const expectNoHoverFill = async (cell: HTMLElement, surface = cell) => {
 	if (!isInBrowserRunner()) return
@@ -468,9 +488,7 @@ export const HoverOnConversation = meta.story({
 	args: { zones: zonesWith(EVERY_STATE) },
 	parameters: {
 		pseudo: {
-			hover: [
-				'[data-slot="collapsed-sidebar-group"]:has([aria-label="Release train"])',
-			],
+			hover: [RELEASE_TRAIN_GROUP],
 		},
 		docs: {
 			description: {
@@ -504,7 +522,7 @@ export const ConversationOpen = meta.story({
 		docs: {
 			description: {
 				story:
-					"Hiring loop is the open conversation. Check its tile holds white 12 percent and it alone carries aria-current.",
+					"Hiring loop, with no mission, is the open conversation next to the Release train group. Check its tile holds white 12 percent, it alone carries aria-current, and the group stays unlit.",
 			},
 		},
 	},
@@ -519,7 +537,41 @@ export const ConversationOpen = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[aria-current="page"]'),
 		).toHaveLength(1)
+		const group = groupOf(releaseTrainIn(canvasElement))
+		await expect(group).not.toHaveAttribute("data-active")
+		await expect(tileOf(group).backgroundColor).toBe("rgba(0, 0, 0, 0)")
 	},
+})
+
+export const GroupAtRest = meta.story({
+	name: "Group at rest",
+	args: { destination: undefined, zones: zonesWith(EVERY_STATE) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Release train has open missions and is not open. Check its group holds the white 5 percent surface alone, with no fill over it and no tile on the conversation.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const item = releaseTrainIn(canvasElement)
+		const group = groupOf(item)
+		await expect(group).not.toHaveAttribute("data-active")
+		await expect(tileOf(group).backgroundColor).toBe("rgba(0, 0, 0, 0)")
+		await expectNoOwnTile(item)
+		await expect(item).not.toHaveAttribute("aria-current")
+	},
+})
+
+export const GroupAtRestLight = GroupAtRest.extend({
+	name: "Group at rest light",
+	globals: LIGHT,
+})
+
+export const HoverOnConversationLight = HoverOnConversation.extend({
+	name: "Hover on a conversation light",
+	globals: LIGHT,
 })
 
 export const GroupConversationOpen = meta.story({
@@ -533,22 +585,69 @@ export const GroupConversationOpen = meta.story({
 		docs: {
 			description: {
 				story:
-					"Release train, which has open missions, is the open conversation. Check its 36x36 tile holds white 12 percent and the pointer on one of its mission cells lights nothing over the group.",
+					"Release train, which has open missions, is the open conversation. Check its whole group, conversation and every mission cell, holds `--rail-item-selected` as one surface, the conversation draws no tile of its own over it, and only the conversation carries aria-current.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const item = rail(canvasElement).getByRole("button", {
-			name: "Release train",
-		})
+		const item = releaseTrainIn(canvasElement)
+		const group = groupOf(item)
+		await expect(group).toHaveAttribute("data-active")
+		await expectGroupFill(group, "bg-rail-item-selected")
+		await expectNoOwnTile(item)
+		for (const cell of slotsIn(group, "collapsed-sidebar-mission"))
+			await expectNoOwnTile(cell)
 		await expect(item).toHaveAttribute("aria-current", "page")
-		await expect(tileOf(item).backgroundColor).toBe(
-			resolvedRootColor("--rail-item-selected"),
-		)
-		const cell = missionCellNamed(canvasElement, "OPE-511 Bump the runtime")
-		await expectNoHoverFill(cell, groupOf(cell))
+		await expect(
+			canvasElement.querySelectorAll('[aria-current="page"]'),
+		).toHaveLength(1)
 	},
 })
+
+export const GroupConversationOpenLight = GroupConversationOpen.extend({
+	name: "Group conversation open light",
+	globals: LIGHT,
+})
+
+export const GroupConversationOpenHovered = meta.story({
+	name: "Group conversation open hovered",
+	args: {
+		destination: undefined,
+		zones: zonesWith(EVERY_STATE),
+		openConversationId: EVERY_STATE.id,
+	},
+	parameters: {
+		pseudo: { hover: [RELEASE_TRAIN_GROUP] },
+		docs: {
+			description: {
+				story:
+					"The pointer rests on the open Release train group. Check the whole group leaves its resting fill for `--rail-item-selected-hover`, wherever the pointer sits on it, with no tile on the conversation.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const item = releaseTrainIn(canvasElement)
+		const group = groupOf(item)
+		const pointer = await realPointer()
+		const cell = missionCellNamed(canvasElement, "OPE-511 Bump the runtime")
+		for (const target of [cell, item]) {
+			try {
+				await pointer.hover(target)
+				await expectGroupFill(group, "bg-rail-item-selected-hover")
+				await expectNoOwnTile(item)
+			} finally {
+				await pointer.unhover(target)
+			}
+		}
+	},
+})
+
+export const GroupConversationOpenHoveredLight =
+	GroupConversationOpenHovered.extend({
+		name: "Group conversation open hovered light",
+		globals: LIGHT,
+	})
 
 export const MissionThreadOpen = meta.story({
 	name: "Mission thread open",
@@ -1174,8 +1273,6 @@ export const R1NotSentCollapsed = meta.story({
 		)
 	},
 })
-
-const LIGHT = { theme: "light", theme_layout: "single" }
 
 const currentDestinationHoverStory = (globals: typeof DARK) => ({
 	globals,
