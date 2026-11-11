@@ -544,18 +544,17 @@ const wrapInMissionMenu: MissionsPageRowWrap = (row) => {
 	)
 }
 
+const WORKING_ROW_ENTRIES = [
+	"Open mission",
+	"Open PR",
+	"Copy",
+	"Message the coding session",
+	"Stop the coding session",
+	"Close",
+]
+
 const ROW_MENUS = [
-	{
-		row: /^OPE-2118/,
-		entries: [
-			"Open mission",
-			"Open PR",
-			"Copy",
-			"Message the coding session",
-			"Stop the coding session",
-			"Close",
-		],
-	},
+	{ row: /^OPE-2118/, entries: WORKING_ROW_ENTRIES },
 	{
 		row: /^OPE-2124/,
 		entries: [
@@ -631,6 +630,6 @@ export const MenuOnARow = meta.story({
 		await userEvent.click(workingRow)
 		await expect(args.onOpen).toHaveBeenLastCalledWith("mission-ope-2118")
 		rightClick(workingRow)
-		await expect(await openedMenuEntries()).toEqual(ROW_MENUS[0]?.entries)
+		await expect(await openedMenuEntries()).toEqual(WORKING_ROW_ENTRIES)
 	},
 })
