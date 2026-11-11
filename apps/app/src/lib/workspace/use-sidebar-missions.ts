@@ -6,12 +6,13 @@ import {
 } from "react"
 
 import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
+import type { MissionsPageRowWrap } from "@workspace/ui/components/missions-page"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
 
 import {
 	type StoppableRuntimes,
-	useMissionCardMenus,
+	useMissionMenus,
 } from "@/components/mission-card-menu"
 import type { RosterController } from "../bots/roster-controller"
 import type { Bot, Conversation } from "../conversations/store-contract"
@@ -66,6 +67,7 @@ export type SidebarMissions = {
 	openCount: number
 	openMissionId: string | undefined
 	openMissionThread: (missionId: string) => void
+	wrapPageRow: MissionsPageRowWrap
 }
 
 const listedConversationIdsOf = (
@@ -206,7 +208,7 @@ export const useSidebarMissions = ({
 		[openMission, openMissionInNewTab],
 	)
 
-	const wrap = useMissionCardMenus({
+	const { wrapCard: wrap, wrapPageRow } = useMissionMenus({
 		missions,
 		runtimes: conversationRuntimes,
 		onOpenMission: openMission,
@@ -247,5 +249,6 @@ export const useSidebarMissions = ({
 		openCount: feed.openCount,
 		openMissionId: opened?.missionId,
 		openMissionThread,
+		wrapPageRow,
 	}
 }

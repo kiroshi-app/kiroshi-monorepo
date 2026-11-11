@@ -2127,6 +2127,7 @@ navigation-missionspage--failed
 navigation-missionspage--in-main-card
 navigation-missionspage--loading
 navigation-missionspage--long-text
+navigation-missionspage--menu-on-a-row
 navigation-missionspage--narrow
 navigation-missionspage--unfolded
 navigation-missionspage--unfolded-dark

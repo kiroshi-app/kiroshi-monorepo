@@ -1,4 +1,12 @@
-import { type ReactNode, useId, useState } from "react"
+import {
+	Fragment,
+	type HTMLAttributes,
+	type ReactElement,
+	type ReactNode,
+	type Ref,
+	useId,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
@@ -93,6 +101,7 @@ type MissionsPageProps = {
 	onRetry: () => void
 	status?: MissionsPageStatus
 	defaultFoldedGroups?: MissionsPageGroupKey[]
+	wrap?: MissionsPageRowWrap
 }
 
 type MissionGlyphProps = Pick<MissionsPageGroupShape, "mark">
@@ -150,24 +159,35 @@ const MissionChip = ({ slot, mark, label, className }: MissionChipProps) => (
 
 const CHIP_ICON = "size-3 shrink-0 text-muted-foreground"
 
+type MissionsPageRowSurface = HTMLAttributes<HTMLButtonElement> & {
+	ref?: Ref<HTMLButtonElement>
+}
+
 type MissionsPageRowProps = {
 	mission: MissionsPageMission
 	group: MissionsPageGroupShape
 	now: number
 	onOpen: (missionId: string) => void
+	surface?: MissionsPageRowSurface
 }
+
+type MissionsPageRowWrap = (
+	row: ReactElement<MissionsPageRowProps>,
+) => ReactNode
 
 const MissionsPageRow = ({
 	mission,
 	group,
 	now,
 	onOpen,
+	surface,
 }: MissionsPageRowProps) => {
 	const ConversationIcon = ConversationIcons[mission.conversation.icon]
 
 	return (
 		<li className="flex">
 			<button
+				{...surface}
 				className={cn(
 					MISSIONS_PAGE_FRAMES.row,
 					"text-start",
@@ -176,6 +196,10 @@ const MissionsPageRow = ({
 				)}
 				data-slot="missions-page-row"
 				onClick={() => onOpen(mission.id)}
+				onContextMenu={(event) => {
+					event.currentTarget.focus()
+					surface?.onContextMenu?.(event)
+				}}
 				type="button"
 			>
 				<span
@@ -257,15 +281,24 @@ const byAgent = (missions: MissionsPageMission[]) =>
 		return [...groups, { agent: mission.agent, missions: [mission] }]
 	}, [])
 
-type MissionsPageRowsProps = Omit<MissionsPageRowProps, "mission"> & {
+type MissionsPageRowsProps = Omit<
+	MissionsPageRowProps,
+	"mission" | "surface"
+> & {
 	missions: MissionsPageMission[]
+	wrap?: MissionsPageRowWrap
 }
 
-const MissionsPageRows = ({ missions, ...rowProps }: MissionsPageRowsProps) => (
+const MissionsPageRows = ({
+	missions,
+	wrap,
+	...rowProps
+}: MissionsPageRowsProps) => (
 	<ul className="flex flex-col">
-		{missions.map((mission) => (
-			<MissionsPageRow key={mission.id} mission={mission} {...rowProps} />
-		))}
+		{missions.map((mission) => {
+			const row = <MissionsPageRow mission={mission} {...rowProps} />
+			return <Fragment key={mission.id}>{wrap ? wrap(row) : row}</Fragment>
+		})}
 	</ul>
 )
 
@@ -431,6 +464,7 @@ const MissionsPageBody = ({
 	onRetry,
 	status = "loaded",
 	defaultFoldedGroups = [],
+	wrap,
 }: MissionsPageProps) => {
 	const { t } = useTranslation("chat")
 	const [foldedGroups, setFoldedGroups] = useState(
@@ -486,6 +520,7 @@ const MissionsPageBody = ({
 						now={now}
 						onOpen={onOpen}
 						onToggle={() => toggle(group.key)}
+						wrap={wrap}
 					/>
 				)
 			})}
@@ -524,5 +559,6 @@ export {
 	type MissionsPageGroupKey,
 	type MissionsPageMission,
 	type MissionsPageProps,
+	type MissionsPageRowWrap,
 	type MissionsPageStatus,
 }
