@@ -5,11 +5,11 @@ import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 
 const TREE =
-	"pointer-events-none relative flex flex-col before:absolute before:start-4.75 before:top-0 before:bottom-3.5 before:w-[1.5px] before:bg-shell-border group-data-[collapsible=icon]:hidden"
+	"pointer-events-none relative flex flex-col before:absolute before:start-4.75 before:top-0 before:bottom-3.5 before:w-[1.5px] before:bg-rail-section-placeholder group-data-[collapsible=icon]:hidden"
 
 const TREE_ROW = "flex h-7 w-full min-w-0 items-center gap-2 p-1.5 text-xs"
 
-const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-shell-border"
+const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-rail-section-placeholder"
 
 type MissionTreeRowProps = {
 	mission: AppSidebarRowMission

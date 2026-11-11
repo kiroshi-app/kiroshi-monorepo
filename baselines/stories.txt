@@ -1510,6 +1510,12 @@ navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
 navigation-appsidebarconversationrow--long-title-and-preview-truncate
 navigation-appsidebarconversationrow--mission-capsules-are-inert
+navigation-appsidebarconversationrow--mission-group-active
+navigation-appsidebarconversationrow--mission-group-active-dark
+navigation-appsidebarconversationrow--mission-group-at-rest
+navigation-appsidebarconversationrow--mission-group-at-rest-dark
+navigation-appsidebarconversationrow--mission-group-hovered
+navigation-appsidebarconversationrow--mission-group-hovered-dark
 navigation-appsidebarconversationrow--mixed-rooms-and-solo-conversations
 navigation-appsidebarconversationrow--monochrome-row
 navigation-appsidebarconversationrow--monochrome-row-dark
@@ -1862,6 +1868,8 @@ navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
+navigation-expandedsidebar--top-menu-at-rest-expanded
+navigation-expandedsidebar--top-menu-hovered-expanded
 navigation-expandedsidebar--trigger-connecting-expanded
 navigation-expandedsidebar--trigger-local-expanded
 navigation-expandedsidebar--trigger-offline-expanded

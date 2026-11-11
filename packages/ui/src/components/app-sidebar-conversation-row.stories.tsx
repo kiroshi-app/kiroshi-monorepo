@@ -10,17 +10,21 @@ import {
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	colourTransitionsOf,
 	expectAnswered,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
 	glyphIn,
+	isInBrowserRunner,
 	pictureOf,
+	realPointer,
 	SidebarFrame,
 	shown,
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
@@ -688,6 +692,14 @@ const MISSIONS_ROOM: AppSidebarConversation = {
 	],
 }
 
+const missionGroupFillOf = (row: HTMLElement) =>
+	tokenStyleIn(row, "bg-sidebar-accent", "backgroundColor")
+
+const expectOneMissionSurface = async (row: HTMLElement, fill: string) => {
+	await expect(getComputedStyle(surfaceOf(row)).backgroundColor).toBe(fill)
+	await expect(getComputedStyle(row).backgroundColor).toBe(TRANSPARENT)
+}
+
 export const OpenRowWithMissionCapsules = meta.story({
 	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
@@ -699,8 +711,7 @@ export const OpenRowWithMissionCapsules = meta.story({
 		const row = rowIn(canvasElement)
 		await expect(row).toHaveAttribute("aria-current", "page")
 		const surface = surfaceOf(row)
-		await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
-		await expect(getComputedStyle(row).backgroundColor).not.toBe(TRANSPARENT)
+		await expectOneMissionSurface(row, missionGroupFillOf(row))
 		await expectRowAnatomy(row)
 		await expectKnockoutCutToTheRow(row)
 		const capsules = slotsIn(canvasElement, "mission-capsule")
@@ -757,6 +768,103 @@ export const MissionCapsulesAreInert = meta.story({
 		await userEvent.keyboard("{Escape}")
 	},
 })
+
+const MISSION_GROUP_HOVER = { hover: '[data-slot="context-menu-trigger"]' }
+
+const hoverMissionGroup = async (row: HTMLElement, target = row) => {
+	const pointer = await realPointer()
+	try {
+		await pointer.hover(target, { force: true })
+		await expectOneMissionSurface(row, missionGroupFillOf(row))
+	} finally {
+		await pointer.unhover(row)
+	}
+}
+
+const missionGroupAtRestStory = (globals?: typeof DARK) => ({
+	globals,
+	args: { conversation: MISSIONS_ROOM },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A conversation with two open missions, at rest. Check the row and its mission tree carry no fill, the tree line and branches read against the sidebar, and neither the row nor the tree runs a colour transition.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = rowIn(canvasElement)
+		await expectOneMissionSurface(row, TRANSPARENT)
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			await expect(colourTransitionsOf(surfaceOf(row))).toEqual([])
+			await expect(colourTransitionsOf(row)).toEqual([])
+		})
+	},
+})
+
+export const MissionGroupAtRest = meta.story(missionGroupAtRestStory())
+
+export const MissionGroupAtRestDark = meta.story(missionGroupAtRestStory(DARK))
+
+const missionGroupHoveredStory = (globals?: typeof DARK) => ({
+	globals,
+	args: { conversation: MISSIONS_ROOM },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		pseudo: MISSION_GROUP_HOVER,
+		docs: {
+			description: {
+				story:
+					"The pointer rests on a conversation with two open missions. Check the row and its mission tree light at once as one surface in `--sidebar-accent`, with no second tile on the row, whether the pointer is on the row or on a mission line.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		if (!isInBrowserRunner()) return
+		const row = rowIn(canvasElement)
+		const lastMission = slotsIn(canvasElement, "mission-capsule").at(
+			-1,
+		) as HTMLElement
+		await withMotionAllowed(async () => {
+			await hoverMissionGroup(row)
+			await expectOneMissionSurface(row, TRANSPARENT)
+			await hoverMissionGroup(row, lastMission)
+		})
+	},
+})
+
+export const MissionGroupHovered = meta.story(missionGroupHoveredStory())
+
+export const MissionGroupHoveredDark = meta.story(
+	missionGroupHoveredStory(DARK),
+)
+
+const missionGroupActiveStory = (globals?: typeof DARK) => ({
+	globals,
+	args: { conversation: MISSIONS_ROOM, isSelected: true },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The current conversation carries two open missions. Check the row and its mission tree wear the active fill `--sidebar-accent` as one surface, the row reporting itself as the current page, and that the pointer on it keeps that one surface.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = rowIn(canvasElement)
+		await expect(row).toHaveAttribute("aria-current", "page")
+		await expectOneMissionSurface(row, missionGroupFillOf(row))
+		if (isInBrowserRunner())
+			await withMotionAllowed(() => hoverMissionGroup(row))
+	},
+})
+
+export const MissionGroupActive = meta.story(missionGroupActiveStory())
+
+export const MissionGroupActiveDark = meta.story(missionGroupActiveStory(DARK))
 
 export const IconAtTheHeightOfItsTwoLines = meta.story({
 	parameters: {

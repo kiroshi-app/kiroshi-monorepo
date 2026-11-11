@@ -14,6 +14,7 @@ import {
 	slotsIn,
 	spaceListInView,
 	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
@@ -493,6 +494,10 @@ export const ExpandedMissions = meta.story({
 
 const EVEN_PADDING = Array(4).fill("6px")
 
+const TOP_MENU_HEIGHT = 32
+
+const TOP_MENU_GLYPH = 14
+
 const paddingOf = (element: Element) => {
 	const style = getComputedStyle(element)
 	return [
@@ -540,12 +545,14 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 	for (const name of ["New conversation", /^Missions/, "Library"]) {
 		const item = within(sidebar).getByRole("button", { name })
 		const slot = item.querySelector("span[aria-hidden]") as HTMLElement
-		await expect(boxOf(item).height).toBe(40)
+		await expect(boxOf(item).height).toBe(TOP_MENU_HEIGHT)
 		await expect(boxOf(slot).width).toBe(ROW_ICON_SIDE)
 		await expect(getComputedStyle(slot).backgroundColor).toBe(
 			"rgba(0, 0, 0, 0)",
 		)
-		await expect(boxOf(slot.querySelector("svg") as SVGElement).width).toBe(16)
+		await expect(boxOf(slot.querySelector("svg") as SVGElement).width).toBe(
+			TOP_MENU_GLYPH,
+		)
 	}
 
 	const avatars = [
@@ -1676,6 +1683,93 @@ export const ActiveRowHoveredExpanded = meta.story(activeRowHoverStory(DARK))
 export const ActiveRowHoveredLightExpanded = meta.story(
 	activeRowHoverStory(LIGHT),
 )
+
+const xOffsetsOf = (row: Element, glyph: Element, sidebar: DOMRect) => {
+	const icon = boxOf(glyph)
+	return {
+		iconCentre: icon.left + icon.width / 2 - sidebar.left,
+		labelStart: boxOf(row.children[1] as Element).left - sidebar.left,
+	}
+}
+
+const expectTopMenuAlignedOnConversations = async (
+	canvasElement: HTMLElement,
+) => {
+	const sidebar = sidebarIn(canvasElement)
+	const box = boxOf(sidebar)
+	const item = within(sidebar).getByRole("button", { name: "Library" })
+	const glyph = item.querySelector("svg") as SVGElement
+	await expect(boxOf(item).height).toBe(TOP_MENU_HEIGHT)
+	await expect(boxOf(glyph).width).toBe(TOP_MENU_GLYPH)
+	await expect(paddingOf(item)).toEqual(EVEN_PADDING)
+	const conversation = slotsIn(
+		slotIn(sidebar, "space-carousel"),
+		"sidebar-menu-button",
+	)[0] as HTMLElement
+	const avatar = conversation.querySelector(
+		":scope > span:first-child > *",
+	) as Element
+	await expect(xOffsetsOf(item, glyph, box)).toEqual({
+		iconCentre: 28,
+		labelStart: 52,
+	})
+	await expect(xOffsetsOf(conversation, avatar, box)).toEqual({
+		iconCentre: 28,
+		labelStart: 52,
+	})
+	return item
+}
+
+export const TopMenuAtRestExpanded = meta.story({
+	name: "Top menu at rest",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 52px from the sidebar edge, the same offsets as a conversation row.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const item = await expectTopMenuAlignedOnConversations(canvasElement)
+		await expect(getComputedStyle(item).backgroundColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+	},
+})
+
+export const TopMenuHoveredExpanded = meta.story({
+	name: "Top menu hovered",
+	parameters: {
+		pseudo: {
+			hover:
+				'[data-slot="expanded-sidebar"] > [data-slot="sidebar-menu"] > li:last-child [data-slot="sidebar-menu-button"]',
+		},
+		docs: {
+			description: {
+				story:
+					"The pointer rests on Library in the destinations menu. Check it lights `--rail-item-selected` at half strength without moving its glyph or its label.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const item = await expectTopMenuAlignedOnConversations(canvasElement)
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		await withMotionAllowed(async () => {
+			try {
+				await pointer.hover(item)
+				await expect(getComputedStyle(item).backgroundColor).toBe(
+					tokenStyleIn(item, "bg-rail-item-selected/50", "backgroundColor"),
+				)
+				await expect(colourTransitionsOf(item)).toEqual([])
+				await expectTopMenuAlignedOnConversations(canvasElement)
+			} finally {
+				await pointer.unhover(item)
+			}
+		})
+	},
+})
 
 export const LongSpaceNameTruncatesExpanded = meta.story({
 	args: {
