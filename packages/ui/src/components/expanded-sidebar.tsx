@@ -7,7 +7,6 @@ import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carou
 import {
 	RosterDropArea,
 	type RosterDropAreaProps,
-	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import {
 	FoldSection,
@@ -15,7 +14,7 @@ import {
 	type SectionHeadActions,
 } from "@workspace/ui/components/app-sidebar-section"
 import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
 	displayNameOf,
@@ -77,34 +76,69 @@ const SWITCHER_ROW = "flex h-10 shrink-0 items-center gap-1"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
+type DestinationHandlers = {
+	onNewConversation?: () => void
+	onSelectMissions?: () => void
+	onSelectLibrary?: () => void
+}
+
+type NavigationDestination = {
+	id: ExpandedSidebarDestination
+	label: "rail.newConversation" | "rail.missions" | "rail.library"
+	Icon: Icon
+	onSelect?: () => void
+}
+
+const navigationDestinationsOf = ({
+	onNewConversation,
+	onSelectMissions,
+	onSelectLibrary,
+}: DestinationHandlers): NavigationDestination[] => [
+	{
+		id: "newConversation",
+		label: "rail.newConversation",
+		Icon: Icons.Add,
+		onSelect: onNewConversation,
+	},
+	{
+		id: "missions",
+		label: "rail.missions",
+		Icon: Icons.Missions,
+		onSelect: onSelectMissions,
+	},
+	{
+		id: "library",
+		label: "rail.library",
+		Icon: Icons.Library,
+		onSelect: onSelectLibrary,
+	},
+]
+
 type ExpandedSidebarSection = SectionHeadActions & {
 	id: string
 	name: string
 	rows: ReactNode
 	dropArea: Omit<RosterDropAreaProps, "children">
 	headSlotId?: string
-	emptySlotId?: string
 }
 
-type ExpandedSidebarProps = SpaceSwitcherProps & {
-	destination?: ExpandedSidebarDestination
-	missionCount?: number
-	pinned: ReactNode
-	conversations: ReactNode
-	sections?: ExpandedSidebarSection[]
-	listStatus?: CollapsedSidebarListStatus
-	listEnd?: ListEnd
-	update?: ReactNode
-	user?: UserChipIdentity
-	isSpaceSwitchingEnabled?: boolean
-	renderSpaceList?: (space: Space) => ReactNode
-	onReorderSpaces?: (ids: string[]) => void
-	onNewConversation?: () => void
-	onSelectMissions?: () => void
-	onSelectLibrary?: () => void
-	onOpenSettings?: () => void
-	onRetryList?: () => void
-}
+type ExpandedSidebarProps = SpaceSwitcherProps &
+	DestinationHandlers & {
+		destination?: ExpandedSidebarDestination
+		missionCount?: number
+		pinned: ReactNode
+		conversations: ReactNode
+		sections?: ExpandedSidebarSection[]
+		listStatus?: CollapsedSidebarListStatus
+		listEnd?: ListEnd
+		update?: ReactNode
+		user?: UserChipIdentity
+		isSpaceSwitchingEnabled?: boolean
+		renderSpaceList?: (space: Space) => ReactNode
+		onReorderSpaces?: (ids: string[]) => void
+		onOpenSettings?: () => void
+		onRetryList?: () => void
+	}
 
 type NavigationItemProps = {
 	label: string
@@ -226,13 +260,10 @@ const ExpandedSidebarListBody = ({
 	return (
 		<>
 			{hasPinned ? (
-				<FoldSection name={t("rail.pinned")}>{pinned}</FoldSection>
+				<FoldSection name={t("roster.pinned")}>{pinned}</FoldSection>
 			) : null}
 			{sections.map(
-				(
-					{ id, name, rows, dropArea, headSlotId, emptySlotId, ...head },
-					rank,
-				) => (
+				({ id, name, rows, dropArea, headSlotId, ...head }, rank) => (
 					<RosterDropArea key={id} {...dropArea}>
 						<NamedFoldSection
 							{...head}
@@ -241,11 +272,7 @@ const ExpandedSidebarListBody = ({
 							section={{ id, name }}
 							slotId={headSlotId}
 						>
-							{holdsRows(rows) ? (
-								rows
-							) : (
-								<SectionDropZone align="start" slotId={emptySlotId} />
-							)}
+							{rows}
 						</NamedFoldSection>
 					</RosterDropArea>
 				),
@@ -302,29 +329,24 @@ const ExpandedSidebar = ({
 				<SpaceSwitcher {...switcher} />
 			</div>
 			<SidebarMenu>
-				<NavigationItem
-					icon={<Icons.Add />}
-					isCurrent={destination === "newConversation"}
-					label={t("rail.newConversation")}
-					onSelect={onNewConversation}
-				/>
-				<NavigationItem
-					icon={<Icons.Missions />}
-					isCurrent={destination === "missions"}
-					label={t("rail.missions")}
-					onSelect={onSelectMissions}
-					trailing={
-						missionCount === undefined ? null : (
-							<span className={MISSION_COUNT}>{missionCount}</span>
-						)
-					}
-				/>
-				<NavigationItem
-					icon={<Icons.Library />}
-					isCurrent={destination === "library"}
-					label={t("rail.library")}
-					onSelect={onSelectLibrary}
-				/>
+				{navigationDestinationsOf({
+					onNewConversation,
+					onSelectMissions,
+					onSelectLibrary,
+				}).map(({ id, label, Icon, onSelect }) => (
+					<NavigationItem
+						icon={<Icon />}
+						isCurrent={destination === id}
+						key={id}
+						label={t(label)}
+						onSelect={onSelect}
+						trailing={
+							id === "missions" && missionCount !== undefined ? (
+								<span className={MISSION_COUNT}>{missionCount}</span>
+							) : null
+						}
+					/>
+				))}
 			</SidebarMenu>
 			<CurrentSpaceCarousel
 				isSwitchingEnabled={isSpaceSwitchingEnabled}
@@ -362,4 +384,5 @@ export {
 	type ExpandedSidebarListProps,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
+	navigationDestinationsOf,
 }

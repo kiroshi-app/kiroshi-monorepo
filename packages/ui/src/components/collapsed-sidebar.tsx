@@ -16,7 +16,10 @@ import type {
 } from "@workspace/ui/components/app-sidebar-model"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
-import type { ExpandedSidebarProps } from "@workspace/ui/components/expanded-sidebar"
+import {
+	type ExpandedSidebarProps,
+	navigationDestinationsOf,
+} from "@workspace/ui/components/expanded-sidebar"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
@@ -794,25 +797,20 @@ const CollapsedSidebar = ({
 				data-slot="collapsed-sidebar"
 			>
 				<SpaceSlot {...switcher} />
-				<Destination
-					icon={<Icons.Add aria-hidden="true" />}
-					isCurrent={destination === "newConversation"}
-					label={t("rail.newConversation")}
-					onSelect={onNewConversation}
-				/>
-				<Destination
-					hasAttention={hasWaitingMission(zones)}
-					icon={<Icons.Missions aria-hidden="true" />}
-					isCurrent={destination === "missions"}
-					label={t("rail.missions")}
-					onSelect={onSelectMissions}
-				/>
-				<Destination
-					icon={<Icons.Library aria-hidden="true" />}
-					isCurrent={destination === "library"}
-					label={t("rail.library")}
-					onSelect={onSelectLibrary}
-				/>
+				{navigationDestinationsOf({
+					onNewConversation,
+					onSelectMissions,
+					onSelectLibrary,
+				}).map(({ id, label, Icon, onSelect }) => (
+					<Destination
+						hasAttention={id === "missions" && hasWaitingMission(zones)}
+						icon={<Icon aria-hidden="true" />}
+						isCurrent={destination === id}
+						key={id}
+						label={t(label)}
+						onSelect={onSelect}
+					/>
+				))}
 				<CurrentSpaceCarousel
 					isSwitchingEnabled={isSpaceSwitchingEnabled}
 					onSelectSpace={switcher.onSelectSpace}
