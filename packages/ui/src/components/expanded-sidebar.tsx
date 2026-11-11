@@ -3,6 +3,7 @@
 import { Children, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
 import {
 	RosterDropArea,
 	type RosterDropAreaProps,
@@ -42,15 +43,11 @@ import {
 	SidebarMenuItem,
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
-import {
-	SPACE_SWIPE_FOLLOWER,
-	useSpaceSwipe,
-} from "@workspace/ui/hooks/use-space-swipe"
 
 const COLUMN =
 	"flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
 
-const SECTIONS = `gap-3 ${SPACE_SWIPE_FOLLOWER}`
+const SECTIONS = "gap-3"
 
 const CONVERSATIONS_BODY = "flex flex-col gap-0.5"
 
@@ -276,7 +273,7 @@ const ExpandedSidebar = ({
 	listEnd,
 	update,
 	user,
-	isSpaceSwitchingEnabled,
+	isSpaceSwitchingEnabled = true,
 	onReorderSpaces,
 	onOpenSearch,
 	onNewConversation,
@@ -288,19 +285,12 @@ const ExpandedSidebar = ({
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
 	const searchLabel = t("open", { ns: "search" })
-	const swipeRef = useSpaceSwipe({
-		isEnabled: isSpaceSwitchingEnabled,
-		onSelectSpace: switcher.onSelectSpace,
-		selectedSpaceId: switcher.selectedSpaceId,
-		spaces: switcher.spaces,
-	})
 
 	return (
 		<nav
 			aria-label={t("rail.label")}
 			className={COLUMN}
 			data-slot="expanded-sidebar"
-			ref={swipeRef}
 		>
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
@@ -341,16 +331,23 @@ const ExpandedSidebar = ({
 					onSelect={onSelectLibrary}
 				/>
 			</SidebarMenu>
-			<SidebarContent className={SECTIONS}>
-				<ExpandedSidebarList
-					conversations={conversations}
-					listEnd={listEnd}
-					listStatus={listStatus}
-					onRetryList={onRetryList}
-					pinned={pinned}
-					sections={sections}
-				/>
-			</SidebarContent>
+			<CurrentSpaceCarousel
+				isSwitchingEnabled={isSpaceSwitchingEnabled}
+				onSelectSpace={switcher.onSelectSpace}
+				selectedSpaceId={switcher.selectedSpaceId}
+				spaces={switcher.spaces}
+			>
+				<SidebarContent className={SECTIONS}>
+					<ExpandedSidebarList
+						conversations={conversations}
+						listEnd={listEnd}
+						listStatus={listStatus}
+						onRetryList={onRetryList}
+						pinned={pinned}
+						sections={sections}
+					/>
+				</SidebarContent>
+			</CurrentSpaceCarousel>
 			<SpaceDots
 				badgesBySpaceId={switcher.badgesBySpaceId}
 				onReorderSpaces={onReorderSpaces}

@@ -48,13 +48,6 @@ import {
 import { SHELL_TITLE_BAR_HEIGHT } from "@workspace/ui/components/workspace-shell"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import {
-	dispatchTrackpadWheels,
-	FAST_FLICK,
-	SLOW_SHORT_SWIPE,
-	trackpadSwipe,
-	trackpadSwipeDuration,
-} from "@workspace/ui/hooks/use-space-swipe.fixtures"
-import {
 	type ClickModifiers,
 	NO_CLICK_MODIFIERS,
 } from "@workspace/ui/lib/click-modifiers"
@@ -230,77 +223,18 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
-const SWIPE_END_WAIT_MS = 200
+const SPACE_CAROUSEL_SETTLE_MS = 250
 
-export const wheelTrainOn = (
-	target: Element,
-	deltas: ReadonlyArray<readonly [deltaX: number, deltaY: number]>,
-) =>
-	deltas.map(
-		([deltaX, deltaY]) =>
-			!target.dispatchEvent(
-				new WheelEvent("wheel", {
-					bubbles: true,
-					cancelable: true,
-					deltaX,
-					deltaY,
-				}),
-			),
+export const scrollSpaceCarousel = async (root: Element, step: 1 | -1) => {
+	const carousel = slotIn(root, "space-carousel")
+	carousel.scrollLeft += step * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SPACE_CAROUSEL_SETTLE_MS))
+}
+
+export const expectSpaceCarouselHeld = (root: Element) =>
+	expect(getComputedStyle(slotIn(root, "space-carousel")).overflowX).toBe(
+		"hidden",
 	)
-
-let nextSwipeAt = 0
-
-const nextSwipeStart = (model: typeof FAST_FLICK) => {
-	const startsAt = Math.max(performance.now(), nextSwipeAt)
-	nextSwipeAt = startsAt + trackpadSwipeDuration(model) + SWIPE_END_WAIT_MS
-	return startsAt
-}
-
-export const swipeOn = (
-	target: Element,
-	direction: 1 | -1,
-	model = FAST_FLICK,
-) => {
-	const startsAt = nextSwipeStart(model)
-	const { fingers, momentum } = trackpadSwipe(model, direction)
-	return dispatchTrackpadWheels(target, [...fingers, ...momentum], startsAt)
-}
-
-type SwipeFollowing = {
-	nav: HTMLElement
-	listIn: () => HTMLElement
-	onSelectSpace: unknown
-}
-
-export const expectListFollowsSwipe = async ({
-	nav,
-	listIn,
-	onSelectSpace,
-}: SwipeFollowing) => {
-	await waitFor(() =>
-		expect(matchMedia("(prefers-reduced-motion: reduce)").matches).toBe(false),
-	)
-	await new Promise(requestAnimationFrame)
-	const restingLeft = listIn().getBoundingClientRect().left
-	const { fingers, momentum } = trackpadSwipe(SLOW_SHORT_SWIPE, 1)
-	const travel = fingers.reduce((sum, { deltaX }) => sum + deltaX, 0)
-	const startsAt = nextSwipeStart(SLOW_SHORT_SWIPE)
-
-	dispatchTrackpadWheels(nav, fingers, startsAt)
-	await expect(listIn().getBoundingClientRect().left).toBeCloseTo(
-		restingLeft - travel,
-		0,
-	)
-	await expect(onSelectSpace).not.toHaveBeenCalled()
-
-	dispatchTrackpadWheels(nav, momentum, startsAt)
-	await expect(onSelectSpace).toHaveBeenCalledTimes(1)
-	await waitFor(() => expect(nav).not.toHaveAttribute("data-space-swipe"))
-	await expect(listIn().getBoundingClientRect().left).toBe(restingLeft)
-}
-
-export const swipeEnded = () =>
-	new Promise((resolve) => setTimeout(resolve, SWIPE_END_WAIT_MS))
 
 export const expectOnboardingDragStrip = async (root: HTMLElement) => {
 	const strips = slotsIn(root, "onboarding-drag-strip")

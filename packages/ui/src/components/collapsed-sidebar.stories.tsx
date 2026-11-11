@@ -3,16 +3,15 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	expectListFollowsSwipe,
 	expectSkeletonFilledTo,
+	expectSpaceCarouselHeld,
 	FRAME_POLL,
 	isInBrowserRunner,
 	realPointer,
 	resolvedRootColor,
+	scrollSpaceCarousel,
 	slotIn,
 	slotsIn,
-	swipeEnded,
-	swipeOn,
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -34,7 +33,6 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
-import { SLOW_SHORT_SWIPE } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 
 const KIROSHI: Space = {
 	id: "kiroshi",
@@ -232,7 +230,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe anywhere over the rail changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
+					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe over the list changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
 			},
 		},
 	},
@@ -945,15 +943,14 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two swipes over the rail as WebKit hands them to the page on a macOS trackpad: a short slow swipe forward, then a fast flick back with a long momentum tail. Check each moves the Space by exactly one. The test browser runs under reduced motion, where the Space changes and nothing moves; pick `SwipeFollowsTheFingersCollapsed` for the list following the fingers. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
+					"The rail list sits in the native scroll snap carousel of the pre-shell sidebar: a two finger swipe over it scrolls the panels under the fingers, and a panel covering more than half of the carousel selects its Space. Check a scroll of one panel width forward selects the next Space, shows it on the Space avatar and draws the list in its panel, and one back selects the first again. Swipe with a trackpad over the list to feel it. Pick `SwipeWithSwitchingNotAllowedDoesNothingCollapsed` for the held carousel.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
 		const nav = slotIn(canvasElement, "collapsed-sidebar")
-		const target = rail(canvasElement).getByRole("button", { name: "Library" })
 
-		await expect(swipeOn(target, 1, SLOW_SHORT_SWIPE)).not.toContain(false)
+		await scrollSpaceCarousel(nav, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
@@ -961,38 +958,14 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 				rail(canvasElement).getByRole("button", { name: "Perso" }),
 			).toBeVisible(),
 		)
+		await expect(
+			slotIn(nav, "collapsed-sidebar-list").closest("[data-slot=space-panel]"),
+		).not.toHaveAttribute("inert")
 
-		await swipeEnded()
-		await expect(swipeOn(target, -1)).not.toContain(false)
+		await scrollSpaceCarousel(nav, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
-		await expect(nav.scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
-		await expect(nav).not.toHaveAttribute("data-space-swipe")
-	},
-})
-
-export const SwipeFollowsTheFingersCollapsed = meta.story({
-	name: "Swipe follows the fingers Collapsed",
-	args: { spaces: SEVERAL_SPACES },
-	render: (args) => <SpaceFollowingWindow {...args} />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A short slow swipe over the rail with reduced motion off. Check the list moves with the fingers mid-swipe, the Space changes once as the momentum carries it past the threshold, and the list is back at rest after release. Swipe with a trackpad over the story to feel it.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		await withMotionAllowed(() =>
-			expectListFollowsSwipe({
-				nav: slotIn(canvasElement, "collapsed-sidebar"),
-				listIn: () => slotIn(canvasElement, "collapsed-sidebar-list"),
-				onSelectSpace: args.onSelectSpace,
-			}),
-		)
 	},
 })
 
@@ -1002,12 +975,12 @@ export const SwipeWithOneSpaceDoesNothingCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe with a single Space. Check the Space stays and no selection is reported.",
+					"A single Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
@@ -1019,12 +992,12 @@ export const SwipeWithSwitchingNotAllowedDoesNothingCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe while the host forbids changing Space, with three Spaces. Check the Space stays and no selection is reported.",
+					"Three Spaces while the host forbids changing Space. Check the carousel refuses a sideways scroll and no selection is reported.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
-		swipeOn(slotIn(canvasElement, "collapsed-sidebar"), 1)
+		await expectSpaceCarouselHeld(slotIn(canvasElement, "collapsed-sidebar"))
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })

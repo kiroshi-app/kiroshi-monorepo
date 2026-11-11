@@ -21,14 +21,20 @@ const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 const CONTENT_INSET = "left-column-inset py-0"
 
 const CAROUSEL =
-	"flex min-h-0 flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+	"flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 
 const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 
 const CAROUSEL_HELD = "overflow-x-hidden"
 
-const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0"
+const CAROUSEL_PANEL = "flex w-full flex-none snap-start snap-always flex-col"
+
+type SpacePanelLook = "inset" | "bare"
+
+const PANEL_LOOKS: Record<SpacePanelLook, string> = {
+	inset: "gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0",
+	bare: "min-h-0",
+}
 
 const NEIGHBOURING = 1
 
@@ -45,6 +51,7 @@ const isFlushWithPanel = (row: HTMLDivElement) => {
 }
 
 interface SpacePanelProps {
+	look: SpacePanelLook
 	scrollKey: string
 	isInView: boolean
 	scrolls: Map<string, number>
@@ -52,17 +59,21 @@ interface SpacePanelProps {
 }
 
 const SpacePanel = ({
+	look,
 	scrollKey,
 	isInView,
 	scrolls,
 	children,
 }: SpacePanelProps) => {
 	const panel = useRef<HTMLDivElement>(null)
-	useOverlayScrollbars(panel, { options: CLIPPED_SIDEWAYS })
+	useOverlayScrollbars(panel, {
+		isEnabled: look === "inset",
+		options: CLIPPED_SIDEWAYS,
+	})
 
 	return (
 		<div
-			className={CAROUSEL_PANEL}
+			className={cn(CAROUSEL_PANEL, PANEL_LOOKS[look])}
 			data-slot="space-panel"
 			inert={!isInView}
 			onScroll={(event) => {
@@ -83,12 +94,14 @@ interface SpaceCarouselProps {
 	spaces: Space[]
 	selectedSpaceId?: string
 	isSwipeEnabled: boolean
+	panel?: SpacePanelLook
 	onSelectSpace?: (id: string) => void
 	renderSpace: (space: Space) => ReactNode
 }
 
 const SpaceCarousel = ({
 	list,
+	panel = "inset",
 	spaces,
 	selectedSpaceId,
 	isSwipeEnabled,
@@ -169,6 +182,7 @@ const SpaceCarousel = ({
 					<SpacePanel
 						isInView={space.id === selectedSpaceId}
 						key={scrollKey}
+						look={panel}
 						scrollKey={scrollKey}
 						scrolls={scrolls}
 					>
@@ -198,4 +212,36 @@ const AppSidebarList = ({
 		<SidebarContent className={CONTENT_INSET}>{children}</SidebarContent>
 	)
 
-export { AppSidebarList }
+interface CurrentSpaceCarouselProps {
+	spaces: Space[]
+	selectedSpaceId?: string
+	isSwitchingEnabled: boolean
+	onSelectSpace?: (id: string) => void
+	children: ReactNode
+}
+
+const CurrentSpaceCarousel = ({
+	spaces,
+	selectedSpaceId,
+	isSwitchingEnabled,
+	onSelectSpace,
+	children,
+}: CurrentSpaceCarouselProps) => {
+	const shown =
+		spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
+	if (!shown) return children
+
+	return (
+		<SpaceCarousel
+			isSwipeEnabled={isSwitchingEnabled && spaces.length > 1}
+			list="conversations"
+			onSelectSpace={onSelectSpace}
+			panel="bare"
+			renderSpace={(space) => (space.id === shown.id ? children : null)}
+			selectedSpaceId={shown.id}
+			spaces={spaces}
+		/>
+	)
+}
+
+export { AppSidebarList, CurrentSpaceCarousel }
