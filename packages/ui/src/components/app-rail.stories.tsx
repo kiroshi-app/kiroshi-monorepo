@@ -5,7 +5,6 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
-	hueScopeOf,
 	isInBrowserRunner,
 	probedStyleOf,
 	realPointer,
@@ -15,7 +14,6 @@ import {
 } from "@workspace/storybook/story-utils"
 import {
 	AppRail,
-	type AppRailDots,
 	type AppRailPanel,
 	type AppRailProps,
 	NAVIGATION_ROW_GAP,
@@ -30,7 +28,6 @@ import {
 	STUDIO,
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
-import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
@@ -390,52 +387,6 @@ const selecting = (selected: AppRailPanel) => ({
 	},
 })
 
-const DOT_TOKEN: Record<BotBadge, string> = {
-	attention: "bg-warning",
-	done: "bg-bot-badge-done",
-	failed: "bg-bot-badge-failed",
-}
-
-const DOT_NEWS: Record<BotBadge, string> = {
-	attention: "waiting for you",
-	done: "activity finished",
-	failed: "activity failed",
-}
-
-const isMotionReduced = () =>
-	matchMedia("(prefers-reduced-motion: reduce)").matches
-
-const expectDotOfKind = async (
-	canvasElement: HTMLElement,
-	panel: AppRailPanel,
-	badge: BotBadge,
-) => {
-	const entry = entryNamed(
-		canvasElement,
-		`${ENTRY_NAMES[panel]}, ${DOT_NEWS[badge]}`,
-	)
-	const dot = slotIn(entry, "app-rail-dot")
-	const { backgroundColor, animationName } = getComputedStyle(dot)
-	await expect(backgroundColor).toBe(
-		tokenStyleIn(entry, DOT_TOKEN[badge], "backgroundColor"),
-	)
-	await expect(backgroundColor).not.toBe(
-		tokenStyleIn(entry, "bg-primary", "backgroundColor"),
-	)
-	const isPulsing = badge === "attention" && !isMotionReduced()
-	await expect(animationName === "pulse").toBe(isPulsing)
-}
-
-const dotsOfKind = (dots: AppRailDots) => ({
-	args: { dots },
-	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		for (const panel of PANELS) {
-			const badge = dots[panel]
-			if (badge) await expectDotOfKind(canvasElement, panel, badge)
-		}
-	},
-})
-
 const meta = preview.meta({
 	title: "Navigation/AppRail",
 	component: AppRail,
@@ -445,7 +396,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, the search that opens the Cmd/Ctrl+K palette right under it, then the three panels a reader moves between, Conversations, Missions then Library, and the reader at the foot. The rail draws and reports; which panel is open, which settings is open over it and the dot on each entry are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`, and the news it carries is spoken in its name, so a dot never rides on colour alone. While a settings is open, its entry is the current one and no panel entry is. The palette is not a panel: while it is open the search entry wears the selected fill through `aria-expanded`, never `aria-current`, and the open panel keeps its mark.",
+					"The 60px column of 44px icons down the left edge of the window: the current space's logo first, a 26px square in its colour that opens the space settings, the search that opens the Cmd/Ctrl+K palette right under it, then the three panels a reader moves between, Conversations, Missions then Library, and the reader at the foot. The rail draws and reports; which panel is open and which settings is open over it are props, and each entry reports its own press. An entry is a button named by its panel, the open one marked `aria-current`. While a settings is open, its entry is the current one and no panel entry is. The palette is not a panel: while it is open the search entry wears the selected fill through `aria-expanded`, never `aria-current`, and the open panel keeps its mark.",
 			},
 		},
 	},
@@ -469,9 +420,6 @@ export const Conversations = meta.story({
 		await expectCurrentBesideIdle(canvasElement)
 		await expectBareBottomGroup(canvasElement)
 		await expectListRowGapBetweenEntries(canvasElement)
-		await expect(
-			canvasElement.querySelector('[data-slot="app-rail-dot"]'),
-		).toBeNull()
 	},
 	parameters: {
 		docs: {
@@ -996,12 +944,11 @@ export const RemovedPanelFallsBackToConversations = meta.story({
 })
 
 export const SpaceLogoHovered = meta.story({
-	args: { dots: { you: true } },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The current space's logo, first in the rail, under the pointer. Check it is the 26px SpaceAvatar in the space colour, with no icon, no presence dot and no dot of its own even while another entry carries one, that no gear is left in the rail, that the tooltip and the name spoken for it read Space settings alone, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
+					"The current space's logo, first in the rail, under the pointer. Check it is the 26px SpaceAvatar in the space colour, with no icon and no presence dot, that no gear is left in the rail, that the tooltip and the name spoken for it read Space settings alone, and that a press opens the space settings. Pick `SpaceLogoWithoutSpace` for the logo before a space is known.",
 			},
 		},
 	},
@@ -1011,7 +958,6 @@ export const SpaceLogoHovered = meta.story({
 		await expect(slotIn(logo, "space-avatar").dataset.colour).toBe(
 			String(BLOT_HUES.blue),
 		)
-		await expect(logo.querySelector('[data-slot="app-rail-dot"]')).toBeNull()
 		await userEvent.hover(logo)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
 			SPACE_SETTINGS,
@@ -1061,94 +1007,6 @@ export const FirstTabUnderTitleBar = meta.story({
 		await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
 		await expect(titleBar.height).toBe(SHELL_TITLE_BAR_HEIGHT)
 	},
-})
-
-export const WithDot = meta.story({
-	args: { dots: { conversations: "done", missions: "attention" } },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Two entries with something new, the way the reference draws them. Check each dot is 8px, carries no number, flush with the top and trailing corner of its 44px entry and ringed 2px in the window ground, and that the entry's name says there is news.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const entry = entryNamed(canvasElement, "Conversations, activity finished")
-		const dot = slotIn(entry, "app-rail-dot").getBoundingClientRect()
-		const box = entry.getBoundingClientRect()
-		await expect(dot.width).toBe(8)
-		await expect(dot.top).toBe(box.top)
-		await expect(dot.right).toBe(box.right)
-		await expect(slotIn(canvasElement, "app-rail")).not.toHaveTextContent(/\d/)
-		await expect(
-			slotIn(
-				entryNamed(canvasElement, "Missions, waiting for you"),
-				"app-rail-dot",
-			),
-		).toBeVisible()
-		await expect(
-			entryNamed(canvasElement, SPACE_SETTINGS).querySelector(
-				'[data-slot="app-rail-dot"]',
-			),
-		).toBeNull()
-	},
-})
-
-export const AttentionDot = meta.story({
-	...dotsOfKind({ conversations: "attention", missions: "attention" }),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A conversation of the space waits on the reader and a mission waits on them too. Check both dots wear `--warning`, never the primary blue, that they pulse while motion is allowed and hold still under `prefers-reduced-motion: reduce`, and that each entry is named waiting for you. Pick `DoneDot` for a turn that simply finished.",
-			},
-		},
-	},
-})
-
-export const AttentionDotDark = meta.story({
-	...dotsOfKind({ conversations: "attention", missions: "attention" }),
-	globals: { theme: "dark" },
-})
-
-export const DoneDot = meta.story({
-	...dotsOfKind({ conversations: "done" }),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The strongest badge among the conversations of the space is a finished turn. Check the Conversations dot is green on `--bot-badge-done`, holds still, and that the entry is named activity finished. Pick `FailedDot` for a turn that failed.",
-			},
-		},
-	},
-})
-
-export const DoneDotDark = meta.story({
-	...dotsOfKind({ conversations: "done" }),
-	globals: { theme: "dark" },
-})
-
-export const FailedDot = meta.story({
-	...dotsOfKind({ conversations: "failed" }),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A failed turn is the strongest badge among the conversations of the space, over any finished one. Check the Conversations dot is red on `--bot-badge-failed`, holds still, and that the entry is named activity failed. Pick `AttentionDot` for a conversation that waits on the reader.",
-			},
-		},
-	},
-})
-
-export const FailedDotDark = meta.story({
-	...dotsOfKind({ conversations: "failed" }),
-	globals: { theme: "dark" },
-})
-
-export const LibraryDot = meta.story({
-	tags: ["test-only"],
-	...dotsOfKind({ library: "done" }),
 })
 
 const updateWaiting = updateBadgeIn("available")
@@ -1262,35 +1120,7 @@ export const KeyboardReach = meta.story({
 	},
 })
 
-export const OnTintedSpace = meta.story({
-	args: { dots: { conversations: "done", missions: "attention" } },
-	render: (args: AppRailProps) => (
-		<div className="surface-shell flex h-[32rem]" {...hueScopeOf("blue")}>
-			<AppRail {...args} />
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The rail on a space that carries a colour, which washes the shell surface behind it. Check the ring around each dot is the tinted surface itself, so no dot wears a halo of the uncoloured ground.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const ground = getComputedStyle(
-			slotIn(canvasElement, "app-rail").parentElement as HTMLElement,
-		).backgroundColor
-		const dots = canvasElement.querySelectorAll('[data-slot="app-rail-dot"]')
-		await expect(dots).toHaveLength(2)
-		for (const dot of dots) {
-			await expect(getComputedStyle(dot).boxShadow).toContain(ground)
-		}
-	},
-})
-
 export const Dark = meta.story({
-	args: { dots: { conversations: "done", missions: "attention" } },
 	globals: { theme: "dark" },
 	play: async ({ canvasElement }) => {
 		await expectListRowGapBetweenEntries(canvasElement)

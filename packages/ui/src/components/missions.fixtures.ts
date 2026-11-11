@@ -14,7 +14,6 @@ import type {
 	MissionsPageAgent,
 	MissionsPageMission,
 } from "@workspace/ui/components/missions-page"
-import type { MissionsPanelMission } from "@workspace/ui/components/missions-panel"
 import type { ReportedRunRowModel } from "@workspace/ui/components/reported-run-row"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type { EarlierTodayRow } from "@workspace/ui/components/routines-panel"
@@ -423,61 +422,6 @@ export const CLOSED_MISSION_CARD: MissionCardModel = {
 	isClosed: true,
 	timestamp: "09:12",
 }
-
-export const LONG_TITLE_MISSION: MissionCardModel = {
-	...WAITING_HUMAN_MISSION,
-	id: "mission-long-title",
-	objective:
-		"Move every run history table off the shared database and into the per space store without losing a single reported run",
-}
-
-const inConversation =
-	(conversationId: string) =>
-	(mission: MissionCardModel): MissionsPanelMission => ({
-		...mission,
-		conversationId,
-	})
-
-export const SPACE_OPEN_MISSIONS: MissionsPanelMission[] = [
-	inConversation("conversation-storage")(WAITING_HUMAN_MISSION),
-	inConversation("conversation-roster")(READY_MISSION),
-	inConversation("conversation-changelog")(WORKING_MISSION),
-	inConversation("conversation-storage")(WAITING_BOT_MISSION),
-	inConversation("conversation-shell")(FAILED_MISSION),
-]
-
-export const SPACE_WAITING_MISSIONS: MissionsPanelMission[] =
-	SPACE_OPEN_MISSIONS.slice(0, 2)
-
-export const SPACE_LONG_TITLE_MISSIONS: MissionsPanelMission[] = [
-	inConversation("conversation-storage")(LONG_TITLE_MISSION),
-]
-
-export const SPACE_EARLIER_TODAY_MISSIONS: MissionsPanelMission[] = [
-	CLOSED_MISSION,
-	{
-		...CLOSED_MISSION,
-		id: "mission-digest",
-		objective: "Send the morning digest",
-		timestamp: "08:40",
-	},
-	{
-		...CLOSED_MISSION,
-		id: "mission-rail",
-		objective: "Draw the icon rail of the shell",
-		timestamp: "08:05",
-		identity: identityOf(MISSION_BOT),
-	},
-	{
-		...CLOSED_MISSION,
-		id: "mission-release",
-		objective: "Watch the release notes file",
-		timestamp: "07:32",
-		identity: identityOf(SHELL_BOT),
-	},
-].map(inConversation("conversation-roster"))
-
-export const NO_SPACE_MISSIONS: MissionsPanelMission[] = []
 
 const ATLAS: MissionsPageAgent = { id: "bot-atlas", name: "Atlas", hue: 257 }
 const JUNO: MissionsPageAgent = { id: "bot-juno", name: "Juno", hue: 296 }
