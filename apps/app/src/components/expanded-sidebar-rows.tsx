@@ -27,7 +27,6 @@ import {
 } from "@workspace/ui/components/app-sidebar-roster-drag"
 import {
 	type RosterEntries,
-	rosterEntriesOf,
 	rosterMovesOf,
 } from "@workspace/ui/components/app-sidebar-roster-layout"
 import {
@@ -53,11 +52,11 @@ import { mergeRefs } from "@workspace/ui/lib/utils"
 
 import {
 	dragEntriesOf,
+	drawnEntriesOf,
 	drawnLandingOf,
 	namedSectionsOf,
 	pinnedRowsOf,
 	rowKeyMoveOf,
-	sectionsDrawnAfterPins,
 } from "@/lib/sidebar/drawn-roster"
 import { isPinnedRow, pinsOfRowsNotShown } from "@/lib/sidebar/roster-pins"
 import { useSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
@@ -300,11 +299,10 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	const [crossingMove, setCrossingMove] = useState<RosterMove | null>(null)
 	const frameRef = useRef<HTMLDivElement>(null)
 
-	const entries = rosterEntriesOf({
-		bots: NO_AGENTS,
+	const entries = drawnEntriesOf({
 		conversations,
+		sections,
 		naming: namedRow ? naming : null,
-		sections: sectionsDrawnAfterPins(conversations, sections),
 	})
 	const moves = rosterMovesOf({
 		entries,
