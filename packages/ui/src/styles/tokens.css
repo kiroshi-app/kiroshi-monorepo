@@ -75,7 +75,6 @@
 	--bot-badge-failed: oklch(0.62 0.22 27);
 	--warning: oklch(0.64 0.16 60);
 	--warning-foreground: #fffffc;
-	--mission-capsule: #ffffff;
 	--mission-mark-cut-out: #0a0a0a;
 	--mission-glyph-waiting: oklch(0.56 0.16 60);
 	--mission-glyph-failed: oklch(0.58 0.22 27);
@@ -315,7 +314,6 @@
 	--bot-badge-attention: var(--primary-strong);
 	--warning: oklch(0.76 0.16 72);
 	--warning-foreground: #1f1400;
-	--mission-capsule: oklch(0.97 0 0 / 10%);
 	--mission-mark-cut-out: #0a0a0a;
 	--mission-glyph-waiting: var(--warning);
 	--mission-glyph-failed: var(--bot-badge-failed);

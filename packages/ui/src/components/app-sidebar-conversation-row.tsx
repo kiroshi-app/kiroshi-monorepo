@@ -35,10 +35,7 @@ import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
 import { dropArea, type Lifter } from "@workspace/ui/hooks/use-roster-lift"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 
-const MISSION_SURFACE =
-	"relative flex flex-col gap-1 rounded-lg p-1.5 hover:bg-sidebar-accent active:bg-sidebar-accent has-[[data-active]]:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70 group-data-[collapsible=icon]:p-0"
-
-const ROW_ICON_SIDE = 36
+const ROW_ICON_SIDE = 28
 
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
@@ -90,14 +87,12 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger
-					className={hasMissions ? MISSION_SURFACE : undefined}
-				>
+				<ContextMenuTrigger>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
 						badge={badgeOf(conversation)}
-						geometry={hasMissions ? "surfaced" : "roster"}
+						geometry={hasMissions ? "tree" : "roster"}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}

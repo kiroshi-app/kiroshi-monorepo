@@ -144,8 +144,9 @@ describe("markMetricsOf", () => {
 		}
 	})
 
-	it("scales 12 from 14, 36 from 26 and 64 from 48", () => {
+	it("scales 12 from 14, 28 and 36 from 26 and 64 from 48", () => {
 		expect(markMetricsOf(12).initial).toEqual({ fontSize: 8.571, weight: 700 })
+		expect(markMetricsOf(28).initial).toEqual({ fontSize: 14, weight: 600 })
 		expect(markMetricsOf(36).initial).toEqual({ fontSize: 18, weight: 600 })
 		expect(markMetricsOf(64).badge).toEqual({ diameter: 24, cutOut: 3.333 })
 		expect(markMetricsOf(12).cross).toBeUndefined()

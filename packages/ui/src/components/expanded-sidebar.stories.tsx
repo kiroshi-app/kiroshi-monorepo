@@ -23,8 +23,12 @@ import {
 	SIDEBAR_SECTION,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
+import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
-import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
+import type {
+	AppSidebarRowMission,
+	AppSidebarSection,
+} from "@workspace/ui/components/app-sidebar-model"
 import {
 	PINNED_ZONE,
 	SORTED,
@@ -190,6 +194,89 @@ const POPULATED_ARTBOARD = {
 	),
 }
 
+const treeMission = (
+	state: AppSidebarRowMission["state"],
+	externalId: string,
+	title: string,
+): AppSidebarRowMission => ({
+	id: externalId,
+	state,
+	isLive: state === "working",
+	ticket: { platform: "linear", externalId, title },
+})
+
+const RELEASE_TRAIN: AppSidebarConversation = {
+	...artboardRow("Release train"),
+	color: BLOT_HUES.blue,
+	icon: "Rocket",
+	missions: [
+		treeMission("failed", "OPE-412", "Fix the flaky upload test"),
+		treeMission("waiting", "OPE-418", "Review the migration plan"),
+	],
+}
+
+const ONBOARDING_FLOW: AppSidebarConversation = {
+	...artboardRow("Onboarding flow"),
+	color: BLOT_HUES.green,
+	missions: [
+		treeMission("working", "OPE-421", "Rewrite the welcome email"),
+		treeMission("ready", "OPE-425", "Ship the empty states"),
+	],
+}
+
+const TREE_CONVERSATIONS = [
+	RELEASE_TRAIN,
+	ROADMAP_REVIEW,
+	ONBOARDING_FLOW,
+	LISBON_OFFSITE,
+]
+
+const LONG_TITLES: AppSidebarConversation[] = [
+	{
+		...RELEASE_TRAIN,
+		name: "Quarterly planning review with every regional lead and the board",
+		missions: [
+			treeMission(
+				"working",
+				"OPE-431",
+				"Migrate every customer workspace to the new storage layout without downtime",
+			),
+		],
+	},
+]
+
+const treeListOf = (conversations: AppSidebarConversation[]) => (
+	<SidebarMenu>
+		{conversations.map((conversation) => (
+			<ConversationRosterRow
+				conversation={conversation}
+				isPinned={false}
+				isSelected={conversation.id === ROADMAP_REVIEW.id}
+				key={conversation.id}
+				lift={STILL_LIFT}
+				sections={[SIDEBAR_SECTION]}
+			/>
+		))}
+		<BotRosterRow
+			bot={ATLAS}
+			isPinned={false}
+			isSelected={false}
+			lift={STILL_LIFT}
+			memberships={[STUDIO.id]}
+			sections={[SIDEBAR_SECTION]}
+			spaces={[STUDIO]}
+		/>
+	</SidebarMenu>
+)
+
+const TREE_ARTBOARD = {
+	...STATE_ARTBOARD,
+	destination: undefined,
+	missionCount: 4,
+	pinned: [],
+	conversations: treeListOf(TREE_CONVERSATIONS),
+}
+
 const LIST_END_BAR_WIDTHS = [
 	[140, 180],
 	[112, 164],
@@ -198,6 +285,8 @@ const LIST_END_BAR_WIDTHS = [
 const DOWNLOAD = fn()
 
 const DARK = { theme: "dark", theme_layout: "single" }
+
+const LIGHT = { theme: "light", theme_layout: "single" }
 
 type PaperWindowProps = {
 	children: ReactNode
@@ -341,6 +430,163 @@ export const ExpandedMissions = meta.story({
 		await expect(
 			sidebar.getByRole("button", { name: "New conversation" }),
 		).not.toHaveAttribute("aria-current")
+	},
+})
+
+const ROW_MEDIA_SIDE = 28
+
+const EVEN_PADDING = Array(4).fill("6px")
+
+const paddingOf = (element: Element) => {
+	const style = getComputedStyle(element)
+	return [
+		style.paddingTop,
+		style.paddingRight,
+		style.paddingBottom,
+		style.paddingLeft,
+	]
+}
+
+const colourTransitionsOf = (element: Element) => {
+	const style = getComputedStyle(element)
+	const durations = style.transitionDuration.split(", ")
+	return style.transitionProperty
+		.split(", ")
+		.filter(
+			(property, rank) =>
+				/color|^all$/.test(property) &&
+				Number.parseFloat(durations[rank % durations.length]) > 0,
+		)
+}
+
+const conversationButtonOf = (tree: Element) =>
+	tree.parentElement?.querySelector<HTMLElement>(
+		'[data-slot="sidebar-menu-button"]',
+	) as HTMLElement
+
+const centreOfBox = (element: Element) => {
+	const box = boxOf(element)
+	return [box.left + box.width / 2, box.top + box.height / 2] as const
+}
+
+const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
+	const sidebar = sidebarIn(canvasElement)
+	const controls = within(sidebar).getAllByRole("button")
+	for (const control of controls)
+		await expect(colourTransitionsOf(control)).toEqual([])
+
+	const rows = [
+		slotIn(sidebar, "space-switcher"),
+		...slotsIn(sidebar, "sidebar-menu-button"),
+		...slotsIn(sidebar, "fold-section-trigger"),
+		slotIn(sidebar, "expanded-sidebar-footer"),
+	]
+	for (const row of rows) await expect(paddingOf(row)).toEqual(EVEN_PADDING)
+
+	for (const name of ["New conversation", /^Missions/, "Library"]) {
+		const item = within(sidebar).getByRole("button", { name })
+		const slot = item.querySelector("span[aria-hidden]") as HTMLElement
+		await expect(boxOf(item).height).toBe(40)
+		await expect(boxOf(slot).width).toBe(ROW_MEDIA_SIDE)
+		await expect(getComputedStyle(slot).backgroundColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect(boxOf(slot.querySelector("svg") as SVGElement).width).toBe(16)
+	}
+
+	const avatars = [
+		sidebar.querySelector('[data-slot="space-switcher"] [data-slot]'),
+		...slotsIn(slotIn(sidebar, "space-carousel"), "sidebar-menu-button").map(
+			(row) => row.querySelector(":scope > span:first-child > *"),
+		),
+		slotIn(sidebar, "expanded-sidebar-avatar"),
+	]
+	await expect(
+		avatars.map((avatar) => [
+			avatar?.getAttribute("data-slot"),
+			boxOf(avatar as Element).width,
+		]),
+	).toEqual(
+		avatars.map((avatar) => [
+			avatar?.getAttribute("data-slot"),
+			ROW_MEDIA_SIDE,
+		]),
+	)
+
+	for (const tree of slotsIn(sidebar, "mission-capsule-list")) {
+		const head = conversationButtonOf(tree)
+		const trunk = getComputedStyle(tree, "::before")
+		await expect(boxOf(tree).top).toBe(boxOf(head).bottom)
+		await expect([trunk.insetInlineStart, trunk.width, trunk.bottom]).toEqual([
+			"19px",
+			"1.5px",
+			"14px",
+		])
+		await expect(getComputedStyle(tree).pointerEvents).toBe("none")
+		const title = slotIn(head, "roster-row-name")
+		for (const row of slotsIn(tree, "mission-capsule")) {
+			const branch = row.firstElementChild as HTMLElement
+			const glyph = slotIn(row, "mission-capsule-glyph")
+			await expect(boxOf(row).height).toBe(28)
+			await expect(boxOf(branch).left - boxOf(tree).left).toBe(20)
+			await expect(boxOf(branch).width).toBe(16)
+			await expect(centreOfBox(branch)[1]).toBe(centreOfBox(row)[1])
+			await expect(boxOf(glyph).width).toBe(14)
+			await expect(boxOf(glyph).left).toBe(boxOf(title).left)
+			await expect(row.tabIndex).toBe(-1)
+			await expect(row.querySelector(".sr-only")).not.toBeEmptyDOMElement()
+			await expect(document.elementFromPoint(...centreOfBox(row))).toBe(head)
+		}
+	}
+}
+
+const TREE_DESCRIPTION =
+	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every row pads 6 on all four sides."
+
+export const Missions1TreeExpanded = meta.story({
+	name: "Missions 1 Tree",
+	args: TREE_ARTBOARD,
+	parameters: { docs: { description: { story: TREE_DESCRIPTION } } },
+	play: async ({ canvasElement }) => {
+		await expectTreeArtboard({ canvasElement })
+		await expect(
+			slotsIn(canvasElement, "mission-capsule").map((row) => row.dataset.state),
+		).toEqual(["failed", "waiting", "working", "ready"])
+	},
+})
+
+export const Missions1TreeLightExpanded = meta.story({
+	name: "Missions 1 Tree Light",
+	globals: LIGHT,
+	args: TREE_ARTBOARD,
+	parameters: { docs: { description: { story: TREE_DESCRIPTION } } },
+	play: expectTreeArtboard,
+})
+
+export const Missions1TreeLongTitlesExpanded = meta.story({
+	name: "Missions 1 Tree Long titles",
+	args: { ...TREE_ARTBOARD, conversations: treeListOf(LONG_TITLES) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation title and a mission title longer than the column. Check both stay on one line and end in an ellipsis, the timestamp and the row height untouched.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectTreeArtboard({ canvasElement })
+		const name = slotIn(canvasElement, "roster-row-name")
+		const title = slotIn(canvasElement, "mission-capsule-title")
+		for (const line of [name, title]) {
+			await expect(line.scrollWidth).toBeGreaterThan(line.clientWidth)
+			await expect(getComputedStyle(line).textOverflow).toBe("ellipsis")
+		}
+		await expect(boxOf(name).height).toBe(20)
+		await expect(boxOf(title).height).toBe(16)
+		await expect(boxOf(slotIn(canvasElement, "mission-capsule")).height).toBe(
+			28,
+		)
 	},
 })
 
@@ -507,17 +753,17 @@ const triggerAt = (state: SpaceAvatarState, host?: SpaceHost) => ({
 	parameters: {
 		docs: {
 			description: {
-				story: `The switcher of a ${state} Space. Check the row stays 36px tall with an 8px gap, and draws the generated 26px avatar in the Space colour with the ${state} host state, then the name and the chevron, with no attention ring even though the Space waits on the person.`,
+				story: `The switcher of a ${state} Space. Check the row stays 40px tall with a 10px gap, and draws the generated 28px avatar in the Space colour with the ${state} host state, then the name and the chevron, with no attention ring even though the Space waits on the person.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }: StoryCanvas) => {
 		const switcher = slotIn(canvasElement, "space-switcher")
 		const avatar = slotIn(switcher, "space-avatar")
-		await expect(switcher.getBoundingClientRect().height).toBe(36)
-		await expect(getComputedStyle(switcher).columnGap).toBe("8px")
+		await expect(switcher.getBoundingClientRect().height).toBe(40)
+		await expect(getComputedStyle(switcher).columnGap).toBe("10px")
 		await expect(avatar.dataset.state).toBe(state)
-		await expect(avatar.dataset.size).toBe("26")
+		await expect(avatar.dataset.size).toBe("28")
 		await expect(avatar.dataset.colour).toBe(String(KIROSHI.colour))
 		await expect(avatar).not.toHaveAttribute("data-attention")
 		await expect(slotsIn(avatar, "space-avatar-attention")).toHaveLength(0)
@@ -969,7 +1215,7 @@ export const N1NamedSectionExpanded = meta.story({
 		const pinned = headerNamed(canvasElement, "Pinned")
 		const style = getComputedStyle(clients)
 		await expect(style.padding).toBe("6px")
-		await expect(style.borderTopLeftRadius).toBe("8px")
+		await expect(style.borderTopLeftRadius).toBe("10px")
 		await expect(style.columnGap).toBe("4px")
 		await expect(style.justifyContent).toBe("space-between")
 		await expect(style.fontSize).toBe("12px")
@@ -1317,8 +1563,6 @@ export const D2ClosedSectionHiddenDuringLiftExpanded = meta.story({
 	},
 })
 
-const LIGHT = { theme: "light", theme_layout: "single" }
-
 const activeRowHoverStory = (globals: typeof DARK) => ({
 	globals,
 	parameters: {
@@ -1413,7 +1657,7 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the switcher keeps one inset on the left and the top of its content and reaches the right edge of its row, the footer avatar sits as far from the left edge as from the top and the gear as far from the right edge as from the top, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
+					"Check the switcher keeps one inset on the left and the top of its content and reaches the right edge of its row, the footer avatar sits as far from the left edge as from the top and the gear as far from the right edge as from the top, and that both avatars sit on the vertical line of the navigation icons, 28px from the sidebar edge.",
 			},
 		},
 	},
@@ -1429,8 +1673,8 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		const rightInsetOf = (edge: Element, content: Element) =>
 			boxOf(edge).right - boxOf(content).right
 
-		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(5)
-		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(5)
+		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(6)
+		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(6)
 		await expect(rightInsetOf(row, switcher)).toBe(0)
 		await expect(footerAvatar.left - boxOf(footer).left).toBe(
 			footerAvatar.top - boxOf(footer).top,
@@ -1443,9 +1687,9 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		const navigationIcon = canvas
 			.getByRole("button", { name: "Library" })
 			.querySelector("svg") as Element
-		await expect(centreOf(boxOf(navigationIcon))).toBe(26)
-		await expect(centreOf(switcherAvatar)).toBe(26)
-		await expect(centreOf(footerAvatar)).toBe(26)
+		await expect(centreOf(boxOf(navigationIcon))).toBe(28)
+		await expect(centreOf(switcherAvatar)).toBe(28)
+		await expect(centreOf(footerAvatar)).toBe(28)
 	},
 })
 
@@ -1475,7 +1719,7 @@ export const LongSpaceNameTruncatesExpanded = meta.story({
 		const name = slotIn(row, "space-switcher-name")
 		const switcher = slotIn(row, "space-switcher")
 		const chevron = switcher.lastElementChild as Element
-		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(5)
+		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(6)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(boxOf(switcher).right).toBe(boxOf(row).right)
 	},

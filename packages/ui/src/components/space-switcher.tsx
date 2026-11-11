@@ -51,16 +51,17 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"relative h-9 w-full min-w-0 shrink justify-start gap-2 rounded-control px-1 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
+	"relative h-10 w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 p-1.5 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
 
-const SWITCHER_NAME = "min-w-0 truncate font-semibold text-foreground text-sm"
+const SWITCHER_NAME =
+	"min-w-0 truncate font-semibold text-foreground text-reading leading-4.5"
 
 const SWITCHER_OFFLINE = "shrink-0 text-space-offline text-xs"
 
 const SWITCHER_CHEVRON = "size-3.5 shrink-0 stroke-2! text-muted-foreground"
 
 const SWITCHER_INVITATION =
-	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
+	"pointer-events-none absolute end-0.5 top-1.25 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
 
 const MENU_RESTING = "max-w-64"
 
@@ -304,7 +305,7 @@ const SpaceSwitcher = ({
 							<SpaceAvatar
 								colour={selected.colour}
 								name={selected.name}
-								size={26}
+								size={28}
 								spaceId={selected.avatarSeed}
 								state={spaceAvatarStateOf(host)}
 							/>

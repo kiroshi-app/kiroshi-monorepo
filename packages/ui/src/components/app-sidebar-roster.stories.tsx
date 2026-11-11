@@ -1045,6 +1045,13 @@ const contrastOf = (colour: string, ground: string) => {
 	return (lighter + 0.05) / (darker + 0.05)
 }
 
+const groundOf = (element: Element): string => {
+	const ground = getComputedStyle(element).backgroundColor
+	return ground === TRANSPARENT && element.parentElement
+		? groundOf(element.parentElement)
+		: ground
+}
+
 const surfaceOf = (element: Element) =>
 	element.closest('[data-slot="context-menu-trigger"]') as HTMLElement
 
@@ -1067,33 +1074,32 @@ const expectMissionsRows = async ({
 	const surface = surfaceOf(head)
 	await expect(surface.contains(first) && surface.contains(second)).toBe(true)
 	await expect(head.contains(first)).toBe(false)
-	await expect(first.offsetHeight).toBe(24)
+	await expect(first.offsetHeight).toBe(28)
 	await expect(
 		first.getBoundingClientRect().top - head.getBoundingClientRect().bottom,
-	).toBe(4)
+	).toBe(0)
 	await expect(
 		second.getBoundingClientRect().top - first.getBoundingClientRect().bottom,
-	).toBe(4)
+	).toBe(0)
 	await expect(
-		first.getBoundingClientRect().left - surface.getBoundingClientRect().left,
-	).toBe(50)
-	await expect(pixelsOf(surface, "padding-top")).toBe(6)
-	await expect(pixelsOf(surface, "padding-inline-end")).toBe(6)
-	await expect(pixelsOf(surface, "border-top-left-radius")).toBe(10)
+		slotIn(first, "mission-capsule-glyph").getBoundingClientRect().left -
+			surface.getBoundingClientRect().left,
+	).toBe(44)
 	await expect(
 		surface.getBoundingClientRect().bottom -
 			second.getBoundingClientRect().bottom,
-	).toBe(6)
+	).toBe(0)
 
 	await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT)
 	fireEvent.contextMenu(first)
 	await waitFor(() =>
-		expect(getComputedStyle(surface).backgroundColor).not.toBe(TRANSPARENT),
+		expect(getComputedStyle(head).backgroundColor).not.toBe(TRANSPARENT),
 	)
-	await expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
 	await userEvent.keyboard("{Escape}")
 	await waitFor(() =>
-		expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT),
+		expect(getComputedStyle(head).backgroundColor).toBe(TRANSPARENT),
 	)
 
 	await expect(first.tabIndex).toBe(-1)
@@ -1129,11 +1135,14 @@ export const ExpandedMissionsRowsLight = meta.story({
 	play: async (context) => {
 		await expectMissionsRows(context)
 		for (const capsule of slotsIn(context.canvasElement, "mission-capsule")) {
-			const ground = getComputedStyle(capsule).backgroundColor
+			const ground = groundOf(capsule)
 			const glyph = slotIn(capsule, "mission-capsule-glyph")
 			const title = slotIn(capsule, "mission-capsule-title")
 			const identifier = title.previousElementSibling as HTMLElement
-			for (const part of [glyph, identifier, title])
+			await expect(
+				contrastOf(getComputedStyle(glyph).color, ground),
+			).toBeGreaterThanOrEqual(3)
+			for (const part of [identifier, title])
 				await expect(
 					contrastOf(getComputedStyle(part).color, ground),
 				).toBeGreaterThanOrEqual(4.5)
