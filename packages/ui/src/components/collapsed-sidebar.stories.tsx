@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	boxOf,
 	carrySpaceCarousel,
 	expectSkeletonFilledTo,
 	expectSpaceCarouselHeld,
@@ -939,8 +940,8 @@ const firstZoneEdgesOf = (canvasElement: HTMLElement, slot: string) => {
 	return slotsIn(list, slot)
 		.slice(0, FIRST_ZONE_SLOTS.length)
 		.map((node) => ({
-			top: node.getBoundingClientRect().top - list.getBoundingClientRect().top,
-			height: node.getBoundingClientRect().height,
+			top: boxOf(node).top - boxOf(list).top,
+			height: boxOf(node).height,
 		}))
 }
 
@@ -1333,10 +1334,8 @@ export const CurrentDestinationHoveredLightCollapsed = meta.story(
 	currentDestinationHoverStory(LIGHT),
 )
 
-const middleYOf = (element: Element) => {
-	const box = element.getBoundingClientRect()
-	return box.top + box.height / 2
-}
+const middleYOf = (element: Element) =>
+	boxOf(element).top + boxOf(element).height / 2
 
 export const SharedRowsCollapsed = meta.story({
 	name: "Shared rows Collapsed",

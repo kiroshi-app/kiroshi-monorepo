@@ -73,7 +73,7 @@ const LIST =
 
 const SLOT = cn(
 	SIDEBAR_ROW_INSET,
-	"relative box-content grid shrink-0 place-content-center place-items-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring",
+	"relative box-content grid shrink-0 place-content-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring",
 )
 
 const GLYPH_SLOT = cn(SLOT, SIDEBAR_GLYPH_BOX)
