@@ -498,6 +498,8 @@ const TOP_MENU_HEIGHT = 32
 
 const TOP_MENU_GLYPH = 14
 
+const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 52 }
+
 const paddingOf = (element: Element) => {
 	const style = getComputedStyle(element)
 	return [
@@ -1709,14 +1711,8 @@ const expectTopMenuAlignedOnConversations = async (
 	const avatar = conversation.querySelector(
 		":scope > span:first-child > *",
 	) as Element
-	await expect(xOffsetsOf(item, glyph, box)).toEqual({
-		iconCentre: 28,
-		labelStart: 52,
-	})
-	await expect(xOffsetsOf(conversation, avatar, box)).toEqual({
-		iconCentre: 28,
-		labelStart: 52,
-	})
+	await expect(xOffsetsOf(item, glyph, box)).toEqual(ROW_X_OFFSETS)
+	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(ROW_X_OFFSETS)
 	return item
 }
 
