@@ -70,6 +70,7 @@ const WorkspaceShellRoot = ({
 				<ShellSidebarProvider
 					className={cn(SHELL, className)}
 					data-resizing={resize.isResizing}
+					data-sidebar-open={open}
 					data-hue={spaceHue}
 					onOpenChange={onOpenChange}
 					open={open}

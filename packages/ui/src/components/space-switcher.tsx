@@ -51,7 +51,7 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"relative h-9 w-full min-w-0 justify-start gap-2 rounded-control px-1.25 font-normal hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
+	"relative h-9 w-full min-w-0 shrink justify-start gap-2 rounded-control px-1 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
 
 const SWITCHER_NAME = "min-w-0 truncate font-semibold text-foreground text-sm"
 

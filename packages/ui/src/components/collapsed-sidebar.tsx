@@ -65,7 +65,8 @@ const SLOT_ICON = "[&_svg]:size-4.5 [&_svg]:stroke-[1.75]"
 
 const SLOT_HOVER = "hover:bg-title-bar-highlight"
 
-const SLOT_CURRENT = "bg-rail-item-selected text-foreground"
+const SLOT_CURRENT =
+	"bg-rail-item-selected text-foreground hover:bg-rail-item-selected-hover"
 
 const ATTENTION_DOT =
 	"-end-0.25 -top-0.25 pointer-events-none absolute size-2 rounded-full bg-mission-glyph-waiting ring-2 ring-background"

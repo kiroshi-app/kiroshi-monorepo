@@ -626,7 +626,7 @@ const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
-const EXPANDED_PANEL_WIDTH = 304
+const EXPANDED_PANEL_WIDTH = 288
 
 const shellWidthOf = (property: string) => {
 	const shell = document.querySelector<HTMLElement>(
@@ -2374,7 +2374,7 @@ export const ConversationsPanel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 288px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},
@@ -2473,7 +2473,7 @@ export const MissionsTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The V1 shell with the Missions tab selected, drawn against the V1f artboard: the 304px panel, its 32px header carrying the title and the search button, then Waiting on you, In progress and Earlier today folded. Check the panel holds no roster, that the search button is named and fires once, and that each group carries its count.",
+					"The V1 shell with the Missions tab selected, drawn against the V1f artboard: the 288px panel, its 32px header carrying the title and the search button, then Waiting on you, In progress and Earlier today folded. Check the panel holds no roster, that the search button is named and fires once, and that each group carries its count.",
 			},
 		},
 	},

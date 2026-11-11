@@ -1293,9 +1293,17 @@ layout-windowcontrols--rest-dark
 layout-windowcontrols--restore-forced-hover
 layout-workspaceshell--boxed-host
 layout-workspaceshell--composer-with-reply-on-shell-inset
+layout-workspaceshell--controls-fade-no-colour
 layout-workspaceshell--conversation-open-dark
 layout-workspaceshell--default
+layout-workspaceshell--drag-resizes-without-animation
 layout-workspaceshell--empty
+layout-workspaceshell--first-pinned-tab-on-the-panel-edge
+layout-workspaceshell--first-tab-after-the-history-collapsed
+layout-workspaceshell--first-tab-on-the-panel-edge
+layout-workspaceshell--first-tab-on-the-panel-edge-without-inset-controls
+layout-workspaceshell--fold-animates-as-one-motion
+layout-workspaceshell--fold-under-reduced-motion-has-no-animation
 layout-workspaceshell--four-companions-in-cold-space-dark
 layout-workspaceshell--four-companions-in-warm-space-dark
 layout-workspaceshell--free-hue
@@ -1309,6 +1317,7 @@ layout-workspaceshell--space-tinted-dark
 layout-workspaceshell--switches-between-expanded-and-collapsed
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
+layout-workspaceshell--toggle-during-drag-swaps-at-once
 navigation-appframe--connecting-space
 navigation-appframe--holding-companion-settings
 navigation-appframe--holding-conversation-settings
@@ -1762,6 +1771,8 @@ navigation-boardcanvas--url-dragged-over-dark
 navigation-boardcanvas--zoom-at-maximum
 navigation-boardcanvas--zoom-at-minimum
 navigation-collapsedsidebar--conversation-open
+navigation-collapsedsidebar--current-destination-hovered-collapsed
+navigation-collapsedsidebar--current-destination-hovered-light-collapsed
 navigation-collapsedsidebar--e-1-no-conversations-collapsed
 navigation-collapsedsidebar--e-2-nothing-pinned-collapsed
 navigation-collapsedsidebar--e-3-empty-section-collapsed
@@ -1779,6 +1790,7 @@ navigation-collapsedsidebar--overflow-with-popover-open
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed
+navigation-collapsedsidebar--search-stays-in-the-rail-collapsed
 navigation-collapsedsidebar--swipe-moves-between-spaces-collapsed
 navigation-collapsedsidebar--swipe-with-one-space-does-nothing-collapsed
 navigation-collapsedsidebar--swipe-with-switching-not-allowed-does-nothing-collapsed
@@ -1840,6 +1852,8 @@ navigation-documentpanel--keeps-the-thread-when-toggled
 navigation-documentpanel--moves-from-the-capped-edge
 navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
 navigation-expandedsidebar--a-1-slots-composed-as-the-app-expanded
+navigation-expandedsidebar--active-row-hovered-expanded
+navigation-expandedsidebar--active-row-hovered-light-expanded
 navigation-expandedsidebar--d-1-row-carried-to-conversations-expanded
 navigation-expandedsidebar--d-2-closed-section-hidden-during-lift-expanded
 navigation-expandedsidebar--e-1-no-agents-yet-expanded
@@ -1847,12 +1861,16 @@ navigation-expandedsidebar--e-2-nothing-pinned-expanded
 navigation-expandedsidebar--e-3-empty-section-expanded
 navigation-expandedsidebar--expanded-missions
 navigation-expandedsidebar--expanded-new-conversation
+navigation-expandedsidebar--footer-is-one-settings-button-expanded
 navigation-expandedsidebar--l-1-loading-expanded
 navigation-expandedsidebar--l-2-failed-expanded
 navigation-expandedsidebar--l-3-loading-more-expanded
+navigation-expandedsidebar--long-space-name-truncates-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
+navigation-expandedsidebar--new-conversation-draws-the-plus-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
+navigation-expandedsidebar--search-beside-the-switcher-expanded
 navigation-expandedsidebar--small-drift-keeps-space-expanded
 navigation-expandedsidebar--swipe-inside-open-menu-keeps-space-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
@@ -1861,6 +1879,7 @@ navigation-expandedsidebar--swipe-past-the-edges-keeps-space-expanded
 navigation-expandedsidebar--swipe-while-dot-is-dragged-keeps-space-expanded
 navigation-expandedsidebar--swipe-with-one-space-does-nothing-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
+navigation-expandedsidebar--switcher-and-footer-insets-expanded
 navigation-expandedsidebar--trigger-connecting-expanded
 navigation-expandedsidebar--trigger-local-expanded
 navigation-expandedsidebar--trigger-offline-expanded

@@ -137,6 +137,7 @@
 	--shell-border: oklch(0 0 0 / 6%);
 	--shell-divider: oklch(0 0 0 / 8%);
 	--rail-item-selected: oklch(0 0 0 / 10%);
+	--rail-item-selected-hover: oklch(0 0 0 / 16%);
 	--rail-avatar: #e5e5e5;
 	--sidebar-person-foreground: #515151;
 	--space-dot: oklch(0 0 0 / 20%);
@@ -377,6 +378,7 @@
 	--shell-border: oklch(1 0 0 / 6%);
 	--shell-divider: oklch(1 0 0 / 8%);
 	--rail-item-selected: oklch(1 0 0 / 12%);
+	--rail-item-selected-hover: oklch(1 0 0 / 18%);
 	--rail-avatar: #3a3a3a;
 	--sidebar-person-foreground: #acacac;
 	--space-dot: oklch(1 0 0 / 25%);

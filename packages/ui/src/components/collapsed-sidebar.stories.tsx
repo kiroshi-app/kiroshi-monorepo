@@ -4,12 +4,15 @@ import { expect, fn, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectSkeletonFilledTo,
+	FRAME_POLL,
 	isInBrowserRunner,
+	realPointer,
 	resolvedRootColor,
 	slotIn,
 	slotsIn,
 	swipeEnded,
 	swipeOn,
+	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ATLAS, BEACON } from "@workspace/ui/components/app-sidebar.fixtures"
@@ -1023,5 +1026,53 @@ export const R1NotSentCollapsed = meta.story({
 		await expect(await tooltipShown()).toHaveTextContent(
 			"Q3 roadmap review· Not sent",
 		)
+	},
+})
+
+const LIGHT = { theme: "light", theme_layout: "single" }
+
+const currentDestinationHoverStory = (globals: typeof DARK) => ({
+	globals,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer rests on the current destination. Check the slot leaves its resting fill for `--rail-item-selected-hover`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const slot = rail(canvasElement).getByRole("button", {
+			name: "New conversation",
+		})
+		const resting = backgroundOf(slot)
+		const hoverFill = tokenStyleIn(
+			slot,
+			"bg-rail-item-selected-hover",
+			"backgroundColor",
+		)
+		await expect(hoverFill).not.toBe(resting)
+		const pointer = await realPointer()
+		await pointer.hover(slot)
+		await waitFor(() => expect(backgroundOf(slot)).toBe(hoverFill), FRAME_POLL)
+		await pointer.unhover(slot)
+	},
+})
+
+export const CurrentDestinationHoveredCollapsed = meta.story(
+	currentDestinationHoverStory(DARK),
+)
+
+export const CurrentDestinationHoveredLightCollapsed = meta.story(
+	currentDestinationHoverStory(LIGHT),
+)
+
+export const SearchStaysInTheRailCollapsed = meta.story({
+	play: async ({ args, canvasElement, userEvent }) => {
+		const destinations = slotsIn(canvasElement, "collapsed-sidebar-destination")
+		const search = rail(canvasElement).getByRole("button", { name: "Search" })
+		await expect(destinations[0]).toBe(search)
+		await userEvent.click(search)
+		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
 	},
 })

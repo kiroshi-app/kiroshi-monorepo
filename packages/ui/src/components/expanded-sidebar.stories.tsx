@@ -5,10 +5,13 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	expectSkeletonFilledTo,
+	FRAME_POLL,
+	realPointer,
 	slotIn,
 	slotsIn,
 	swipeEnded,
 	swipeOn,
+	tokenStyleIn,
 	wheelTrainOn,
 } from "@workspace/storybook/story-utils"
 import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
@@ -287,7 +290,7 @@ export const ExpandedNewConversation = meta.story({
 				block.getAttribute("data-slot"),
 			),
 		).toEqual([
-			"space-switcher",
+			"expanded-sidebar-switcher-row",
 			"sidebar-menu",
 			"sidebar-content",
 			"expanded-sidebar-footer",
@@ -307,10 +310,12 @@ export const ExpandedNewConversation = meta.story({
 		await expect(pinned).toHaveAttribute("aria-expanded", "true")
 
 		const canvas = within(canvasElement)
-		for (const name of ["Toggle sidebar", "Back", "Forward", "Settings"])
+		for (const name of ["Toggle sidebar", "Back", "Forward"])
 			await expect(canvas.getByRole("button", { name })).toBeVisible()
 
-		const settings = canvas.getByRole("button", { name: "Settings" })
+		const settings = canvas.getByRole("button", {
+			name: "Ada Martin, Settings",
+		})
 		await userEvent.click(settings)
 		await expect(args.onOpenSettings).toHaveBeenCalledOnce()
 		await userEvent.keyboard("{Shift>}{Tab}{/Shift}")
@@ -1349,5 +1354,183 @@ export const D2ClosedSectionHiddenDuringLiftExpanded = meta.story({
 				.overflowY,
 		).toBe("visible")
 		fireEvent.pointerUp(handle, pointerAt(x, 0))
+	},
+})
+
+const LIGHT = { theme: "light", theme_layout: "single" }
+
+const activeRowHoverStory = (globals: typeof DARK) => ({
+	globals,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer rests on the current destination. Check the row leaves its resting fill for `--rail-item-selected-hover`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = within(canvasElement).getByRole("button", {
+			name: "New conversation",
+		})
+		const resting = getComputedStyle(row).backgroundColor
+		const hoverFill = tokenStyleIn(
+			row,
+			"bg-rail-item-selected-hover",
+			"backgroundColor",
+		)
+		await expect(hoverFill).not.toBe(resting)
+		const pointer = await realPointer()
+		await pointer.hover(row)
+		await waitFor(
+			() => expect(getComputedStyle(row).backgroundColor).toBe(hoverFill),
+			FRAME_POLL,
+		)
+		await pointer.unhover(row)
+	},
+})
+
+export const ActiveRowHoveredExpanded = meta.story(activeRowHoverStory(DARK))
+
+export const ActiveRowHoveredLightExpanded = meta.story(
+	activeRowHoverStory(LIGHT),
+)
+
+export const NewConversationDrawsThePlusExpanded = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Check the New conversation row draws the same Add glyph as the New tab button of the title bar.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const drawingOf = (name: string) =>
+			canvas.getByRole("button", { name }).querySelector("svg")?.innerHTML
+		await expect(drawingOf("New conversation")).toBe(drawingOf("New tab"))
+	},
+})
+
+export const FooterIsOneSettingsButtonExpanded = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Check the whole footer row is one button named after the person and Settings, with no button nested in it, the gear on screen and hidden from assistive technology, and that hover and keyboard focus paint the whole row.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const footer = slotIn(canvasElement, "expanded-sidebar-footer")
+		const gear = footer.lastElementChild
+		await expect(footer.tagName).toBe("BUTTON")
+		await expect(footer.querySelectorAll("button")).toHaveLength(0)
+		await expect(footer).toHaveAccessibleName("Ada Martin, Settings")
+		await expect(gear).toBeVisible()
+		await expect(gear).toHaveAttribute("aria-hidden", "true")
+
+		const resting = getComputedStyle(footer).backgroundColor
+		const pointer = await realPointer()
+		await pointer.hover(footer)
+		await waitFor(
+			() => expect(getComputedStyle(footer).backgroundColor).not.toBe(resting),
+			FRAME_POLL,
+		)
+		await pointer.unhover(footer)
+
+		await userEvent.click(footer)
+		await expect(args.onOpenSettings).toHaveBeenCalledOnce()
+		await userEvent.keyboard("{Shift>}{Tab}{/Shift}")
+		await userEvent.tab()
+		await expect(footer).toHaveFocus()
+		await expect(getComputedStyle(footer).outlineStyle).toBe("solid")
+	},
+})
+
+export const SwitcherAndFooterInsetsExpanded = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Check the switcher and the footer each keep one inset on the left, the top and the right of their content, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const sidebar = boxOf(sidebarIn(canvasElement))
+		const switcher = slotIn(canvasElement, "space-switcher")
+		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
+		const footer = slotIn(canvasElement, "expanded-sidebar-footer")
+		const switcherAvatar = boxOf(slotIn(switcher, "space-avatar"))
+		const footerAvatar = boxOf(slotIn(footer, "expanded-sidebar-avatar"))
+		const search = slotIn(canvasElement, "expanded-sidebar-search")
+		const searchGlyph = search.querySelector("svg") as Element
+		const gear = footer.lastElementChild as Element
+
+		const rightInsetOf = (edge: Element, content: Element) =>
+			boxOf(edge).right - boxOf(content).right
+
+		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(5)
+		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(5)
+		await expect(rightInsetOf(row, searchGlyph)).toBe(5)
+		await expect(footerAvatar.left - boxOf(footer).left).toBe(5)
+		await expect(footerAvatar.top - boxOf(footer).top).toBe(5)
+		await expect(rightInsetOf(footer, gear)).toBe(5)
+
+		const centreOf = (box: DOMRect) => box.left + box.width / 2 - sidebar.left
+		const navigationIcon = canvas
+			.getByRole("button", { name: "Library" })
+			.querySelector("svg") as Element
+		await expect(centreOf(boxOf(navigationIcon))).toBe(26)
+		await expect(centreOf(switcherAvatar)).toBe(26)
+		await expect(centreOf(footerAvatar)).toBe(26)
+	},
+})
+
+export const SearchBesideTheSwitcherExpanded = meta.story({
+	play: async ({ args, canvasElement, userEvent }) => {
+		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
+		const search = within(row).getByRole("button", { name: "Search" })
+		await expect(boxOf(search).left).toBeGreaterThan(
+			boxOf(slotIn(row, "space-switcher")).right,
+		)
+		await expect(
+			within(slotIn(canvasElement, "sidebar-menu")).queryByRole("button", {
+				name: "Search",
+			}),
+		).toBeNull()
+		await userEvent.click(search)
+		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
+		await userEvent.hover(search)
+		await waitFor(
+			() =>
+				expect(document.querySelector('[role="tooltip"]')).toHaveTextContent(
+					"Search",
+				),
+			FRAME_POLL,
+		)
+	},
+})
+
+export const LongSpaceNameTruncatesExpanded = meta.story({
+	args: {
+		spaces: [
+			{
+				...KIROSHI,
+				name: "The long name of a Space shared across the whole organisation",
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
+		const name = slotIn(row, "space-switcher-name")
+		const search = boxOf(slotIn(row, "expanded-sidebar-search"))
+		const switcher = slotIn(row, "space-switcher")
+		const chevron = switcher.lastElementChild as Element
+		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(5)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(search.width).toBe(28)
+		await expect(search.right).toBe(boxOf(row).right)
 	},
 })

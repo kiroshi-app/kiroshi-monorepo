@@ -111,6 +111,7 @@
 	--color-shell-border: var(--shell-border);
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);
+	--color-rail-item-selected-hover: var(--rail-item-selected-hover);
 	--color-rail-avatar: var(--rail-avatar);
 	--color-sidebar-person-foreground: var(--sidebar-person-foreground);
 	--color-space-dot: var(--space-dot);
