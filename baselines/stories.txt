@@ -1527,6 +1527,7 @@ navigation-appsidebarconversationrow--conversation-needing-you-dark
 navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
 navigation-appsidebarconversationrow--long-title-and-preview-truncate
+navigation-appsidebarconversationrow--mixed-rooms-and-solo-conversations
 navigation-appsidebarconversationrow--monochrome-row
 navigation-appsidebarconversationrow--monochrome-row-dark
 navigation-appsidebarconversationrow--muted-tint-row
@@ -1555,6 +1556,7 @@ navigation-appsidebarconversationrow--row-with-one-bot
 navigation-appsidebarconversationrow--row-with-three-bots
 navigation-appsidebarconversationrow--row-with-two-bots
 navigation-appsidebarconversationrow--row-without-icon-or-colour
+navigation-appsidebarconversationrow--solo-conversation-row-dark
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
 navigation-appsidebarconversationrow--working-conversation-waiting-on-one-background-task
 navigation-appsidebarconversationrow--working-conversation-waiting-on-two-background-tasks
@@ -1891,7 +1893,6 @@ navigation-expandedsidebar--u-3-expanded
 navigation-expandedsidebar--u-4-expanded
 navigation-expandedsidebar--u-5-expanded
 navigation-expandedsidebar--vertical-gesture-keeps-space-expanded
-navigation-headerconversationbutton--crowded
 navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded
 navigation-headerconversationbutton--in-layout
@@ -1900,7 +1901,6 @@ navigation-headerconversationbutton--single-bot
 navigation-headerconversationbutton--themes-group
 navigation-headerconversationbutton--themes-group-free-hue
 navigation-headerconversationbutton--themes-group-picked-icon
-navigation-headerconversationbutton--themes-solo
 navigation-headeridentitybutton--default
 navigation-headeridentitybutton--expanded
 navigation-headeridentitybutton--free-hue
