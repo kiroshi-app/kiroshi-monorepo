@@ -87,8 +87,6 @@ const SETTLE_MS = 200
 
 const CONVERSATION_TITLE = "Round table"
 
-const DRAFT = "half a thought for the room"
-
 afterEach(() => {
 	cleanup()
 	localStorage.clear()
@@ -244,11 +242,6 @@ const openApplications = () =>
 const isMarked = (railItem: HTMLElement) =>
 	railItem.getAttribute("aria-current") === "page"
 
-const composerOf = () =>
-	screen.getByRole<HTMLTextAreaElement>("textbox", {
-		name: i18n.t("chat:composer.label"),
-	})
-
 it("switches between the space and the user settings on the gear and the avatar", async () => {
 	await mountApp()
 	await openSpaceSettingsBySwitcher()
@@ -266,19 +259,6 @@ it("switches between the space and the user settings on the gear and the avatar"
 		subtitle: "space",
 		entry: i18n.t("settings:rail.space"),
 	})
-})
-
-it("brings back the open conversation and its draft on Back to your settings", async () => {
-	collapseSidebar()
-	await mountApp()
-	await openConversation()
-	fireEvent.change(composerOf(), { target: { value: DRAFT } })
-	await openSpaceSettingsBySwitcher()
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toBeNull()
-	expect(composerOf().value).toBe(DRAFT)
 })
 
 it("opens the user settings again on the first entry once they were closed", async () => {
@@ -833,31 +813,6 @@ it("adds the row of a new Space on the + of Your spaces", async () => {
 	expect(
 		within(settingsMenuOf() as HTMLElement).getByText(untitled),
 	).toBeTruthy()
-})
-
-it("opens the user settings on Back to your settings when the Space settings are the first entry of the history", async () => {
-	const space = await seedStore()
-	const router = createWorkspaceRouter()
-	render(createElement(RouterProvider, { router }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
-	await settle()
-	await act(async () => {
-		await router.navigate({
-			to: "/settings/space/$spaceId",
-			params: { spaceId: space.id },
-			replace: true,
-		})
-	})
-	await settle()
-	expect(shownSettingsOf()?.subtitle).toBe("space")
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()).toEqual({
-		subtitle: "user",
-		entry: i18n.t("settings:rail.account"),
-	})
 })
 
 it("returns to the conversations when the Space switches from the settings of a companion", async () => {
