@@ -734,15 +734,18 @@ const contentBoxesOf = (surface: HTMLElement) =>
 		.filter((box) => box.width > 0 && box.height > 0)
 
 const insetsOf = (row: HTMLElement) => {
-	const edge = surfaceOf(row).getBoundingClientRect()
-	const boxes = contentBoxesOf(surfaceOf(row))
+	const surface = surfaceOf(row)
+	const edge = surface.getBoundingClientRect()
+	const boxes = contentBoxesOf(surface)
+	const lowest = (side: "left" | "top") =>
+		Math.min(...boxes.map((box) => box[side]))
+	const highest = (side: "right" | "bottom") =>
+		Math.max(...boxes.map((box) => box[side]))
 	return {
-		left: Math.round(Math.min(...boxes.map((box) => box.left)) - edge.left),
-		right: Math.round(edge.right - Math.max(...boxes.map((box) => box.right))),
-		top: Math.round(Math.min(...boxes.map((box) => box.top)) - edge.top),
-		bottom: Math.round(
-			edge.bottom - Math.max(...boxes.map((box) => box.bottom)),
-		),
+		left: Math.round(lowest("left") - edge.left),
+		right: Math.round(edge.right - highest("right")),
+		top: Math.round(lowest("top") - edge.top),
+		bottom: Math.round(edge.bottom - highest("bottom")),
 	}
 }
 
