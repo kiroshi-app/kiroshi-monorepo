@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 
 import { RouterProvider } from "@tanstack/react-router"
-import { act, cleanup, render, within } from "@testing-library/react"
+import { act, cleanup, render, screen, within } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -72,13 +74,18 @@ const mountAppWithSidebar = async (isCollapsed: boolean) => {
 	await settle()
 }
 
-const neighbourPanel = () => {
-	const carousel = document.querySelector<HTMLElement>(
-		"[data-slot='space-carousel']",
+const SELECTED_SPACE = "Personal"
+
+const panelOfUnselectedSpace = () => {
+	const panel = document.querySelector<HTMLElement>(
+		"[data-slot='space-carousel'] > [data-slot='space-panel'][inert]",
 	)
-	if (!carousel) throw new Error("the Space carousel is not drawn")
-	return within(carousel)
+	if (!panel) throw new Error("the panel of the unselected Space is not drawn")
+	return within(panel)
 }
+
+const sidebar = () =>
+	within(screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }))
 
 afterEach(() => {
 	cleanup()
@@ -90,14 +97,24 @@ describe("the sidebar with two Spaces", () => {
 	it("draws the second Space's conversation in its panel when expanded", async () => {
 		await mountAppWithSidebar(false)
 
-		expect(neighbourPanel().queryByText(NEIGHBOUR_CONVERSATION)).not.toBeNull()
+		expect(
+			sidebar().queryByRole("button", {
+				name: i18n.t("bots:spaces.switch", { name: SELECTED_SPACE }),
+			}),
+		).not.toBeNull()
+		expect(
+			panelOfUnselectedSpace().queryByText(NEIGHBOUR_CONVERSATION),
+		).not.toBeNull()
 	})
 
 	it("draws the second Space's conversation in its rail panel when collapsed", async () => {
 		await mountAppWithSidebar(true)
 
 		expect(
-			neighbourPanel().queryByLabelText(NEIGHBOUR_CONVERSATION),
+			sidebar().queryByRole("button", { name: SELECTED_SPACE }),
+		).not.toBeNull()
+		expect(
+			panelOfUnselectedSpace().queryByLabelText(NEIGHBOUR_CONVERSATION),
 		).not.toBeNull()
 	})
 })
