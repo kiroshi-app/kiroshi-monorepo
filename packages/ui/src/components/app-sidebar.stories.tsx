@@ -242,9 +242,7 @@ const dotIn = (row: HTMLElement) => slotIn(row, "bot-mission-dot")
 
 const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
-const BARE_ROW_HEIGHT = 48
-
-const CONVERSATION_ROW_HEIGHT = 52
+const BARE_ROW_HEIGHT = 52
 
 const MISSION_LINE_HEIGHT = 32
 
@@ -573,7 +571,7 @@ const expectStripSpansRow = async (row: HTMLElement) => {
 	const button = rowButton(row).getBoundingClientRect()
 
 	await expect(Math.round(strip.left)).toBe(Math.round(avatar.left))
-	await expect(Math.round(button.right - strip.right)).toBe(6)
+	await expect(Math.round(button.right - strip.right)).toBe(8)
 	await expect(rowButton(row).contains(stripsIn(row)[0])).toBe(true)
 }
 
@@ -1508,7 +1506,7 @@ export const MissionStripStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 76px, the head staying 36px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
+					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 36px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
 			},
 		},
 	},
@@ -1611,7 +1609,7 @@ export const MissionStripSingle = meta.story({
 		docs: {
 			description: {
 				story:
-					"One companion on one mission over one companion on none. Check the first row measures 76px and the second 48px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 36px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
+					"One companion on one mission over one companion on none. Check the first row measures 80px and the second 52px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 36px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
 			},
 		},
 	},
@@ -1715,7 +1713,7 @@ export const MissionStripSelected = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same two rows, the first of them the one the reader is in. Check the lit background and its rounding cover the head and the strip alike: the strip lives inside the button, 4px under the head and 6px from the surface edge, so a selected row reads as one block and not as a row with something stapled under it. Check the strip keeps its own rounded corners and the same 10 percent foreground fill on the lit row as on the resting one, since a mission does not change because the reader happens to be reading it, and that fill is neither the panel surface nor the selected surface it sits on. Pick `MissionStripStates` for the strip on rows at rest.",
+					"The same two rows, the first of them the one the reader is in. Check the lit background and its rounding cover the head and the strip alike: the strip lives inside the button, 4px under the head and 8px from the surface edge, so a selected row reads as one block and not as a row with something stapled under it. Check the strip keeps its own rounded corners and the same 10 percent foreground fill on the lit row as on the resting one, since a mission does not change because the reader happens to be reading it, and that fill is neither the panel surface nor the selected surface it sits on. Pick `MissionStripStates` for the strip on rows at rest.",
 			},
 		},
 	},
@@ -1747,7 +1745,7 @@ export const MissionStripSelected = meta.story({
 				rowButton(rows[0]).getBoundingClientRect().bottom -
 					stripsIn(rows[0])[0].getBoundingClientRect().bottom,
 			),
-		).toBe(6)
+		).toBe(8)
 	},
 })
 
@@ -5548,7 +5546,7 @@ export const ConversationMissionStrips = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 116px for its two missions while the room with none keeps its 52px and the companion its 48px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
+					"A mission belongs to the conversation it was opened from, so a room carrying open missions wears the strips its companions would otherwise wear alone. Check the strips sit under the room row, in the same lane and the same shapes a companion row gives them, and that the room draws one per open mission whichever of its companions runs it. Check the room whose mission waits on the reader is drawn first even though it spoke longest ago, exactly as a waiting companion row is raised, that it measures 116px for its two missions while the room with none and the companion both keep their 52px, and that the avatar stack stays centred on the row part. Pick `MissionStripStates` for the strip on a companion row.",
 			},
 		},
 	},
@@ -5566,8 +5564,8 @@ export const ConversationMissionStrips = meta.story({
 			),
 		).toEqual([["waiting", "working"], [], []])
 		await expect(rowHeights(rows)).toEqual([
-			CONVERSATION_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
-			CONVERSATION_ROW_HEIGHT,
+			BARE_ROW_HEIGHT + 2 * MISSION_LINE_HEIGHT,
+			BARE_ROW_HEIGHT,
 			BARE_ROW_HEIGHT,
 		])
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(

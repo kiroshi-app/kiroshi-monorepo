@@ -29,7 +29,10 @@ import {
 	SIDEBAR_LIST_END_ROWS,
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
-import { SidebarMenuRow } from "@workspace/ui/components/sidebar-menu-row"
+import {
+	SIDEBAR_ROW_INSET,
+	SidebarMenuRow,
+} from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
@@ -43,6 +46,7 @@ import {
 	SidebarMenuItem,
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
+import { cn } from "@workspace/ui/lib/utils"
 
 const COLUMN = "flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 p-2"
 
@@ -61,8 +65,10 @@ const LIST_RETRY =
 const MISSION_COUNT =
 	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
 
-const FOOTER =
-	"flex w-full shrink-0 items-center gap-2.5 rounded-lg p-1.5 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+const FOOTER = cn(
+	SIDEBAR_ROW_INSET,
+	"flex w-full shrink-0 items-center gap-2.5 rounded-lg text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+)
 
 const FOOTER_GLYPH =
 	"grid size-7 shrink-0 place-items-center [&>svg]:size-4.5 [&>svg]:stroke-[1.75]"
@@ -73,7 +79,7 @@ const FOOTER_AVATAR =
 const FOOTER_NAME =
 	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5"
 
-const SWITCHER_ROW = "flex h-10 shrink-0 items-center gap-1"
+const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 

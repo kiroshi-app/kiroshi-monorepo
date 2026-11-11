@@ -10,6 +10,7 @@ import {
 	isInBrowserRunner,
 	realPointer,
 	scrollSpaceCarousel,
+	settled,
 	slotIn,
 	slotsIn,
 	spaceListInView,
@@ -364,7 +365,7 @@ export const ExpandedNewConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New conversation open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New conversation alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New conversation row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 28px from the sidebar edge. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New conversation open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New conversation alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New conversation row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 30px from the sidebar edge, each avatar 8px from its row's start edge and from its top. Check both section headers are 32px tall with their label 8px in, the first row starts 34px under the top of the list and Conversations sits 12px under the last pinned row, the numbers the loading skeleton holds in `L1LoadingExpanded`. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -394,6 +395,17 @@ export const ExpandedNewConversation = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="space-dots"]'),
 		).toBeNull()
+
+		await expect(
+			listRhythmOf({
+				content: slotIn(canvasElement, "sidebar-content"),
+				headers: slotsIn(canvasElement, "fold-section-trigger"),
+				firstSectionRows: slotsIn(
+					slotIn(canvasElement, "fold-section"),
+					"sidebar-menu-button",
+				),
+			}),
+		).toEqual(LIST_RHYTHM)
 
 		const pinned = sidebar.getByRole("button", { name: "Pinned" })
 		await expect(pinned).toHaveAttribute("aria-expanded", "true")
@@ -432,22 +444,23 @@ export const ExpandedNewConversation = meta.story({
 		const footerAvatar = boxOf(slotIn(footer, "expanded-sidebar-avatar"))
 		const rightInsetOf = (edge: Element, content: Element) =>
 			boxOf(edge).right - boxOf(content).right
-		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(6)
-		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(6)
+		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(8)
+		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(8)
 		await expect(rightInsetOf(row, switcher)).toBe(0)
-		await expect(footerAvatar.left - boxOf(footer).left).toBe(
-			footerAvatar.top - boxOf(footer).top,
-		)
-		await expect(rightInsetOf(footer, gear)).toBe(
-			boxOf(gear).top - boxOf(footer).top,
-		)
+		await expect(footerAvatar.left - boxOf(footer).left).toBe(8)
+		await expect(footerAvatar.top - boxOf(footer).top).toBe(8)
+		await expect(rightInsetOf(footer, gear)).toBe(8)
+		await expect(boxOf(gear).top - boxOf(footer).top).toBe(8)
+		await expect(
+			[switcher, footer].map((avatarRow) => boxOf(avatarRow).height),
+		).toEqual([AVATAR_ROW_HEIGHT, AVATAR_ROW_HEIGHT])
 		const centreOf = (inner: DOMRect) => inner.left + inner.width / 2 - box.left
 		const navigationIcon = canvas
 			.getByRole("button", { name: "Library" })
 			.querySelector("svg") as Element
-		await expect(centreOf(boxOf(navigationIcon))).toBe(28)
-		await expect(centreOf(switcherAvatar)).toBe(28)
-		await expect(centreOf(footerAvatar)).toBe(28)
+		await expect(centreOf(boxOf(navigationIcon))).toBe(ROW_X_OFFSETS.iconCentre)
+		await expect(centreOf(switcherAvatar)).toBe(ROW_X_OFFSETS.iconCentre)
+		await expect(centreOf(footerAvatar)).toBe(ROW_X_OFFSETS.iconCentre)
 
 		if (isInBrowserRunner()) {
 			const resting = getComputedStyle(footer).backgroundColor
@@ -492,17 +505,47 @@ export const ExpandedMissions = meta.story({
 	},
 })
 
-const EVEN_PADDING = Array(4).fill("6px")
+const ROW_PADDING = Array(4).fill("8px")
 
-const CONVERSATION_PADDING = Array(4).fill("8px")
+const AVATAR_ROW_HEIGHT = 44
 
-const TOP_MENU_HEIGHT = 32
+const TOP_MENU_HEIGHT = 36
+
+const SECTION_HEADER_HEIGHT = 32
+
+const LIST_ROW_HEIGHT = 52
 
 const TOP_MENU_GLYPH = 14
 
-const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 52 }
+const ROW_X_OFFSETS = { iconCentre: 30, labelStart: 54 }
 
-const CONVERSATION_X_OFFSETS = { iconCentre: 30, labelStart: 54 }
+const LIST_RHYTHM = {
+	headerHeights: [SECTION_HEADER_HEIGHT, SECTION_HEADER_HEIGHT],
+	headerInsets: [8, 8],
+	firstRowTop: 34,
+	sectionGap: 12,
+}
+
+type ListRhythmParts = {
+	content: Element
+	headers: Element[]
+	firstSectionRows: Element[]
+}
+
+const listRhythmOf = ({
+	content,
+	headers,
+	firstSectionRows,
+}: ListRhythmParts) => ({
+	headerHeights: headers.map((header) => boxOf(header).height),
+	headerInsets: headers.map(
+		(header) =>
+			boxOf(header.firstElementChild as Element).left - boxOf(header).left,
+	),
+	firstRowTop: boxOf(firstSectionRows[0]).top - boxOf(content).top,
+	sectionGap:
+		boxOf(headers[1]).top - boxOf(firstSectionRows.at(-1) as Element).bottom,
+})
 
 const paddingOf = (element: Element) => {
 	const style = getComputedStyle(element)
@@ -529,11 +572,6 @@ const colourTransitionsOf = (element: Element) => {
 const conversationButtonOf = (tree: Element) =>
 	slotIn(tree.parentElement as HTMLElement, "sidebar-menu-button")
 
-const isConversationRow = (row: Element) => {
-	const name = row.querySelector('[data-slot="roster-row-name"]')
-	return Boolean(name) && name?.textContent !== ATLAS.name
-}
-
 const centreOfBox = (element: Element) => {
 	const box = boxOf(element)
 	return [box.left + box.width / 2, box.top + box.height / 2] as const
@@ -551,10 +589,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		...slotsIn(sidebar, "fold-section-trigger"),
 		slotIn(sidebar, "expanded-sidebar-footer"),
 	]
-	for (const row of rows)
-		await expect(paddingOf(row)).toEqual(
-			isConversationRow(row) ? CONVERSATION_PADDING : EVEN_PADDING,
-		)
+	for (const row of rows) await expect(paddingOf(row)).toEqual(ROW_PADDING)
 
 	for (const name of ["New conversation", /^Missions/, "Library"]) {
 		const item = within(sidebar).getByRole("button", { name })
@@ -613,7 +648,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every conversation row pads 8 on all four sides and every other row 6."
+	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every row pads 8 on all four sides."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -832,7 +867,9 @@ const triggerAt = (state: SpaceAvatarState, host?: SpaceHost) => ({
 	play: async ({ canvasElement }: StoryCanvas) => {
 		const switcher = slotIn(canvasElement, "space-switcher")
 		const avatar = slotIn(switcher, "space-avatar")
-		await expect(switcher.getBoundingClientRect().height).toBe(40)
+		await expect(switcher.getBoundingClientRect().height).toBe(
+			AVATAR_ROW_HEIGHT,
+		)
 		await expect(getComputedStyle(switcher).columnGap).toBe("10px")
 		await expect(avatar.dataset.state).toBe(state)
 		await expect(avatar.dataset.size).toBe("28")
@@ -1141,15 +1178,22 @@ export const L1LoadingExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area.",
+					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area. Check both header bars sit in a 32px header 8px in, the first row starts 34px under the top of the list and the second header 12px under the second row, where the loaded list of `ExpandedNewConversation` puts them, so nothing moves when the list arrives.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expect(sectionHeadersIn(canvasElement)).toEqual([])
 		await expect(
-			slotsIn(canvasElement, "sidebar-list-skeleton-header"),
-		).toHaveLength(2)
+			listRhythmOf({
+				content: slotIn(canvasElement, "sidebar-content"),
+				headers: slotsIn(canvasElement, "sidebar-list-skeleton-header"),
+				firstSectionRows: slotsIn(
+					canvasElement,
+					"sidebar-list-skeleton-row",
+				).slice(0, 2),
+			}),
+		).toEqual(LIST_RHYTHM)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 		await expect(
 			boxOf(slotIn(canvasElement, "sidebar-list-skeleton")).bottom,
@@ -1313,7 +1357,8 @@ export const N1NamedSectionExpanded = meta.story({
 		const clients = headerNamed(canvasElement, "Clients")
 		const pinned = headerNamed(canvasElement, "Pinned")
 		const style = getComputedStyle(clients)
-		await expect(style.padding).toBe("6px")
+		await expect(paddingOf(clients)).toEqual(ROW_PADDING)
+		await expect(boxOf(clients).height).toBe(SECTION_HEADER_HEIGHT)
 		await expect(style.borderTopLeftRadius).toBe("10px")
 		await expect(style.columnGap).toBe("4px")
 		await expect(style.justifyContent).toBe("space-between")
@@ -1369,6 +1414,8 @@ export const N1NamedSectionExpanded = meta.story({
 
 		await chooseFromMenu(clients, "Rename")
 		const field = await renameFieldIn(canvasElement)
+		await expect(paddingOf(field)).toEqual(ROW_PADDING)
+		await expect(boxOf(field).height).toBe(SECTION_HEADER_HEIGHT)
 		await userEvent.clear(field)
 		await userEvent.type(field, "  Partners  {Enter}")
 		await expect(RENAME_SECTION).toHaveBeenCalledOnce()
@@ -1715,7 +1762,7 @@ const expectTopMenuAlignedOnConversations = async (
 	const glyph = item.querySelector("svg") as SVGElement
 	await expect(boxOf(item).height).toBe(TOP_MENU_HEIGHT)
 	await expect(boxOf(glyph).width).toBe(TOP_MENU_GLYPH)
-	await expect(paddingOf(item)).toEqual(EVEN_PADDING)
+	await expect(paddingOf(item)).toEqual(ROW_PADDING)
 	const conversation = slotsIn(
 		slotIn(sidebar, "space-carousel"),
 		"sidebar-menu-button",
@@ -1724,9 +1771,7 @@ const expectTopMenuAlignedOnConversations = async (
 		":scope > span:first-child > *",
 	) as Element
 	await expect(xOffsetsOf(item, glyph, box)).toEqual(ROW_X_OFFSETS)
-	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(
-		CONVERSATION_X_OFFSETS,
-	)
+	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(ROW_X_OFFSETS)
 	return item
 }
 
@@ -1736,7 +1781,7 @@ export const TopMenuAtRestExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 52px from the sidebar edge, 2px before a conversation row's 30px and 54px.",
+					"The destinations menu at rest. Check each button is 36px tall with a 14px glyph and pads 8 on all four sides, and that its icon centre and label start sit 30px and 54px from the sidebar edge, the same as a conversation row's.",
 			},
 		},
 	},
@@ -1781,6 +1826,159 @@ export const TopMenuHoveredExpanded = meta.story({
 	},
 })
 
+const ROW_COLUMNS = { ...ROW_X_OFFSETS, trailingEnd: 16 }
+
+const HEADER_COLUMNS = { labelStart: 16, trailingEnd: 16 }
+
+type RowColumnParts = {
+	icon?: Element
+	label: Element
+	trailing?: Element
+}
+
+type RowKind = {
+	row: HTMLElement
+	parts: RowColumnParts
+	columns: Partial<typeof ROW_COLUMNS>
+	height: number
+}
+
+const switcherPartsOf = (switcher: Element): RowColumnParts => ({
+	icon: slotIn(switcher, "space-avatar"),
+	label: slotIn(switcher, "space-switcher-name"),
+})
+
+const topMenuPartsOf = (item: Element): RowColumnParts => ({
+	icon: item.firstElementChild as Element,
+	label: item.children[1] as Element,
+	trailing: item.lastElementChild as Element,
+})
+
+const headerPartsOf = (header: Element): RowColumnParts => ({
+	label: header.firstElementChild as Element,
+	trailing: header.lastElementChild as Element,
+})
+
+const listRowPartsOf = (row: Element): RowColumnParts => ({
+	icon: row.querySelector(":scope > span:first-child > *") as Element,
+	label: slotIn(row, "roster-row-name"),
+	trailing: slotIn(row, "roster-row-timestamp"),
+})
+
+const footerPartsOf = (footer: Element): RowColumnParts => ({
+	icon: slotIn(footer, "expanded-sidebar-avatar"),
+	label: footer.children[1] as Element,
+	trailing: footer.lastElementChild as Element,
+})
+
+const columnsOf = (
+	{ icon, label, trailing }: RowColumnParts,
+	sidebar: DOMRect,
+) => ({
+	...(icon
+		? { iconCentre: boxOf(icon).left + boxOf(icon).width / 2 - sidebar.left }
+		: {}),
+	labelStart: boxOf(label).left - sidebar.left,
+	...(trailing ? { trailingEnd: sidebar.right - boxOf(trailing).right } : {}),
+})
+
+const expectRowsOnSharedColumns = async ({ canvasElement }: StoryCanvas) => {
+	const sidebar = sidebarIn(canvasElement)
+	const switcher = slotIn(sidebar, "space-switcher")
+	const menuItem = within(sidebar).getByRole("button", { name: /^Missions/ })
+	const header = slotIn(sidebar, "fold-section-trigger")
+	const listRows = slotsIn(
+		slotIn(sidebar, "space-carousel"),
+		"sidebar-menu-button",
+	)
+	const footer = slotIn(sidebar, "expanded-sidebar-footer")
+	await expect(
+		listRows.map((row) => slotIn(row, "roster-row-name").textContent),
+	).toEqual([RELEASE_TRAIN.name, ROADMAP_REVIEW.name, ATLAS.name])
+	await expect(slotsIn(sidebar, "mission-capsule-list")).toHaveLength(1)
+
+	const kinds: RowKind[] = [
+		{
+			row: switcher,
+			parts: switcherPartsOf(switcher),
+			columns: ROW_X_OFFSETS,
+			height: AVATAR_ROW_HEIGHT,
+		},
+		{
+			row: menuItem,
+			parts: topMenuPartsOf(menuItem),
+			columns: ROW_COLUMNS,
+			height: TOP_MENU_HEIGHT,
+		},
+		{
+			row: header,
+			parts: headerPartsOf(header),
+			columns: HEADER_COLUMNS,
+			height: SECTION_HEADER_HEIGHT,
+		},
+		...listRows.map((row) => ({
+			row,
+			parts: listRowPartsOf(row),
+			columns: ROW_COLUMNS,
+			height: LIST_ROW_HEIGHT,
+		})),
+		{
+			row: footer,
+			parts: footerPartsOf(footer),
+			columns: ROW_COLUMNS,
+			height: AVATAR_ROW_HEIGHT,
+		},
+	]
+	const columns = () => {
+		const box = boxOf(sidebar)
+		return kinds.map(({ parts }) => columnsOf(parts, box))
+	}
+	const resting = columns()
+	await expect(resting).toEqual(kinds.map((kind) => kind.columns))
+	await expect(kinds.map(({ row }) => paddingOf(row))).toEqual(
+		kinds.map(() => ROW_PADDING),
+	)
+	await expect(kinds.map(({ row }) => boxOf(row).height)).toEqual(
+		kinds.map(({ height }) => height),
+	)
+
+	if (!isInBrowserRunner()) return
+	const pointer = await realPointer()
+	for (const { row } of kinds) {
+		try {
+			await pointer.hover(row)
+			await settled(row)
+			await expect(row.matches(":hover")).toBe(true)
+			await expect(columns()).toEqual(resting)
+		} finally {
+			await pointer.unhover(row)
+		}
+	}
+}
+
+const ROW_COLUMNS_ARTBOARD = {
+	...TREE_ARTBOARD,
+	conversations: treeListOf([RELEASE_TRAIN, ROADMAP_REVIEW]),
+}
+
+const ROW_COLUMNS_DESCRIPTION =
+	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the icon centre sits 30px and the label 54px from the sidebar's start edge in the switcher, the Missions item, the three rows and the footer alike, that the trailing column ends 16px from its end edge in all of them but the switcher, whose chevron follows its name, and that the section header starts its label and ends its chevron 16px from the edges. Check every one of them pads 8 on all four sides, the switcher and the footer 44px tall, the Missions item 36px, the section header 32px and the three rows 52px, and that resting the pointer on any of them moves none of the columns."
+
+export const RowColumnsExpanded = meta.story({
+	name: "Row columns",
+	args: ROW_COLUMNS_ARTBOARD,
+	parameters: { docs: { description: { story: ROW_COLUMNS_DESCRIPTION } } },
+	play: expectRowsOnSharedColumns,
+})
+
+export const RowColumnsLightExpanded = meta.story({
+	name: "Row columns Light",
+	globals: LIGHT,
+	args: ROW_COLUMNS_ARTBOARD,
+	parameters: { docs: { description: { story: ROW_COLUMNS_DESCRIPTION } } },
+	play: expectRowsOnSharedColumns,
+})
+
 export const LongSpaceNameTruncatesExpanded = meta.story({
 	args: {
 		spaces: [
@@ -1795,7 +1993,7 @@ export const LongSpaceNameTruncatesExpanded = meta.story({
 		const name = slotIn(row, "space-switcher-name")
 		const switcher = slotIn(row, "space-switcher")
 		const chevron = switcher.lastElementChild as Element
-		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(6)
+		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(8)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(boxOf(switcher).right).toBe(boxOf(row).right)
 	},

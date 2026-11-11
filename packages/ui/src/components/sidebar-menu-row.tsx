@@ -33,8 +33,12 @@ const HEAD = "flex min-h-9 min-w-0 items-center gap-2.5 pe-1.5"
 const ICON_SLOT =
 	"grid min-h-5 min-w-5 shrink-0 place-items-center [&_svg]:size-full!"
 
-const NAVIGATION_ROW =
-	"min-h-8 gap-2.5 rounded-lg p-1.5 font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover"
+const SIDEBAR_ROW_INSET = "p-2"
+
+const NAVIGATION_ROW = cn(
+	SIDEBAR_ROW_INSET,
+	"gap-2.5 rounded-lg font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
+)
 
 const NAVIGATION_ICON_SLOT =
 	"grid h-5 w-7 shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!"
@@ -148,6 +152,7 @@ const SidebarMenuRow = ({
 
 export {
 	NO_CLICK_MODIFIERS,
+	SIDEBAR_ROW_INSET,
 	type SidebarClickModifiers,
 	SidebarMenuRow,
 	type SidebarMenuRowProps,

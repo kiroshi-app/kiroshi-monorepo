@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { RowAnatomy } from "@workspace/ui/components/row-anatomy"
 import {
+	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
 	type SidebarMenuRowProps,
 } from "@workspace/ui/components/sidebar-menu-row"
@@ -12,13 +13,18 @@ import { Item } from "@workspace/ui/components/ui/item"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SidebarListRowGeometry = "roster" | "conversation" | "menu"
+type SidebarListRowGeometry = "roster" | "agent" | "conversation" | "menu"
+
+const ROSTER_ROW =
+	"flex-nowrap border-0 text-foreground transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0"
 
 const ROW: Record<SidebarListRowGeometry, string> = {
-	roster:
-		"flex-nowrap border-0 py-1.5 pl-1.5 pe-1.5 text-foreground transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0",
-	conversation:
-		"flex-nowrap border-0 p-2 text-foreground transition-[width,height,padding] hover:bg-transparent active:bg-transparent data-active:bg-transparent after:absolute after:inset-0 focus-visible:ring-sidebar-ring *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:p-0",
+	roster: cn(ROSTER_ROW, "py-1.5 pl-1.5 pe-1.5"),
+	agent: cn(ROSTER_ROW, SIDEBAR_ROW_INSET),
+	conversation: cn(
+		SIDEBAR_ROW_INSET,
+		"flex-nowrap border-0 text-foreground transition-[width,height,padding] hover:bg-transparent active:bg-transparent data-active:bg-transparent after:absolute after:inset-0 focus-visible:ring-sidebar-ring *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:p-0",
+	),
 	menu: "flex-nowrap gap-2 rounded-control border-0 py-0 ps-1.5 pe-2 font-normal text-muted-foreground text-sm hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 }
 

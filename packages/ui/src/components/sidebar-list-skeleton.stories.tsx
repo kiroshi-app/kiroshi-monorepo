@@ -28,11 +28,12 @@ const LOADED = {
 	titleHeight: 12,
 	previewHeight: 10,
 	barGap: 8,
+	headerHeight: 32,
 	headerBar: [52, 12],
 	secondHeaderBar: [88, 12],
-	secondHeaderTop: 12,
+	headerBarTop: 10,
 	headerRadius: 4,
-	columnTop: 4,
+	sectionGap: 12,
 }
 
 const BAR_WIDTHS = [
@@ -64,7 +65,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is 52px, the height of a loaded conversation row without missions, and holds a 28px rounded tile, the size of the conversation icon, beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
+					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar over the remaining rows, 12px under the first two. Each header bar sits in a 32px header padded 8 on all four sides, the box of a loaded section header. Every row is 52px, the height of a loaded conversation row without missions, and holds a 28px rounded tile, the size of the conversation icon, beside a title bar and a fainter preview bar 8px under it. A header and its rows sit 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
 			},
 		},
 	},
@@ -88,27 +89,30 @@ const meta = preview.meta({
 
 		await expect(skeleton).toHaveAttribute("aria-hidden", "true")
 		await expect(headers).toHaveLength(2)
-		const headerBar = headers[0].firstElementChild as Element
+		const headerBars = headers.map(
+			(header) => header.querySelector("span > span") as Element,
+		)
+		const [headerBar, secondHeaderBar] = headerBars
 		await expect([boxOf(headerBar).width, boxOf(headerBar).height]).toEqual(
 			LOADED.headerBar,
 		)
 		await expect(getComputedStyle(headerBar).borderTopLeftRadius).toBe(
 			`${LOADED.headerRadius}px`,
 		)
-		const secondHeaderBar = headers[1].firstElementChild as Element
 		await expect([
 			boxOf(secondHeaderBar).width,
 			boxOf(secondHeaderBar).height,
 		]).toEqual(LOADED.secondHeaderBar)
-		await expect(boxOf(secondHeaderBar).top - boxOf(headers[1]).top).toBe(
-			LOADED.secondHeaderTop,
-		)
-		await expect(boxOf(headers[0]).top - boxOf(skeleton).top).toBe(
-			LOADED.columnTop,
-		)
+		for (const [rank, header] of headers.entries()) {
+			const bar = boxOf(headerBars[rank])
+			await expect(boxOf(header).height).toBe(LOADED.headerHeight)
+			await expect(bar.left - boxOf(header).left).toBe(LOADED.rowPadding)
+			await expect(bar.top - boxOf(header).top).toBe(LOADED.headerBarTop)
+		}
+		await expect(boxOf(headers[0]).top).toBe(boxOf(skeleton).top)
 		await expect(boxOf(rows[1]).top - boxOf(rows[0]).bottom).toBe(LOADED.rowGap)
 		await expect(boxOf(headers[1]).top - boxOf(rows[1]).bottom).toBe(
-			LOADED.rowGap,
+			LOADED.sectionGap,
 		)
 		await expect(boxOf(rows[2]).top - boxOf(headers[1]).bottom).toBe(
 			LOADED.rowGap,
