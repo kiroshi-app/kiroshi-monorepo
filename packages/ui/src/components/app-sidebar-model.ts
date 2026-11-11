@@ -29,7 +29,7 @@ import { toPlainText } from "@workspace/ui/lib/plain-text"
 
 type AppSidebarOpenPanel = Exclude<AppRailPanel, "library">
 
-const ROW_AVATAR_SIZE = 40
+const ROW_AVATAR_SIZE = 28
 
 type AppSidebarStatus = "idle" | "working"
 

@@ -27,6 +27,9 @@ import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
 import { dropArea, type Lifter } from "@workspace/ui/hooks/use-roster-lift"
 import { mergeRefs } from "@workspace/ui/lib/utils"
 
+const TITLE_BADGE =
+	"rounded-sm p-1 font-normal text-[11px] text-soft-foreground leading-3"
+
 const rowButtonOf = (row: HTMLElement | null) =>
 	row?.querySelector<HTMLElement>('[data-slot="sidebar-menu-button"]') ?? null
 
@@ -130,7 +133,11 @@ const BotRosterRow = ({
 						strips={missionStripsOf(bot.missions)}
 						timestamp={bot.timestamp ?? ""}
 						trailing={
-							<BotTitleBadge data-slot="roster-row-badge" title={bot.title} />
+							<BotTitleBadge
+								className={TITLE_BADGE}
+								data-slot="roster-row-badge"
+								title={bot.title}
+							/>
 						}
 					/>
 				</ContextMenuTrigger>

@@ -62,7 +62,7 @@ const SECTION_BODY_INNER_OPEN =
 const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
 
 const FOLD_TRIGGER =
-	"flex w-full min-w-0 items-center justify-between gap-1 rounded-md p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"flex w-full min-w-0 items-center justify-between gap-1 rounded-lg p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 

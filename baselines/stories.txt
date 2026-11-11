@@ -1880,6 +1880,9 @@ navigation-expandedsidebar--l-2-failed-expanded
 navigation-expandedsidebar--l-3-loading-more-expanded
 navigation-expandedsidebar--list-scroll-kept-across-swipe-expanded
 navigation-expandedsidebar--long-space-name-truncates-expanded
+navigation-expandedsidebar--missions-1-tree-expanded
+navigation-expandedsidebar--missions-1-tree-light-expanded
+navigation-expandedsidebar--missions-1-tree-long-titles-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
 navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
 navigation-expandedsidebar--new-conversation-draws-the-plus-expanded

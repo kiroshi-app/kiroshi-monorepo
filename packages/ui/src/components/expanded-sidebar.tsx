@@ -44,8 +44,7 @@ import {
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 
-const COLUMN =
-	"flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
+const COLUMN = "flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 p-2"
 
 const SECTIONS = "gap-3"
 
@@ -63,15 +62,18 @@ const MISSION_COUNT =
 	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
 
 const FOOTER =
-	"flex h-9 w-full shrink-0 items-center gap-2 rounded-control ps-1.25 pe-2.25 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.75]"
+	"flex w-full shrink-0 items-center gap-2.5 rounded-lg p-1.5 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+
+const FOOTER_GLYPH =
+	"grid size-7 shrink-0 place-items-center [&>svg]:size-4.5 [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
-	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
+	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase"
 
 const FOOTER_NAME =
-	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm"
+	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5"
 
-const SWITCHER_ROW = "flex h-9 shrink-0 items-center gap-1"
+const SWITCHER_ROW = "flex h-10 shrink-0 items-center gap-1"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
@@ -153,7 +155,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			<AvatarFrame
 				image={user?.image}
 				shape="round"
-				size={26}
+				size={28}
 				slot="expanded-sidebar-avatar"
 			>
 				<span aria-hidden="true" className={FOOTER_AVATAR}>
@@ -161,7 +163,9 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 				</span>
 			</AvatarFrame>
 			<span className={FOOTER_NAME}>{name}</span>
-			<Icons.Settings aria-hidden="true" />
+			<span aria-hidden="true" className={FOOTER_GLYPH}>
+				<Icons.Settings />
+			</span>
 		</button>
 	)
 }

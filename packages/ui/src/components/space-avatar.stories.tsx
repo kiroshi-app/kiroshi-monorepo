@@ -341,7 +341,7 @@ export const Sizes = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3: the mark at 12, 14, 26, 36, 48 and 64px, for a coloured Space and for Personal, in both themes. Check that 12 and 14 draw the compact recipe without glaze, that every size from 26 keeps the same corner and arcs, and that Personal reads as the same mark in greys.",
+					"Artboard 3: the mark at 12, 14, 26, 28, 36, 48 and 64px, for a coloured Space and for Personal, in both themes. Check that 12 and 14 draw the compact recipe without glaze, that every size from 26 keeps the same corner and arcs, and that Personal reads as the same mark in greys.",
 			},
 		},
 	},

@@ -46,7 +46,7 @@ const meta = preview.meta({
 			...BOT_MISSION_STATES,
 		])
 		for (const mark of marks) {
-			await expect(mark.getBoundingClientRect().width).toBe(12)
+			await expect(mark.getBoundingClientRect().width).toBe(14)
 		}
 		for (const capsule of capsules) {
 			await expect(capsule.tabIndex).toBe(-1)

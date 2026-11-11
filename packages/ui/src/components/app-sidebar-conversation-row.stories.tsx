@@ -165,10 +165,14 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 	const nameLine = slotIn(row, "roster-row-name").parentElement as HTMLElement
 
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
-	await expect([cell.width, cell.height]).toEqual([36, 36])
-	await expect(cell.top).toBeCloseTo(nameLine.getBoundingClientRect().top, 1)
-	await expect(cell.bottom).toBeCloseTo(
-		previewLine.getBoundingClientRect().bottom,
+	await expect([cell.width, cell.height]).toEqual([
+		ROW_ICON_SIDE,
+		ROW_ICON_SIDE,
+	])
+	await expect(cell.top + cell.height / 2).toBeCloseTo(
+		(nameLine.getBoundingClientRect().top +
+			previewLine.getBoundingClientRect().bottom) /
+			2,
 		1,
 	)
 	await expect(name.left - cell.right).toBe(10)
@@ -365,7 +369,7 @@ export const MonochromeRow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room with no colour, in the light theme. Check that the 36px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+					"A room with no colour, in the light theme. Check that the 28px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
 			},
 		},
 	},
@@ -378,7 +382,7 @@ export const MonochromeRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room with no colour, in the dark theme. Check that the 36px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
+					"A room with no colour, in the dark theme. Check that the 28px subject icon wears the neutral pair. Pick `MutedTintRow` for a preset hue, `MutedTintRowFreeHue` for a free hue.",
 			},
 		},
 	},
@@ -393,7 +397,7 @@ export const MutedTintRow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured red with the shield key picked, in the light theme. Check that the 36px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+					"A room coloured red with the shield key picked, in the light theme. Check that the 28px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
 			},
 		},
 	},
@@ -410,7 +414,7 @@ export const MutedTintRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured red with the shield key picked, in the dark theme. Check that the 36px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
+					"A room coloured red with the shield key picked, in the dark theme. Check that the 28px subject icon wears the red recipe tones. Pick `MonochromeRow` for a room with no colour.",
 			},
 		},
 	},
@@ -424,7 +428,7 @@ export const MutedTintRowFreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in the light theme. Check that the 36px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+					"A room coloured at a hue outside the eight presets, 210, in the light theme. Check that the 28px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
 			},
 		},
 	},
@@ -438,7 +442,7 @@ export const MutedTintRowFreeHueDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room coloured at a hue outside the eight presets, 210, in the dark theme. Check that the 36px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
+					"A room coloured at a hue outside the eight presets, 210, in the dark theme. Check that the 28px subject icon wears the recipe tones of 210 rather than the nearest preset. Pick `MutedTintRow` for a preset hue.",
 			},
 		},
 	},
@@ -494,7 +498,7 @@ export const MixedRoomsAndSoloConversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A list mixing rooms and one-to-one conversations whose caller passes the agent. Check that each solo row leads with its agent's 36px hexagon, wearing the agent's working pose or uploaded picture, that each room leads with its subject icon, and that name, preview, pile and timestamp sit at the same place on both. Pick `SoloConversationRowDark` for the dark theme.",
+					"A list mixing rooms and one-to-one conversations whose caller passes the agent. Check that each solo row leads with its agent's 28px hexagon, wearing the agent's working pose or uploaded picture, that each room leads with its subject icon, and that name, preview, pile and timestamp sit at the same place on both. Pick `SoloConversationRowDark` for the dark theme.",
 			},
 		},
 	},
@@ -534,7 +538,7 @@ export const SoloConversationRowDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A one-to-one conversation whose caller passes its working agent, in the dark theme. Check that the agent's 36px hexagon leads the row in its writing pose, with no subject icon. Pick `MixedRoomsAndSoloConversations` for the light theme beside rooms.",
+					"A one-to-one conversation whose caller passes its working agent, in the dark theme. Check that the agent's 28px hexagon leads the row in its writing pose, with no subject icon. Pick `MixedRoomsAndSoloConversations` for the light theme beside rooms.",
 			},
 		},
 	},
@@ -695,10 +699,8 @@ export const OpenRowWithMissionCapsules = meta.story({
 		const row = rowIn(canvasElement)
 		await expect(row).toHaveAttribute("aria-current", "page")
 		const surface = surfaceOf(row)
-		await expect(getComputedStyle(surface).backgroundColor).not.toBe(
-			TRANSPARENT,
-		)
-		await expect(getComputedStyle(row).backgroundColor).toBe(TRANSPARENT)
+		await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
+		await expect(getComputedStyle(row).backgroundColor).not.toBe(TRANSPARENT)
 		await expectRowAnatomy(row)
 		await expectKnockoutCutToTheRow(row)
 		const capsules = slotsIn(canvasElement, "mission-capsule")
@@ -761,7 +763,7 @@ export const IconAtTheHeightOfItsTwoLines = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the subject icon is 36px, the 20px name line plus the 16px preview line, starts and ends with them, and the row without missions is 48px, the height of a sidebar skeleton row.",
+					"Check the subject icon is 28px, centred on the 20px name line plus the 16px preview line, and the row without missions is 48px, the height of a sidebar skeleton row.",
 			},
 		},
 	},

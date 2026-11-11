@@ -1,7 +1,7 @@
 import { companionSeed } from "@workspace/ui/components/companion-field"
 import { COMPACT_BELOW } from "@workspace/ui/components/glaze-border"
 
-const SPACE_AVATAR_SIZES = [12, 14, 26, 36, 48, 64] as const
+const SPACE_AVATAR_SIZES = [12, 14, 26, 28, 36, 48, 64] as const
 
 type SpaceAvatarSize = (typeof SPACE_AVATAR_SIZES)[number]
 
@@ -107,6 +107,11 @@ const STATE_METRICS: Record<SpaceAvatarSize, StateMetrics> = {
 		invitationStroke: 1.5,
 		lineStroke: 1,
 	},
+	28: {
+		attention: { gap: 1.5, width: 2 },
+		invitationStroke: 1.5,
+		lineStroke: 1,
+	},
 	36: {
 		attention: { gap: 1.5, width: 2 },
 		invitationStroke: 2,
@@ -151,6 +156,7 @@ const NEAREST_DRAWN: Record<SpaceAvatarSize, DrawnSize> = {
 	12: 14,
 	14: 14,
 	26: 26,
+	28: 26,
 	36: 26,
 	48: 48,
 	64: 48,

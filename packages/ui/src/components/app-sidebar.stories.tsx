@@ -250,11 +250,11 @@ const dotIn = (row: HTMLElement) => slotIn(row, "bot-mission-dot")
 
 const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-mission-dot")
 
-const BARE_ROW_HEIGHT = 52
+const BARE_ROW_HEIGHT = 48
 
 const CONVERSATION_ROW_HEIGHT = 48
 
-const ROW_HEAD_HEIGHT = 40
+const ROW_HEAD_HEIGHT = 36
 
 const STRIP_STEP = 28
 
@@ -1520,7 +1520,7 @@ export const MissionStripStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 80px, the head staying 40px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
+					"Four companions each carrying one open mission, one per state a mission can be in, the running one live. The mission speaks in a strip under the row and the conversation in the dot on the preview line, and since the strip closes on a dot of its own, in the same three colours, on the same trailing column, the line each one sits on is what separates them: the dot above the strip is the state of the conversation, the dot inside it is the state of the work, and only the strip carries a ticket beside it. Check each strip runs the full width of the row, from the leading edge of the avatar to the trailing inner edge, so it passes under the avatar rather than starting after it. Check the strip opens on the platform mark, then the identifier and the title, and closes on its mission state mark at the trailing edge, a disc in the attention, failed and done colours the panel already uses and a soft grey ring for a mission running right now. Check the strip never moves: it is the one mark in the row that does not pulse, because a mission is a fact and not an alarm. The title and the mark carry `--muted-foreground`, which reaches 3.9:1 on the strip fill instead of the 4.5:1 AA asks for: the pair is the artboard’s and the fix is a lightness step on the token, which every muted line in the panel would take with it, so it is flagged for review here rather than settled inside this strip. Check every row measures 76px, the head staying 36px with the avatar centred on it rather than on the row plus the strip, and that the four chat signals are exactly what the host passed. Pick `MissionStripQuiet` for the running mission nobody is watching, `MissionStripStack` for a row carrying four, `MissionStripSelected` for the strip under a lit row.",
 			},
 		},
 	},
@@ -1623,7 +1623,7 @@ export const MissionStripSingle = meta.story({
 		docs: {
 			description: {
 				story:
-					"One companion on one mission over one companion on none. Check the first row measures 80px and the second 52px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 40px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
+					"One companion on one mission over one companion on none. Check the first row measures 76px and the second 48px: a strip costs 24px of height and the 4px that separates it from the row above it, and a row with nothing to say pays neither. Check the strip sits inside the row button, under the head, so one surface and one rounding cover both: the head keeps the 36px it has everywhere else in the panel and the avatar stays centred on it rather than on the row plus what hangs below it. Pick `MissionStripNone` for the bare row alone, `MissionStripStack` for four at once.",
 			},
 		},
 	},
@@ -5499,7 +5499,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the room's subject icon, a 40px hexagon cell, and the companions of the room move to a pile of small hexagons on the preview line, under the time. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
+					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 28px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the room's subject icon, a 28px hexagon cell, and the companions of the room move to a pile of small hexagons on the preview line, under the time. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
 			},
 		},
 	},
@@ -5659,7 +5659,7 @@ export const ConversationParticipants = meta.story({
 				slotIn(crowd, "conversation-subject-icon").getBoundingClientRect()
 					.width,
 			),
-		).toBe(36)
+		).toBe(28)
 	},
 })
 
@@ -5682,7 +5682,7 @@ export const ConversationOfOneBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The subject icon stands as tall as the room's two lines of text, 36px, beside the companion's 40px avatar. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
+					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The subject icon is 28px, centred on the room's two lines of text, beside the companion's 28px avatar. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
 			},
 		},
 	},
@@ -5699,8 +5699,8 @@ export const ConversationOfOneBot = meta.story({
 			bot.querySelector('[data-slot="conversation-bot-pile"]'),
 		).toBeNull()
 
-		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(36)
-		await expect(Math.round(loose.getBoundingClientRect().width)).toBe(40)
+		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(28)
+		await expect(Math.round(loose.getBoundingClientRect().width)).toBe(28)
 		await expect(pileIn(room)).toHaveLength(1)
 		await expect(pileIn(room)[0].getBoundingClientRect().width).toBeLessThan(
 			loose.getBoundingClientRect().width,
