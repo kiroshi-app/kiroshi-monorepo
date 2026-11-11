@@ -15,6 +15,7 @@ const soloThreadRowOf = (agent: AppSidebarBot): AppSidebarConversation => ({
 	id: agent.id,
 	name: agent.name,
 	participants: [agent],
+	agent,
 	sectionId: agent.sectionId,
 	pinPosition: agent.pinPosition,
 	lastMessage: agent.lastMessage,

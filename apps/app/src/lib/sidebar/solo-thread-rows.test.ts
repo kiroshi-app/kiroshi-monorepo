@@ -27,4 +27,14 @@ describe("soloThreadRowsOf", () => {
 			}),
 		])
 	})
+
+	it("leads the row of a solo conversation with its agent's avatar", () => {
+		const [row] = soloThreadRowsOf({
+			agents: [ATLAS],
+			soloThreads: { "thread-atlas": { spaceId: "studio", botId: "atlas" } },
+			spaceId: "studio",
+		})
+
+		expect(row?.agent).toEqual(ATLAS)
+	})
 })
