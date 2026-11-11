@@ -94,7 +94,7 @@ pub fn write_own_file(
 	if held_text(&file)? == held {
 		return Ok(BundleWritten::Unchanged);
 	}
-	match bot_recorded(&bundle, title, asked.summary.trim()) {
+	match bot_recorded(&format!("bot {}", bot.id), &bundle, title, asked.summary.trim()) {
 		Evolved::Recorded(evolution) => {
 			Ok(BundleWritten::Recorded { commit_id: evolution.commit_id, title: evolution.title })
 		}
