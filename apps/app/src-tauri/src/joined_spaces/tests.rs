@@ -30,7 +30,7 @@ use super::contract::{
 use super::member_link::{MemberLink, Presence};
 use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, HostCall, RelayGuests, RelayJoinError};
-use super::test_host::SealingHost;
+use super::test_host::{SealingHost, MEMBER_RELAY_ID};
 use super::wait_reason::{wait_of, Stall};
 use super::waiting;
 use crate::account::session::{self, AccountSession};
@@ -60,7 +60,7 @@ const MEMBER_BEARER: &str = "bearer-of-the-member";
 const OWNER_BEARER: &str = "bearer-of-the-owner";
 const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const SPACE: &str = "personal";
-const MEMBER_RELAY_ID: &str = "3b0c7a52-1d4e-4f8a-9b6c-0e2f4a6c8d10";
+const STALE_RELAY_ID: &str = "r-old";
 const PATIENCE: Duration = Duration::from_secs(60);
 const POLL_EVERY: Duration = Duration::from_millis(50);
 const HOST_ANSWER_BOUND: Duration = Duration::from_secs(2);
@@ -357,6 +357,10 @@ async fn member_socket(
 	let Some(device) = device_of(query.as_deref()) else {
 		return StatusCode::BAD_REQUEST.into_response();
 	};
+	if device != MEMBER_RELAY_ID {
+		let (status, body) = refusal(StatusCode::FORBIDDEN, "FORBIDDEN");
+		return answered_json(status, body);
+	}
 	let (refusal, retry_after) = {
 		let mut room = relay.room();
 		room.upgrades.push(Instant::now());
@@ -969,6 +973,62 @@ fn a_waiting_socket_its_host_refuses_names_this_device_not_admitted_and_comes_on
 		);
 		assert!(member.held_key_id().is_some());
 		assert_eq!(member.last_wait(), None);
+	});
+}
+
+fn pinned_host(roster: Option<String>) -> Value {
+	let roster: Value =
+		serde_json::from_str(&roster.expect("a pinned roster")).expect("a json roster set");
+	roster["host"].clone()
+}
+
+#[test]
+fn a_space_held_under_another_relay_device_awaits_its_approval_and_comes_online_once_admitted_again(
+) {
+	run(async {
+		let member = Member::new("join-stale-relay-device").await;
+		let host = member.host();
+		member.relay.hosting(HostSide::Answering(host.admitted_on(STALE_RELAY_ID, 1)));
+		let joined = member.accepted().await.expect("the join");
+		let pinned = pinned_host(member.held_roster().await);
+		let state = member.app.state::<DatabaseState>();
+		let spaces = state.as_ref().expect("the database").joined_spaces();
+		spaces.learned(joined.id.clone(), SPACE.to_owned()).await.expect("the space id is learned");
+		let refused = json!({ "v": 2, "instance": INSTANCE, "to": MEMBER_RELAY_ID, "refused": "notAdmitted" });
+		member.relay.hosting(HostSide::Answering(refused.to_string()));
+
+		let connect = || joined_space_connect(member.app.handle().clone(), joined.id.clone());
+		connect().await.expect("the connection");
+		let waited = until("the refusal kept as the wait", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
+		})
+		.await;
+		let state_while_refused = member.listed().await.remove(0).state;
+		member.relay.hosting(HostSide::Answering(host.admitted_on(MEMBER_RELAY_ID, 2)));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+		member.relay.greets_after_the_next_members_read(vec![host.hello()]);
+		connect().await.expect("the connection once admitted again");
+		let guests = member.app.state::<RelayGuests>();
+		until("the link online", || async {
+			(guests.presence(&joined.id) == Some(Presence::Online)).then_some(())
+		})
+		.await;
+
+		assert_eq!(
+			waited.reason,
+			JoinedSpaceWaitReason::DeviceAwaitingApproval,
+			"{}",
+			waited.detail
+		);
+		assert_eq!(state_while_refused, JoinedSpaceState::WaitingForHost);
+		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
+		assert_eq!(pinned_host(member.held_roster().await), pinned);
+		let room = member.relay.room();
+		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
 	});
 }
 

@@ -20,6 +20,7 @@ use super::commands::{
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceWait};
 use super::description;
 use super::held::{self, Held};
+use super::join::{member_socket_of, registered_relay_device};
 use super::member_link::{Answer, MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
@@ -59,6 +60,7 @@ pub struct RelayGuests {
 	guests: Mutex<HashMap<String, Guest>>,
 	removed: Mutex<HashSet<String>>,
 	unlisted: Mutex<HashSet<String>>,
+	unadmitted: Mutex<HashSet<String>>,
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
@@ -128,6 +130,7 @@ enum Ended {
 	Evicted(JoinedSpaceRemovalReason),
 	Departed,
 	Removed,
+	Unadmitted(String),
 	SignedOut(&'static str),
 	Dropped(String),
 }
@@ -158,6 +161,7 @@ impl RelayGuests {
 			guests: Mutex::new(HashMap::new()),
 			removed: Mutex::new(HashSet::new()),
 			unlisted: Mutex::new(HashSet::new()),
+			unadmitted: Mutex::new(HashSet::new()),
 			waiting: Mutex::new(HashMap::new()),
 			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
@@ -234,6 +238,18 @@ impl RelayGuests {
 
 	fn unlisted(&self) -> MutexGuard<'_, HashSet<String>> {
 		self.unlisted.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn unadmitted(&self) -> MutexGuard<'_, HashSet<String>> {
+		self.unadmitted.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	pub(super) fn is_unadmitted(&self, instance_id: &str) -> bool {
+		self.unadmitted().contains(instance_id)
+	}
+
+	pub(super) fn admitted(&self, instance_id: &str) {
+		self.unadmitted().remove(instance_id);
 	}
 
 	fn gesture_made(&self) {
@@ -619,8 +635,8 @@ async fn unlisted_reason<R: Runtime>(
 	id: &str,
 	instance_id: &str,
 ) -> JoinedSpaceRemovalReason {
-	let roster = match held::roster(app, instance_id).await {
-		Ok(Some(roster)) => roster,
+	let url = match unlisted_socket(app, bearer, instance_id).await {
+		Ok(Some(url)) => url,
 		Ok(None) => return JoinedSpaceRemovalReason::Unknown,
 		Err(failure) => {
 			log::warn!(
@@ -629,11 +645,22 @@ async fn unlisted_reason<R: Runtime>(
 			return JoinedSpaceRemovalReason::Unknown;
 		}
 	};
-	let url = member_socket_url(cloud, instance_id, &roster.own.relay_device_id);
 	match opened_unpaused(cloud, url, bearer).await {
 		Opened::Gone(Some(departure)) => reason_of(departure),
 		_ => JoinedSpaceRemovalReason::Unknown,
 	}
+}
+
+async fn unlisted_socket<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	instance_id: &str,
+) -> Result<Option<String>, JoinedSpaceError> {
+	if held::roster(app, instance_id).await?.is_none() {
+		return Ok(None);
+	}
+	let device = held::device_keys(app)?;
+	member_socket_of(app, bearer, &device, instance_id).await.map(Some)
 }
 
 pub(super) fn reason_of(departure: Departure) -> JoinedSpaceRemovalReason {
@@ -948,6 +975,13 @@ async fn guest_linked<R: Runtime>(
 					linked.id, linked.instance_id
 				);
 			}
+			Ended::Unadmitted(registered) => {
+				log::warn!(
+					"joined space {} (instance {}) holds a roster naming it relay device {} while relay device {registered} is registered: it asks its host for its admission again",
+					linked.id, linked.instance_id, held.roster.own.relay_device_id
+				);
+				return readmission_asked(&app, &linked, &mut stop).await;
+			}
 			Ended::SignedOut(reason) => {
 				linked.link.ended(Presence::Down);
 				app.state::<RelayGuests>().left(&linked.id, &linked.link);
@@ -973,6 +1007,33 @@ async fn guest_linked<R: Runtime>(
 	}
 }
 
+async fn readmission_asked<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
+	stop: &mut watch::Receiver<bool>,
+) {
+	let guests = app.state::<RelayGuests>();
+	let Some(_turn) = until_stopped(stop, guests.turn.lock()).await else {
+		return linked.link.ended(Presence::Ended);
+	};
+	guests.unadmitted().insert(linked.instance_id.clone());
+	linked.link.ended(Presence::Down);
+	guests.left(&linked.id, &linked.link);
+	if let Err(failure) = waiting::joins_started(app, &guests).await {
+		log::warn!(
+			"joined space {} (instance {}) did not start waiting for its host: {failure:?}",
+			linked.id,
+			linked.instance_id
+		);
+	}
+	if let Err(failure) = announce_change(app, linked.id.clone()).await {
+		log::error!(
+			"joined space {} (instance {}) waits for its host and the front was not told: {failure:?}",
+			linked.id, linked.instance_id
+		);
+	}
+}
+
 async fn attempted<R: Runtime>(
 	app: &AppHandle<R>,
 	linked: &Linked,
@@ -988,7 +1049,26 @@ async fn attempted<R: Runtime>(
 		}
 	};
 	let cloud = &app.state::<RelayGuests>().cloud;
-	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
+	let registered = until_stopped(stop, async {
+		cloud.unpaused().await;
+		registered_relay_device(app, &bearer, &held.device, &linked.instance_id).await
+	})
+	.await;
+	let registered = match registered {
+		None => return (Ended::Stopped, held),
+		Some(Ok(registered)) => registered,
+		Some(Err(JoinedSpaceError::SessionRevoked)) => {
+			return (Ended::SignedOut("the cloud refused the account (401)"), held)
+		}
+		Some(Err(failure)) => {
+			let reason = format!("the relay device of this account did not read: {failure:?}");
+			return (Ended::Dropped(reason), held);
+		}
+	};
+	if registered != held.roster.own.relay_device_id {
+		return (Ended::Unadmitted(registered), held);
+	}
+	let url = member_socket_url(cloud, &linked.instance_id, &registered);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await {
 		None => (Ended::Stopped, held),
 		Some(Opened::Socket(socket)) => {
@@ -1033,8 +1113,18 @@ async fn departure_asked<R: Runtime>(
 			return Some(JoinedSpaceRemovalReason::Removed);
 		}
 	};
+	let asked = member_socket_of(app, &bearer, &held.device, &linked.instance_id);
+	let url = match until_stopped(stop, asked).await? {
+		Ok(url) => url,
+		Err(failure) => {
+			log::warn!(
+				"joined space {} (instance {}) could not ask the relay why its membership ended: {failure:?}",
+				linked.id, linked.instance_id
+			);
+			return Some(JoinedSpaceRemovalReason::Removed);
+		}
+	};
 	let cloud = &app.state::<RelayGuests>().cloud;
-	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await? {
 		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
 		_ => Some(JoinedSpaceRemovalReason::Removed),

@@ -147,8 +147,8 @@ ids of every device with its public keys.
 - A sender never writes `from`. The relay splices `"from":"<relay device id>"` in
   front of the frame, after its opening brace.
 - The host opens its relay socket with `?device=<its relay device id>`, and so does a
-  member: the desktop reads its own relay device id from its row of the roster set it
-  holds, or from `POST /devices` before the host admits it.
+  member: the desktop opens with the relay device id `POST /devices` registered for
+  its account and device, never with the one its row of the held roster set names.
 - A host frame for one member carries `to` set to that member's relay device id,
   and the AAD `to` set to that member's `device_id`. An answer to a call or a
   `relay_resume`, the frames that `relay_resume` replays, and a hello answer go
@@ -370,6 +370,13 @@ the hello under `key_id` 0 on every connection and every `PING_EVERY`, and
 reconnects with the relay backoff. The first verified rekey stores the key and the
 roster, closes that socket, and announces the Space changed; it is then listed
 `state: "online"`.
+
+A device that holds a key and a roster naming it under a relay device id other
+than the registered one (a sign-out and sign-in, or a relay device deleted and
+registered again) is no longer admitted: it opens no socket on the held id, logs
+one line naming both ids, and waits for its host the same way, with the held
+roster kept as its pin. The mark lives in memory only and leaves once a verified
+rekey is kept.
 
 ## Device list admission
 

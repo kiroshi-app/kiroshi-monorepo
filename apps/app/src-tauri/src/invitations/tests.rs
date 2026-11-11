@@ -38,7 +38,7 @@ use crate::joined_spaces::commands::{
 };
 use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
 use crate::joined_spaces::relay::{self as joined_relay, reconciled, RelayGuests};
-use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
+use crate::joined_spaces::test_host::{SealingHost, CHALLENGE, MEMBER_RELAY_ID};
 use crate::logging::contract::InstallKind;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -46,7 +46,6 @@ use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 const BEARER: &str = "bearer-that-never-leaves";
 const INSTANCE: &str = "instance-1";
 const INVITATION: &str = "instance-1-invitation";
-const MEMBER_RELAY_ID: &str = "r-member";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
 const PATIENCE: Duration = Duration::from_secs(60);
 const POLL_EVERY: Duration = Duration::from_millis(100);
