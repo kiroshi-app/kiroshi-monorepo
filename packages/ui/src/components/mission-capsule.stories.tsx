@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
@@ -31,18 +31,20 @@ const meta = preview.meta({
 			</div>
 		),
 	],
-	args: { missions: MISSIONS, onOpen: fn() },
-	play: async ({ args, canvasElement }) => {
+	args: { missions: MISSIONS },
+	play: async ({ canvasElement }) => {
 		const capsules = slotsIn(canvasElement, "mission-capsule")
 		await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
 			...BOT_MISSION_STATES,
 		])
 		const [title] = slotsIn(canvasElement, "mission-capsule-title")
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-		capsules[0].focus()
-		await expect(capsules[0]).toHaveFocus()
-		capsules[0].click()
-		await expect(args.onOpen).toHaveBeenCalledWith("mission-waiting")
+		await expect(within(canvasElement).queryAllByRole("button")).toEqual([])
+		await expect(capsules[0]).toHaveTextContent("waiting for you")
+		for (const capsule of capsules) {
+			await expect(capsule.tabIndex).toBe(-1)
+			await expect(getComputedStyle(capsule).pointerEvents).toBe("none")
+		}
 	},
 })
 

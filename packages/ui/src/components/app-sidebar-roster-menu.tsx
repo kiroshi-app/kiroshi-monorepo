@@ -104,7 +104,6 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 				onDelete={rows.onDeleteConversation}
 				onOpenInNewTab={rows.onOpenConversationInNewTab}
 				onOpenSettings={rows.onOpenConversationSettings}
-				onOpenMission={rows.onOpenMission}
 				onSelect={rows.onSelectConversation}
 			/>
 		)

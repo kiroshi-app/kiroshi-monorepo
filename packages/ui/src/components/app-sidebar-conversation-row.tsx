@@ -38,6 +38,8 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 const MISSION_SURFACE =
 	"relative flex flex-col gap-1 rounded-lg p-1.5 hover:bg-sidebar-accent active:bg-sidebar-accent has-[[data-active]]:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70 group-data-[collapsible=icon]:p-0"
 
+const ROW_ICON_SIDE = 36
+
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
 	isSelected: boolean
@@ -48,7 +50,6 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
-	onOpenMission?: (missionId: string) => void
 	lift: Lifter
 }
 
@@ -71,7 +72,6 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
-	onOpenMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const hasMissions = Boolean(conversation.missions?.length)
@@ -103,11 +103,12 @@ const ConversationRosterRow = ({
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							conversation.agent ? (
-								<BotRowAvatar bot={conversation.agent} />
+								<BotRowAvatar bot={conversation.agent} size={ROW_ICON_SIDE} />
 							) : (
 								<ConversationSubjectIcon
 									hue={conversation.color}
 									icon={conversation.icon}
+									side={ROW_ICON_SIDE}
 								/>
 							)
 						}
@@ -128,10 +129,7 @@ const ConversationRosterRow = ({
 								: (conversation.timestamp ?? "")
 						}
 					/>
-					<MissionCapsuleList
-						missions={conversation.missions}
-						onOpen={onOpenMission}
-					/>
+					<MissionCapsuleList missions={conversation.missions} />
 				</ContextMenuTrigger>
 				<ContextMenuContent
 					aria-label={t("roster.actions", { name: conversation.name })}
@@ -169,4 +167,4 @@ const ConversationRosterRow = ({
 	)
 }
 
-export { ConversationRosterRow }
+export { ConversationRosterRow, ROW_ICON_SIDE }

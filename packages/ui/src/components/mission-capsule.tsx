@@ -6,10 +6,10 @@ import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { cn } from "@workspace/ui/lib/utils"
 
 const CAPSULE_LIST =
-	"flex flex-col gap-1 ps-11 group-data-[collapsible=icon]:hidden"
+	"pointer-events-none flex flex-col gap-1 ps-11 group-data-[collapsible=icon]:hidden"
 
 const CAPSULE =
-	"relative flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-mission-capsule px-2 py-1 text-start text-xs outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"relative flex h-6 w-full min-w-0 items-center gap-1.5 rounded-sm bg-mission-capsule px-2 py-1 text-xs"
 
 const MISSION_GLYPH =
 	"pointer-events-none size-3 shrink-0 rounded-full border-[1.5px] border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_3px)]"
@@ -24,21 +24,14 @@ const MISSION_GLYPH_COLOUR = {
 
 type MissionCapsuleProps = {
 	mission: AppSidebarRowMission
-	onOpen?: (missionId: string) => void
 }
 
-const MissionCapsule = ({ mission, onOpen }: MissionCapsuleProps) => {
+const MissionCapsule = ({ mission }: MissionCapsuleProps) => {
 	const { t } = useTranslation("bots")
 	const { state, ticket, objective } = mission
 
 	return (
-		<button
-			className={CAPSULE}
-			data-slot="mission-capsule"
-			data-state={state}
-			onClick={() => onOpen?.(mission.id)}
-			type="button"
-		>
+		<div className={CAPSULE} data-slot="mission-capsule" data-state={state}>
 			<span className="sr-only">{t(`roster.mission.state.${state}`)}</span>
 			<span
 				aria-hidden="true"
@@ -56,20 +49,19 @@ const MissionCapsule = ({ mission, onOpen }: MissionCapsuleProps) => {
 			>
 				{ticket.title || objective}
 			</span>
-		</button>
+		</div>
 	)
 }
 
 type MissionCapsuleListProps = {
 	missions: AppSidebarRowMission[] | undefined
-	onOpen?: (missionId: string) => void
 }
 
-const MissionCapsuleList = ({ missions, onOpen }: MissionCapsuleListProps) =>
+const MissionCapsuleList = ({ missions }: MissionCapsuleListProps) =>
 	missions && missions.length > 0 ? (
 		<div className={CAPSULE_LIST} data-slot="mission-capsule-list">
 			{missions.map((mission) => (
-				<MissionCapsule key={mission.id} mission={mission} onOpen={onOpen} />
+				<MissionCapsule key={mission.id} mission={mission} />
 			))}
 		</div>
 	) : null

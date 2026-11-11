@@ -1,3 +1,4 @@
+import { ROW_ICON_SIDE } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { ListSkeleton } from "@workspace/ui/components/list-skeleton"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -50,7 +51,10 @@ const SidebarSkeletonRow = ({ title, preview }: SidebarRowWidths) => (
 		className="flex shrink-0 items-center gap-2.5 p-1.5"
 		data-slot="sidebar-list-skeleton-row"
 	>
-		<span className="size-10 shrink-0 rounded-control bg-foreground/7" />
+		<span
+			className="shrink-0 rounded-control bg-foreground/7"
+			style={{ width: ROW_ICON_SIDE, height: ROW_ICON_SIDE }}
+		/>
 		<span className="flex min-w-0 flex-1 flex-col gap-2">
 			<span className={cn(BAR, "h-3 bg-foreground/7", title)} />
 			<span className={cn(BAR, "h-2.5 bg-foreground/4", preview)} />

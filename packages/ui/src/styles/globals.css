@@ -32,8 +32,6 @@
 		0 2px 4px rgb(0 0 0 / 0.12), 0 20px 40px rgb(0 0 0 / 0.22);
 	--rail-tooltip-shadow:
 		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.12);
-	--rail-popover-shadow:
-		0 0 0 1px var(--title-bar-menu-border), 0 12px 32px rgb(0 0 0 / 0.16);
 	--selection-toolbar-border: oklch(0 0 0 / 8%);
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
@@ -59,8 +57,6 @@
 		0 2px 4px rgb(0 0 0 / 0.4), 0 20px 40px rgb(0 0 0 / 0.6);
 	--rail-tooltip-shadow:
 		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.5);
-	--rail-popover-shadow:
-		0 0 0 1px var(--title-bar-menu-border), 0 12px 32px rgb(0 0 0 / 0.63);
 	--selection-toolbar-border: oklch(1 0 0 / 10%);
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
@@ -83,7 +79,6 @@
 	--shadow-lifted-tile: var(--lifted-tile-shadow);
 	--shadow-selection-toolbar: var(--selection-toolbar-shadow);
 	--shadow-rail-tooltip: var(--rail-tooltip-shadow);
-	--shadow-rail-popover: var(--rail-popover-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
 	--color-primary: var(--primary);
