@@ -19,7 +19,7 @@ import {
 const ROW_PADDING = 6
 
 const LOADED = {
-	rowHeight: ROW_ICON_SIDE + 2 * ROW_PADDING,
+	rowHeight: 48,
 	rowGap: 2,
 	rowPadding: ROW_PADDING,
 	tile: ROW_ICON_SIDE,
@@ -64,7 +64,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is 48px, the height of a loaded conversation row without missions, and holds a 36px rounded tile, the size of the conversation icon, beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
+					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is 48px, the height of a loaded conversation row without missions, and holds a 28px rounded tile, the size of the conversation icon, beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
 			},
 		},
 	},
