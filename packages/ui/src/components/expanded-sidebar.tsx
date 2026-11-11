@@ -63,7 +63,7 @@ const MISSION_COUNT =
 	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
 
 const FOOTER =
-	"flex h-9 w-full shrink-0 items-center gap-2 rounded-control px-1.25 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.75]"
+	"flex h-9 w-full shrink-0 items-center gap-2 rounded-control ps-1.25 pe-2.25 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
