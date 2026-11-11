@@ -736,19 +736,17 @@ export const MissionCapsulesAreInert = meta.story({
 			await expect(getComputedStyle(capsule).pointerEvents).toBe("none")
 			await expect(document.elementFromPoint(...centreOf(capsule))).toBe(row)
 		}
-		const [first] = capsules
-		const hit = document.elementFromPoint(...centreOf(first)) as HTMLElement
-		fireEvent.click(hit, { detail: 1 })
+		fireEvent.click(row, { detail: 1 })
 		await expect(args.onSelect).toHaveBeenLastCalledWith(
 			MISSIONS_ROOM.id,
 			NO_CLICK_MODIFIERS,
 		)
-		fireEvent.click(hit, { detail: 1, metaKey: true })
+		fireEvent.click(row, { detail: 1, metaKey: true })
 		await expect(args.onSelect).toHaveBeenLastCalledWith(MISSIONS_ROOM.id, {
 			...NO_CLICK_MODIFIERS,
 			meta: true,
 		})
-		fireEvent.contextMenu(hit)
+		fireEvent.contextMenu(row)
 		await shown(
 			await screen.findByRole("menu", {
 				name: `Actions for ${MISSIONS_ROOM.name}`,
