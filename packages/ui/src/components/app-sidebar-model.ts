@@ -81,6 +81,7 @@ interface AppSidebarConversation {
 	sectionId?: string | null
 	pinPosition?: number | null
 	participants: AppSidebarBot[]
+	agent?: AppSidebarBot
 	lastMessage?: string
 	lastSpeaker?: string
 	timestamp?: string

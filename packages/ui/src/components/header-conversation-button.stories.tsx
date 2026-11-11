@@ -2,7 +2,6 @@ import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	expectSoloAvatarInBothThemes,
 	expectSubjectIconInBothThemes,
 	slotIn,
 	slotsIn,
@@ -10,21 +9,6 @@ import {
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
-import type { RosterBot } from "@workspace/ui/components/roster"
-
-const NEST: RosterBot = { id: "nest", name: "Nest", blot: BLOT_HUES.blue }
-
-const BOTS: RosterBot[] = [
-	NEST,
-	{ id: "atlas", name: "Atlas", blot: BLOT_HUES.green },
-]
-
-const CROWD: RosterBot[] = [
-	...BOTS,
-	{ id: "pike", name: "Pike", blot: BLOT_HUES.orange },
-	{ id: "wren", name: "Wren", blot: BLOT_HUES.purple },
-	{ id: "otto", name: "Otto", blot: BLOT_HUES.pink },
-]
 
 const CELL_SIDE = 24
 
@@ -41,13 +25,12 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The leading control of a conversation header: the room's subject icon (or the face of its one companion), the name of the conversation, and the way into its settings, in one ghost button. It wears the same height and padding as `HeaderIdentityButton`, so a room and a one-to-one chat sit their identity at exactly the same place. Reach for it in an app header; a single companion's chat takes `HeaderIdentityButton` instead.",
+					"The leading control of a conversation header: the room's subject icon whatever the number of agents seated, the name of the conversation, and the way into its settings, in one ghost button. It wears the same height and padding as `HeaderIdentityButton`, so a room and a one-to-one chat sit their identity at exactly the same place. Reach for it in an app header; a one-to-one conversation takes `HeaderIdentityButton` instead.",
 			},
 		},
 	},
 	args: {
 		name: "Billing migration",
-		bots: BOTS,
 		onOpenSettings: fn(),
 	},
 })
@@ -94,51 +77,26 @@ export const Expanded = meta.story({
 	},
 })
 
-export const Crowded = meta.story({
-	args: { bots: CROWD },
+export const SingleBot = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this when the room is full. Check that the room still draws one 24px subject icon, so the leading slot never widens with the room and it is the name that gives up room as the row fills. Pick `Default` for the usual pair. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
+					"Reach for this for a room where one agent is left seated. Check that it still reads as a conversation: the 24px subject icon leads, never the agent's face, the name is the room's, and the settings glyph opens the room. Pick `HeaderIdentityButton` for a true one-to-one conversation, which also carries the connection mark.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		const button = canvas.getByRole("button")
+	play: async ({ canvas, canvasElement }) => {
+		const button = canvas.getByRole("button", {
+			name: "Billing migration · conversation settings",
+		})
 
-		await expect(slotsIn(button, "conversation-subject-icon")).toHaveLength(1)
 		await expect(
 			slotIn(button, "conversation-subject-icon").getBoundingClientRect().width,
 		).toBe(CELL_SIDE)
+		await expect(slotsIn(canvasElement, "bot-identity-avatar")).toHaveLength(0)
+		await expect(button).toHaveAttribute("aria-expanded", "false")
 	},
-})
-
-export const SingleBot = meta.story({
-	args: { bots: [NEST] },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this for a room where one companion is left seated. Check that it still reads as a conversation — the name is the room's, not the companion's, and the settings glyph opens the room. Pick `HeaderIdentityButton` for a true one-to-one chat, which also carries the connection mark. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
-			},
-		},
-	},
-})
-
-export const ThemesSolo = meta.story({
-	globals: { theme_layout: "side-by-side" },
-	args: { bots: [NEST] },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this to read a one-companion room in light and dark at once. Check that the companion's own 24px face leads the button in both themes, with no subject icon. Pick `ThemesGroup` for a room of several companions.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) =>
-		expectSoloAvatarInBothThemes(canvasElement, CELL_SIDE),
 })
 
 export const ThemesGroup = meta.story({

@@ -14,13 +14,18 @@ import {
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
 	glyphIn,
+	pictureOf,
 	SidebarFrame,
 	shown,
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
+	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
-import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
+import type {
+	AppSidebarBot,
+	AppSidebarConversation,
+} from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
 	BEACON,
@@ -431,6 +436,106 @@ export const MutedTintRowFreeHueDark = meta.story({
 		},
 	},
 	play: ({ canvasElement }) => expectCellWears(rowIn(canvasElement), FREE_HUE),
+})
+
+const soloWith = (agent: AppSidebarBot): AppSidebarConversation => ({
+	id: `solo-${agent.id}`,
+	name: agent.name,
+	participants: [agent],
+	agent,
+	lastMessage: agent.lastMessage,
+	lastSpeaker: agent.name,
+	timestamp: agent.timestamp,
+})
+
+const PICTURED_ATLAS: AppSidebarBot = { ...ATLAS, image: UPLOADED_AVATAR_IMAGE }
+
+const MIXED_ROOMS_AND_SOLOS = [
+	DESK_ROOM,
+	soloWith(BEACON),
+	roomOf(FIVE_BOTS),
+	soloWith(PICTURED_ATLAS),
+]
+
+const ROW_MEDIA_SIDE = 40
+
+const mediaAvatarsIn = (row: HTMLElement) =>
+	slotsIn(row, "bot-identity-avatar").filter(
+		(avatar) => !avatar.closest('[data-slot="conversation-bot-pile"]'),
+	)
+
+const expectMediaGeometry = async (row: HTMLElement, media: HTMLElement) => {
+	const cell = media.getBoundingClientRect()
+
+	await expect([cell.width, cell.height]).toEqual([
+		ROW_MEDIA_SIDE,
+		ROW_MEDIA_SIDE,
+	])
+	await expect(boxOf(row, "roster-row-name").left - cell.right).toBe(10)
+	await expect(boxOf(row, "conversation-bot-pile").height).toBe(16)
+}
+
+const expectAgentLeads = async (row: HTMLElement) => {
+	const avatars = mediaAvatarsIn(row)
+
+	await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(0)
+	await expect(avatars).toHaveLength(1)
+	await expectMediaGeometry(row, avatars[0])
+	return avatars[0]
+}
+
+export const MixedRoomsAndSoloConversations = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A list mixing rooms and one-to-one conversations whose caller passes the agent. Check that each solo row leads with its agent's 40px hexagon, wearing the agent's working pose or uploaded picture, that each room leads with its subject icon, and that name, preview, pile and timestamp sit at the same place on both. Pick `SoloConversationRowDark` for the dark theme.",
+			},
+		},
+	},
+	render: (args) => (
+		<>
+			{MIXED_ROOMS_AND_SOLOS.map((conversation) => (
+				<ConversationRosterRow
+					{...args}
+					conversation={conversation}
+					key={conversation.id}
+				/>
+			))}
+		</>
+	),
+	play: async ({ canvasElement }) => {
+		const [room, workingSolo, crowdedRoom, picturedSolo] = slotsIn(
+			canvasElement,
+			"sidebar-menu-button",
+		)
+
+		for (const row of [room, crowdedRoom]) {
+			await expect(mediaAvatarsIn(row)).toHaveLength(0)
+			await expectMediaGeometry(row, slotIn(row, "conversation-subject-icon"))
+		}
+		await expectAgentLeads(workingSolo)
+		const picturedAvatar = await expectAgentLeads(picturedSolo)
+		await expect((await pictureOf(picturedAvatar)).src).toBe(
+			UPLOADED_AVATAR_IMAGE,
+		)
+	},
+})
+
+export const SoloConversationRowDark = meta.story({
+	globals: DARK,
+	args: { conversation: soloWith(BEACON) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A one-to-one conversation whose caller passes its working agent, in the dark theme. Check that the agent's 40px hexagon leads the row in its writing pose, with no subject icon. Pick `MixedRoomsAndSoloConversations` for the light theme beside rooms.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectAgentLeads(rowIn(canvasElement))
+	},
 })
 
 export const RowWithOneBot = meta.story({

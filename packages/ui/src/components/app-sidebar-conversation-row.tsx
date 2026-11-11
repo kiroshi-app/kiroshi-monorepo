@@ -9,6 +9,7 @@ import {
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
+	BotRowAvatar,
 	type RosterRowSlot,
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
@@ -101,10 +102,14 @@ const ConversationRosterRow = ({
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
-							<ConversationSubjectIcon
-								hue={conversation.color}
-								icon={conversation.icon}
-							/>
+							conversation.agent ? (
+								<BotRowAvatar bot={conversation.agent} />
+							) : (
+								<ConversationSubjectIcon
+									hue={conversation.color}
+									icon={conversation.icon}
+								/>
+							)
 						}
 						name={conversation.name}
 						onSelect={(modifiers) => {
