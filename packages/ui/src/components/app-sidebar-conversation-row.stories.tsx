@@ -475,6 +475,15 @@ const expectMediaGeometry = async (row: HTMLElement, media: HTMLElement) => {
 	await expect(boxOf(row, "conversation-bot-pile").height).toBe(16)
 }
 
+const expectAgentLeads = async (row: HTMLElement) => {
+	const avatars = mediaAvatarsIn(row)
+
+	await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(0)
+	await expect(avatars).toHaveLength(1)
+	await expectMediaGeometry(row, avatars[0])
+	return avatars[0]
+}
+
 export const MixedRoomsAndSoloConversations = meta.story({
 	parameters: {
 		docs: {
@@ -505,12 +514,9 @@ export const MixedRoomsAndSoloConversations = meta.story({
 			await expect(mediaAvatarsIn(row)).toHaveLength(0)
 			await expectMediaGeometry(row, slotIn(row, "conversation-subject-icon"))
 		}
-		for (const row of [workingSolo, picturedSolo]) {
-			await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(0)
-			await expect(mediaAvatarsIn(row)).toHaveLength(1)
-			await expectMediaGeometry(row, mediaAvatarsIn(row)[0])
-		}
-		await expect((await pictureOf(mediaAvatarsIn(picturedSolo)[0])).src).toBe(
+		await expectAgentLeads(workingSolo)
+		const picturedAvatar = await expectAgentLeads(picturedSolo)
+		await expect((await pictureOf(picturedAvatar)).src).toBe(
 			UPLOADED_AVATAR_IMAGE,
 		)
 	},
@@ -528,11 +534,7 @@ export const SoloConversationRowDark = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const row = rowIn(canvasElement)
-
-		await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(0)
-		await expect(mediaAvatarsIn(row)).toHaveLength(1)
-		await expectMediaGeometry(row, mediaAvatarsIn(row)[0])
+		await expectAgentLeads(rowIn(canvasElement))
 	},
 })
 
