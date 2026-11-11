@@ -93,10 +93,7 @@ const NOT_SENT_DOT =
 	"-bottom-0.5 -end-0.5 pointer-events-none absolute size-2.5 rounded-full bg-mission-glyph-failure ring-2 ring-background"
 
 const GROUP =
-	"relative flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2 before:pointer-events-none before:absolute before:inset-0 before:rounded-control"
-
-const GROUP_STATE =
-	"hover:before:bg-title-bar-highlight data-active:before:bg-rail-item-selected data-active:hover:before:bg-rail-item-selected-hover"
+	"relative flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2 before:pointer-events-none before:absolute before:inset-0 before:rounded-control hover:before:bg-title-bar-highlight data-active:before:bg-rail-item-selected data-active:hover:before:bg-rail-item-selected-hover"
 
 const OVERFLOW_COUNT =
 	"relative font-semibold text-[11px] text-foreground tabular-nums"
@@ -505,7 +502,7 @@ const RailConversation = ({
 		<RailTip content={tip}>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: the mission cells and the +N label are pointer extensions of the conversation button, which is the group's only tab stop and whose click bubbles here */}
 			<div
-				className={cn(GROUP, GROUP_STATE)}
+				className={GROUP}
 				data-active={isOpen || undefined}
 				data-slot="collapsed-sidebar-group"
 				onClick={openConversation}
