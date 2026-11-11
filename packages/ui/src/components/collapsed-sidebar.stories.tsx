@@ -17,7 +17,12 @@ import {
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
-import { ATLAS, BEACON } from "@workspace/ui/components/app-sidebar.fixtures"
+import {
+	ATLAS,
+	BEACON,
+	PINNED_CONVERSATIONS,
+	RECENT_CONVERSATIONS,
+} from "@workspace/ui/components/app-sidebar.fixtures"
 import type {
 	AppSidebarConversation,
 	AppSidebarRowMission,
@@ -924,6 +929,21 @@ export const E3EmptySectionCollapsed = meta.story({
 	},
 })
 
+const FIRST_ZONE_SLOTS = [
+	{ top: 11, height: 44 },
+	{ top: 57, height: 44 },
+]
+
+const firstZoneEdgesOf = (canvasElement: HTMLElement, slot: string) => {
+	const list = slotIn(canvasElement, "collapsed-sidebar-list")
+	return slotsIn(list, slot)
+		.slice(0, FIRST_ZONE_SLOTS.length)
+		.map((node) => ({
+			top: node.getBoundingClientRect().top - list.getBoundingClientRect().top,
+			height: node.getBoundingClientRect().height,
+		}))
+}
+
 export const L1LoadingCollapsed = meta.story({
 	name: "L1 Loading Collapsed",
 	args: { listStatus: "loading" },
@@ -931,7 +951,7 @@ export const L1LoadingCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The conversations are loading. Check 28px skeleton squares in 44px slots replace the list and fill its height.",
+					"The conversations are loading. Check 28px skeleton squares in 44px slots follow the separator, each where a loaded conversation stands and as tall, and fill the height of the list.",
 			},
 		},
 	},
@@ -939,6 +959,9 @@ export const L1LoadingCollapsed = meta.story({
 		await expect(
 			slotsIn(canvasElement, "collapsed-sidebar-conversation"),
 		).toHaveLength(0)
+		await expect(
+			firstZoneEdgesOf(canvasElement, "collapsed-sidebar-skeleton"),
+		).toEqual(FIRST_ZONE_SLOTS)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 	},
 })
@@ -1309,3 +1332,38 @@ export const CurrentDestinationHoveredCollapsed = meta.story(
 export const CurrentDestinationHoveredLightCollapsed = meta.story(
 	currentDestinationHoverStory(LIGHT),
 )
+
+const middleYOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return box.top + box.height / 2
+}
+
+export const SharedRowsCollapsed = meta.story({
+	name: "Shared rows Collapsed",
+	args: {
+		zones: [pinnedZone(PINNED_CONVERSATIONS), recentZone(RECENT_CONVERSATIONS)],
+		update: { status: "available", onDownload: DOWNLOAD },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The content the expanded sidebar draws in its own Shared rows story: one Space, the three destinations, two pinned and three recent conversations, an available update and the person. Check the Space slot, each destination, the list, the update slot and the person start at the same distance from the top edge and stand as tall as their expanded rows, that the two pinned conversations stand where the loading skeleton draws its first two slots, and that the update disc stays centred in its slot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			firstZoneEdgesOf(canvasElement, "collapsed-sidebar-conversation"),
+		).toEqual(FIRST_ZONE_SLOTS)
+		const update = slotIn(canvasElement, "collapsed-sidebar-update")
+		await expect(
+			middleYOf(slotIn(update, "collapsed-sidebar-update-disc")),
+		).toBe(middleYOf(update))
+	},
+})
+
+export const SharedRowsLightCollapsed = SharedRowsCollapsed.extend({
+	name: "Shared rows Light Collapsed",
+	globals: LIGHT,
+})

@@ -35,13 +35,21 @@ const ICON_SLOT =
 
 const SIDEBAR_ROW_INSET = "p-2"
 
+const SIDEBAR_COLUMN = "flex min-h-0 shrink-0 flex-col gap-2 p-2"
+
+const SIDEBAR_GLYPH_BOX = "h-5 w-7"
+
+const SIDEBAR_AVATAR_SIDE = 28
+
 const NAVIGATION_ROW = cn(
 	SIDEBAR_ROW_INSET,
 	"gap-2.5 rounded-lg font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
 )
 
-const NAVIGATION_ICON_SLOT =
-	"grid h-5 w-7 shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!"
+const NAVIGATION_ICON_SLOT = cn(
+	SIDEBAR_GLYPH_BOX,
+	"grid shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!",
+)
 
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
@@ -152,6 +160,9 @@ const SidebarMenuRow = ({
 
 export {
 	NO_CLICK_MODIFIERS,
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_COLUMN,
+	SIDEBAR_GLYPH_BOX,
 	SIDEBAR_ROW_INSET,
 	type SidebarClickModifiers,
 	SidebarMenuRow,

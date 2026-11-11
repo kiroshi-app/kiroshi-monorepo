@@ -20,7 +20,10 @@ import {
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
-import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
+import {
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_ROW_INSET,
+} from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceAvatar,
@@ -308,7 +311,7 @@ const SpaceSwitcher = ({
 							<SpaceAvatar
 								colour={selected.colour}
 								name={selected.name}
-								size={28}
+								size={SIDEBAR_AVATAR_SIDE}
 								spaceId={selected.avatarSeed}
 								state={spaceAvatarStateOf(host)}
 							/>
