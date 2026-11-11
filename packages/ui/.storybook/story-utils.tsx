@@ -464,7 +464,7 @@ const LEFT_COLUMN = {
 
 type LeftColumnParts = {
 	column: HTMLElement
-	header: HTMLElement
+	header?: HTMLElement
 	row: HTMLElement
 }
 
@@ -481,24 +481,38 @@ export const expectLeftColumn = async ({
 	await expect(style.paddingInlineStart).toBe(LEFT_COLUMN.paddingInline)
 	await expect(style.paddingInlineEnd).toBe(LEFT_COLUMN.paddingInline)
 	await expect(style.rowGap).toBe(LEFT_COLUMN.gap)
-	await expect(header.getBoundingClientRect().height).toBe(
-		LEFT_COLUMN.headerHeight,
-	)
+	if (header) {
+		await expect(header.getBoundingClientRect().height).toBe(
+			LEFT_COLUMN.headerHeight,
+		)
+	}
 	await expect(row.getBoundingClientRect().left - innerLeft).toBe(
 		LEFT_COLUMN.rowInset,
 	)
 }
 
-export const expectSettingsMenuLeftColumn = (root: Element) => {
+type SettingsMenuLeftColumnOptions = {
+	hasBackRow?: boolean
+}
+
+export const expectSettingsMenuLeftColumn = async (
+	root: Element,
+	{ hasBackRow = true }: SettingsMenuLeftColumnOptions = {},
+) => {
 	const column = slotIn(root, "settings-menu")
 	const firstEntry = slotIn(column, "settings-menu-entries").querySelector(
 		"button",
 	)
 	if (!firstEntry) throw new Error("The settings menu lists no entry")
+	if (!hasBackRow) {
+		await expect(
+			column.querySelector('[data-slot="settings-menu-back"]'),
+		).toBeNull()
+	}
 
 	return expectLeftColumn({
 		column,
-		header: slotIn(column, "settings-menu-back"),
+		header: hasBackRow ? slotIn(column, "settings-menu-back") : undefined,
 		row: firstEntry,
 	})
 }

@@ -1787,6 +1787,7 @@ navigation-collapsedsidebar--last-mission-completes
 navigation-collapsedsidebar--mission-thread-open
 navigation-collapsedsidebar--one-mission
 navigation-collapsedsidebar--overflow-with-popover-open
+navigation-collapsedsidebar--overflow-without-named-ticket
 navigation-collapsedsidebar--r-1-not-sent-collapsed
 navigation-collapsedsidebar--s-1-several-spaces-collapsed
 navigation-collapsedsidebar--s-2-shared-space-host-not-connected-collapsed

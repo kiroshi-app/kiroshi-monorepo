@@ -446,24 +446,30 @@ const MissionOverflow = ({
 						className={OVERFLOW_MENU}
 						data-slot="collapsed-sidebar-overflow-menu"
 					>
-						{missions.map((mission) => (
-							<Menu.Item
-								aria-current={mission.id === openMissionId ? "page" : undefined}
-								className={OVERFLOW_ROW}
-								data-slot="collapsed-sidebar-overflow-row"
-								key={mission.id}
-								label={missionNameOf(mission)}
-								onClick={() => onOpen?.(mission.id)}
-							>
-								<MissionGlyph state={mission.state} />
-								<span className={OVERFLOW_TICKET}>
-									{missionTicketOf(mission)}
-								</span>
-								<span className="min-w-0 flex-1 truncate">
-									{missionTitleOf(mission)}
-								</span>
-							</Menu.Item>
-						))}
+						{missions.map((mission) => {
+							const ticket = missionTicketOf(mission)
+
+							return (
+								<Menu.Item
+									aria-current={
+										mission.id === openMissionId ? "page" : undefined
+									}
+									className={OVERFLOW_ROW}
+									data-slot="collapsed-sidebar-overflow-row"
+									key={mission.id}
+									label={missionNameOf(mission)}
+									onClick={() => onOpen?.(mission.id)}
+								>
+									<MissionGlyph state={mission.state} />
+									{ticket ? (
+										<span className={OVERFLOW_TICKET}>{ticket}</span>
+									) : null}
+									<span className="min-w-0 flex-1 truncate">
+										{missionTitleOf(mission)}
+									</span>
+								</Menu.Item>
+							)
+						})}
 					</Menu.Popup>
 				</Menu.Positioner>
 			</Menu.Portal>

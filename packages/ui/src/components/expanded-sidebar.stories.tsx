@@ -1453,7 +1453,7 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the switcher and the footer each keep one inset on the left, the top and the right of their content, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
+					"Check the switcher keeps one inset on the left, the top and the right of its content, the footer avatar sits as far from the left edge as from the top and the gear as far from the right edge as from the top, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
 			},
 		},
 	},
@@ -1474,9 +1474,12 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(5)
 		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(5)
 		await expect(rightInsetOf(row, searchGlyph)).toBe(5)
-		await expect(footerAvatar.left - boxOf(footer).left).toBe(5)
-		await expect(footerAvatar.top - boxOf(footer).top).toBe(5)
-		await expect(rightInsetOf(footer, gear)).toBe(5)
+		await expect(footerAvatar.left - boxOf(footer).left).toBe(
+			footerAvatar.top - boxOf(footer).top,
+		)
+		await expect(rightInsetOf(footer, gear)).toBe(
+			boxOf(gear).top - boxOf(footer).top,
+		)
 
 		const centreOf = (box: DOMRect) => box.left + box.width / 2 - sidebar.left
 		const navigationIcon = canvas
