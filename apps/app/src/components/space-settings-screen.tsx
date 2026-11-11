@@ -208,7 +208,6 @@ export const SpaceSettingsScreen = ({
 		entry: search.entry ?? SPACE_ENTRY,
 		onEntryChange: navigation.showEntry,
 		onOpenApplication: navigation.openApplication,
-		onBack: navigation.backToUserSettings,
 		environment: toEnvironmentRows(spaceEnvironment.entries),
 		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
 		isEnvironmentPending: spaceEnvironment.isPending,

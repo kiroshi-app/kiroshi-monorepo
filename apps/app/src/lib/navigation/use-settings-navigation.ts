@@ -25,14 +25,6 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 	const router = useRouter()
 
 	return useMemo(() => {
-		const backOr = (fallback: () => void) => {
-			if (router.history.canGoBack()) {
-				router.history.back()
-				return
-			}
-			fallback()
-		}
-
 		const openInBackgroundTab = (options: NavigateOptions, spaceId?: string) =>
 			router.options.context.tabs.openInNewTab(
 				router.buildLocation(options).href,
@@ -70,17 +62,13 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 		}
 
 		return {
-			back: () =>
-				backOr(
-					() =>
-						void navigate({
-							to: "/",
-							search: heldThreadOf(holder),
-							replace: true,
-						}),
-				),
-			backToUserSettings: () =>
-				backOr(() => void navigate({ to: "/settings/user", replace: true })),
+			back: () => {
+				if (router.history.canGoBack()) {
+					router.history.back()
+					return
+				}
+				void navigate({ to: "/", search: heldThreadOf(holder), replace: true })
+			},
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
