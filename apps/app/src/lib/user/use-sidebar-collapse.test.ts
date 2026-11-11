@@ -18,19 +18,21 @@ afterEach(() => {
 	vi.mocked(raiseFailureNotice).mockClear()
 })
 
-const renderCollapse = (
-	isCollapsed: boolean,
+const renderExpanded = (
 	setSidebarCollapsed: (isCollapsed: boolean) => Promise<void>,
 ) =>
 	renderHook(
 		() =>
-			useSidebarCollapse({ isCollapsed, controller: { setSidebarCollapsed } }),
+			useSidebarCollapse({
+				isCollapsed: false,
+				controller: { setSidebarCollapsed },
+			}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
 it("raises a failure notice when the host refuses the layout", async () => {
 	const setSidebarCollapsed = vi.fn(() => Promise.reject(new Error("refused")))
-	const { result } = renderCollapse(false, setSidebarCollapsed)
+	const { result } = renderExpanded(setSidebarCollapsed)
 
 	act(() => result.current.toggle())
 

@@ -59,10 +59,8 @@ type SpaceListProps = {
 }
 
 const ExpandedSpaceList = ({ spaceId }: SpaceListProps) => {
-	const entries = drawnEntriesOf({
-		...useSpaceSidebarConversations(spaceId),
-		naming: null,
-	})
+	const rows = useSpaceSidebarConversations(spaceId)
+	const entries = drawnEntriesOf({ ...rows, naming: null })
 	const pinnedRows = pinnedRowsOf(entries)
 
 	return (
