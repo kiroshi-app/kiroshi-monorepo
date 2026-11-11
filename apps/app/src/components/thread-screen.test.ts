@@ -1278,6 +1278,9 @@ const authorSelectOf = (text: string) =>
 		'[data-slot="author-line"] button[data-slot="bot-select"]',
 	) ?? null
 
+const stateOf = ({ thread }: Room) =>
+	thread.runtimes.runtimeFor(thread.conversation.id).getState()
+
 const workLines = () =>
 	[...document.querySelectorAll('[data-slot="bot-working"]')].map((row) =>
 		[
@@ -2669,6 +2672,24 @@ describe("ThreadScreen", () => {
 		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
+		await room.send("@Ada @Nyx @Zoe now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Nyx"), ASKED)
+			room.driver.pushTo(room.idOf("Ada"), HANDED_TO_ZOE)
+		})
+		await settle()
+		openWorkLine()
+
+		expect(stateOf(room).waitingBotIds).toEqual([room.idOf("Zoe")])
+		expect(workLines()).toContain("Zoe is thinking…")
+		expect(workLines()).toContain("Nyx is waiting for you…")
+	})
+
+	it("never draws as up next a seat handed the turn while only a wave mate speaks", async () => {
+		const room = await roomOf({ names: ["Ada", "Nyx", "Zoe"] })
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
 		await room.send("@Ada @Nyx now")
 		act(() => {
 			room.driver.pushTo(room.idOf("Ada"), HANDED_TO_ZOE)
@@ -2677,7 +2698,8 @@ describe("ThreadScreen", () => {
 		await settle()
 		openWorkLine()
 
-		expect(workLines()).toContain("Zoe is up next…")
+		expect(stateOf(room).waitingBotIds).toEqual([])
+		expect(workLines()).not.toContain("Zoe is up next…")
 		expect(workLines()).toContain("Nyx is waiting for you…")
 	})
 
