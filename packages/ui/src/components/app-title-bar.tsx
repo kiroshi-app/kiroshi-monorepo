@@ -11,6 +11,10 @@ const TITLE_BAR = "absolute inset-x-0 top-0 flex h-10 items-center gap-2 ps-3.5"
 
 const NO_WINDOW_CONTROLS_END = "pe-2"
 
+const LEAD_BARE = "[--title-bar-lead:--spacing(3.5)]"
+
+const LEAD_AFTER_TRAFFIC_LIGHTS = "[--title-bar-lead:--spacing(19.75)]"
+
 const TRAFFIC_LIGHTS_SLOT = "w-14.25 shrink-0 self-stretch"
 
 const TITLE_BAR_WINDOW_CONTROLS = "ms-auto flex shrink-0 self-stretch"
@@ -28,7 +32,11 @@ const AppTitleBar = ({
 	...tabStrip
 }: AppTitleBarProps) => (
 	<div
-		className={cn(TITLE_BAR, !windowControls && NO_WINDOW_CONTROLS_END)}
+		className={cn(
+			TITLE_BAR,
+			!windowControls && NO_WINDOW_CONTROLS_END,
+			insetWindowControls ? LEAD_AFTER_TRAFFIC_LIGHTS : LEAD_BARE,
+		)}
 		data-slot="app-title-bar"
 		data-tauri-drag-region={dragRegion}
 	>

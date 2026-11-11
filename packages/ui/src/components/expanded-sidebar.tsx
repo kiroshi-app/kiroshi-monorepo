@@ -34,6 +34,7 @@ import {
 	SpaceSwitcher,
 	type SpaceSwitcherProps,
 } from "@workspace/ui/components/space-switcher"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	SidebarContent,
@@ -43,7 +44,8 @@ import {
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
 
-const COLUMN = "flex min-h-0 w-72 shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
+const COLUMN =
+	"flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
 
 const SECTIONS = "gap-3"
 
@@ -55,12 +57,13 @@ const LIST_FAILED =
 	"flex flex-col items-start gap-2 p-3 text-start text-compact text-muted-foreground leading-5"
 
 const LIST_RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-foreground text-xs leading-4"
+	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-foreground text-xs leading-4 transition-none"
 
 const MISSION_COUNT =
 	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
 
-const FOOTER = "flex h-9 shrink-0 items-center gap-2 px-1.5"
+const FOOTER =
+	"flex h-9 w-full shrink-0 items-center gap-2 rounded-control px-1.25 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
@@ -68,8 +71,10 @@ const FOOTER_AVATAR =
 const FOOTER_NAME =
 	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm"
 
-const FOOTER_SETTINGS =
-	"grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&_svg]:size-4.5 [&_svg]:stroke-[1.75]"
+const SWITCHER_ROW = "flex h-9 shrink-0 items-center gap-1"
+
+const SEARCH_BUTTON =
+	"grid size-7 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&_svg]:size-4.5 [&_svg]:stroke-[1.75]"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
@@ -141,7 +146,13 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 	const name = displayNameOf(user?.name)
 
 	return (
-		<div className={FOOTER} data-slot="expanded-sidebar-footer">
+		<button
+			aria-label={t("rail.personSettings", { name })}
+			className={FOOTER}
+			data-slot="expanded-sidebar-footer"
+			onClick={onOpenSettings}
+			type="button"
+		>
 			<AvatarFrame
 				image={user?.image}
 				shape="round"
@@ -153,15 +164,8 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 				</span>
 			</AvatarFrame>
 			<span className={FOOTER_NAME}>{name}</span>
-			<button
-				aria-label={t("rail.settings")}
-				className={FOOTER_SETTINGS}
-				onClick={onOpenSettings}
-				type="button"
-			>
-				<Icons.Settings aria-hidden="true" />
-			</button>
-		</div>
+			<Icons.Settings aria-hidden="true" />
+		</button>
 	)
 }
 
@@ -280,6 +284,7 @@ const ExpandedSidebar = ({
 	...switcher
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation(["bots", "search"])
+	const searchLabel = t("open", { ns: "search" })
 	const swipeRef = useSpaceSwipe({
 		isEnabled: isSpaceSwitchingEnabled,
 		onSelectSpace: switcher.onSelectSpace,
@@ -294,15 +299,23 @@ const ExpandedSidebar = ({
 			data-slot="expanded-sidebar"
 			ref={swipeRef}
 		>
-			<SpaceSwitcher {...switcher} />
+			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
+				<SpaceSwitcher {...switcher} />
+				<TooltipHint content={searchLabel} side="bottom">
+					<button
+						aria-label={searchLabel}
+						className={SEARCH_BUTTON}
+						data-slot="expanded-sidebar-search"
+						onClick={onOpenSearch}
+						type="button"
+					>
+						<Icons.Search aria-hidden="true" />
+					</button>
+				</TooltipHint>
+			</div>
 			<SidebarMenu>
 				<NavigationItem
-					icon={<Icons.Search />}
-					label={t("open", { ns: "search" })}
-					onSelect={onOpenSearch}
-				/>
-				<NavigationItem
-					icon={<Icons.Write />}
+					icon={<Icons.Add />}
 					isCurrent={destination === "newConversation"}
 					label={t("rail.newConversation")}
 					onSelect={onNewConversation}

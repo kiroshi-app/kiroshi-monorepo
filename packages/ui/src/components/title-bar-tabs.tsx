@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import { Icons } from "@workspace/ui/components/icons"
 import { NEEDS_YOU_GLYPH } from "@workspace/ui/components/row-anatomy"
+import { SIDEBAR_FOLD_MOTION } from "@workspace/ui/components/sidebar-resize"
 import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
@@ -118,7 +119,10 @@ const STRIP = "flex min-w-0 flex-1 items-center gap-1 self-stretch"
 
 const HISTORY = "flex shrink-0 items-center gap-0.5 pe-1"
 
-const HISTORY_BESIDE_SIDEBAR = "w-52.25"
+const HISTORY_BESIDE_SIDEBAR = cn(
+	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))] in-data-[sidebar-open=false]:w-23",
+	SIDEBAR_FOLD_MOTION,
+)
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
@@ -247,6 +251,8 @@ const useFittingTabCount = (unpinnedCount: number) => {
 		if (!strip) return
 		const observer = new ResizeObserver(measure)
 		observer.observe(strip)
+		const history = strip.querySelector('[data-slot="title-bar-history"]')
+		if (history) observer.observe(history)
 		return () => observer.disconnect()
 	}, [measure])
 

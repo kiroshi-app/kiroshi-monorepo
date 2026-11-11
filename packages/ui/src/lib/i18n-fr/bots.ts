@@ -98,6 +98,7 @@ const bots = {
 		searchMissions: "Rechercher des missions",
 		spaceSettings: "Réglages de l’espace",
 		settings: "Réglages",
+		personSettings: "{{name}}, Réglages",
 		dot: "{{name}}, nouvelle activité",
 		detail: "· {{detail}}",
 		missionCount_one: "{{count}} mission",

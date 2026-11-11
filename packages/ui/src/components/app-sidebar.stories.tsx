@@ -626,7 +626,7 @@ const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
-const EXPANDED_PANEL_WIDTH = 304
+const EXPANDED_PANEL_WIDTH = 288
 
 const shellWidthOf = (property: string) => {
 	const shell = document.querySelector<HTMLElement>(
