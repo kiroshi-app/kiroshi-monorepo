@@ -177,8 +177,12 @@ type InvitedSpace = {
 	onDecline: () => void
 }
 
-type SpaceSettingsScreenBodyProps = SettingsScreenBodyNavigation &
-	SpaceSettingsProps &
+type SpaceSettingsScreenBodyProps = Omit<
+	SettingsScreenBodyNavigation,
+	"onBack" | "backLabel"
+> & {
+	onBack?: () => void
+} & SpaceSettingsProps &
 	(OwnedOrJoinedSpace | InvitedSpace) & {
 		target: "space"
 		spaceId: string
@@ -234,7 +238,11 @@ type ConversationSettingsScreenBodyProps = SettingsScreenBodyNavigation &
 type ConversationSettingsScreenProps = ConversationSettingsScreenBodyProps &
 	SettingsScreenFrame
 
-type SettingsScreenBodyLayoutProps = SettingsScreenBodyNavigation & {
+type SettingsScreenBodyLayoutProps = Omit<
+	SettingsScreenBodyNavigation,
+	"onBack"
+> & {
+	onBack?: () => void
 	avatar: ReactNode
 	name: string
 	subtitle: string
@@ -491,7 +499,7 @@ const SettingsScreenBodyLayout = ({
 					) : undefined
 				}
 				name={name}
-				onBack={() => leaveThen(onBack)}
+				onBack={onBack ? () => leaveThen(onBack) : undefined}
 				resizeHandle={<SidebarResizeHandle side="left" />}
 				subtitle={subtitle}
 			>
@@ -604,8 +612,7 @@ const SpaceSettingsScreen = (
 		entry,
 		onEntryChange,
 		onOpenApplication,
-		onBack,
-		backLabel,
+		onBack: _onBack,
 		rail,
 		currentSpace,
 		currentSpaceHost,
@@ -722,9 +729,7 @@ const SpaceSettingsScreen = (
 			}
 			entries={focusedEntries}
 			entry={entry}
-			backLabel={backLabel ?? t("screen.backToSettings")}
 			name={name}
-			onBack={onBack}
 			onEntryChange={onEntryChange}
 			onOpenApplication={onOpenApplication}
 			pages={pages}

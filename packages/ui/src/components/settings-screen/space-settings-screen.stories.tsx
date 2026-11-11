@@ -182,7 +182,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: Back to your settings, the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and colour field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and colour field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -195,16 +195,16 @@ export const Members = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last outside the Settings group, Members marked as the current page, the space avatar with its presence dot beside the name, the Members title above the panel, and that Back to your settings reports itself.",
+					"Artboard E2: the space's settings open on Members. Check the menu order with Danger zone pinned last outside the Settings group, Members marked as the current page, the space avatar with its presence dot beside the name, the Members title above the panel, and no back row above the identity.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
+	play: async () => {
 		const menu = await menuIn()
-		await expect(menuNames(menu)).toEqual([
-			"Back to your settings",
-			...SPACE_MENU,
-		])
+		await expect(menuNames(menu)).toEqual(SPACE_MENU)
+		await expect(
+			menu.querySelector('[data-slot="settings-menu-back"]'),
+		).not.toBeInTheDocument()
 		await expect(entryIn(menu, "Members")).toHaveAttribute(
 			"aria-current",
 			"page",
@@ -220,9 +220,6 @@ export const Members = meta.story({
 		const main = screen.getByRole("main")
 		await expectSettingsPage(main, "Members", "full")
 		await expect(within(main).getByText("Maya Chen")).toBeVisible()
-
-		await userEvent.click(entryIn(menu, "Back to your settings"))
-		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })
 
@@ -297,12 +294,12 @@ const LEFT_COLUMN = {
 		docs: {
 			description: {
 				story:
-					"The Space settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its back header is 32px tall like the Conversations panel header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the User settings menu read.",
+					"The Space settings menu as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that it draws no back header and that its first entry sits 8px in from its inner edge, the same numbers the Conversations and Missions panels and the User settings menu read.",
 			},
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		await expectSettingsMenuLeftColumn(canvasElement)
+		await expectSettingsMenuLeftColumn(canvasElement, { hasBackRow: false })
 	},
 }
 
@@ -397,7 +394,6 @@ export const Agents = meta.story({
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
 		await expect(menuNames(menu)).toEqual([
-			"Back to your settings",
 			"Space",
 			"Members",
 			"Agents4",
@@ -781,21 +777,11 @@ const expectArtboard = async ({
 	isInvitation = false,
 }: ArtboardMenu) => {
 	const menu = await menuIn()
-	await expect(menuNames(menu)).toEqual([
-		"Back to your settings",
-		...entries,
-		pinned,
-	])
+	await expect(menuNames(menu)).toEqual([...entries, pinned])
 	const main = screen.getByRole("main")
 	await expect(slotIn(main, "focused-space-standing")).toHaveTextContent(
 		subtitle,
 	)
-
-	const back = entryIn(menu, "Back to your settings")
-	await expect(back.getBoundingClientRect().width).toBeLessThan(
-		slotIn(menu, "settings-menu-back").clientWidth,
-	)
-	await expect(iconOf(back).strokeWidth).toBe("2px")
 
 	const identity = slotIn(menu, "settings-menu-header")
 	await expect(getComputedStyle(identity).columnGap).toBe("10px")
@@ -1073,9 +1059,7 @@ export const JoinedHostNotConnected = meta.story({
 			"1",
 		)
 
-		entryIn(menu, "Back to your settings").focus()
-		await userEvent.tab()
-		await expect(entryIn(menu, "Space")).toHaveFocus()
+		entryIn(menu, "Space").focus()
 		await userEvent.tab()
 		await expect(entryIn(menu, "Leave space")).toHaveFocus()
 	},
@@ -1124,8 +1108,8 @@ export const JoinedSessionUnavailable = meta.story({
 			await expect(entryIn(menu, label)).toBeEnabled()
 		}
 
-		entryIn(menu, "Back to your settings").focus()
-		for (const label of ["Space", "Members", companions, "Leave space"]) {
+		entryIn(menu, "Space").focus()
+		for (const label of ["Members", companions, "Leave space"]) {
 			await userEvent.tab()
 			await expect(entryIn(menu, label)).toHaveFocus()
 		}
@@ -1222,16 +1206,20 @@ export const ByKeyboard = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu driven from the keyboard. Check that Tab walks Back to your settings then each entry in order, each drawing the focus ring, and that Enter opens the focused entry.",
+					"The menu driven from the keyboard. Check that the menu's Tab order starts on its first entry, Space, then walks each entry in order, each drawing the focus ring, and that Enter opens the focused entry.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const menu = await menuIn()
-		entryIn(menu, "Back to your settings").focus()
+		const space = entryIn(menu, "Space")
+		space.focus()
+		await userEvent.tab({ shift: true })
+		await expect(menu).not.toContainElement(
+			document.activeElement as HTMLElement,
+		)
 
 		await userEvent.tab()
-		const space = entryIn(menu, "Space")
 		await expect(space).toHaveFocus()
 		await expect(getComputedStyle(space).boxShadow).not.toBe("none")
 
