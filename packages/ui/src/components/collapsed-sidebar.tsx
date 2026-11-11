@@ -48,15 +48,20 @@ import type {
 	UpdateBadgeProps,
 	UpdateBadgeStatus,
 } from "@workspace/ui/components/update-badge"
-import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
+import {
+	SPACE_SWIPE_FOLLOWER,
+	useSpaceSwipe,
+} from "@workspace/ui/hooks/use-space-swipe"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const RAIL =
 	"flex min-h-0 w-15 shrink-0 flex-col items-center gap-0.5 px-2 pt-2"
 
-const LIST =
-	"flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide"
+const LIST = cn(
+	"flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto scrollbar-hide",
+	SPACE_SWIPE_FOLLOWER,
+)
 
 const SLOT =
 	"relative grid size-11 shrink-0 place-items-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"

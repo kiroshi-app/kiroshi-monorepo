@@ -4,8 +4,10 @@ import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectListFollowsSwipe,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
+	isInBrowserRunner,
 	realPointer,
 	slotIn,
 	slotsIn,
@@ -13,6 +15,7 @@ import {
 	swipeOn,
 	tokenStyleIn,
 	wheelTrainOn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { pointerAt } from "@workspace/storybook/tab-drag-gesture"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
@@ -63,6 +66,7 @@ import {
 import { UpdateRow } from "@workspace/ui/components/update-badge"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
+import { SLOW_SHORT_SWIPE } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const KIROSHI: Space = {
@@ -577,7 +581,7 @@ export const SwipeMovesBetweenSpacesExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A two finger swipe over the sidebar, momentum tail included. Check one forward swipe moves to the next Space, one backward swipe returns, and nothing moves sideways. Pick `SwipeWithOneSpaceDoesNothingExpanded` for a lone Space.",
+					"Two swipes over the sidebar as WebKit hands them to the page on a macOS trackpad: a short slow swipe forward, then a fast flick back with a long momentum tail. Check each moves the Space by exactly one. The test browser runs under reduced motion, where the Space changes and nothing moves; pick `SwipeFollowsTheFingersExpanded` for the list following the fingers. Pick `SwipeWithOneSpaceDoesNothingExpanded` for a lone Space.",
 			},
 		},
 	},
@@ -586,7 +590,7 @@ export const SwipeMovesBetweenSpacesExpanded = meta.story({
 			name: "Library",
 		})
 
-		await expect(swipeOn(target, 1)).not.toContain(false)
+		await expect(swipeOn(target, 1, SLOW_SHORT_SWIPE)).not.toContain(false)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
@@ -603,6 +607,33 @@ export const SwipeMovesBetweenSpacesExpanded = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
 		await expect(sidebarIn(canvasElement).scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
+		await expect(sidebarIn(canvasElement)).not.toHaveAttribute(
+			"data-space-swipe",
+		)
+	},
+})
+
+export const SwipeFollowsTheFingersExpanded = meta.story({
+	name: "Swipe follows the fingers Expanded",
+	args: { spaces: SEVERAL_SPACES },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A short slow swipe over the sidebar with reduced motion off. Check the list moves with the fingers mid-swipe, the Space changes once as the momentum carries it past the threshold, and the list is back at rest after release. Swipe with a trackpad over the story to feel it.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(() =>
+			expectListFollowsSwipe({
+				nav: sidebarIn(canvasElement),
+				listIn: () => slotIn(sidebarIn(canvasElement), "sidebar-content"),
+				onSelectSpace: args.onSelectSpace,
+			}),
+		)
 	},
 })
 

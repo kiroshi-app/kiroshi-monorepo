@@ -42,12 +42,15 @@ import {
 	SidebarMenuItem,
 } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
-import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
+import {
+	SPACE_SWIPE_FOLLOWER,
+	useSpaceSwipe,
+} from "@workspace/ui/hooks/use-space-swipe"
 
 const COLUMN =
 	"flex min-h-0 w-(--sidebar-width) shrink-0 flex-col gap-2 px-2 pt-2 pb-1"
 
-const SECTIONS = "gap-3"
+const SECTIONS = `gap-3 ${SPACE_SWIPE_FOLLOWER}`
 
 const CONVERSATIONS_BODY = "flex flex-col gap-0.5"
 

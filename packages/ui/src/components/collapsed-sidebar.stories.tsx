@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectListFollowsSwipe,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
 	isInBrowserRunner,
@@ -33,6 +34,7 @@ import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
+import { SLOW_SHORT_SWIPE } from "@workspace/ui/hooks/use-space-swipe.fixtures"
 
 const KIROSHI: Space = {
 	id: "kiroshi",
@@ -1003,7 +1005,7 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"A two finger swipe over the rail, momentum tail included. Check one forward swipe moves to the next Space, one backward swipe returns, and nothing moves sideways. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
+					"Two swipes over the rail as WebKit hands them to the page on a macOS trackpad: a short slow swipe forward, then a fast flick back with a long momentum tail. Check each moves the Space by exactly one. The test browser runs under reduced motion, where the Space changes and nothing moves; pick `SwipeFollowsTheFingersCollapsed` for the list following the fingers. Pick `SwipeWithOneSpaceDoesNothingCollapsed` for a lone Space.",
 			},
 		},
 	},
@@ -1011,7 +1013,7 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		const nav = slotIn(canvasElement, "collapsed-sidebar")
 		const target = rail(canvasElement).getByRole("button", { name: "Library" })
 
-		await expect(swipeOn(target, 1)).not.toContain(false)
+		await expect(swipeOn(target, 1, SLOW_SHORT_SWIPE)).not.toContain(false)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 		await waitFor(() =>
@@ -1026,6 +1028,31 @@ export const SwipeMovesBetweenSpacesCollapsed = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("kiroshi")
 		await expect(nav.scrollLeft).toBe(0)
 		await expect(document.documentElement.scrollLeft).toBe(0)
+		await expect(nav).not.toHaveAttribute("data-space-swipe")
+	},
+})
+
+export const SwipeFollowsTheFingersCollapsed = meta.story({
+	name: "Swipe follows the fingers Collapsed",
+	args: { spaces: SEVERAL_SPACES },
+	render: (args) => <SpaceFollowingWindow {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A short slow swipe over the rail with reduced motion off. Check the list moves with the fingers mid-swipe, the Space changes once as the momentum carries it past the threshold, and the list is back at rest after release. Swipe with a trackpad over the story to feel it.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(() =>
+			expectListFollowsSwipe({
+				nav: slotIn(canvasElement, "collapsed-sidebar"),
+				listIn: () => slotIn(canvasElement, "collapsed-sidebar-list"),
+				onSelectSpace: args.onSelectSpace,
+			}),
+		)
 	},
 })
 
