@@ -5,7 +5,6 @@ import { resolve } from "node:path"
 import ts from "typescript"
 import { beforeAll, describe, expect, it } from "vitest"
 
-import type { AppRailDots } from "@workspace/ui/components/app-rail"
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 
@@ -30,6 +29,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	listStatus: "the scene roster never loads and never fails to load",
 	onRetryList: "the scene roster never fails to load",
 	update: "the scene shows an app that is up to date",
+	missionCount: "the scene rail draws no dot, so it counts no mission",
 	openMissionId: "no mission thread opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
@@ -39,11 +39,9 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 const SCENE_PROP_OF_SIDEBAR_PROP: Record<string, string> = {
 	destination: "openPanel",
 	listEnd: "rosterListEnd",
-	missionCount: "railDots",
 	onNewConversation: "onCreateConversation",
 	onOpenChange: "onSpaceSwitcherOpenChange",
 	onOpenConversation: "onSelectConversation",
-	onOpenMission: "missionsBySpaceId",
 	onOpenSettings: "onOpenUserSettings",
 	onSelectMissions: "onOpenPanelChange",
 	openConversationId: "selectedConversationId",
@@ -340,12 +338,6 @@ describe("the landing scene against apps/app", () => {
 
 type BadgeCarriersBySpaceId = Record<string, { badge?: BotBadge }[]>
 
-type RailSources = {
-	conversationsBySpaceId: BadgeCarriersBySpaceId
-	waitingMissionCount: number
-	spaceId: string | null
-}
-
 type MissionCarriersBySpaceId = Record<
 	string,
 	{ missions?: AppSidebarRowMission[] }[]
@@ -355,7 +347,6 @@ type SidebarBadgeRule = {
 	toSpaceBadges: (
 		...groups: BadgeCarriersBySpaceId[]
 	) => Record<string, BotBadge>
-	toRailSignals: (sources: RailSources) => AppRailDots
 	missionRingBadges: (
 		rowsBySpaceId: MissionCarriersBySpaceId,
 	) => BadgeCarriersBySpaceId
@@ -368,7 +359,6 @@ const loadSidebarBadgeRule = async (): Promise<SidebarBadgeRule> => {
 	])
 	return {
 		toSpaceBadges: sidebarBadges.toSpaceBadges,
-		toRailSignals: sidebarBadges.toRailSignals,
 		missionRingBadges: missionsModel.missionRingBadges,
 	}
 }
@@ -377,9 +367,6 @@ const bySpaceId = <Row>(
 	spaces: SceneSpace[],
 	rowsOf: (space: SceneSpace) => Row[],
 ) => Object.fromEntries(spaces.map((space) => [space.id, rowsOf(space)]))
-
-const waitingMissionCountOf = (space: SceneSpace) =>
-	space.missions.filter((mission) => mission.state === "waiting_human").length
 
 const nobodyJoinedOrShared = {}
 
@@ -401,11 +388,6 @@ const appRailOf = (
 			rule.missionRingBadges(conversationsBySpaceId),
 		),
 		hostBySpaceId: nobodyJoinedOrShared,
-		railDots: rule.toRailSignals({
-			conversationsBySpaceId,
-			waitingMissionCount: waitingMissionCountOf(selected),
-			spaceId: selected.id,
-		}),
 		space: {
 			id: selected.id,
 			name: selected.name,

@@ -67,14 +67,6 @@ import {
 	COMPANION_SILHOUETTE_SPACE,
 	silhouetteKey,
 } from "@workspace/ui/components/companion-silhouette"
-import {
-	SPACE_EARLIER_TODAY_MISSIONS,
-	SPACE_OPEN_MISSIONS,
-} from "@workspace/ui/components/missions.fixtures"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { WindowControls } from "@workspace/ui/components/window-controls"
@@ -434,12 +426,6 @@ const panelInView = (canvasElement: HTMLElement) => {
 	if (!panel) throw new Error("No space panel is in view")
 	return panel
 }
-
-const missionsPanelOf = (open: MissionsPanelMission[]): MissionsPanelProps => ({
-	open,
-	earlierToday: [],
-	onOpen: fn(),
-})
 
 const SEARCH = "Search"
 
@@ -2378,14 +2364,13 @@ const expectJoinedCard = async (canvasElement: HTMLElement) => {
 export const ConversationsPanel = meta.story({
 	args: {
 		insetWindowControls: true,
-		railDots: { conversations: "done", missions: "attention" },
 	},
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 288px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, then the shell card holding the Conversations panel and the conversation. Check the rail is 60px wide, the panel 288px with its 1px divider, the panel header 32px with the 15px semibold title and the create button alone, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},
@@ -2393,9 +2378,7 @@ export const ConversationsPanel = meta.story({
 		const rail = slotIn(canvasElement, "app-rail")
 		await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
 		await expect(
-			within(rail).getByRole("button", {
-				name: "Conversations, activity finished",
-			}),
+			within(rail).getByRole("button", { name: "Conversations" }),
 		).toHaveAttribute("aria-current", "true")
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
@@ -2430,81 +2413,6 @@ export const ConversationsPanel = meta.story({
 	},
 })
 
-export const EmptyPanels = meta.story({
-	tags: ["test-only"],
-	args: { missionsBySpaceId: { [HOME]: missionsPanelOf([]) } },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The rail entry whose panel has no content yet. Check it opens a panel titled and named after it, with no roster, no search and no create button, that the rail marks it current, that it draws its empty state, and that coming back to Conversations brings the roster back.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const rail = slotIn(canvasElement, "app-rail")
-		const name = "Missions"
-		const entry = within(rail).getByRole("button", { name })
-		await userEvent.click(entry)
-		await expect(entry).toHaveAttribute("aria-current", "true")
-		const panel = canvas.getByRole("complementary", { name })
-		await expect(within(panel).getByRole("heading", { name })).toBeVisible()
-		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(querySearchButtonIn(canvasElement)).toBeNull()
-		await expect(canvas.queryByRole("button", { name: CREATE })).toBeNull()
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		await expect(
-			canvas.getByRole("heading", { name: "No missions yet" }),
-		).toBeVisible()
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
-	},
-})
-
-export const MissionsTab = meta.story({
-	args: {
-		insetWindowControls: true,
-		openPanel: "missions",
-		missionsBySpaceId: {
-			[HOME]: {
-				open: SPACE_OPEN_MISSIONS,
-				earlierToday: SPACE_EARLIER_TODAY_MISSIONS,
-				onOpen: fn(),
-			},
-		},
-		onSearchMissions: fn(),
-	},
-	globals: { theme: "dark" },
-	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		docs: {
-			description: {
-				story:
-					"The V1 shell with the Missions tab selected, drawn against the V1f artboard: the 288px panel, its 32px header carrying the title and the search button, then Waiting on you, In progress and Earlier today folded. Check the panel holds no roster, that the search button is named and fires once, and that each group carries its count.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const panel = canvas.getByRole("complementary", { name: "Missions" })
-		await expect(panel.getBoundingClientRect().width).toBe(EXPANDED_PANEL_WIDTH)
-		await expect(rowsIn(canvasElement)).toHaveLength(0)
-		await expect(
-			within(panel).getByRole("heading", { name: "Waiting on you" }),
-		).toBeVisible()
-		await expect(
-			within(panel).getByRole("button", { name: /Earlier today/ }),
-		).toHaveAttribute("aria-expanded", "false")
-		await userEvent.click(
-			within(panel).getByRole("button", { name: "Search missions" }),
-		)
-		await expect(args.onSearchMissions).toHaveBeenCalledTimes(1)
-	},
-})
-
 const expectPanelLeftColumn = (canvasElement: HTMLElement, row: HTMLElement) =>
 	expectLeftColumn({
 		column: slotIn(canvasElement, "sidebar-inner"),
@@ -2536,35 +2444,8 @@ export const ConversationsLeftColumnDark = meta.story({
 	globals: { theme: "dark" },
 })
 
-const MISSIONS_LEFT_COLUMN = {
-	args: MissionsTab.input.args,
-	parameters: {
-		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		docs: {
-			description: {
-				story:
-					"The Missions panel as the left column every screen shares. Check that the column opens 8px under its top edge and closes 12px over its bottom edge, that its pieces stand 8px apart, that its header is 32px tall and that its missions sit 8px in from its inner edge, the same numbers the Conversations panel and the User and Space settings menus read.",
-			},
-		},
-	},
-	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		await expectPanelLeftColumn(
-			canvasElement,
-			slotIn(canvasElement, "missions-panel"),
-		)
-	},
-}
-
-export const MissionsLeftColumn = meta.story(MISSIONS_LEFT_COLUMN)
-
-export const MissionsLeftColumnDark = meta.story({
-	...MISSIONS_LEFT_COLUMN,
-	globals: { theme: "dark" },
-})
-
-const railHostStory = (panel: "conversations" | "missions") => ({
+const CONVERSATIONS_RAIL_SPACE_HOST = {
 	args: {
-		...(panel === "missions" ? MissionsTab.input.args : {}),
 		space: SPACES[0],
 		hostBySpaceId: { [HOME]: RAIL_SPACE_HOST },
 		spaceHost: RAIL_SPACE_HOST,
@@ -2572,40 +2453,32 @@ const railHostStory = (panel: "conversations" | "missions") => ({
 	parameters: {
 		docs: {
 			description: {
-				story: `The ${panel === "missions" ? "Missions" : "Conversations"} panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.`,
+				story:
+					"The Conversations panel while the current Space's host is being reached. Check that the Space logo at the top of the rail draws the connecting state, the same one the User and Space settings screens draw for the same host.",
 			},
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		await expectRailSpaceHost(canvasElement)
 	},
-})
+}
 
 export const ConversationsRailSpaceHost = meta.story(
-	railHostStory("conversations"),
+	CONVERSATIONS_RAIL_SPACE_HOST,
 )
 
-export const MissionsRailSpaceHost = meta.story(railHostStory("missions"))
-
-const railHostDarkStory = (panel: "conversations" | "missions") => ({
-	...railHostStory(panel),
+export const ConversationsRailSpaceHostDark = meta.story({
+	...CONVERSATIONS_RAIL_SPACE_HOST,
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
-				story: `\`${panel === "missions" ? "Missions" : "Conversations"}RailSpaceHost\` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.`,
+				story:
+					"`ConversationsRailSpaceHost` in the dark theme. Check that the Space logo at the top of the rail still draws the connecting state, its hatching legible on its dark fill and told apart from the filled online logo.",
 			},
 		},
 	},
 })
-
-export const ConversationsRailSpaceHostDark = meta.story(
-	railHostDarkStory("conversations"),
-)
-
-export const MissionsRailSpaceHostDark = meta.story(
-	railHostDarkStory("missions"),
-)
 
 export const DragRegion = meta.story({
 	tags: ["test-only"],
@@ -2720,35 +2593,6 @@ const NINE_ROSTERS = rostersAcross(SPACES)
 const ROSTER_IN_EVERY_SPACE: Record<string, AppSidebarBot[]> =
 	Object.fromEntries(FIVE_SPACES.map((space) => [space.id, ROSTER]))
 
-const missionsAcross = (spaces: Space[]): Record<string, MissionsPanelProps> =>
-	Object.fromEntries(
-		spaces.map((space, rank) => [
-			space.id,
-			missionsPanelOf(
-				SPACE_OPEN_MISSIONS.filter(
-					(_, index) => index % spaces.length === rank,
-				),
-			),
-		]),
-	)
-
-const missionIdsIn = (panel: HTMLElement) =>
-	Array.from(panel.querySelectorAll("[data-opens]"), (row) =>
-		row.getAttribute("data-opens"),
-	).sort()
-
-const missionIdsOf = ({ open }: MissionsPanelProps) =>
-	open.map(({ id }) => id).sort()
-
-const IN_MISSIONS: Partial<AppSidebarProps> = {
-	openPanel: "missions",
-	missionsBySpaceId: missionsAcross(FIVE_SPACES),
-}
-
-const TWO_SPACES = FIVE_SPACES.slice(0, 2)
-
-const TWO_SPACE_MISSIONS = missionsAcross(TWO_SPACES)
-
 const expectOneSpaceHeld = async (
 	args: AppSidebarProps,
 	canvasElement: HTMLElement,
@@ -2829,25 +2673,6 @@ export const OneSpace = meta.story({
 			HEADER_ACTION_INSET + ROSTER_LANE,
 		)
 
-		await expectOneSpaceHeld(args, canvasElement)
-	},
-})
-
-export const OneSpaceInMissions = meta.story({
-	tags: ["test-only"],
-	args: {
-		openPanel: "missions",
-		missionsBySpaceId: missionsAcross(HOME_SPACES),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab with one space: the same carousel host as Conversations, so the row holds one panel and a swipe lands nowhere. Check the hold is the one `OneSpace` proves, run on this tab.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
 		await expectOneSpaceHeld(args, canvasElement)
 	},
 })
@@ -3897,216 +3722,6 @@ export const SpaceScrollMemory = meta.story({
 		await swipeBeside(carousel, -1)
 		await waitFor(async () => {
 			await expect(panelInView(canvasElement).scrollTop).toBe(90)
-		}, FRAME_POLL)
-	},
-})
-
-const inMissionsDocs = (story: string) => ({
-	docs: {
-		description: {
-			story: `The Missions tab mounted in the same carousel host as Conversations, with one mission per space. Check the play of \`${story}\` holds unchanged on this tab.`,
-		},
-	},
-})
-
-export const LiveSpaceSelectionInMissions = LiveSpaceSelection.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("LiveSpaceSelection"),
-})
-
-export const SpaceScrollingInMissions = SpaceScrolling.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceScrolling"),
-})
-
-export const SpaceSwipeTakenBackInMissions = SpaceSwipeTakenBack.extend({
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceSwipeTakenBack"),
-})
-
-export const SpaceSwitchingOffInMissions = SpaceSwitchingOff.extend({
-	tags: ["test-only"],
-	args: IN_MISSIONS,
-	parameters: inMissionsDocs("SpaceSwitchingOff"),
-})
-
-export const MissionsAcrossSpaces = meta.story({
-	render: (args) => <LiveSpaces {...args} />,
-	args: {
-		spaces: TWO_SPACES,
-		selectedSpaceId: HOME,
-		openPanel: "missions",
-		missionsBySpaceId: TWO_SPACE_MISSIONS,
-		onSearchMissions: fn(),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab with two spaces, each with its own missions, mounted in the carousel that carries Conversations: the swipe that switches spaces there switches them here, while the title bar, the rail and the header with its search button stay still. Check each drawn panel lists only its own space, that the panel off the edge is inert, that a swipe reports the next space once and lands on its list, and that the swipe back does the same the other way.",
-			},
-		},
-	},
-	play: async ({ args, canvasElement }) => {
-		const carousel = carouselIn(canvasElement)
-		const [home, next] = TWO_SPACES
-		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(2)
-		await expect(missionIdsIn(panels[0])).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[home.id]),
-		)
-		await expect(missionIdsIn(panels[1])).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[next.id]),
-		)
-		await expect(panels[1]).toHaveAttribute("inert")
-
-		const header = slotIn(canvasElement, "sidebar-header")
-		const still = leftOf(header)
-
-		await swipeBeside(carousel, 1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith(next.id)
-		await expect(missionIdsIn(panelInView(canvasElement))).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[next.id]),
-		)
-		await expect(leftOf(header)).toBe(still)
-
-		await swipeBeside(carousel, -1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith(home.id)
-		await expect(missionIdsIn(panelInView(canvasElement))).toEqual(
-			missionIdsOf(TWO_SPACE_MISSIONS[home.id]),
-		)
-	},
-})
-
-export const MissionsOfUnloadedSpaces = meta.story({
-	tags: ["test-only"],
-	args: {
-		spaces: FIVE_SPACES,
-		selectedSpaceId: "vocca",
-		botsBySpaceId: FIVE_ROSTERS,
-		openPanel: "missions",
-		missionsBySpaceId: { vocca: missionsPanelOf(SPACE_OPEN_MISSIONS) },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Missions tab as the app hands it over: only the open space has a feed, so the panels waiting off each edge have no entry of their own. Check the panel in view lists the open space's missions, and each neighbour draws nothing at all, neither borrowing that list nor claiming an empty state for a feed not loaded yet.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const [before, inView, after] = panelsIn(canvasElement)
-		await expect(inView).toBe(panelInView(canvasElement))
-		await expect(missionIdsIn(inView)).toEqual(
-			missionIdsOf(missionsPanelOf(SPACE_OPEN_MISSIONS)),
-		)
-		for (const neighbour of [before, after]) {
-			await expect(neighbour).toHaveAttribute("inert")
-			await expect(missionIdsIn(neighbour)).toEqual([])
-			await expect(
-				neighbour.querySelector('[data-slot="missions-panel-empty"]'),
-			).toBeNull()
-			await expect(neighbour.textContent).toBe("")
-		}
-	},
-})
-
-const scrollPanelTo = async (panel: HTMLElement, top: number) => {
-	const dispatched = new Promise((resolve) =>
-		panel.addEventListener("scroll", resolve, { once: true }),
-	)
-	panel.scrollTop = top
-	await dispatched
-}
-
-interface CarouselRest {
-	slot: number
-	drawn: number
-}
-
-const swipeToRest = async (
-	carousel: HTMLElement,
-	step: number,
-	{ slot, drawn }: CarouselRest,
-) => {
-	const aimed = slotReported(carousel) + step
-	const target = panelsIn(carousel)[aimed]
-	carousel.scrollLeft = aimed * carousel.clientWidth
-	await waitFor(async () => {
-		await expect(target).not.toHaveAttribute("inert")
-		await expect(panelsIn(carousel)).toHaveLength(drawn)
-		await expect(panelsIn(carousel).indexOf(target)).toBe(slot)
-		await expect(slotShown(carousel)).toBe(slot)
-	}, FRAME_POLL)
-}
-
-export const MissionsScrollMemory = meta.story({
-	tags: ["test-only"],
-	render: (args) => <LiveSpaces {...args} />,
-	globals: { viewport: { value: "short" } },
-	args: {
-		spaces: FIVE_SPACES,
-		selectedSpaceId: HOME,
-		botsBySpaceId: ROSTER_IN_EVERY_SPACE,
-		missionsBySpaceId: Object.fromEntries(
-			FIVE_SPACES.map((space) => [
-				space.id,
-				missionsPanelOf(SPACE_OPEN_MISSIONS),
-			]),
-		),
-	},
-	parameters: {
-		viewport: { options: SHORT_VIEWPORT },
-		docs: {
-			description: {
-				story:
-					"A window too short to show a space's missions whole, walked away from and back to in the Missions tab. Check the panel comes back where it was left, and that its memory is its own: the Conversations tab of the same space starts at its own top, keeps its own offset, and handing back to Missions finds the missions offset untouched.",
-			},
-		},
-	},
-	play: async ({ canvasElement, userEvent }) => {
-		const carousel = carouselIn(canvasElement)
-		const rail = slotIn(canvasElement, "app-rail")
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		const missions = panelInView(canvasElement)
-		const depth = missions.scrollHeight - missions.clientHeight
-		await expect(depth).toBeGreaterThan(0)
-
-		await scrollPanelTo(missions, depth)
-
-		await swipeToRest(carousel, 1, { slot: 1, drawn: 3 })
-		await swipeToRest(carousel, 1, { slot: 1, drawn: 3 })
-		await expect(missions.isConnected).toBe(false)
-		await swipeToRest(carousel, -1, { slot: 1, drawn: 3 })
-		await swipeToRest(carousel, -1, { slot: 0, drawn: 2 })
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth)
-		}, FRAME_POLL)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		const roster = panelInView(canvasElement)
-		await expect(roster.scrollTop).toBe(0)
-		await scrollPanelTo(roster, depth - 1)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Missions" }),
-		)
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth)
-		}, FRAME_POLL)
-
-		await userEvent.click(
-			within(rail).getByRole("button", { name: "Conversations" }),
-		)
-		await waitFor(async () => {
-			await expect(panelInView(canvasElement).scrollTop).toBe(depth - 1)
 		}, FRAME_POLL)
 	},
 })

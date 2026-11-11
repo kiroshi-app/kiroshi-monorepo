@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 
-import { toRailSignals, toSpaceBadges, withBadges } from "./sidebar-badges"
+import { toSpaceBadges, withBadges } from "./sidebar-badges"
 
 type ShownBadge = AppSidebarBot["badge"]
 
@@ -93,87 +93,5 @@ describe("toSpaceBadges", () => {
 
 	it("gives no badge to a space where neither companions nor conversations carry one", () => {
 		expect(toSpaceBadges(spaceOf(undefined), spaceOf(undefined))).toEqual({})
-	})
-})
-
-describe("toRailSignals", () => {
-	const badged = (badges: ShownBadge[]) =>
-		badges.map((badge, index) => ({ id: `room-${index}`, badge }))
-
-	type RailSeed = {
-		conversations?: Record<string, ReturnType<typeof badged>>
-		waitingMissionCount?: number
-		spaceId?: string | null
-	}
-
-	const signalsOf = ({
-		conversations = {},
-		waitingMissionCount = 0,
-		spaceId = "vocca",
-	}: RailSeed) =>
-		toRailSignals({
-			conversationsBySpaceId: conversations,
-			waitingMissionCount,
-			spaceId,
-		})
-
-	it("dots nothing on Conversations while no conversation of the space carries a badge", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged([undefined, undefined]) },
-		})
-		expect(dots.conversations).toBeUndefined()
-	})
-
-	it("dots Conversations done while done is the only badge of the space", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged([undefined, "done", "done"]) },
-		})
-		expect(dots.conversations).toBe("done")
-	})
-
-	it("dots Conversations failed over done", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged(["done", "failed", undefined]) },
-		})
-		expect(dots.conversations).toBe("failed")
-	})
-
-	it("dots Conversations attention over failed", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged(["failed", "done", "attention"]) },
-		})
-		expect(dots.conversations).toBe("attention")
-	})
-
-	it("dots Missions attention while a mission of the space waits on the reader", () => {
-		expect(signalsOf({ waitingMissionCount: 3 }).missions).toBe("attention")
-		expect(signalsOf({ waitingMissionCount: 0 }).missions).toBeUndefined()
-	})
-
-	it("reads the conversation signals of the selected space only", () => {
-		const sources = {
-			conversations: { atlas: badged(["attention", "done"]) },
-		}
-		const vocca = signalsOf({ ...sources, spaceId: "vocca" })
-		const atlas = signalsOf({ ...sources, spaceId: "atlas" })
-		expect(vocca).toEqual({ conversations: undefined, missions: undefined })
-		expect(atlas).toEqual({ conversations: "attention", missions: undefined })
-	})
-
-	it("signals nothing on Companions and Applications", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged(["attention"]) },
-			waitingMissionCount: 1,
-		})
-		expect(dots).not.toHaveProperty("companions")
-		expect(dots).not.toHaveProperty("applications")
-	})
-
-	it("signals nothing when no space is selected", () => {
-		const dots = signalsOf({
-			conversations: { vocca: badged(["attention"]) },
-			spaceId: null,
-		})
-		expect(dots).toEqual({ conversations: undefined, missions: undefined })
 	})
 })

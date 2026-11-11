@@ -7,13 +7,11 @@ import {
 } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { AppRail } from "@workspace/ui/components/app-rail"
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
 import { AppScene } from "./app-scene"
 import { SCENE_COPY } from "./copy"
-import { SCENE_SPACES, type SceneSpace, SPACES, spaceOf } from "./scene-cast"
-import { sceneRailOf } from "./scene-rail"
+import { SCENE_SPACES, spaceOf } from "./scene-cast"
 
 const WORK = spaceOf("work")
 const PERSONAL = spaceOf("personal")
@@ -72,45 +70,6 @@ const sectionNames = () =>
 const pinnedZoneSeparators = () =>
 	scene().querySelectorAll("[data-slot=roster-zone-header]")
 
-const openMissionsPanel = () =>
-	fireEvent.click(screen.getByRole("button", { name: /^Missions/ }))
-
-const missionTools = () =>
-	[...scene().querySelectorAll("[data-slot=mission-tool-mark]")].map((tool) =>
-		tool.getAttribute("aria-label"),
-	)
-
-const changeSpaceButton = (name: string) =>
-	within(scene()).getByRole("button", { name: `Change space, ${name} open` })
-
-const railDotOn = (button: HTMLElement) =>
-	button.querySelector("[data-slot=app-rail-dot]")
-
-const withoutMissionsIn = (spaceId: string): SceneSpace[] =>
-	SCENE_SPACES.map((space) =>
-		space.id === spaceId
-			? {
-					...space,
-					missions: [],
-					rows: space.rows.map((row) => ({ ...row, missions: undefined })),
-				}
-			: space,
-	)
-
-const renderRailOf = (spaces: SceneSpace[], selected: SceneSpace) => {
-	const { railDots, ...rail } = sceneRailOf(spaces, selected)
-	return render(
-		<I18nProvider>
-			<AppRail
-				{...rail}
-				dots={railDots}
-				selected="conversations"
-				spaces={SPACES}
-			/>
-		</I18nProvider>,
-	)
-}
-
 const presenceDots = () =>
 	scene().querySelectorAll("[data-slot=space-avatar-dot]")
 
@@ -139,26 +98,14 @@ describe("the landing scene", () => {
 		).toBe("true")
 	})
 
-	it("draws the Space logo local and bare while the other Space holds a waiting mission", () => {
+	it("draws the Space logo local, with no presence dot, in either Space", () => {
 		renderScene()
 
 		expect(presenceDots()).toHaveLength(0)
-		expect(railDotOn(changeSpaceButton(WORK.name))).toBeNull()
 
 		switchToPersonal()
 
 		expect(presenceDots()).toHaveLength(0)
-		expect(railDotOn(changeSpaceButton(PERSONAL.name))).toBeNull()
-	})
-
-	it("draws no Change space dot while the selected Space alone waits on the reader", () => {
-		renderRailOf(withoutMissionsIn(PERSONAL.id), WORK)
-		const changeSpace = screen.getByRole("button", {
-			name: `Change space, ${WORK.name} open`,
-		})
-
-		expect(changeSpace).not.toBeNull()
-		expect(railDotOn(changeSpace)).toBeNull()
 	})
 
 	it("opens several tabs, the active one on the conversation shown", () => {
@@ -203,26 +150,6 @@ describe("the landing scene", () => {
 
 		switchToPersonal()
 		expect(sectionNames()).toContain(SCENE_COPY.sections.home)
-	})
-
-	it("lists missions with their tools and ticket in every Space", () => {
-		renderScene()
-		openMissionsPanel()
-
-		expect(missionTools()).toEqual(expect.arrayContaining(["GitHub", "Paper"]))
-		expect(
-			screen.queryByText(SCENE_COPY.missions.work.settings.externalId),
-		).not.toBeNull()
-
-		switchToPersonal()
-		openMissionsPanel()
-
-		expect(missionTools()).toEqual(
-			expect.arrayContaining(["Paper", "Superset"]),
-		)
-		expect(
-			screen.queryByText(SCENE_COPY.missions.personal.flat.externalId),
-		).not.toBeNull()
 	})
 
 	it.each([

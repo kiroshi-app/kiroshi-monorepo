@@ -193,12 +193,7 @@ const meta = preview.meta({
 export const ConversationOpenDark = meta.story({
 	args: {
 		sidebar: (
-			<AppSidebar
-				bots={ROSTER}
-				insetWindowControls
-				railDots={{ conversations: "done", missions: "attention" }}
-				selectedBotId="atlas"
-			/>
+			<AppSidebar bots={ROSTER} insetWindowControls selectedBotId="atlas" />
 		),
 	},
 	globals: { theme: "dark" },

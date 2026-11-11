@@ -104,16 +104,10 @@ const bots = {
 		searchMissions: "Search missions",
 		spaceSettings: "Space settings",
 		personSettings: "{{name}}, Settings",
-		dot: "{{name}}, new activity",
 		detail: "· {{detail}}",
 		missionCount_one: "{{count}} mission",
 		missionCount_other: "{{count}} missions",
 		moreMissions: "+{{count}} missions",
-		badge: {
-			attention: "{{name}}, waiting for you",
-			done: "{{name}}, activity finished",
-			failed: "{{name}}, activity failed",
-		},
 	},
 	spaces: {
 		label: "Spaces",

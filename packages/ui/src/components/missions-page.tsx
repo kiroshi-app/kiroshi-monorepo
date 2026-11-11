@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -25,7 +26,6 @@ import type {
 	MissionState,
 } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
-import { MissionsPanelEmpty } from "@workspace/ui/components/missions-panel"
 import { Notice } from "@workspace/ui/components/notice"
 import { toElapsedTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
@@ -457,6 +457,24 @@ const MissionsPageSkeletonGroup = () => (
 	</div>
 )
 
+const MissionsEmpty = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<EmptyStateShell
+			data-slot="missions-panel-empty"
+			description={t("missions.panel.empty.description")}
+			mark={
+				<Icons.Missions
+					aria-hidden="true"
+					className="size-8 text-muted-foreground"
+				/>
+			}
+			title={t("missions.panel.empty.title")}
+		/>
+	)
+}
+
 const MissionsPageBody = ({
 	missions,
 	now,
@@ -491,7 +509,7 @@ const MissionsPageBody = ({
 		)
 	}
 
-	if (missions.length === 0) return <MissionsPanelEmpty />
+	if (missions.length === 0) return <MissionsEmpty />
 
 	const toggle = (key: MissionsPageGroupKey) =>
 		setFoldedGroups((folded) => {
@@ -553,6 +571,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 
 export {
 	MISSIONS_PAGE_FRAMES,
+	MissionsEmpty,
 	MissionsPage,
 	type MissionsPageAgent,
 	type MissionsPageConversation,
