@@ -761,12 +761,14 @@ export const IconAtTheHeightOfItsTwoLines = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the subject icon is 36px, the 20px name line plus the 16px preview line, and starts and ends with them.",
+					"Check the subject icon is 36px, the 20px name line plus the 16px preview line, starts and ends with them, and the row without missions is 48px, the height of a sidebar skeleton row.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectRowAnatomy(rowIn(canvasElement))
+		const row = rowIn(canvasElement)
+		await expectRowAnatomy(row)
+		await expect(row.getBoundingClientRect().height).toBe(48)
 	},
 })
 

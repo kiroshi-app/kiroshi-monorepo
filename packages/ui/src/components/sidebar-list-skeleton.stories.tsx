@@ -7,6 +7,7 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { ROW_ICON_SIDE } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { SIDEBAR_DEFAULT_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import {
@@ -15,11 +16,13 @@ import {
 	SidebarProvider,
 } from "@workspace/ui/components/ui/sidebar"
 
+const ROW_PADDING = 6
+
 const LOADED = {
-	rowHeight: 52,
+	rowHeight: ROW_ICON_SIDE + 2 * ROW_PADDING,
 	rowGap: 2,
-	rowPadding: 6,
-	tile: 40,
+	rowPadding: ROW_PADDING,
+	tile: ROW_ICON_SIDE,
 	tileRadius: 12,
 	tileGap: 10,
 	titleHeight: 12,
@@ -61,7 +64,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is a 40px rounded tile beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
+					"The stand-in for the sidebar list while it is on its way, drawn flat: a 52px header bar over two rows, then an 88px header bar set off by 12px above it over the remaining rows. Every row is 48px, the height of a loaded conversation row without missions, and holds a 36px rounded tile, the size of the conversation icon, beside a title bar and a fainter preview bar 8px under it. Every child sits 2px apart, and bar widths turn over a cycle of ten rows. It reads from the top and runs to the bottom of the list region, the last row cut by its edge. Only the list region waits: the panel header and the rail stay the loaded components.",
 			},
 		},
 	},
@@ -118,7 +121,10 @@ const meta = preview.meta({
 			const [tile, column] = Array.from(row.children)
 			const [title, preview] = Array.from(column.children)
 			await expect(boxOf(row).height).toBe(LOADED.rowHeight)
-			await expect(boxOf(tile).width).toBe(LOADED.tile)
+			await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([
+				LOADED.tile,
+				LOADED.tile,
+			])
 			await expect(getComputedStyle(tile).borderTopLeftRadius).toBe(
 				`${LOADED.tileRadius}px`,
 			)
