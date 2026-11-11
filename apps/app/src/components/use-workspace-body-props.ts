@@ -2,10 +2,7 @@ import type { WorkspaceBodyProps } from "@/components/workspace-body"
 import { onboardingCreationOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
-type SharedBodyProps = Omit<
-	WorkspaceBodyProps,
-	"bot" | "conversation" | "isMissionsPanelOpen" | "home"
->
+type SharedBodyProps = Omit<WorkspaceBodyProps, "bot" | "conversation" | "home">
 
 export const useWorkspaceBodyProps = (): SharedBodyProps => {
 	const {

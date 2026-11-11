@@ -5,7 +5,7 @@ import { WorkspaceBody } from "@/components/workspace-body"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 export const ConversationsScreen = () => {
-	const { rosterView, sidebarTab } = useWorkspace()
+	const { rosterView } = useWorkspace()
 	const body = useWorkspaceBodyProps()
 
 	return (
@@ -14,7 +14,6 @@ export const ConversationsScreen = () => {
 				{...body}
 				bot={rosterView.selected}
 				conversation={rosterView.selectedConversation}
-				isMissionsPanelOpen={sidebarTab.openTab === "missions"}
 			/>
 		</ContentCard>
 	)

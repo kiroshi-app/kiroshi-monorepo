@@ -355,7 +355,6 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
 			isLibraryOpen: false,
-			isMissionsPanelOpen: false,
 			isOverlayOpen: false,
 			landings: createMessageLandingController(),
 			missions,
@@ -747,7 +746,7 @@ describe("WorkspaceBody frame", () => {
 
 	it("frames an empty column under the app header when no thread is shown", async () => {
 		const workspace = await workspaceOf()
-		render(workspace.body({ overrides: { isMissionsPanelOpen: true } }))
+		render(workspace.body({ overrides: { conversation: undefined } }))
 		await settle()
 
 		expect(screenSlot("app-header")).not.toBeNull()

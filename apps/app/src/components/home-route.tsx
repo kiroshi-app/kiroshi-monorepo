@@ -39,7 +39,6 @@ export const HomeRoute = () => {
 					discardConversation: core.roster.controller.discardConversation,
 					openConversation,
 				}}
-				isMissionsPanelOpen={false}
 			/>
 		</ContentCard>
 	)
