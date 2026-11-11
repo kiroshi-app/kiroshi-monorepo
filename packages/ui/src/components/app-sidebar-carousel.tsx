@@ -33,7 +33,7 @@ type SpacePanelLook = "inset" | "bare"
 
 const PANEL_LOOKS: Record<SpacePanelLook, string> = {
 	inset: "gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0",
-	bare: "min-h-0",
+	bare: "",
 }
 
 const NEIGHBOURING = 1
