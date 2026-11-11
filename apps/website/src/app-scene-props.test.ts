@@ -48,6 +48,7 @@ const SCENE_PROP_OF_SIDEBAR_PROP: Record<string, string> = {
 	onSelectMissions: "onOpenPanelChange",
 	openConversationId: "selectedConversationId",
 	pinned: "conversations",
+	renderSpaceList: "conversationsBySpaceId",
 	sections: "sectionsBySpaceId",
 	zones: "conversations",
 }
@@ -56,9 +57,6 @@ const SCENE_PROPS_THE_SECTIONS_SLOT_READS = ["collapsedSectionIds"]
 
 const AGENT_ROWS_ARE_GONE =
 	"the scene still draws the agent rows of AppSidebar, the shell lists none"
-
-const ONE_SPACE_AT_A_TIME =
-	"the scene still swipes between Spaces in AppSidebar, the shell lists one"
 
 const SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES: Record<string, string> = {
 	bots: AGENT_ROWS_ARE_GONE,
@@ -72,7 +70,6 @@ const SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES: Record<string, string> = {
 	onRemoveBotFromSpace: AGENT_ROWS_ARE_GONE,
 	onSelectBot: AGENT_ROWS_ARE_GONE,
 	selectedBotId: AGENT_ROWS_ARE_GONE,
-	conversationsBySpaceId: ONE_SPACE_AT_A_TIME,
 	haveBotsFailedToLoad: "the scene roster never fails to load",
 	sidebar: "the app renders its sidebar as a child of the shell",
 	space: "the switcher reads the Space from spaces and selectedSpaceId",

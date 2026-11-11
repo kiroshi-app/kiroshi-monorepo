@@ -140,7 +140,7 @@ const noticeText = () => textIn("chat-notice")
 
 const openFirstRow = async () => {
 	const row = document.querySelector(
-		'[data-slot="collapsed-sidebar-conversation"]',
+		'[data-slot="space-panel"]:not([inert]) [data-slot="collapsed-sidebar-conversation"]',
 	)
 	if (!row) throw new Error("no sidebar row")
 	fireEvent.click(row)
