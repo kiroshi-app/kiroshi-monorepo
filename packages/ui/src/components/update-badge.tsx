@@ -5,6 +5,10 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { ProgressRing } from "@workspace/ui/components/progress-ring"
+import {
+	SIDEBAR_GLYPH_BOX,
+	SIDEBAR_ROW_INSET,
+} from "@workspace/ui/components/sidebar-menu-row"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -154,8 +158,10 @@ const UpdateBadge = ({
 	)
 }
 
-const UPDATE_ROW =
-	"flex min-h-9 w-full min-w-0 items-center gap-2 rounded-control bg-update-row p-2 text-start font-medium text-sm"
+const UPDATE_ROW = cn(
+	SIDEBAR_ROW_INSET,
+	"flex w-full min-w-0 items-center gap-2 rounded-control bg-update-row text-start font-medium text-sm",
+)
 
 const UPDATE_ROW_PRESSABLE =
 	"hover:bg-rail-item-selected focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
@@ -163,13 +169,19 @@ const UPDATE_ROW_PRESSABLE =
 const UPDATE_ROW_FAILED =
 	"bg-update-failed-surface text-update-failed hover:bg-update-failed-surface"
 
-const UPDATE_DISC =
-	"grid size-5 shrink-0 place-items-center rounded-full bg-foreground text-on-foreground [&_svg]:size-3 [&_svg]:stroke-[2.5]"
+const UPDATE_DISC_BOX = cn(SIDEBAR_GLYPH_BOX, "aspect-square w-auto shrink-0")
+
+const UPDATE_DISC = cn(
+	UPDATE_DISC_BOX,
+	"grid place-items-center rounded-full bg-foreground text-on-foreground [&_svg]:size-3 [&_svg]:stroke-[2.5]",
+)
 
 const UPDATE_DISC_FAILED = "bg-update-failed text-update-failed-foreground"
 
-const UPDATE_RING =
-	"size-5 shrink-0 [&_circle]:stroke-[3.6] [&_circle:first-child]:stroke-update-track [&_circle:last-child]:stroke-foreground"
+const UPDATE_RING = cn(
+	UPDATE_DISC_BOX,
+	"[&_circle]:stroke-[3.6] [&_circle:first-child]:stroke-update-track [&_circle:last-child]:stroke-foreground",
+)
 
 const UPDATE_LABEL = "min-w-0 flex-1 truncate"
 
@@ -299,4 +311,12 @@ const UpdateRow = ({
 	)
 }
 
-export { UpdateBadge, type UpdateBadgeProps, type UpdateBadgeStatus, UpdateRow }
+export {
+	UPDATE_DISC,
+	UPDATE_DISC_FAILED,
+	UPDATE_RING,
+	UpdateBadge,
+	type UpdateBadgeProps,
+	type UpdateBadgeStatus,
+	UpdateRow,
+}

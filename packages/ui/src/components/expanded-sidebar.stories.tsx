@@ -2042,7 +2042,7 @@ export const SharedRowsLineUpAcrossViews = SharedRowsExpanded.extend({
 		docs: {
 			description: {
 				story:
-					"The expanded and the collapsed sidebar side by side on the same content. Check the Space switcher, each destination, the list, the update row and the footer start at the same distance from the top edge and stand as tall in both, that the expanded ones keep 8, 60, 98 and 136px for 44, 36, 36 and 36px, and that the first collapsed separator starts where the first section header does.",
+					"The expanded and the collapsed sidebar side by side on the same content. Check the Space switcher, each destination, the list, the update row and the footer start at the same distance from the top edge and stand as tall in both, that the expanded ones keep 8, 60, 98 and 136px for 44, 36, 36 and 36px, that the first collapsed separator starts where the first section header does, and that the collapsed update disc is as large as the expanded one with as much space above it as to its left inside its slot.",
 			},
 		},
 	},
@@ -2059,5 +2059,20 @@ export const SharedRowsLineUpAcrossViews = SharedRowsExpanded.extend({
 		await expect(
 			boxOf(slotIn(collapsed, "collapsed-sidebar-separator")).top,
 		).toBe(boxOf(slotIn(expanded, "fold-section-trigger")).top)
+
+		const updateSlot = boxOf(slotIn(collapsed, COLLAPSED_ROW_SLOTS.update))
+		const collapsedDisc = boxOf(
+			slotIn(collapsed, "collapsed-sidebar-update-disc"),
+		)
+		const expandedDisc = boxOf(
+			slotIn(expanded, EXPANDED_ROW_SLOTS.update).firstElementChild as Element,
+		)
+		await expect([collapsedDisc.width, collapsedDisc.height]).toEqual([
+			expandedDisc.width,
+			expandedDisc.height,
+		])
+		await expect(collapsedDisc.top - updateSlot.top).toBe(
+			collapsedDisc.left - updateSlot.left,
+		)
 	},
 })

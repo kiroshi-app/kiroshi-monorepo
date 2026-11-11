@@ -59,9 +59,12 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@workspace/ui/components/ui/tooltip"
-import type {
-	UpdateBadgeProps,
-	UpdateBadgeStatus,
+import {
+	UPDATE_DISC,
+	UPDATE_DISC_FAILED,
+	UPDATE_RING,
+	type UpdateBadgeProps,
+	type UpdateBadgeStatus,
 } from "@workspace/ui/components/update-badge"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
@@ -75,8 +78,6 @@ const SLOT = cn(
 	SIDEBAR_ROW_INSET,
 	"relative box-content grid shrink-0 place-content-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring",
 )
-
-const GLYPH_SLOT = cn(SLOT, SIDEBAR_GLYPH_BOX)
 
 const AVATAR_SLOT_BOX = {
 	width: SIDEBAR_AVATAR_SIDE,
@@ -136,15 +137,7 @@ const SKELETON_LIST = "items-center gap-0.5"
 const EMPTY_TILE =
 	"size-7 rounded-md border border-rail-section-placeholder border-dashed"
 
-const UPDATE_DISC =
-	"grid size-7 place-items-center rounded-full bg-foreground text-on-foreground [&_svg]:size-3.5 [&_svg]:stroke-[2.5]"
-
-const UPDATE_DISC_FAILED = "bg-update-failed text-update-failed-foreground"
-
-const UPDATE_RING =
-	"size-7 [&_circle]:stroke-[2.57] [&_circle:first-child]:stroke-update-track [&_circle:last-child]:stroke-foreground"
-
-const UPDATE_RING_ARROW = "size-3.5 stroke-[2.5] text-muted-foreground"
+const UPDATE_RING_ARROW = "size-3 stroke-[2.5] text-muted-foreground"
 
 const PERSON_INITIAL =
 	"grid size-full place-items-center bg-rail-avatar font-medium text-foreground text-xs/4 uppercase"
@@ -286,7 +279,8 @@ const Destination = ({
 			aria-current={isCurrent ? "page" : undefined}
 			aria-label={label}
 			className={cn(
-				GLYPH_SLOT,
+				SLOT,
+				SIDEBAR_GLYPH_BOX,
 				SLOT_ICON,
 				isCurrent ? SLOT_CURRENT : SLOT_HOVER,
 			)}
@@ -731,7 +725,7 @@ const UpdateSlot = ({
 			<button
 				aria-disabled={isInert || undefined}
 				aria-label={label}
-				className={GLYPH_SLOT}
+				className={SLOT}
 				data-slot="collapsed-sidebar-update"
 				data-status={status}
 				onClick={isInert ? undefined : onPress}

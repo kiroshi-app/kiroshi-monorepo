@@ -739,6 +739,19 @@ export const LastMissionCompletes = meta.story({
 const updateSlotNamed = (canvasElement: HTMLElement, name: string) =>
 	rail(canvasElement).getByRole("button", { name })
 
+const UPDATE_DISC_INSETS = Array(4).fill(8)
+
+const updateDiscInsetsOf = (update: HTMLElement) => {
+	const slot = update.getBoundingClientRect()
+	const disc = (update.firstElementChild as Element).getBoundingClientRect()
+	return [
+		disc.top - slot.top,
+		slot.right - disc.right,
+		slot.bottom - disc.bottom,
+		disc.left - slot.left,
+	]
+}
+
 export const U1Collapsed = meta.story({
 	name: "U1 Collapsed",
 	args: { update: { status: "available", onDownload: DOWNLOAD } },
@@ -746,7 +759,7 @@ export const U1Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"An update is available. Check the 28px foreground disc with the dark arrow sits above the person, its tooltip reads Download update and pressing it starts the download.",
+					"An update is available. Check the 20px foreground disc with the dark arrow sits above the person with 8px around it on all four sides, its tooltip reads Download update and pressing it starts the download.",
 			},
 		},
 	},
@@ -756,6 +769,7 @@ export const U1Collapsed = meta.story({
 			"data-slot",
 			"collapsed-sidebar-person",
 		)
+		await expect(updateDiscInsetsOf(update)).toEqual(UPDATE_DISC_INSETS)
 		await userEvent.hover(update)
 		await expect(await tooltipShown()).toHaveTextContent("Download update")
 		await userEvent.click(update)
@@ -771,7 +785,7 @@ export const U2Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update is downloading. Check the 28px ring fills 40 percent in the foreground over a white 15 percent track, around a muted arrow.",
+					"The update is downloading. Check the 20px ring fills 40 percent in the foreground over a white 15 percent track, around a muted arrow, with 8px around it on all four sides.",
 			},
 		},
 	},
@@ -782,6 +796,7 @@ export const U2Collapsed = meta.story({
 			"aria-valuenow",
 			"40",
 		)
+		await expect(updateDiscInsetsOf(update)).toEqual(UPDATE_DISC_INSETS)
 	},
 })
 
@@ -794,12 +809,13 @@ export const U3Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update is downloaded. Check the foreground disc carries the counter-clockwise restart glyph and pressing it restarts.",
+					"The update is downloaded. Check the foreground disc carries the counter-clockwise restart glyph with 8px around it on all four sides and pressing it restarts.",
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const update = updateSlotNamed(canvasElement, "Restart to update to 0.15.0")
+		await expect(updateDiscInsetsOf(update)).toEqual(UPDATE_DISC_INSETS)
 		await userEvent.click(update)
 		await expect(RESTART).toHaveBeenCalled()
 		update.blur()
@@ -815,7 +831,7 @@ export const U4Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update is ready but two agents still run. Check the restart disc dims to 50 percent, stays focusable and its tooltip says why it waits.",
+					"The update is ready but two agents still run. Check the restart disc dims to 50 percent with 8px around it on all four sides, stays focusable and its tooltip says why it waits.",
 			},
 		},
 	},
@@ -828,6 +844,7 @@ export const U4Collapsed = meta.story({
 		await expect(
 			getComputedStyle(slotIn(update, "collapsed-sidebar-update-disc")).opacity,
 		).toBe("0.5")
+		await expect(updateDiscInsetsOf(update)).toEqual(UPDATE_DISC_INSETS)
 	},
 })
 
@@ -838,7 +855,7 @@ export const U5Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update failed. Check the disc turns the failure red with a dark glyph and pressing it downloads again.",
+					"The update failed. Check the disc turns the failure red with a dark glyph, keeps 8px around it on all four sides and pressing it downloads again.",
 			},
 		},
 	},
@@ -850,6 +867,7 @@ export const U5Collapsed = meta.story({
 		await expect(
 			backgroundOf(slotIn(update, "collapsed-sidebar-update-disc")),
 		).toBe(resolvedRootColor("--update-failed"))
+		await expect(updateDiscInsetsOf(update)).toEqual(UPDATE_DISC_INSETS)
 	},
 })
 
@@ -1334,9 +1352,6 @@ export const CurrentDestinationHoveredLightCollapsed = meta.story(
 	currentDestinationHoverStory(LIGHT),
 )
 
-const middleYOf = (element: Element) =>
-	boxOf(element).top + boxOf(element).height / 2
-
 export const SharedRowsCollapsed = meta.story({
 	name: "Shared rows Collapsed",
 	args: {
@@ -1347,7 +1362,7 @@ export const SharedRowsCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The content the expanded sidebar draws in its own Shared rows story: one Space, the three destinations, two pinned and three recent conversations, an available update and the person. Check the Space slot, each destination, the list, the update slot and the person start at the same distance from the top edge and stand as tall as their expanded rows, that the two pinned conversations stand where the loading skeleton draws its first two slots, and that the update disc stays centred in its slot.",
+					"The content the expanded sidebar draws in its own Shared rows story: one Space, the three destinations, two pinned and three recent conversations, an available update and the person. Check the Space slot, each destination, the list, the update slot and the person start at the same distance from the top edge and stand as tall as their expanded rows, that the two pinned conversations stand where the loading skeleton draws its first two slots, and that the update disc keeps 8px around it on all four sides.",
 			},
 		},
 	},
@@ -1355,10 +1370,9 @@ export const SharedRowsCollapsed = meta.story({
 		await expect(
 			firstZoneEdgesOf(canvasElement, "collapsed-sidebar-conversation"),
 		).toEqual(FIRST_ZONE_SLOTS)
-		const update = slotIn(canvasElement, "collapsed-sidebar-update")
 		await expect(
-			middleYOf(slotIn(update, "collapsed-sidebar-update-disc")),
-		).toBe(middleYOf(update))
+			updateDiscInsetsOf(slotIn(canvasElement, "collapsed-sidebar-update")),
+		).toEqual(UPDATE_DISC_INSETS)
 	},
 })
 
