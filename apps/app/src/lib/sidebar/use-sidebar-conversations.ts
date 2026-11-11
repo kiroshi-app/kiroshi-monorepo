@@ -31,3 +31,22 @@ export const useSidebarConversations = () => {
 		),
 	}
 }
+
+const NO_ROWS: never[] = []
+
+export const useSpaceSidebarConversations = (spaceId: string) => {
+	const { core, rosterView } = useWorkspace()
+	const { rosterLists } = useWorkspaceFrame()
+
+	return {
+		conversations: [
+			...(rosterLists.rosterConversationsBySpace[spaceId] ?? NO_ROWS),
+			...soloThreadRowsOf({
+				agents: rosterLists.rosterBotsBySpace[spaceId] ?? NO_ROWS,
+				soloThreads: rosterView.soloThreads,
+				spaceId,
+			}),
+		],
+		sections: sectionsIn(core.sections.state.sections, spaceId),
+	}
+}

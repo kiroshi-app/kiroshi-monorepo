@@ -104,7 +104,7 @@ type RecentRowsProps = {
 	rows: RosterRowsContext
 }
 
-const RecentRows = ({
+export const RecentRows = ({
 	conversations,
 	isLanding,
 	isRowLifted,

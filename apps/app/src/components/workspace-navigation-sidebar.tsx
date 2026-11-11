@@ -5,6 +5,10 @@ import {
 	ExpandedRowsProvider,
 	useExpandedSlotElements,
 } from "@/components/expanded-sidebar-rows"
+import {
+	expandedSpaceListOf,
+	railSpaceListOf,
+} from "@/components/space-neighbour-lists"
 import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
 import { useSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
 import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
@@ -53,6 +57,7 @@ const NavigationSidebarWithRows = () => {
 			openConversationId={rosterView.selectedConversationId ?? undefined}
 			openMissionId={openMissionId}
 			pinned={pinned}
+			renderSpaceList={collapse.isOpen ? expandedSpaceListOf : railSpaceListOf}
 			sections={sections}
 			selectedSpaceId={selectedSpaceId}
 			spaces={sidebar.spaces ?? []}
