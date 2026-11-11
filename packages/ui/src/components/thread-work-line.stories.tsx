@@ -62,6 +62,14 @@ const COLUMN = "w-[640px]"
 
 const NARROW_COLUMN = "w-[400px]"
 
+const SQUEEZED_COLUMN = "w-[240px]"
+
+const SMALLEST_COLUMN = "w-[320px]"
+
+const LONG_ACTIVITY = "mcp__Linear__update_issue_with_a_long_description"
+
+const UNBREAKABLE_NAME = "Juniper-the-release-shepherd-of-the-monorepo"
+
 type ColumnProps = { width?: string; children: ReactNode }
 
 const Column = ({ width = COLUMN, children }: ColumnProps) => (
@@ -628,16 +636,6 @@ export const Final17 = meta.story({
 	},
 })
 
-const SQUEEZED_COLUMN = "w-[240px]"
-
-const SMALLEST_COLUMN = "w-[320px]"
-
-const LONG_ACTIVITY = "mcp__Linear__update_issue_with_a_long_description"
-
-const UNBREAKABLE_NAME = "Juniper-the-release-shepherd-of-the-monorepo"
-
-const isTruncated = (node: HTMLElement) => node.scrollWidth > node.clientWidth
-
 const expectNamesWhole = async (canvasElement: HTMLElement) => {
 	const names = slotsIn(canvasElement, "author-line-name")
 	await expect(names.length).toBeGreaterThan(0)
@@ -648,7 +646,7 @@ const expectNamesWhole = async (canvasElement: HTMLElement) => {
 const expectTruncated = async (texts: HTMLElement[]) => {
 	await expect(texts).toHaveLength(THEMES)
 	for (const text of texts) {
-		await expect(isTruncated(text)).toBe(true)
+		await expect(text.scrollWidth).toBeGreaterThan(text.clientWidth)
 		await expect(getComputedStyle(text).textOverflow).toBe("ellipsis")
 	}
 }
