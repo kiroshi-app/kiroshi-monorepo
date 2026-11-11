@@ -39,14 +39,14 @@ export const useSpaceSidebarConversations = (spaceId: string) => {
 	const { rosterLists } = useWorkspaceFrame()
 
 	return {
-		conversations: [
+		conversations: useSharedStructure([
 			...(rosterLists.rosterConversationsBySpace[spaceId] ?? NO_ROWS),
 			...soloThreadRowsOf({
 				agents: rosterLists.rosterBotsBySpace[spaceId] ?? NO_ROWS,
 				soloThreads: rosterView.soloThreads,
 				spaceId,
 			}),
-		],
+		]),
 		sections: sectionsIn(core.sections.state.sections, spaceId),
 	}
 }
