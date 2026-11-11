@@ -36,7 +36,6 @@ import {
 	SpaceSwitcher,
 	type SpaceSwitcherProps,
 } from "@workspace/ui/components/space-switcher"
-import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	SidebarContent,
@@ -74,9 +73,6 @@ const FOOTER_NAME =
 
 const SWITCHER_ROW = "flex h-9 shrink-0 items-center gap-1"
 
-const SEARCH_BUTTON =
-	"grid size-7 shrink-0 place-items-center rounded-control text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 [&_svg]:size-4.5 [&_svg]:stroke-[1.75]"
-
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 
 type ExpandedSidebarSection = SectionHeadActions & {
@@ -101,7 +97,6 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	isSpaceSwitchingEnabled?: boolean
 	renderSpaceList?: (space: Space) => ReactNode
 	onReorderSpaces?: (ids: string[]) => void
-	onOpenSearch?: () => void
 	onNewConversation?: () => void
 	onSelectMissions?: () => void
 	onSelectLibrary?: () => void
@@ -284,7 +279,6 @@ const ExpandedSidebar = ({
 	isSpaceSwitchingEnabled = true,
 	renderSpaceList,
 	onReorderSpaces,
-	onOpenSearch,
 	onNewConversation,
 	onSelectMissions,
 	onSelectLibrary,
@@ -292,8 +286,7 @@ const ExpandedSidebar = ({
 	onRetryList,
 	...switcher
 }: ExpandedSidebarProps) => {
-	const { t } = useTranslation(["bots", "search"])
-	const searchLabel = t("open", { ns: "search" })
+	const { t } = useTranslation("bots")
 
 	return (
 		<nav
@@ -303,17 +296,6 @@ const ExpandedSidebar = ({
 		>
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
-				<TooltipHint content={searchLabel} side="bottom">
-					<button
-						aria-label={searchLabel}
-						className={SEARCH_BUTTON}
-						data-slot="expanded-sidebar-search"
-						onClick={onOpenSearch}
-						type="button"
-					>
-						<Icons.Search aria-hidden="true" />
-					</button>
-				</TooltipHint>
 			</div>
 			<SidebarMenu>
 				<NavigationItem

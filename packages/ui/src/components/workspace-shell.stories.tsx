@@ -784,6 +784,7 @@ const NavigationShell = ({
 		<WorkspaceShellRoot onOpenChange={setIsOpen} open={isOpen}>
 			<AppTitleBar
 				insetWindowControls={hasInsetControls}
+				onOpenSearch={fn()}
 				onToggleSidebar={() => setIsOpen(!isOpen)}
 				tabs={tabs}
 			/>
@@ -914,7 +915,7 @@ export const FirstTabAfterTheHistoryCollapsed = meta.story({
 	render: () => <NavigationShell isInitiallyOpen={false} tabs={[NOTES_TAB]} />,
 	play: async ({ canvas, canvasElement }) => {
 		const sidebar = navigationSidebarIn(canvasElement)
-		await expect(leftOf(firstTabIn(canvas))).toBe(175)
+		await expect(leftOf(firstTabIn(canvas))).toBe(205)
 		await expect(sidebar.getBoundingClientRect().width).toBe(60)
 		await expect(sidebar.getAnimations()).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
@@ -1033,7 +1034,7 @@ export const FoldAnimatesAsOneMotion = meta.story({
 				FRAME_POLL,
 			)
 			await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
-			await expect(leftOf(firstTabIn(canvas))).toBe(175)
+			await expect(leftOf(firstTabIn(canvas))).toBe(205)
 
 			await userEvent.click(toggle)
 			await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
@@ -1095,7 +1096,7 @@ export const ControlsFadeNoColour = meta.story({
 		await expectNoColourFadeOn([
 			toggle,
 			slotIn(canvasElement, "space-switcher"),
-			slotIn(canvasElement, "expanded-sidebar-search"),
+			canvas.getByRole("button", { name: "Search" }),
 			slotIn(canvasElement, "expanded-sidebar-footer"),
 			canvas.getByRole("button", { name: "New conversation" }),
 		])

@@ -246,7 +246,6 @@ const meta = preview.meta({
 		pinned: rowsOf(PINNED, true),
 		conversations: rowsOf(RECENT, false),
 		user: { name: "Ada Martin" },
-		onOpenSearch: fn(),
 		onNewConversation: fn(),
 		onSelectMissions: fn(),
 		onSelectLibrary: fn(),
@@ -1414,7 +1413,7 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Check the switcher keeps one inset on the left, the top and the right of its content, the footer avatar sits as far from the left edge as from the top and the gear as far from the right edge as from the top, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
+					"Check the switcher keeps one inset on the left and the top of its content and reaches the right edge of its row, the footer avatar sits as far from the left edge as from the top and the gear as far from the right edge as from the top, and that both avatars sit on the vertical line of the navigation icons, 26px from the sidebar edge.",
 			},
 		},
 	},
@@ -1425,8 +1424,6 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 		const footer = slotIn(canvasElement, "expanded-sidebar-footer")
 		const switcherAvatar = boxOf(slotIn(switcher, "space-avatar"))
 		const footerAvatar = boxOf(slotIn(footer, "expanded-sidebar-avatar"))
-		const search = slotIn(canvasElement, "expanded-sidebar-search")
-		const searchGlyph = search.querySelector("svg") as Element
 		const gear = footer.lastElementChild as Element
 
 		const rightInsetOf = (edge: Element, content: Element) =>
@@ -1434,7 +1431,7 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 
 		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(5)
 		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(5)
-		await expect(rightInsetOf(row, searchGlyph)).toBe(5)
+		await expect(rightInsetOf(row, switcher)).toBe(0)
 		await expect(footerAvatar.left - boxOf(footer).left).toBe(
 			footerAvatar.top - boxOf(footer).top,
 		)
@@ -1452,28 +1449,15 @@ export const SwitcherAndFooterInsetsExpanded = meta.story({
 	},
 })
 
-export const SearchBesideTheSwitcherExpanded = meta.story({
-	play: async ({ args, canvasElement, userEvent }) => {
+export const SwitcherAloneInItsRowExpanded = meta.story({
+	play: async ({ canvas, canvasElement }) => {
 		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
-		const search = within(row).getByRole("button", { name: "Search" })
-		await expect(boxOf(search).left).toBeGreaterThan(
-			boxOf(slotIn(row, "space-switcher")).right,
-		)
+		await expect(row.children).toHaveLength(1)
+		await expect(row.firstElementChild).toBe(slotIn(row, "space-switcher"))
 		await expect(
-			within(slotIn(canvasElement, "sidebar-menu")).queryByRole("button", {
-				name: "Search",
-			}),
+			canvasElement.querySelector('[data-slot="expanded-sidebar-search"]'),
 		).toBeNull()
-		await userEvent.click(search)
-		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
-		await userEvent.hover(search)
-		await waitFor(
-			() =>
-				expect(document.querySelector('[role="tooltip"]')).toHaveTextContent(
-					"Search",
-				),
-			FRAME_POLL,
-		)
+		await expect(canvas.queryByRole("button", { name: "Search" })).toBeNull()
 	},
 })
 
@@ -1489,12 +1473,10 @@ export const LongSpaceNameTruncatesExpanded = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
 		const name = slotIn(row, "space-switcher-name")
-		const search = boxOf(slotIn(row, "expanded-sidebar-search"))
 		const switcher = slotIn(row, "space-switcher")
 		const chevron = switcher.lastElementChild as Element
 		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(5)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
-		await expect(search.width).toBe(28)
-		await expect(search.right).toBe(boxOf(row).right)
+		await expect(boxOf(switcher).right).toBe(boxOf(row).right)
 	},
 })
