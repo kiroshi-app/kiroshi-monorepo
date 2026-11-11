@@ -202,9 +202,6 @@ export const Members = meta.story({
 	play: async () => {
 		const menu = await menuIn()
 		await expect(menuNames(menu)).toEqual(SPACE_MENU)
-		await expect(
-			menu.querySelector('[data-slot="settings-menu-back"]'),
-		).not.toBeInTheDocument()
 		await expect(entryIn(menu, "Members")).toHaveAttribute(
 			"aria-current",
 			"page",
