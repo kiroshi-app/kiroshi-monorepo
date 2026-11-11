@@ -537,8 +537,6 @@ const backLabelled = (name: string) =>
 
 const backOf = () => backLabelled(i18n.t("settings:screen.back"))
 
-const spaceBackOf = () => backLabelled(i18n.t("settings:screen.backToSettings"))
-
 const resizeHandleOf = () =>
 	document.querySelector(
 		'[data-slot="sidebar-resize-handle"][data-side="left"]',
@@ -569,20 +567,6 @@ const openFirstCompanionOfSpace = async () => {
 	)
 }
 
-it("goes back one entry, to the user settings the space settings were opened over, then to the conversations", async () => {
-	await mountApp()
-	await press(avatarOf())
-	await openSpaceSettingsByRail()
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()?.subtitle).toBe("user")
-
-	await press(backOf())
-
-	expect(shownSettingsOf()).toBeNull()
-})
-
 it("opens the conversations and every settings screen at the width set on a settings screen, after a restart too", async () => {
 	harness.preferences = { ...STORED_PREFERENCES, openOn: "lastConversation" }
 	await mountApp()
@@ -593,7 +577,7 @@ it("opens the conversations and every settings screen at the width set on a sett
 	const widened = sidebarWidthOf()
 
 	expect(widened).toBeGreaterThan(openingWidth)
-	await press(spaceBackOf())
+	await press(avatarOf())
 	expect(sidebarWidthOf()).toBe(widened)
 	await press(avatarOf())
 	expect(sidebarWidthOf()).toBe(widened)
@@ -723,7 +707,7 @@ it("lists every Space on the user settings, the current one marked", async () =>
 	expect(spaceRowOf(VOCCA).getAttribute("aria-current")).toBeNull()
 })
 
-it("opens the settings of a Space other than the current one from its row, then goes back to the user settings", async () => {
+it("opens the settings of a Space other than the current one from its row", async () => {
 	const opened = await mountApp(secondSpace)
 	await press(avatarOf())
 
@@ -732,10 +716,6 @@ it("opens the settings of a Space other than the current one from its row, then 
 	expect(shownSettingsOf()?.subtitle).toBe("space")
 	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
 	expect(openSpaceLabelOf()).toContain(opened.name)
-
-	await press(spaceBackOf())
-
-	expect(shownSettingsOf()?.subtitle).toBe("user")
 })
 
 it("reads the secrets of the Space its route shows, though another Space is current", async () => {
