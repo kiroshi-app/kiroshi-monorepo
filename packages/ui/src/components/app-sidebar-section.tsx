@@ -62,10 +62,8 @@ const SECTION_BODY_INNER_OPEN =
 
 const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
 
-const FOLD_INSET = cn(SIDEBAR_ROW_INSET, "py-1.5")
-
 const FOLD_TRIGGER = cn(
-	FOLD_INSET,
+	SIDEBAR_ROW_INSET,
 	"flex w-full min-w-0 items-center justify-between gap-1 rounded-lg text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
 )
 
@@ -397,7 +395,7 @@ const NamedFoldSection = ({
 					{...head}
 					bodyId={bodyId}
 					className={NAMED_FOLD_TRIGGER}
-					fieldClassName={FOLD_INSET}
+					fieldClassName={SIDEBAR_ROW_INSET}
 					isOpen={isOpen}
 					section={section}
 					slot="fold-section-trigger"

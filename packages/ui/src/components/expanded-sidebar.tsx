@@ -67,7 +67,7 @@ const MISSION_COUNT =
 
 const FOOTER = cn(
 	SIDEBAR_ROW_INSET,
-	"flex w-full shrink-0 items-center gap-2.5 rounded-lg py-1.5 text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+	"flex w-full shrink-0 items-center gap-2.5 rounded-lg text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
 )
 
 const FOOTER_GLYPH =
@@ -79,7 +79,7 @@ const FOOTER_AVATAR =
 const FOOTER_NAME =
 	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5"
 
-const SWITCHER_ROW = "flex h-10 shrink-0 items-center gap-1"
+const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
 type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
 

@@ -244,7 +244,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, in the sidebar it was sized for. Check the button is 40px tall with 10px corners, that it reads as the 28px square with the space's initial, the space's name and a 14px chevron 10px apart, that the square carries the space's tint, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"Five spaces with the second one open, in the sidebar it was sized for. Check the button is 44px tall, its 28px square padded 8 on all four sides, with 10px corners, that it reads as the 28px square with the space's initial, the space's name and a 14px chevron 10px apart, that the square carries the space's tint, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -256,7 +256,8 @@ export const Default = meta.story({
 		await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(within(trigger).getByText("Vocca")).toBeVisible()
-		await expect(trigger.getBoundingClientRect().height).toBe(40)
+		await expect(trigger.getBoundingClientRect().height).toBe(44)
+		await expect(getComputedStyle(trigger).padding).toBe("8px")
 		await expect(getComputedStyle(trigger).borderStartStartRadius).toBe("10px")
 		await expect(getComputedStyle(trigger).columnGap).toBe("10px")
 		const avatar = avatarOn(trigger)

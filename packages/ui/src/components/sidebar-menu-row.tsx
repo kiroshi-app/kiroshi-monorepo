@@ -37,7 +37,7 @@ const SIDEBAR_ROW_INSET = "p-2"
 
 const NAVIGATION_ROW = cn(
 	SIDEBAR_ROW_INSET,
-	"min-h-8 gap-2.5 rounded-lg py-1.5 font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
+	"gap-2.5 rounded-lg font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
 )
 
 const NAVIGATION_ICON_SLOT =

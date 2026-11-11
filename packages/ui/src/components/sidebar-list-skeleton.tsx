@@ -28,22 +28,24 @@ const LIST_END_ROW_WIDTHS: SidebarRowWidths[] = [
 
 const ROW_GAP = "gap-0.5"
 
+const SECTION_GAP = "gap-3"
+
+const SECTION = cn("flex flex-col", ROW_GAP)
+
 const BAR = "block max-w-full rounded"
 
 type SkeletonSectionHeaderProps = {
-	padding: string
 	width: string
 }
 
-const SkeletonSectionHeader = ({
-	padding,
-	width,
-}: SkeletonSectionHeaderProps) => (
+const SkeletonSectionHeader = ({ width }: SkeletonSectionHeaderProps) => (
 	<div
-		className={cn("shrink-0", SIDEBAR_ROW_INSET, padding)}
+		className={cn("flex shrink-0", SIDEBAR_ROW_INSET)}
 		data-slot="sidebar-list-skeleton-header"
 	>
-		<span className={cn(BAR, "h-3 bg-foreground/7", width)} />
+		<span className="flex h-4 min-w-0 flex-1 items-center">
+			<span className={cn(BAR, "h-3 bg-foreground/7", width)} />
+		</span>
 	</div>
 )
 
@@ -81,19 +83,23 @@ const SidebarListSkeleton = () => (
 	<div
 		aria-hidden="true"
 		className={cn(
-			"flex size-full animate-pulse flex-col overflow-hidden pt-1 motion-reduce:animate-none",
-			ROW_GAP,
+			"flex size-full animate-pulse flex-col overflow-hidden motion-reduce:animate-none",
+			SECTION_GAP,
 		)}
 		data-slot="sidebar-list-skeleton"
 	>
-		<SkeletonSectionHeader padding="py-1.5" width="w-13" />
-		{sidebarRowAt(0)}
-		{sidebarRowAt(1)}
-		<SkeletonSectionHeader padding="pt-3 pb-1.5" width="w-22" />
-		<ListSkeleton
-			className={cn("min-h-0 flex-1 animate-none", ROW_GAP)}
-			row={rowAfterSecondHeaderAt}
-		/>
+		<div className={cn(SECTION, "shrink-0")}>
+			<SkeletonSectionHeader width="w-13" />
+			{sidebarRowAt(0)}
+			{sidebarRowAt(1)}
+		</div>
+		<div className={cn(SECTION, "min-h-0 flex-1")}>
+			<SkeletonSectionHeader width="w-22" />
+			<ListSkeleton
+				className={cn("min-h-0 flex-1 animate-none", ROW_GAP)}
+				row={rowAfterSecondHeaderAt}
+			/>
+		</div>
 	</div>
 )
 

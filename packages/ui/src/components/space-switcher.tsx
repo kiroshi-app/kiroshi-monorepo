@@ -53,7 +53,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER = cn(
 	SIDEBAR_ROW_INSET,
-	"relative h-10 w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 py-1.5 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50",
+	"relative h-auto w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50",
 )
 
 const SWITCHER_NAME =
