@@ -1,5 +1,6 @@
 import {
 	createContext,
+	type KeyboardEvent,
 	type ReactNode,
 	useContext,
 	useRef,
@@ -12,20 +13,32 @@ import type {
 	SectionNaming,
 	SidebarClickModifiers,
 } from "@workspace/ui/components/app-sidebar-model"
-import { SORTED_ZONE } from "@workspace/ui/components/app-sidebar-pins"
-import { useRosterDrag } from "@workspace/ui/components/app-sidebar-roster-drag"
 import {
+	type Landing,
+	PINNED_ZONE,
+	type PinnedEntry,
+	SORTED_ZONE,
+} from "@workspace/ui/components/app-sidebar-pins"
+import {
+	emptySlotOf,
+	headSlotOf,
+	type RosterDrag,
+	useRosterDrag,
+} from "@workspace/ui/components/app-sidebar-roster-drag"
+import {
+	type RosterEntries,
 	rosterEntriesOf,
 	rosterMovesOf,
 } from "@workspace/ui/components/app-sidebar-roster-layout"
 import {
-	PinnedZone,
 	type RosterRowsContext,
 	recentMenuOf,
+	rosterMenuOf,
 } from "@workspace/ui/components/app-sidebar-roster-menu"
 import {
 	RosterDropArea,
 	RosterLiftFrame,
+	type RosterMove,
 	RosterMoveAnnouncement,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
@@ -33,15 +46,25 @@ import {
 	SectionLabel,
 	SectionNameField,
 } from "@workspace/ui/components/app-sidebar-section"
+import type { ExpandedSidebarProps } from "@workspace/ui/components/expanded-sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { i18n } from "@workspace/ui/lib/i18n"
 import { mergeRefs } from "@workspace/ui/lib/utils"
 
+import {
+	dragEntriesOf,
+	drawnLandingOf,
+	namedSectionsOf,
+	pinnedRowsOf,
+	rowKeyMoveOf,
+	sectionsDrawnAfterPins,
+} from "@/lib/sidebar/drawn-roster"
 import { isPinnedRow, pinsOfRowsNotShown } from "@/lib/sidebar/roster-pins"
 import { useSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
 import { opensInNewTab } from "@/lib/tabs/new-tab-clicks"
 import { isListPage } from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
+import { useSharedStructure } from "@/lib/use-shared-structure"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 import { useWorkspaceFrame } from "@/lib/workspace/workspace-frame"
 
@@ -99,6 +122,35 @@ const RecentRows = ({
 	)
 }
 
+type PinnedAreaProps = {
+	drag: RosterDrag
+	isOnlySlot: boolean
+	pinnedRows: PinnedEntry[]
+	rows: RosterRowsContext
+}
+
+const PinnedArea = ({
+	drag,
+	isOnlySlot,
+	pinnedRows,
+	rows,
+}: PinnedAreaProps) => {
+	const isEmpty = pinnedRows.length === 0
+	return (
+		<RosterDropArea
+			isLanding={isEmpty && drag.isPinnedLanding && !drag.landingSection}
+			landing={PINNED_ZONE}
+			slotId={isOnlySlot ? PINNED_ZONE : undefined}
+		>
+			{isEmpty ? (
+				<SectionDropZone label={i18n.t("bots:roster.pinDrop")} />
+			) : (
+				rosterMenuOf(pinnedRows, true, rows)
+			)}
+		</RosterDropArea>
+	)
+}
+
 type RowSelection = {
 	selectedBotId: string | null
 	selectedConversationId: string | null
@@ -113,7 +165,7 @@ type SlotPresenceSource = {
 	hasNamedRow: boolean
 	isNamingPinnedRow: boolean
 	isRowLifted: boolean
-	pinnedEntryCount: number
+	pinnedRowCount: number
 	recentRowCount: number
 }
 
@@ -121,13 +173,110 @@ const slotPresenceOf = ({
 	hasNamedRow,
 	isNamingPinnedRow,
 	isRowLifted,
-	pinnedEntryCount,
+	pinnedRowCount,
 	recentRowCount,
 }: SlotPresenceSource) => ({
-	hasPinned: pinnedEntryCount > 0 || isRowLifted || isNamingPinnedRow,
+	hasPinned: pinnedRowCount > 0 || isRowLifted || isNamingPinnedRow,
 	hasConversations:
 		recentRowCount > 0 || isRowLifted || (hasNamedRow && !isNamingPinnedRow),
 })
+
+type ExpandedRowContents = {
+	conversations: ReactNode
+	pinned: ReactNode
+	rowsOfSection: (sectionId: string) => ReactNode
+}
+
+const ExpandedRowContentsContext = createContext<ExpandedRowContents | null>(
+	null,
+)
+
+const useExpandedRowContents = () => {
+	const contents = useContext(ExpandedRowContentsContext)
+	if (!contents)
+		throw new Error("expanded rows are read outside their provider")
+	return contents
+}
+
+type SectionRowsProps = {
+	sectionId: string
+}
+
+const SectionRows = ({ sectionId }: SectionRowsProps) =>
+	useExpandedRowContents().rowsOfSection(sectionId)
+
+type SectionActionSource = Pick<
+	ReturnType<typeof useWorkspace>["rosterLines"]["sidebarActions"],
+	"onCollapseSection" | "onDeleteSection" | "onRenameSection"
+>
+
+type SectionSlotsSource = {
+	actions: SectionActionSource
+	collapsedSectionIds: string[]
+	drag: RosterDrag
+	entries: RosterEntries
+	onMove: (id: string, by: number) => void
+}
+
+const useSectionSlots = ({
+	actions,
+	collapsedSectionIds,
+	drag,
+	entries,
+	onMove,
+}: SectionSlotsSource): NonNullable<ExpandedSidebarProps["sections"]> => {
+	const states = useSharedStructure(
+		namedSectionsOf(entries).map(({ id, name }) => {
+			const isLifted = id === drag.liftedSectionId
+			return {
+				id,
+				name,
+				isEmpty: entries.rowsOf(id).length === 0,
+				isOpen: !collapsedSectionIds.includes(id),
+				isLanding: drag.landingSection === id,
+				isGiving: drag.isGiving(id),
+				isReceiving: drag.isReceiving(id),
+				isLifted,
+				isSliding: drag.isLifting && !isLifted,
+				shift: drag.cardShiftOf(id),
+			}
+		}),
+	)
+	const collapse = useStableCallback((id: string, isOpen: boolean) =>
+		actions.onCollapseSection(id, !isOpen),
+	)
+	const moveByKey = useStableCallback(drag.moveSectionByKey)
+	const rename = useStableCallback(actions.onRenameSection)
+	const remove = useStableCallback(actions.onDeleteSection)
+	const handlersFor = useStableCallback(drag.rosterLift.handlersFor)
+	const hasJustDropped = useStableCallback(drag.rosterLift.hasJustDropped)
+	const { keepFocus } = drag
+	const lift = { handlersFor, hasJustDropped }
+
+	return states.map(({ id, name, isEmpty, isOpen, ...dropArea }) => ({
+		id,
+		name,
+		isOpen,
+		lift,
+		rows: isEmpty ? (
+			<SectionDropZone align="start" slotId={emptySlotOf(id)} />
+		) : (
+			<SectionRows sectionId={id} />
+		),
+		headSlotId: headSlotOf(id),
+		onDelete: remove,
+		onMove,
+		onMoveKey: (event) => moveByKey(id, event),
+		onOpenChange: (next) => collapse(id, next),
+		onRename: rename,
+		dropArea: {
+			...dropArea,
+			landing: id,
+			slotId: id,
+			ref: (node) => keepFocus(id, node),
+		},
+	}))
+}
 
 type ExpandedRowsSource = {
 	conversations: AppSidebarConversation[]
@@ -148,13 +297,14 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	)
 	const [naming, setNaming] = useState<SectionNaming | null>(null)
 	const namedRow = conversations.find(({ id }) => id === naming?.rowId)
+	const [crossingMove, setCrossingMove] = useState<RosterMove | null>(null)
 	const frameRef = useRef<HTMLDivElement>(null)
 
 	const entries = rosterEntriesOf({
 		bots: NO_AGENTS,
 		conversations,
 		naming: namedRow ? naming : null,
-		sections,
+		sections: sectionsDrawnAfterPins(conversations, sections),
 	})
 	const moves = rosterMovesOf({
 		entries,
@@ -162,18 +312,37 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		onPinRoster: (space, pins) =>
 			actions.onPinRoster(space, [...pins, ...hiddenPins]),
 	})
-	const land = useStableCallback(moves.land)
+	const land = useStableCallback((id: string, landing: Landing) => {
+		setCrossingMove(null)
+		moves.land(id, drawnLandingOf(entries, id, landing))
+	})
 	const fileRow = useStableCallback(moves.fileRow)
 	const pinLast = useStableCallback(moves.pinLast)
 	const unpin = useStableCallback(moves.unpin)
-	const moveSection = useStableCallback(moves.moveSection)
+	const moveSection = useStableCallback((id: string, by: number) => {
+		setCrossingMove(null)
+		moves.moveSection(id, by)
+	})
 	const drag = useRosterDrag({
 		collapsedSectionIds,
 		containerRef: frameRef,
-		entries,
+		entries: dragEntriesOf(entries),
 		onLand: land,
 		onMoveSection: moveSection,
 	})
+	const moveRowByKey = useStableCallback(
+		(id: string, event: KeyboardEvent<HTMLElement>) => {
+			const keyMove = rowKeyMoveOf(entries, id, event)
+			if (keyMove.kind === "walk") {
+				drag.moveRowByKey(id, event)
+				return
+			}
+			if (keyMove.kind === "stop") return
+			event.preventDefault()
+			setCrossingMove(keyMove.move)
+			moves.land(id, keyMove.landing)
+		},
+	)
 
 	const selectRow = useStableCallback(
 		(id: string, modifiers?: SidebarClickModifiers) => {
@@ -205,7 +374,7 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		membershipsOf: NO_MEMBERSHIPS,
 		onCreateSectionFor: createSectionFor,
 		onDeleteConversation: deleteRow,
-		onMoveKey: drag.moveRowByKey,
+		onMoveKey: moveRowByKey,
 		onMoveToSection: sections.length > 0 ? fileRow : undefined,
 		onOpenConversationInNewTab: openInNewTab,
 		onOpenConversationSettings: openSettings,
@@ -220,9 +389,17 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		spaces: NO_SPACES,
 	}
 
-	const { sortedConversations, topLevel } = entries
+	const { rowsOf, sortedConversations, topLevel } = entries
+	const pinnedRows = pinnedRowsOf(entries)
 	const isRowLifted = Boolean(drag.liftedEntry && !drag.liftedEntry.section)
-	const hasPinnedZone = topLevel.length > 0 || isRowLifted
+	const hasPinnedArea = pinnedRows.length > 0 || isRowLifted
+	const sectionSlots = useSectionSlots({
+		actions,
+		collapsedSectionIds,
+		drag,
+		entries,
+		onMove: moveSection,
+	})
 
 	const namingField = namedRow ? (
 		<NamingRow
@@ -242,7 +419,7 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 			hasNamedRow: Boolean(namedRow),
 			isNamingPinnedRow,
 			isRowLifted,
-			pinnedEntryCount: topLevel.length,
+			pinnedRowCount: pinnedRows.length,
 			recentRowCount: sortedConversations.length,
 		}),
 		conversations: (
@@ -260,49 +437,42 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 			isLifting: drag.isLifting,
 			ref: mergeRefs(frameRef, drag.rosterLift.followRef),
 		},
-		move: drag.move,
+		move: crossingMove ?? drag.move,
 		pinned: (
 			<>
-				{hasPinnedZone ? (
-					<PinnedZone
-						collapsedSectionIds={collapsedSectionIds}
+				{hasPinnedArea ? (
+					<PinnedArea
 						drag={drag}
-						entries={entries}
-						onCollapseSection={actions.onCollapseSection}
-						onDeleteSection={actions.onDeleteSection}
-						onMoveSection={moveSection}
-						onRenameSection={actions.onRenameSection}
+						isOnlySlot={topLevel.length === 0}
+						pinnedRows={pinnedRows}
 						rows={rows}
 					/>
 				) : null}
 				{isNamingPinnedRow ? namingField : null}
 			</>
 		),
+		rowsOfSection: (sectionId: string) =>
+			rosterMenuOf(rowsOf(sectionId), true, rows),
+		sectionSlots,
 	}
 }
 
-type ExpandedSlots = {
-	conversations: ReactNode
-	pinned: ReactNode
-}
+const PinnedRows = () => useExpandedRowContents().pinned
 
-const ExpandedSlotsContext = createContext<ExpandedSlots | null>(null)
-
-const useExpandedSlots = () => {
-	const slots = useContext(ExpandedSlotsContext)
-	if (!slots) throw new Error("expanded rows are read outside their provider")
-	return slots
-}
-
-const PinnedRows = () => useExpandedSlots().pinned
-
-const ConversationRows = () => useExpandedSlots().conversations
+const ConversationRows = () => useExpandedRowContents().conversations
 
 const PINNED_ROWS = <PinnedRows />
 
 const CONVERSATION_ROWS = <ConversationRows />
 
-const ExpandedSlotElementsContext = createContext<ExpandedSlots | null>(null)
+type ExpandedSlotElements = Pick<
+	ExpandedSidebarProps,
+	"conversations" | "pinned" | "sections"
+>
+
+const ExpandedSlotElementsContext = createContext<ExpandedSlotElements | null>(
+	null,
+)
 
 export const useExpandedSlotElements = () => {
 	const elements = useContext(ExpandedSlotElementsContext)
@@ -318,21 +488,32 @@ type ExpandedRowsProviderProps = {
 export const ExpandedRowsProvider = ({
 	children,
 }: ExpandedRowsProviderProps) => {
-	const { conversations, frame, hasConversations, hasPinned, move, pinned } =
-		useExpandedRows(useSidebarConversations())
+	const {
+		conversations,
+		frame,
+		hasConversations,
+		hasPinned,
+		move,
+		pinned,
+		rowsOfSection,
+		sectionSlots,
+	} = useExpandedRows(useSidebarConversations())
 	const elements = {
 		pinned: hasPinned ? PINNED_ROWS : null,
 		conversations: hasConversations ? CONVERSATION_ROWS : null,
+		sections: sectionSlots,
 	}
 
 	return (
-		<ExpandedSlotsContext.Provider value={{ conversations, pinned }}>
+		<ExpandedRowContentsContext.Provider
+			value={{ conversations, pinned, rowsOfSection }}
+		>
 			<ExpandedSlotElementsContext.Provider value={elements}>
 				<RosterLiftFrame {...frame}>
 					{children}
 					<RosterMoveAnnouncement move={move} />
 				</RosterLiftFrame>
 			</ExpandedSlotElementsContext.Provider>
-		</ExpandedSlotsContext.Provider>
+		</ExpandedRowContentsContext.Provider>
 	)
 }

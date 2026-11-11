@@ -34,7 +34,7 @@ const NavigationSidebarWithRows = () => {
 	const destination = useShownDestination(tabs)
 	const { roster } = core
 	const zones = sidebarZonesOf(useSidebarConversations())
-	const { conversations, pinned } = useExpandedSlotElements()
+	const { conversations, pinned, sections } = useExpandedSlotElements()
 	const { openCount, openMissionId } = sidebarMissions
 
 	return (
@@ -53,6 +53,7 @@ const NavigationSidebarWithRows = () => {
 			openConversationId={rosterView.selectedConversationId ?? undefined}
 			openMissionId={openMissionId}
 			pinned={pinned}
+			sections={sections}
 			selectedSpaceId={selectedSpaceId}
 			spaces={sidebar.spaces ?? []}
 			update={rosterLines.updateBadge}

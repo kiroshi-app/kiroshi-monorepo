@@ -917,6 +917,15 @@ const foldHeaders = () =>
 
 const emptyLine = () => screen.queryByText(EMPTY_LINE)
 
+const SECTION_DROP = '[data-slot="roster-section-drop"]'
+
+const foldOf = (name: string) =>
+	Array.from(slotsOf("fold-section")).find(
+		(fold) =>
+			fold.querySelector('[data-slot="fold-section-trigger"]')?.textContent ===
+			name,
+	) as Element
+
 const filterPagesBy = (
 	store: TranscriptStore,
 	keeps: (row: ConversationInPage) => boolean,
@@ -1021,14 +1030,15 @@ describe("the list states of the expanded sidebar", () => {
 		expect(foldHeaders()).toEqual([])
 	})
 
-	it("draws Pinned, not the empty line, for a Space holding only a section", async () => {
+	it("draws the section and its drop zone, not the empty line, for a Space holding only a section", async () => {
 		await mountApp(async ({ store, spaceId }) => {
 			await store.createSection(spaceId, "Clients")
 			holdsNoRow(store)
 		})
 
 		expect(emptyLine()).toBeNull()
-		expect(foldHeaders()).toEqual([PINNED])
+		expect(foldHeaders()).toEqual(["Clients"])
+		expect(foldOf("Clients").querySelector(SECTION_DROP)).not.toBeNull()
 	})
 
 	it("keeps the drop zone of Pinned while its only way in is a lifted row", async () => {
@@ -1114,5 +1124,416 @@ describe("the list states of the expanded sidebar", () => {
 		expect(
 			conversations.querySelector('[data-slot="list-end-skeleton"]'),
 		).not.toBeNull()
+	})
+})
+
+const namesIn = (fold: string) =>
+	Array.from(
+		foldOf(fold).querySelectorAll('[data-slot="roster-row-name"]'),
+	).map((name) => name.textContent)
+
+const headerOf = (name: string) =>
+	foldOf(name).querySelector(
+		'[data-slot="fold-section-trigger"]',
+	) as HTMLElement
+
+const announcement = () => slotOf("roster-move-announcement")?.textContent
+
+const seedNamedSections = async (held: SpaceSeed) => {
+	const firstPin = await roomIn(held, "First pin")
+	const clients = await held.store.createSection(held.spaceId, "Clients")
+	const press = await held.store.createSection(held.spaceId, "Press")
+	const kickoff = await roomIn(held, "Client kickoff")
+	const brief = await roomIn(held, "Client brief")
+	const kit = await roomIn(held, "Press kit")
+	const lastPin = await roomIn(held, "Last pin")
+	await roomIn(held, "Loose room")
+	await held.store.pinRoster(held.spaceId, [
+		{ id: firstPin.id, sectionId: null },
+		{ id: clients.id, sectionId: null },
+		{ id: kickoff.id, sectionId: clients.id },
+		{ id: brief.id, sectionId: clients.id },
+		{ id: lastPin.id, sectionId: null },
+		{ id: press.id, sectionId: null },
+		{ id: kit.id, sectionId: press.id },
+	])
+}
+
+const mountSections = async (
+	seed: (held: SpaceSeed) => Promise<void> = seedNamedSections,
+) => {
+	let store: TranscriptStore | undefined
+	await mountApp(async (held) => {
+		store = held.store
+		await seed(held)
+	})
+	return store as TranscriptStore
+}
+
+const relaunch = async (store: TranscriptStore) => {
+	cleanup()
+	harness.store = store
+	render(createElement(RouterProvider, { router: createWorkspaceRouter() }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+}
+
+const SLOT_STEP = 40
+
+const SLOT_HEIGHT = 32
+
+const rosterSlots = () =>
+	Array.from(document.querySelectorAll("[data-roster-slot]"))
+
+const slotTopOf = (element: Element) =>
+	rosterSlots().indexOf(element) * SLOT_STEP
+
+const layOutRosterSlots = () => {
+	for (const slot of rosterSlots())
+		vi.spyOn(slot, "getBoundingClientRect").mockReturnValue(
+			new DOMRect(0, slotTopOf(slot), 200, SLOT_HEIGHT),
+		)
+}
+
+const slotHolding = (handle: Element) =>
+	handle.closest("[data-roster-slot]") as Element
+
+const dragToSlot = async (
+	handle: Element,
+	area: Element,
+	target: Element,
+	offset = 0,
+) => {
+	layOutRosterSlots()
+	const pointAt = (clientY: number) => ({ clientX: 0, clientY, pointerId: 1 })
+	const fromY = slotTopOf(slotHolding(handle)) + SLOT_HEIGHT / 2
+	const toY = slotTopOf(target) + SLOT_HEIGHT / 2 + offset
+	vi.spyOn(document, "elementFromPoint").mockReturnValue(area)
+	await act(async () => {
+		fireEvent.pointerDown(handle, { button: 0, ...pointAt(fromY) })
+		fireEvent.pointerMove(window, pointAt(fromY + 8))
+		fireEvent.pointerMove(window, pointAt(toY))
+		fireEvent.pointerUp(window, pointAt(toY))
+	})
+	await settle()
+	vi.restoreAllMocks()
+}
+
+const pressAltArrow = async (control: Element, key: string) => {
+	await act(async () => {
+		fireEvent.keyDown(control, { altKey: true, key })
+	})
+	await settle()
+}
+
+const pickInSectionMenu = async (name: string, item: string) => {
+	await act(async () => {
+		fireEvent.contextMenu(headerOf(name), { clientX: 20, clientY: 20 })
+	})
+	await settle()
+	await press(screen.getByRole("menuitem", { name: item }))
+}
+
+const SECTIONS_BETWEEN = (...sections: string[]) => [
+	PINNED,
+	...sections,
+	CONVERSATIONS,
+]
+
+describe("the named sections of the expanded sidebar", () => {
+	it("draws Pinned with its rows only, then each section in saved order, then Conversations", async () => {
+		await mountSections()
+
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
+		expect(namesIn("Press")).toEqual(["Press kit"])
+		expect(namesIn(CONVERSATIONS)).toContain("Loose room")
+	})
+
+	it("lands a pinned row saved after a section where the pointer drops it in Pinned", async () => {
+		await mountSections()
+		const first = rosterRowOf("First pin")
+
+		await dragToSlot(
+			rosterRowOf("Last pin"),
+			dropAreaWith("First pin"),
+			slotHolding(first),
+		)
+
+		expect(namesIn(PINNED)).toEqual(["Last pin", "First pin"])
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+	})
+
+	it("lands a section row dropped between two pinned rows where the pointer drops it", async () => {
+		await mountSections()
+		const lastPin = rosterRowOf("Last pin")
+
+		await dragToSlot(
+			rosterRowOf("Client kickoff"),
+			dropAreaWith("Last pin"),
+			slotHolding(lastPin),
+		)
+
+		expect(namesIn(PINNED)).toEqual(["First pin", "Client kickoff", "Last pin"])
+		expect(namesIn("Clients")).toEqual(["Client brief"])
+	})
+
+	it("lands a pinned row saved after a section in the section drawn under it", async () => {
+		await mountSections()
+		const brief = rosterRowOf("Client brief")
+
+		await dragToSlot(
+			rosterRowOf("Last pin"),
+			foldOf("Clients").closest("[data-roster-drop]") as Element,
+			slotHolding(brief),
+		)
+
+		expect(namesIn(PINNED)).toEqual(["First pin"])
+		expect(namesIn("Clients")).toContain("Last pin")
+	})
+
+	it("walks a pinned row saved after a section through what is drawn on Alt with an arrow", async () => {
+		await mountSections()
+
+		await pressAltArrow(rosterRowOf("Last pin"), "ArrowUp")
+		expect(namesIn(PINNED)).toEqual(["Last pin", "First pin"])
+
+		await pressAltArrow(rosterRowOf("First pin"), "ArrowDown")
+		expect(namesIn(PINNED)).toEqual(["Last pin"])
+		expect(namesIn("Clients")).toEqual([
+			"First pin",
+			"Client kickoff",
+			"Client brief",
+		])
+	})
+
+	it("carries the last row of a section into the next section on Alt with the Down arrow", async () => {
+		await mountSections()
+
+		await pressAltArrow(rosterRowOf("Client brief"), "ArrowDown")
+
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+		expect(namesIn("Clients")).toEqual(["Client kickoff"])
+		expect(namesIn("Press")).toEqual(["Client brief", "Press kit"])
+		expect(announcement()).toBe(
+			i18n.t("bots:roster.movedInSection", {
+				name: "Client brief",
+				position: 1,
+				count: 2,
+				section: "Press",
+			}),
+		)
+	})
+
+	it("carries the first row of a section to the end of the previous section on Alt with the Up arrow", async () => {
+		await mountSections()
+
+		await pressAltArrow(rosterRowOf("Press kit"), "ArrowUp")
+
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+		expect(namesIn("Clients")).toEqual([
+			"Client kickoff",
+			"Client brief",
+			"Press kit",
+		])
+	})
+
+	it("leaves the last row of the last section there on Alt with the Down arrow and announces nothing", async () => {
+		await mountSections()
+
+		await pressAltArrow(rosterRowOf("Press kit"), "ArrowDown")
+
+		expect(namesIn("Press")).toEqual(["Press kit"])
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+		expect(announcement()).toBe("")
+	})
+
+	it("places a section released above Pinned first among the sections", async () => {
+		const store = await mountSections()
+		const first = rosterRowOf("First pin")
+
+		await dragToSlot(
+			headerOf("Press"),
+			dropAreaWith("First pin"),
+			slotHolding(first),
+		)
+
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+	})
+
+	it("keeps a section and its rows when it is released over Conversations", async () => {
+		await mountSections()
+
+		await dragToSlot(
+			headerOf("Clients"),
+			dropAreaWith("Loose room"),
+			slotHolding(headerOf("Press")),
+		)
+
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
+	})
+
+	it.each([
+		["Clients", "ArrowUp"],
+		["Press", "ArrowDown"],
+	])(
+		"leaves the order unchanged on Alt with an arrow past the edge from %s and announces no move",
+		async (name, key) => {
+			await mountSections()
+
+			await pressAltArrow(headerOf(name), key)
+
+			expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients", "Press"))
+			expect(announcement()).toBe("")
+		},
+	)
+
+	it("moves a section among the sections on Alt with an arrow and counts only the sections", async () => {
+		await mountSections()
+
+		await pressAltArrow(headerOf("Press"), "ArrowUp")
+
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(announcement()).toBe(
+			i18n.t("bots:roster.moved", { name: "Press", position: 1, count: 2 }),
+		)
+	})
+
+	it("draws the drop zone in the body of a section holding no row", async () => {
+		await mountSections(async (held) => {
+			await seedPinned(held)
+			await held.store.createSection(held.spaceId, "Clients")
+		})
+
+		expect(foldOf("Clients").querySelector(SECTION_DROP)?.textContent).toBe(
+			i18n.t("bots:roster.section.empty"),
+		)
+	})
+
+	it("draws no Pinned header above the sections while no row is pinned or lifted", async () => {
+		await mountSections(async (held) => {
+			await roomIn(held, "Loose room")
+			await held.store.createSection(held.spaceId, "Clients")
+		})
+
+		expect(foldHeaders()).toEqual(["Clients", CONVERSATIONS])
+	})
+
+	it("shows the drop zone of Pinned during a lift and pins a row released there outside any section", async () => {
+		const seed = async (held: SpaceSeed) => {
+			await roomIn(held, "Loose room")
+			await held.store.createSection(held.spaceId, "Clients")
+		}
+		await mountSections(seed)
+
+		act(() => liftRow("Loose room"))
+
+		expect(foldHeaders()).toEqual([PINNED, "Clients", CONVERSATIONS])
+		const zone = foldOf(PINNED).querySelector(SECTION_DROP) as Element
+		expect(zone.textContent).toBe(i18n.t("bots:roster.pinDrop"))
+
+		await dropOver(zone)
+
+		expect(namesIn(PINNED)).toEqual(["Loose room"])
+		expect(foldOf("Clients").querySelector(SECTION_DROP)).not.toBeNull()
+	})
+
+	it("keeps a renamed section after a relaunch", async () => {
+		const store = await mountSections()
+
+		await pickInSectionMenu("Clients", i18n.t("bots:roster.section.rename"))
+		const field = screen.getByRole("textbox", {
+			name: i18n.t("bots:roster.section.renameField", { name: "Clients" }),
+		})
+		await act(async () => {
+			fireEvent.change(field, { target: { value: "Partners" } })
+			fireEvent.keyDown(field, { key: "Enter" })
+		})
+		await settle()
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Partners", "Press"))
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Partners", "Press"))
+	})
+
+	it("keeps Move up after a relaunch", async () => {
+		const store = await mountSections()
+
+		await pickInSectionMenu("Press", i18n.t("bots:roster.section.moveUp"))
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(namesIn(PINNED)).toEqual(["First pin", "Last pin"])
+	})
+
+	it("keeps Move down after a relaunch", async () => {
+		const store = await mountSections()
+
+		await pickInSectionMenu("Clients", i18n.t("bots:roster.section.moveDown"))
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+		expect(namesIn("Clients")).toEqual(["Client kickoff", "Client brief"])
+	})
+
+	it("keeps a deleted section gone after a relaunch", async () => {
+		const store = await mountSections()
+
+		await pickInSectionMenu("Press", i18n.t("bots:roster.section.delete"))
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients"))
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Clients"))
+	})
+
+	it("keeps a dragged section after a relaunch", async () => {
+		const store = await mountSections()
+
+		await dragToSlot(
+			headerOf("Clients"),
+			foldOf("Press").closest("[data-roster-drop]") as Element,
+			slotHolding(headerOf("Press")),
+		)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+
+		await relaunch(store)
+		expect(foldHeaders()).toEqual(SECTIONS_BETWEEN("Press", "Clients"))
+	})
+
+	it("keeps a section closed after a relaunch and opens it again", async () => {
+		const store = await mountSections()
+
+		await press(headerOf("Clients"))
+		expect(headerOf("Clients").getAttribute("aria-expanded")).toBe("false")
+
+		await relaunch(store)
+		expect(headerOf("Clients").getAttribute("aria-expanded")).toBe("false")
+
+		await press(headerOf("Clients"))
+		expect(headerOf("Clients").getAttribute("aria-expanded")).toBe("true")
+	})
+
+	it("shows a row filed from its menu in the body of that section", async () => {
+		await mountSections()
+
+		await openRowMenu("Loose room")
+		await press(
+			screen.getByRole("menuitem", {
+				name: i18n.t("bots:roster.section.moveTo"),
+			}),
+		)
+		await press(screen.getByRole("menuitemradio", { name: "Press" }))
+
+		expect(namesIn("Press")).toEqual(["Press kit", "Loose room"])
+		expect(namesIn(CONVERSATIONS)).not.toContain("Loose room")
 	})
 })

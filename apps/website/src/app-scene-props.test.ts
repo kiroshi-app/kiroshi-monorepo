@@ -48,8 +48,11 @@ const SCENE_PROP_OF_SIDEBAR_PROP: Record<string, string> = {
 	onSelectMissions: "onOpenPanelChange",
 	openConversationId: "selectedConversationId",
 	pinned: "conversations",
+	sections: "sectionsBySpaceId",
 	zones: "conversations",
 }
+
+const SCENE_PROPS_THE_SECTIONS_SLOT_READS = ["collapsedSectionIds"]
 
 const AGENT_ROWS_ARE_GONE =
 	"the scene still draws the agent rows of AppSidebar, the shell lists none"
@@ -70,8 +73,6 @@ const SCENE_PROPS_THE_SHELL_NO_LONGER_TAKES: Record<string, string> = {
 	onSelectBot: AGENT_ROWS_ARE_GONE,
 	selectedBotId: AGENT_ROWS_ARE_GONE,
 	conversationsBySpaceId: ONE_SPACE_AT_A_TIME,
-	isSpaceSwitchingEnabled: ONE_SPACE_AT_A_TIME,
-	sectionsBySpaceId: ONE_SPACE_AT_A_TIME,
 	haveBotsFailedToLoad: "the scene roster never fails to load",
 	sidebar: "the app renders its sidebar as a child of the shell",
 	space: "the switcher reads the Space from spaces and selectedSpaceId",
@@ -254,9 +255,9 @@ const propsTheShellTakes = (reader: PropReader) => [
 	...reader.propsAcceptedBy(NAVIGATION_SIDEBAR_CALL, "NavigationSidebar"),
 	...reader.propsAcceptedBy(SHELL_CALL, "AppTitleBar"),
 	...reader.propsAcceptedBy(SHELL_CALL, "WorkspaceShellRoot"),
-	...reader.propsPassedTo(EXPANDED_ROWS_CALL, "PinnedZone"),
 	...reader.propsOfVariable(EXPANDED_ROWS_CALL, "rows"),
 	...reader.propsReadOn(EXPANDED_ROWS_CALL, "actions"),
+	...SCENE_PROPS_THE_SECTIONS_SLOT_READS,
 	...Object.values(SCENE_PROP_OF_SIDEBAR_PROP),
 ]
 
