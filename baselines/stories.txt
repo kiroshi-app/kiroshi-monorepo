@@ -1770,9 +1770,15 @@ navigation-collapsedsidebar--e-1-no-conversations-collapsed
 navigation-collapsedsidebar--e-2-nothing-pinned-collapsed
 navigation-collapsedsidebar--e-3-empty-section-collapsed
 navigation-collapsedsidebar--every-open-state
+navigation-collapsedsidebar--group-at-rest
+navigation-collapsedsidebar--group-at-rest-light
 navigation-collapsedsidebar--group-conversation-open
+navigation-collapsedsidebar--group-conversation-open-hovered
+navigation-collapsedsidebar--group-conversation-open-hovered-light
+navigation-collapsedsidebar--group-conversation-open-light
 navigation-collapsedsidebar--hover-3-b
 navigation-collapsedsidebar--hover-on-conversation
+navigation-collapsedsidebar--hover-on-conversation-light
 navigation-collapsedsidebar--l-1-loading-collapsed
 navigation-collapsedsidebar--l-2-failed-collapsed
 navigation-collapsedsidebar--l-3-loading-more-collapsed

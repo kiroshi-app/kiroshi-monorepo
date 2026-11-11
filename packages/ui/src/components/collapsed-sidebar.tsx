@@ -95,7 +95,8 @@ const NOT_SENT_DOT =
 const GROUP =
 	"relative flex w-11 shrink-0 flex-col rounded-control bg-update-row pb-2 before:pointer-events-none before:absolute before:inset-0 before:rounded-control"
 
-const GROUP_HOVER = "hover:before:bg-title-bar-highlight"
+const GROUP_STATE =
+	"hover:before:bg-title-bar-highlight data-active:before:bg-rail-item-selected data-active:hover:before:bg-rail-item-selected-hover"
 
 const OVERFLOW_COUNT =
 	"relative font-semibold text-[11px] text-foreground tabular-nums"
@@ -415,13 +416,13 @@ const ConversationTip = ({ conversation, missions }: ConversationTipProps) => {
 type ConversationButtonProps = ComponentProps<"button"> & {
 	conversation: AppSidebarConversation
 	isOpen: boolean
-	isHoverable: boolean
+	hasOwnTile: boolean
 }
 
 const ConversationButton = ({
 	conversation,
 	isOpen,
-	isHoverable,
+	hasOwnTile,
 	...props
 }: ConversationButtonProps) => {
 	const { t } = useTranslation("bots")
@@ -441,7 +442,7 @@ const ConversationButton = ({
 			className={cn(
 				ITEM,
 				CONVERSATION_ITEM,
-				isOpen ? TILE_CURRENT : isHoverable && TILE_HOVER,
+				hasOwnTile && (isOpen ? TILE_CURRENT : TILE_HOVER),
 			)}
 			data-slot="collapsed-sidebar-conversation"
 			type="button"
@@ -493,7 +494,7 @@ const RailConversation = ({
 			<RailTip content={tip}>
 				<ConversationButton
 					conversation={conversation}
-					isHoverable
+					hasOwnTile
 					isOpen={isOpen}
 					onClick={openConversation}
 				/>
@@ -504,13 +505,14 @@ const RailConversation = ({
 		<RailTip content={tip}>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: the mission cells and the +N label are pointer extensions of the conversation button, which is the group's only tab stop and whose click bubbles here */}
 			<div
-				className={cn(GROUP, !isOpen && GROUP_HOVER)}
+				className={cn(GROUP, GROUP_STATE)}
+				data-active={isOpen || undefined}
 				data-slot="collapsed-sidebar-group"
 				onClick={openConversation}
 			>
 				<ConversationButton
 					conversation={conversation}
-					isHoverable={false}
+					hasOwnTile={false}
 					isOpen={isOpen}
 				/>
 				{cells.map((mission) => (
