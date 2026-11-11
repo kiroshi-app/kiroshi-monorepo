@@ -121,7 +121,6 @@ const rosterListsOn = ({
 			rosteredSpaceId: spaceRowId ?? SPACE,
 			soloThreads,
 		},
-		waitingMissionCount: 0,
 	} as unknown as Parameters<typeof useRosterLists>[0]
 }
 
