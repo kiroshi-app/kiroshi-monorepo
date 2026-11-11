@@ -1070,6 +1070,7 @@ const conversationOnTheIconRailStory = (globals?: typeof DARK) => ({
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const row = rowIn(canvasElement)
+		const surface = surfaceOf(row)
 		const tile = row.getBoundingClientRect()
 		const activeFill = missionGroupFillOf(row)
 		await expect([tile.width, tile.height]).toEqual([
@@ -1078,17 +1079,13 @@ const conversationOnTheIconRailStory = (globals?: typeof DARK) => ({
 		])
 		await expect(getComputedStyle(row).borderTopLeftRadius).toBe("10px")
 		await expect(getComputedStyle(row).backgroundColor).toBe(activeFill)
-		await expect(getComputedStyle(surfaceOf(row)).backgroundColor).toBe(
-			TRANSPARENT,
-		)
+		await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
 		if (!isInBrowserRunner()) return
 		const pointer = await realPointer()
 		try {
 			await pointer.hover(row)
 			await expect(getComputedStyle(row).backgroundColor).toBe(activeFill)
-			await expect(getComputedStyle(surfaceOf(row)).backgroundColor).toBe(
-				TRANSPARENT,
-			)
+			await expect(getComputedStyle(surface).backgroundColor).toBe(TRANSPARENT)
 		} finally {
 			await pointer.unhover(row)
 		}
