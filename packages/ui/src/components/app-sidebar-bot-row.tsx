@@ -119,6 +119,7 @@ const BotRosterRow = ({
 						{...lift.handlersFor(bot.id)}
 						isLiftable
 						badge={bot.badge}
+						geometry="agent"
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={working}

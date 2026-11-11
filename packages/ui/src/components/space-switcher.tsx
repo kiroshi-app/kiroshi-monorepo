@@ -20,6 +20,7 @@ import {
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
+import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceAvatar,
@@ -50,8 +51,10 @@ import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
-const SWITCHER =
-	"relative h-10 w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 p-1.5 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50"
+const SWITCHER = cn(
+	SIDEBAR_ROW_INSET,
+	"relative h-10 w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 py-1.5 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50",
+)
 
 const SWITCHER_NAME =
 	"min-w-0 truncate font-semibold text-foreground text-reading leading-4.5"

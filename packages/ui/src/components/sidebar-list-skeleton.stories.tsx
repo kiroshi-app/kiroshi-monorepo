@@ -103,6 +103,10 @@ const meta = preview.meta({
 		await expect(boxOf(secondHeaderBar).top - boxOf(headers[1]).top).toBe(
 			LOADED.secondHeaderTop,
 		)
+		for (const header of headers)
+			await expect(
+				boxOf(header.firstElementChild as Element).left - boxOf(header).left,
+			).toBe(LOADED.rowPadding)
 		await expect(boxOf(headers[0]).top - boxOf(skeleton).top).toBe(
 			LOADED.columnTop,
 		)

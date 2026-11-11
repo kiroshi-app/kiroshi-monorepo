@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
 import { rosterSlot } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { Icons } from "@workspace/ui/components/icons"
+import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -61,8 +62,12 @@ const SECTION_BODY_INNER_OPEN =
 
 const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
 
-const FOLD_TRIGGER =
-	"flex w-full min-w-0 items-center justify-between gap-1 rounded-lg p-1.5 text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+const FOLD_INSET = cn(SIDEBAR_ROW_INSET, "py-1.5")
+
+const FOLD_TRIGGER = cn(
+	FOLD_INSET,
+	"flex w-full min-w-0 items-center justify-between gap-1 rounded-lg text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
+)
 
 const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 
@@ -107,6 +112,7 @@ const SectionLabel = ({ slotId, children }: SectionLabelProps) => (
 interface SectionNameFieldProps {
 	ariaLabel: string
 	initialName: string
+	className?: string
 	onCommit: (name: string) => void
 	onCancel: () => void
 }
@@ -114,6 +120,7 @@ interface SectionNameFieldProps {
 const SectionNameField = ({
 	ariaLabel,
 	initialName,
+	className,
 	onCommit,
 	onCancel,
 }: SectionNameFieldProps) => {
@@ -139,7 +146,7 @@ const SectionNameField = ({
 	return (
 		<input
 			aria-label={ariaLabel}
-			className={SECTION_FIELD}
+			className={cn(SECTION_FIELD, className)}
 			data-slot="roster-section-field"
 			onBlur={settle}
 			onChange={(event) => setDraft(event.target.value)}
@@ -173,6 +180,7 @@ interface SectionHeadProps extends SectionHeadActions, SectionPlace {
 	section: Pick<AppSidebarSection, "id" | "name">
 	bodyId: string
 	className: string
+	fieldClassName?: string
 	slot: string
 	children: ReactNode
 }
@@ -190,6 +198,7 @@ const SectionHead = ({
 	onDelete,
 	bodyId,
 	className,
+	fieldClassName,
 	slot,
 	children,
 }: SectionHeadProps) => {
@@ -200,6 +209,7 @@ const SectionHead = ({
 		return (
 			<SectionNameField
 				ariaLabel={t("roster.section.renameField", { name: section.name })}
+				className={fieldClassName}
 				initialName={section.name}
 				onCancel={() => setIsRenaming(false)}
 				onCommit={(name) => {
@@ -387,6 +397,7 @@ const NamedFoldSection = ({
 					{...head}
 					bodyId={bodyId}
 					className={NAMED_FOLD_TRIGGER}
+					fieldClassName={FOLD_INSET}
 					isOpen={isOpen}
 					section={section}
 					slot="fold-section-trigger"

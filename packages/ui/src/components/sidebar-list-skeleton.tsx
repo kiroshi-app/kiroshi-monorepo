@@ -1,5 +1,6 @@
 import { ROW_ICON_SIDE } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { ListSkeleton } from "@workspace/ui/components/list-skeleton"
+import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SidebarRowWidths = {
@@ -39,7 +40,7 @@ const SkeletonSectionHeader = ({
 	width,
 }: SkeletonSectionHeaderProps) => (
 	<div
-		className={cn("shrink-0", padding)}
+		className={cn("shrink-0", SIDEBAR_ROW_INSET, padding)}
 		data-slot="sidebar-list-skeleton-header"
 	>
 		<span className={cn(BAR, "h-3 bg-foreground/7", width)} />
@@ -48,7 +49,10 @@ const SkeletonSectionHeader = ({
 
 const SidebarSkeletonRow = ({ title, preview }: SidebarRowWidths) => (
 	<div
-		className="flex min-h-13 shrink-0 items-center gap-2.5 p-2"
+		className={cn(
+			"flex min-h-13 shrink-0 items-center gap-2.5",
+			SIDEBAR_ROW_INSET,
+		)}
 		data-slot="sidebar-list-skeleton-row"
 	>
 		<span
@@ -82,10 +86,10 @@ const SidebarListSkeleton = () => (
 		)}
 		data-slot="sidebar-list-skeleton"
 	>
-		<SkeletonSectionHeader padding="p-1.5" width="w-13" />
+		<SkeletonSectionHeader padding="py-1.5" width="w-13" />
 		{sidebarRowAt(0)}
 		{sidebarRowAt(1)}
-		<SkeletonSectionHeader padding="px-1.5 pt-3 pb-1.5" width="w-22" />
+		<SkeletonSectionHeader padding="pt-3 pb-1.5" width="w-22" />
 		<ListSkeleton
 			className={cn("min-h-0 flex-1 animate-none", ROW_GAP)}
 			row={rowAfterSecondHeaderAt}

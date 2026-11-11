@@ -1874,6 +1874,8 @@ navigation-expandedsidebar--missions-1-tree-long-titles-expanded
 navigation-expandedsidebar--n-1-named-section-expanded
 navigation-expandedsidebar--neighbour-empty-section-mid-swipe-expanded
 navigation-expandedsidebar--neighbour-list-shows-mid-swipe-expanded
+navigation-expandedsidebar--row-columns-expanded
+navigation-expandedsidebar--row-columns-light-expanded
 navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded

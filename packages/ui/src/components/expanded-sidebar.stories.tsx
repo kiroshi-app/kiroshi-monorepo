@@ -10,6 +10,7 @@ import {
 	isInBrowserRunner,
 	realPointer,
 	scrollSpaceCarousel,
+	settled,
 	slotIn,
 	slotsIn,
 	spaceListInView,
@@ -364,7 +365,7 @@ export const ExpandedNewConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New conversation open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New conversation alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New conversation row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 28px from the sidebar edge. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New conversation open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New conversation alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New conversation row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 30px from the sidebar edge, each avatar 8px from its row's start edge and 6px from its top. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -432,22 +433,20 @@ export const ExpandedNewConversation = meta.story({
 		const footerAvatar = boxOf(slotIn(footer, "expanded-sidebar-avatar"))
 		const rightInsetOf = (edge: Element, content: Element) =>
 			boxOf(edge).right - boxOf(content).right
-		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(6)
+		await expect(switcherAvatar.left - boxOf(switcher).left).toBe(8)
 		await expect(switcherAvatar.top - boxOf(switcher).top).toBe(6)
 		await expect(rightInsetOf(row, switcher)).toBe(0)
-		await expect(footerAvatar.left - boxOf(footer).left).toBe(
-			footerAvatar.top - boxOf(footer).top,
-		)
-		await expect(rightInsetOf(footer, gear)).toBe(
-			boxOf(gear).top - boxOf(footer).top,
-		)
+		await expect(footerAvatar.left - boxOf(footer).left).toBe(8)
+		await expect(footerAvatar.top - boxOf(footer).top).toBe(6)
+		await expect(rightInsetOf(footer, gear)).toBe(8)
+		await expect(boxOf(gear).top - boxOf(footer).top).toBe(6)
 		const centreOf = (inner: DOMRect) => inner.left + inner.width / 2 - box.left
 		const navigationIcon = canvas
 			.getByRole("button", { name: "Library" })
 			.querySelector("svg") as Element
-		await expect(centreOf(boxOf(navigationIcon))).toBe(28)
-		await expect(centreOf(switcherAvatar)).toBe(28)
-		await expect(centreOf(footerAvatar)).toBe(28)
+		await expect(centreOf(boxOf(navigationIcon))).toBe(ROW_X_OFFSETS.iconCentre)
+		await expect(centreOf(switcherAvatar)).toBe(ROW_X_OFFSETS.iconCentre)
+		await expect(centreOf(footerAvatar)).toBe(ROW_X_OFFSETS.iconCentre)
 
 		if (isInBrowserRunner()) {
 			const resting = getComputedStyle(footer).backgroundColor
@@ -492,17 +491,17 @@ export const ExpandedMissions = meta.story({
 	},
 })
 
-const EVEN_PADDING = Array(4).fill("6px")
+const SHORT_ROW_PADDING = ["6px", "8px", "6px", "8px"]
 
-const CONVERSATION_PADDING = Array(4).fill("8px")
+const LIST_ROW_PADDING = Array(4).fill("8px")
 
 const TOP_MENU_HEIGHT = 32
 
+const LIST_ROW_HEIGHT = 52
+
 const TOP_MENU_GLYPH = 14
 
-const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 52 }
-
-const CONVERSATION_X_OFFSETS = { iconCentre: 30, labelStart: 54 }
+const ROW_X_OFFSETS = { iconCentre: 30, labelStart: 54 }
 
 const paddingOf = (element: Element) => {
 	const style = getComputedStyle(element)
@@ -529,10 +528,8 @@ const colourTransitionsOf = (element: Element) => {
 const conversationButtonOf = (tree: Element) =>
 	slotIn(tree.parentElement as HTMLElement, "sidebar-menu-button")
 
-const isConversationRow = (row: Element) => {
-	const name = row.querySelector('[data-slot="roster-row-name"]')
-	return Boolean(name) && name?.textContent !== ATLAS.name
-}
+const isListRow = (row: Element) =>
+	Boolean(row.querySelector('[data-slot="roster-row-name"]'))
 
 const centreOfBox = (element: Element) => {
 	const box = boxOf(element)
@@ -553,7 +550,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 	]
 	for (const row of rows)
 		await expect(paddingOf(row)).toEqual(
-			isConversationRow(row) ? CONVERSATION_PADDING : EVEN_PADDING,
+			isListRow(row) ? LIST_ROW_PADDING : SHORT_ROW_PADDING,
 		)
 
 	for (const name of ["New conversation", /^Missions/, "Library"]) {
@@ -613,7 +610,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every conversation row pads 8 on all four sides and every other row 6."
+	"Paper artboard Missions 1 Tree Corrected: four conversations, two of them carrying missions drawn as a tree under their row, and one agent row. Check each mission hangs off a trunk from the avatar centre with a branch to its state mark, that the mark sits on the title column, that the destinations show their glyph alone, and that every row pads 8 at its start and its end, the conversation and agent rows 8 above and below too and every other row 6."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -1313,7 +1310,7 @@ export const N1NamedSectionExpanded = meta.story({
 		const clients = headerNamed(canvasElement, "Clients")
 		const pinned = headerNamed(canvasElement, "Pinned")
 		const style = getComputedStyle(clients)
-		await expect(style.padding).toBe("6px")
+		await expect(paddingOf(clients)).toEqual(SHORT_ROW_PADDING)
 		await expect(style.borderTopLeftRadius).toBe("10px")
 		await expect(style.columnGap).toBe("4px")
 		await expect(style.justifyContent).toBe("space-between")
@@ -1369,6 +1366,7 @@ export const N1NamedSectionExpanded = meta.story({
 
 		await chooseFromMenu(clients, "Rename")
 		const field = await renameFieldIn(canvasElement)
+		await expect(paddingOf(field)).toEqual(SHORT_ROW_PADDING)
 		await userEvent.clear(field)
 		await userEvent.type(field, "  Partners  {Enter}")
 		await expect(RENAME_SECTION).toHaveBeenCalledOnce()
@@ -1715,7 +1713,7 @@ const expectTopMenuAlignedOnConversations = async (
 	const glyph = item.querySelector("svg") as SVGElement
 	await expect(boxOf(item).height).toBe(TOP_MENU_HEIGHT)
 	await expect(boxOf(glyph).width).toBe(TOP_MENU_GLYPH)
-	await expect(paddingOf(item)).toEqual(EVEN_PADDING)
+	await expect(paddingOf(item)).toEqual(SHORT_ROW_PADDING)
 	const conversation = slotsIn(
 		slotIn(sidebar, "space-carousel"),
 		"sidebar-menu-button",
@@ -1724,9 +1722,7 @@ const expectTopMenuAlignedOnConversations = async (
 		":scope > span:first-child > *",
 	) as Element
 	await expect(xOffsetsOf(item, glyph, box)).toEqual(ROW_X_OFFSETS)
-	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(
-		CONVERSATION_X_OFFSETS,
-	)
+	await expect(xOffsetsOf(conversation, avatar, box)).toEqual(ROW_X_OFFSETS)
 	return item
 }
 
@@ -1736,7 +1732,7 @@ export const TopMenuAtRestExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 52px from the sidebar edge, 2px before a conversation row's 30px and 54px.",
+					"The destinations menu at rest. Check each button is 32px tall with a 14px glyph and pads 6 above and below and 8 at its start and its end, and that its icon centre and label start sit 30px and 54px from the sidebar edge, the same as a conversation row's.",
 			},
 		},
 	},
@@ -1781,6 +1777,102 @@ export const TopMenuHoveredExpanded = meta.story({
 	},
 })
 
+const ROW_COLUMNS = { iconStart: 16, labelStart: 54, trailingEnd: 16 }
+
+type RowColumnParts = {
+	icon: Element
+	label: Element
+	trailing: Element
+}
+
+const topMenuPartsOf = (item: Element): RowColumnParts => ({
+	icon: item.firstElementChild as Element,
+	label: item.children[1] as Element,
+	trailing: item.lastElementChild as Element,
+})
+
+const listRowPartsOf = (row: Element): RowColumnParts => ({
+	icon: row.querySelector(":scope > span:first-child > *") as Element,
+	label: slotIn(row, "roster-row-name"),
+	trailing: slotIn(row, "roster-row-timestamp"),
+})
+
+const columnsOf = (
+	{ icon, label, trailing }: RowColumnParts,
+	sidebar: DOMRect,
+) => ({
+	iconStart: boxOf(icon).left - sidebar.left,
+	labelStart: boxOf(label).left - sidebar.left,
+	trailingEnd: sidebar.right - boxOf(trailing).right,
+})
+
+const expectRowsOnSharedColumns = async ({ canvasElement }: StoryCanvas) => {
+	const sidebar = sidebarIn(canvasElement)
+	const menuItem = within(sidebar).getByRole("button", { name: /^Missions/ })
+	const listRows = slotsIn(
+		slotIn(sidebar, "space-carousel"),
+		"sidebar-menu-button",
+	)
+	await expect(
+		listRows.map((row) => slotIn(row, "roster-row-name").textContent),
+	).toEqual([RELEASE_TRAIN.name, ROADMAP_REVIEW.name, ATLAS.name])
+	await expect(slotsIn(sidebar, "mission-capsule-list")).toHaveLength(1)
+
+	const rows = [menuItem, ...listRows]
+	const columns = () => {
+		const box = boxOf(sidebar)
+		return [
+			columnsOf(topMenuPartsOf(menuItem), box),
+			...listRows.map((row) => columnsOf(listRowPartsOf(row), box)),
+		]
+	}
+	const resting = columns()
+	await expect(resting).toEqual(rows.map(() => ROW_COLUMNS))
+	await expect(listRows.map(paddingOf)).toEqual(
+		listRows.map(() => LIST_ROW_PADDING),
+	)
+	await expect(rows.map((row) => boxOf(row).height)).toEqual([
+		TOP_MENU_HEIGHT,
+		...listRows.map(() => LIST_ROW_HEIGHT),
+	])
+
+	if (!isInBrowserRunner()) return
+	const pointer = await realPointer()
+	for (const row of rows) {
+		try {
+			await pointer.hover(row)
+			await settled(row)
+			await expect(row.matches(":hover")).toBe(true)
+			await expect(columns()).toEqual(resting)
+		} finally {
+			await pointer.unhover(row)
+		}
+	}
+}
+
+const ROW_COLUMNS_ARTBOARD = {
+	...TREE_ARTBOARD,
+	conversations: treeListOf([RELEASE_TRAIN, ROADMAP_REVIEW]),
+}
+
+const ROW_COLUMNS_DESCRIPTION =
+	"The destinations menu above a conversation carrying missions, a conversation carrying none and an agent row. Check the icon column starts 16px and the label column 54px from the sidebar's start edge and the trailing column ends 16px from its end edge, in the Missions item and in the three rows alike, that the agent row is 52px tall like a conversation row, and that resting the pointer on any of the four moves none of the columns."
+
+export const RowColumnsExpanded = meta.story({
+	name: "Row columns",
+	args: ROW_COLUMNS_ARTBOARD,
+	parameters: { docs: { description: { story: ROW_COLUMNS_DESCRIPTION } } },
+	play: expectRowsOnSharedColumns,
+})
+
+export const RowColumnsLightExpanded = meta.story({
+	name: "Row columns Light",
+	globals: LIGHT,
+	args: ROW_COLUMNS_ARTBOARD,
+	parameters: { docs: { description: { story: ROW_COLUMNS_DESCRIPTION } } },
+	play: expectRowsOnSharedColumns,
+})
+
 export const LongSpaceNameTruncatesExpanded = meta.story({
 	args: {
 		spaces: [
@@ -1795,7 +1887,7 @@ export const LongSpaceNameTruncatesExpanded = meta.story({
 		const name = slotIn(row, "space-switcher-name")
 		const switcher = slotIn(row, "space-switcher")
 		const chevron = switcher.lastElementChild as Element
-		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(6)
+		await expect(boxOf(switcher).right - boxOf(chevron).right).toBe(8)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(boxOf(switcher).right).toBe(boxOf(row).right)
 	},
