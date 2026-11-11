@@ -535,13 +535,17 @@ interface DragParams {
 	pointer: (steps: PointerStep[]) => Promise<void>
 }
 
-const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+const grabHandle = (handle: HTMLElement, by: number) => {
 	const grip = handle.getBoundingClientRect()
 	const from = {
 		clientX: grip.left + grip.width / 2,
 		clientY: grip.top + grip.height / 2,
 	}
-	const to = { clientX: from.clientX + by, clientY: from.clientY }
+	return { from, to: { clientX: from.clientX + by, clientY: from.clientY } }
+}
+
+const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+	const { from, to } = grabHandle(handle, by)
 	await pointer([
 		{ keys: "[MouseLeft>]", target: handle, coords: from },
 		{ coords: to },
@@ -916,15 +920,6 @@ export const FirstTabAfterTheHistoryCollapsed = meta.story({
 		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
 	},
 })
-
-const grabHandle = (handle: HTMLElement, by: number) => {
-	const grip = handle.getBoundingClientRect()
-	const from = {
-		clientX: grip.left + grip.width / 2,
-		clientY: grip.top + grip.height / 2,
-	}
-	return { from, to: { clientX: from.clientX + by, clientY: from.clientY } }
-}
 
 export const DragResizesWithoutAnimation = meta.story({
 	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
