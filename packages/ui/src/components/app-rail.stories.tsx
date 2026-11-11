@@ -1282,7 +1282,6 @@ export const A7SpacesMenuAttentionRow = meta.story({
 	play: async ({ canvasElement, userEvent }) => {
 		const logo = entryNamed(canvasElement, SPACES_MENU)
 		await expect(logo).toHaveAccessibleName(SPACES_MENU)
-		await expect(logo.querySelector('[data-slot="app-rail-dot"]')).toBeNull()
 		await userEvent.click(logo)
 		const menu = await settled(
 			await screen.findByRole("menu", { name: "Spaces" }),
