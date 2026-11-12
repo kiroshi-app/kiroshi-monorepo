@@ -1113,6 +1113,7 @@ feedback-onboardingwelcomescreen--welcome-every-slide-french
 feedback-onboardingwelcomescreen--welcome-in-an-orange-space
 feedback-onboardingwelcomescreen--welcome-spaces-dark
 feedback-onboardingwelcomescreen--welcome-spaces-light
+feedback-onboardingwelcomescreen--welcome-walk
 feedback-onboardingwelcomescreen--welcome-your-tools-dark
 feedback-onboardingwelcomescreen--welcome-your-tools-light
 feedback-progressring--default

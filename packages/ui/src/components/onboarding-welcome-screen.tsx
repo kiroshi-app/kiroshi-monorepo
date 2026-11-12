@@ -19,6 +19,7 @@ import {
 } from "@workspace/ui/components/onboarding-shell"
 import { OnboardingWelcomeFooter } from "@workspace/ui/components/onboarding-welcome-footer"
 import { SpaceAvatar } from "@workspace/ui/components/space-avatar"
+import { type Travel, useTravel } from "@workspace/ui/hooks/use-travel"
 import { cn } from "@workspace/ui/lib/utils"
 
 type OnboardingWelcomeStep = "companions" | "conversations" | "spaces" | "tools"
@@ -46,6 +47,12 @@ const COMPANIONS = [
 	{ id: "juniper", hue: JUNIPER_HUE, isFeatured: true },
 	{ id: "wren", hue: WREN_HUE, isFeatured: false },
 ] as const
+
+const ENTERS_BY_TRAVEL = {
+	forward:
+		"fade-in slide-in-from-end-3 animate-in duration-200 ease-out motion-reduce:animate-none",
+	back: "fade-in slide-in-from-start-3 animate-in duration-200 ease-out motion-reduce:animate-none",
+} as const satisfies Record<Travel, string>
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
 
@@ -263,10 +270,14 @@ const OnboardingWelcomeScreen = ({
 	const { t } = useTranslation("chat")
 	const Illustration = ILLUSTRATIONS[step]
 	const position = STEPS.indexOf(step) + 1
+	const travel = useTravel(position)
 
 	return (
 		<OnboardingShell data-step={step} data-slot="onboarding-welcome-screen">
-			<OnboardingContent className="gap-8">
+			<OnboardingContent
+				className={cn("gap-8", travel && ENTERS_BY_TRAVEL[travel])}
+				key={step}
+			>
 				<Illustration />
 				<OnboardingHeading
 					body={t(`onboarding.intro.${step}.body`)}

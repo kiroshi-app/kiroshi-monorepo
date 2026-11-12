@@ -128,6 +128,16 @@ export const withMotionAllowed = async (run: () => Promise<void>) => {
 	}
 }
 
+export const enterStartOf = (element: HTMLElement) => {
+	const [enter] = element.getAnimations()
+	if (!enter) throw new Error("Nothing here enters by an animation")
+	enter.pause()
+	enter.currentTime = 0
+	const { opacity, transform } = getComputedStyle(element)
+	enter.finish()
+	return { opacity, x: new DOMMatrix(transform).m41 }
+}
+
 const runsToAnEnd = (animation: Animation) =>
 	animation.effect?.getTiming().duration !== "auto"
 
