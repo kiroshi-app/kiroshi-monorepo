@@ -700,7 +700,9 @@ export const PartlyFailed = meta.story({
 		const cause = canvas.getByText(
 			i18n.t("common:claudeImport.row.unparsable", { file: "SKILL.md" }),
 		)
-		const glyph = canvas.getByRole("img", { name: "Failed" }).firstElementChild
+		const glyph = canvas
+			.getByRole("img", { name: "Failed" })
+			.querySelector('[data-shown="true"] svg')
 		if (!glyph) throw new Error("The failed status draws no icon")
 		await expect(getComputedStyle(cause).color).toBe(
 			getComputedStyle(glyph).color,

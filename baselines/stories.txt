@@ -1120,6 +1120,7 @@ feedback-onboardingwelcomescreen--welcome-every-slide-french
 feedback-onboardingwelcomescreen--welcome-in-an-orange-space
 feedback-onboardingwelcomescreen--welcome-spaces-dark
 feedback-onboardingwelcomescreen--welcome-spaces-light
+feedback-onboardingwelcomescreen--welcome-walk
 feedback-onboardingwelcomescreen--welcome-your-tools-dark
 feedback-onboardingwelcomescreen--welcome-your-tools-light
 feedback-progressring--default
@@ -2788,6 +2789,7 @@ settings-settingsdialogshell--default-wording-with-no-page
 settings-settingsdialogshell--guard-accepted
 settings-settingsdialogshell--guard-raised
 settings-settingsdialogshell--guard-refused
+settings-settingsdialogshell--pushed-page-travels
 settings-settingsdialogshell--rail-icons-only
 settings-settingsdialogshell--skill-page-wording
 settings-settingsdialogshell--without-session-closes-unasked

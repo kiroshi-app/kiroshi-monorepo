@@ -4,6 +4,7 @@ import { expect, fn, userEvent, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
+	enterStartOf,
 	expectNoHorizontalScrollAt,
 	expectOnboardingDragStrip,
 	expectOnboardingSecondaryAction,
@@ -385,7 +386,7 @@ type WalkProps = Omit<
 	"step" | "onBack" | "onNext"
 >
 
-const WelcomeWalk = (props: WalkProps) => {
+const WalkedWelcome = (props: WalkProps) => {
 	const [index, setIndex] = useState(0)
 
 	return (
@@ -879,7 +880,7 @@ export const WelcomeEverySlide = meta.story({
 	name: "Welcome / Every slide",
 	tags: ["test-only"],
 	args: { step: "companions" },
-	render: (args) => <WelcomeWalk onSkip={args.onSkip} />,
+	render: (args) => <WalkedWelcome onSkip={args.onSkip} />,
 	parameters: {
 		docs: {
 			description: {
@@ -897,7 +898,7 @@ export const WelcomeEverySlideFrench = meta.story({
 	tags: ["test-only"],
 	args: { step: "companions" },
 	beforeEach: inFrench,
-	render: (args) => <WelcomeWalk onSkip={args.onSkip} />,
+	render: (args) => <WalkedWelcome onSkip={args.onSkip} />,
 	parameters: {
 		docs: {
 			description: {
@@ -908,6 +909,40 @@ export const WelcomeEverySlideFrench = meta.story({
 	},
 	play: ({ canvasElement }) =>
 		expectRowFixedAcrossTheWalk(canvasElement, "Suivant"),
+})
+
+export const WelcomeWalk = meta.story({
+	name: "Welcome / Walk",
+	args: { step: "companions" },
+	render: (args) => <WalkedWelcome onSkip={args.onSkip} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The tour walked by hand. Check that the first slide stands still, that Next brings the next slide in from the end side over 12px while it fades in, that Back brings the previous one in from the start side, and that the stepper and the action never move.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const content = () => slotIn(canvasElement, "onboarding-content")
+		const screen = slotIn(canvasElement, "onboarding-welcome-screen")
+
+		await expect(content().getAnimations()).toHaveLength(0)
+
+		await withMotionAllowed(async () => {
+			await userEvent.click(canvas.getByRole("button", { name: "Next" }))
+			await waitFor(() =>
+				expect(screen).toHaveAttribute("data-step", "conversations"),
+			)
+			await expect(enterStartOf(content())).toEqual({ opacity: "0", x: 12 })
+
+			await userEvent.click(canvas.getByRole("button", { name: "Back" }))
+			await waitFor(() =>
+				expect(screen).toHaveAttribute("data-step", "companions"),
+			)
+			await expect(enterStartOf(content())).toEqual({ opacity: "0", x: -12 })
+		})
+	},
 })
 
 export const WelcomeInAnOrangeSpace = meta.story({

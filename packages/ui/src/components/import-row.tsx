@@ -4,6 +4,7 @@ import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import { Checkbox } from "@workspace/ui/components/ui/checkbox"
 import { cn } from "@workspace/ui/lib/utils"
@@ -30,12 +31,8 @@ const KIND_ICON = {
 	skill: Icons.Skill,
 } as const
 
-const STATUS_ICON = {
+const SETTLED_ICON = {
 	done: { Icon: Icons.Success, className: "text-success" },
-	pending: {
-		Icon: Icons.Loading,
-		className: "animate-spin text-muted-foreground motion-reduce:animate-none",
-	},
 	failed: { Icon: Icons.AlertCircle, className: "text-destructive" },
 } as const
 
@@ -45,7 +42,8 @@ type ImportRowStatusIconProps = {
 
 const ImportRowStatusIcon = ({ status }: ImportRowStatusIconProps) => {
 	const { t } = useTranslation("common")
-	const { Icon, className } = STATUS_ICON[status]
+	const { Icon, className } =
+		SETTLED_ICON[status === "failed" ? "failed" : "done"]
 
 	return (
 		<span
@@ -53,7 +51,18 @@ const ImportRowStatusIcon = ({ status }: ImportRowStatusIconProps) => {
 			className="flex"
 			role="img"
 		>
-			<Icon aria-hidden="true" className={cn("size-4", className)} />
+			<IconSwap
+				icon={
+					<Icons.Loading
+						aria-hidden="true"
+						className="size-4 animate-spin text-muted-foreground in-data-[shown=false]:paused! motion-reduce:animate-none"
+					/>
+				}
+				isSwapped={status !== "pending"}
+				swappedIcon={
+					<Icon aria-hidden="true" className={cn("size-4", className)} />
+				}
+			/>
 		</span>
 	)
 }

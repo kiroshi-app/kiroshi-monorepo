@@ -11,8 +11,10 @@ import {
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	enterStartOf,
 	expectHeadingFont,
 	FRAME_POLL,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { Icons } from "@workspace/ui/components/icons"
@@ -314,6 +316,41 @@ export const ChordIgnored = meta.story({
 		await expect(screen.queryByRole("alertdialog")).toBe(null)
 		await expect(body).toBeVisible()
 		await expect(args.onClose).not.toHaveBeenCalled()
+	},
+})
+
+export const PushedPageTravels = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill page pushed, then left by its back row. Check that the dialog opens with its tabs standing still, that the pushed page comes in from the end side over 8px while it fades in, and that the tabs come back from the start side.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+		const page = () =>
+			dialog.querySelector<HTMLElement>(
+				'[data-slot="settings-dialog-page"]',
+			) as HTMLElement
+
+		await expect(page().getAnimations()).toHaveLength(0)
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+
+		await withMotionAllowed(async () => {
+			await userEvent.click(
+				within(dialog).getByRole("button", { name: /release-notes/ }),
+			)
+			await within(dialog).findByLabelText("Body")
+			await expect(enterStartOf(page())).toEqual({ opacity: "0", x: 8 })
+
+			await userEvent.click(
+				within(dialog).getByRole("button", { name: "All skills" }),
+			)
+			await within(dialog).findByRole("tab", { name: "Skills" })
+			await expect(enterStartOf(page())).toEqual({ opacity: "0", x: -8 })
+		})
 	},
 })
 

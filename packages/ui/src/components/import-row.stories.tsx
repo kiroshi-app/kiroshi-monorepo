@@ -10,6 +10,15 @@ const LONG_TITLE =
 const LONG_DETAIL =
 	"Reads every merged pull request since the last tag, groups them by scope, writes the release notes in the voice of the changelog, then opens a draft for review before anything ships. It never tags on its own."
 
+const spinnerOf = (status: HTMLElement) => {
+	const spinner = status.querySelector(".animate-spin")
+	if (!spinner) throw new Error("This status draws no spinner")
+	return {
+		isShown: spinner.parentElement?.dataset.shown,
+		playState: getComputedStyle(spinner).animationPlayState,
+	}
+}
+
 const meta = preview.meta({
 	title: "Feedback/ImportRow",
 	component: ImportRow,
@@ -18,7 +27,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed. A row already in Kiroshi shows its checkbox checked and disabled whatever `checked` says, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
+					"One thing found in ~/.claude on the Import from Claude Code screen: a companion, the CLAUDE.md instructions or a skill. While the reader picks, the lead slot holds a checkbox named after the row title; once the import runs it holds a status icon instead, labelled done, in progress or failed, the spinner giving way to the settled mark through the icon swap. A row already in Kiroshi shows its checkbox checked and disabled whatever `checked` says, and reads Already in Kiroshi. Every row names its type at the right edge: Agent, Instructions or Skills.",
 			},
 		},
 	},
@@ -109,7 +118,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi shows its checkbox checked and disabled, with the accent fill and the check mark although its `checked` prop is false, and that neither a click nor Space changes it, that each status icon carries its label, and that every row, failed and already in Kiroshi included, keeps its type at the right edge.",
+					"Every lead the row takes, top to bottom: checked, unchecked, the CLAUDE.md row in Geist Mono already in Kiroshi, the skills on one row titled with their count, then done, in progress and failed once the import runs. Check that the row already in Kiroshi shows its checkbox checked and disabled, with the accent fill and the check mark although its `checked` prop is false, and that neither a click nor Space changes it, that each status icon carries its label, that the spinner turns only on the row in progress and waits paused and hidden behind the settled mark, and that every row, failed and already in Kiroshi included, keeps its type at the right edge.",
 			},
 		},
 	},
@@ -128,6 +137,13 @@ export const States = meta.story({
 		await expect(canvas.getByRole("img", { name: "Done" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "In progress" })).toBeVisible()
 		await expect(canvas.getByRole("img", { name: "Failed" })).toBeVisible()
+		await expect(
+			spinnerOf(canvas.getByRole("img", { name: "In progress" })),
+		).toEqual({ isShown: "true", playState: "running" })
+		await expect(spinnerOf(canvas.getByRole("img", { name: "Done" }))).toEqual({
+			isShown: "false",
+			playState: "paused",
+		})
 		await expect(canvas.getAllByText("Agent")).toHaveLength(4)
 		await expect(canvas.getByText("Instructions")).toBeVisible()
 		await expect(canvas.getAllByText("Skills")).toHaveLength(2)
