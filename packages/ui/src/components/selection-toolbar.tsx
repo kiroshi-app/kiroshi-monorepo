@@ -75,7 +75,7 @@ const BUTTON =
 
 const PLAIN_BUTTON = cn(
 	BUTTON,
-	"border-0 active:not-aria-[haspopup]:translate-y-0 dark:hover:bg-selection-toolbar-highlight",
+	"border-0 active:scale-none! dark:hover:bg-selection-toolbar-highlight",
 )
 
 const TOOLTIP = cn(

@@ -522,18 +522,20 @@
 
 .group\/button.transition-all {
 	will-change: transform;
+}
 
-	&:active:not([aria-haspopup]) {
-		translate: none;
-		scale: 0.98;
-	}
+.group\/button:is(.transition-all, .transition-none):active:not(
+	[aria-haspopup]
+) {
+	translate: none;
+	scale: 0.98;
 }
 
 @media (prefers-reduced-motion: no-preference) {
 	.group\/button.transition-all {
 		transition:
 			opacity 150ms,
-			scale 200ms ease-out;
+			scale 160ms ease-out;
 	}
 }
 
@@ -679,7 +681,7 @@ svg[focusable="false"] {
 		transition-duration: 0.01ms;
 	}
 
-	[data-slot="button"],
+	.group\/button,
 	[data-slot="switch-thumb"] {
 		transition-duration: 0.01ms;
 	}
