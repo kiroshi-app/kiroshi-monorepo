@@ -1,6 +1,5 @@
 "use client"
 
-import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -16,7 +15,6 @@ import {
 } from "@workspace/ui/components/tool-card-styles"
 import { Button } from "@workspace/ui/components/ui/button"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
-import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ToolApprovalStatus = "pending" | "allowed" | "denied"
@@ -94,7 +92,6 @@ export function ToolApproval({
 	className,
 }: ToolApprovalProps) {
 	const { t } = useTranslation("chat")
-	const reduce = useReducedMotion() ?? false
 	const cardRef = useAutoFocus<HTMLDivElement>(status === "pending")
 	const baseId = useId()
 	const titleId = `${baseId}-title`
@@ -155,13 +152,13 @@ export function ToolApproval({
 						className="w-fit text-muted-foreground"
 					>
 						{t("toolApproval.input")}
-						<motion.span
+						<Icons.Expand
 							data-icon="inline-end"
-							animate={{ rotate: currentOpen ? 180 : 0 }}
-							transition={reduce ? { duration: 0 } : SPRING_SWAP}
-						>
-							<Icons.Expand className="size-3" />
-						</motion.span>
+							className={cn(
+								"size-3 transition-transform duration-150 ease-out motion-reduce:transition-none",
+								currentOpen && "rotate-180",
+							)}
+						/>
 					</Button>
 				) : null}
 			</div>

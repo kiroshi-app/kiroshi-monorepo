@@ -1,6 +1,5 @@
 "use client"
 
-import { motion, useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
 	cloneElement,
@@ -18,7 +17,6 @@ import { useTranslation } from "react-i18next"
 import { Icons } from "@workspace/ui/components/icons"
 import { MARKDOWN_TYPESET_CLASS } from "@workspace/ui/components/markdown/prose"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
-import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 export type MessageBubbleVariant =
@@ -232,7 +230,6 @@ export function MessageBubbleCollapsible({
 	...props
 }: MessageBubbleCollapsibleProps) {
 	const { t } = useTranslation("chat")
-	const reduce = useReducedMotion() ?? false
 	const contentId = useId()
 	const [internalOpen, setInternalOpen] = useState(defaultOpen)
 	const currentOpen = open ?? internalOpen
@@ -278,13 +275,13 @@ export function MessageBubbleCollapsible({
 				)}
 			>
 				<span>{triggerLabel}</span>
-				<motion.span
+				<Icons.Expand
 					aria-hidden="true"
-					animate={{ rotate: currentOpen ? 180 : 0 }}
-					transition={reduce ? { duration: 0 } : SPRING_SWAP}
-				>
-					<Icons.Expand className="size-3.5" />
-				</motion.span>
+					className={cn(
+						"size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+						currentOpen && "rotate-180",
+					)}
+				/>
 			</button>
 		</div>
 	)
