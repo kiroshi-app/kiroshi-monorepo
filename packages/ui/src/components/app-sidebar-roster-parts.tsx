@@ -11,7 +11,6 @@ import {
 } from "@workspace/ui/components/app-sidebar-model"
 import { BotMissionStrip } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { dropArea } from "@workspace/ui/hooks/use-roster-lift"
 import {
 	SHIFTABLE,
@@ -37,18 +36,16 @@ const LIFTED_IN_ZONE = cn(
 const LIFTED_LOOSE = cn(LIFTED, "translate-y-(--lift-dy)")
 
 const SECTION_DROP =
-	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs"
+	"flex items-center rounded-lg border border-input border-dashed p-3 text-compact text-faint-foreground leading-5"
 
-const SECTION_DROP_AVATAR = "block opacity-40"
+const SECTION_DROP_ALIGN = {
+	center: "justify-center text-center",
+	start: "justify-start text-start",
+}
 
 const DROP_AREA = "group/roster-drop relative rounded-2xl"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
-
-const ZONE_SEPARATOR =
-	"mx-1.5 my-1 block h-px shrink-0 rounded-full bg-sidebar-border"
-
-const DROP_AVATAR_SIZE = 28
 
 const missionStripsOf = (missions: AppSidebarRowMission[] | undefined) =>
 	missions?.length
@@ -65,16 +62,17 @@ const missionStripsOf = (missions: AppSidebarRowMission[] | undefined) =>
 
 interface BotRowAvatarProps {
 	bot: AppSidebarBot
+	size?: number
 }
 
-const BotRowAvatar = ({ bot }: BotRowAvatarProps) => (
+const BotRowAvatar = ({ bot, size = ROW_AVATAR_SIZE }: BotRowAvatarProps) => (
 	<BotIdentityAvatar
 		hue={bot.blot}
 		image={bot.image}
 		kind={poseOf(bot)}
 		name={bot.name}
 		seed={bot.id}
-		size={ROW_AVATAR_SIZE}
+		size={size}
 		working={isBusy(bot)}
 	/>
 )
@@ -164,32 +162,25 @@ const RosterMoveAnnouncement = ({ move }: RosterMoveAnnouncementProps) => {
 	)
 }
 
-const RosterZoneSeparator = () => (
-	<span
-		aria-hidden="true"
-		className={ZONE_SEPARATOR}
-		data-slot="roster-zone-separator"
-	/>
-)
-
 interface SectionDropZoneProps {
-	name: string
+	align?: keyof typeof SECTION_DROP_ALIGN
 	label?: string
 	slotId?: string
 }
 
-const SectionDropZone = ({ name, label, slotId }: SectionDropZoneProps) => {
+const SectionDropZone = ({
+	align = "center",
+	label,
+	slotId,
+}: SectionDropZoneProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
 		<div
 			{...(slotId ? rosterSlot(slotId) : undefined)}
-			className={SECTION_DROP}
+			className={cn(SECTION_DROP, SECTION_DROP_ALIGN[align])}
 			data-slot="roster-section-drop"
 		>
-			<span aria-hidden="true" className={SECTION_DROP_AVATAR}>
-				<DitheredFieldAvatar name={name} size={DROP_AVATAR_SIZE} />
-			</span>
 			{label ?? t("roster.section.empty")}
 		</div>
 	)
@@ -249,11 +240,11 @@ export {
 	missionStripsOf,
 	ROSTER_SLOT,
 	RosterDropArea,
+	type RosterDropAreaProps,
 	RosterLiftFrame,
 	type RosterMove,
 	RosterMoveAnnouncement,
 	type RosterRowSlot,
-	RosterZoneSeparator,
 	rosterRowSlotOf,
 	rosterSlot,
 	SectionDropZone,

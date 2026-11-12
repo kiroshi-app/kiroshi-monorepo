@@ -1,6 +1,11 @@
 "use client"
 
-import { useLayoutEffect, useRef } from "react"
+import {
+	type HTMLAttributes,
+	type ReactElement,
+	useLayoutEffect,
+	useRef,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -15,6 +20,10 @@ import {
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_ROW_INSET,
+} from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceAvatar,
@@ -45,15 +54,20 @@ import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
-const SWITCHER =
-	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4 aria-expanded:bg-sidebar-accent"
+const SWITCHER = cn(
+	SIDEBAR_ROW_INSET,
+	"relative h-auto w-full min-w-0 shrink justify-start gap-2.5 rounded-lg border-0 font-normal transition-none hover:bg-rail-item-selected/50 aria-expanded:bg-rail-item-selected dark:hover:bg-rail-item-selected/50",
+)
 
-const SWITCHER_NAME = "min-w-0 truncate"
+const SWITCHER_NAME =
+	"min-w-0 truncate font-semibold text-foreground text-reading leading-4.5"
 
-const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
+const SWITCHER_OFFLINE = "shrink-0 text-space-offline text-xs"
+
+const SWITCHER_CHEVRON = "size-3.5 shrink-0 stroke-2! text-muted-foreground"
 
 const SWITCHER_INVITATION =
-	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
+	"pointer-events-none absolute end-0.5 top-1.25 size-1.75 rounded-full bg-primary-strong ring-2 ring-background"
 
 const MENU_RESTING = "max-w-64"
 
@@ -63,13 +77,13 @@ const ROW_NAME = "min-w-0 grow truncate"
 
 const SPACE_ROW = "h-10 min-h-10"
 
-const DOT = "h-2.5 w-2.5 shrink-0 rounded-full"
+const DOT = "h-1.5 w-1.5 shrink-0 rounded-full"
 
 const DOTS =
-	"flex flex-wrap items-center justify-center group-data-[collapsible=icon]:hidden"
+	"flex flex-wrap items-center justify-center px-1 group-data-[collapsible=icon]:hidden"
 
 const DOT_BUTTON =
-	"group/space-dot relative grid size-5 shrink-0 touch-none select-none place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"group/space-dot relative grid h-5.5 shrink-0 touch-none select-none place-items-center rounded-full px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
 const DOT_LIFTED =
 	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
@@ -88,7 +102,7 @@ const DOT_OPEN = "w-4 bg-sidebar-foreground"
 
 const DOT_CLOSED = "group-hover/space-dot:bg-sidebar-foreground"
 
-const DOT_UNTINTED = "bg-sidebar-foreground/30"
+const DOT_UNTINTED = "bg-space-dot"
 
 const BADGE_RANK: BotBadge[] = ["attention", "failed"]
 
@@ -162,8 +176,10 @@ type SpaceSwitcherProps = Omit<SpaceSelection, "onReorderSpaces"> &
 		invitations?: SpaceInvitation[]
 		open?: boolean
 		focusedInvitationId?: string
+		onOpenSpaceSettings?: () => void
 		onCreateSpace?: () => void
 		onOpenChange?: (isOpen: boolean) => void
+		trigger?: ReactElement<HTMLAttributes<HTMLElement>>
 	}
 
 type SpaceMenuRowsProps = Pick<
@@ -232,11 +248,13 @@ const SpaceSwitcher = ({
 	open,
 	focusedInvitationId,
 	onSelectSpace,
+	onOpenSpaceSettings,
 	onCreateSpace,
 	onAcceptInvitation,
 	onDeclineInvitation,
 	onRetryInvitation,
 	onOpenChange,
+	trigger,
 }: SpaceSwitcherProps) => {
 	const { t } = useTranslation("bots")
 	const triggerRef = useRef<HTMLElement>(null)
@@ -253,6 +271,7 @@ const SpaceSwitcher = ({
 	if (!selected) return null
 
 	const host = hostBySpaceId?.[selected.id]
+	const isOffline = host === "down"
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
 		? host
@@ -277,43 +296,50 @@ const SpaceSwitcher = ({
 			<ContextMenuPressTrigger
 				ref={triggerRef}
 				render={
-					<Button
-						aria-label={t(switchLabel, {
-							count: invitations.length,
-							host: host ? t(`spaces.host.${host}`) : "",
-							name: selected.name,
-						})}
-						className={SWITCHER}
-						data-slot="space-switcher"
-						size="sm"
-						variant="ghost"
-					>
-						<SpaceAvatar
-							colour={selected.colour}
-							name={selected.name}
-							size={12}
-							spaceId={selected.avatarSeed}
-							state={spaceAvatarStateOf(host)}
-						/>
-						<span className={SWITCHER_NAME} data-slot="space-switcher-name">
-							{selected.name}
-						</span>
-						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
-						{elsewhere ? (
-							<BotBadgeDot
-								badge={elsewhere}
-								data-slot="space-switcher-badge"
-								placement="switcher"
+					trigger ?? (
+						<Button
+							aria-label={t(switchLabel, {
+								count: invitations.length,
+								host: host ? t(`spaces.host.${host}`) : "",
+								name: selected.name,
+							})}
+							className={SWITCHER}
+							data-slot="space-switcher"
+							size="sm"
+							variant="ghost"
+						>
+							<SpaceAvatar
+								colour={selected.colour}
+								name={selected.name}
+								size={SIDEBAR_AVATAR_SIDE}
+								spaceId={selected.avatarSeed}
+								state={spaceAvatarStateOf(host)}
 							/>
-						) : null}
-						{isInvited ? (
-							<span
-								aria-hidden="true"
-								className={SWITCHER_INVITATION}
-								data-slot="space-switcher-invitation"
-							/>
-						) : null}
-					</Button>
+							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
+								{selected.name}
+							</span>
+							{isOffline ? (
+								<span className={SWITCHER_OFFLINE}>
+									{t("spaces.host.down")}
+								</span>
+							) : null}
+							<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
+							{elsewhere ? (
+								<BotBadgeDot
+									badge={elsewhere}
+									data-slot="space-switcher-badge"
+									placement="switcher"
+								/>
+							) : null}
+							{isInvited ? (
+								<span
+									aria-hidden="true"
+									className={SWITCHER_INVITATION}
+									data-slot="space-switcher-invitation"
+								/>
+							) : null}
+						</Button>
+					)
 				}
 			/>
 			<ContextMenuContent
@@ -338,6 +364,10 @@ const SpaceSwitcher = ({
 					onRetryInvitation={onRetryInvitation}
 				/>
 				<ContextMenuSeparator />
+				<ContextMenuItem onClick={onOpenSpaceSettings}>
+					<Icons.Settings aria-hidden="true" className="size-3.5" />
+					{t("rail.spaceSettings")}
+				</ContextMenuItem>
 				<ContextMenuItem onClick={onCreateSpace}>
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("spaces.create")}

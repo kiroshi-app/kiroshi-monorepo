@@ -15,11 +15,7 @@ import {
 } from "@workspace/ui/components/app-sidebar-model"
 import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
 import { spaceRostersOf } from "@workspace/ui/components/app-sidebar-roster-layout"
-import {
-	MissionsPanel,
-	MissionsPanelEmpty,
-	type MissionsPanelProps,
-} from "@workspace/ui/components/missions-panel"
+import { MissionsEmpty } from "@workspace/ui/components/missions-page"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import type { Space } from "@workspace/ui/components/space"
 import { Sidebar } from "@workspace/ui/components/ui/sidebar"
@@ -45,7 +41,6 @@ type AppSidebarChromeProp =
 	| "onReorderSpaces"
 	| "onRetryInvitation"
 	| "onSpaceSwitcherOpenChange"
-	| "railDots"
 	| "spaceHost"
 	| "updateBadge"
 	| "user"
@@ -62,12 +57,7 @@ interface AppSidebarPanelProps
 	footer: ReactNode
 }
 
-const missionsOfSpaceIn =
-	(missionsBySpaceId?: Record<string, MissionsPanelProps>) =>
-	(space: Space) => {
-		const missions = missionsBySpaceId?.[space.id]
-		return missions ? <MissionsPanel {...missions} /> : null
-	}
+const noMissionsOfSpace = () => null
 
 type RosterSkeletonSlotProps = {
 	children: ReactNode
@@ -115,7 +105,6 @@ const AppSidebarPanel = ({
 	selectedSpaceId,
 	isSpaceSwitchingEnabled,
 	onSelectSpace,
-	missionsBySpaceId,
 	onSearchMissions,
 	openPanel,
 	footer,
@@ -208,9 +197,7 @@ const AppSidebarPanel = ({
 					isSwipeEnabled={isSpaceSwitchingEnabled && spaces.length > 1}
 					list={openPanel}
 					onSelectSpace={onSelectSpace}
-					renderSpace={
-						isRosterOpen ? rosterOfSpace : missionsOfSpaceIn(missionsBySpaceId)
-					}
+					renderSpace={isRosterOpen ? rosterOfSpace : noMissionsOfSpace}
 					selectedSpaceId={selectedSpaceId}
 					spaces={spaces}
 				>
@@ -227,7 +214,7 @@ const AppSidebarPanel = ({
 							/>
 						))
 					) : (
-						<MissionsPanelEmpty />
+						<MissionsEmpty />
 					)}
 				</AppSidebarList>
 				{footer}

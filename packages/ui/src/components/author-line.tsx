@@ -56,6 +56,8 @@ type AuthorLineQueuedProps = {
 
 const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 
+const GIVES_WAY_TO_THE_NAME = "min-w-0 max-w-max grow basis-0 truncate"
+
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
 const AUTHOR_LINE_STICKY =
@@ -309,4 +311,5 @@ export {
 	type AuthorLineProps,
 	AuthorLineQueued,
 	type AuthorLineTone,
+	GIVES_WAY_TO_THE_NAME,
 }

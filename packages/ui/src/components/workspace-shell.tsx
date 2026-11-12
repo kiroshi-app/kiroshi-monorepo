@@ -5,9 +5,9 @@ import {
 	ContentCardLandmarkId,
 } from "@workspace/ui/components/content-card"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
+import { ShellSidebarProvider } from "@workspace/ui/components/shell-sidebar-provider"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
 import { SkipLink } from "@workspace/ui/components/skip-link"
-import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SIDEBAR_INSIDE_SHELL =
@@ -41,6 +41,8 @@ interface WorkspaceShellRootProps {
 	className?: string
 	spaceTint?: number | null
 	isLandmark?: boolean
+	open?: boolean
+	onOpenChange?: (open: boolean) => void
 	children: ReactNode
 }
 
@@ -50,6 +52,8 @@ const WorkspaceShellRoot = ({
 	width,
 	onWidthChange,
 	isResizable,
+	open = true,
+	onOpenChange,
 	children,
 	className,
 }: WorkspaceShellRootProps) => {
@@ -63,18 +67,20 @@ const WorkspaceShellRoot = ({
 			width={width}
 		>
 			{(resize) => (
-				<SidebarProvider
+				<ShellSidebarProvider
 					className={cn(SHELL, className)}
 					data-resizing={resize.isResizing}
+					data-sidebar-open={open}
 					data-hue={spaceHue}
-					open
+					onOpenChange={onOpenChange}
+					open={open}
 					style={shellStyle(resize.width, spaceHue)}
 				>
 					<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
 						{isLandmark ? <SkipLink targetId={mainId} /> : null}
 						{children}
 					</ContentCardLandmarkId>
-				</SidebarProvider>
+				</ShellSidebarProvider>
 			)}
 		</SidebarResizeProvider>
 	)

@@ -18,7 +18,7 @@ pub const CHALLENGE: [u8; CHALLENGE_LENGTH] = [9; CHALLENGE_LENGTH];
 
 const HOST_RELAY_ID: &str = "r-host";
 
-const MEMBER_RELAY_ID: &str = "r-member";
+pub(crate) const MEMBER_RELAY_ID: &str = "3b0c7a52-1d4e-4f8a-9b6c-0e2f4a6c8d10";
 
 const NEWCOMER_RELAY_ID: &str = "r-newcomer";
 
@@ -85,6 +85,12 @@ impl SealingHost {
 
 	pub fn admitted(&self) -> String {
 		self.rekey_of(&self.host, &self.space, 1, &self.devices())
+	}
+
+	pub fn admitted_on(&self, relay_device_id: &str, version: u64) -> String {
+		let [host, member] = self.devices();
+		let member = Device { relay_device_id, ..member };
+		self.rekey_of(&self.host, &self.space, version, &[host, member])
 	}
 
 	pub fn admitted_without_the_member(&self) -> String {

@@ -33,6 +33,24 @@ const HEAD = "flex min-h-9 min-w-0 items-center gap-2.5 pe-1.5"
 const ICON_SLOT =
 	"grid min-h-5 min-w-5 shrink-0 place-items-center [&_svg]:size-full!"
 
+const SIDEBAR_ROW_INSET = "p-2"
+
+const SIDEBAR_COLUMN = "flex min-h-0 shrink-0 flex-col gap-2 p-2"
+
+const SIDEBAR_GLYPH_BOX = "h-5 w-7"
+
+const SIDEBAR_AVATAR_SIDE = 28
+
+const NAVIGATION_ROW = cn(
+	SIDEBAR_ROW_INSET,
+	"gap-2.5 rounded-lg font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
+)
+
+const NAVIGATION_ICON_SLOT = cn(
+	SIDEBAR_GLYPH_BOX,
+	"grid shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!",
+)
+
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
 
@@ -44,11 +62,15 @@ type SidebarMenuRowElementProps = AriaAttributes &
 		"onPointerCancel" | "onPointerDown" | "onPointerMove" | "onPointerUp"
 	>
 
+type SidebarMenuRowVariant = "row" | "navigation"
+
 interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	label: string
 	children: ReactNode
 	below?: ReactNode
 	icon?: ReactNode
+	trailing?: ReactNode
+	variant?: SidebarMenuRowVariant
 	isIconDecorative?: boolean
 	isActive?: boolean
 	isMiddleClickSelectable?: boolean
@@ -62,6 +84,8 @@ const SidebarMenuRow = ({
 	children,
 	below,
 	icon,
+	trailing,
+	variant = "row",
 	isIconDecorative = true,
 	isActive = false,
 	isMiddleClickSelectable = false,
@@ -72,6 +96,7 @@ const SidebarMenuRow = ({
 }: SidebarMenuRowProps) => {
 	const { isMobile, setOpenMobile, state } = useSidebar()
 	const isCollapsed = !isMobile && state === "collapsed"
+	const isNavigation = variant === "navigation"
 
 	const select = (event: MouseEvent) => {
 		onSelect?.(modifiersOf(event))
@@ -81,13 +106,17 @@ const SidebarMenuRow = ({
 	const head = (
 		<>
 			{icon ? (
-				<span aria-hidden={isIconDecorative || undefined} className={ICON_SLOT}>
+				<span
+					aria-hidden={isIconDecorative || undefined}
+					className={isNavigation ? NAVIGATION_ICON_SLOT : ICON_SLOT}
+				>
 					{icon}
 				</span>
 			) : null}
 			<span aria-hidden={isCollapsed} className={LABEL_SLOT}>
 				{children}
 			</span>
+			{trailing}
 		</>
 	)
 
@@ -100,6 +129,7 @@ const SidebarMenuRow = ({
 				ROW,
 				icon && ROW_WITH_ICON,
 				below && ROW_STACKED,
+				isNavigation && NAVIGATION_ROW,
 				className,
 			)}
 			data-slot="sidebar-menu-button"
@@ -130,6 +160,10 @@ const SidebarMenuRow = ({
 
 export {
 	NO_CLICK_MODIFIERS,
+	SIDEBAR_AVATAR_SIDE,
+	SIDEBAR_COLUMN,
+	SIDEBAR_GLYPH_BOX,
+	SIDEBAR_ROW_INSET,
 	type SidebarClickModifiers,
 	SidebarMenuRow,
 	type SidebarMenuRowProps,

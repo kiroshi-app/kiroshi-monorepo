@@ -35,6 +35,7 @@ const bots = {
 				failed: "blocked",
 				ready: "ready to merge",
 				working: "working",
+				waiting_agent: "waiting on an agent",
 			},
 			unavailable: {
 				title: "Couldn’t load missions",
@@ -52,6 +53,7 @@ const bots = {
 				"An agent stays in at least one space. To remove an agent from its last space, delete the agent.",
 		},
 		pin: "Pin",
+		pinned: "Pinned",
 		pinDrop: "Drop here to pin",
 		unpin: "Unpin",
 		moved: "{{name}} moved to position {{position}} of {{count}}",
@@ -95,6 +97,7 @@ const bots = {
 	rail: {
 		label: "Navigation",
 		home: "Home",
+		newConversation: "New conversation",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Library",
@@ -106,6 +109,11 @@ const bots = {
 			done: "{{name}}, activity finished",
 			failed: "{{name}}, activity failed",
 		},
+		personSettings: "{{name}}, Settings",
+		detail: "· {{detail}}",
+		missionCount_one: "{{count}} mission",
+		missionCount_other: "{{count}} missions",
+		moreMissions: "+{{count}} missions",
 	},
 	spaces: {
 		label: "Spaces",

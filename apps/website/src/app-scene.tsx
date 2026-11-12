@@ -32,7 +32,6 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { SCENE_COPY } from "./copy"
 import {
 	CONVERSATIONS_BY_SPACE,
-	MISSIONS_BY_SPACE,
 	READER,
 	ROSTER_BY_SPACE,
 	SCENE_SPACES,
@@ -199,7 +198,6 @@ const ThreadTitle = ({ bot, conversation, onOpen }: ThreadTitleProps) =>
 		/>
 	) : (
 		<HeaderConversationButton
-			bots={conversation.participants}
 			color={conversation.color}
 			icon={conversation.icon}
 			name={conversation.name}
@@ -333,7 +331,6 @@ export const AppScene = () => {
 							insetWindowControls
 							invitations={NO_INVITATIONS}
 							isSpaceSwitchingEnabled
-							missionsBySpaceId={MISSIONS_BY_SPACE}
 							onAcceptInvitation={engage}
 							onAddBotToSpace={engage}
 							onCloseOtherTabs={engage}

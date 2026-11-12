@@ -31,10 +31,10 @@ import {
 	RosterDropArea,
 	RosterLiftFrame,
 	RosterMoveAnnouncement,
-	RosterZoneSeparator,
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import {
+	RosterZone,
 	SECTION_GROUP,
 	SectionLabel,
 	SectionNameField,
@@ -43,7 +43,7 @@ import {
 	type ListEnd,
 	ListEndSlot,
 } from "@workspace/ui/components/list-skeleton"
-import { sidebarRowAt } from "@workspace/ui/components/sidebar-list-skeleton"
+import { SIDEBAR_LIST_END_ROWS } from "@workspace/ui/components/sidebar-list-skeleton"
 import type { Space } from "@workspace/ui/components/space"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
@@ -51,10 +51,18 @@ import {
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
-import { cn, mergeRefs } from "@workspace/ui/lib/utils"
+import { mergeRefs } from "@workspace/ui/lib/utils"
 
-const EMPTY_COPY = "px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
-const FAILURE_WITH_RETRY = cn(EMPTY_COPY, "flex flex-col items-center gap-2")
+const EMPTY_COPY =
+	"p-3 text-center text-compact text-faint-foreground leading-5"
+
+const FAILURE_WITH_RETRY =
+	"flex flex-col items-center gap-2 p-3 text-center text-compact text-muted-foreground leading-5"
+
+const RETRY =
+	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-sidebar-foreground text-xs leading-4"
+
+const ZONES = "flex flex-col gap-3"
 
 interface SectionNamingGroupProps {
 	bots: AppSidebarBot[]
@@ -215,7 +223,7 @@ const BotRoster = ({
 					<div className={FAILURE_WITH_RETRY}>
 						<p>{t("roster.failed")}</p>
 						<Button
-							className="text-sidebar-foreground"
+							className={RETRY}
 							onClick={onRetryLoadBots}
 							size="xs"
 							variant="outline"
@@ -251,33 +259,38 @@ const BotRoster = ({
 				isLifting={drag.isLifting}
 				ref={mergeRefs(frameRef, rosterLift.followRef)}
 			>
-				{hasPinnedZone ? (
-					<PinnedZone
-						collapsedSectionIds={collapsedSectionIds}
-						drag={drag}
-						entries={entries}
-						onCollapseSection={onCollapseSection}
-						onDeleteSection={onDeleteSection}
-						onMoveSection={moveSection}
-						onRenameSection={onRenameSection}
-						rows={rows}
-					/>
-				) : null}
-				{hasPinnedZone ? <RosterZoneSeparator /> : null}
-				{hasSortedRows || isLifting ? (
-					<RosterDropArea
-						isLanding={drag.isLandingSorted}
-						landing={SORTED_ZONE}
-					>
-						{hasSortedRows ? (
-							recentMenuOf(sortedConversations, sortedBots, rows)
-						) : (
-							<SectionDropZone name={t("roster.label")} />
-						)}
-					</RosterDropArea>
-				) : null}
+				<div className={ZONES}>
+					{hasPinnedZone ? (
+						<RosterZone label={t("roster.pinned")}>
+							<PinnedZone
+								collapsedSectionIds={collapsedSectionIds}
+								drag={drag}
+								entries={entries}
+								onCollapseSection={onCollapseSection}
+								onDeleteSection={onDeleteSection}
+								onMoveSection={moveSection}
+								onRenameSection={onRenameSection}
+								rows={rows}
+							/>
+						</RosterZone>
+					) : null}
+					{hasSortedRows || isLifting ? (
+						<RosterZone label={t("roster.label")}>
+							<RosterDropArea
+								isLanding={drag.isLandingSorted}
+								landing={SORTED_ZONE}
+							>
+								{hasSortedRows ? (
+									recentMenuOf(sortedConversations, sortedBots, rows)
+								) : (
+									<SectionDropZone />
+								)}
+							</RosterDropArea>
+						</RosterZone>
+					) : null}
+				</div>
 			</RosterLiftFrame>
-			<ListEndSlot listEnd={listEnd} row={sidebarRowAt(0)} />
+			<ListEndSlot listEnd={listEnd} row={SIDEBAR_LIST_END_ROWS} />
 			{naming ? (
 				<SectionNamingGroup
 					bots={bots.filter((bot) => isNamed(bot.id))}

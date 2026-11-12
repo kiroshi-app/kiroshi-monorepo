@@ -264,6 +264,12 @@ pub static FULLSCREEN: Icon = Icon {
 	body: r#"<path d="M14 3H20.5C20.77614 3 21 3.22386 21 3.5V10M14 10L20.4 3.6M10 21H3.5C3.22386 21 3 20.77614 3 20.5V14M10 14L3.6 20.4" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
 };
 
+pub static GIT_PULL_REQUEST: Icon = Icon {
+	name: "keyline-GitPullRequest-outline",
+	view: 24.0,
+	body: r#"<path d="M6 21V9M18 15V10C18 7.79086 16.2091 6 14 6H13M6 3C7.65685 3 9 4.34315 9 6C9 7.65685 7.65685 9 6 9C4.34315 9 3 7.65685 3 6C3 4.34315 4.34315 3 6 3ZM18 15C19.6569 15 21 16.3431 21 18C21 19.6569 19.6569 21 18 21C16.3431 21 15 19.6569 15 18C15 16.3431 16.3431 15 18 15Z" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
+};
+
 pub static GLOBE: Icon = Icon {
 	name: "keyline-Globe-outline",
 	view: 24.0,
@@ -1014,7 +1020,7 @@ pub static WRENCH_FILL: Icon = Icon {
 	body: r#"<path d="M17.9749 8.1464L19.5607 6.5607C19.9357 6.1856 20.4444 5.9749 20.9749 5.9749C22.0055 5.9749 22.8673 6.758 22.9657 7.7839C22.9886 8.0219 23 8.2609 23 8.5C23 12.6421 19.6421 16 15.5 16C11.3579 16 8 12.6421 8 8.5C8 4.3579 11.3579 1 15.5 1C15.7391 1 15.9781 1.0114 16.2161 1.0343C17.242 1.1327 18.0251 1.9945 18.0251 3.0251C18.0251 3.5556 17.8144 4.0643 17.4393 4.4393L15.8536 6.0251C15.5722 6.3064 15.4142 6.688 15.4142 7.0858C15.4142 7.9142 16.0858 8.5858 16.9142 8.5858C17.312 8.5858 17.6936 8.4278 17.9749 8.1464Z" fill="currentColor" stroke="none" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15.3955 14.9992C15.3688 14.9987 15.342 14.9985 15.3152 14.9985C13.9891 14.9985 12.7173 15.5253 11.7797 16.463L7.1213 21.1213C6.5587 21.6839 5.7956 22 5 22C3.3431 22 2 20.6569 2 19C2 18.2044 2.3161 17.4413 2.8787 16.8787L7.537 12.2203C8.4747 11.2827 9.0015 10.0109 9.0015 8.6848C9.0015 8.658 9.0013 8.6312 9.0008 8.6045" fill="none" stroke="currentColor" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"></path>"#,
 };
 
-pub static KEYLINE: [&Icon; 169] = [
+pub static KEYLINE: [&Icon; 170] = [
 	&ALIGN_LEFT,
 	&APP_WINDOW_PLUS,
 	&ARCHIVE,
@@ -1059,6 +1065,7 @@ pub static KEYLINE: [&Icon; 169] = [
 	&FOLDER_OPEN,
 	&FRAME,
 	&FULLSCREEN,
+	&GIT_PULL_REQUEST,
 	&GLOBE,
 	&GRID_SQUARES_X,
 	&GRIP_VERTICAL,
@@ -1186,7 +1193,7 @@ pub static KEYLINE: [&Icon; 169] = [
 	&WRENCH_FILL,
 ];
 
-pub static ICONS: [(&str, &Icon); 134] = [
+pub static ICONS: [(&str, &Icon); 137] = [
 	("Add", &PLUS),
 	("Alert", &TRIANGLE_ALERT),
 	("AlertCircle", &CIRCLE_ALERT),
@@ -1272,9 +1279,12 @@ pub static ICONS: [(&str, &Icon); 134] = [
 	("Pin", &PIN),
 	("Play", &PLAY),
 	("Unpin", &PIN_OFF),
+	("UpdateRestart", &ROTATE_CCW),
+	("UpdateRetry", &ROTATE_CW),
 	("ReopenTab", &ROTATE_CCW),
 	("Reply", &REPLY),
 	("Previous", &CHEVRON_LEFT),
+	("PullRequest", &GIT_PULL_REQUEST),
 	("Quote", &QUOTE),
 	("Restart", &ROTATE_CW),
 	("Restore", &COPY),

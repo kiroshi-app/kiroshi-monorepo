@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { activateLanguage } from "@workspace/ui/lib/i18n"
-import { formatDateTime, toRelativeTime } from "@workspace/ui/lib/time-format"
+import {
+	formatDateTime,
+	toElapsedTime,
+	toRelativeTime,
+} from "@workspace/ui/lib/time-format"
 
 const NOW = Date.UTC(2026, 0, 15, 12, 0, 0)
 
@@ -39,6 +43,24 @@ describe("toRelativeTime", () => {
 		activateLanguage("fr")
 
 		expect(ago(7_200_000)).toBe("il y a 2 heures")
+	})
+})
+
+describe("toElapsedTime", () => {
+	const since = (ms: number) => toElapsedTime(NOW - ms, NOW)
+
+	it("reads the time since a moment in the largest unit it fills", () => {
+		expect(since(30_000)).toBe("0m")
+		expect(since(150_000)).toBe("2m")
+		expect(since(7_200_000)).toBe("2h")
+		expect(since(1_209_600_000)).toBe("14d")
+		expect(since(63_072_000_000)).toBe("2y")
+	})
+
+	it("says it in the language the runtime carries", () => {
+		activateLanguage("fr")
+
+		expect(since(172_800_000)).toBe("2j")
 	})
 })
 

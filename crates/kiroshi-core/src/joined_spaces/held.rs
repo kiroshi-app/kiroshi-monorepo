@@ -1,5 +1,6 @@
 use super::commands::ready;
 use super::contract::{JoinedSpaceError, JoinedSpaceWait};
+use super::relay::RelayGuests;
 use super::roster_set::{verified_set, Handed, HeldRoster};
 use super::wait_reason::{last_wait, wait_of, Stall};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
@@ -35,7 +36,8 @@ pub(super) async fn held(
 	instance_id: &str,
 ) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
 	let device = device_keys(core)?;
-	let Some(space) = space_keys(core)?.held(&key_item(instance_id)).map_err(key_store)? else {
+	let space = space_keys(core)?.held(&key_item(instance_id)).map_err(key_store)?;
+	let Some(space) = space.filter(|_| !is_unadmitted(core, instance_id)) else {
 		return Ok(Err(last_wait(core, instance_id)));
 	};
 	let Some(roster) = roster_verified(core, instance_id, &device).await? else {
@@ -49,7 +51,12 @@ pub(super) fn wait(
 	instance_id: &str,
 ) -> Result<Option<JoinedSpaceWait>, JoinedSpaceError> {
 	let space = space_keys(core)?.held(&key_item(instance_id)).map_err(key_store)?;
-	Ok(space.is_none().then(|| last_wait(core, instance_id)))
+	let is_waiting = space.is_none() || is_unadmitted(core, instance_id);
+	Ok(is_waiting.then(|| last_wait(core, instance_id)))
+}
+
+fn is_unadmitted(core: &crate::core_context::Core, instance_id: &str) -> bool {
+	core.try_state::<RelayGuests>().is_some_and(|guests| guests.is_unadmitted(instance_id))
 }
 
 pub(super) fn wait_or_unread(
@@ -105,6 +112,9 @@ pub(super) async fn kept(
 	relay.counter_started(instance_id.to_owned(), space.key_id).await?;
 	let copy = HeldSpaceKey { key_id: space.key_id, key: space.key.clone() };
 	space_keys.stored(&key_item(instance_id), copy).map_err(key_store)?;
+	if let Some(guests) = core.try_state::<RelayGuests>() {
+		guests.admitted(instance_id);
+	}
 	Ok(true)
 }
 

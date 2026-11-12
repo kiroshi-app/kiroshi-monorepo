@@ -2,14 +2,14 @@
 
 import { type ComponentProps, useEffect, useRef } from "react"
 
-import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
+import {
+	isToggleShortcut,
+	ShellSidebarProvider,
+} from "@workspace/ui/components/shell-sidebar-provider"
 
-const TOGGLE_SHORTCUT_KEY = "b"
-
-const isToggleShortcut = (event: KeyboardEvent) =>
-	event.key === TOGGLE_SHORTCUT_KEY && (event.metaKey || event.ctrlKey)
-
-type NestedSidebarProviderProps = ComponentProps<typeof SidebarProvider> & {
+type NestedSidebarProviderProps = ComponentProps<
+	typeof ShellSidebarProvider
+> & {
 	open: boolean
 	onOpenChange: (isOpen: boolean) => void
 }
@@ -36,7 +36,7 @@ const NestedSidebarProvider = ({
 	}, [])
 
 	return (
-		<SidebarProvider
+		<ShellSidebarProvider
 			{...props}
 			onOpenChange={(isOpen) => {
 				if (isShortcutDown.current) return
