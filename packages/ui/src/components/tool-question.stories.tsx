@@ -221,7 +221,7 @@ const expectChosenPaint = async (row: HTMLElement) => {
 const expectColourSwitchesInstantly = async (row: HTMLElement) => {
 	if (!isInBrowserRunner()) return
 	await withMotionAllowed(async () => {
-		await expect(getComputedStyle(row).transitionProperty).toBe("translate")
+		await expect(getComputedStyle(row).transitionProperty).toBe("none")
 		await expect(
 			getComputedStyle(slotIn(row, "tool-question-key")).transitionDuration,
 		).toBe("0s")
@@ -428,7 +428,7 @@ export const OptionRowPressed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every option row held under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row deepens past its hover tint to the full `muted` token in the same frame, with no fade, and sinks by 1px, the press of the design-system buttons. The chosen row keeps the Space bubble colour. Only the 1px sink moves, over 150ms, and under reduced motion it lands at once too.",
+					"Every option row held under the pointer, with Team chosen, drawn by the pseudo-state addon: check by eye that an unchosen row deepens past its hover tint to the full `muted` token in the same frame, with no fade, and sinks by 1px, the press of the design-system buttons. The chosen row keeps the Space bubble colour. The 1px sink lands at once too, whatever the motion preference.",
 			},
 		},
 	},
@@ -1325,7 +1325,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel for a reader who asked the system to stop moving things. A segment switches its colour, fill and shadow in a single frame whatever the preference, so the lifted fill moves from one segment to the next at once. An option row drops its 1px press sink under `prefers-reduced-motion`. Check that every segment and every option row reports no transition property, and that the track still selects. " +
+					"The panel for a reader who asked the system to stop moving things. A segment switches its colour, fill and shadow in a single frame whatever the preference, so the lifted fill moves from one segment to the next at once. An option row lands its 1px press sink at once whatever the preference too. Check that every segment and every option row reports no transition property, and that the track still selects. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
