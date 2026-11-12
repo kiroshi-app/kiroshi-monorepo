@@ -29,7 +29,7 @@ const MCP_SERVER_EDITOR_HEADER_STYLE = {
 		root: "flex shrink-0 items-start justify-between gap-4",
 		identity: "flex min-w-0 items-center gap-3",
 		mark: "md",
-		name: "wrap-break-word font-semibold text-2xl text-foreground tracking-[-0.01em]",
+		name: "wrap-break-word font-semibold text-2xl text-foreground tracking-[-0.02em]",
 	},
 } as const satisfies Record<McpServerEditorLayout, McpServerEditorHeaderStyle>
 
