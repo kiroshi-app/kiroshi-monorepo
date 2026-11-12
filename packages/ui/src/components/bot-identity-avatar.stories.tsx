@@ -308,7 +308,7 @@ export const EveryBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three things a dot can mean, and the companion that means none of them. Attention is orange and breathes, because it is the only one asking the reader for something; a finished turn is green and a failed one is red, and both hold perfectly still — a turn that is over has nothing left to signal. The three colours are fixed and do not follow the theme: green cannot become teal on the water theme without the dot losing the only thing it says. Switch the Storybook theme, and light to dark, and check that all three hold. The first avatar carries no badge and must draw no dot at all.",
+					"The three things a dot can mean, and the companion that means none of them. Attention is orange, because it is the only one asking the reader for something; a finished turn is green and a failed one is red. All three hold perfectly still: the colour is the signal. The three colours are fixed and do not follow the theme: green cannot become teal on the water theme without the dot losing the only thing it says. Switch the Storybook theme, and light to dark, and check that all three hold. The first avatar carries no badge and must draw no dot at all.",
 			},
 		},
 	},
@@ -321,8 +321,8 @@ export const EveryBadge = meta.story({
 			...BOT_BADGES,
 		])
 		await expect(
-			badged.map((dot) => dot.classList.contains("motion-safe:animate-pulse")),
-		).toEqual([true, false, false])
+			badged.map((dot) => getComputedStyle(dot).animationName),
+		).toEqual(["none", "none", "none"])
 	},
 })
 
