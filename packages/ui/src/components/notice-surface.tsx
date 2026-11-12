@@ -300,7 +300,7 @@ const FADE_ONLY_UNDER_REDUCED_MOTION =
 	"motion-reduce:[transition:opacity_150ms]! motion-reduce:data-starting-style:[transform:none]! motion-reduce:data-starting-style:opacity-0 motion-reduce:data-ending-style:[transform:none]! motion-reduce:data-ending-style:opacity-0"
 
 const MOVES_ON_THE_EASE_OUT_TOKEN =
-	"[transition:transform_500ms_var(--ease-out),opacity_500ms,height_150ms]"
+	"[transition:transform_250ms_var(--ease-out),opacity_250ms,height_150ms]"
 
 const SPACE_MARK =
 	"pointer-events-none size-2.5 shrink-0 rounded-[3px] inset-ring-[1.5px] inset-ring-current"
