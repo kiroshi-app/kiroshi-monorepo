@@ -593,6 +593,15 @@
 	--tw-exit-blur: 4px;
 }
 
+:is([data-slot="dialog-overlay"], [data-slot="dialog-content"]) {
+	--tw-duration: 150ms;
+	--tw-ease: var(--ease-out);
+}
+
+[data-slot="dialog-content"] {
+	--tw-enter-scale: 0.98;
+}
+
 :is(
 	[data-slot="dialog-content"],
 	[data-slot="context-menu-content"],
