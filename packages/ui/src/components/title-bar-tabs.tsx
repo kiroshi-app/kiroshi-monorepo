@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import { Icons } from "@workspace/ui/components/icons"
 import { NEEDS_YOU_GLYPH } from "@workspace/ui/components/row-anatomy"
-import { SIDEBAR_FOLD_MOTION } from "@workspace/ui/components/sidebar-resize"
 import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
@@ -121,10 +120,8 @@ const STRIP = "flex min-w-0 flex-1 items-center gap-1 self-stretch"
 
 const HISTORY = "flex shrink-0 items-center gap-0.5 pe-1"
 
-const HISTORY_BESIDE_SIDEBAR = cn(
-	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))]",
-	SIDEBAR_FOLD_MOTION,
-)
+const HISTORY_BESIDE_SIDEBAR =
+	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))]"
 
 const HISTORY_COLLAPSED = "in-data-[sidebar-open=false]:w-23"
 

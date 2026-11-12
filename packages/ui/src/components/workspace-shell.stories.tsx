@@ -930,7 +930,6 @@ export const DragResizesWithoutAnimation = meta.story({
 				{ keys: "[MouseLeft>]", target: handle, coords: from },
 				{ coords: to },
 			])
-			await expect(getComputedStyle(sidebar).transitionProperty).toBe("none")
 			await expect(sidebar.getAnimations()).toHaveLength(0)
 			await expectFirstTabOnThePanelEdge(
 				canvas,
@@ -961,104 +960,26 @@ export const ToggleDuringDragSwapsAtOnce = meta.story({
 	},
 })
 
-const FOLD_FROZEN_FOR = "60s"
-
-const freezeMotionOf = (elements: HTMLElement[]) => {
-	for (const element of elements)
-		element.style.transitionDuration = FOLD_FROZEN_FOR
-}
-
-const finishMotionOf = (elements: HTMLElement[]) => {
-	for (const element of elements)
-		for (const animation of element.getAnimations()) animation.finish()
-}
-
-const progressOf = (element: HTMLElement) =>
-	element.getAnimations()[0]?.effect?.getComputedTiming().progress ?? 0
-
-export const FoldAnimatesAsOneMotion = meta.story({
+export const ToggleSwapsAtOnce = meta.story({
 	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The fold, frozen half way. Check the sidebar and the tab strip run on one clock and one curve in both directions, that the content panel follows the edge, that the expanded column keeps its full width under the clip, and that the rail is all that is left at the end.",
-			},
-		},
-	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(async () => {
 			const sidebar = navigationSidebarIn(canvasElement)
-			const history = slotIn(canvasElement, "title-bar-history")
 			const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
-			const motion = getComputedStyle(sidebar)
-			await expect(motion.transitionDuration).toBe("0.18s")
-			await expect(getComputedStyle(history).transitionDuration).toBe("0.18s")
-			await expect(getComputedStyle(history).transitionTimingFunction).toBe(
-				motion.transitionTimingFunction,
-			)
 
-			freezeMotionOf([sidebar, history])
 			await userEvent.click(toggle)
-			await waitFor(
-				() => expect(progressOf(sidebar)).toBeGreaterThan(0),
-				FRAME_POLL,
-			)
-			await expect(
-				Math.abs(progressOf(sidebar) - progressOf(history)),
-			).toBeLessThan(0.05)
-			const expanded = slotIn(canvasElement, "expanded-sidebar")
-			await expect(expanded.getBoundingClientRect().width).toBe(
-				SIDEBAR_DEFAULT_WIDTH,
-			)
-			await expect(sidebar.getBoundingClientRect().width).toBeLessThan(
-				SIDEBAR_DEFAULT_WIDTH,
-			)
-			await expect(leftOf(canvas.getByRole("main"))).toBeLessThan(
-				SIDEBAR_DEFAULT_WIDTH,
-			)
-			await expect(leftOf(firstTabIn(canvas))).toBeLessThan(
-				SIDEBAR_DEFAULT_WIDTH,
-			)
-
-			finishMotionOf([sidebar, history])
-			await waitFor(
-				() =>
-					expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0),
-				FRAME_POLL,
-			)
+			await expect(sidebar.getAnimations()).toHaveLength(0)
+			await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
 			await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
+			await expect(sidebar.getBoundingClientRect().width).toBe(60)
 			await expect(leftOf(firstTabIn(canvas))).toBe(205)
 
 			await userEvent.click(toggle)
+			await expect(sidebar.getAnimations()).toHaveLength(0)
 			await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
-			await waitFor(
-				() => expect(progressOf(sidebar)).toBeGreaterThan(0),
-				FRAME_POLL,
-			)
-			finishMotionOf([sidebar, history])
 			await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
 		})
-	},
-})
-
-export const FoldUnderReducedMotionHasNoAnimation = meta.story({
-	render: () => <NavigationShell />,
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const sidebar = navigationSidebarIn(canvasElement)
-		await expect(
-			Number.parseFloat(getComputedStyle(sidebar).transitionDuration),
-		).toBeLessThan(0.001)
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Toggle sidebar" }),
-		)
-		await waitFor(
-			() =>
-				expect(slotIn(canvasElement, "collapsed-sidebar")).toBeInTheDocument(),
-			FRAME_POLL,
-		)
-		await expect(sidebar.getBoundingClientRect().width).toBe(60)
 	},
 })
 

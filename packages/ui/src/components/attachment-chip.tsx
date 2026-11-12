@@ -33,7 +33,7 @@ export const AttachmentChip = ({
 			data-slot="attachment-chip"
 			onClick={onOpen}
 			className={cn(
-				"flex max-w-56 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-foreground/15 bg-foreground/5 p-1 pr-2 text-left outline-none transition-opacity duration-150 hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none",
+				"flex max-w-56 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-foreground/15 bg-foreground/5 p-1 pr-2 text-left outline-none hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
 				isInline && "not-typeset inline-flex align-middle",
 			)}
 		>
