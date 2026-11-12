@@ -209,7 +209,7 @@ export const useRosterLift = <Landing>({
 				)
 				if (travelled < LIFT_THRESHOLD) return
 				isLifted = true
-				settling.current?.cancel()
+				settling.current?.finish()
 				capturePointer(element, pointerId)
 				element.addEventListener("lostpointercapture", cancel)
 				window.addEventListener("keydown", cancelOnEscape, true)
