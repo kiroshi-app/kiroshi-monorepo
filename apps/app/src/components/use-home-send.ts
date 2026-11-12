@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -62,12 +62,20 @@ export const useHomeSend = ({
 	discardConversation,
 	openConversation,
 }: HomeSendOptions): HomeSend => {
-	const owner: AttachmentsOwner = { kind: "home", id: spaceId ?? "" }
+	const owner = useMemo<AttachmentsOwner>(
+		() => ({ kind: "home", id: spaceId ?? "" }),
+		[spaceId],
+	)
 	const homeKey = ownerKey(owner)
 	const { staged, documents } = useControllerState(attachments)
 	const isSendRunning = useRef(false)
 	const [isSending, setIsSending] = useState(false)
 	const [draft, setDraft] = useState(() => drafts.read(homeKey))
+
+	const stage = useCallback(
+		(files: File[]) => attachments.stage(owner, files),
+		[attachments, owner],
+	)
 
 	const changeDraft = (next: string) => {
 		setDraft(next)
@@ -160,7 +168,8 @@ export const useHomeSend = ({
 				void send(text)
 			}
 		},
-		onAttach: (files) => attachments.stage(owner, files),
+		onAttach: stage,
+		onStageDocument: (document) => attachments.stageDocument(owner, document),
 		attachments: [
 			...(staged[homeKey] ?? NO_ATTACHMENTS),
 			...(documents[homeKey] ?? NO_DOCUMENTS),
