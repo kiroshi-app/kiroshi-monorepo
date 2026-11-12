@@ -32,7 +32,6 @@ export const HomeRoute = () => {
 					arrivalKey,
 					visits: core.homeVisits,
 					store: core.store,
-					conversations: rosterView.conversations,
 					onSelectAgent: pickAgent,
 					startConversation:
 						core.roster.controller.createUnselectedConversation,

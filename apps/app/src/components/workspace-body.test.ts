@@ -50,7 +50,6 @@ import {
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
-import { homeQueryKeys } from "@/lib/home/home-query-keys"
 import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
@@ -59,8 +58,6 @@ import type {
 	MissionChanged,
 	MissionDetail,
 	MissionEvent,
-	MissionInSpace,
-	MissionState,
 } from "@/lib/missions/mission-contract"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
@@ -167,15 +164,6 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 		reopen: vi.fn(),
 		onChanged: vi.fn(),
 	},
-}))
-
-const homeFeed = vi.hoisted(() => ({ entries: [] as MissionInSpace[] }))
-vi.mock("@/lib/missions/use-space-missions", () => ({
-	useSpaceMissions: () => ({
-		waitingOnYou: [],
-		inProgress: [],
-		earlierToday: homeFeed.entries,
-	}),
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
@@ -775,7 +763,6 @@ describe("WorkspaceBody frame", () => {
 describe("WorkspaceBody Home", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		homeFeed.entries = []
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
 		listSources.mockResolvedValue([])
@@ -800,7 +787,6 @@ describe("WorkspaceBody Home", () => {
 	}: HomeLaunch = {}) => {
 		const workspace = seated ?? (await workspaceOf(store))
 		const homeVisits = createHomeVisits()
-		const onOpenThreadInNewTab = vi.fn()
 		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
 			createElement(
 				OpenJoinedHostContext.Provider,
@@ -812,16 +798,11 @@ describe("WorkspaceBody Home", () => {
 						home: {
 							visits: homeVisits,
 							store,
-							conversations: [
-								workspace.conversation,
-								workspace.otherConversation,
-							],
 							onSelectAgent: () => undefined,
 							startConversation: () => Promise.resolve(null),
 							discardConversation: () => Promise.resolve(),
 							openConversation: () => undefined,
 						},
-						onOpenThreadInNewTab,
 						...overrides,
 						...more,
 					},
@@ -831,39 +812,7 @@ describe("WorkspaceBody Home", () => {
 		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
 		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
 			view.rerender(bodyOf(more))
-		return {
-			workspace,
-			open,
-			rerender,
-			onOpenThreadInNewTab,
-		}
-	}
-
-	type HomeMission = {
-		id: string
-		title: string
-		state: MissionState
-		at: number
-	}
-
-	const homeMissionOf = (
-		bot: Bot,
-		room: Conversation,
-		{ id, title, state, at }: HomeMission,
-	): MissionInSpace => {
-		const mission = missionOf(bot, room)
-		return {
-			conversationId: room.id,
-			conversationTitle: room.title,
-			mission: {
-				...mission,
-				id,
-				state,
-				ticket: { ...mission.ticket, title },
-				closedAt: at,
-				lastActivityAt: at,
-			},
-		}
+		return { open, rerender }
 	}
 
 	const homeSlot = (slot: string) =>
@@ -976,33 +925,6 @@ describe("WorkspaceBody Home", () => {
 		expect(homeSlot("prompt-input")).toBeNull()
 	})
 
-	it("shows only the missions that completed or blocked after the Home opened", async () => {
-		const home = await launchHome()
-		await home.open()
-		const openedAt = Date.now()
-		const { bot, conversation } = home.workspace
-		homeFeed.entries = [
-			homeMissionOf(bot, conversation, {
-				id: "before",
-				title: "Earlier booking",
-				state: "done",
-				at: openedAt - 60_000,
-			}),
-			homeMissionOf(bot, conversation, {
-				id: "after",
-				title: "Book flights",
-				state: "waiting_human",
-				at: openedAt + 60_000,
-			}),
-		]
-
-		home.rerender()
-
-		expect(screen.getByText("Book flights")).toBeTruthy()
-		expect(screen.getByText("Blocked")).toBeTruthy()
-		expect(screen.queryByText("Earlier booking")).toBeNull()
-	})
-
 	it("suggests Applications to an agent that has none, until the suggestion is hidden", async () => {
 		const home = await launchHome()
 		await home.open()
@@ -1049,31 +971,72 @@ describe("WorkspaceBody Home", () => {
 		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
-	it("keeps a done room line when the person switches to another agent and back", async () => {
+	const ROOM_QUESTION = "When should the deposit go out?"
+
+	const ROOM_REQUEST = {
+		id: "ask-1",
+		questions: [
+			{
+				header: "Deposit",
+				question: ROOM_QUESTION,
+				options: [],
+				multiSelect: false,
+			},
+		],
+	}
+
+	const holdQuestionOnHost = ({ bot, conversation, driver }: Workspace) =>
+		vi.spyOn(driver, "pendingQuestions").mockResolvedValue([
+			{
+				scope: {
+					conversationId: conversation.id,
+					botId: bot.id,
+					runtimeSessionId: "run-of-the-room",
+					epoch: 1,
+				},
+				turn: { turnId: "turn-of-the-room", conversationId: conversation.id },
+				event: { type: "questionRequested", request: ROOM_REQUEST },
+			},
+		])
+
+	const roomsNamedIn = (calls: unknown[][]) =>
+		calls.map(([conversationId]) => conversationId)
+
+	const roomReads = () =>
+		queries.queryClient
+			.getQueryCache()
+			.getAll()
+			.filter(({ queryKey }) => queryKey.includes("agent-rooms"))
+
+	it("keeps the composer and opens no room of the agent while one of them holds a question", async () => {
 		const store = createFakeTranscriptStore()
 		const seated = await workspaceOf(store)
-		const { bot, conversation } = seated
-		const rooms = vi
-			.spyOn(store, "agentRooms")
-			.mockResolvedValue([
-				{ botId: bot.id, conversationIds: [conversation.id] },
-			])
+		const { conversation: room, runtimes } = seated
+		const askedQuestions = holdQuestionOnHost(seated)
+		const readPage = vi.spyOn(store, "loadPage")
+		const watchRooms = vi.spyOn(runtimes, "subscribe")
 		const home = await launchHome({ store, seated })
 		await home.open()
-		expect(await screen.findByText("Nyx is working in")).toBeTruthy()
+		await settle()
 
-		rooms.mockResolvedValue([{ botId: bot.id, conversationIds: [] }])
-		await act(() =>
-			queries.queryClient.invalidateQueries({ queryKey: homeQueryKeys.all }),
+		typeOnHome("Book the flights.")
+
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+		expect(screen.queryByText(ROOM_QUESTION)).toBeNull()
+		expect(screen.queryByRole("link", { name: "Walls" })).toBeNull()
+		expect(screen.queryByText(/working in|worked in/)).toBeNull()
+		expect(roomsNamedIn(readPage.mock.calls)).not.toContain(room.id)
+		expect(roomsNamedIn(askedQuestions.mock.calls)).not.toContain(room.id)
+		expect(runtimes.heldFor(room.id)).toBeNull()
+		expect(watchRooms).not.toHaveBeenCalled()
+		expect(roomReads()).toEqual([])
+
+		const thread = runtimes.runtimeFor(room.id)
+		await thread.open(room)
+		await waitFor(() =>
+			expect(thread.getState().pendingPrompt?.request.id).toBe(ROOM_REQUEST.id),
 		)
-		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
-
-		const [vega] = await seatBots(store, SPACE, ["Vega"])
-		home.rerender({ bot: vega, bots: [bot, vega] })
-		expect(screen.queryByText("Nyx worked in")).toBeNull()
-		home.rerender({ bot, bots: [bot, vega] })
-
-		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
+		expect(roomsNamedIn(readPage.mock.calls)).toContain(room.id)
 	})
 })
 

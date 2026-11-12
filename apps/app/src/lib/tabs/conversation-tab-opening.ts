@@ -71,7 +71,7 @@ const revealShowing =
 const threadHrefOf = (thread: ThreadSearch) =>
 	`${EMPTY_LIST_HREF}${defaultStringifySearch(thread)}`
 
-export const conversationHrefOf = ({
+const conversationHrefOf = ({
 	conversationId,
 	mission,
 }: Omit<ConversationTarget, "openInPlace">) =>
