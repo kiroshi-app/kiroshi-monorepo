@@ -1,9 +1,17 @@
-import { Fragment, type MouseEvent, type ReactNode, useContext } from "react"
+import {
+	Fragment,
+	type MouseEvent,
+	type ReactNode,
+	useContext,
+	useRef,
+} from "react"
 
 import { greetingPeriodOf } from "@workspace/ui/components/greeting-period"
-import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
+import {
+	type HomeAgent,
+	HomeAgentPicker,
+} from "@workspace/ui/components/home-agent-picker"
 import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
-import { HomeComposer } from "@workspace/ui/components/home-composer"
 import { HomeGreeting } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
 import {
@@ -13,8 +21,14 @@ import {
 	type HomeRoom,
 	HomeRoomLine,
 } from "@workspace/ui/components/home-lines"
-import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import {
+	type PromptAttachment,
+	PromptAttachments,
+} from "@workspace/ui/components/prompt-attachments"
+import { PromptInput } from "@workspace/ui/components/prompt-input"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
+import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { ApprovalPrompt, QuestionPrompt } from "@/components/thread-prompt"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
@@ -329,22 +343,42 @@ const HomeDraftComposer = ({
 	attachments,
 	onRemoveAttachment,
 	arrivalKey,
-}: HomeDraftComposerProps) => (
-	<HomeComposer
-		agents={bots.map(homeAgentOf)}
-		arrivalKey={arrivalKey}
-		attachments={attachments}
-		band={band}
-		onAttach={onAttach}
-		onRemoveAttachment={onRemoveAttachment}
-		onSelectAgent={onSelectAgent}
-		onSubmit={onSubmit}
-		onValueChange={onDraftChange}
-		selectedAgentId={agent.id}
-		sending={isSending}
-		value={draft}
-	/>
-)
+}: HomeDraftComposerProps) => {
+	const t = useChatCopy()
+	const fieldRef = useRef<HTMLTextAreaElement>(null)
+	const selected = homeAgentOf(agent)
+
+	const removeAttachment = (id: string) => {
+		onRemoveAttachment(id)
+		fieldRef.current?.focus({ preventScroll: true })
+	}
+
+	return (
+		<PromptInput
+			arrivalKey={arrivalKey}
+			attachments={
+				<PromptAttachments items={attachments} onRemove={removeAttachment} />
+			}
+			band={band}
+			leading={<PromptAttachButton hasLabel onAttach={onAttach} />}
+			onAttach={onAttach}
+			onSubmit={onSubmit}
+			onValueChange={onDraftChange}
+			placeholder={t("home.composer.placeholder", { name: selected.name })}
+			sending={isSending}
+			size="large"
+			textareaRef={fieldRef}
+			trailing={
+				<HomeAgentPicker
+					agents={bots.map(homeAgentOf)}
+					onSelectAgent={onSelectAgent}
+					selected={selected}
+				/>
+			}
+			value={draft}
+		/>
+	)
+}
 
 export type HomeEmptyStageProps = HomeSend &
 	HomeRequestsProps & {

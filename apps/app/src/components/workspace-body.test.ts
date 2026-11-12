@@ -973,7 +973,7 @@ describe("WorkspaceBody Home", () => {
 		expect(homeSlot("space-access-banner")?.getAttribute("data-reason")).toBe(
 			"removed",
 		)
-		expect(homeSlot("home-composer")).toBeNull()
+		expect(homeSlot("prompt-input")).toBeNull()
 	})
 
 	it("shows only the missions that completed or blocked after the Home opened", async () => {
@@ -1044,7 +1044,7 @@ describe("WorkspaceBody Home", () => {
 		await launchHome({ overrides: { bot: undefined, bots: [] } })
 		await settle()
 
-		expect(homeSlot("home-composer")).toBeNull()
+		expect(homeSlot("prompt-input")).toBeNull()
 		expect(screen.queryByRole("textbox")).toBeNull()
 		expect(screen.queryByRole("alert")).toBeNull()
 	})

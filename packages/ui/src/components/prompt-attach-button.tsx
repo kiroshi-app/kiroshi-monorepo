@@ -14,7 +14,7 @@ export interface PromptAttachButtonProps {
 	className?: string
 }
 
-const LABELLED_PILL =
+export const LABELLED_PILL =
 	"h-8 w-auto gap-1.5 rounded-2xl ps-2.5 pe-3 font-medium text-compact leading-4 transition-none [&_svg]:size-3.5"
 
 export function PromptAttachButton({

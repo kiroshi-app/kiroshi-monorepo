@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useRef, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -9,9 +9,11 @@ import {
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { GreetingPeriod } from "@workspace/ui/components/greeting-period"
-import type { HomeAgent } from "@workspace/ui/components/home-agent-picker"
+import {
+	type HomeAgent,
+	HomeAgentPicker,
+} from "@workspace/ui/components/home-agent-picker"
 import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
-import { HomeComposer } from "@workspace/ui/components/home-composer"
 import { HomeGreeting } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
 import {
@@ -26,11 +28,16 @@ import {
 	NoticeSurface,
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
-import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import {
+	type PromptAttachment,
+	PromptAttachments,
+} from "@workspace/ui/components/prompt-attachments"
 import {
 	LONG_PROMPT_ATTACHMENTS,
 	PROMPT_ATTACHMENTS,
 } from "@workspace/ui/components/prompt-attachments.fixtures"
+import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -117,6 +124,58 @@ const removedAttachment = fn()
 
 let raisedSendFailure: string | undefined
 
+type NewPageComposerProps = {
+	agents: HomeAgent[]
+	agent?: HomeAgent
+	band?: ReactNode
+	draft?: string
+	attachments?: PromptAttachment[]
+	isSending?: boolean
+	arrivalKey?: string
+}
+
+const NewPageComposer = ({
+	agents,
+	agent,
+	band,
+	draft,
+	attachments,
+	isSending,
+	arrivalKey,
+}: NewPageComposerProps) => {
+	const fieldRef = useRef<HTMLTextAreaElement>(null)
+
+	const removeAttachment = (id: string) => {
+		removedAttachment(id)
+		fieldRef.current?.focus({ preventScroll: true })
+	}
+
+	return (
+		<PromptInput
+			arrivalKey={arrivalKey}
+			attachments={
+				<PromptAttachments items={attachments} onRemove={removeAttachment} />
+			}
+			band={band}
+			defaultValue={draft}
+			leading={<PromptAttachButton hasLabel onAttach={attached} />}
+			onAttach={attached}
+			onSubmit={sent}
+			placeholder={agent ? `Message ${agent.name}` : undefined}
+			sending={isSending}
+			size="large"
+			textareaRef={fieldRef}
+			trailing={
+				<HomeAgentPicker
+					agents={agents}
+					onSelectAgent={selectedAgent}
+					selected={agent}
+				/>
+			}
+		/>
+	)
+}
+
 type EmptyHomeProps = {
 	agent?: HomeAgent
 	period?: GreetingPeriod
@@ -142,7 +201,8 @@ const EmptyHome = ({
 }: EmptyHomeProps) => (
 	<EmptyStage>
 		<HomeGreeting agent={agent} firstName={firstName} period={period} />
-		<HomeComposer
+		<NewPageComposer
+			agent={agent}
 			agents={AGENTS}
 			arrivalKey={arrivalKey}
 			attachments={attachments}
@@ -155,13 +215,8 @@ const EmptyHome = ({
 					/>
 				) : undefined
 			}
-			defaultValue={draft}
-			onAttach={attached}
-			onRemoveAttachment={removedAttachment}
-			onSelectAgent={selectedAgent}
-			onSubmit={sent}
-			selectedAgentId={agent.id}
-			sending={isSending}
+			draft={draft}
+			isSending={isSending}
 		/>
 		{after}
 	</EmptyStage>
@@ -420,12 +475,7 @@ export const PickerWithoutAgents = meta.story({
 	tags: ["test-only"],
 	render: () => (
 		<EmptyStage>
-			<HomeComposer
-				agents={[]}
-				onAttach={attached}
-				onSelectAgent={selectedAgent}
-				selectedAgentId="atlas"
-			/>
+			<NewPageComposer agents={[]} />
 		</EmptyStage>
 	),
 	parameters: withDescription(
@@ -744,7 +794,7 @@ export const ApprovalWaits = meta.story({
 		await expect(canvas.getByText("Pico")).toBeVisible()
 		await expectRoomLink(canvasElement)
 		await expect(
-			canvasElement.querySelector('[data-slot="home-composer"]'),
+			canvasElement.querySelector('[data-slot="prompt-input"]'),
 		).toBeNull()
 	},
 })

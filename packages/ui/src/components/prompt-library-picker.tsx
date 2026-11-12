@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next"
 import { DocumentGlyph } from "@workspace/ui/components/document-panel"
 import { Icons } from "@workspace/ui/components/icons"
 import { FOCUS_OUTLINE } from "@workspace/ui/components/library-document-agents"
+import { LABELLED_PILL } from "@workspace/ui/components/prompt-attach-button"
 import { Button } from "@workspace/ui/components/ui/button"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
@@ -22,6 +23,7 @@ type PromptLibraryPickerProps = {
 	onPick: (document: LibraryPickerDocument) => void
 	onAttach: (files: File[]) => void
 	disabled?: boolean
+	hasLabel?: boolean
 }
 
 const PromptLibraryPicker = ({
@@ -29,6 +31,7 @@ const PromptLibraryPicker = ({
 	onPick,
 	onAttach,
 	disabled,
+	hasLabel = false,
 }: PromptLibraryPickerProps) => {
 	const { t } = useTranslation("common")
 	const { t: tChat } = useTranslation("chat")
@@ -36,6 +39,9 @@ const PromptLibraryPicker = ({
 	const [query, setQuery] = useState("")
 	const fileRef = useRef<HTMLInputElement>(null)
 	const sectionId = useId()
+	const triggerLabel = hasLabel
+		? tChat("attachments.add")
+		: tChat("attachments.attach")
 
 	const nameOf = (document: LibraryPickerDocument) =>
 		libraryDisplayName(document.name, t)
@@ -75,17 +81,21 @@ const PromptLibraryPicker = ({
 				value={null}
 			>
 				<Combobox.Trigger
-					aria-label={tChat("attachments.attach")}
+					aria-label={triggerLabel}
 					disabled={disabled}
 					render={
 						<Button
-							className="size-8 rounded-full border-foreground/12 text-soft-foreground transition-none"
+							className={cn(
+								"size-8 rounded-full border-foreground/12 text-soft-foreground transition-none",
+								hasLabel && LABELLED_PILL,
+							)}
 							size="icon"
 							variant="ghost"
 						/>
 					}
 				>
 					<Icons.Add aria-hidden="true" />
+					{hasLabel ? triggerLabel : null}
 				</Combobox.Trigger>
 				<Combobox.Portal>
 					<Combobox.Positioner

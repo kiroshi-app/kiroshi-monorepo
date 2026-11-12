@@ -2,6 +2,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { hueScopeOf } from "@workspace/storybook/story-utils"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import {
 	type LibraryPickerDocument,
 	PromptLibraryPicker,
@@ -147,5 +148,62 @@ export const ReachesFilesByKeyboard = meta.story({
 		await userEvent.keyboard("{Enter}")
 		await expect(chooserOpened).toHaveBeenCalledOnce()
 		await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
+	},
+})
+
+const PILL_PROPERTIES = [
+	"height",
+	"width",
+	"paddingInlineStart",
+	"paddingInlineEnd",
+	"columnGap",
+	"borderTopLeftRadius",
+	"borderTopColor",
+	"backgroundColor",
+	"color",
+	"fontSize",
+	"fontWeight",
+	"lineHeight",
+	"transitionDuration",
+] as const
+
+export const LabelledTrigger = meta.story({
+	tags: ["test-only"],
+	args: { hasLabel: true },
+	render: (args) => (
+		<div
+			className="flex h-120 w-140 items-end gap-4 p-6"
+			{...hueScopeOf("blue")}
+		>
+			<PromptLibraryPicker {...args} />
+			<PromptAttachButton hasLabel onAttach={fn()} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Proves the labelled trigger the large composer asks for, beside the labelled attach button it stands in for: same pill, same label, same glyph, and it still opens the picker. `Conversation/Prompt/PromptInput` shows it in place in `LargeLibraryPickerOpen`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("combobox", { name: "Add files" })
+		const pill = canvas.getByRole("button", { name: "Add files" })
+		const triggerStyle = getComputedStyle(trigger)
+		const pillStyle = getComputedStyle(pill)
+
+		await expect(trigger).toHaveTextContent("Add files")
+		for (const property of PILL_PROPERTIES) {
+			await expect(triggerStyle[property]).toBe(pillStyle[property])
+		}
+		await expect(
+			trigger.querySelector("svg")?.getBoundingClientRect().width,
+		).toBe(pill.querySelector("svg")?.getBoundingClientRect().width)
+
+		await userEvent.click(trigger)
+		await expect(
+			await screen.findByRole("combobox", { name: "Search documents" }),
+		).toBeVisible()
 	},
 })
