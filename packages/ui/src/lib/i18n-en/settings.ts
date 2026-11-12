@@ -158,7 +158,7 @@ const settings = {
 	openOn: {
 		label: "Open on",
 		option: {
-			newConversation: "New conversation",
+			newConversation: "New",
 			lastConversation: "Last conversation",
 		},
 	},

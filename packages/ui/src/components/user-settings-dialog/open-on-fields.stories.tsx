@@ -41,7 +41,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Which page the app opens on at launch, as one select: a New conversation, or the Last conversation the reader was in. The row holds nothing: the choice goes straight to the host, which writes it down and hands back what the trigger shows.",
+					"Which page the app opens on at launch, as one select: the New page, or the Last conversation the reader was in. The row holds nothing: the choice goes straight to the host, which writes it down and hands back what the trigger shows.",
 			},
 		},
 	},
@@ -56,19 +56,19 @@ export const NewConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"The default a fresh record holds. Check that the trigger reads New conversation, that the list offers New conversation then Last conversation, and that picking the second reports `lastConversation` once. Pick `LastConversation` for the other value.",
+					"The default a fresh record holds. Check that the trigger reads New, that the list offers New then Last conversation, and that picking the second reports `lastConversation` once. Pick `LastConversation` for the other value.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const trigger = canvas.getByRole("combobox", { name: "Open on" })
-		await expect(trigger).toHaveTextContent("New conversation")
+		await expect(trigger).toHaveTextContent("New")
 
 		await userEvent.click(trigger)
 		await screen.findByRole("listbox", { name: "Open on" })
 		const options = screen.getAllByRole("option")
 		await expect(options.map((option) => option.textContent)).toEqual([
-			"New conversation",
+			"New",
 			"Last conversation",
 		])
 
@@ -87,7 +87,7 @@ export const LastConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who reopens where they left off. Check that the trigger reads Last conversation and that picking New conversation reports `newConversation` once. Pick `NewConversation` for the default.",
+					"A reader who reopens where they left off. Check that the trigger reads Last conversation and that picking New reports `newConversation` once. Pick `NewConversation` for the default.",
 			},
 		},
 	},
@@ -96,9 +96,7 @@ export const LastConversation = meta.story({
 		await expect(trigger).toHaveTextContent("Last conversation")
 
 		await userEvent.click(trigger)
-		await userEvent.click(
-			await screen.findByRole("option", { name: "New conversation" }),
-		)
+		await userEvent.click(await screen.findByRole("option", { name: "New" }))
 		await expect(args.onOpenOnChange).toHaveBeenCalledOnce()
 		await expect(args.onOpenOnChange).toHaveBeenCalledWith("newConversation")
 	},

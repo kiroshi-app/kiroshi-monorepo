@@ -839,9 +839,10 @@ export const SwitchesBetweenExpandedAndCollapsed = meta.story({
 		const rail = slotIn(canvasElement, "collapsed-sidebar")
 		await expect(rail.getBoundingClientRect().width).toBe(60)
 		const inRail = within(rail)
-		await expect(
-			inRail.getByRole("button", { name: "New conversation" }),
-		).toHaveAttribute("aria-current", "page")
+		await expect(inRail.getByRole("button", { name: "New" })).toHaveAttribute(
+			"aria-current",
+			"page",
+		)
 		await expect(
 			inRail.getByRole("button", { name: "Download update" }),
 		).toBeVisible()
@@ -1014,7 +1015,7 @@ export const ControlsFadeNoColour = meta.story({
 			slotIn(canvasElement, "space-switcher"),
 			canvas.getByRole("button", { name: "Search" }),
 			slotIn(canvasElement, "expanded-sidebar-footer"),
-			canvas.getByRole("button", { name: "New conversation" }),
+			canvas.getByRole("button", { name: "New" }),
 		])
 		await userEvent.click(toggle)
 		await waitFor(
