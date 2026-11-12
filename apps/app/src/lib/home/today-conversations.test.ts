@@ -1,20 +1,24 @@
 import { expect, it } from "vitest"
 
-import { type TodayRoster, todayRowsOf } from "./today-conversations"
+import {
+	localDayAt,
+	type TodayRoster,
+	todayRowsOf,
+} from "./today-conversations"
 
-import type { Conversation, Participant } from "../conversations/store-contract"
+import type {
+	ConversationInPage,
+	Participant,
+} from "../conversations/store-contract"
 
 const ATLAS = "b-atlas"
-const NYX = "b-nyx"
 
 const MIDNIGHT = new Date(2026, 10, 12, 0, 0, 0, 0).getTime()
+const NEXT_MIDNIGHT = new Date(2026, 10, 13, 0, 0, 0, 0).getTime()
 const NOON = new Date(2026, 10, 12, 12, 0, 0, 0).getTime()
 const MINUTE_MS = 60 * 1000
 
-const seat = (
-	botId: string,
-	fields: Partial<Participant> = {},
-): Participant => ({
+const seat = (botId: string): Participant => ({
 	botId,
 	role: "lead",
 	joinedAt: 1,
@@ -23,13 +27,20 @@ const seat = (
 	avatarBlot: null,
 	avatarImagePath: null,
 	isDeleted: false,
-	...fields,
 })
 
-const conversation = (
+const lastWordAt = (at: number, text: string) => ({
+	text,
+	at,
+	authorBotId: ATLAS,
+	authorAccountId: null,
+	authorName: null,
+})
+
+const readRow = (
 	id: string,
-	fields: Partial<Conversation> = {},
-): Conversation => ({
+	fields: Partial<ConversationInPage> = {},
+): ConversationInPage => ({
 	id,
 	spaceId: "personal",
 	sectionId: null,
@@ -41,6 +52,11 @@ const conversation = (
 	createdAt: 1,
 	updatedAt: 1,
 	participants: [seat(ATLAS)],
+	lastActivityAt: NOON,
+	lastWord: null,
+	soloBotId: null,
+	activeTurn: null,
+	state: "idle",
 	...fields,
 })
 
@@ -52,150 +68,113 @@ const rosterOf = (roster: Partial<TodayRoster> = {}): TodayRoster => ({
 	...roster,
 })
 
-const idsOf = (agentId: string, roster: TodayRoster) =>
-	todayRowsOf(agentId, roster).map(({ id }) => id)
+it("bounds the local day from its midnight to the next one", () => {
+	const day = { start: MIDNIGHT, end: NEXT_MIDNIGHT }
 
-it("leaves out a conversation whose last activity fell on another day", () => {
-	const roster = rosterOf({
-		conversations: [conversation("today"), conversation("yesterday")],
-		previews: {
-			today: { at: NOON - MINUTE_MS },
-			yesterday: { at: NOON - 24 * 60 * MINUTE_MS },
-		},
-	})
-
-	expect(idsOf(ATLAS, roster)).toEqual(["today"])
+	expect(localDayAt(MIDNIGHT)).toEqual(day)
+	expect(localDayAt(NOON)).toEqual(day)
+	expect(localDayAt(NEXT_MIDNIGHT - 1)).toEqual(day)
+	expect(localDayAt(NEXT_MIDNIGHT).start).toBe(NEXT_MIDNIGHT)
 })
 
-it("keeps the conversation spoken in at midnight sharp and drops the one a millisecond before", () => {
-	const roster = rosterOf({
-		conversations: [conversation("at-midnight"), conversation("before")],
-		previews: {
-			"at-midnight": { at: MIDNIGHT },
-			before: { at: MIDNIGHT - 1 },
-		},
-	})
-
-	expect(idsOf(ATLAS, roster)).toEqual(["at-midnight"])
-})
-
-it("lists nothing once now passes midnight into the next day", () => {
-	const roster = rosterOf({
-		conversations: [conversation("late")],
-		previews: { late: { at: MIDNIGHT - 1 } },
-		now: MIDNIGHT - 1,
-	})
-
-	expect(idsOf(ATLAS, roster)).toEqual(["late"])
-	expect(idsOf(ATLAS, { ...roster, now: MIDNIGHT })).toEqual([])
-})
-
-it("counts a conversation created today that nobody spoke in yet", () => {
-	const roster = rosterOf({
-		conversations: [conversation("fresh", { createdAt: NOON - MINUTE_MS })],
-	})
-
-	expect(idsOf(ATLAS, roster)).toEqual(["fresh"])
-})
-
-it("leaves out a conversation where the agent is not seated, has left or was deleted", () => {
-	const roster = rosterOf({
-		conversations: [
-			conversation("with-atlas"),
-			conversation("with-nyx", { participants: [seat(NYX)] }),
-			conversation("atlas-left", {
-				participants: [seat(ATLAS, { leftAt: NOON }), seat(NYX)],
-			}),
-			conversation("atlas-deleted", {
-				participants: [seat(ATLAS, { isDeleted: true }), seat(NYX)],
-			}),
-		],
-		previews: {
-			"with-atlas": { at: NOON },
-			"with-nyx": { at: NOON },
-			"atlas-left": { at: NOON },
-			"atlas-deleted": { at: NOON },
-		},
-	})
-
-	expect(idsOf(ATLAS, roster)).toEqual(["with-atlas"])
-	expect(new Set(idsOf(NYX, roster))).toEqual(
-		new Set(["with-nyx", "atlas-left", "atlas-deleted"]),
+it("keeps the order of the host read and drops the fourth row", () => {
+	const todayRead = ["newest", "second", "third", "oldest"].map((id) =>
+		readRow(id),
 	)
+
+	expect(todayRowsOf(todayRead, rosterOf()).map(({ id }) => id)).toEqual([
+		"newest",
+		"second",
+		"third",
+	])
 })
 
-it("orders the rows most recent first and drops the fourth", () => {
-	const roster = rosterOf({
-		conversations: [
-			conversation("oldest"),
-			conversation("newest"),
-			conversation("second"),
-			conversation("third"),
-		],
-		previews: {
-			oldest: { at: NOON - 4 * MINUTE_MS },
-			newest: { at: NOON - MINUTE_MS },
-			second: { at: NOON - 2 * MINUTE_MS },
-			third: { at: NOON - 3 * MINUTE_MS },
-		},
-	})
+it("draws a row the roster does not hold from the host read alone", () => {
+	const todayRead = [
+		readRow("venue", {
+			title: "Lisbon offsite",
+			state: "working",
+			lastActivityAt: NOON - 5 * MINUTE_MS,
+			lastWord: lastWordAt(NOON - 5 * MINUTE_MS, "Booking the venue"),
+		}),
+	]
 
-	expect(idsOf(ATLAS, roster)).toEqual(["newest", "second", "third"])
-})
-
-it("shows the pending prompt of a conversation that needs you", () => {
-	const roster = rosterOf({
-		conversations: [conversation("deposit", { title: "Lisbon offsite" })],
-		previews: { deposit: { at: NOON - 5 * MINUTE_MS, text: "On it" } },
-		hostStates: {
-			deposit: {
-				state: "needs_you",
-				pendingPrompt: {
-					promptId: "ask-1",
-					kind: "question",
-					text: "When should the deposit go out?",
-				},
-			},
-		},
-	})
-
-	expect(todayRowsOf(ATLAS, roster)).toEqual([
+	expect(todayRowsOf(todayRead, rosterOf())).toEqual([
 		{
-			id: "deposit",
+			id: "venue",
 			title: "Lisbon offsite",
 			timestamp: "5m",
 			icon: undefined,
 			hue: null,
+			state: "working",
+			preview: "Booking the venue",
+		},
+	])
+})
+
+it("dates a row nobody spoke in yet by its last activity", () => {
+	const todayRead = [readRow("fresh", { lastActivityAt: NOON - 5 * MINUTE_MS })]
+
+	expect(todayRowsOf(todayRead, rosterOf())).toMatchObject([
+		{ id: "fresh", timestamp: "5m", state: "done", preview: "" },
+	])
+})
+
+it("prefers the live roster over the host read for a row the roster holds", () => {
+	const read = readRow("venue", {
+		title: "Offsite",
+		state: "idle",
+		lastWord: lastWordAt(NOON - 5 * MINUTE_MS, "On it"),
+	})
+	const roster = rosterOf({
+		conversations: [{ ...read, title: "Lisbon offsite" }],
+		previews: { venue: { at: NOON - MINUTE_MS, text: "Booking the venue" } },
+		hostStates: { venue: { state: "working" } },
+	})
+
+	expect(todayRowsOf([read], roster)).toMatchObject([
+		{
+			id: "venue",
+			title: "Lisbon offsite",
+			timestamp: "1m",
+			state: "working",
+			preview: "Booking the venue",
+		},
+	])
+})
+
+it("shows the pending prompt of a conversation that needs you", () => {
+	const todayRead = [
+		readRow("deposit", {
+			state: "needs_you",
+			pendingPrompt: {
+				promptId: "ask-1",
+				kind: "question",
+				text: "When should the deposit go out?",
+			},
+			lastWord: lastWordAt(NOON, "On it"),
+		}),
+	]
+
+	expect(todayRowsOf(todayRead, rosterOf())).toMatchObject([
+		{
+			id: "deposit",
 			state: "needs-you",
 			question: "When should the deposit go out?",
 		},
 	])
 })
 
-it("shows the last message of a working conversation, and of every other one as done", () => {
-	const roster = rosterOf({
-		conversations: [conversation("busy"), conversation("settled")],
-		previews: {
-			busy: { at: NOON, text: "Booking the venue" },
-			settled: { at: NOON - MINUTE_MS, text: "Venue booked" },
-		},
-		hostStates: { busy: { state: "working" }, settled: { state: "idle" } },
-	})
-
-	expect(todayRowsOf(ATLAS, roster)).toMatchObject([
-		{ id: "busy", state: "working", preview: "Booking the venue" },
-		{ id: "settled", state: "done", preview: "Venue booked" },
-	])
-})
-
 it("falls back to the last message as done when the host names no pending prompt", () => {
-	const roster = rosterOf({
-		conversations: [conversation("silent")],
-		previews: { silent: { at: NOON, text: "Waiting on you" } },
-		hostStates: { silent: { state: "needs_you", pendingPrompt: null } },
-	})
+	const todayRead = [
+		readRow("silent", {
+			state: "needs_you",
+			pendingPrompt: null,
+			lastWord: lastWordAt(NOON, "Waiting on you"),
+		}),
+	]
 
-	expect(todayRowsOf(ATLAS, roster)).toMatchObject([
+	expect(todayRowsOf(todayRead, rosterOf())).toMatchObject([
 		{ id: "silent", state: "done", preview: "Waiting on you" },
 	])
 })

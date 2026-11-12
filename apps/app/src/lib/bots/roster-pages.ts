@@ -253,7 +253,7 @@ export const withFreshHead = (
 const withoutConversation = (conversations: Conversation[], id: string) =>
 	conversations.filter((conversation) => conversation.id !== id)
 
-const lastWordsOfRow = (row: ConversationInPage) =>
+export const lastWordsOfRow = (row: ConversationInPage) =>
 	lastWordsIn({ pinned: [], conversations: [row], nextCursor: null })
 
 export const withPageRow = (

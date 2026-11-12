@@ -12,6 +12,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationInPage,
 	ConversationPage,
 	EnvEntry,
 	EnvScope,
@@ -149,6 +150,13 @@ export type TranscriptStore = TranscriptPort & {
 		limit: number,
 		signal?: AbortSignal,
 	) => Promise<ConversationPage>
+	conversationTodayOfAgent: (
+		spaceId: string,
+		botId: string,
+		dayStart: number,
+		dayEnd: number,
+		signal?: AbortSignal,
+	) => Promise<ConversationInPage[]>
 	conversationSoloStates: (
 		spaceId: string,
 		signal?: AbortSignal,

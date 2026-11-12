@@ -160,6 +160,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 			onSelectAgent={seat.onSelectAgent}
 			readerName={body.readerName}
 			spaceId={spaceId}
+			spaceRowId={body.spaceRowId}
 			store={seat.store}
 			today={seat.today}
 		/>

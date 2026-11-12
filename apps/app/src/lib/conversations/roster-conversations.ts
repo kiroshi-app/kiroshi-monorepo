@@ -175,16 +175,14 @@ export type ConversationRosterActivity = {
 	personOf: (person: LastWordAuthor) => string | undefined
 }
 
-type SpokenActivity = Pick<ConversationRosterActivity, "previews">
-
-export const lastSpokeAt = (
+const lastSpokeAt = (
 	conversation: Conversation,
-	activity: SpokenActivity,
+	activity: ConversationRosterActivity,
 ): number => activity.previews[conversation.id]?.at ?? conversation.createdAt
 
-export const mostRecentFirst = (
+const mostRecentFirst = (
 	conversations: Conversation[],
-	activity: SpokenActivity,
+	activity: ConversationRosterActivity,
 ): Conversation[] =>
 	conversations.toSorted(
 		(one, other) => lastSpokeAt(other, activity) - lastSpokeAt(one, activity),
