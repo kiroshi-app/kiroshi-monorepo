@@ -584,33 +584,41 @@ const measureMessageReceived = async () => {
 
 const EARLIER_TEXT = "An earlier message"
 
+const EARLIER_BY_MS = 90 * 60 * 1000
+
+const timeShownInRowOf = (name: string) =>
+	rosterRowOf(name).querySelector('[data-slot="roster-row-timestamp"]')
+		?.textContent ?? null
+
 const measureRowsOfMessageReceived = async () => {
 	const tally = tallyRenders()
 	const { store } = await mountApp(undefined, "expanded")
+	const arrival = Date.now()
+	vi.setSystemTime(arrival - EARLIER_BY_MS)
 	await storeMessageReceived(store, EARLIER_TEXT)
+	vi.setSystemTime(arrival)
 	await emitOnHost("conversation://updated", await soloThreadRowOf(store))
 	await settle(MOUNT_MS)
 	await storeMessageReceived(store)
 	const received = await soloThreadRowOf(store)
 	const receiverId = received.conversation.soloBotId ?? ""
+	const [space] = await store.spaces()
+	const receiver = (await store.bots(space.id)).find(
+		({ id }) => id === receiverId,
+	)
+	if (!receiver) throw new Error("no agent received the message")
+	const timeBefore = timeShownInRowOf(receiver.name)
 	tally.reset()
 
 	await emitOnHost("conversation://updated", received)
 	await settle(MOUNT_MS)
 
 	const rows = tally.entriesOf("RosterRow")
-	const [space] = await store.spaces()
-	const receiver = (await store.bots(space.id)).find(
-		({ id }) => id === receiverId,
-	)
 	return {
 		app: tally.countOf("App"),
 		receiverRow: rows.find(([id]) => id === receiverId)?.[1] ?? 0,
 		otherRows: rows.filter(([id]) => id !== receiverId).length,
-		isShownInRow:
-			receiver !== undefined &&
-			(rosterRowOf(receiver.name).textContent?.includes(RECEIVED_TEXT) ??
-				false),
+		timeShownInRow: [timeBefore, timeShownInRowOf(receiver.name)],
 	}
 }
 
@@ -980,7 +988,7 @@ describe("PRF1 render baseline", () => {
 			app: 0,
 			receiverRow: 1,
 			otherRows: 0,
-			isShownInRow: true,
+			timeShownInRow: ["1h", "now"],
 		})
 	})
 
