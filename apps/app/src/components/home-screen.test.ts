@@ -54,6 +54,7 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 const SPACE = "personal"
 
 const NOON = new Date(2026, 10, 12, 12).getTime()
+const NEXT_NOON = new Date(2026, 10, 13, 12).getTime()
 
 const spokenAtNoon = (conversations: Conversation[]): TodayRoster => ({
 	conversations,
@@ -484,8 +485,8 @@ it("opens the conversation of the Today row that is clicked", () => {
 })
 
 it("draws no Today list and no header when the agent has no conversation today", () => {
-	const yesterday = { ...spokenAtNoon([fixture.room]), now: NOON + 86_400_000 }
-	render(emptyStageOf(fixture, { today: yesterday }), {
+	const spokenYesterday = { ...spokenAtNoon([fixture.room]), now: NEXT_NOON }
+	render(emptyStageOf(fixture, { today: spokenYesterday }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
