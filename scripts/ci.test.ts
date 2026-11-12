@@ -89,6 +89,7 @@ const releaseWorkflow = Bun.YAML.parse(
 const SETUP_STEPS = new Set([
 	"Install dependencies",
 	"Install the keyboard library the Rune app links on Linux",
+	"Install the Vulkan driver the Rune scenes render with on Linux",
 	"Select the Xcode pinned in .xcode-version",
 	"Install XcodeGen",
 	"Boot the simulator while the app builds",
@@ -1015,6 +1016,24 @@ describe("the jobs of ci.yml", () => {
 		})
 		expect(JSON.stringify(workflow.jobs.core)).toContain(
 			`"runs-on":"\${{ matrix.os }}"`,
+		)
+	})
+
+	it("has core render the Rune scenes with Mesa's Vulkan driver on Linux and upload the ones that failed there", () => {
+		const onLinux = "runner.os == 'Linux'"
+		const upload = workflow.jobs.core?.steps?.find((step) =>
+			step.uses?.startsWith("actions/upload-artifact@"),
+		)
+		const driver = stepNamed(
+			"core",
+			"Install the Vulkan driver the Rune scenes render with on Linux",
+		)
+
+		expect(driver?.if).toBe(onLinux)
+		expect(driver?.run).toContain("mesa-vulkan-drivers")
+		expect(upload?.if).toBe(`failure() && ${onLinux}`)
+		expect(upload?.with?.path).toBe(
+			"apps/rune-preview/kit/captures/linux/failed",
 		)
 	})
 

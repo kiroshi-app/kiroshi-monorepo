@@ -125,9 +125,20 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libxkbcommon-dev
 
+      - name: Install the Vulkan driver the Rune scenes render with on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get install --yes --no-install-recommends mesa-vulkan-drivers
+
       - name: Gate
         shell: bash
         run: bun scripts/ci.ts core
+
+      - name: Upload the Rune scenes that failed on Linux
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rune-scenes-linux-failed-${{ github.run_attempt }}
+          path: apps/rune-preview/kit/captures/linux/failed
 
   installer:
     needs: changes
