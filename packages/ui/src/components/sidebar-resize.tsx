@@ -16,7 +16,7 @@ const SIDEBAR_MIN_WIDTH = 224
 const SIDEBAR_MAX_WIDTH = 416
 const SIDEBAR_WIDTH_STEP = RESIZE_STEP
 const SIDEBAR_FOLD_MOTION =
-	"transition-[width] duration-180 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:duration-[0.01ms] in-data-[resizing=true]:transition-none"
+	"transition-[width] duration-180 ease-out motion-reduce:duration-[0.01ms] in-data-[resizing=true]:transition-none"
 
 type SidebarResize = ResizableWidth & {
 	isResizable: boolean

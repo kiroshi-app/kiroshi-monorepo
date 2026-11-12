@@ -11,7 +11,7 @@ import {
 
 ## Easing
 
-**`globals.css` declares no custom easing tokens.** The system uses the Tailwind defaults.
+**`globals.css` declares one easing token, `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, and the `ease-out` utility resolves to it.** Anything that enters, leaves or answers a press uses it. `ease-in-out` and `ease-linear` keep the Tailwind defaults. The system never uses `ease-in`. The matching `EASE_OUT` curve and the springs for Motion live in `lib/ease.ts`.
 
 <EasingScale />
 
@@ -19,14 +19,14 @@ import {
 
 Animations come from `tw-animate-css`, imported in `globals.css`. Utilities are composable: `animate-in` plus one or more of `zoom-in`, `spin-in`, `slide-in-from-*`, with `duration-*` and `ease-*` to tune them. The `animate-out` counterparts exist for exit transitions.
 
-**Fades are for modals only.** A dialog and its backdrop fade and scale in — that is what says the page behind went away, and `settings-styles.ts` owns it for all of them. Everywhere else the system does not fade: popovers, menus, tooltips, rows and bubbles appear and leave outright, and what moves does so by transform or by clip. Outside a modal, reach for a transform, never for opacity.
+**Fades are for modals only.** A dialog and its backdrop fade and scale in — that is what says the page behind went away. `settings-styles.ts` owns it for the confirm dialogs, and the overrides in `globals.css` tune the vendored `ui/dialog.tsx` for the others. Everywhere else the system does not fade: popovers, menus, tooltips, rows and bubbles appear and leave outright, and what moves does so by transform or by clip. Outside a modal, reach for a transform, never for opacity. The thread artboards draw two exceptions: a transcript row that arrives live fades and lifts 8px into place (`animate-thread-arrive`), and the jump-to-latest button fades as it slides.
 
 <AnimationScale />
 
 ## Reduced motion
 
-**`globals.css` declares no `prefers-reduced-motion` block.** Honouring the preference is the component's job: pair every `animate-*` or `transition-*` utility with its `motion-reduce:` counterpart, as the previews on this page do.
+**`globals.css` shortens every `animate-in` and `animate-out` utility, every button and the switch thumb to `0.01ms` under `prefers-reduced-motion: reduce`.** Everything else is the component's job: pair every other `animate-*` or `transition-*` utility with its `motion-reduce:` counterpart, as the previews on this page do.
 
 ```tsx
-<div className="animate-in zoom-in motion-reduce:animate-none" />
+<div className="animate-in zoom-in-95 motion-reduce:animate-none" />
 ```

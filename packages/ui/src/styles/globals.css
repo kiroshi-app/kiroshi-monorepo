@@ -242,6 +242,10 @@
 	--font-mono: "Geist Mono Variable", monospace;
 }
 
+@theme {
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 @layer components {
 	.typeset-chat {
 		--typeset-size: calc(0.875rem / 1.125);
@@ -469,7 +473,7 @@
 }
 
 @utility animate-thread-arrive {
-	animation: ui-thread-arrive 200ms cubic-bezier(0.16, 1, 0.3, 1);
+	animation: ui-thread-arrive 200ms var(--ease-out);
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
@@ -484,7 +488,7 @@
 }
 
 @utility animate-run-fade {
-	animation: ui-run-fade 1000ms ease-out forwards;
+	animation: ui-run-fade 1000ms var(--ease-out) forwards;
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
@@ -535,7 +539,7 @@
 	.group\/button.transition-all {
 		transition:
 			opacity 150ms,
-			scale 160ms ease-out;
+			scale 160ms var(--ease-out);
 	}
 }
 

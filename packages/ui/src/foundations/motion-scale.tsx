@@ -4,13 +4,12 @@ import { Button } from "@workspace/ui/components/ui/button"
 
 const EASINGS = [
 	{ className: "ease-linear", value: "linear" },
-	{ className: "ease-in", value: "cubic-bezier(0.4, 0, 1, 1)" },
-	{ className: "ease-out", value: "cubic-bezier(0, 0, 0.2, 1)" },
+	{ className: "ease-out", value: "cubic-bezier(0.23, 1, 0.32, 1)" },
 	{ className: "ease-in-out", value: "cubic-bezier(0.4, 0, 0.2, 1)" },
 ]
 
 const ANIMATIONS = [
-	{ label: "zoom-in", className: "animate-in zoom-in" },
+	{ label: "zoom-in", className: "animate-in zoom-in-95" },
 	{ label: "spin-in", className: "animate-in spin-in" },
 	{ label: "slide-in-from-top", className: "animate-in slide-in-from-top-8" },
 	{
