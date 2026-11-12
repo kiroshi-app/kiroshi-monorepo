@@ -255,7 +255,6 @@ export function MessageBubbleCollapsible({
 			<div
 				id={contentId}
 				className={cn(
-					"transition-[mask-image] duration-200",
 					!currentOpen && LINE_CLAMP_CLASS[collapsedLines],
 					!currentOpen &&
 						"[mask-image:linear-gradient(to_bottom_in_oklab,#000_68%,transparent_100%)]",
