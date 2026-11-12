@@ -971,6 +971,20 @@ describe("WorkspaceBody Home", () => {
 		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
+	const ROOM_QUESTION = "When should the deposit go out?"
+
+	const ROOM_REQUEST = {
+		id: "ask-1",
+		questions: [
+			{
+				header: "Deposit",
+				question: ROOM_QUESTION,
+				options: [],
+				multiSelect: false,
+			},
+		],
+	}
+
 	const holdQuestionOnHost = ({ bot, conversation, driver }: Workspace) =>
 		vi.spyOn(driver, "pendingQuestions").mockResolvedValue([
 			{
@@ -981,20 +995,7 @@ describe("WorkspaceBody Home", () => {
 					epoch: 1,
 				},
 				turn: { turnId: "turn-of-the-room", conversationId: conversation.id },
-				event: {
-					type: "questionRequested",
-					request: {
-						id: "ask-1",
-						questions: [
-							{
-								header: "Deposit",
-								question: "When should the deposit go out?",
-								options: [],
-								multiSelect: false,
-							},
-						],
-					},
-				},
+				event: { type: "questionRequested", request: ROOM_REQUEST },
 			},
 		])
 
@@ -1021,7 +1022,7 @@ describe("WorkspaceBody Home", () => {
 		typeOnHome("Book the flights.")
 
 		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
-		expect(screen.queryByText("When should the deposit go out?")).toBeNull()
+		expect(screen.queryByText(ROOM_QUESTION)).toBeNull()
 		expect(screen.queryByRole("link", { name: "Walls" })).toBeNull()
 		expect(screen.queryByText(/working in|worked in/)).toBeNull()
 		expect(roomsNamedIn(readPage.mock.calls)).not.toContain(room.id)
@@ -1033,7 +1034,7 @@ describe("WorkspaceBody Home", () => {
 		const thread = runtimes.runtimeFor(room.id)
 		await thread.open(room)
 		await waitFor(() =>
-			expect(thread.getState().pendingPrompt?.request.id).toBe("ask-1"),
+			expect(thread.getState().pendingPrompt?.request.id).toBe(ROOM_REQUEST.id),
 		)
 		expect(roomsNamedIn(readPage.mock.calls)).toContain(room.id)
 	})
