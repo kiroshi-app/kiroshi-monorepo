@@ -1034,9 +1034,7 @@ export const ThreeTodayMixedStates = meta.story({
 	},
 })
 
-const TODAY_SHORT_PANEL_HEIGHT = 560
-
-const TODAY_SHORT_WINDOW = inWindowAround(TODAY_SHORT_PANEL_HEIGHT)
+const TODAY_SHORT_WINDOW = inWindowAround(560)
 
 const PANEL_BOTTOM_PADDING = 16
 
