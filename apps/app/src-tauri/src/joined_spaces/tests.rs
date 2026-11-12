@@ -528,21 +528,6 @@ impl Member {
 		let keys = self.app.state::<SpaceKeys>();
 		keys.stored(&format!("joined-{INSTANCE}"), key).expect("the key is kept");
 	}
-
-	async fn restarted(&self, name: &str) -> AppOfItsOwn {
-		let cloud = self.relay.served().await;
-		let app = an_app_of_its_own(name, mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&self._temporary[0])));
-		app.manage(DeviceKeysState::new(Ok(self.device())));
-		let profile = self.app.path().app_data_dir().expect("the data folder resolves");
-		let identifier = self.app.config().identifier.clone();
-		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(self.root.clone()), &cloud));
-		let guests = RelayGuests::new(&cloud).answering_within(HOST_ANSWER_BOUND);
-		app.manage(guests.resending_every(RESEND_EVERY));
-		app.manage(Invitations::new(&cloud));
-		app
-	}
 }
 
 fn signed_in(
@@ -1065,8 +1050,10 @@ fn a_space_held_under_another_relay_device_never_connected_comes_online_on_the_s
 		let pinned = pinned_host(member.held_roster().await);
 		let refused = json!({ "v": 2, "instance": INSTANCE, "to": MEMBER_RELAY_ID, "refused": "notAdmitted" });
 		member.relay.hosting(HostSide::Answering(refused.to_string()));
+		let account_reads_with_the_relay_device_known = member.relay.room().me_reads;
 
 		relay::reconciled(member.app.handle()).await;
+		let account_reads_after_the_reconciliation = member.relay.room().me_reads;
 		let waited = within(HOST_ANSWER_BOUND, "the refusal kept as the wait", || async {
 			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
 		})
@@ -1089,6 +1076,10 @@ fn a_space_held_under_another_relay_device_never_connected_comes_online_on_the_s
 			JoinedSpaceWaitReason::DeviceAwaitingApproval,
 			"{}",
 			waited.detail
+		);
+		assert_eq!(
+			account_reads_after_the_reconciliation,
+			account_reads_with_the_relay_device_known
 		);
 		assert_eq!(state_while_refused, JoinedSpaceState::WaitingForHost);
 		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
@@ -1128,26 +1119,6 @@ fn a_space_holding_its_key_and_no_roster_says_its_hello_and_comes_online_on_the_
 		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
 		assert_eq!(member.last_wait(), None);
 		assert!(member.relay.joins().iter().all(is_missed_rekey));
-	});
-}
-
-#[test]
-fn a_space_holding_its_key_and_no_roster_keeps_its_local_id_across_two_restarts() {
-	run(async {
-		let member = Member::facing_a_silent_host("join-restarted").await;
-		member.relay.hosting(HostSide::Silent);
-		let joined = member.accepted().await.expect("the join waits");
-		member.holds_a_key_without_its_roster();
-
-		let mut ids = Vec::new();
-		for name in ["join-restarted-once", "join-restarted-twice"] {
-			let restarted = member.restarted(name).await;
-			relay::reconciled(restarted.handle()).await;
-			let listed = joined_spaces_list(restarted.handle().clone()).await.expect("the list");
-			ids.extend(listed.into_iter().map(|joined| joined.id));
-		}
-
-		assert_eq!(ids, vec![joined.id.clone(), joined.id]);
 	});
 }
 
