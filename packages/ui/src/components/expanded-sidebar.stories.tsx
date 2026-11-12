@@ -74,7 +74,6 @@ import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import { UpdateRow } from "@workspace/ui/components/update-badge"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
-import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const KIROSHI: Space = {
 	id: "kiroshi",
@@ -1493,10 +1492,7 @@ const CarriedSidebar = ({
 
 	return (
 		<PaperWindow>
-			<RosterLiftFrame
-				isLifting={drag.isLifting}
-				ref={mergeRefs(frameRef, drag.rosterLift.followRef)}
-			>
+			<RosterLiftFrame isLifting={drag.isLifting} ref={frameRef}>
 				<ExpandedSidebar
 					{...args}
 					conversations={
