@@ -106,21 +106,56 @@ fn a_space_hue_paints_primary_user_bubble_and_selection_in_its_tone() {
 	}
 }
 
-#[test]
-fn every_theme_colour_aliases_a_rust_token() {
-	let sheet = Sheet::read();
+fn unaliased(theme_inline: &Declarations) -> Vec<String> {
 	let rust: BTreeSet<String> =
 		Tokens::new(false).colours().into_iter().map(|(token, _)| css_name(token)).collect();
-	let aliased: Vec<String> = sheet
-		.theme_inline
+	theme_inline
 		.iter()
 		.filter(|(name, _)| name.starts_with("--color-"))
 		.filter_map(|(name, value)| {
-			let source = value.strip_prefix("var(")?.strip_suffix(')')?.trim().to_string();
-			(!rust.contains(&source)).then(|| format!("{name} reads {source}"))
+			let Some(source) = value.strip_prefix("var(").and_then(|rest| rest.strip_suffix(')'))
+			else {
+				return Some(format!("{name} is {value}, not the alias of a token"));
+			};
+			(!rust.contains(source.trim())).then(|| format!("{name} reads {}", source.trim()))
 		})
-		.collect();
+		.collect()
+}
+
+#[test]
+fn every_theme_colour_aliases_a_rust_token() {
+	let aliased = unaliased(&Sheet::read().theme_inline);
 	assert!(aliased.is_empty(), "{}", aliased.join("\n"));
+}
+
+#[test]
+fn a_css_colour_token_the_kit_lacks_or_paints_differently_is_named() {
+	let mut declared = Sheet::read().theme(false).clone();
+	declared.insert("--brand-new".to_string(), "#123456".to_string());
+	declared.insert("--space-offline".to_string(), "#000000".to_string());
+	assert_eq!(
+		mismatches(&Tokens::new(false), &declared),
+		[
+			"--brand-new has no Rust token",
+			"--space-offline: Rust [92, 92, 92, 255], CSS [0, 0, 0, 255]",
+		]
+	);
+}
+
+#[test]
+fn a_theme_colour_that_aliases_no_rust_token_is_named() {
+	let theme_inline = Declarations::from([
+		("--color-background".to_string(), "var(--background)".to_string()),
+		("--color-brand-new".to_string(), "var(--brand-new)".to_string()),
+		("--color-literal".to_string(), "#123456".to_string()),
+	]);
+	assert_eq!(
+		unaliased(&theme_inline),
+		[
+			"--color-brand-new reads --brand-new",
+			"--color-literal is #123456, not the alias of a token",
+		]
+	);
 }
 
 fn rem(value: &str) -> f32 {
