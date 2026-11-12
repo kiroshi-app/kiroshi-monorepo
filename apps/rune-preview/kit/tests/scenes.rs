@@ -299,14 +299,14 @@ fn pair_after_bless(held: Pair, recorded: Option<Pair>, blessed: usize) -> Pair 
 }
 
 fn record_pairs() -> Result<(), String> {
-	let [macos, linux] = held_on_both()?;
+	let held = held_on_both()?;
 	let recorded = recorded_pairs()?;
-	let lines: String = macos
+	let lines: String = held[0]
 		.iter()
 		.filter_map(|(name, &macos)| {
-			let held = [macos, *linux.get(name)?];
-			let [macos, linux] = pair_after_bless(held, recorded.get(name).copied(), HERE);
-			Some(format!("{name} {macos:016x} {linux:016x}\n"))
+			let both = [macos, *held[1].get(name)?];
+			let pair = pair_after_bless(both, recorded.get(name).copied(), HERE);
+			Some(format!("{name} {:016x} {:016x}\n", pair[0], pair[1]))
 		})
 		.collect();
 	let path = captures().join(PAIRS);
