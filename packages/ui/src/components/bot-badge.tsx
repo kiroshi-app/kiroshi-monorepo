@@ -19,7 +19,7 @@ const DOT_CLASS = "pointer-events-none size-2 gap-0 rounded-full border-0 p-0"
 const botBadgeVariants = cva("", {
 	variants: {
 		badge: {
-			attention: "bg-warning motion-safe:animate-pulse",
+			attention: "bg-warning",
 			done: "bg-bot-badge-done",
 			failed: "bg-bot-badge-failed",
 		},
@@ -37,7 +37,7 @@ const botBadgeVariants = cva("", {
 const botBadgeRingVariants = cva("ring-2", {
 	variants: {
 		badge: {
-			attention: "ring-warning motion-safe:animate-pulse",
+			attention: "ring-warning",
 			done: "ring-bot-badge-done",
 			failed: "ring-bot-badge-failed",
 		},
