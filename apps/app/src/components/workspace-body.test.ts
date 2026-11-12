@@ -787,7 +787,6 @@ describe("WorkspaceBody Home", () => {
 	}: HomeLaunch = {}) => {
 		const workspace = seated ?? (await workspaceOf(store))
 		const homeVisits = createHomeVisits()
-		const onOpenThreadInNewTab = vi.fn()
 		const bodyOf = (more: Partial<WorkspaceBodyHarnessProps> = {}) =>
 			createElement(
 				OpenJoinedHostContext.Provider,
@@ -804,7 +803,6 @@ describe("WorkspaceBody Home", () => {
 							discardConversation: () => Promise.resolve(),
 							openConversation: () => undefined,
 						},
-						onOpenThreadInNewTab,
 						...overrides,
 						...more,
 					},
@@ -814,12 +812,7 @@ describe("WorkspaceBody Home", () => {
 		const open = () => act(() => homeVisits.open(workspace.bot.id, SPACE))
 		const rerender = (more?: Partial<WorkspaceBodyHarnessProps>) =>
 			view.rerender(bodyOf(more))
-		return {
-			workspace,
-			open,
-			rerender,
-			onOpenThreadInNewTab,
-		}
+		return { open, rerender }
 	}
 
 	const homeSlot = (slot: string) =>
