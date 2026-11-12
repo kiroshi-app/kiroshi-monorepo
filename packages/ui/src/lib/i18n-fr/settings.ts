@@ -162,7 +162,7 @@ const settings = {
 	openOn: {
 		label: "Ouvrir sur",
 		option: {
-			newConversation: "Nouvelle conversation",
+			newConversation: "Nouveau",
 			lastConversation: "Dernière conversation",
 		},
 	},

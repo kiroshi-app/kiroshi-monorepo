@@ -118,7 +118,7 @@ export const InFrench = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		const trigger = await canvas.findByRole("combobox", { name: "Ouvrir sur" })
-		await expect(trigger).toHaveTextContent("Nouvelle conversation")
+		await expect(trigger).toHaveTextContent("Nouveau")
 
 		await userEvent.click(trigger)
 		await expect(
