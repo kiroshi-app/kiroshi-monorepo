@@ -3,8 +3,10 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	colourTransitionsOf,
 	isInBrowserRunner,
 	slotIn,
+	slotsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -23,6 +25,10 @@ import {
 	type HomeRoom,
 	HomeRoomLine,
 } from "@workspace/ui/components/home-lines"
+import {
+	HomeTodayList,
+	type HomeTodayRow,
+} from "@workspace/ui/components/home-today-list"
 import {
 	endNotice,
 	NoticeSurface,
@@ -92,6 +98,81 @@ const at = (hours: number, minutes: number) =>
 const FLIGHTS_ASK =
 	"Can you find flights to Lisbon for the offsite, 12 to 15 March?"
 
+const TODAY_WORKING: HomeTodayRow = {
+	id: "lisbon-offsite",
+	title: "Lisbon offsite",
+	timestamp: "09:42",
+	icon: "Globe",
+	hue: BLOT_HUES.blue,
+	state: "working",
+	preview: "Atlas: working…",
+}
+
+const TODAY_NEEDS_YOU: HomeTodayRow = {
+	id: "venue-deposit",
+	title: "Venue deposit",
+	timestamp: "09:15",
+	icon: "CreditCard",
+	hue: BLOT_HUES.orange,
+	state: "needs-you",
+	question: "Which card pays the deposit?",
+}
+
+const TODAY_DONE: HomeTodayRow = {
+	id: "launch-notes",
+	title: "Launch notes",
+	timestamp: "08:30",
+	icon: "Pen",
+	hue: BLOT_HUES.green,
+	state: "done",
+	preview: "Atlas: The draft is ready for your review.",
+}
+
+const TODAY_FOURTH: HomeTodayRow = {
+	id: "team-calendar",
+	title: "Team calendar",
+	timestamp: "08:05",
+	icon: "Calendar",
+	state: "done",
+	preview: "Atlas: Every invite is sent.",
+}
+
+const TODAY_MIXED = [TODAY_WORKING, TODAY_NEEDS_YOU, TODAY_DONE]
+
+const TODAY_WITH_PICO: HomeTodayRow[] = [
+	{
+		id: "release-checklist",
+		title: "Release checklist",
+		timestamp: "10:05",
+		icon: "Rocket",
+		hue: BLOT_HUES.orange,
+		state: "done",
+		preview: "Pico: The build is green on every platform.",
+	},
+]
+
+const UNBREAKABLE = "Offsite".repeat(30)
+
+const TODAY_LONG: HomeTodayRow[] = [
+	{
+		...TODAY_WORKING,
+		title:
+			"Lisbon offsite, flights, venue, catering and the walking tour for the fourteen people who confirmed before the deadline we set last week",
+		preview: `${UNBREAKABLE}: working…`,
+	},
+	{
+		...TODAY_NEEDS_YOU,
+		title: UNBREAKABLE,
+		question:
+			"Which card pays the deposit, the team card that expires in March or the company card that needs a second approval from finance before any charge above two thousand euros?",
+	},
+	{
+		...TODAY_DONE,
+		preview:
+			"Atlas: The draft is ready for your review. I kept the three sections you outlined, moved the pricing change to the top and left two open questions at the end.",
+	},
+]
+
 const HOME_PANEL_HEIGHT = 848
 
 const HOME_COLUMN_WIDTH = 680
@@ -108,15 +189,18 @@ const HomePanel = ({ children, height }: HomePanelProps) => (
 	</div>
 )
 
-type EmptyStageProps = { children: ReactNode }
+type EmptyStageProps = { children: ReactNode; below?: ReactNode }
 
-const EmptyStage = ({ children }: EmptyStageProps) => (
+const EmptyStage = ({ children, below }: EmptyStageProps) => (
 	<ScreenLayout width="full">
-		<HomeLayout stage="empty">{children}</HomeLayout>
+		<HomeLayout below={below} stage="empty">
+			{children}
+		</HomeLayout>
 	</ScreenLayout>
 )
 
 const selectedAgent = fn()
+const openedTodayRow = fn()
 const attached = fn()
 const sent = fn()
 const dismissedBand = fn()
@@ -186,6 +270,7 @@ type EmptyHomeProps = {
 	isSending?: boolean
 	arrivalKey?: string
 	after?: ReactNode
+	today?: HomeTodayRow[]
 }
 
 const EmptyHome = ({
@@ -198,8 +283,19 @@ const EmptyHome = ({
 	isSending,
 	arrivalKey,
 	after,
+	today,
 }: EmptyHomeProps) => (
-	<EmptyStage>
+	<EmptyStage
+		below={
+			today ? (
+				<HomeTodayList
+					agentName={agent.name}
+					onOpenRow={openedTodayRow}
+					rows={today}
+				/>
+			) : undefined
+		}
+	>
 		<HomeGreeting agent={agent} firstName={firstName} period={period} />
 		<NewPageComposer
 			agent={agent}
@@ -244,6 +340,7 @@ const meta = preview.meta({
 	],
 	beforeEach: () => {
 		selectedAgent.mockClear()
+		openedTodayRow.mockClear()
 		dismissedBand.mockClear()
 		removedAttachment.mockClear()
 		sent.mockClear()
@@ -796,5 +893,233 @@ export const ApprovalWaits = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="prompt-input"]'),
 		).toBeNull()
+	},
+})
+
+const TODAY_GAP_UNDER_THE_COMPOSER = 20
+
+const todayRowsIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "home-today-row")
+
+const expectTodayUnderTheComposer = async (canvasElement: HTMLElement) => {
+	const { block } = emptyStageBoxesOf(canvasElement)
+	const list = slotIn(canvasElement, "home-today-list").getBoundingClientRect()
+
+	await expectBlockInTheMiddle(canvasElement)
+	await expect(Math.round(list.top - block.bottom)).toBe(
+		TODAY_GAP_UNDER_THE_COMPOSER,
+	)
+	await expect(Math.round(list.left)).toBe(Math.round(block.left))
+	await expect(Math.round(list.width)).toBe(HOME_COLUMN_WIDTH)
+}
+
+const expectCutOnOneLine = async (text: HTMLElement) => {
+	await expect(getComputedStyle(text).textOverflow).toBe("ellipsis")
+	await expect(getComputedStyle(text).whiteSpace).toBe("nowrap")
+	await expect(text.scrollWidth).toBeGreaterThan(text.clientWidth)
+}
+
+export const NoConversationToday = meta.story({
+	name: "Today 1 · No conversation today, nothing drawn",
+	render: () => <EmptyHome today={[]} />,
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"Reach for this when the agent has no conversation today: the list draws nothing, header included, and the greeting and composer stay in the middle of the panel.",
+		),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="home-today-list"]'),
+		).toBeNull()
+		await expect(canvas.queryByText("Today with Atlas")).toBeNull()
+		await expect(slotIn(canvasElement, "home-layout-below")).not.toBeVisible()
+		await expectBlockInTheMiddle(canvasElement)
+	},
+})
+
+export const OneConversationToday = meta.story({
+	name: "Today 2 · One conversation today",
+	render: () => <EmptyHome today={[TODAY_WORKING]} />,
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"One conversation today, the agent working in it: the header names the agent and the row hangs 20px under the composer, which stays in the middle of the panel. Check the row is one button named by its title, shows the focus ring on keyboard focus and changes background on hover with no colour transition.",
+		),
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvas.getByRole("heading", { name: "Today with Atlas" }),
+		).toBeVisible()
+		await expect(
+			within(
+				canvas.getByRole("list", { name: "Today with Atlas" }),
+			).getAllByRole("button"),
+		).toHaveLength(1)
+		await expectTodayUnderTheComposer(canvasElement)
+
+		const row = canvas.getByRole("button", { name: "Lisbon offsite" })
+		await expect(row).toHaveAttribute("data-state", "working")
+		await expect(slotIn(row, "text-shimmer")).toHaveTextContent(
+			"Atlas: working…",
+		)
+		await expect(colourTransitionsOf(row)).toEqual([])
+
+		row.focus()
+		await userEvent.tab({ shift: true })
+		await userEvent.tab()
+		await expect(row).toHaveFocus()
+		await expect(row.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(row).outlineStyle).not.toBe("none")
+
+		await userEvent.click(row)
+		await expect(openedTodayRow).toHaveBeenCalledOnce()
+		await expect(openedTodayRow).toHaveBeenCalledWith(TODAY_WORKING.id)
+
+		if (!isInBrowserRunner()) return
+		const { userEvent: pointer } = await import("vitest/browser")
+		const atRest = getComputedStyle(row).backgroundColor
+		await pointer.hover(row)
+		await expect(getComputedStyle(row).backgroundColor).not.toBe(atRest)
+		await pointer.unhover(row)
+	},
+})
+
+export const ThreeTodayMixedStates = meta.story({
+	name: "Today 3 · Three today, mixed states",
+	render: () => <EmptyHome today={TODAY_MIXED} />,
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"Three conversations today, one per state: working with the shimmer, needs you with the attention badge, label and time, done with the last message. The greeting and composer sit where they do with no row or one.",
+		),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			todayRowsIn(canvasElement).map((row) => row.dataset.state),
+		).toEqual(["working", "needs-you", "done"])
+		await expectTodayUnderTheComposer(canvasElement)
+
+		const waiting = canvas.getByRole("button", { name: "Venue deposit" })
+		const attention = getComputedStyle(slotIn(waiting, "needs-you-label")).color
+		await expect(slotIn(waiting, "needs-you-label")).toHaveTextContent(
+			"Needs you",
+		)
+		await expect(slotIn(waiting, "needs-you-glyph")).toBeVisible()
+		await expect(
+			getComputedStyle(slotIn(waiting, "needs-you-glyph")).backgroundColor,
+		).toBe(attention)
+		await expect(
+			getComputedStyle(slotIn(waiting, "home-today-row-time")).color,
+		).toBe(attention)
+		await expect(slotIn(waiting, "home-today-row-preview")).toHaveTextContent(
+			"Which card pays the deposit?",
+		)
+
+		const done = canvas.getByRole("button", { name: "Launch notes" })
+		const muted = getComputedStyle(slotIn(done, "home-today-row-time")).color
+		await expect(muted).not.toBe(attention)
+		await expect(
+			getComputedStyle(slotIn(done, "home-today-row-preview")).color,
+		).toBe(muted)
+		await expect(
+			getComputedStyle(slotIn(waiting, "home-today-row-preview")).color,
+		).toBe(muted)
+		await expect(done.querySelector('[data-slot="text-shimmer"]')).toBeNull()
+	},
+})
+
+export const MoreThanThreeCappedAtThree = meta.story({
+	name: "Today 4 · More than three, capped at three",
+	render: () => <EmptyHome today={[...TODAY_MIXED, TODAY_FOURTH]} />,
+	parameters: withDescription(
+		"Four conversations today: the list keeps the first three and draws no fourth row, no counter and no link to the rest.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(todayRowsIn(canvasElement)).toHaveLength(3)
+		await expect(
+			canvas.queryByRole("button", { name: TODAY_FOURTH.title }),
+		).toBeNull()
+	},
+})
+
+export const PickerOpenOverToday = meta.story({
+	name: "Today 5a · Picker open, aligned on the chip",
+	render: () => <EmptyHome today={TODAY_MIXED} />,
+	parameters: withDescription(
+		"The agent menu open over the Today list: its right edge sits on the right edge of the chip and its top 6px under the chip, within 1px.",
+	),
+	play: async ({ canvas, userEvent }) => {
+		const chip = canvas.getByRole("button", { name: "Atlas" })
+		await userEvent.click(chip)
+		const menu = await screen.findByRole("menu")
+
+		await waitFor(async () => {
+			const chipBox = chip.getBoundingClientRect()
+			const menuBox = menu.getBoundingClientRect()
+			await expect(Math.abs(menuBox.right - chipBox.right)).toBeLessThanOrEqual(
+				1,
+			)
+			await expect(
+				Math.abs(menuBox.top - chipBox.bottom - 6),
+			).toBeLessThanOrEqual(1)
+		})
+	},
+})
+
+export const PicoChosenToday = meta.story({
+	name: "Today 5b · Pico chosen",
+	render: () => (
+		<EmptyHome agent={PICO} hasBand={false} today={TODAY_WITH_PICO} />
+	),
+	parameters: withDescription(
+		"Pico chosen in the picker: the chip, the placeholder and the Today header all name Pico, and the rows are Pico's.",
+	),
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("button", { name: "Pico" })).toBeVisible()
+		await expect(
+			canvas.getByRole("heading", { name: "Today with Pico" }),
+		).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Release checklist" }),
+		).toBeVisible()
+	},
+})
+
+export const TodayLongContent = meta.story({
+	name: "Today · Long titles and previews cut on one line",
+	render: () => <EmptyHome today={TODAY_LONG} />,
+	parameters: withDescription(
+		"Titles, previews and a question longer than the row, one of them a single unbreakable word: each is cut on one line with an ellipsis, the row keeps its height and the time stays whole.",
+	),
+	play: async ({ canvasElement }) => {
+		const list = slotIn(
+			canvasElement,
+			"home-today-list",
+		).getBoundingClientRect()
+
+		for (const row of todayRowsIn(canvasElement)) {
+			const time = slotIn(row, "home-today-row-time")
+			await expect(Math.round(row.getBoundingClientRect().height)).toBe(52)
+			await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
+				list.right,
+			)
+			await expect(time.scrollWidth).toBeLessThanOrEqual(time.clientWidth)
+			await expect(time.getBoundingClientRect().right).toBeLessThan(
+				row.getBoundingClientRect().right,
+			)
+		}
+
+		const [working, waiting, done] = todayRowsIn(canvasElement)
+		await expectCutOnOneLine(slotIn(working, "home-today-row-title"))
+		await expectCutOnOneLine(slotIn(working, "text-shimmer"))
+		await expectCutOnOneLine(slotIn(waiting, "home-today-row-title"))
+		await expectCutOnOneLine(slotIn(waiting, "home-today-row-preview"))
+		await expectCutOnOneLine(
+			within(done).getByText(/The draft is ready for your review/),
+		)
 	},
 })

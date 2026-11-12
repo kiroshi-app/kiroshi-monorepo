@@ -140,7 +140,7 @@ const RowParts = ({ parts, slot, identifier, lead }: RowPartsProps) => {
 
 type RowAnatomyGeometry =
 	| { geometry: "roster"; badge?: BotBadge; pendingQuestion?: string }
-	| { geometry: "activity"; badge?: never; pendingQuestion?: never }
+	| { geometry: "activity"; badge?: never; pendingQuestion?: string }
 
 type RowAnatomyProps = RowAnatomyGeometry & {
 	name: ReactNode
