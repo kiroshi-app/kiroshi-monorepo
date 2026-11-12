@@ -658,7 +658,7 @@ export const Pressed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row held down with the pointer beside a design system `Button` held the same way. The play holds a real pointer on each through the Vitest browser runner, so it only runs there; in Storybook, press the row by hand. Check the row scales down by the amount the `Button` scales down by, transitions only its geometry and that scale, and settles back on release. The play then restores the page to keyboard input, because a real press leaves Chromium in mouse modality, where a later synthetic tab in another story file would focus without a ring.",
+					"The row held down with the pointer beside a design system `Button` held the same way. The play holds a real pointer on each through the Vitest browser runner, so it only runs there; in Storybook, press the row by hand. Check the row scales down by the amount the `Button` scales down by, transitions only that scale, and settles back on release. The play then restores the page to keyboard input, because a real press leaves Chromium in mouse modality, where a later synthetic tab in another story file would focus without a ring.",
 			},
 		},
 	},
@@ -667,9 +667,7 @@ export const Pressed = meta.story({
 		const button = canvas.getByRole("button", { name: "Press me" })
 
 		await waitFor(() =>
-			expect(getComputedStyle(row).transitionProperty).toBe(
-				"width, height, padding, scale",
-			),
+			expect(getComputedStyle(row).transitionProperty).toBe("scale"),
 		)
 		if (!isInBrowserRunner()) return
 
