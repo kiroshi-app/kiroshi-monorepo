@@ -437,7 +437,7 @@ export const InstallAddedFromKeyboard = meta.story({
 		docs: {
 			description: {
 				story:
-					"The action pressed from the keyboard, run, then added. Check that focus never leaves the action, that it ends on Added with a check glyph, reachable but unavailable to assistive technology, and that pressing it again calls nothing.",
+					"The action pressed from the keyboard, run, then added. Check that focus never leaves the action, that it ends on Added with the check glyph swapped in over the spinner, reachable but unavailable to assistive technology, and that pressing it again calls nothing.",
 			},
 		},
 	},
@@ -455,7 +455,14 @@ export const InstallAddedFromKeyboard = meta.story({
 		await expect(action).toHaveFocus()
 		await expect(action).toHaveAttribute("aria-disabled", "true")
 		await expect(action).not.toHaveAttribute("aria-busy", "true")
-		await expect(action.querySelector("svg")).not.toBeNull()
+		await expect(
+			action.querySelector('[data-shown="true"] svg'),
+		).not.toHaveClass("animate-spin")
+		const spinner = action.querySelector('[data-shown="false"] svg')
+		await expect(spinner).toHaveClass("animate-spin")
+		await expect(getComputedStyle(spinner as Element).animationPlayState).toBe(
+			"paused",
+		)
 
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onInstall).toHaveBeenCalledTimes(1)

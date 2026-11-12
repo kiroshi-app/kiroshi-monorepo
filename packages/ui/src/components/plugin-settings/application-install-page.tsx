@@ -9,6 +9,7 @@ import {
 	MCP_CONNECTION_DOT,
 	MCP_DESTRUCTIVE_SURFACE,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	ApplicationMetaLine,
@@ -370,14 +371,6 @@ const InstallAction = ({
 	const isUnavailable = isInstalling || isInstalled
 	const isSignIn = setup === "signIn" && !isHosted
 
-	const readGlyph = () => {
-		if (isInstalled) return Icons.Check
-		if (isInstalling) return Icons.Loading
-		return isSignIn ? Icons.ExternalLink : null
-	}
-
-	const Glyph = readGlyph()
-
 	const readLabel = () => {
 		if (isInstalled) return t("applications.install.done")
 		return isSignIn
@@ -394,14 +387,29 @@ const InstallAction = ({
 				if (!isUnavailable) onInstall()
 			}}
 		>
-			{Glyph ? (
-				<Glyph
+			{isUnavailable ? (
+				<IconSwap
+					icon={
+						<Icons.Loading
+							aria-hidden="true"
+							className="size-3.5 animate-spin in-data-[shown=false]:paused! motion-reduce:animate-none"
+							data-icon="inline-start"
+						/>
+					}
+					isSwapped={isInstalled}
+					swappedIcon={
+						<Icons.Check
+							aria-hidden="true"
+							className="size-3.5"
+							data-icon="inline-start"
+						/>
+					}
+				/>
+			) : null}
+			{isSignIn && !isUnavailable ? (
+				<Icons.ExternalLink
 					aria-hidden="true"
-					className={cn(
-						"size-3.5",
-						Glyph === Icons.Loading &&
-							"animate-spin motion-reduce:animate-none",
-					)}
+					className="size-3.5"
 					data-icon="inline-start"
 				/>
 			) : null}
