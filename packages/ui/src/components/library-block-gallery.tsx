@@ -333,11 +333,10 @@ const LibraryGalleryEditor = ({
 			{drag && liftedImage ? (
 				<span
 					aria-hidden="true"
-					className="pointer-events-none fixed z-50 h-[170px] w-60 -rotate-2 rounded-xl bg-muted bg-center bg-cover shadow-lifted-tile"
+					className="pointer-events-none fixed top-0 left-0 z-50 h-[170px] w-60 -rotate-2 rounded-xl bg-muted bg-center bg-cover shadow-lifted-tile"
 					data-slot="library-gallery-lifted"
 					style={{
-						left: drag.x - 120,
-						top: drag.y - 85,
+						translate: `${drag.x - 120}px ${drag.y - 85}px`,
 						backgroundImage: liftedImage.status
 							? undefined
 							: `url("${resolveImage ? liftedImage.src : encodeURI(liftedImage.src)}")`,
