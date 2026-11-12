@@ -972,6 +972,10 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 		if repository.remove(joined.id.clone()).await? {
 			let JoinedReach::Relay { instance_id } = &joined.reach;
 			wait_ended(app, instance_id);
+			log::info!(
+				"joined space {} (instance {instance_id}) was dropped by the sign-out",
+				joined.id
+			);
 			announce_change(app, joined.id).await?;
 		}
 	}
