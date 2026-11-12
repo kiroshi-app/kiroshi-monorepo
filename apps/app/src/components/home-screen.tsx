@@ -15,6 +15,7 @@ import {
 import { HomeApplicationsBand } from "@workspace/ui/components/home-applications-band"
 import { HomeGreeting } from "@workspace/ui/components/home-greeting"
 import { HomeLayout } from "@workspace/ui/components/home-layout"
+import { HomeTodayList } from "@workspace/ui/components/home-today-list"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import {
 	type PromptAttachment,
@@ -34,6 +35,7 @@ import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import { faceOfBot } from "@/lib/chat/thread-contract"
 import type { Bot } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { type TodayRoster, todayRowsOf } from "@/lib/home/today-conversations"
 import { useComposerLibrary } from "@/lib/library/use-composer-library"
 
 const homeAgentOf = (bot: Bot): HomeAgent => {
@@ -202,8 +204,10 @@ export type HomeEmptyStageProps = HomeSend & {
 	isBandDismissed: boolean
 	notice: ReactNode
 	isReadOnly: boolean
+	today: TodayRoster
 	onSelectAgent: (botId: string) => void
 	onDismissBand: () => void
+	onOpenConversation: (conversationId: string) => void
 	arrivalKey?: string
 }
 
@@ -251,8 +255,10 @@ export const HomeEmptyStage = ({
 	isBandDismissed,
 	notice,
 	isReadOnly,
+	today,
 	onSelectAgent,
 	onDismissBand,
+	onOpenConversation,
 	arrivalKey,
 	...send
 }: HomeEmptyStageProps) => {
@@ -268,7 +274,16 @@ export const HomeEmptyStage = ({
 
 	return (
 		<ScreenLayout ref={page} width="full">
-			<HomeLayout stage="empty">
+			<HomeLayout
+				below={
+					<HomeTodayList
+						agentName={agent.name}
+						onOpenRow={onOpenConversation}
+						rows={todayRowsOf(agent.id, today)}
+					/>
+				}
+				stage="empty"
+			>
 				<HomeGreeting
 					agent={homeAgentOf(agent)}
 					firstName={firstNameOf(readerName)}

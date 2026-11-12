@@ -22,6 +22,7 @@ import type { ConversationRuntimes } from "@/lib/conversations/conversation-runt
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type HomeVisits, visitOf } from "@/lib/home/home-visits"
+import type { TodayRoster } from "@/lib/home/today-conversations"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
@@ -36,6 +37,7 @@ import {
 type HomeSeat = HomeConversationStart & {
 	visits: HomeVisits
 	store: TranscriptStore
+	today: TodayRoster
 	onSelectAgent: (botId: string) => void
 	arrivalKey?: string
 }
@@ -154,10 +156,12 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 				) : null
 			}
 			onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
+			onOpenConversation={seat.openConversation}
 			onSelectAgent={seat.onSelectAgent}
 			readerName={body.readerName}
 			spaceId={spaceId}
 			store={seat.store}
+			today={seat.today}
 		/>
 	)
 }
