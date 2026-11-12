@@ -1106,6 +1106,10 @@ const LARGE = {
 const LARGE_SIZE =
 	"The large size, the composer of the New page: two stacked surfaces, the field on a row of its own in the reading size, then one controls row with `leading` at the start, the `trailing` slot and send at the end. It never folds into the one-line pill. `apps/app/src/components/home-screen.tsx` mounts it with the agent picker in `trailing`. "
 
+const LARGE_EDGE_INSET = 13
+
+const LARGE_CONTROLS_GAP = 8
+
 type RoomAboveProps = { children: ReactNode }
 
 const RoomAbove = ({ children }: RoomAboveProps) => (
@@ -1131,9 +1135,9 @@ export const LargeEmpty = meta.story({
 		await expect(textarea).toHaveAttribute("placeholder", "Message Atlas")
 		await expect(send).toBeDisabled()
 		await expect(isBelow(attach, textarea)).toBe(true)
-		await expect(box(attach).left - box(form).left).toBe(13)
-		await expect(box(send).left - box(picker).right).toBe(8)
-		await expect(box(form).right - box(send).right).toBe(13)
+		await expect(box(attach).left - box(form).left).toBe(LARGE_EDGE_INSET)
+		await expect(box(send).left - box(picker).right).toBe(LARGE_CONTROLS_GAP)
+		await expect(box(form).right - box(send).right).toBe(LARGE_EDGE_INSET)
 
 		await userEvent.type(textarea, DRAFT)
 		await expect(send).toBeEnabled()
