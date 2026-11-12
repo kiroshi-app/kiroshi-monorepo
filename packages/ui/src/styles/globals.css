@@ -571,9 +571,12 @@
 :is(
 	[data-slot="context-menu-content"],
 	[data-slot="context-menu-sub-content"],
-	[data-slot="popover-content"],
-	[data-slot="tooltip-content"]
+	[data-slot="popover-content"]
 ):not([data-closed]) {
+	animation: none;
+}
+
+[data-slot="tooltip-content"] {
 	animation: none;
 }
 

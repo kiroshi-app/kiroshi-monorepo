@@ -3,7 +3,10 @@ import { expect, screen, waitFor } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { FRAME_POLL, Row } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
-import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
+import {
+	TooltipHint,
+	TooltipHintProvider,
+} from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const COPY_BUTTON = (
@@ -179,6 +182,43 @@ export const InRow = meta.story({
 		await userEvent.tab()
 		await expect(canvas.getByRole("button", { name: "Copy" })).toHaveFocus()
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+	},
+})
+
+export const AdjacentHints = meta.story({
+	name: "Adjacent hints",
+	args: {
+		content: "Delete",
+		children: (
+			<Button aria-label="Delete" size="icon-sm" variant="ghost">
+				<Icons.Delete />
+			</Button>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two hinted controls side by side under one `TooltipHintProvider`, the way the app mounts it at its root. Check that the pointer leaving the first control for its neighbour swaps one hint for the other, with a single bubble on screen and the second label in it. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
+			},
+		},
+	},
+	render: (args) => (
+		<TooltipHintProvider>
+			<Row>
+				<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
+				<TooltipHint {...args} />
+			</Row>
+		</TooltipHintProvider>
+	),
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+
+		await userEvent.hover(canvas.getByRole("button", { name: "Delete" }))
+		await waitFor(async () => {
+			await expect(screen.getByRole("tooltip")).toHaveTextContent("Delete")
+		}, FRAME_POLL)
 	},
 })
 
