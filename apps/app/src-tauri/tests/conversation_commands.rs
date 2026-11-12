@@ -3923,6 +3923,12 @@ fn the_today_of_an_agent_is_every_conversation_seating_it_active_inside_the_day_
 			.expect("the solo"),
 	);
 	stamped(&app, ACTIVE_AT, &solo, DAY_START);
+	let pins = json!([
+		{ "id": seating_nyx[2], "sectionId": null },
+		{ "id": nyx, "sectionId": null }
+	]);
+	call(&window, "roster_pin", json!({ "spaceId": space, "pins": pins }))
+		.expect("the room and the solo are pinned");
 
 	let today = today_of(&window, &space, &nyx, DAY_END).expect("the day reads");
 
@@ -3930,7 +3936,18 @@ fn the_today_of_an_agent_is_every_conversation_seating_it_active_inside_the_day_
 	let answered: Vec<String> = today.iter().map(id_of).collect();
 	let expected: Vec<String> = seating_nyx.into_iter().rev().chain([solo]).collect();
 	let paged = walked_rooms(&window, &space).concat();
+	let pinned: Vec<String> = page_of(&window, &space, Value::Null, Value::Null)["pinned"]
+		.as_array()
+		.expect("the page holds its pinned rows")
+		.iter()
+		.map(id_of)
+		.collect();
 	assert_eq!(answered, expected);
+	assert_eq!(
+		pinned,
+		[answered[2].clone(), answered[5].clone()],
+		"the pinned room and the pinned solo are not answered at their activity rank"
+	);
 	assert_eq!(Some(&today[0]), paged.iter().find(|row| id_of(row) == expected[0]));
 	assert_eq!(today_of(&window, &space, &idle, DAY_END), Ok(json!([])));
 	assert_eq!(
