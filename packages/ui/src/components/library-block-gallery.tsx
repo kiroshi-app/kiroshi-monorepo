@@ -48,8 +48,16 @@ type LibraryGalleryEditorProps = {
 type TileDrag = {
 	from: number
 	to: number
+}
+
+type LiftedPoint = {
 	x: number
 	y: number
+}
+
+const placeLifted = (lifted: HTMLElement | null, at: LiftedPoint) => {
+	if (!lifted) return
+	lifted.style.translate = `${at.x - 120}px ${at.y - 85}px`
 }
 
 type TileFocus = {
@@ -86,6 +94,8 @@ const LibraryGalleryEditor = ({
 	const { t } = useTranslation(["common", "chat"])
 	const hintId = useId()
 	const frame = useRef<HTMLDivElement>(null)
+	const liftedTile = useRef<HTMLSpanElement | null>(null)
+	const pointer = useRef<LiftedPoint>({ x: 0, y: 0 })
 	const [drag, setDrag] = useState<TileDrag>()
 	const [tileFocus, setTileFocus] = useState<TileFocus>()
 	const [hasAddFailed, setAddFailed] = useState(false)
@@ -170,12 +180,12 @@ const LibraryGalleryEditor = ({
 			)
 				return
 			start.isMoving = true
-			setDrag({
-				from,
-				to: slotAt(moved.clientX, moved.clientY),
-				x: moved.clientX,
-				y: moved.clientY,
-			})
+			pointer.current = { x: moved.clientX, y: moved.clientY }
+			placeLifted(liftedTile.current, pointer.current)
+			const to = slotAt(moved.clientX, moved.clientY)
+			setDrag((held) =>
+				held?.from === from && held.to === to ? held : { from, to },
+			)
 		}
 		const finish = (end: globalThis.PointerEvent) => {
 			window.removeEventListener("pointermove", follow)
@@ -335,8 +345,11 @@ const LibraryGalleryEditor = ({
 					aria-hidden="true"
 					className="pointer-events-none fixed top-0 left-0 z-50 h-[170px] w-60 -rotate-2 rounded-xl bg-muted bg-center bg-cover shadow-lifted-tile"
 					data-slot="library-gallery-lifted"
+					ref={(node) => {
+						liftedTile.current = node
+						placeLifted(node, pointer.current)
+					}}
 					style={{
-						translate: `${drag.x - 120}px ${drag.y - 85}px`,
 						backgroundImage: liftedImage.status
 							? undefined
 							: `url("${resolveImage ? liftedImage.src : encodeURI(liftedImage.src)}")`,

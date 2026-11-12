@@ -1,7 +1,11 @@
 import { useState } from "react"
-import { expect } from "storybook/test"
+import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import {
+	isInBrowserRunner,
+	withMotionAllowed,
+} from "@workspace/storybook/story-utils"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -13,11 +17,14 @@ const layersOf = (canvasElement: HTMLElement) =>
 		),
 	)
 
+const reducesMotion = () =>
+	matchMedia("(prefers-reduced-motion: reduce)").matches
+
 const expectHidden = async (layer: HTMLElement) => {
 	const style = getComputedStyle(layer)
 	await expect(style.opacity).toBe("0")
-	await expect(style.scale).toBe("0.25")
-	await expect(style.filter).toBe("blur(4px)")
+	await expect(style.scale).toBe(reducesMotion() ? "1" : "0.25")
+	await expect(style.filter).toBe(reducesMotion() ? "none" : "blur(4px)")
 }
 
 const expectShown = async (layer: HTMLElement) => {
@@ -53,7 +60,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one crossfade every icon swap goes through: the copy buttons of a code block and a markdown table, and the reveal toggle of a launch variable. Both icons stay mounted on the same grid cell; the incoming one grows from a quarter of its size, fades in and sharpens from a 4px blur while the outgoing one does the reverse, so a swap interrupted halfway turns back instead of restarting.",
+					"The one crossfade every icon swap goes through: the copy buttons of a code block and a markdown table, and the reveal toggle of a launch variable. Both icons stay mounted on the same grid cell; the incoming one grows from a quarter of its size, fades in and sharpens from a 4px blur while the outgoing one does the reverse, so a swap interrupted halfway turns back instead of restarting. Under `prefers-reduced-motion` the two icons only fade, at full size and sharp.",
 			},
 		},
 	},
@@ -69,7 +76,7 @@ export const Resting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Before the swap. Check that only the first icon shows and that the second one waits shrunk, transparent and blurred on the same cell. Pick `Swapped` for the state after.",
+					"Before the swap. Check that only the first icon shows and that the second one waits shrunk, transparent and blurred on the same cell, or only transparent under reduced motion. Pick `Swapped` for the state after.",
 			},
 		},
 	},
@@ -78,6 +85,8 @@ export const Resting = meta.story({
 
 		await expectShown(icon)
 		await expectHidden(swappedIcon)
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(() => waitFor(() => expectHidden(swappedIcon)))
 	},
 })
 

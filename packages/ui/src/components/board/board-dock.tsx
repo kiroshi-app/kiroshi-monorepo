@@ -119,20 +119,23 @@ const TileFace = ({ item }: TileFaceProps) =>
 		</span>
 	)
 
-type DragGhostProps = {
-	item: BoardLibraryItem
-	pointer: BoardClientPoint
+const placeGhost = (ghost: HTMLElement | null, pointer: BoardClientPoint) => {
+	if (!ghost) return
+	ghost.style.translate = `calc(${pointer.clientX}px - 50%) calc(${pointer.clientY}px - 50%)`
 }
 
-const DragGhost = ({ item, pointer }: DragGhostProps) =>
+type DragGhostProps = {
+	item: BoardLibraryItem
+	ref: Ref<HTMLDivElement>
+}
+
+const DragGhost = ({ item, ref }: DragGhostProps) =>
 	createPortal(
 		<div
 			aria-hidden="true"
 			className="pointer-events-none fixed top-0 left-0 z-50"
 			data-slot="board-library-ghost"
-			style={{
-				translate: `calc(${pointer.clientX}px - 50%) calc(${pointer.clientY}px - 50%)`,
-			}}
+			ref={ref}
 		>
 			{item.kind === "document" ? (
 				<BoardLibraryCard
@@ -151,11 +154,6 @@ const DragGhost = ({ item, pointer }: DragGhostProps) =>
 		document.body,
 	)
 
-type LibraryDrag = {
-	item: BoardLibraryItem
-	pointer: BoardClientPoint
-}
-
 type LibraryPickerProps = Pick<
 	BoardDockProps,
 	"libraryItems" | "onLibraryItemPick" | "onLibraryItemDrop"
@@ -168,8 +166,15 @@ const LibraryPicker = ({
 }: LibraryPickerProps) => {
 	const { t } = useTranslation("common")
 	const [focusedAt, setFocusedAt] = useState(0)
-	const [drag, setDrag] = useState<LibraryDrag | null>(null)
+	const [dragged, setDragged] = useState<BoardLibraryItem | null>(null)
 	const hasJustDragged = useRef(false)
+	const ghost = useRef<HTMLDivElement | null>(null)
+	const pointer = useRef<BoardClientPoint>({ clientX: 0, clientY: 0 })
+
+	const followPointer = (node: HTMLDivElement | null) => {
+		ghost.current = node
+		placeGhost(node, pointer.current)
+	}
 
 	const pressTile =
 		(item: BoardLibraryItem) => (event: PointerEvent<HTMLButtonElement>) => {
@@ -183,16 +188,15 @@ const LibraryPicker = ({
 				)
 				if (!hasJustDragged.current && travel < DRAG_THRESHOLD) return
 				hasJustDragged.current = true
-				setDrag({
-					item,
-					pointer: { clientX: moved.clientX, clientY: moved.clientY },
-				})
+				pointer.current = { clientX: moved.clientX, clientY: moved.clientY }
+				placeGhost(ghost.current, pointer.current)
+				setDragged(item)
 			}
 			const finish = (end: globalThis.PointerEvent) => {
 				window.removeEventListener("pointermove", track)
 				window.removeEventListener("pointerup", finish)
 				window.removeEventListener("pointercancel", finish)
-				setDrag(null)
+				setDragged(null)
 				if (hasJustDragged.current && end.type === "pointerup")
 					onLibraryItemDrop(item.id, {
 						clientX: end.clientX,
@@ -240,7 +244,7 @@ const LibraryPicker = ({
 					role="group"
 				>
 					{libraryItems.map((item, index) => {
-						const isDragged = drag?.item.id === item.id
+						const isDragged = dragged?.id === item.id
 						return (
 							<button
 								aria-label={item.title}
@@ -271,7 +275,7 @@ const LibraryPicker = ({
 					{t("board.picker.empty")}
 				</p>
 			)}
-			{drag ? <DragGhost item={drag.item} pointer={drag.pointer} /> : null}
+			{dragged ? <DragGhost item={dragged} ref={followPointer} /> : null}
 		</>
 	)
 }

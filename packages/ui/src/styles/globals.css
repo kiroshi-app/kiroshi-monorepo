@@ -488,7 +488,7 @@
 }
 
 @utility animate-run-fade {
-	animation: ui-run-fade 1000ms var(--ease-out) forwards;
+	animation: ui-run-fade 1000ms ease forwards;
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
@@ -524,7 +524,7 @@
 	}
 }
 
-.group\/button.transition-all {
+.group\/button.transition-all:hover {
 	will-change: transform;
 }
 
