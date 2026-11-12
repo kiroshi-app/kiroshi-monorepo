@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
@@ -33,6 +33,10 @@ import {
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { RosterSection } from "@workspace/ui/components/app-sidebar-section"
+import {
+	COMPACT_ROW_GAP,
+	useIsCompactRows,
+} from "@workspace/ui/components/compact-rows"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
@@ -127,12 +131,24 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 	)
 }
 
+interface RosterMenuProps {
+	children: ReactNode
+}
+
+const RosterMenu = ({ children }: RosterMenuProps) => (
+	<SidebarMenu
+		className={useIsCompactRows() ? COMPACT_ROW_GAP : NAVIGATION_ROW_GAP}
+	>
+		{children}
+	</SidebarMenu>
+)
+
 const rosterMenuOf = (
 	entries: PinnedEntry[],
 	isSlotted: boolean,
 	rows: RosterRowsContext,
 ) => (
-	<SidebarMenu className={NAVIGATION_ROW_GAP}>
+	<RosterMenu>
 		{entries.map((entry) => (
 			<RosterRow
 				entry={entry}
@@ -141,7 +157,7 @@ const rosterMenuOf = (
 				rows={rows}
 			/>
 		))}
-	</SidebarMenu>
+	</RosterMenu>
 )
 
 const recentMenuOf = (

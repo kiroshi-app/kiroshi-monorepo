@@ -4,6 +4,7 @@ import { HUE_THEMES } from "@workspace/ui/components/hue-recipe"
 import {
 	type ConversationIconName,
 	ConversationIcons,
+	ConversationOutlineIcons,
 } from "@workspace/ui/components/icons"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
@@ -11,24 +12,35 @@ const CELL = "relative grid shrink-0 place-items-center"
 
 const PICTOGRAM = "relative"
 
+const BARE_PICTOGRAM = "size-full stroke-[1.75]!"
+
 type ConversationSubjectIconProps = {
 	icon?: string
 	hue?: number | null
 	side?: number
+	isBare?: boolean
 }
 
-const UNTINTED_SCOPE_STYLE = Object.fromEntries(
-	HUE_THEMES.flatMap((theme) =>
-		["conversation-icon", "conversation-icon-foreground"].map((role) => [
-			`--hue-${theme}-${role}`,
-			"initial",
-		]),
-	),
-)
+const untintedStyleOf = (roles: string[]) =>
+	Object.fromEntries(
+		HUE_THEMES.flatMap((theme) =>
+			roles.map((role) => [`--hue-${theme}-${role}`, "initial"]),
+		),
+	)
 
-const hueScopeOf = (hue: number | null | undefined) =>
+const UNTINTED_TILE_STYLE = untintedStyleOf([
+	"conversation-icon",
+	"conversation-icon-foreground",
+])
+
+const UNTINTED_GLYPH_STYLE = untintedStyleOf(["avatar-ink"])
+
+const hueScopeOf = (hue: number | null | undefined, isBare: boolean) =>
 	hue == null
-		? { "data-hue": "", style: UNTINTED_SCOPE_STYLE }
+		? {
+				"data-hue": "",
+				style: isBare ? UNTINTED_GLYPH_STYLE : UNTINTED_TILE_STYLE,
+			}
 		: { "data-hue": hue, style: hueStyle(hue) }
 
 const isConversationIcon = (
@@ -43,9 +55,11 @@ const ConversationSubjectIcon = ({
 	icon,
 	hue,
 	side = 40,
+	isBare = false,
 }: ConversationSubjectIconProps) => {
-	const Pictogram = ConversationIcons[conversationIconOf(icon)]
-	const scope = hueScopeOf(hue)
+	const drawn = isBare ? ConversationOutlineIcons : ConversationIcons
+	const Pictogram = drawn[conversationIconOf(icon)]
+	const scope = hueScopeOf(hue, isBare)
 
 	return (
 		<span
@@ -55,18 +69,32 @@ const ConversationSubjectIcon = ({
 			data-slot="conversation-subject-icon"
 			style={{
 				...scope.style,
-				color: "var(--conversation-icon-foreground)",
+				color: isBare
+					? "var(--conversation-glyph)"
+					: "var(--conversation-icon-foreground)",
 				width: side,
 				height: side,
 			}}
 		>
-			<OutlinedHexagon fill="var(--conversation-icon)" side={side} />
-			<span className={PICTOGRAM} style={{ width: side / 2, height: side / 2 }}>
+			{isBare ? (
 				<Pictogram
-					className="size-full"
+					className={BARE_PICTOGRAM}
 					data-slot="conversation-subject-icon-pictogram"
 				/>
-			</span>
+			) : (
+				<>
+					<OutlinedHexagon fill="var(--conversation-icon)" side={side} />
+					<span
+						className={PICTOGRAM}
+						style={{ width: side / 2, height: side / 2 }}
+					>
+						<Pictogram
+							className="size-full"
+							data-slot="conversation-subject-icon-pictogram"
+						/>
+					</span>
+				</>
+			)}
 		</span>
 	)
 }

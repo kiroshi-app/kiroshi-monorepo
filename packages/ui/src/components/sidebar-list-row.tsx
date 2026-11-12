@@ -3,7 +3,11 @@
 import type { ReactNode } from "react"
 
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
-import { RowAnatomy } from "@workspace/ui/components/row-anatomy"
+import {
+	CompactRowMeta,
+	CompactRowTitle,
+	RowAnatomy,
+} from "@workspace/ui/components/row-anatomy"
 import {
 	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
@@ -13,12 +17,14 @@ import { Item } from "@workspace/ui/components/ui/item"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SidebarListRowGeometry = "roster" | "agent" | "conversation" | "menu"
+type StackedRowGeometry = "roster" | "agent" | "conversation" | "menu"
+
+type SidebarListRowGeometry = StackedRowGeometry | "compact"
 
 const ROSTER_ROW =
 	"flex-nowrap border-0 text-foreground transition-[scale] duration-160 ease-out hover:will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0"
 
-const ROW: Record<SidebarListRowGeometry, string> = {
+const ROW: Record<StackedRowGeometry, string> = {
 	roster: cn(ROSTER_ROW, "py-1.5 pl-1.5 pe-1.5"),
 	agent: cn(ROSTER_ROW, SIDEBAR_ROW_INSET),
 	conversation: cn(
@@ -27,6 +33,8 @@ const ROW: Record<SidebarListRowGeometry, string> = {
 	),
 	menu: "flex-nowrap gap-2 rounded-control border-0 py-0 ps-1.5 pe-2 font-normal text-muted-foreground text-sm hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 }
+
+const COMPACT_ROW = "after:absolute after:inset-0"
 
 const LIFTABLE_ROW = "touch-none select-none"
 
@@ -82,6 +90,35 @@ const SidebarListRow = ({
 }: SidebarListRowProps) => {
 	const { state } = useSidebar()
 	const hasStrips = Boolean(strips) && state !== "collapsed"
+
+	if (geometry === "compact") {
+		const isNeedingYou = Boolean(pendingQuestion)
+
+		return (
+			<SidebarMenuRow
+				{...rowProps}
+				className={cn(COMPACT_ROW, isLiftable && LIFTABLE_ROW)}
+				icon={media}
+				label={name}
+				render={<button type="button" />}
+				trailing={
+					<CompactRowMeta
+						isNeedingYou={isNeedingYou}
+						isTimestampDestructive={isTimestampDestructive}
+						pile={previewTrailing}
+						timestamp={timestamp}
+					/>
+				}
+				variant="navigation"
+			>
+				<CompactRowTitle
+					isNeedingYou={isNeedingYou}
+					isWorking={isWorking}
+					name={name}
+				/>
+			</SidebarMenuRow>
+		)
+	}
 
 	return (
 		<SidebarMenuRow

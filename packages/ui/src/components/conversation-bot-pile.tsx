@@ -28,13 +28,15 @@ const HOLE_IMAGE = `url("data:image/svg+xml,${encodeURIComponent(
 	`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${HOLE_SIDE} ${HOLE_SIDE}'><path d='${roundedHexagonPath(HOLE)}'/></svg>`,
 )}")`
 
-const KNOCKED_OUT_UNDER_NEXT: CSSProperties = {
+const COMPACT_STEP = 9
+
+const knockedOutUnderNextAt = (step: number): CSSProperties => ({
 	maskImage: `linear-gradient(#000, #000), ${HOLE_IMAGE}`,
-	maskPosition: `0 0, ${STEP - KNOCKOUT_WIDTH}px ${-KNOCKOUT_WIDTH}px`,
+	maskPosition: `0 0, ${step - KNOCKOUT_WIDTH}px ${-KNOCKOUT_WIDTH}px`,
 	maskSize: `100% 100%, ${HOLE_SIDE}px ${HOLE_SIDE}px`,
 	maskRepeat: "no-repeat",
 	maskComposite: "exclude",
-}
+})
 
 const COUNTER_FONT_SIZE = HEXAGON_SIDE * 0.45
 const COUNTER_TEXT = "font-bold tabular-nums"
@@ -48,6 +50,7 @@ type PileBot = Omit<ConversationParticipant, "isPerson">
 
 type ConversationBotPileProps = {
 	bots: PileBot[]
+	isCompact?: boolean
 }
 
 type PileSlotProps = {
@@ -62,8 +65,12 @@ const PileSlot = ({ style, slot, children }: PileSlotProps) => (
 	</span>
 )
 
-const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
+const ConversationBotPile = ({
+	bots,
+	isCompact = false,
+}: ConversationBotPileProps) => {
 	const { t } = useTranslation("bots")
+	const step = isCompact ? COMPACT_STEP : STEP
 	const isOverflowing = bots.length > PILE_LIMIT
 	const shown = isOverflowing ? bots.slice(0, PILE_LIMIT - 1) : bots
 	const slotCount = isOverflowing ? PILE_LIMIT : shown.length
@@ -74,8 +81,8 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 	if (slotCount === 0) return null
 
 	const slotStyleOf = (index: number): CSSProperties => ({
-		left: index * STEP,
-		...(index < slotCount - 1 ? KNOCKED_OUT_UNDER_NEXT : undefined),
+		left: index * step,
+		...(index < slotCount - 1 ? knockedOutUnderNextAt(step) : undefined),
 	})
 	const counter = (
 		<text
@@ -97,7 +104,7 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 			className="relative block h-4 shrink-0"
 			data-slot="conversation-bot-pile"
 			role="img"
-			style={{ width: HEXAGON_SIDE + STEP * (slotCount - 1) }}
+			style={{ width: HEXAGON_SIDE + step * (slotCount - 1) }}
 		>
 			{shown.map((bot, index) => (
 				<PileSlot

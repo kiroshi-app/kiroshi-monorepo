@@ -10,8 +10,8 @@ import { useTranslation } from "react-i18next"
 
 import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
 import { rosterSlot } from "@workspace/ui/components/app-sidebar-roster-parts"
+import { COMPACT_ROW_STACK } from "@workspace/ui/components/compact-rows"
 import { Icons } from "@workspace/ui/components/icons"
-import { SIDEBAR_ROW_INSET } from "@workspace/ui/components/sidebar-menu-row"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -60,17 +60,15 @@ const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 const SECTION_BODY_INNER_OPEN =
 	"group-data-[lifting]/roster-lift:overflow-visible"
 
-const FOLD_SECTION = "flex flex-col gap-0.5 p-0"
+const FOLD_SECTION = cn(COMPACT_ROW_STACK, "p-0")
 
-const FOLD_TRIGGER = cn(
-	SIDEBAR_ROW_INSET,
-	"flex w-full min-w-0 items-center justify-between gap-1 rounded-lg text-start font-medium text-muted-foreground text-xs hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
-)
+const FOLD_TRIGGER =
+	"flex h-7 w-full min-w-0 items-center justify-between gap-1 rounded-sm p-1.5 text-start font-medium text-faint-foreground text-xs leading-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 
 const FOLD_CHEVRON =
-	"size-3.5 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
+	"size-3 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
 
 const SECTION_FIELD =
 	"w-full min-w-0 border-none bg-transparent p-1.5 text-sidebar-foreground text-xs leading-4 outline-none"
@@ -110,7 +108,6 @@ const SectionLabel = ({ slotId, children }: SectionLabelProps) => (
 interface SectionNameFieldProps {
 	ariaLabel: string
 	initialName: string
-	className?: string
 	onCommit: (name: string) => void
 	onCancel: () => void
 }
@@ -118,7 +115,6 @@ interface SectionNameFieldProps {
 const SectionNameField = ({
 	ariaLabel,
 	initialName,
-	className,
 	onCommit,
 	onCancel,
 }: SectionNameFieldProps) => {
@@ -144,7 +140,7 @@ const SectionNameField = ({
 	return (
 		<input
 			aria-label={ariaLabel}
-			className={cn(SECTION_FIELD, className)}
+			className={SECTION_FIELD}
 			data-slot="roster-section-field"
 			onBlur={settle}
 			onChange={(event) => setDraft(event.target.value)}
@@ -178,7 +174,6 @@ interface SectionHeadProps extends SectionHeadActions, SectionPlace {
 	section: Pick<AppSidebarSection, "id" | "name">
 	bodyId: string
 	className: string
-	fieldClassName?: string
 	slot: string
 	children: ReactNode
 }
@@ -196,7 +191,6 @@ const SectionHead = ({
 	onDelete,
 	bodyId,
 	className,
-	fieldClassName,
 	slot,
 	children,
 }: SectionHeadProps) => {
@@ -207,7 +201,6 @@ const SectionHead = ({
 		return (
 			<SectionNameField
 				ariaLabel={t("roster.section.renameField", { name: section.name })}
-				className={fieldClassName}
 				initialName={section.name}
 				onCancel={() => setIsRenaming(false)}
 				onCommit={(name) => {
@@ -395,7 +388,6 @@ const NamedFoldSection = ({
 					{...head}
 					bodyId={bodyId}
 					className={NAMED_FOLD_TRIGGER}
-					fieldClassName={SIDEBAR_ROW_INSET}
 					isOpen={isOpen}
 					section={section}
 					slot="fold-section-trigger"

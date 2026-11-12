@@ -63,6 +63,7 @@
 		--hue-light-conversation-icon-foreground,
 		#525252
 	);
+	--conversation-glyph: var(--hue-light-avatar-ink, var(--muted-foreground));
 	--conversation-pile-overflow: #e5e5e5;
 	--conversation-pile-overflow-foreground: #404040;
 	--bot-blot-ink: oklch(0.08 0 0);
@@ -127,6 +128,7 @@
 	--sidebar-accent: #f2f2f2;
 	--sidebar-accent-foreground: #0a0a0a;
 	--sidebar-border: #e5e5e5;
+	--sidebar-tree-line: var(--sidebar-border);
 	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.72 0.013 285.938);
 	--scrollbar-hover: oklch(0.6 0.014 285.938);
@@ -304,6 +306,7 @@
 		--hue-dark-conversation-icon-foreground,
 		#d4d4d4
 	);
+	--conversation-glyph: var(--hue-dark-avatar-ink, var(--muted-foreground));
 	--conversation-pile-overflow: #333333;
 	--conversation-pile-overflow-foreground: #ededed;
 	--bot-avatar-field-untinted: #75acff;
@@ -362,6 +365,7 @@
 	--sidebar-accent: #262626;
 	--sidebar-accent-foreground: #f5f5f5;
 	--sidebar-border: #212224;
+	--sidebar-tree-line: #2a2a2a;
 	--sidebar-ring: var(--primary-strong);
 	--scrollbar: oklch(0.44 0.008 286.033);
 	--scrollbar-hover: oklch(0.55 0.01 286.033);

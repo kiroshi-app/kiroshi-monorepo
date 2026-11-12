@@ -50,10 +50,16 @@ const hasWaitingMission = (missions: AppSidebarRowMission[] | undefined) =>
 const isWaitingOnReader = ({ bot, conversation }: PinnedEntry) =>
 	hasWaitingMission(bot?.missions) || hasWaitingMission(conversation?.missions)
 
-const waitingFirst = (entries: PinnedEntry[]) => [
-	...entries.filter(isWaitingOnReader),
-	...entries.filter((entry) => !isWaitingOnReader(entry)),
-]
+const hasPendingQuestion = ({ bot, conversation }: PinnedEntry) =>
+	Boolean(bot?.pendingQuestion || conversation?.pendingQuestion)
+
+const waitRankOf = (entry: PinnedEntry) => {
+	if (hasPendingQuestion(entry)) return 0
+	return isWaitingOnReader(entry) ? 1 : 2
+}
+
+const waitingFirst = (entries: PinnedEntry[]) =>
+	entries.toSorted((one, other) => waitRankOf(one) - waitRankOf(other))
 
 const toPin = ({ id, sectionId }: PinnedEntry): RosterPin => ({ id, sectionId })
 

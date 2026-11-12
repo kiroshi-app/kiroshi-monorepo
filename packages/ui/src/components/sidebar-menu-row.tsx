@@ -41,15 +41,14 @@ const SIDEBAR_GLYPH_BOX = "h-5 w-7"
 
 const SIDEBAR_AVATAR_SIDE = 28
 
-const NAVIGATION_ROW = cn(
-	SIDEBAR_ROW_INSET,
-	"gap-2.5 rounded-lg font-normal text-soft-foreground hover:bg-rail-item-selected/50 hover:text-foreground active:bg-rail-item-selected active:text-foreground data-active:bg-rail-item-selected data-active:font-normal data-active:text-foreground data-active:hover:bg-rail-item-selected-hover",
-)
+const NAVIGATION_ROW =
+	"h-7 min-h-7 gap-2 rounded-sm p-1.5 font-normal text-compact leading-4 hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover data-active:bg-sidebar-accent data-active:font-normal data-active:active:bg-sidebar-accent data-active:hover:bg-sidebar-accent"
 
-const NAVIGATION_ICON_SLOT = cn(
-	SIDEBAR_GLYPH_BOX,
-	"grid shrink-0 place-items-center [&_svg]:size-3.5! [&_svg]:stroke-[1.75]!",
-)
+const NAVIGATION_ICON_SLOT =
+	"grid size-4 shrink-0 place-items-center text-muted-foreground [&>svg]:stroke-[1.75]! [&_svg]:size-full!"
+
+const NAVIGATION_LABEL =
+	"text-soft-foreground group-data-active/menu-button:text-foreground"
 
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
@@ -113,7 +112,10 @@ const SidebarMenuRow = ({
 					{icon}
 				</span>
 			) : null}
-			<span aria-hidden={isCollapsed} className={LABEL_SLOT}>
+			<span
+				aria-hidden={isCollapsed}
+				className={cn(LABEL_SLOT, isNavigation && NAVIGATION_LABEL)}
+			>
 				{children}
 			</span>
 			{trailing}

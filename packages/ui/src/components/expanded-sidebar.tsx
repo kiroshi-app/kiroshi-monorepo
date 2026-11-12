@@ -15,6 +15,12 @@ import {
 	type SectionHeadActions,
 } from "@workspace/ui/components/app-sidebar-section"
 import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
+import {
+	COMPACT_LEAD_SIDE,
+	COMPACT_ROW_GAP,
+	COMPACT_ROW_STACK,
+	CompactRowsContext,
+} from "@workspace/ui/components/compact-rows"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
@@ -30,9 +36,7 @@ import {
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
 import {
-	SIDEBAR_AVATAR_SIDE,
 	SIDEBAR_COLUMN,
-	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
 } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
@@ -50,11 +54,9 @@ import {
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width)")
+const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width) gap-3")
 
 const SECTIONS = "gap-3"
-
-const CONVERSATIONS_BODY = "flex flex-col gap-0.5"
 
 const LIST_EMPTY = "p-3 text-start text-compact text-faint-foreground leading-5"
 
@@ -65,21 +67,19 @@ const LIST_RETRY =
 	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-foreground text-xs leading-4 transition-none"
 
 const MISSION_COUNT =
-	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
+	"w-16 shrink-0 text-end text-[11px] text-muted-foreground leading-4 tabular-nums"
 
-const FOOTER = cn(
-	SIDEBAR_ROW_INSET,
-	"flex w-full shrink-0 items-center gap-2.5 rounded-lg text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
-)
+const FOOTER =
+	"flex h-7 w-full shrink-0 items-center gap-2 rounded-sm p-1.5 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const FOOTER_GLYPH =
-	"grid size-7 shrink-0 place-items-center [&>svg]:size-4.5 [&>svg]:stroke-[1.75]"
+	"grid size-4 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
-	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase"
+	"grid size-full place-items-center bg-sidebar-accent font-medium text-[9px] text-foreground uppercase leading-none"
 
 const FOOTER_NAME =
-	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5"
+	"min-w-0 flex-1 truncate text-compact text-sidebar-person-foreground leading-4"
 
 const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
@@ -199,7 +199,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			<AvatarFrame
 				image={user?.image}
 				shape="round"
-				size={SIDEBAR_AVATAR_SIDE}
+				size={COMPACT_LEAD_SIDE}
 				slot="expanded-sidebar-avatar"
 			>
 				<span aria-hidden="true" className={FOOTER_AVATAR}>
@@ -289,7 +289,7 @@ const ExpandedSidebarListBody = ({
 			)}
 			{hasConversations ? (
 				<FoldSection name={t("rail.conversations")}>
-					<div className={CONVERSATIONS_BODY}>
+					<div className={COMPACT_ROW_STACK}>
 						{conversations}
 						{listEndSlot}
 					</div>
@@ -302,9 +302,11 @@ const ExpandedSidebarListBody = ({
 }
 
 const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
-	<SidebarContent className={SECTIONS}>
-		<ExpandedSidebarListBody {...props} />
-	</SidebarContent>
+	<CompactRowsContext.Provider value>
+		<SidebarContent className={SECTIONS}>
+			<ExpandedSidebarListBody {...props} />
+		</SidebarContent>
+	</CompactRowsContext.Provider>
 )
 
 const ExpandedSidebar = ({
@@ -338,7 +340,7 @@ const ExpandedSidebar = ({
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
 			</div>
-			<SidebarMenu>
+			<SidebarMenu className={COMPACT_ROW_GAP}>
 				{navigationDestinationsOf({
 					onNewConversation,
 					onSelectMissions,

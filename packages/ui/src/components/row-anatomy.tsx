@@ -141,6 +141,101 @@ const RowParts = ({ parts, slot, identifier, lead }: RowPartsProps) => {
 	)
 }
 
+const COMPACT_TITLE = "block truncate"
+
+const COMPACT_TITLE_NEEDING_YOU = "font-medium text-foreground"
+
+const COMPACT_META =
+	"flex min-w-16 shrink-0 items-center justify-end gap-1.5 text-[11px] text-muted-foreground leading-4 tabular-nums"
+
+const COMPACT_TIME = "min-w-5.5 shrink-0 text-end"
+
+const COMPACT_NEEDS_YOU =
+	"flex items-center gap-1 ps-1 font-semibold text-warning"
+
+type CompactRowTitleProps = {
+	name: string
+	isWorking?: boolean
+	isNeedingYou?: boolean
+}
+
+const CompactRowTitle = ({
+	name,
+	isWorking = false,
+	isNeedingYou = false,
+}: CompactRowTitleProps) => {
+	const { t } = useTranslation("bots")
+	const isShimmering = isWorking && !isNeedingYou
+
+	return (
+		<span
+			className={cn(COMPACT_TITLE, isNeedingYou && COMPACT_TITLE_NEEDING_YOU)}
+			data-slot="roster-row-name"
+		>
+			{isShimmering ? (
+				<>
+					<TextShimmer
+						className="inline"
+						duration={WORKING_SHIMMER_DURATION}
+						isHeldUnderReducedMotion
+					>
+						{name}
+					</TextShimmer>{" "}
+					<span className="sr-only">{t("roster.pose.working")}</span>
+				</>
+			) : (
+				name
+			)}
+		</span>
+	)
+}
+
+type CompactRowMetaProps = {
+	pile?: ReactNode
+	timestamp?: string
+	isTimestampDestructive?: boolean
+	isNeedingYou?: boolean
+}
+
+const CompactRowMeta = ({
+	pile,
+	timestamp,
+	isTimestampDestructive = false,
+	isNeedingYou = false,
+}: CompactRowMetaProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<span className={COMPACT_META} data-slot="roster-row-meta">
+			{isNeedingYou ? (
+				<span className={COMPACT_NEEDS_YOU} data-slot="roster-row-needs-you">
+					<span
+						aria-hidden="true"
+						className={NEEDS_YOU_GLYPH}
+						data-slot="needs-you-glyph"
+					/>
+					<span data-slot="needs-you-label">{t("roster.needsYou")}</span>
+				</span>
+			) : (
+				<>
+					{pile}
+					{timestamp ? (
+						<span
+							className={cn(
+								COMPACT_TIME,
+								isTimestampDestructive && "text-destructive",
+							)}
+							data-slot="roster-row-timestamp"
+						>
+							{timestamp}
+						</span>
+					) : null}
+				</>
+			)}
+		</span>
+	)
+}
+
 type RowAnatomyGeometry =
 	| { geometry: "roster"; badge?: BotBadge; pendingQuestion?: string }
 	| { geometry: "activity"; badge?: never; pendingQuestion?: string }
@@ -267,6 +362,8 @@ const RowAnatomy = ({
 
 export {
 	ACTIVITY_ROW_CLASS,
+	CompactRowMeta,
+	CompactRowTitle,
 	DOT_CLASS,
 	NEEDS_YOU_GLYPH,
 	ROW_GLYPH_CLASS,
