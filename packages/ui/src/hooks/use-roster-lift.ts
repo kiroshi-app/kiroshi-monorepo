@@ -7,7 +7,9 @@ import {
 	useSyncExternalStore,
 } from "react"
 
+import { usePrefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
+import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { capturePointer, releasePointer } from "@workspace/ui/lib/touch"
 
 const LIFT_THRESHOLD = 4
@@ -42,6 +44,37 @@ const place = (node: HTMLElement | null, at: Point, from: Point) => {
 	if (!node) return
 	node.style.setProperty("--lift-dx", `${at.x - from.x}px`)
 	node.style.setProperty("--lift-dy", `${at.y - from.y}px`)
+}
+
+const SETTLING = {
+	duration: 150,
+	easing: `cubic-bezier(${EASE_OUT.join(", ")})`,
+} as const satisfies KeyframeAnimationOptions
+
+const centreOf = (node: HTMLElement): Point => {
+	const { left, top, width, height } = node.getBoundingClientRect()
+	return { x: left + width / 2, y: top + height / 2 }
+}
+
+const isSlidingHome = (node: HTMLElement) =>
+	node
+		.getAnimations()
+		.some(
+			(animation) =>
+				animation instanceof CSSTransition &&
+				animation.transitionProperty === "translate",
+		)
+
+const settleFrom = (node: HTMLElement, dropped: Point) => {
+	if (!node.isConnected || isSlidingHome(node)) return
+	const rest = centreOf(node)
+	node.animate(
+		[
+			{ translate: `${dropped.x - rest.x}px ${dropped.y - rest.y}px` },
+			{ translate: "0px 0px" },
+		],
+		SETTLING,
+	)
 }
 
 const createLandingStore = <Landing>() => {
@@ -115,6 +148,7 @@ export const useRosterLift = <Landing>({
 	const at = useRef<Point>({ x: 0, y: 0 })
 	const followed = useRef<HTMLElement | null>(null)
 	const hasDropped = useRef(false)
+	const isStill = usePrefersReducedMotion()
 	const landingFor = useStableCallback(landingAt)
 	const isSame = useStableCallback(isSameLanding)
 	const liftedElement = useStableCallback(
@@ -152,6 +186,11 @@ export const useRosterLift = <Landing>({
 			element.removeEventListener("lostpointercapture", cancel)
 			if (!isLifted) return
 			releasePointer(element, pointerId)
+			const dropped = followed.current
+			if (dropped && !isStill) {
+				const from = centreOf(dropped)
+				requestAnimationFrame(() => settleFrom(dropped, from))
+			}
 			hasDropped.current = true
 			landing.write(null)
 			setLift(null)
