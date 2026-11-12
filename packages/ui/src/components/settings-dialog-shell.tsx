@@ -55,8 +55,8 @@ const DEFAULT_LEAVE_KIND: WordedSessionKind = "skills"
 
 const ENTERS_BY_TRAVEL = {
 	forward:
-		"fade-in slide-in-from-end-2 animate-in duration-200 ease-out motion-reduce:animate-none",
-	back: "fade-in slide-in-from-start-2 animate-in duration-200 ease-out motion-reduce:animate-none",
+		"fade-in motion-safe:slide-in-from-end-2 animate-in duration-200 ease-out motion-reduce:[animation-duration:200ms]!",
+	back: "fade-in motion-safe:slide-in-from-start-2 animate-in duration-200 ease-out motion-reduce:[animation-duration:200ms]!",
 } as const satisfies Record<Travel, string>
 
 const wordedKindOf = (sessions: SettingsSessions, pages?: SettingsPages) => {

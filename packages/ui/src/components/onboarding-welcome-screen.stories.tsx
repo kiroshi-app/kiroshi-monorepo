@@ -919,7 +919,7 @@ export const WelcomeWalk = meta.story({
 		docs: {
 			description: {
 				story:
-					"The tour walked by hand. Check that the first slide stands still, that Next brings the next slide in from the end side over 12px while it fades in, that Back brings the previous one in from the start side, and that the stepper and the action never move.",
+					"The tour walked by hand. Check that the first slide stands still, that Next brings the next slide in from the end side over 12px while it fades in, that Back brings the previous one in from the start side, that under reduced motion a slide still fades in over 200ms without moving, and that the stepper and the action never move.",
 			},
 		},
 	},
@@ -942,6 +942,13 @@ export const WelcomeWalk = meta.story({
 			)
 			await expect(enterStartOf(content())).toEqual({ opacity: "0", x: -12 })
 		})
+
+		await userEvent.click(canvas.getByRole("button", { name: "Next" }))
+		await waitFor(() =>
+			expect(screen).toHaveAttribute("data-step", "conversations"),
+		)
+		await expect(getComputedStyle(content()).animationDuration).toBe("0.2s")
+		await expect(enterStartOf(content())).toEqual({ opacity: "0", x: 0 })
 	},
 })
 

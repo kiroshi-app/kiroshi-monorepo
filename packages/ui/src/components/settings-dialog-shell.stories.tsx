@@ -14,6 +14,7 @@ import {
 	enterStartOf,
 	expectHeadingFont,
 	FRAME_POLL,
+	shown,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
@@ -314,7 +315,7 @@ export const ChordIgnored = meta.story({
 		await userEvent.keyboard("{Meta>},{/Meta}")
 
 		await expect(screen.queryByRole("alertdialog")).toBe(null)
-		await expect(body).toBeVisible()
+		await shown(body)
 		await expect(args.onClose).not.toHaveBeenCalled()
 	},
 })
@@ -324,7 +325,7 @@ export const PushedPageTravels = meta.story({
 		docs: {
 			description: {
 				story:
-					"A skill page pushed, then left by its back row. Check that the dialog opens with its tabs standing still, that the pushed page comes in from the end side over 8px while it fades in, and that the tabs come back from the start side.",
+					"A skill page pushed, then left by its back row. Check that the dialog opens with its tabs standing still, that the pushed page comes in from the end side over 8px while it fades in, that the tabs come back from the start side, and that under reduced motion a pushed page still fades in over 200ms without moving.",
 			},
 		},
 	},
@@ -351,6 +352,13 @@ export const PushedPageTravels = meta.story({
 			await within(dialog).findByRole("tab", { name: "Skills" })
 			await expect(enterStartOf(page())).toEqual({ opacity: "0", x: -8 })
 		})
+
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: /release-notes/ }),
+		)
+		await within(dialog).findByLabelText("Body")
+		await expect(getComputedStyle(page()).animationDuration).toBe("0.2s")
+		await expect(enterStartOf(page())).toEqual({ opacity: "0", x: 0 })
 	},
 })
 

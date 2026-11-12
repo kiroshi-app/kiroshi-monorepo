@@ -1400,6 +1400,7 @@ navigation-appsidebar--conversations-rail-space-host
 navigation-appsidebar--conversations-rail-space-host-dark
 navigation-appsidebar--create-label
 navigation-appsidebar--create-menu
+navigation-appsidebar--drag-bot-again-before-it-lands
 navigation-appsidebar--drag-bot-into-an-empty-pinned-zone
 navigation-appsidebar--drag-bot-into-empty-section
 navigation-appsidebar--drag-bot-nowhere

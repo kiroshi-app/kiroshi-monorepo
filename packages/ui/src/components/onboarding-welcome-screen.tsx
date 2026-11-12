@@ -50,8 +50,8 @@ const COMPANIONS = [
 
 const ENTERS_BY_TRAVEL = {
 	forward:
-		"fade-in slide-in-from-end-3 animate-in duration-200 ease-out motion-reduce:animate-none",
-	back: "fade-in slide-in-from-start-3 animate-in duration-200 ease-out motion-reduce:animate-none",
+		"fade-in motion-safe:slide-in-from-end-3 animate-in duration-200 ease-out motion-reduce:[animation-duration:200ms]!",
+	back: "fade-in motion-safe:slide-in-from-start-3 animate-in duration-200 ease-out motion-reduce:[animation-duration:200ms]!",
 } as const satisfies Record<Travel, string>
 
 const CARD_CLASS = "rounded-bubble border border-border bg-card"
