@@ -571,6 +571,8 @@
 :is(
 	[data-slot="context-menu-content"],
 	[data-slot="context-menu-sub-content"],
+	[data-slot="dropdown-menu-content"],
+	[data-slot="dropdown-menu-sub-content"],
 	[data-slot="popover-content"]
 ):not([data-closed]) {
 	animation: none;
@@ -583,7 +585,9 @@
 :is(
 	[data-slot="dialog-content"],
 	[data-slot="context-menu-content"],
-	[data-slot="context-menu-sub-content"]
+	[data-slot="context-menu-sub-content"],
+	[data-slot="dropdown-menu-content"],
+	[data-slot="dropdown-menu-sub-content"]
 ) {
 	--tw-exit-scale: 0.98;
 	--tw-exit-blur: 4px;
