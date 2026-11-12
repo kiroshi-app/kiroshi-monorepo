@@ -180,6 +180,36 @@ pub async fn conversation_page<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn conversation_today_of_agent<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	caller: Caller,
+	space_id: String,
+	bot_id: String,
+	day_start: i64,
+	day_end: i64,
+) -> Result<Vec<ConversationInPage>, TranscriptStoreError> {
+	let day = day_start..day_end;
+	if day.is_empty() {
+		return Err(TranscriptStoreError::EmptyDay { day_start, day_end });
+	}
+	let reader = owner_of(&caller, &app)?;
+	let database = ready(&state)?;
+	let read = database.conversations().day_of_agent(space_id, reader, bot_id, day).await?;
+	let ids = read.iter().map(|row| row.conversation.id.clone()).collect();
+	let states = conversation_state::listed(&app, database, ids).await?;
+	let avatars = avatars::Avatars::dir(&app);
+	Ok(read
+		.into_iter()
+		.map(|row| {
+			let observed = state_in(&states, &row.conversation.id);
+			ConversationInPage::of(row, observed, avatars.as_deref())
+		})
+		.collect())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn conversation_local_ids(
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Vec<String>, TranscriptStoreError> {

@@ -166,6 +166,11 @@ pub enum TranscriptStoreError {
 		cursor: String,
 	},
 	#[serde(rename_all = "camelCase")]
+	EmptyDay {
+		day_start: i64,
+		day_end: i64,
+	},
+	#[serde(rename_all = "camelCase")]
 	DocumentRefused {
 		name: String,
 		failure: Box<LibraryError>,

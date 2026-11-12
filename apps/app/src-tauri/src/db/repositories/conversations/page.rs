@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
@@ -71,6 +72,19 @@ impl ConversationsRepository {
 	) -> Result<ActivePage, ConversationError> {
 		self.call(move |connection| {
 			Ok(page_of_space(connection, &space_id, &reader, after.as_ref(), size))
+		})
+		.await?
+	}
+
+	pub async fn day_of_agent(
+		&self,
+		space_id: String,
+		reader: ChatOwner,
+		bot_id: String,
+		day: Range<i64>,
+	) -> Result<Vec<ActiveConversation>, ConversationError> {
+		self.call(move |connection| {
+			Ok(day_of_agent_in_space(connection, &space_id, &reader, &bot_id, &day))
 		})
 		.await?
 	}
@@ -204,6 +218,38 @@ fn pinned_statement() -> String {
 		&format!("AND {PIN_POSITION} IS NOT NULL AND {}", owned_by_the_reader(2)),
 		&format!("ORDER BY {PIN_POSITION} ASC, conversations.id ASC"),
 	)
+}
+
+fn day_of_agent_statement() -> String {
+	active_statement(
+		&format!(
+			"AND {} AND conversations.last_activity_at >= ?3 AND conversations.last_activity_at < ?4
+				AND EXISTS (SELECT 1 FROM conversation_participants AS seated
+					WHERE seated.conversation_id = conversations.id AND seated.bot_id = ?5
+						AND seated.left_at IS NULL)",
+			owned_by_the_reader(2)
+		),
+		"ORDER BY conversations.last_activity_at DESC, conversations.id DESC",
+	)
+}
+
+fn day_of_agent_in_space(
+	connection: &Connection,
+	space_id: &str,
+	reader: &ChatOwner,
+	bot_id: &str,
+	day: &Range<i64>,
+) -> Result<Vec<ActiveConversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&day_of_agent_statement())?;
+	let rows =
+		statement.query_map(params![space_id, reader, day.start, day.end, bot_id], active)?;
+	let mut read = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+	let ids: Vec<&str> = read.iter().map(|row| row.conversation.id.as_str()).collect();
+	let mut seats = seats_of_page(connection, &ids)?;
+	for row in &mut read {
+		row.conversation.seats = seats.remove(&row.conversation.id).unwrap_or_default();
+	}
+	Ok(read)
 }
 
 fn page_of_space(
@@ -1122,6 +1168,22 @@ mod tests {
 				"the page sorts its rows apart from the index: {plan:?}"
 			);
 		}
+	}
+
+	#[tokio::test]
+	async fn the_day_of_an_agent_reads_its_rows_through_the_activity_index_with_no_sort() {
+		let (database, _dir) = planted(String::new()).await;
+
+		let plan = plan(&database, day_of_agent_statement()).await;
+
+		assert!(
+			plan.iter().any(|step| step.contains("conversations_and_solos_by_activity")),
+			"the day does not read its rows through their activity index: {plan:?}"
+		);
+		assert!(
+			!plan.iter().any(|step| step.contains("TEMP B-TREE")),
+			"the day sorts its rows apart from the index: {plan:?}"
+		);
 	}
 
 	#[tokio::test]

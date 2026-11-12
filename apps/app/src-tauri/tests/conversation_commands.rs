@@ -3863,3 +3863,78 @@ fn a_cursor_that_does_not_decode_is_refused_by_name_before_any_row_is_read() {
 
 	assert_eq!(refused, Err(json!({ "kind": "unreadableCursor", "cursor": "not a cursor" })));
 }
+
+const DAY_START: i64 = 2_000_000_000_000;
+const DAY_END: i64 = DAY_START + 86_400_000;
+const ACTIVE_AT: &str = "UPDATE conversations SET last_activity_at = ?2 WHERE id = ?1";
+const ARCHIVED_AT: &str = "UPDATE conversations SET archived_at = ?2 WHERE id = ?1";
+
+fn stamped(app: &App<MockRuntime>, statement: &'static str, conversation_id: &str, at: i64) {
+	let state = app.state::<db::DatabaseState>();
+	let database = state.as_ref().expect("the database is open");
+	let conversation_id = conversation_id.to_owned();
+	let stamped = tauri::async_runtime::block_on(database.call_mut(move |connection| {
+		Ok(connection.execute(statement, rusqlite::params![conversation_id, at])?)
+	}))
+	.expect("the conversation is stamped");
+	assert_eq!(stamped, 1, "the stamp did not land on exactly one conversation");
+}
+
+fn today_of(
+	window: &WebviewWindow<MockRuntime>,
+	space_id: &str,
+	bot_id: &str,
+	day_end: i64,
+) -> Result<Value, Value> {
+	call(
+		window,
+		"conversation_today_of_agent",
+		json!({ "spaceId": space_id, "botId": bot_id, "dayStart": DAY_START, "dayEnd": day_end }),
+	)
+}
+
+#[test]
+fn the_today_of_an_agent_is_every_conversation_seating_it_active_inside_the_day_newest_first() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let nyx = a_bot_in(&window, &space, "Nyx");
+	let ode = a_bot_in(&window, &space, "Ode");
+	let idle = a_bot_in(&window, &space, "Pax");
+	let room_at = |title: &str, bot_ids: Vec<String>, at: i64| {
+		let id = id_of(&a_room(&window, &space, title, bot_ids));
+		stamped(&app, ACTIVE_AT, &id, at);
+		id
+	};
+	for n in 0..30 {
+		room_at(&format!("Later {n}"), vec![], DAY_START + 1_000 + n);
+	}
+	let seating_nyx: Vec<String> = (0..5)
+		.map(|n| room_at(&format!("Nyx {n}"), vec![nyx.clone(), ode.clone()], DAY_START + 100 + n))
+		.collect();
+	room_at("Yesterday", vec![nyx.clone()], DAY_START - 1);
+	room_at("Tomorrow", vec![nyx.clone()], DAY_END);
+	room_at("Of another agent", vec![ode.clone()], DAY_START + 50);
+	let archived = room_at("Archived", vec![nyx.clone()], DAY_START + 60);
+	stamped(&app, ARCHIVED_AT, &archived, DAY_START + 61);
+	let solo = id_of(
+		&call(&window, "conversation_main_chat", json!({ "botId": nyx, "spaceId": space }))
+			.expect("the solo"),
+	);
+	stamped(&app, ACTIVE_AT, &solo, DAY_START);
+
+	let today = today_of(&window, &space, &nyx, DAY_END).expect("the day reads");
+
+	let today = today.as_array().expect("the day holds a list");
+	let answered: Vec<String> = today.iter().map(id_of).collect();
+	let expected: Vec<String> = seating_nyx.into_iter().rev().chain([solo]).collect();
+	let paged = walked_rooms(&window, &space).concat();
+	assert_eq!(answered, expected);
+	assert_eq!(Some(&today[0]), paged.iter().find(|row| id_of(row) == expected[0]));
+	assert_eq!(today_of(&window, &space, &idle, DAY_END), Ok(json!([])));
+	assert_eq!(
+		today_of(&window, &space, &nyx, DAY_START),
+		Err(json!({ "kind": "emptyDay", "dayStart": DAY_START, "dayEnd": DAY_START }))
+	);
+}
