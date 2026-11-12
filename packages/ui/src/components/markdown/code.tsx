@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
 import { CodeLine } from "@workspace/ui/components/code-block"
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	MarkdownAnswerBlock,
@@ -157,7 +158,11 @@ export const MarkdownFence = ({
 						void copy()
 					}}
 				>
-					{copied ? <Icons.Check /> : <Icons.Copy />}
+					<IconSwap
+						icon={<Icons.Copy />}
+						isSwapped={copied}
+						swappedIcon={<Icons.Check />}
+					/>
 				</TooltipButton>
 			</span>
 		</div>

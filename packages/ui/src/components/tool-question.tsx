@@ -13,6 +13,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
@@ -715,7 +716,6 @@ const LinkField = ({ link }: LinkFieldProps) => {
 	const id = useId()
 
 	const hasCopied = copied && !hasFailedToCopy
-	const CopyGlyph = hasCopied ? Icons.Check : Icons.Copy
 	const failed = hasFailedToCopy ? t("toolQuestion.copyFailed") : null
 	const announced = hasCopied ? t("toolQuestion.copyAnnounced") : null
 
@@ -746,7 +746,13 @@ const LinkField = ({ link }: LinkFieldProps) => {
 					type="button"
 					variant="ghost"
 				>
-					<CopyGlyph className="size-3.5 text-muted-foreground" />
+					<IconSwap
+						icon={<Icons.Copy className="size-3.5 text-muted-foreground" />}
+						isSwapped={hasCopied}
+						swappedIcon={
+							<Icons.Check className="size-3.5 text-muted-foreground" />
+						}
+					/>
 					{hasCopied ? t("toolQuestion.copied") : t("toolQuestion.copy")}
 				</Button>
 			</div>
