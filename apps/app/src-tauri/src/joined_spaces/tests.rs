@@ -522,12 +522,6 @@ impl Member {
 		let state = self.app.state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
 	}
-
-	fn holds_a_key_without_its_roster(&self) {
-		let key = HeldSpaceKey::first().expect("randomness");
-		let keys = self.app.state::<SpaceKeys>();
-		keys.stored(&format!("joined-{INSTANCE}"), key).expect("the key is kept");
-	}
 }
 
 fn signed_in(
@@ -1097,7 +1091,9 @@ fn a_space_holding_its_key_and_no_roster_says_its_hello_and_comes_online_on_the_
 		let member = Member::facing_a_silent_host("join-roster-missing").await;
 		member.relay.hosting(HostSide::Silent);
 		let joined = member.accepted().await.expect("the join waits");
-		member.holds_a_key_without_its_roster();
+		let key = HeldSpaceKey::first().expect("randomness");
+		let keys = member.app.state::<SpaceKeys>();
+		keys.stored(&format!("joined-{INSTANCE}"), key).expect("the key is kept");
 		let sockets_before = member.relay.connections();
 
 		relay::reconciled(member.app.handle()).await;
