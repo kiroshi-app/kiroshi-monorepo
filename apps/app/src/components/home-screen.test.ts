@@ -421,39 +421,26 @@ it("puts the keyboard after the draft on each arrival, and leaves it alone in be
 	expect(field().selectionEnd).toBe("Also the hotel".length)
 })
 
-type HomeWorkspace = {
-	attachments: AttachmentsController
-	drafts: DraftsController
-	openConversation: (conversationId: string) => void
-}
-
 const storeEveryFile: AttachmentsPort["store"] = (_owner, files) =>
 	Promise.resolve(files.map((file) => `/data/${file.name}`))
 
-const homeWorkspaceWith = (
-	send: AttachmentsPort["send"] = () => true,
-): HomeWorkspace => ({
-	attachments: createAttachmentsController({ store: storeEveryFile, send }),
-	drafts: createDraftsController(),
-	openConversation: vi.fn(),
-})
-
 type HomePageProps = {
-	workspace: HomeWorkspace
+	attachments: AttachmentsController
+	drafts: DraftsController
 	bots: Bot[]
 }
 
-const HomePage = ({ workspace, bots }: HomePageProps) => {
+const HomePage = ({ attachments, drafts, bots }: HomePageProps) => {
 	const [agent, setAgent] = useState(bots[0])
 	const send = useHomeSend({
 		agentId: agent.id,
 		spaceId: SPACE,
-		attachments: workspace.attachments,
-		drafts: workspace.drafts,
+		attachments,
+		drafts,
 		runtimes: fixture.runtimes,
 		startConversation: () => Promise.resolve(fixture.room),
 		discardConversation: () => Promise.resolve(),
-		openConversation: workspace.openConversation,
+		openConversation: () => undefined,
 	})
 
 	return emptyStageOf(fixture, {
@@ -467,12 +454,17 @@ const HomePage = ({ workspace, bots }: HomePageProps) => {
 }
 
 const mountHomePage = (
-	workspace = homeWorkspaceWith(),
 	bots = [fixture.atlas],
+	send: AttachmentsPort["send"] = () => true,
 ) =>
-	render(createElement(HomePage, { workspace, bots }), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
+	render(
+		createElement(HomePage, {
+			attachments: createAttachmentsController({ store: storeEveryFile, send }),
+			drafts: createDraftsController(),
+			bots,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
 
 const screenshot = () =>
 	new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" })
@@ -574,7 +566,7 @@ it("opens the commands of the selected agent on a slash, and writes the picked o
 		{ name: "review", description: "Review the diff" },
 	])
 	await fixture.store.recordBotCommands(nyx.id, [{ name: "deploy" }])
-	mountHomePage(homeWorkspaceWith(), [fixture.atlas, nyx])
+	mountHomePage([fixture.atlas, nyx])
 
 	fireEvent.change(fieldOf("Atlas"), { target: { value: "/" } })
 	const review = await screen.findByRole("option", { name: /\/review/ })
@@ -590,7 +582,7 @@ it("opens the commands of the selected agent on a slash, and writes the picked o
 })
 
 it("keeps the typed text and the files in the composer when the send fails", async () => {
-	mountHomePage(homeWorkspaceWith(() => false))
+	mountHomePage([fixture.atlas], () => false)
 	fireEvent.change(fieldOf("Atlas"), { target: { value: "Look at this" } })
 	dragOverGreeting("drop", [screenshot()])
 	await chipOf(/shot\.png/)
@@ -610,7 +602,7 @@ it("keeps the typed text and the files in the composer when the send fails", asy
 
 it("puts the keyboard in the composer when another agent is picked", async () => {
 	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
-	mountHomePage(homeWorkspaceWith(), [fixture.atlas, nyx])
+	mountHomePage([fixture.atlas, nyx])
 	await waitFor(() => expect(document.activeElement).toBe(fieldOf("Atlas")))
 
 	await pickAgent("Atlas", "Nyx")
