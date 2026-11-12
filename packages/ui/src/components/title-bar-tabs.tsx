@@ -553,7 +553,10 @@ const useTabLift = ({
 				(wasTornOff ? onTearOffMove : onTearOffStart)?.(tearOffAt(id, moved))
 			else if (wasTornOff) onTearOffCancel?.(id)
 		},
-		onCancel: (id) => onTearOffCancel?.(id),
+		onCancel: (id) => {
+			setIsSnapping(true)
+			onTearOffCancel?.(id)
+		},
 		onLand: (id, landing, released) => {
 			if (landing === TORN_OFF) {
 				if (onTearOffTab?.(tearOffAt(id, released)) !== true)

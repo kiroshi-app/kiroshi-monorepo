@@ -172,7 +172,7 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 		>
 			<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
 				<div className="flex min-w-0 flex-col gap-1">
-					<h1 className="font-heading font-semibold text-2xl text-foreground leading-7.5 tracking-[-0.015em]">
+					<h1 className="font-heading font-semibold text-2xl text-foreground leading-7.5 tracking-[-0.02em]">
 						{t("library.title")}
 					</h1>
 					<p className="text-compact text-muted-foreground leading-4.5">
