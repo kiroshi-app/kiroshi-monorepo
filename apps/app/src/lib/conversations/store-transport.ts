@@ -13,6 +13,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationInPage,
 	ConversationPage,
 	EnvEntry,
 	EnvScope,
@@ -416,6 +417,19 @@ export const conversationStore: TranscriptStore = {
 		invoke<ConversationPage>(
 			"conversation_page",
 			{ spaceId, cursor, limit },
+			{ signal },
+		),
+
+	conversationTodayOfAgent: (
+		spaceId: string,
+		botId: string,
+		dayStart: number,
+		dayEnd: number,
+		signal?: AbortSignal,
+	) =>
+		invoke<ConversationInPage[]>(
+			"conversation_today_of_agent",
+			{ spaceId, botId, dayStart, dayEnd },
 			{ signal },
 		),
 

@@ -142,6 +142,11 @@ const byPin = (one: Conversation, other: Conversation) =>
 const latestFirst = (one: ConversationInPage, other: ConversationInPage) =>
 	other.lastActivityAt - one.lastActivityAt
 
+const isSeatedIn = (row: ConversationInPage, botId: string) =>
+	row.participants.some(
+		(participant) => participant.botId === botId && participant.leftAt === null,
+	)
+
 const conversationPageOf = (
 	rows: ConversationInPage[],
 	cursor: string | null,
@@ -1489,6 +1494,28 @@ export const createFakeTranscriptStore = (
 					limit,
 				),
 			),
+
+		conversationTodayOfAgent: (
+			spaceId: string,
+			botId: string,
+			dayStart: number,
+			dayEnd: number,
+		) =>
+			dayEnd <= dayStart
+				? refuse({ kind: "emptyDay", dayStart, dayEnd })
+				: Promise.resolve(
+						[...conversations.values()]
+							.filter((stored) => stored.spaceId === spaceId)
+							.map(drawnConversation)
+							.map(topicInPage)
+							.filter(
+								(row) =>
+									isSeatedIn(row, botId) &&
+									dayStart <= row.lastActivityAt &&
+									row.lastActivityAt < dayEnd,
+							)
+							.sort(latestFirst),
+					),
 
 		conversationSoloStates: (spaceId: string) =>
 			Promise.resolve(

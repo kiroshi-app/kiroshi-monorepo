@@ -32,10 +32,39 @@ import {
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
-import type { Bot, Conversation } from "@/lib/conversations/store-contract"
+import type {
+	Bot,
+	Conversation,
+	ConversationInPage,
+} from "@/lib/conversations/store-contract"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
-import type { TodayRoster } from "@/lib/home/today-conversations"
+import { localDayAt, type TodayRoster } from "@/lib/home/today-conversations"
+import { startOfLocalDay } from "@/lib/missions/missions-model"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
+type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
+
+type HostListener = { event: string; handler: HostHandler }
+
+const host = vi.hoisted(() => ({ listeners: new Set<HostListener>() }))
+
+vi.mock("@/lib/host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host")>()),
+	listen: async (event: string, handler: HostHandler) => {
+		const listener = { event, handler }
+		host.listeners.add(listener)
+		return () => host.listeners.delete(listener)
+	},
+}))
+
+const emitOnHost = (heard: string) =>
+	act(async () => {
+		for (const { event, handler } of host.listeners) {
+			if (event === heard) {
+				handler({ payload: null }, null)
+			}
+		}
+	})
 
 const shelf = vi.hoisted(() => ({ items: [] as LibraryItem[] }))
 
@@ -53,8 +82,10 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 
 const SPACE = "personal"
 
-const NOON = new Date(2026, 10, 12, 12).getTime()
-const NEXT_NOON = new Date(2026, 10, 13, 12).getTime()
+const HOUR_MS = 60 * 60 * 1000
+const FIRST_MINTED_AT = 1
+const NOON = startOfLocalDay(FIRST_MINTED_AT) + 12 * HOUR_MS
+const NEXT_NOON = localDayAt(NOON).end + 12 * HOUR_MS
 
 const spokenAtNoon = (conversations: Conversation[]): TodayRoster => ({
 	conversations,
@@ -107,6 +138,7 @@ const emptyStageOf = (
 		bots: [fixture.atlas],
 		store: fixture.store,
 		spaceId: SPACE,
+		spaceRowId: SPACE,
 		readerName: "Lea",
 		isBandDismissed: true,
 		notice: null,
@@ -129,6 +161,7 @@ beforeEach(async () => {
 
 afterEach(() => {
 	cleanup()
+	host.listeners.clear()
 	vi.restoreAllMocks()
 	vi.clearAllMocks()
 })
@@ -440,57 +473,183 @@ const todayListOf = (agentName: string) =>
 const todayRow = (title: string) =>
 	screen.queryByRole("button", { name: title })
 
-it("swaps the Today list to the conversations of the agent picked in the composer", async () => {
-	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
-	const report = await fixture.store.createConversation({
+const findTodayRow = (title: string) =>
+	screen.findByRole("button", { name: title })
+
+const todayTitles = () =>
+	screen
+		.getAllByRole("listitem")
+		.map((item) => item.querySelector("button")?.getAttribute("aria-label"))
+
+const NO_ROSTER_PAGE = spokenAtNoon([])
+
+const roomWith = (bot: Bot, title: string) =>
+	fixture.store.createConversation({
 		spaceId: SPACE,
 		sectionId: null,
-		title: "Quarterly report",
-		botIds: [nyx.id],
+		title,
+		botIds: [bot.id],
 	})
-	const stage = {
-		bots: [fixture.atlas, nyx],
-		today: spokenAtNoon([fixture.room, report]),
-	}
-	const { rerender } = render(emptyStageOf(fixture, stage), {
+
+const mountTodayOf = (stage: Partial<HomeEmptyStageProps> = {}) =>
+	render(emptyStageOf(fixture, { today: NO_ROSTER_PAGE, ...stage }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	})
 
+it("lists a conversation of today with the agent that no roster page holds", async () => {
+	mountTodayOf()
+
+	expect(await findTodayRow("Lisbon offsite")).toBeTruthy()
 	expect(todayListOf("Atlas")).toBeTruthy()
-	expect(todayRow("Lisbon offsite")).toBeTruthy()
-	expect(screen.getByText("Last word on Lisbon offsite")).toBeTruthy()
+})
+
+it("lists the three most recent conversations of the day, newest first", async () => {
+	for (const title of ["Second", "Third", "Newest"]) {
+		await roomWith(fixture.atlas, title)
+	}
+	mountTodayOf()
+
+	await findTodayRow("Newest")
+
+	expect(todayTitles()).toEqual(["Newest", "Third", "Second"])
+})
+
+it("swaps the Today list to the conversations of the agent picked in the composer", async () => {
+	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
+	await roomWith(nyx, "Quarterly report")
+	const stage = { bots: [fixture.atlas, nyx], today: NO_ROSTER_PAGE }
+	const { rerender } = mountTodayOf(stage)
+
+	expect(await findTodayRow("Lisbon offsite")).toBeTruthy()
+	expect(todayListOf("Atlas")).toBeTruthy()
 	expect(todayRow("Quarterly report")).toBeNull()
 
 	rerender(emptyStageOf(fixture, { ...stage, agent: nyx }))
 
+	expect(await findTodayRow("Quarterly report")).toBeTruthy()
 	expect(todayListOf("Atlas")).toBeNull()
 	expect(todayListOf("Nyx")).toBeTruthy()
-	expect(todayRow("Quarterly report")).toBeTruthy()
 	expect(todayRow("Lisbon offsite")).toBeNull()
 })
 
-it("opens the conversation of the Today row that is clicked", () => {
-	const onOpenConversation = vi.fn()
-	render(
-		emptyStageOf(fixture, {
-			today: spokenAtNoon([fixture.room]),
-			onOpenConversation,
-		}),
-		{ wrapper: createQueryTestWrapper().wrapper },
+it("shows the live last message of a row the roster holds", async () => {
+	mountTodayOf({ today: spokenAtNoon([fixture.room]) })
+
+	await findTodayRow("Lisbon offsite")
+
+	expect(screen.getByText("Last word on Lisbon offsite")).toBeTruthy()
+})
+
+it("lists a conversation that becomes active while the page is open", async () => {
+	mountTodayOf()
+	await findTodayRow("Lisbon offsite")
+
+	await roomWith(fixture.atlas, "Quarterly report")
+	expect(todayRow("Quarterly report")).toBeNull()
+	await emitOnHost("conversation://created")
+
+	expect(await findTodayRow("Quarterly report")).toBeTruthy()
+})
+
+const roomOnHost = async (): Promise<ConversationInPage> => {
+	const { start, end } = localDayAt(NOON)
+	const [row] = await fixture.store.conversationTodayOfAgent(
+		SPACE,
+		fixture.atlas.id,
+		start,
+		end,
+	)
+	return row
+}
+
+it("shows the question of a listed row once the host says it needs you", async () => {
+	const idle = await roomOnHost()
+	const todayRead = vi
+		.spyOn(fixture.store, "conversationTodayOfAgent")
+		.mockResolvedValue([idle])
+	mountTodayOf()
+	await findTodayRow("Lisbon offsite")
+
+	todayRead.mockResolvedValue([
+		{
+			...idle,
+			state: "needs_you",
+			pendingPrompt: {
+				promptId: "ask-1",
+				kind: "question",
+				text: "When should the deposit go out?",
+			},
+		},
+	])
+	await emitOnHost("conversation://state-changed")
+
+	expect(
+		await screen.findByText("When should the deposit go out?"),
+	).toBeTruthy()
+})
+
+it("reads the new day once the local day changes", async () => {
+	const todayRead = vi.spyOn(fixture.store, "conversationTodayOfAgent")
+	const { rerender } = mountTodayOf()
+	await findTodayRow("Lisbon offsite")
+
+	rerender(
+		emptyStageOf(fixture, { today: { ...NO_ROSTER_PAGE, now: NEXT_NOON } }),
 	)
 
-	fireEvent.click(screen.getByRole("button", { name: "Lisbon offsite" }))
+	const nextDay = localDayAt(NEXT_NOON)
+	await waitFor(() =>
+		expect(todayRead).toHaveBeenLastCalledWith(
+			SPACE,
+			fixture.atlas.id,
+			nextDay.start,
+			nextDay.end,
+			expect.anything(),
+		),
+	)
+	await waitFor(() => expect(todayRow("Lisbon offsite")).toBeNull())
+	expect(screen.queryByRole("heading", { name: /Today with/ })).toBeNull()
+})
+
+it("opens the conversation of the Today row that is clicked", async () => {
+	const onOpenConversation = vi.fn()
+	mountTodayOf({ onOpenConversation })
+
+	fireEvent.click(await findTodayRow("Lisbon offsite"))
 
 	expect(onOpenConversation).toHaveBeenCalledWith(fixture.room.id)
 })
 
-it("draws no Today list and no header when the agent has no conversation today", () => {
-	const spokenYesterday = { ...spokenAtNoon([fixture.room]), now: NEXT_NOON }
-	render(emptyStageOf(fixture, { today: spokenYesterday }), {
-		wrapper: createQueryTestWrapper().wrapper,
+it("draws no Today list and no header when the agent has no conversation today", async () => {
+	const todayRead = vi.spyOn(fixture.store, "conversationTodayOfAgent")
+	mountTodayOf({ today: { ...NO_ROSTER_PAGE, now: NEXT_NOON } })
+
+	await waitFor(() => expect(todayRead).toHaveBeenCalled())
+	await act(async () => {
+		await todayRead.mock.results[0].value
 	})
 
 	expect(screen.queryByRole("heading", { name: /Today with/ })).toBeNull()
 	expect(screen.queryByRole("list")).toBeNull()
 	expect(todayRow("Lisbon offsite")).toBeNull()
+})
+
+it("raises the failed read of today and keeps the composer usable", async () => {
+	vi.spyOn(fixture.store, "conversationTodayOfAgent").mockRejectedValue({
+		kind: "unavailable",
+	})
+	const onDraftChange = vi.fn()
+	mountTodayOf({ onDraftChange })
+
+	await waitFor(() =>
+		expect(vi.mocked(raiseFailureNotice)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: i18n.t("chat:home.failure.rooms.title"),
+			}),
+		),
+	)
+	fireEvent.change(fieldOf("Atlas"), { target: { value: "Still here" } })
+
+	expect(onDraftChange).toHaveBeenCalledWith("Still here")
+	expect(screen.queryByRole("list")).toBeNull()
 })

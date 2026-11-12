@@ -1,17 +1,19 @@
 import type { HomeTodayRow } from "@workspace/ui/components/home-today-list"
 
-import type { ConversationHostStates } from "../bots/roster-pages"
+import {
+	type ConversationHostStates,
+	lastWordsIn,
+	observedStateOf,
+} from "../bots/roster-pages"
 import { rosterTimestamp } from "../bots/roster-timestamp"
 import {
 	conversationName,
-	lastSpokeAt,
-	mostRecentFirst,
-	presentParticipants,
 	previewText,
 	toConversationLook,
 } from "../conversations/roster-conversations"
 import type {
 	Conversation,
+	ConversationInPage,
 	ObservedState,
 } from "../conversations/store-contract"
 import type { ConversationPreviews } from "../conversations/transcript-state"
@@ -26,60 +28,61 @@ export type TodayRoster = {
 	now: number
 }
 
+type LocalDay = {
+	start: number
+	end: number
+}
+
+export const localDayAt = (now: number): LocalDay => {
+	const start = startOfLocalDay(now)
+	const nextDay = new Date(start)
+	nextDay.setDate(nextDay.getDate() + 1)
+	return { start, end: nextDay.getTime() }
+}
+
 type TodayRowActivity =
 	| { state: "needs-you"; question: string }
 	| { state: "working" | "done"; preview: string }
 
-const isSeated = (conversation: Conversation, agentId: string) =>
-	presentParticipants(conversation).some(({ botId }) => botId === agentId)
-
-const isToday = (conversation: Conversation, roster: TodayRoster) =>
-	startOfLocalDay(lastSpokeAt(conversation, roster)) ===
-	startOfLocalDay(roster.now)
-
-const pendingQuestionOf = (observed: ObservedState | undefined) =>
-	observed?.state === "needs_you" ? observed.pendingPrompt?.text : undefined
+const pendingQuestionOf = (observed: ObservedState) =>
+	observed.state === "needs_you" ? observed.pendingPrompt?.text : undefined
 
 const activityOf = (
-	observed: ObservedState | undefined,
+	observed: ObservedState,
 	preview: string,
 ): TodayRowActivity => {
 	const question = pendingQuestionOf(observed)
 	if (question) {
 		return { state: "needs-you", question }
 	}
-	return { state: observed?.state === "working" ? "working" : "done", preview }
+	return { state: observed.state === "working" ? "working" : "done", preview }
 }
 
+const lastWordReadOf = (row: ConversationInPage) =>
+	lastWordsIn({ pinned: [], conversations: [row], nextCursor: null })
+		.conversations[row.id]
+
 const toTodayRow = (
-	conversation: Conversation,
+	row: ConversationInPage,
 	roster: TodayRoster,
 ): HomeTodayRow => {
+	const conversation =
+		roster.conversations.find(({ id }) => id === row.id) ?? row
+	const lastWord = roster.previews[row.id] ?? lastWordReadOf(row)
+	const observed = roster.hostStates[row.id] ?? observedStateOf(row)
 	const { icon, color } = toConversationLook(conversation)
-	const lastMessage = previewText(
-		conversation,
-		roster.previews[conversation.id],
-	)
 	return {
-		id: conversation.id,
+		id: row.id,
 		title: conversationName(conversation),
-		timestamp: rosterTimestamp(lastSpokeAt(conversation, roster), roster.now),
+		timestamp: rosterTimestamp(lastWord?.at ?? row.lastActivityAt, roster.now),
 		icon,
 		hue: color,
-		...activityOf(roster.hostStates[conversation.id], lastMessage ?? ""),
+		...activityOf(observed, previewText(conversation, lastWord) ?? ""),
 	}
 }
 
 export const todayRowsOf = (
-	agentId: string,
+	todayRead: ConversationInPage[],
 	roster: TodayRoster,
 ): HomeTodayRow[] =>
-	mostRecentFirst(
-		roster.conversations.filter(
-			(conversation) =>
-				isSeated(conversation, agentId) && isToday(conversation, roster),
-		),
-		roster,
-	)
-		.slice(0, TODAY_ROW_LIMIT)
-		.map((conversation) => toTodayRow(conversation, roster))
+	todayRead.slice(0, TODAY_ROW_LIMIT).map((row) => toTodayRow(row, roster))

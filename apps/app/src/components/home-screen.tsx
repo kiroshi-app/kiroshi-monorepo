@@ -36,6 +36,7 @@ import { faceOfBot } from "@/lib/chat/thread-contract"
 import type { Bot } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type TodayRoster, todayRowsOf } from "@/lib/home/today-conversations"
+import { useTodayConversations } from "@/lib/home/use-today-conversations"
 import { useComposerLibrary } from "@/lib/library/use-composer-library"
 
 const homeAgentOf = (bot: Bot): HomeAgent => {
@@ -200,6 +201,7 @@ export type HomeEmptyStageProps = HomeSend & {
 	bots: Bot[]
 	store: TranscriptStore
 	spaceId: string | null
+	spaceRowId: string | null
 	readerName: string
 	isBandDismissed: boolean
 	notice: ReactNode
@@ -251,6 +253,7 @@ export const HomeEmptyStage = ({
 	bots,
 	store,
 	spaceId,
+	spaceRowId,
 	readerName,
 	isBandDismissed,
 	notice,
@@ -269,6 +272,12 @@ export const HomeEmptyStage = ({
 		isDismissed: isBandDismissed,
 		onDismiss: onDismissBand,
 	})
+	const todayRead = useTodayConversations(store, {
+		spaceRowId,
+		spaceId,
+		agentId: agent.id,
+		now: today.now,
+	})
 	const page = useRef<HTMLDivElement>(null)
 	const isDropTarget = usePageDrop(page, !isReadOnly, send.onAttach)
 
@@ -279,7 +288,7 @@ export const HomeEmptyStage = ({
 					<HomeTodayList
 						agentName={agent.name}
 						onOpenRow={onOpenConversation}
-						rows={todayRowsOf(agent.id, today)}
+						rows={todayRowsOf(todayRead.conversations, today)}
 					/>
 				}
 				stage="empty"
