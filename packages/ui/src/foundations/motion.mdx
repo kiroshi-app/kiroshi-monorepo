@@ -11,7 +11,7 @@ import {
 
 ## Easing
 
-**`globals.css` declares one easing token, `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, and the `ease-out` utility resolves to it.** Anything that enters, leaves or answers a press uses it. `ease-in-out` and `ease-linear` keep the Tailwind defaults. The system never uses `ease-in`. The matching `EASE_OUT` curve and the springs for Motion live in `lib/ease.ts`.
+**`globals.css` declares one easing token, `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`, and the `ease-out` utility resolves to it.** Anything that enters, leaves or answers a press uses it. `ease-in-out` and `ease-linear` keep the Tailwind defaults. The system never uses `ease-in`. The matching `EASE_OUT` curve for Motion lives in `lib/ease.ts`.
 
 <EasingScale />
 
@@ -19,7 +19,7 @@ import {
 
 Animations come from `tw-animate-css`, imported in `globals.css`. Utilities are composable: `animate-in` plus one or more of `zoom-in`, `spin-in`, `slide-in-from-*`, with `duration-*` and `ease-*` to tune them. The `animate-out` counterparts exist for exit transitions.
 
-**Fades are for modals only.** A dialog and its backdrop fade and scale in — that is what says the page behind went away. `settings-styles.ts` owns it for the confirm dialogs, and the overrides in `globals.css` tune the vendored `ui/dialog.tsx` for the others. Everywhere else the system does not fade: popovers, menus, tooltips, rows and bubbles appear and leave outright, and what moves does so by transform or by clip. Outside a modal, reach for a transform, never for opacity. The thread artboards draw two exceptions: a transcript row that arrives live fades and lifts 8px into place (`animate-thread-arrive`), and the jump-to-latest button fades as it slides.
+**Fades are for modals only.** A dialog and its backdrop fade and scale in — that is what says the page behind went away. `settings-styles.ts` owns it for the confirm dialogs, and the overrides in `globals.css` tune the vendored `ui/dialog.tsx` for the others. Everywhere else the system does not fade in: popovers, menus, tooltips, rows and bubbles appear outright, and what moves does so by transform or by clip. Outside a modal, reach for a transform, never for opacity. Five exceptions are drawn. A transcript row that arrives live fades and lifts 8px into place (`animate-thread-arrive`). The jump-to-latest button fades as it slides. A menu, a popover and the settings select leave by shrinking to 0.98 through a 4px blur and a fade, the recipe a dialog leaves by, while a tooltip leaves outright. A glyph that swaps in place, copy to check, crosses through scale, blur and opacity (`icon-swap.tsx`). The check of a chosen question option fades in place.
 
 <AnimationScale />
 
