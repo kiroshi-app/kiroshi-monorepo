@@ -191,7 +191,7 @@ const measureSlide = (
 
 type UseSlidingLiftOptions<Landing> = Omit<
 	UseRosterLiftOptions<number | Landing>,
-	"landingAt"
+	"landingAt" | "liftedElementOf"
 > &
 	SlideLayout & {
 		containerRef: RefObject<HTMLElement | null>
@@ -230,6 +230,11 @@ export const useSlidingLift = <Landing = never>({
 	const landingAt = (x: number, y: number) =>
 		geometry.current ? slideLandingIn(geometry.current, x, y) : null
 
+	const slotOf = (id: string) =>
+		[...(containerRef.current?.querySelectorAll<HTMLElement>(slot) ?? [])].find(
+			(node) => node.getAttribute(idAttribute) === id,
+		) ?? null
+
 	const shiftOf = (id: string, landing: number | Landing | null) =>
 		geometry.current && typeof landing === "number"
 			? slideShiftIn(geometry.current, id, landing)
@@ -242,6 +247,7 @@ export const useSlidingLift = <Landing = never>({
 			if (!measured) return null
 			return landingOutside?.(x, y, measured) ?? slideLandingIn(measured, x, y)
 		},
+		liftedElementOf: slotOf,
 		onLift: (id, press) => {
 			measure(id, press)
 			onLift?.(id, press)

@@ -13,6 +13,7 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
@@ -49,7 +50,7 @@ const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
 
 const QUESTION_ROW_CLASS =
-	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start transition-[translate] duration-150 focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30 motion-reduce:transition-none"
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start transition-[translate] duration-160 ease-out focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30 motion-reduce:transition-none"
 
 const QUESTION_PILL_CLASS =
 	"h-8 rounded-full font-medium text-compact leading-4"
@@ -715,7 +716,6 @@ const LinkField = ({ link }: LinkFieldProps) => {
 	const id = useId()
 
 	const hasCopied = copied && !hasFailedToCopy
-	const CopyGlyph = hasCopied ? Icons.Check : Icons.Copy
 	const failed = hasFailedToCopy ? t("toolQuestion.copyFailed") : null
 	const announced = hasCopied ? t("toolQuestion.copyAnnounced") : null
 
@@ -746,7 +746,13 @@ const LinkField = ({ link }: LinkFieldProps) => {
 					type="button"
 					variant="ghost"
 				>
-					<CopyGlyph className="size-3.5 text-muted-foreground" />
+					<IconSwap
+						icon={<Icons.Copy className="size-3.5 text-muted-foreground" />}
+						isSwapped={hasCopied}
+						swappedIcon={
+							<Icons.Check className="size-3.5 text-muted-foreground" />
+						}
+					/>
 					{hasCopied ? t("toolQuestion.copied") : t("toolQuestion.copy")}
 				</Button>
 			</div>

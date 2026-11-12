@@ -1,6 +1,5 @@
 "use client"
 
-import { motion, useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
 	cloneElement,
@@ -18,7 +17,6 @@ import { useTranslation } from "react-i18next"
 import { Icons } from "@workspace/ui/components/icons"
 import { MARKDOWN_TYPESET_CLASS } from "@workspace/ui/components/markdown/prose"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
-import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 export type MessageBubbleVariant =
@@ -102,7 +100,7 @@ export function MessageBubble({
 export const MESSAGE_BUBBLE_INLINE_PADDING = "px-4.5"
 
 export const MESSAGE_BUBBLE_INTERACTIVE =
-	"cursor-pointer text-left outline-none transition-[scale] duration-200 ease-out will-change-transform hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
+	"cursor-pointer text-left outline-none transition-[scale] duration-160 ease-out will-change-transform hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
 
 const BUBBLE_FOCUS_RING =
 	"outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
@@ -232,7 +230,6 @@ export function MessageBubbleCollapsible({
 	...props
 }: MessageBubbleCollapsibleProps) {
 	const { t } = useTranslation("chat")
-	const reduce = useReducedMotion() ?? false
 	const contentId = useId()
 	const [internalOpen, setInternalOpen] = useState(defaultOpen)
 	const currentOpen = open ?? internalOpen
@@ -278,13 +275,13 @@ export function MessageBubbleCollapsible({
 				)}
 			>
 				<span>{triggerLabel}</span>
-				<motion.span
+				<Icons.Expand
 					aria-hidden="true"
-					animate={{ rotate: currentOpen ? 180 : 0 }}
-					transition={reduce ? { duration: 0 } : SPRING_SWAP}
-				>
-					<Icons.Expand className="size-3.5" />
-				</motion.span>
+					className={cn(
+						"size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+						currentOpen && "rotate-180",
+					)}
+				/>
 			</button>
 		</div>
 	)

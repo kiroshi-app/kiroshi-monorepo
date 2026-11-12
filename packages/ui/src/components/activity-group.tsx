@@ -67,7 +67,7 @@ const ActivityGroup = ({
 						<Icons.Expand
 							aria-hidden="true"
 							className={cn(
-								"size-3.5 shrink-0 transition-transform duration-150 motion-reduce:transition-none",
+								"size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none",
 								isUnfolded || "-rotate-90 rtl:rotate-90",
 							)}
 						/>

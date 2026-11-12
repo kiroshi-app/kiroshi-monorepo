@@ -2,6 +2,7 @@
 
 import { useId } from "react"
 
+import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	FIELD_CONTROL_CLASS,
@@ -59,7 +60,11 @@ const CopyField = ({
 						size="icon-sm"
 						variant="ghost"
 					>
-						{copied ? <Icons.Check /> : <Icons.Copy />}
+						<IconSwap
+							icon={<Icons.Copy />}
+							isSwapped={copied}
+							swappedIcon={<Icons.Check />}
+						/>
 					</Button>
 				) : null}
 			</div>

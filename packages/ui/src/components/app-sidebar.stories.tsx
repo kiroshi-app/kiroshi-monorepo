@@ -4732,6 +4732,12 @@ export const DragBotToSection = meta.story({
 		await expect(
 			Math.abs(centreOf(handle).clientY - centreOf(shipping).clientY),
 		).toBeLessThanOrEqual(1)
+		await expect(liftedSlot()?.style.getPropertyValue("--lift-dy")).not.toBe("")
+		await expect(
+			slotIn(canvasElement, "roster-lift-frame").style.getPropertyValue(
+				"--lift-dy",
+			),
+		).toBe("")
 		await expect(isLightened(shipping)).toBe(true)
 		await expect(isLightened(dropAreaFor(canvasElement, "research"))).toBe(
 			false,

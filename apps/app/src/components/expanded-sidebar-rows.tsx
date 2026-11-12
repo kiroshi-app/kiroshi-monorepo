@@ -48,7 +48,6 @@ import {
 import type { ExpandedSidebarProps } from "@workspace/ui/components/expanded-sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 import { i18n } from "@workspace/ui/lib/i18n"
-import { mergeRefs } from "@workspace/ui/lib/utils"
 
 import {
 	dragEntriesOf,
@@ -431,7 +430,7 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		),
 		frame: {
 			isLifting: drag.isLifting,
-			ref: mergeRefs(frameRef, drag.rosterLift.followRef),
+			ref: frameRef,
 		},
 		move: crossingMove ?? drag.move,
 		pinned: (

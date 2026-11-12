@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from "react"
+import type { KeyboardEvent, ReactNode, Ref } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
@@ -114,7 +114,7 @@ const rosterRowSlotOf = (id: string, row: RosterRowSlot) => {
 
 interface RosterLiftFrameProps {
 	isLifting: boolean
-	ref: (node: HTMLDivElement | null) => void
+	ref: Ref<HTMLDivElement>
 	children: ReactNode
 }
 

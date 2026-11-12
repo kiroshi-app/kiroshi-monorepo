@@ -51,7 +51,6 @@ import {
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
 import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
-import { mergeRefs } from "@workspace/ui/lib/utils"
 
 const EMPTY_COPY =
 	"p-3 text-center text-compact text-faint-foreground leading-5"
@@ -255,10 +254,7 @@ const BotRoster = ({
 
 	return (
 		<>
-			<RosterLiftFrame
-				isLifting={drag.isLifting}
-				ref={mergeRefs(frameRef, rosterLift.followRef)}
-			>
+			<RosterLiftFrame isLifting={drag.isLifting} ref={frameRef}>
 				<div className={ZONES}>
 					{hasPinnedZone ? (
 						<RosterZone label={t("roster.pinned")}>

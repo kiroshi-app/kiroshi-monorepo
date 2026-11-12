@@ -128,9 +128,11 @@ const DragGhost = ({ item, pointer }: DragGhostProps) =>
 	createPortal(
 		<div
 			aria-hidden="true"
-			className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2"
+			className="pointer-events-none fixed top-0 left-0 z-50"
 			data-slot="board-library-ghost"
-			style={{ left: pointer.clientX, top: pointer.clientY }}
+			style={{
+				translate: `calc(${pointer.clientX}px - 50%) calc(${pointer.clientY}px - 50%)`,
+			}}
 		>
 			{item.kind === "document" ? (
 				<BoardLibraryCard
