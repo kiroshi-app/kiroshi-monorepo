@@ -35,11 +35,11 @@ pub(super) async fn held<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
-	let device = device_keys(app)?;
 	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
 	let Some(space) = space.filter(|_| !is_unadmitted(app, instance_id)) else {
 		return Ok(Err(last_wait(app, instance_id)));
 	};
+	let device = device_keys(app)?;
 	let Some(roster) = roster_verified(app, instance_id, &device).await? else {
 		return Ok(Err(roster_wait(app, instance_id)));
 	};
@@ -50,12 +50,7 @@ pub(super) async fn wait<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Option<JoinedSpaceWait>, JoinedSpaceError> {
-	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
-	if space.is_none() || is_unadmitted(app, instance_id) {
-		return Ok(Some(last_wait(app, instance_id)));
-	}
-	let is_roster_missing = roster(app, instance_id).await?.is_none();
-	Ok(is_roster_missing.then(|| roster_wait(app, instance_id)))
+	Ok(held(app, instance_id).await?.err())
 }
 
 fn roster_wait<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> JoinedSpaceWait {
