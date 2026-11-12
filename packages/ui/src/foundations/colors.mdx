@@ -47,6 +47,8 @@ Colour tokens are declared in `tokens.json`: a light value, emitted on `:root`, 
 
 ## Borders and controls
 
+Under `prefers-contrast: more`, `globals.css` redraws `--border` as a 55% mix of `--foreground` into `--background` and points the other border, divider and outline tokens at it.
+
 <ColorTokenGrid tokens={CONTROL_TOKENS} />
 
 ## Sidebar

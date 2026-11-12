@@ -696,6 +696,24 @@ svg[focusable="false"] {
 	stroke-width: calc(var(--icon-stroke) * 24 / 16);
 }
 
+@media (prefers-contrast: more) {
+	:root,
+	[data-hue],
+	.dark,
+	.dark [data-hue] {
+		--border: color-mix(in srgb, var(--foreground) 55%, var(--background));
+		--input: var(--border);
+		--sidebar-border: var(--border);
+		--shell-border: var(--border);
+		--shell-divider: var(--border);
+		--title-bar-divider: var(--border);
+		--title-bar-menu-border: var(--border);
+		--image-outline: var(--border);
+		--mission-list-divider: var(--border);
+		--board-card-border: var(--border);
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	[class*="animate-in"],
 	[class*="animate-out"] {
