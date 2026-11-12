@@ -2,7 +2,7 @@ import type { HomeTodayRow } from "@workspace/ui/components/home-today-list"
 
 import {
 	type ConversationHostStates,
-	lastWordsIn,
+	lastWordsOfRow,
 	observedStateOf,
 } from "../bots/roster-pages"
 import { rosterTimestamp } from "../bots/roster-timestamp"
@@ -58,17 +58,14 @@ const activityOf = (
 	return { state: observed.state === "working" ? "working" : "done", preview }
 }
 
-const lastWordReadOf = (row: ConversationInPage) =>
-	lastWordsIn({ pinned: [], conversations: [row], nextCursor: null })
-		.conversations[row.id]
-
 const toTodayRow = (
 	row: ConversationInPage,
 	roster: TodayRoster,
 ): HomeTodayRow => {
 	const conversation =
 		roster.conversations.find(({ id }) => id === row.id) ?? row
-	const lastWord = roster.previews[row.id] ?? lastWordReadOf(row)
+	const lastWord =
+		roster.previews[row.id] ?? lastWordsOfRow(row).conversations[row.id]
 	const observed = roster.hostStates[row.id] ?? observedStateOf(row)
 	const { icon, color } = toConversationLook(conversation)
 	return {
