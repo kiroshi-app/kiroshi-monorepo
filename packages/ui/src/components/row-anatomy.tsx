@@ -75,12 +75,14 @@ const NEEDS_YOU_TRAILING = "flex shrink-0 ps-1"
 
 type NeedsYouLineProps = {
 	question: string
+	id?: string
 	questionSlot?: string
 	trailing?: ReactNode
 }
 
 const NeedsYouLine = ({
 	question,
+	id,
 	questionSlot,
 	trailing,
 }: NeedsYouLineProps) => {
@@ -90,6 +92,7 @@ const NeedsYouLine = ({
 		<span
 			className={cn(NEEDS_YOU_LINE, !trailing && "pe-1")}
 			data-slot="roster-row-needs-you"
+			id={id}
 		>
 			<span
 				aria-hidden="true"
@@ -140,7 +143,7 @@ const RowParts = ({ parts, slot, identifier, lead }: RowPartsProps) => {
 
 type RowAnatomyGeometry =
 	| { geometry: "roster"; badge?: BotBadge; pendingQuestion?: string }
-	| { geometry: "activity"; badge?: never; pendingQuestion?: never }
+	| { geometry: "activity"; badge?: never; pendingQuestion?: string }
 
 type RowAnatomyProps = RowAnatomyGeometry & {
 	name: ReactNode
@@ -157,6 +160,8 @@ type RowAnatomyProps = RowAnatomyGeometry & {
 	nameSlot?: string
 	timestampSlot?: string
 	previewSlot?: string
+	timestampId?: string
+	previewId?: string
 }
 
 const RowAnatomy = ({
@@ -177,6 +182,8 @@ const RowAnatomy = ({
 	nameSlot,
 	timestampSlot,
 	previewSlot,
+	timestampId,
+	previewId,
 }: RowAnatomyProps) => {
 	const previewText =
 		preview === undefined ? null : (
@@ -186,6 +193,7 @@ const RowAnatomy = ({
 					previewTrailing && PREVIEW_BESIDE_TRAILING,
 				)}
 				data-slot={previewSlot}
+				id={previewId}
 			>
 				{isWorking ? (
 					<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
@@ -199,6 +207,7 @@ const RowAnatomy = ({
 
 	const previewLine = pendingQuestion ? (
 		<NeedsYouLine
+			id={previewId}
 			question={pendingQuestion}
 			questionSlot={previewSlot}
 			trailing={previewTrailing}
@@ -236,6 +245,7 @@ const RowAnatomy = ({
 								isTimestampDestructive && TIMESTAMP_DESTRUCTIVE,
 							)}
 							data-slot={timestampSlot}
+							id={timestampId}
 						>
 							{timestamp}
 						</span>

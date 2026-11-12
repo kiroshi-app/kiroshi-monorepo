@@ -27,8 +27,6 @@ const CHIP =
 const MENU =
 	"flex w-72 flex-col gap-0.5 rounded-2xl border border-foreground/10 bg-prompt-surface p-1.5 shadow-popover outline-none"
 
-const PICKER_ALIGN_OFFSET = 48
-
 const ITEM =
 	"flex cursor-default items-center gap-2.5 rounded-[10px] p-2 outline-none data-highlighted:bg-foreground/6"
 
@@ -66,12 +64,7 @@ const HomeAgentPicker = ({
 				/>
 			</Menu.Trigger>
 			<Menu.Portal>
-				<Menu.Positioner
-					align="end"
-					alignOffset={PICKER_ALIGN_OFFSET}
-					className="z-50"
-					sideOffset={8}
-				>
+				<Menu.Positioner align="end" className="z-50" sideOffset={6}>
 					<Menu.Popup className={MENU} data-slot="home-agent-menu">
 						<Menu.Group className="flex flex-col gap-0.5">
 							<Menu.GroupLabel className="p-2 font-medium text-muted-foreground text-xs leading-4">

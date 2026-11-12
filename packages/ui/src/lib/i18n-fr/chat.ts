@@ -1308,6 +1308,7 @@ const chat = {
 			dismiss: "Masquer cette suggestion",
 		},
 		saved: "Enregistrée dans {{name}}, dans Conversations",
+		today: "Aujourd’hui avec {{name}}",
 		room: {
 			working: "{{name}} travaille dans",
 			worked: "{{name}} a travaillé dans",
