@@ -1306,8 +1306,6 @@ layout-workspaceshell--first-pinned-tab-on-the-panel-edge
 layout-workspaceshell--first-tab-after-the-history-collapsed
 layout-workspaceshell--first-tab-on-the-panel-edge
 layout-workspaceshell--first-tab-on-the-panel-edge-without-inset-controls
-layout-workspaceshell--fold-animates-as-one-motion
-layout-workspaceshell--fold-under-reduced-motion-has-no-animation
 layout-workspaceshell--four-companions-in-cold-space-dark
 layout-workspaceshell--four-companions-in-warm-space-dark
 layout-workspaceshell--free-hue
@@ -1322,6 +1320,7 @@ layout-workspaceshell--switches-between-expanded-and-collapsed
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
 layout-workspaceshell--toggle-during-drag-swaps-at-once
+layout-workspaceshell--toggle-swaps-at-once
 navigation-appframe--connecting-space
 navigation-appframe--holding-companion-settings
 navigation-appframe--holding-conversation-settings

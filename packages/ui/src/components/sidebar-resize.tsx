@@ -15,8 +15,6 @@ const SIDEBAR_DEFAULT_WIDTH = 288
 const SIDEBAR_MIN_WIDTH = 224
 const SIDEBAR_MAX_WIDTH = 416
 const SIDEBAR_WIDTH_STEP = RESIZE_STEP
-const SIDEBAR_FOLD_MOTION =
-	"transition-[width] duration-180 ease-out motion-reduce:duration-[0.01ms] in-data-[resizing=true]:transition-none"
 
 type SidebarResize = ResizableWidth & {
 	isResizable: boolean
@@ -58,9 +56,6 @@ const SidebarResizeProvider = ({
 	)
 }
 
-const useIsSidebarResizing = () =>
-	useContext(SidebarResizeContext)?.isResizing ?? false
-
 interface SidebarResizeHandleProps {
 	side: "left" | "right"
 }
@@ -85,11 +80,9 @@ const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
 
 export {
 	SIDEBAR_DEFAULT_WIDTH,
-	SIDEBAR_FOLD_MOTION,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 	SIDEBAR_WIDTH_STEP,
 	SidebarResizeHandle,
 	SidebarResizeProvider,
-	useIsSidebarResizing,
 }
