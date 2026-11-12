@@ -600,7 +600,7 @@ describe("the Home page", () => {
 		expect(slot("space-access-banner")?.getAttribute("data-reason")).toBe(
 			"removed",
 		)
-		expect(slot("home-composer")).toBeNull()
+		expect(slot("prompt-input")).toBeNull()
 		expect(slot("chat-layout")).toBeNull()
 	})
 

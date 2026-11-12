@@ -5,6 +5,7 @@ import {
 	type ReactNode,
 	type Ref,
 	type TextareaHTMLAttributes,
+	useEffect,
 	useMemo,
 	useState,
 } from "react"
@@ -15,7 +16,10 @@ import {
 	PromptAttachments,
 	type PromptReplyAttachment,
 } from "@workspace/ui/components/prompt-attachments"
-import { PromptField } from "@workspace/ui/components/prompt-input-field"
+import {
+	PromptField,
+	type PromptFieldSize,
+} from "@workspace/ui/components/prompt-input-field"
 import { usePromptLayout } from "@workspace/ui/components/prompt-input-layout"
 import { usePromptTransfer } from "@workspace/ui/components/prompt-input-transfer"
 import {
@@ -26,6 +30,9 @@ import { Button } from "@workspace/ui/components/ui/button"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const OFFLINE_CONTROLS = "[&_svg]:invisible"
+
+const IDLE_SEND =
+	"bg-foreground/8 text-disabled-foreground hover:bg-foreground/8"
 
 const NO_REPLIES: PromptReplyAttachment[] = []
 
@@ -48,7 +55,12 @@ export interface PromptInputProps
 	defaultValue?: string
 	onValueChange?: (value: string) => void
 	onSubmit?: (value: string) => void
+	size?: PromptFieldSize
 	leading?: ReactNode
+	trailing?: ReactNode
+	band?: ReactNode
+	sending?: boolean
+	arrivalKey?: string
 	quote?: PromptInputQuote
 	replies?: PromptReplyAttachment[]
 	onRemoveReply?: (id: string) => void
@@ -64,7 +76,12 @@ export function PromptInput({
 	defaultValue = "",
 	onValueChange,
 	onSubmit,
+	size = "default",
 	leading,
+	trailing,
+	band,
+	sending = false,
+	arrivalKey,
 	quote,
 	replies = NO_REPLIES,
 	onRemoveReply,
@@ -87,6 +104,7 @@ export function PromptInput({
 	const isBlocked = disabled || Boolean(offline)
 	const canAttach = Boolean(onAttach) && !isBlocked
 	const hasReplies = replies.length > 0
+	const isLarge = size === "large"
 
 	const { refs, isExpanded, hasAttachments } = usePromptLayout({
 		attachments,
@@ -107,7 +125,8 @@ export function PromptInput({
 
 	const hasPayload = Boolean(currentValue.trim()) || hasAttachments
 	const isDropTarget = canAttach && (dropTarget || isDragOver)
-	const canSubmit = hasPayload && !isBlocked
+	const canSubmit = hasPayload && !isBlocked && !sending
+	const looksFilled = hasPayload && !sending
 
 	const setValue = (next: string) => {
 		if (value === undefined) setInternalValue(next)
@@ -123,18 +142,110 @@ export function PromptInput({
 		refs.textarea.current?.focus({ preventScroll: true })
 	}
 
+	useEffect(() => {
+		const field = refs.textarea.current
+		if (arrivalKey === undefined || !field) return
+		field.focus({ preventScroll: true })
+		field.setSelectionRange(field.value.length, field.value.length)
+	}, [arrivalKey, refs.textarea])
+
+	const formProps = {
+		ref: refs.form,
+		onSubmit: submit,
+		"data-slot": "prompt-input",
+		"data-drop-target": isDropTarget,
+		onDragOver: handleDragOver,
+		onDragLeave: handleDragLeave,
+		onDragEnd: handleDragEnd,
+		onDrop: handleDrop,
+	}
+
+	const field = (
+		<PromptField
+			disabled={disabled}
+			label={ariaLabel}
+			notice={
+				offline
+					? t("composer.offline", {
+							host: offline.hostName,
+							space: offline.spaceName,
+						})
+					: undefined
+			}
+			onKeyDown={onKeyDown}
+			onPaste={handlePaste}
+			onSubmit={submit}
+			onValueChange={setValue}
+			placeholder={placeholder}
+			refs={refs}
+			size={size}
+			textareaProps={textareaProps}
+			textareaRef={setTextareaRef}
+			value={currentValue}
+		/>
+	)
+
+	const send = (
+		<Button
+			type="submit"
+			size="icon"
+			disabled={disabled || (isLarge && !hasPayload && !sending)}
+			aria-busy={sending || undefined}
+			aria-disabled={sending || undefined}
+			aria-label={t("composer.send")}
+			data-empty={!hasPayload}
+			data-filled={looksFilled}
+			className={cn(
+				"size-8 rounded-full",
+				isLarge && "transition-none disabled:opacity-100",
+				!isLarge &&
+					looksFilled &&
+					"bg-foreground text-on-foreground hover:bg-foreground",
+				!looksFilled && IDLE_SEND,
+				sending && "active:scale-none!",
+			)}
+		>
+			<Icons.Send />
+		</Button>
+	)
+
+	if (isLarge) {
+		return (
+			<form
+				{...formProps}
+				className={cn(
+					"flex w-full flex-col overflow-clip rounded-[20px] border border-foreground/10 bg-prompt-surface-inert",
+					isDropTarget && "border-primary bg-primary/10",
+					className,
+				)}
+			>
+				<div
+					className={cn(
+						"flex flex-col gap-3 rounded-[20px] p-3",
+						!isDropTarget && "bg-prompt-surface",
+						band && "border-foreground/8 border-b",
+					)}
+				>
+					<div ref={refs.attachments} className="empty:hidden">
+						{attachments}
+					</div>
+					<div className="flex">{field}</div>
+					<div ref={refs.controls} className="flex items-center gap-2">
+						<div className="me-auto flex items-center">{leading}</div>
+						{trailing}
+						{send}
+					</div>
+				</div>
+				{band}
+			</form>
+		)
+	}
+
 	return (
 		<form
-			ref={refs.form}
-			onSubmit={submit}
-			data-slot="prompt-input"
+			{...formProps}
 			aria-label={offline ? (ariaLabel ?? t("composer.label")) : undefined}
 			data-expanded={isExpanded}
-			data-drop-target={isDropTarget}
-			onDragOver={handleDragOver}
-			onDragLeave={handleDragLeave}
-			onDragEnd={handleDragEnd}
-			onDrop={handleDrop}
 			className={cn(
 				"flex w-full flex-wrap items-center gap-1 rounded-[25px] border border-foreground/10 bg-prompt-surface p-2 focus-within:border-foreground/20",
 				hasPayload && "border-foreground/20",
@@ -180,27 +291,7 @@ export function PromptInput({
 				</div>
 			</div>
 
-			<PromptField
-				disabled={disabled}
-				label={ariaLabel}
-				notice={
-					offline
-						? t("composer.offline", {
-								host: offline.hostName,
-								space: offline.spaceName,
-							})
-						: undefined
-				}
-				onKeyDown={onKeyDown}
-				onPaste={handlePaste}
-				onSubmit={submit}
-				onValueChange={setValue}
-				placeholder={placeholder}
-				refs={refs}
-				textareaProps={textareaProps}
-				textareaRef={setTextareaRef}
-				value={currentValue}
-			/>
+			{field}
 
 			<div
 				ref={refs.leading}
@@ -219,21 +310,7 @@ export function PromptInput({
 				inert={isBlocked}
 				className={cn("ms-auto flex items-center", offline && OFFLINE_CONTROLS)}
 			>
-				<Button
-					type="submit"
-					size="icon"
-					disabled={disabled}
-					aria-label={t("composer.send")}
-					data-empty={!hasPayload}
-					className={cn(
-						"size-8 rounded-full",
-						hasPayload
-							? "bg-foreground text-on-foreground hover:bg-foreground"
-							: "bg-foreground/8 text-disabled-foreground hover:bg-foreground/8",
-					)}
-				>
-					<Icons.Send />
-				</Button>
+				{send}
 			</div>
 		</form>
 	)

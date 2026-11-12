@@ -766,6 +766,12 @@ conversation-prompt-promptinput--drag-over
 conversation-prompt-promptinput--empty
 conversation-prompt-promptinput--files-only
 conversation-prompt-promptinput--full-width-line
+conversation-prompt-promptinput--large-command-menu-open
+conversation-prompt-promptinput--large-dropping
+conversation-prompt-promptinput--large-empty
+conversation-prompt-promptinput--large-library-picker-open
+conversation-prompt-promptinput--large-sending
+conversation-prompt-promptinput--large-with-attachments
 conversation-prompt-promptinput--long-content
 conversation-prompt-promptinput--marked-from-outside
 conversation-prompt-promptinput--offline
@@ -788,6 +794,7 @@ conversation-prompt-promptinput--with-quote-and-attachments
 conversation-prompt-promptinput--with-quote-blocked
 conversation-prompt-promptinput--with-replies-and-attachments
 conversation-prompt-promptlibrarypicker--highlighted-row
+conversation-prompt-promptlibrarypicker--labelled-trigger
 conversation-prompt-promptlibrarypicker--picks-on-enter
 conversation-prompt-promptlibrarypicker--reaches-files-by-keyboard
 conversation-prompt-promptmentionmenu--counted

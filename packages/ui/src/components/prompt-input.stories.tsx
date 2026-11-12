@@ -1,5 +1,5 @@
-import { type ComponentProps, useState } from "react"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { type ComponentProps, type ReactNode, useState } from "react"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -7,9 +7,15 @@ import {
 	realPointer,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import {
+	type HomeAgent,
+	HomeAgentPicker,
+} from "@workspace/ui/components/home-agent-picker"
 import { Icons } from "@workspace/ui/components/icons"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import {
+	type PromptAttachment,
 	PromptAttachments,
 	type PromptReplyAttachment,
 } from "@workspace/ui/components/prompt-attachments"
@@ -20,7 +26,12 @@ import {
 	REPLY_CHIP_MAX_WIDTH,
 	REPLY_CHIP_MIN_WIDTH,
 } from "@workspace/ui/components/prompt-attachments.fixtures"
+import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	type LibraryPickerDocument,
+	PromptLibraryPicker,
+} from "@workspace/ui/components/prompt-library-picker"
 import { Button } from "@workspace/ui/components/ui/button"
 
 type ComposerProps = ComponentProps<typeof PromptInput>
@@ -1073,5 +1084,289 @@ export const Offline = meta.story({
 		await expect(args.onValueChange).not.toHaveBeenCalled()
 		drag("drop", form, draggingFile())
 		await expect(args.onAttach).not.toHaveBeenCalled()
+	},
+})
+
+const ATLAS: HomeAgent = {
+	id: "atlas",
+	name: "Atlas",
+	role: "Planner",
+	hue: BLOT_HUES.blue,
+}
+
+const LARGE = {
+	size: "large",
+	placeholder: "Message Atlas",
+	leading: <PromptAttachButton hasLabel onAttach={fn()} />,
+	trailing: (
+		<HomeAgentPicker agents={[ATLAS]} onSelectAgent={fn()} selected={ATLAS} />
+	),
+} satisfies ComposerProps
+
+const LARGE_SIZE =
+	"The large size, the composer of the New page: two stacked surfaces, the field on a row of its own in the reading size, then one controls row with `leading` at the start, the `trailing` slot and send at the end. It never folds into the one-line pill. `apps/app/src/components/home-screen.tsx` mounts it with the agent picker in `trailing`. "
+
+const LARGE_EDGE_INSET = 13
+
+const LARGE_CONTROLS_GAP = 8
+
+type RoomAboveProps = { children: ReactNode }
+
+const RoomAbove = ({ children }: RoomAboveProps) => (
+	<div className="flex h-96 items-end">{children}</div>
+)
+
+export const LargeEmpty = meta.story({
+	args: LARGE,
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}Nothing typed, nothing attached. Check that send is disabled until the field holds text, that the attach pill sits at the start of the controls row with the agent picker and send together at its end, and that Enter sends and empties the field.`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const form = formOf(textarea)
+		const attach = canvas.getByRole("button", { name: "Add files" })
+		const picker = canvas.getByRole("button", { name: "Atlas" })
+		const send = canvas.getByRole("button", { name: "Send" })
+
+		await expect(textarea).toHaveAttribute("placeholder", "Message Atlas")
+		await expect(send).toBeDisabled()
+		await expect(isBelow(attach, textarea)).toBe(true)
+		await expect(box(attach).left - box(form).left).toBe(LARGE_EDGE_INSET)
+		await expect(box(send).left - box(picker).right).toBe(LARGE_CONTROLS_GAP)
+		await expect(box(form).right - box(send).right).toBe(LARGE_EDGE_INSET)
+
+		await userEvent.type(textarea, DRAFT)
+		await expect(send).toBeEnabled()
+		await userEvent.keyboard("{Enter}")
+
+		await expect(args.onSubmit).toHaveBeenCalledWith(DRAFT)
+		await expect(textarea).toHaveValue("")
+		await expect(send).toBeDisabled()
+	},
+})
+
+export const LargeWithAttachments = meta.story({
+	args: { ...LARGE, attachments: stagedFiles },
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}Files staged before the first message: the chips take the top of the field surface, above the field, and send is enabled with the field still empty.`,
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const chips = canvas.getAllByRole("listitem")
+
+		await expect(chips).toHaveLength(PROMPT_ATTACHMENTS.length)
+		await expect(isBelow(textarea, chips[0])).toBe(true)
+		await expect(textarea).toHaveValue("")
+		await expect(canvas.getByRole("button", { name: "Send" })).toBeEnabled()
+	},
+})
+
+const DROPPED_IMAGE = new File(["png"], "boarding-pass.png", {
+	type: "image/png",
+})
+
+const attachmentOf = (file: File): PromptAttachment => ({
+	id: file.name,
+	name: file.name,
+	size: file.size,
+})
+
+const StagingComposer = ({ onAttach, ...props }: ComposerProps) => {
+	const [staged, setStaged] = useState<PromptAttachment[]>([])
+
+	return (
+		<Composer
+			{...props}
+			attachments={<PromptAttachments items={staged} />}
+			onAttach={(files) => {
+				setStaged([...staged, ...files.map(attachmentOf)])
+				onAttach?.(files)
+			}}
+		/>
+	)
+}
+
+const expectDropMark = async (form: HTMLElement, isMarked: boolean) => {
+	await waitFor(() =>
+		expect(form.dataset.dropTarget).toBe(isMarked ? "true" : "false"),
+	)
+	await expect(getComputedStyle(form).borderTopColor).toBe(
+		tokenStyleIn(
+			form,
+			isMarked ? "border-primary" : "border-foreground/10",
+			"borderTopColor",
+		),
+	)
+}
+
+export const LargeDropping = meta.story({
+	args: LARGE,
+	render: (args) => <StagingComposer {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}An image dragged over the composer, then let go on it. Check that both surfaces take the highlight as one place to drop, border and fill together, that the dropped image reaches \`onAttach\` and lands as a chip above the field, and that the highlight clears on the drop.`,
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const form = formOf(canvas.getByRole("textbox", { name: "Message" }))
+		const draggingImage = () => ({
+			dataTransfer: filesTransfer([DROPPED_IMAGE]),
+		})
+
+		await expectDropMark(form, false)
+		await expect(drag("dragover", form, draggingImage())).toBe(true)
+		await expectDropMark(form, true)
+
+		await expect(drag("drop", form, draggingImage())).toBe(true)
+		await expect(args.onAttach).toHaveBeenCalledWith(named(DROPPED_IMAGE))
+		await expect(await canvas.findByRole("listitem")).toHaveTextContent(
+			DROPPED_IMAGE.name,
+		)
+		await expectDropMark(form, false)
+	},
+})
+
+const COMMANDS = [{ name: "/clear" }, { name: "/compact" }, { name: "/help" }]
+
+const CommandComposer = (props: ComposerProps) => {
+	const [draft, setDraft] = useState("")
+
+	return (
+		<PromptCommandMenu
+			className="w-full"
+			commands={COMMANDS}
+			onDismiss={fn()}
+			onSelect={setDraft}
+			open={draft.startsWith("/")}
+			query={draft.slice(1)}
+		>
+			<PromptInput {...props} onValueChange={setDraft} value={draft} />
+		</PromptCommandMenu>
+	)
+}
+
+export const LargeCommandMenuOpen = meta.story({
+	args: LARGE,
+	render: (args) => (
+		<RoomAbove>
+			<CommandComposer {...args} />
+		</RoomAbove>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}Wrapped in \`PromptCommandMenu\`, as the conversation composer is: a slash opening the field opens the command menu above the composer, on its leading edge, while focus stays in the field.`,
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		await expect(canvas.queryByRole("listbox")).toBeNull()
+
+		await userEvent.type(textarea, "/")
+
+		await expect(await canvas.findAllByRole("option")).toHaveLength(
+			COMMANDS.length,
+		)
+		const menu = canvas.getByRole("listbox")
+		const form = formOf(textarea)
+		await waitFor(() =>
+			expect(box(menu).bottom).toBeLessThanOrEqual(box(form).top),
+		)
+		await expect(box(menu).left).toBeGreaterThanOrEqual(box(form).left)
+		await expect(textarea).toHaveFocus()
+	},
+})
+
+const LIBRARY_DOCUMENTS: LibraryPickerDocument[] = [
+	{
+		id: "brief",
+		name: "Spring launch brief",
+		detail: "Edited today · 1,240 words",
+	},
+	{
+		id: "notes",
+		name: "Meeting notes, 2 November",
+		detail: "Edited yesterday · 640 words",
+	},
+]
+
+export const LargeLibraryPickerOpen = meta.story({
+	args: {
+		...LARGE,
+		leading: (
+			<PromptLibraryPicker
+				documents={LIBRARY_DOCUMENTS}
+				hasLabel
+				onAttach={fn()}
+				onPick={fn()}
+			/>
+		),
+	},
+	render: (args) => (
+		<RoomAbove>
+			<Composer {...args} />
+		</RoomAbove>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}The Library picker in \`leading\`: its trigger is the labelled attach pill, and pressing it opens the picker over the Library's documents above the composer. \`Conversation/Prompt/PromptLibraryPicker\` covers the picker itself.`,
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("combobox", { name: "Add files" })
+		await expect(trigger).toHaveTextContent("Add files")
+
+		await userEvent.click(trigger)
+
+		const search = await screen.findByRole("combobox", {
+			name: "Search documents",
+		})
+		await waitFor(() => expect(search).toHaveFocus())
+		await expect(screen.getAllByRole("option")).toHaveLength(
+			LIBRARY_DOCUMENTS.length,
+		)
+	},
+})
+
+export const LargeSending = meta.story({
+	args: { ...LARGE, value: DRAFT, attachments: stagedFiles, sending: true },
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}A send is on its way: send is busy, wears its idle look and stays focusable but refuses a second submit, by click or by Enter, while the draft and the files stay in place and the field stays live.`,
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Message" })
+		const send = canvas.getByRole("button", { name: "Send" })
+
+		await expect(send).toHaveAttribute("aria-busy", "true")
+		await expect(send).toHaveAttribute("aria-disabled", "true")
+		await expect(send).not.toBeDisabled()
+
+		await userEvent.click(send)
+		await expect(send).toHaveFocus()
+		await userEvent.click(textarea)
+		await userEvent.keyboard("{Enter}")
+
+		await expect(args.onSubmit).not.toHaveBeenCalled()
+		await expect(textarea).toHaveValue(DRAFT)
+		await expect(canvas.getAllByRole("listitem")).toHaveLength(
+			PROMPT_ATTACHMENTS.length,
+		)
 	},
 })
