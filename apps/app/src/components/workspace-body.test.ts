@@ -971,36 +971,35 @@ describe("WorkspaceBody Home", () => {
 		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
-	const askInRoom = async ({
-		bot,
-		conversation,
-		driver,
-		runtimes,
-	}: Workspace) => {
-		const room = runtimes.runtimeFor(conversation.id)
-		await room.open(conversation)
-		await room.send("@Nyx pick the deposit date")
-		await waitFor(() => expect(driver.submissions).toHaveLength(1))
-		driver.pushTo(bot.id, [
+	const holdQuestionOnHost = ({ bot, conversation, driver }: Workspace) =>
+		vi.spyOn(driver, "pendingQuestions").mockResolvedValue([
 			{
-				type: "questionRequested",
-				request: {
-					id: "ask-1",
-					questions: [
-						{
-							header: "Deposit",
-							question: "When should the deposit go out?",
-							options: [],
-							multiSelect: false,
-						},
-					],
+				scope: {
+					conversationId: conversation.id,
+					botId: bot.id,
+					runtimeSessionId: "run-of-the-room",
+					epoch: 1,
+				},
+				turn: { turnId: "turn-of-the-room", conversationId: conversation.id },
+				event: {
+					type: "questionRequested",
+					request: {
+						id: "ask-1",
+						questions: [
+							{
+								header: "Deposit",
+								question: "When should the deposit go out?",
+								options: [],
+								multiSelect: false,
+							},
+						],
+					},
 				},
 			},
 		])
-		await waitFor(() =>
-			expect(room.getState().pendingPrompt?.request.id).toBe("ask-1"),
-		)
-	}
+
+	const roomsNamedIn = (calls: unknown[][]) =>
+		calls.map(([conversationId]) => conversationId)
 
 	const roomReads = () =>
 		queries.queryClient
@@ -1011,9 +1010,10 @@ describe("WorkspaceBody Home", () => {
 	it("keeps the composer and opens no room of the agent while one of them holds a question", async () => {
 		const store = createFakeTranscriptStore()
 		const seated = await workspaceOf(store)
-		await askInRoom(seated)
-		const openRoom = vi.spyOn(seated.runtimes, "runtimeFor")
-		const watchRooms = vi.spyOn(seated.runtimes, "subscribe")
+		const { conversation: room, runtimes } = seated
+		const askedQuestions = holdQuestionOnHost(seated)
+		const readPage = vi.spyOn(store, "loadPage")
+		const watchRooms = vi.spyOn(runtimes, "subscribe")
 		const home = await launchHome({ store, seated })
 		await home.open()
 		await settle()
@@ -1024,9 +1024,18 @@ describe("WorkspaceBody Home", () => {
 		expect(screen.queryByText("When should the deposit go out?")).toBeNull()
 		expect(screen.queryByRole("link", { name: "Walls" })).toBeNull()
 		expect(screen.queryByText(/working in|worked in/)).toBeNull()
-		expect(openRoom).not.toHaveBeenCalled()
+		expect(roomsNamedIn(readPage.mock.calls)).not.toContain(room.id)
+		expect(roomsNamedIn(askedQuestions.mock.calls)).not.toContain(room.id)
+		expect(runtimes.heldFor(room.id)).toBeNull()
 		expect(watchRooms).not.toHaveBeenCalled()
 		expect(roomReads()).toEqual([])
+
+		const thread = runtimes.runtimeFor(room.id)
+		await thread.open(room)
+		await waitFor(() =>
+			expect(thread.getState().pendingPrompt?.request.id).toBe("ask-1"),
+		)
+		expect(roomsNamedIn(readPage.mock.calls)).toContain(room.id)
 	})
 })
 
