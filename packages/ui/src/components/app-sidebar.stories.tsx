@@ -25,6 +25,7 @@ import {
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	barIn,
@@ -1464,7 +1465,7 @@ export const Badges = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three rows carrying the badge a host derived from their chat — one asking for the reader, one done, one that failed — over a fourth with nothing to say. Check the badge sits at the trailing edge of the row, under the timestamp and level with the preview line, rather than on the avatar it used to crowd: the marks stack into one column the eye can run down, next to the times it is already reading. Check a row without one keeps its name, its preview and its timestamp on exactly the columns the rest of the list holds — the dot is out of the flow, so it moves nothing — that the row heights are untouched, and that the three read apart by colour and by the pulse on attention rather than by position alone. The badge is drawn and not spoken here: the row is named by its own text and the news is in the message line under it. Pick `Working` for the running rows that carry no badge of their own.",
+					"Three rows carrying the badge a host derived from their chat — one asking for the reader, one done, one that failed — over a fourth with nothing to say. Check the badge sits at the trailing edge of the row, under the timestamp and level with the preview line, rather than on the avatar it used to crowd: the marks stack into one column the eye can run down, next to the times it is already reading. Check a row without one keeps its name, its preview and its timestamp on exactly the columns the rest of the list holds — the dot is out of the flow, so it moves nothing — that the row heights are untouched, and that the three read apart by colour rather than by position alone. The badge is drawn and not spoken here: the row is named by its own text and the news is in the message line under it. Pick `Working` for the running rows that carry no badge of their own.",
 			},
 		},
 	},
@@ -4733,6 +4734,9 @@ export const DragBotToSection = meta.story({
 			Math.abs(centreOf(handle).clientY - centreOf(shipping).clientY),
 		).toBeLessThanOrEqual(1)
 		await expect(liftedSlot()?.style.getPropertyValue("--lift-dy")).not.toBe("")
+		await expect(getComputedStyle(handle).getPropertyValue("--lift-dy")).toBe(
+			"0px",
+		)
 		await expect(
 			slotIn(canvasElement, "roster-lift-frame").style.getPropertyValue(
 				"--lift-dy",
@@ -4748,6 +4752,38 @@ export const DragBotToSection = meta.story({
 		await expect(args.onSelectBot).not.toHaveBeenCalled()
 		await expect(liftedSlot()).toBeNull()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+	},
+})
+
+const glidesOf = (node: HTMLElement) =>
+	node
+		.getAnimations()
+		.filter((animation) => !(animation instanceof CSSTransition))
+
+export const DragBotAgainBeforeItLands = meta.story({
+	tags: ["test-only"],
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row dropped, then lifted again while it still glides onto its slot. Check that the glide stops at the second lift, so the row rides the pointer at once instead of finishing its way home first.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowFor(canvasElement, "Atlas")
+		const handle = rowButton(row)
+
+		await withMotionAllowed(async () => {
+			await new Promise(requestAnimationFrame)
+			dragOnto(handle, dropAreaFor(canvasElement, "shipping"))
+			await waitFor(() => expect(glidesOf(row)).toHaveLength(1), FRAME_POLL)
+
+			lift(handle)
+			await expect(liftedSlot()).toBe(row)
+			await expect(glidesOf(row)).toHaveLength(0)
+		})
 	},
 })
 

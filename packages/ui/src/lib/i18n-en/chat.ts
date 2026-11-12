@@ -1250,6 +1250,7 @@ const chat = {
 			dismiss: "Hide this suggestion",
 		},
 		saved: "Saved to {{name}} in Conversations",
+		today: "Today with {{name}}",
 		room: {
 			working: "{{name}} is working in",
 			worked: "{{name}} worked in",

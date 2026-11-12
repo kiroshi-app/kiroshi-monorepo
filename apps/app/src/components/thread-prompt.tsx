@@ -1,4 +1,4 @@
-import { type ReactNode, useContext, useState } from "react"
+import { useContext, useState } from "react"
 
 import { AnsweredQuestionCard } from "@workspace/ui/components/answered-question-card"
 import type { MessageAuthor } from "@workspace/ui/components/message"
@@ -102,7 +102,6 @@ type QuestionPromptProps = {
 	request: QuestionRequest
 	responder: PromptResponder
 	companionName?: string
-	askedBy?: ReactNode
 }
 
 const markOf = (
@@ -117,7 +116,6 @@ export const QuestionPrompt = ({
 	request,
 	responder,
 	companionName,
-	askedBy,
 }: QuestionPromptProps) => {
 	const applications = useContext(ConversationApplicationsContext)
 	const mark = markOf(request.subject, applications?.curated ?? [])
@@ -125,7 +123,6 @@ export const QuestionPrompt = ({
 
 	return (
 		<ToolQuestion
-			askedBy={askedBy}
 			companionName={companionName}
 			hasDigitKeys
 			minimised={isMinimised}

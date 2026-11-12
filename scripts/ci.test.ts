@@ -92,6 +92,7 @@ const SETUP_STEPS = new Set([
 	"Drop the unused third-party apt sources",
 	"Install Playwright browser",
 	"Select the Xcode pinned in .xcode-version",
+	"Read the Rust version pinned in rust-toolchain.toml",
 	"Install XcodeGen",
 	"Boot the simulator while the app builds",
 	"Read the changed test files against the base the merge ref was built on",

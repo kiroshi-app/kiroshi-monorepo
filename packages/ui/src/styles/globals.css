@@ -465,6 +465,18 @@
 	outline-offset: -1px;
 }
 
+@property --lift-dx {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
+@property --lift-dy {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
 @keyframes ui-thread-arrive {
 	from {
 		opacity: 0;
@@ -550,6 +562,10 @@
 	[data-slot="accordion-trigger"]
 ).transition-all,
 [data-slot="item"].transition-colors,
+[data-slot="sidebar-gap"].transition-\[width\],
+[data-slot="sidebar-container"].transition-\[left\,right\,width\],
+[data-slot="sidebar-group-label"].transition-\[margin\,opacity\],
+[data-slot="sidebar-menu-button"].transition-\[width\,height\,padding\],
 :is(
 	[data-slot="input"],
 	[data-slot="input-otp-slot"]

@@ -1,7 +1,4 @@
-import { createRoomLog, type HomeRoomLineModel } from "./home-room-lines"
-
 export type HomeVisit = {
-	openedAt: number
 	isBandDismissed: boolean
 }
 
@@ -10,11 +7,6 @@ export type HomeVisitsState = Readonly<Record<string, HomeVisit>>
 export type HomeVisits = {
 	open: (botId: string, spaceId: string) => void
 	dismissBand: (botId: string, spaceId: string | null) => void
-	roomLinesOf: (
-		botId: string,
-		spaceId: string | null,
-		workingIds: string[],
-	) => HomeRoomLineModel[]
 	getState: () => HomeVisitsState
 	subscribe: (listener: () => void) => () => void
 }
@@ -31,7 +23,6 @@ export const visitOf = (
 
 export const createHomeVisits = (): HomeVisits => {
 	const listeners = new Set<() => void>()
-	const roomLog = createRoomLog()
 	let visits: HomeVisitsState = {}
 
 	const write = (key: string, visit: HomeVisit) => {
@@ -52,13 +43,11 @@ export const createHomeVisits = (): HomeVisits => {
 		open: (botId, spaceId) => {
 			const key = homeKeyOf(botId, spaceId)
 			if (!visits[key]) {
-				write(key, { openedAt: Date.now(), isBandDismissed: false })
+				write(key, { isBandDismissed: false })
 			}
 		},
 		dismissBand: (botId, spaceId) =>
 			update(homeKeyOf(botId, spaceId), { isBandDismissed: true }),
-		roomLinesOf: (botId, spaceId, workingIds) =>
-			roomLog.linesOf(homeKeyOf(botId, spaceId), workingIds),
 		getState: () => visits,
 		subscribe: (listener) => {
 			listeners.add(listener)

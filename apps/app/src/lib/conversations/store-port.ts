@@ -36,11 +36,7 @@ import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 import type { AgentCommand } from "@/lib/agent/contract"
-import type {
-	AgentRooms,
-	SummonsDropped,
-	SummonsDropReason,
-} from "@/lib/bindings"
+import type { SummonsDropped, SummonsDropReason } from "@/lib/bindings"
 
 export type TranscriptStore = TranscriptPort & {
 	spaces: () => Promise<Space[]>
@@ -140,7 +136,6 @@ export type TranscriptStore = TranscriptPort & {
 		spaceId?: string | null,
 		signal?: AbortSignal,
 	) => Promise<Chat>
-	agentRooms: (spaceId: string, signal?: AbortSignal) => Promise<AgentRooms[]>
 	addBotToSpace: (
 		botId: string,
 		spaceId: string,

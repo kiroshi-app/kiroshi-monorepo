@@ -90,7 +90,7 @@ export const BotBadges = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three things a companion badge can mean, on their own tokens: attention wears the warning tone and breathes because it is the only one waiting on the reader, done is green and failed is red and both hold still. The primary blue never marks attention: blue is the app's accent, not a request. Check the three colours hold in light and dark, that the attention dot reads `--warning` in both, and that only attention pulses, and only while motion is allowed. Pick `Placements` for where the mark lands.",
+					"The three things a companion badge can mean, on their own tokens: attention wears the warning tone because it is the only one waiting on the reader, done is green and failed is red, and all three hold still. The primary blue never marks attention: blue is the app's accent, not a request. Check the three colours hold in light and dark, that the attention dot reads `--warning` in both, and that none of the three moves. Pick `Placements` for where the mark lands.",
 			},
 		},
 	},
@@ -99,8 +99,8 @@ export const BotBadges = meta.story({
 
 		await expect(dots.map((dot) => dot.dataset.badge)).toEqual([...BOT_BADGES])
 		await expect(
-			dots.map((dot) => dot.classList.contains("motion-safe:animate-pulse")),
-		).toEqual([true, false, false])
+			dots.map((dot) => getComputedStyle(dot).animationName),
+		).toEqual(["none", "none", "none"])
 		await expect(getComputedStyle(dots[0]).backgroundColor).toBe(
 			tokenStyleIn(dots[0], "bg-warning", "backgroundColor"),
 		)

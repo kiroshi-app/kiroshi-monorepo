@@ -3065,7 +3065,9 @@ mod tests {
 				.query_row("SELECT space_id FROM conversations WHERE id = 'c1'", [], |row| row
 					.get::<_, Option<
 					String,
-				>>(0))
+				>>(
+					0
+				))
 				.expect("query"),
 			Some("writers".to_owned()),
 			"a conversation from the older build came out of the step without a space"

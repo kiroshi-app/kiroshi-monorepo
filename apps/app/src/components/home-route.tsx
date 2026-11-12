@@ -4,10 +4,13 @@ import { ContentCard } from "@workspace/ui/components/content-card"
 
 import { useWorkspaceBodyProps } from "@/components/use-workspace-body-props"
 import { WorkspaceBody } from "@/components/workspace-body"
+import { useControllerState } from "@/lib/use-controller"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
 
 export const HomeRoute = () => {
-	const { core, homeAgent, rosterView } = useWorkspace()
+	const { core, homeAgent, rosterLines, rosterView } = useWorkspace()
+	const { conversations, conversationPreviews, hostStates } =
+		useControllerState(core.roster.controller)
 	const body = useWorkspaceBodyProps()
 	const navigate = useNavigate()
 	const arrivalKey = useLocation({
@@ -32,7 +35,12 @@ export const HomeRoute = () => {
 					arrivalKey,
 					visits: core.homeVisits,
 					store: core.store,
-					conversations: rosterView.conversations,
+					today: {
+						conversations,
+						previews: conversationPreviews,
+						hostStates,
+						now: rosterLines.now,
+					},
 					onSelectAgent: pickAgent,
 					startConversation:
 						core.roster.controller.createUnselectedConversation,
