@@ -35,11 +35,11 @@ export function Disclosure({
 					? undefined
 					: {
 							clipPath: open ? "inset(0 0 0% 0)" : "inset(0 0 100% 0)",
-							y: open ? 0 : -4,
+							transform: open ? "translateY(0px)" : "translateY(-4px)",
 						}
 			}
 			transition={{
-				duration: reduce ? 0 : open ? 0.22 : 0.14,
+				duration: reduce ? 0 : open ? 0.22 : 0.1,
 				ease: EASE_OUT,
 			}}
 			onAnimationComplete={() => {
