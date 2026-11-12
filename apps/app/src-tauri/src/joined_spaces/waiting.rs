@@ -12,7 +12,7 @@ use super::commands::{announce_change, ready};
 use super::contract::JoinedSpaceError;
 use super::held::{self, device_keys};
 use super::join::{
-	bearer_of, kept_answer, member_socket_of, missed_rekey_frame, rekey_handed, revoked,
+	bearer_of, kept_answer, missed_rekey_frame, registered_relay_device, rekey_handed, revoked,
 };
 use super::members;
 use super::relay::{self, RelayGuests};
@@ -63,7 +63,7 @@ pub(super) async fn joins_started<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
-		if held::wait_or_unread(app, &joined.id, &instance_id).is_none() {
+		if held::wait_or_unread(app, &joined.id, &instance_id).await.is_none() {
 			continue;
 		}
 		let mut waiting = guests.waiting();
@@ -90,7 +90,7 @@ pub(super) async fn waited_for_host<R: Runtime>(
 ) {
 	let mut backoff = Backoff::first();
 	loop {
-		match until_stopped(&mut stop, attempted(&app, &instance_id, &mut backoff)).await {
+		match until_stopped(&mut stop, attempted(&app, &id, &instance_id, &mut backoff)).await {
 			None => return,
 			Some(Attempt::Joined) => {
 				left(&app, &id, &stop);
@@ -129,6 +129,7 @@ pub(super) async fn waited_for_host<R: Runtime>(
 
 async fn attempted<R: Runtime>(
 	app: &AppHandle<R>,
+	id: &str,
 	instance_id: &str,
 	backoff: &mut Backoff,
 ) -> Attempt {
@@ -149,20 +150,23 @@ async fn attempted<R: Runtime>(
 	let guests = app.state::<RelayGuests>().inner();
 	let cloud = guests.cloud();
 	cloud.unpaused().await;
-	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
-		Ok(url) => url,
+	let relay_device_id = match registered_relay_device(app, &bearer, &device, instance_id).await {
+		Ok(relay_device_id) => relay_device_id,
 		Err(JoinedSpaceError::SessionRevoked) => {
 			return Attempt::Ended("the cloud refused the account (401)".to_owned())
 		}
 		Err(failure) => return Attempt::Dropped(Stall::SocketUrl(failure)),
 	};
+	let url = relay::member_socket_url(cloud, instance_id, &relay_device_id);
 	let opened = opened_unpaused(cloud, url, &bearer).await;
 	guests.relay_device_forgotten_on_refusal(&opened);
 	match opened {
 		Opened::Socket(socket) => {
 			log::info!("the waiting join of instance {instance_id} opened its member socket");
 			backoff.socket_opened();
-			listened(app, *socket, instance_id, &device).await
+			let asker =
+				Asker { id, instance_id, relay_device_id: &relay_device_id, device: &device };
+			listened(app, *socket, &asker).await
 		}
 		Opened::Revoked => {
 			revoked(app, &bearer);
@@ -176,12 +180,26 @@ async fn attempted<R: Runtime>(
 	}
 }
 
-async fn listened<R: Runtime>(
-	app: &AppHandle<R>,
-	socket: Socket,
-	instance_id: &str,
-	device: &DeviceKeys,
-) -> Attempt {
+struct Asker<'a> {
+	id: &'a str,
+	instance_id: &'a str,
+	relay_device_id: &'a str,
+	device: &'a DeviceKeys,
+}
+
+impl Asker<'_> {
+	fn hello_sent(&self) {
+		log::info!(
+			"joined space {} (instance {}) sent a hello under key_id 0 on the socket opened with relay device {}",
+			self.id,
+			self.instance_id,
+			self.relay_device_id
+		);
+	}
+}
+
+async fn listened<R: Runtime>(app: &AppHandle<R>, socket: Socket, asker: &Asker<'_>) -> Attempt {
+	let Asker { instance_id, device, .. } = *asker;
 	let asked = match missed_rekey_frame(device, instance_id) {
 		Ok(asked) => asked,
 		Err(failure) => return Attempt::Dropped(Stall::AskNotSent(format!("{failure:?}"))),
@@ -190,6 +208,7 @@ async fn listened<R: Runtime>(
 	if let Err(reason) = sent(&mut sink, Message::text(asked.clone())).await {
 		return Attempt::Dropped(Stall::AskNotSent(reason));
 	}
+	asker.hello_sent();
 	waited(app, instance_id, Stall::Asked);
 	let mut is_refused = false;
 	let every = app.state::<RelayGuests>().resend_every();
@@ -228,6 +247,7 @@ async fn listened<R: Runtime>(
 						return Attempt::Dropped(Stall::AskNotSent(reason));
 					}
 				}
+				asker.hello_sent();
 			}
 			_ = &mut silence => {
 				return Attempt::Dropped(Stall::PongMissing(SILENCE_BOUND));

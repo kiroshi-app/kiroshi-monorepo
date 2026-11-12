@@ -20,7 +20,7 @@ use super::commands::{
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceWait};
 use super::description;
 use super::held::{self, Held};
-use super::join::{member_socket_of, registered_relay_device};
+use super::join::{bearer_of, member_socket_of, registered_relay_device};
 use super::member_link::{Answer, MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
@@ -411,7 +411,7 @@ pub async fn joined<R: Runtime>(
 		inviter_email,
 		listing,
 	};
-	let wait = held::wait(app, &instance_id)?;
+	let wait = held::wait(app, &instance_id).await?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	guests.unlisted().remove(&joined.id);
@@ -431,12 +431,54 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 			"the joined spaces of every instance did not follow the cloud memberships: {failure}"
 		);
 	}
+	if let Err(failure) = readmissions_owed(app, &guests).await {
+		log::warn!(
+			"the joined spaces of every instance were not all compared with the registered relay device: {failure:?}"
+		);
+	}
 	let _turn = guests.turn.lock().await;
 	if let Err(failure) = waiting::joins_started(app, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance waiting for their host were not all followed: {failure:?}"
 		);
 	}
+}
+
+async fn readmissions_owed<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+) -> Result<(), JoinedSpaceError> {
+	let bearer = match bearer_of(app) {
+		Ok(bearer) => bearer,
+		Err(JoinedSpaceError::NeedsSignIn) => return Ok(()),
+		Err(failure) => return Err(failure),
+	};
+	let device = held::device_keys(app)?;
+	let state = app.state::<db::DatabaseState>();
+	for joined in ready(&state)?.joined_spaces().list().await? {
+		let (id, instance_id) = relay_instance(&joined);
+		if guests.guests().contains_key(id) || guests.is_unadmitted(instance_id) {
+			continue;
+		}
+		let Some(roster) = held::roster(app, instance_id).await? else {
+			continue;
+		};
+		let registered = registered_relay_device(app, &bearer, &device, instance_id).await?;
+		if registered == roster.own.relay_device_id {
+			continue;
+		}
+		readmission_owed(id, instance_id, &roster, &registered);
+		guests.unadmitted().insert(instance_id.to_owned());
+		announce_change(app, id.to_owned()).await?;
+	}
+	Ok(())
+}
+
+fn readmission_owed(id: &str, instance_id: &str, roster: &HeldRoster, registered: &str) {
+	log::warn!(
+		"joined space {id} (instance {instance_id}) holds a roster naming it relay device {} while relay device {registered} is registered: it asks its host for its admission again",
+		roster.own.relay_device_id
+	);
 }
 
 struct Listing {
@@ -930,6 +972,10 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 		if repository.remove(joined.id.clone()).await? {
 			let JoinedReach::Relay { instance_id } = &joined.reach;
 			wait_ended(app, instance_id);
+			log::info!(
+				"joined space {} (instance {instance_id}) was dropped by the sign-out",
+				joined.id
+			);
 			announce_change(app, joined.id).await?;
 		}
 	}
@@ -976,10 +1022,7 @@ async fn guest_linked<R: Runtime>(
 				);
 			}
 			Ended::Unadmitted(registered) => {
-				log::warn!(
-					"joined space {} (instance {}) holds a roster naming it relay device {} while relay device {registered} is registered: it asks its host for its admission again",
-					linked.id, linked.instance_id, held.roster.own.relay_device_id
-				);
+				readmission_owed(&linked.id, &linked.instance_id, &held.roster, &registered);
 				return readmission_asked(&app, &linked, &mut stop).await;
 			}
 			Ended::SignedOut(reason) => {
@@ -1078,7 +1121,7 @@ async fn attempted<R: Runtime>(
 				linked.instance_id
 			);
 			backoff.socket_opened();
-			online(app, *socket, linked, held, stop).await
+			online(app, *socket, &registered, linked, held, stop).await
 		}
 		Some(Opened::Unknown) => (Ended::Evicted(JoinedSpaceRemovalReason::Unknown), held),
 		Some(Opened::Gone(Some(departure))) => (Ended::Evicted(reason_of(departure)), held),
@@ -1134,6 +1177,7 @@ async fn departure_asked<R: Runtime>(
 async fn online<R: Runtime>(
 	app: &AppHandle<R>,
 	socket: Socket,
+	relay_device_id: &str,
 	linked: &Linked,
 	held: Held,
 	stop: &mut watch::Receiver<bool>,
@@ -1146,7 +1190,7 @@ async fn online<R: Runtime>(
 		}
 	};
 	let mut wire = MemberWire::new(database.joined_space_relay(), &linked.instance_id, held);
-	let ended = sealed_session(app, socket, linked, &mut wire, stop).await;
+	let ended = sealed_session(app, socket, relay_device_id, linked, &mut wire, stop).await;
 	(ended, wire.into_held())
 }
 
@@ -1160,6 +1204,7 @@ enum Outgoing {
 async fn sealed_session<R: Runtime>(
 	app: &AppHandle<R>,
 	socket: Socket,
+	relay_device_id: &str,
 	linked: &Linked,
 	wire: &mut MemberWire<'_>,
 	stop: &mut watch::Receiver<bool>,
@@ -1175,11 +1220,18 @@ async fn sealed_session<R: Runtime>(
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
-		if matches!(outgoing, Outgoing::Hello) {
+		let is_hello = matches!(outgoing, Outgoing::Hello);
+		if is_hello {
 			hello_deadline = Instant::now() + answer_bound;
 		}
 		if let Err(reason) = delivered(&mut sink, wire, outgoing).await {
 			return Ended::Dropped(reason);
+		}
+		if is_hello {
+			log::info!(
+				"joined space {} (instance {}) sent a hello on the socket opened with relay device {relay_device_id}",
+				linked.id, linked.instance_id
+			);
 		}
 		let is_greeted = wire.is_greeted();
 		let resume_deadline = link.resume_deadline();

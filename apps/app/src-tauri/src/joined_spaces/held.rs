@@ -35,36 +35,40 @@ pub(super) async fn held<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
-	let device = device_keys(app)?;
 	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
 	let Some(space) = space.filter(|_| !is_unadmitted(app, instance_id)) else {
 		return Ok(Err(last_wait(app, instance_id)));
 	};
+	let device = device_keys(app)?;
 	let Some(roster) = roster_verified(app, instance_id, &device).await? else {
-		return Ok(Err(wait_of(Stall::RosterMissing)));
+		return Ok(Err(roster_wait(app, instance_id)));
 	};
 	Ok(Ok(Held { device, space, roster }))
 }
 
-pub(super) fn wait<R: Runtime>(
+pub(super) async fn wait<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Option<JoinedSpaceWait>, JoinedSpaceError> {
-	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
-	let is_waiting = space.is_none() || is_unadmitted(app, instance_id);
-	Ok(is_waiting.then(|| last_wait(app, instance_id)))
+	Ok(held(app, instance_id).await?.err())
+}
+
+fn roster_wait<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> JoinedSpaceWait {
+	app.try_state::<RelayGuests>()
+		.and_then(|guests| guests.last_wait(instance_id))
+		.unwrap_or_else(|| wait_of(Stall::RosterMissing))
 }
 
 fn is_unadmitted<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> bool {
 	app.try_state::<RelayGuests>().is_some_and(|guests| guests.is_unadmitted(instance_id))
 }
 
-pub(super) fn wait_or_unread<R: Runtime>(
+pub(super) async fn wait_or_unread<R: Runtime>(
 	app: &AppHandle<R>,
 	id: &str,
 	instance_id: &str,
 ) -> Option<JoinedSpaceWait> {
-	wait(app, instance_id).unwrap_or_else(|failure| {
+	wait(app, instance_id).await.unwrap_or_else(|failure| {
 		let unread = wait_of(Stall::KeyRead(failure));
 		log::warn!(
 			"joined space {id} (instance {instance_id}) waits for its host ({:?}): {}",

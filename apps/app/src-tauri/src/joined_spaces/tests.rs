@@ -38,6 +38,7 @@ use crate::conversations::contract::Hue;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::fingerprint::fingerprint;
+use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_space_members::JoinedSpaceRole;
 use crate::db::{self, DatabaseState};
@@ -1029,6 +1030,91 @@ fn a_space_held_under_another_relay_device_awaits_its_approval_and_comes_online_
 		assert_eq!(pinned_host(member.held_roster().await), pinned);
 		let room = member.relay.room();
 		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
+	});
+}
+
+#[test]
+fn a_space_held_under_another_relay_device_never_connected_comes_online_on_the_socket_opened_after_its_admission(
+) {
+	run(async {
+		let member = Member::new("join-readmitted-unconnected").await;
+		let host = member.host();
+		member.relay.hosting(HostSide::Answering(host.admitted_on(STALE_RELAY_ID, 1)));
+		let joined = member.accepted().await.expect("the join");
+		let pinned = pinned_host(member.held_roster().await);
+		let refused = json!({ "v": 2, "instance": INSTANCE, "to": MEMBER_RELAY_ID, "refused": "notAdmitted" });
+		member.relay.hosting(HostSide::Answering(refused.to_string()));
+		let account_reads_with_the_relay_device_known = member.relay.room().me_reads;
+
+		relay::reconciled(member.app.handle()).await;
+		let account_reads_after_the_reconciliation = member.relay.room().me_reads;
+		let waited = within(HOST_ANSWER_BOUND, "the refusal kept as the wait", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
+		})
+		.await;
+		let state_while_refused = member.listed().await.remove(0).state;
+		member.relay.hosting(HostSide::Vanishing);
+		until("the waiting socket to close", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("no close code reached"))
+		})
+		.await;
+		let sockets_before_the_admission = member.relay.connections();
+		member.relay.hosting(HostSide::Answering(host.admitted_on(MEMBER_RELAY_ID, 2)));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert_eq!(
+			waited.reason,
+			JoinedSpaceWaitReason::DeviceAwaitingApproval,
+			"{}",
+			waited.detail
+		);
+		assert_eq!(
+			account_reads_after_the_reconciliation,
+			account_reads_with_the_relay_device_known
+		);
+		assert_eq!(state_while_refused, JoinedSpaceState::WaitingForHost);
+		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
+		assert_eq!(pinned_host(member.held_roster().await), pinned);
+		let room = member.relay.room();
+		assert_eq!(room.connections, sockets_before_the_admission + 1);
+		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
+	});
+}
+
+#[test]
+fn a_space_holding_its_key_and_no_roster_says_its_hello_and_comes_online_on_the_roster_handed() {
+	run(async {
+		let member = Member::facing_a_silent_host("join-roster-missing").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		let key = HeldSpaceKey::first().expect("randomness");
+		let keys = member.app.state::<SpaceKeys>();
+		keys.stored(&format!("joined-{INSTANCE}"), key).expect("the key is kept");
+		let sockets_before = member.relay.connections();
+
+		relay::reconciled(member.app.handle()).await;
+		within(HOST_ANSWER_BOUND, "a hello on a member socket of the waiting join", || async {
+			let room = member.relay.room();
+			(room.connections > sockets_before && room.joins.len() >= 2).then_some(())
+		})
+		.await;
+		let state_without_roster = member.listed().await.remove(0).state;
+		member.relay.hosting(HostSide::Answering(member.host().admitted()));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert_eq!(joined.remote_space_id, None);
+		assert_eq!(state_without_roster, JoinedSpaceState::WaitingForHost);
+		assert!(member.held_roster().await.is_some());
+		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
+		assert!(member.relay.joins().iter().all(is_missed_rekey));
 	});
 }
 

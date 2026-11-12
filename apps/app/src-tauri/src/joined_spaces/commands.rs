@@ -109,7 +109,7 @@ pub(super) async fn presented<R: Runtime>(
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let roster = database.joined_space_members().members(joined.id.clone()).await?;
 	let JoinedReach::Relay { instance_id } = &joined.reach;
-	let wait = held::wait_or_unread(app, &joined.id, instance_id);
+	let wait = held::wait_or_unread(app, &joined.id, instance_id).await;
 	let cloud = app.state::<RelayGuests>().inner().cloud();
 	Ok(JoinedSpace::presented(joined, cloud, wait, &roster))
 }
@@ -169,11 +169,12 @@ mod tests {
 	use tauri::{App, Listener, Manager};
 
 	use super::super::contract::{JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason};
+	use super::super::test_host::SealingHost;
 	use super::super::wait_reason::{wait_of, Stall};
 	use super::*;
 	use crate::account::session::AccountSession;
-	use crate::crypto::commands::SpaceKeys;
-	use crate::crypto::space_key::HeldSpaceKey;
+	use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
+	use crate::crypto::device_keys::DeviceKeys;
 	use crate::db::connection::temp_dir;
 	use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 	use crate::db::repositories::joined_spaces::{self, JoinedReach};
@@ -396,8 +397,8 @@ mod tests {
 		let dir = temp_dir();
 		let app = app_over(&dir);
 		let keyless = held(&app).await;
-		let space = HeldSpaceKey::first().expect("randomness");
-		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		SealingHost::planted(app.handle(), "instance-2").await;
 		let keyed = held_over(&app, "instance-2", None).await;
 		let unreadable = held_over(&app, "instance.3", None).await;
 

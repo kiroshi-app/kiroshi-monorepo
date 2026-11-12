@@ -363,8 +363,9 @@ pinned roster is kept.
 
 When the host is offline, sends no verified rekey within the answer bound, or the
 socket drops, the desktop stores the joined Space anyway and answers it with
-`state: "waitingForHost"`. Every joined Space the device holds no key for is
-listed that way, and `joined_space_connect` answers `waitingForHost`. While the
+`state: "waitingForHost"`. Every joined Space the device holds no key for, or
+holds a key for with no verified roster, is listed that way, and
+`joined_space_connect` answers `waitingForHost`. While the
 account is signed in, the desktop keeps one member socket per such Space, sends
 the hello under `key_id` 0 on every connection and every `PING_EVERY`, and
 reconnects with the relay backoff. The first verified rekey stores the key and the
