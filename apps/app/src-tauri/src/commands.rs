@@ -202,6 +202,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_list::<tauri::Wry>,
 		conversations::commands::conversation_mission_thread::<tauri::Wry>,
 		conversations::commands::conversation_page::<tauri::Wry>,
+		conversations::commands::conversation_today_of_agent::<tauri::Wry>,
 		conversations::commands::conversation_local_ids,
 		conversations::commands::conversation_update::<tauri::Wry>,
 		conversations::commands::conversation_delete::<tauri::Wry>,

@@ -9396,6 +9396,25 @@
         },
         {
           "properties": {
+            "dayEnd": {
+              "type": "integer"
+            },
+            "dayStart": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "emptyDay"
+            }
+          },
+          "required": [
+            "kind",
+            "dayStart",
+            "dayEnd"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "failure": {
               "$ref": "#/$defs/LibraryError"
             },
@@ -11795,6 +11814,40 @@
       "ok": {
         "items": {
           "$ref": "#/$defs/SuggestedBot"
+        },
+        "type": "array"
+      }
+    },
+    "conversation_today_of_agent": {
+      "args": {
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "dayEnd": {
+            "type": "integer"
+          },
+          "dayStart": {
+            "type": "integer"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "botId",
+          "dayStart",
+          "dayEnd"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/ConversationInPage"
         },
         "type": "array"
       }
