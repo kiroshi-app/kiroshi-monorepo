@@ -19,6 +19,7 @@ import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { Dialog, DialogTitle } from "@workspace/ui/components/ui/dialog"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { useSettingsTab } from "@workspace/ui/hooks/use-settings-tab"
+import { type Travel, useTravel } from "@workspace/ui/hooks/use-travel"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SettingsSession = {
@@ -52,6 +53,12 @@ type SettingsDialogShellProps = {
 
 const DEFAULT_LEAVE_KIND: WordedSessionKind = "skills"
 
+const ENTERS_BY_TRAVEL = {
+	forward:
+		"fade-in slide-in-from-end-2 animate-in duration-200 ease-out motion-reduce:animate-none",
+	back: "fade-in slide-in-from-start-2 animate-in duration-200 ease-out motion-reduce:animate-none",
+} as const satisfies Record<Travel, string>
+
 const wordedKindOf = (sessions: SettingsSessions, pages?: SettingsPages) => {
 	const top = pages?.top
 	const holder = WORDED_SESSION_KINDS.find(
@@ -81,6 +88,7 @@ const SettingsDialogShell = ({
 	const activeTab = useSettingsTab(open, tab, onTabChange)
 	const declared = Object.values(sessions)
 	const wordedKind = wordedKindOf(sessions, pages)
+	const travel = useTravel(pages?.depth ?? 0, open)
 
 	const leave = () => {
 		for (const session of declared) session.discard()
@@ -110,23 +118,34 @@ const SettingsDialogShell = ({
 					</DialogTitle>
 				</header>
 
-				{pages?.shown(
-					declared.reduce<SessionPages>(
-						(shown, session) => ({ ...shown, ...session.pages }),
-						{},
-					),
-				) ?? (
-					<Tabs.Root
-						className="flex min-h-0 flex-1"
-						onValueChange={activeTab.onValueChange}
-						orientation="vertical"
-						value={activeTab.value}
-						ref={setTabs}
-					>
-						<SettingsRail iconsOnly={iconsOnly}>{rail(iconsOnly)}</SettingsRail>
-						{children}
-					</Tabs.Root>
-				)}
+				<div
+					className={cn(
+						"flex min-h-0 flex-1 flex-col",
+						travel && ENTERS_BY_TRAVEL[travel],
+					)}
+					data-slot="settings-dialog-page"
+					key={pages?.top ?? "tabs"}
+				>
+					{pages?.shown(
+						declared.reduce<SessionPages>(
+							(shown, session) => ({ ...shown, ...session.pages }),
+							{},
+						),
+					) ?? (
+						<Tabs.Root
+							className="flex min-h-0 flex-1"
+							onValueChange={activeTab.onValueChange}
+							orientation="vertical"
+							value={activeTab.value}
+							ref={setTabs}
+						>
+							<SettingsRail iconsOnly={iconsOnly}>
+								{rail(iconsOnly)}
+							</SettingsRail>
+							{children}
+						</Tabs.Root>
+					)}
+				</div>
 
 				<ConfirmDialog
 					confirmLabel={t(`${wordedKind}.leave.action`)}

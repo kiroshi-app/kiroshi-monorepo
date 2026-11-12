@@ -2783,6 +2783,7 @@ settings-settingsdialogshell--default-wording-with-no-page
 settings-settingsdialogshell--guard-accepted
 settings-settingsdialogshell--guard-raised
 settings-settingsdialogshell--guard-refused
+settings-settingsdialogshell--pushed-page-travels
 settings-settingsdialogshell--rail-icons-only
 settings-settingsdialogshell--skill-page-wording
 settings-settingsdialogshell--without-session-closes-unasked
