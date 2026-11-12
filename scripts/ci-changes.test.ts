@@ -288,6 +288,10 @@ describe("the paths each job watches", () => {
 		expect(touching("crates/relay/Cargo.toml").rust).toBe(true)
 	})
 
+	it("runs rust alone on the pinned toolchain", () => {
+		expect(touching("rust-toolchain.toml")).toEqual({ ...none, rust: true })
+	})
+
 	it("runs every job but ios on paths only under packages/shared", () => {
 		expect(touching(...SHARED_ONLY_PATHS)).toEqual({
 			...every,

@@ -184,7 +184,8 @@ fn is_identity(spec: &FieldSpec, value: &Value) -> bool {
 	identity.keys().map(String::as_str).eq(IDENTITY_KEYS)
 		&& kind.is_some_and(|kind| {
 			spec.allowed.as_ref().is_some_and(|allowed| allowed.iter().any(|name| name == kind))
-		}) && id.is_some_and(|id| !id.is_empty())
+		})
+		&& id.is_some_and(|id| !id.is_empty())
 }
 
 fn with_paired_fill(mut node: JsonObject, spec: &KindSpec) -> JsonObject {
