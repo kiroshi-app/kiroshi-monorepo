@@ -238,6 +238,7 @@ fn the_callback_polls_signs_the_account_in_and_sign_out_deletes_the_bearer() {
 				"id": "u1",
 				"email": EMAIL,
 				"createdAt": "2026-10-01T00:00:00.000Z",
+				"name": null,
 				"plan": "pro"
 			})
 		);
