@@ -75,6 +75,10 @@
 	--bot-badge-failed: oklch(0.62 0.22 27);
 	--warning: oklch(0.64 0.16 60);
 	--warning-foreground: #fffffc;
+	--mission-mark-cut-out: #0a0a0a;
+	--mission-glyph-waiting: oklch(0.56 0.16 60);
+	--mission-glyph-failed: oklch(0.58 0.22 27);
+	--mission-glyph-ready: oklch(0.54 0.17 148);
 	--success: #207144;
 	--state-connected: oklch(0.696 0.17 162.48);
 	--state-needs-authorization: var(--warning);
@@ -133,7 +137,18 @@
 	--shell-border: oklch(0 0 0 / 6%);
 	--shell-divider: oklch(0 0 0 / 8%);
 	--rail-item-selected: oklch(0 0 0 / 10%);
+	--rail-item-selected-hover: oklch(0 0 0 / 16%);
 	--rail-avatar: #e5e5e5;
+	--sidebar-person-foreground: #515151;
+	--space-dot: oklch(0 0 0 / 20%);
+	--space-offline: #5c5c5c;
+	--rail-section-placeholder: oklch(0 0 0 / 20%);
+	--update-row: oklch(0 0 0 / 4%);
+	--update-track: oklch(0 0 0 / 12%);
+	--update-blocked-foreground: #5c5c5c;
+	--update-failed: #b83232;
+	--update-failed-surface: rgb(184 50 50 / 8%);
+	--update-failed-foreground: #ffffff;
 	--person-avatar: #e5e5e5;
 	--bot-avatar-field: var(
 		--hue-light-avatar-ink,
@@ -157,6 +172,13 @@
 	--faint-foreground: #67676c;
 	--disabled-foreground: #a3a3a8;
 	--waiting-foreground: #8a6400;
+	--mission-list-faint-foreground: #6b6b70;
+	--mission-list-group: oklch(0 0 0 / 3%);
+	--mission-list-divider: oklch(0 0 0 / 5%);
+	--mission-list-hover: oklch(0 0 0 / 5%);
+	--mission-chip-foreground: #404044;
+	--mission-glyph-success: #2f7d32;
+	--mission-glyph-failure: #c93b3b;
 	--prompt-surface: #ffffff;
 	--prompt-surface-inert: #f0f0f0;
 	--prompt-menu: #ffffff;
@@ -289,6 +311,10 @@
 	--bot-badge-attention: var(--primary-strong);
 	--warning: oklch(0.76 0.16 72);
 	--warning-foreground: #1f1400;
+	--mission-mark-cut-out: #0a0a0a;
+	--mission-glyph-waiting: var(--warning);
+	--mission-glyph-failed: var(--bot-badge-failed);
+	--mission-glyph-ready: var(--bot-badge-done);
 	--success: #5fbf85;
 	--state-needs-authorization: #e8b04a;
 	--presence-online: #3fb466;
@@ -346,7 +372,18 @@
 	--shell-border: oklch(1 0 0 / 6%);
 	--shell-divider: oklch(1 0 0 / 8%);
 	--rail-item-selected: oklch(1 0 0 / 12%);
+	--rail-item-selected-hover: oklch(1 0 0 / 18%);
 	--rail-avatar: #3a3a3a;
+	--sidebar-person-foreground: #acacac;
+	--space-dot: oklch(1 0 0 / 25%);
+	--space-offline: #8a8a8a;
+	--rail-section-placeholder: oklch(1 0 0 / 20%);
+	--update-row: oklch(1 0 0 / 5%);
+	--update-track: oklch(1 0 0 / 15%);
+	--update-blocked-foreground: #7b7b7b;
+	--update-failed: #f07a7a;
+	--update-failed-surface: rgb(240 122 122 / 8%);
+	--update-failed-foreground: #2a0f0f;
 	--person-avatar: #333333;
 	--bot-avatar-field: var(
 		--hue-dark-avatar-ink,
@@ -370,6 +407,13 @@
 	--faint-foreground: #8a8a8e;
 	--disabled-foreground: #6b6b70;
 	--waiting-foreground: #f5d88f;
+	--mission-list-faint-foreground: #7a7a80;
+	--mission-list-group: oklch(1 0 0 / 3%);
+	--mission-list-divider: oklch(1 0 0 / 4%);
+	--mission-list-hover: oklch(1 0 0 / 5%);
+	--mission-chip-foreground: #c8c8cc;
+	--mission-glyph-success: #9ad39a;
+	--mission-glyph-failure: #f07a7a;
 	--prompt-surface: #1c1c1e;
 	--prompt-surface-inert: #161618;
 	--prompt-menu: #1f1f22;

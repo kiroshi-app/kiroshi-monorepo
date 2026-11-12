@@ -202,6 +202,8 @@ table! { core, client, caller;
 		answered(user_set_profile_picture(core, bytes).await);
 	user_set_onboarding_step(step: OnboardingStep) =>
 		answered(user_set_onboarding_step(core, step).await);
+	user_set_sidebar_collapsed(is_collapsed: bool) =>
+		answered(user_set_sidebar_collapsed(core, is_collapsed).await);
 	user_replay_onboarding() => answered(user_replay_onboarding(core).await);
 	user_set_onboarding_first_companion(bot_id: String) =>
 		answered(user_set_onboarding_first_companion(core, bot_id).await);

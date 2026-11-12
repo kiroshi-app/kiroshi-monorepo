@@ -9,13 +9,14 @@ import {
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
-	missionStripsOf,
+	BotRowAvatar,
 	type RosterRowSlot,
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
+import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -30,9 +31,17 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
-import { SidebarMenuItem } from "@workspace/ui/components/ui/sidebar"
+import {
+	SidebarMenuItem,
+	useSidebar,
+} from "@workspace/ui/components/ui/sidebar"
 import { dropArea, type Lifter } from "@workspace/ui/hooks/use-roster-lift"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
+
+const ROW_ICON_SIDE = 28
+
+const SURFACE =
+	"rounded-lg hover:bg-sidebar-accent has-data-active:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70"
 
 interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
@@ -68,6 +77,9 @@ const ConversationRosterRow = ({
 	onCreateSectionFor,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
+	const { state } = useSidebar()
+	const hasSurface =
+		state !== "collapsed" || Boolean(conversation.missions?.length)
 
 	return (
 		<SidebarMenuItem
@@ -83,19 +95,25 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger>
+				<ContextMenuTrigger className={hasSurface ? SURFACE : undefined}>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
 						badge={badgeOf(conversation)}
+						geometry={hasSurface ? "conversation" : "roster"}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
-							<ConversationSubjectIcon
-								hue={conversation.color}
-								icon={conversation.icon}
-							/>
+							conversation.agent ? (
+								<BotRowAvatar bot={conversation.agent} size={ROW_ICON_SIDE} />
+							) : (
+								<ConversationSubjectIcon
+									hue={conversation.color}
+									icon={conversation.icon}
+									side={ROW_ICON_SIDE}
+								/>
+							)
 						}
 						name={conversation.name}
 						onSelect={(modifiers) => {
@@ -107,7 +125,6 @@ const ConversationRosterRow = ({
 						previewTrailing={
 							<ConversationBotPile bots={heldBotsOf(conversation)} />
 						}
-						strips={missionStripsOf(conversation.missions)}
 						isTimestampDestructive={conversation.isNotSent}
 						timestamp={
 							conversation.isNotSent
@@ -115,6 +132,7 @@ const ConversationRosterRow = ({
 								: (conversation.timestamp ?? "")
 						}
 					/>
+					<MissionCapsuleList missions={conversation.missions} />
 				</ContextMenuTrigger>
 				<ContextMenuContent
 					aria-label={t("roster.actions", { name: conversation.name })}
@@ -152,4 +170,4 @@ const ConversationRosterRow = ({
 	)
 }
 
-export { ConversationRosterRow }
+export { ConversationRosterRow, ROW_ICON_SIDE }

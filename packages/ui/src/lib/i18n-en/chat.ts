@@ -972,6 +972,17 @@ const chat = {
 				description: "Missions your agents open in this space show up here.",
 			},
 		},
+		page: {
+			title: "Missions",
+			group: {
+				blockedOnYou: "Blocked on you",
+				readyToMerge: "Ready to merge",
+				working: "Working",
+				waitingOnAgent: "Waiting on an agent",
+				completed: "Completed",
+				blocked: "Blocked",
+			},
+		},
 		state: {
 			waiting_human: "Blocked on you",
 			ready_to_merge: "Ready to merge",

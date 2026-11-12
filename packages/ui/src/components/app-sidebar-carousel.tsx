@@ -21,14 +21,20 @@ const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 const CONTENT_INSET = "left-column-inset py-0"
 
 const CAROUSEL =
-	"flex min-h-0 flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+	"flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 
 const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 
 const CAROUSEL_HELD = "overflow-x-hidden"
 
-const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0"
+const CAROUSEL_PANEL = "flex w-full flex-none snap-start snap-always flex-col"
+
+type SpacePanelLook = "inset" | "bare"
+
+const PANEL_LOOKS: Record<SpacePanelLook, string> = {
+	inset: "gap-1 overflow-y-auto overscroll-y-contain left-column-inset py-0",
+	bare: "",
+}
 
 const NEIGHBOURING = 1
 
@@ -44,7 +50,11 @@ const isFlushWithPanel = (row: HTMLDivElement) => {
 	return Math.abs(drift) <= 1
 }
 
+const scrollerOf = (panel: HTMLElement, look: SpacePanelLook) =>
+	look === "inset" ? panel : panel.firstElementChild
+
 interface SpacePanelProps {
+	look: SpacePanelLook
 	scrollKey: string
 	isInView: boolean
 	scrolls: Map<string, number>
@@ -52,26 +62,37 @@ interface SpacePanelProps {
 }
 
 const SpacePanel = ({
+	look,
 	scrollKey,
 	isInView,
 	scrolls,
 	children,
 }: SpacePanelProps) => {
 	const panel = useRef<HTMLDivElement>(null)
-	useOverlayScrollbars(panel, { options: CLIPPED_SIDEWAYS })
+	const restoredScroller = useRef<Element | null>(null)
+	useOverlayScrollbars(panel, {
+		isEnabled: look === "inset",
+		options: CLIPPED_SIDEWAYS,
+	})
+
+	useLayoutEffect(() => {
+		const scroller = panel.current && scrollerOf(panel.current, look)
+		if (!scroller || scroller === restoredScroller.current) return
+		restoredScroller.current = scroller
+		scroller.scrollTop = scrolls.get(scrollKey) ?? 0
+	})
 
 	return (
 		<div
-			className={CAROUSEL_PANEL}
+			className={cn(CAROUSEL_PANEL, PANEL_LOOKS[look])}
 			data-slot="space-panel"
 			inert={!isInView}
-			onScroll={(event) => {
-				scrolls.set(scrollKey, event.currentTarget.scrollTop)
+			onScrollCapture={(event) => {
+				const scroller = scrollerOf(event.currentTarget, look)
+				if (event.target === scroller)
+					scrolls.set(scrollKey, scroller.scrollTop)
 			}}
-			ref={(node) => {
-				panel.current = node
-				if (node) node.scrollTop = scrolls.get(scrollKey) ?? 0
-			}}
+			ref={panel}
 		>
 			{children}
 		</div>
@@ -83,12 +104,14 @@ interface SpaceCarouselProps {
 	spaces: Space[]
 	selectedSpaceId?: string
 	isSwipeEnabled: boolean
+	panel?: SpacePanelLook
 	onSelectSpace?: (id: string) => void
 	renderSpace: (space: Space) => ReactNode
 }
 
 const SpaceCarousel = ({
 	list,
+	panel = "inset",
 	spaces,
 	selectedSpaceId,
 	isSwipeEnabled,
@@ -169,6 +192,7 @@ const SpaceCarousel = ({
 					<SpacePanel
 						isInView={space.id === selectedSpaceId}
 						key={scrollKey}
+						look={panel}
 						scrollKey={scrollKey}
 						scrolls={scrolls}
 					>
@@ -198,4 +222,40 @@ const AppSidebarList = ({
 		<SidebarContent className={CONTENT_INSET}>{children}</SidebarContent>
 	)
 
-export { AppSidebarList }
+interface CurrentSpaceCarouselProps {
+	spaces: Space[]
+	selectedSpaceId?: string
+	isSwitchingEnabled: boolean
+	onSelectSpace?: (id: string) => void
+	renderSpaceList?: (space: Space) => ReactNode
+	children: ReactNode
+}
+
+const CurrentSpaceCarousel = ({
+	spaces,
+	selectedSpaceId,
+	isSwitchingEnabled,
+	onSelectSpace,
+	renderSpaceList,
+	children,
+}: CurrentSpaceCarouselProps) => {
+	const shown =
+		spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
+	if (!shown) return children
+
+	return (
+		<SpaceCarousel
+			isSwipeEnabled={isSwitchingEnabled && spaces.length > 1}
+			list="conversations"
+			onSelectSpace={onSelectSpace}
+			panel="bare"
+			renderSpace={(space) =>
+				space.id === shown.id ? children : renderSpaceList?.(space)
+			}
+			selectedSpaceId={shown.id}
+			spaces={spaces}
+		/>
+	)
+}
+
+export { AppSidebarList, CurrentSpaceCarousel }

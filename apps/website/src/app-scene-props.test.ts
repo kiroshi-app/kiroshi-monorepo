@@ -32,6 +32,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	sections: "the scene hands its sections by Space, through sectionsBySpaceId",
 	side: "the scene keeps the sidebar on its default side",
 	variant: "the scene draws the sidebar in its default variant",
+	onToggleSidebar: "the scene keeps its sidebar open, so it draws no toggle",
 }
 
 const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
@@ -39,6 +40,8 @@ const LEFT_OUT_OF_THE_SHELL: Record<string, string> = {
 	onWidthChange:
 		"the scene keeps no saved sidebar width, the shell holds its own",
 	className: "the scene adds no class to the shell",
+	open: "the scene keeps its sidebar open",
+	onOpenChange: "the scene keeps its sidebar open",
 }
 
 const SLOW_PROGRAM_MS = 60_000

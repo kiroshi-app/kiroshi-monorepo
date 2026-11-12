@@ -33,6 +33,8 @@ const common = {
 		toggle: "Toggle sidebar",
 		close: "Close sidebar",
 		resize: "Resize sidebar",
+		collapseUnsaved:
+			"Couldn’t remember the sidebar layout. Toggle the sidebar again to save it.",
 	},
 	windowControls: {
 		minimize: "Minimize",

@@ -18,6 +18,7 @@ const NOTIFY_ON_PERMISSION_KEY: &str = "user.notify_on_permission";
 const NOTIFY_ON_FINISHED_TURN_KEY: &str = "user.notify_on_finished_turn";
 const NOTIFY_WITH_SOUND_KEY: &str = "user.notify_with_sound";
 const SIDEBAR_WIDTH_KEY: &str = "user.sidebar_width";
+const SIDEBAR_COLLAPSED_KEY: &str = "user.sidebar_collapsed";
 const SIDEBAR_TAB_KEY: &str = "user.sidebar_tab";
 const OPEN_ON_KEY: &str = "user.open_on";
 const ACTIVITY_PANEL_OPEN_KEY: &str = "user.activity_panel_open";
@@ -207,6 +208,7 @@ pub struct Preferences {
 	pub notify_on_finished_turn: bool,
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
+	pub sidebar_collapsed: bool,
 	pub sidebar_tab: SidebarTab,
 	pub open_on: OpenOn,
 	pub activity_panel_open: bool,
@@ -234,6 +236,7 @@ impl Default for Preferences {
 			notify_on_finished_turn: true,
 			notify_with_sound: true,
 			sidebar_width: None,
+			sidebar_collapsed: false,
 			sidebar_tab: SidebarTab::default(),
 			open_on: OpenOn::default(),
 			activity_panel_open: false,
@@ -410,6 +413,16 @@ impl UserRepository {
 		self.write_then_read(move |transaction| write_onboarding_step_in(transaction, step)).await
 	}
 
+	pub async fn set_sidebar_collapsed(
+		&self,
+		is_collapsed: bool,
+	) -> Result<Preferences, DatabaseError> {
+		self.write_then_read(move |transaction| {
+			write_switch_in(transaction, SIDEBAR_COLLAPSED_KEY, is_collapsed)
+		})
+		.await
+	}
+
 	pub async fn replay_onboarding(&self) -> Result<Preferences, DatabaseError> {
 		self.write_then_read(|transaction| {
 			write_switch_in(transaction, FIRST_RUN_DONE_KEY, false)?;
@@ -538,6 +551,7 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		notify_with_sound: switch_in(connection, NOTIFY_WITH_SOUND_KEY)?,
 		sidebar_width: setting_in(connection, SIDEBAR_WIDTH_KEY)?
 			.and_then(|stored| stored.parse().ok()),
+		sidebar_collapsed: switch_on_in(connection, SIDEBAR_COLLAPSED_KEY)?,
 		sidebar_tab: setting_in(connection, SIDEBAR_TAB_KEY)?
 			.map_or(defaults.sidebar_tab, |stored| SidebarTab::of(&stored)),
 		open_on: setting_in(connection, OPEN_ON_KEY)?
@@ -624,6 +638,7 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	write_switch_in(transaction, NOTIFY_WITH_SOUND_KEY, preferences.notify_with_sound)?;
 	let width = preferences.sidebar_width.map(|width| width.to_string());
 	write_optional_in(transaction, SIDEBAR_WIDTH_KEY, width.as_deref())?;
+	write_switch_in(transaction, SIDEBAR_COLLAPSED_KEY, preferences.sidebar_collapsed)?;
 	SETTINGS.write(transaction, None, SIDEBAR_TAB_KEY, preferences.sidebar_tab.as_stored())?;
 	SETTINGS.write(transaction, None, OPEN_ON_KEY, preferences.open_on.as_stored())?;
 	write_switch_in(transaction, ACTIVITY_PANEL_OPEN_KEY, preferences.activity_panel_open)?;
@@ -709,6 +724,7 @@ mod tests {
 			notify_on_finished_turn: false,
 			notify_with_sound: false,
 			sidebar_width: Some(320),
+			sidebar_collapsed: true,
 			sidebar_tab: SidebarTab::Missions,
 			open_on: OpenOn::LastConversation,
 			activity_panel_open: true,
@@ -751,6 +767,7 @@ mod tests {
 				notify_on_finished_turn: true,
 				notify_with_sound: true,
 				sidebar_width: None,
+				sidebar_collapsed: false,
 				sidebar_tab: SidebarTab::Conversations,
 				open_on: OpenOn::NewConversation,
 				activity_panel_open: false,
@@ -933,6 +950,66 @@ mod tests {
 		let database = open(&dir);
 
 		assert!(!database.user().preferences().await.expect("the record").activity_panel_open);
+	}
+
+	#[tokio::test]
+	async fn a_sidebar_state_that_is_neither_on_nor_off_reads_as_an_expanded_sidebar() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				SETTINGS.write(&transaction, None, SIDEBAR_COLLAPSED_KEY, "maybe")?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert!(!read.sidebar_collapsed);
+	}
+
+	#[tokio::test]
+	async fn a_collapsed_sidebar_is_answered_and_still_collapsed_after_the_file_is_reopened() {
+		let dir = temp_dir();
+		{
+			let database = open(&dir);
+			let answered = database.user().set_sidebar_collapsed(true).await.expect("the write");
+			assert!(answered.sidebar_collapsed);
+			assert_eq!(setting(&database, SIDEBAR_COLLAPSED_KEY).await, Some("on".to_owned()));
+		}
+
+		let database = open(&dir);
+
+		assert!(database.user().preferences().await.expect("the record").sidebar_collapsed);
+	}
+
+	#[tokio::test]
+	async fn a_set_sidebar_collapsed_changes_only_the_sidebar_state() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let written = database.user().set_preferences(a_record()).await.expect("the record write");
+
+		let answered = database.user().set_sidebar_collapsed(false).await.expect("the write");
+
+		assert_eq!(answered, Preferences { sidebar_collapsed: false, ..written });
+		assert_eq!(setting(&database, SIDEBAR_COLLAPSED_KEY).await, Some("off".to_owned()));
+	}
+
+	#[tokio::test]
+	async fn a_collapsed_sidebar_written_with_the_record_reads_back_collapsed() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		database
+			.user()
+			.set_preferences(Preferences { sidebar_collapsed: true, ..a_record() })
+			.await
+			.expect("the write");
+
+		assert!(database.user().preferences().await.expect("the record").sidebar_collapsed);
 	}
 
 	#[tokio::test]

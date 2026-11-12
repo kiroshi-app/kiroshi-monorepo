@@ -59,7 +59,7 @@ const PREVIEW: Record<RowGeometry, string> = {
 
 const TIMESTAMP_NEEDING_YOU = "font-medium text-warning"
 
-const TIMESTAMP_DESTRUCTIVE = "w-auto text-destructive text-xs"
+const TIMESTAMP_DESTRUCTIVE = "w-auto min-w-13 text-destructive text-xs"
 
 const NEEDS_YOU_LINE = "flex h-4 min-w-0 items-center gap-1 [&_svg]:size-full!"
 

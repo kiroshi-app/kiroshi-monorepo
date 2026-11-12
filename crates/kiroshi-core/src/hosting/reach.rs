@@ -427,6 +427,7 @@ pub const REACHES: &[(&str, Reach)] = &[
 	("user_set_preferences", Reach::HostOnly),
 	("user_set_profile_picture", Reach::HostOnly),
 	("user_set_onboarding_step", Reach::HostOnly),
+	("user_set_sidebar_collapsed", Reach::HostOnly),
 	("user_replay_onboarding", Reach::HostOnly),
 	("user_set_onboarding_first_companion", Reach::HostOnly),
 	("user_mark_onboarding_import_seen", Reach::HostOnly),

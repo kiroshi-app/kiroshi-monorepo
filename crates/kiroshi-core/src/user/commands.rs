@@ -65,6 +65,16 @@ pub async fn user_set_onboarding_step(
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }
 
+pub async fn user_set_sidebar_collapsed(
+	core: &crate::core_context::Core,
+	is_collapsed: bool,
+) -> Result<UserPreferences, UserPreferencesError> {
+	let state = core.state::<db::DatabaseState>();
+	let dir = avatars::Avatars::dir(core);
+	let stored = ready(&state)?.user().set_sidebar_collapsed(is_collapsed).await?;
+	Ok(UserPreferences::of(stored, dir.as_deref()))
+}
+
 pub async fn user_replay_onboarding(
 	core: &crate::core_context::Core,
 ) -> Result<UserPreferences, UserPreferencesError> {

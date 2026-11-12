@@ -56,7 +56,6 @@ type AppSidebarFrameKey =
 	| "isSearchOpen"
 	| "insetWindowControls"
 	| "windowControls"
-	| "railDots"
 	| "openPanel"
 	| "openSettings"
 	| "onOpenPanelChange"
@@ -130,7 +129,6 @@ const AppSidebarBase = ({
 	isSearchOpen,
 	insetWindowControls,
 	windowControls,
-	railDots,
 	tabs,
 	activeTabId,
 	canGoBack,
@@ -177,7 +175,6 @@ const AppSidebarBase = ({
 			rail={{
 				badgesBySpaceId,
 				"data-tauri-drag-region": dragRegion,
-				dots: railDots,
 				hostBySpaceId,
 				invitations,
 				isSearchOpen,

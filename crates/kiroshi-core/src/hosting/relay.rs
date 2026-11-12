@@ -478,6 +478,7 @@ pub async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
 	};
 	request.headers_mut().insert(header::AUTHORIZATION, authorization);
 	let path = request.uri().path().to_owned();
+	let asked = request.uri().path_and_query().map_or_else(|| path.clone(), ToString::to_string);
 	installed_tls_provider();
 	let connected = connect_async_with_config(request, Some(relay_socket_config()), false);
 	match timeout(CONNECT_BOUND, connected).await {
@@ -491,7 +492,7 @@ pub async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
 			Opened::RateLimited(retry_after)
 		}
 		Ok(Err(SocketError::Http(response))) => {
-			refused(&path, response.status(), response.body().as_deref())
+			refused(&asked, response.status(), response.body().as_deref())
 		}
 		Ok(Err(error)) => Opened::Unreachable(format!("the relay could not be reached: {error}")),
 	}
@@ -644,6 +645,10 @@ async fn online(
 					}
 					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
 					Received::Hello(sender) => {
+						log::info!(
+							"hosted space {} (instance {}) heard a hello from relay device {}",
+							ids.space_id, ids.instance_id, sender.relay_device_id
+						);
 						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Device(&sender.relay_device_id)).await {
 							return ended;
 						}

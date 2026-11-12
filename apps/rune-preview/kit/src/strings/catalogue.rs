@@ -1,4 +1,4 @@
-pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
+pub(super) static ENTRIES: [(&str, &str, &str); 2170] = [
 	("bots.roster.label", "Conversations", "Conversations"),
 	("bots.roster.create", "Create an agent", "Créer un agent"),
 	("bots.roster.createMenu", "Create", "Créer"),
@@ -18,6 +18,7 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("bots.roster.mission.state.failed", "blocked", "bloquée"),
 	("bots.roster.mission.state.ready", "ready to merge", "prête à fusionner"),
 	("bots.roster.mission.state.working", "working", "en cours"),
+	("bots.roster.mission.state.waiting_agent", "waiting on an agent", "en attente d’un agent"),
 	("bots.roster.mission.unavailable.title", "Couldn’t load missions", "Impossible de charger les missions"),
 	("bots.roster.mission.unavailable.description", "Restart Kiroshi to retry.", "Redémarrez Kiroshi pour réessayer."),
 	("bots.roster.actions", "Actions for {{name}}", "Actions pour {{name}}"),
@@ -28,6 +29,7 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("bots.roster.spaces.label", "Spaces", "Espaces"),
 	("bots.roster.spaces.lastSpace", "An agent stays in at least one space. To remove an agent from its last space, delete the agent.", "Un agent reste dans au moins un espace. Pour retirer un agent de son dernier espace, supprimez l’agent."),
 	("bots.roster.pin", "Pin", "Épingler"),
+	("bots.roster.pinned", "Pinned", "Épinglées"),
 	("bots.roster.pinDrop", "Drop here to pin", "Déposer ici pour épingler"),
 	("bots.roster.unpin", "Unpin", "Détacher"),
 	("bots.roster.moved", "{{name}} moved to position {{position}} of {{count}}", "{{name}} déplacé en position {{position}} sur {{count}}"),
@@ -61,6 +63,7 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("bots.roster.seedRefused", "Your first agent couldn’t be set up", "Votre premier agent n’a pas pu être créé"),
 	("bots.rail.label", "Navigation", "Navigation"),
 	("bots.rail.home", "Home", "Accueil"),
+	("bots.rail.newConversation", "New conversation", "Nouvelle conversation"),
 	("bots.rail.conversations", "Conversations", "Conversations"),
 	("bots.rail.missions", "Missions", "Missions"),
 	("bots.rail.library", "Library", "Bibliothèque"),
@@ -70,6 +73,11 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("bots.rail.badge.attention", "{{name}}, waiting for you", "{{name}}, en attente de vous"),
 	("bots.rail.badge.done", "{{name}}, activity finished", "{{name}}, activité terminée"),
 	("bots.rail.badge.failed", "{{name}}, activity failed", "{{name}}, activité en échec"),
+	("bots.rail.personSettings", "{{name}}, Settings", "{{name}}, Réglages"),
+	("bots.rail.detail", "· {{detail}}", "· {{detail}}"),
+	("bots.rail.missionCount_one", "{{count}} mission", "{{count}} mission"),
+	("bots.rail.missionCount_other", "{{count}} missions", "{{count}} missions"),
+	("bots.rail.moreMissions", "+{{count}} missions", "+{{count}} missions"),
 	("bots.spaces.label", "Spaces", "Espaces"),
 	("bots.spaces.switch", "Change space, {{name}} open", "Changer d’espace, {{name}} ouvert"),
 	("bots.spaces.switchHosted", "Change space, {{name}} open, {{host}}", "Changer d’espace, {{name}} ouvert, {{host}}"),
@@ -1110,6 +1118,13 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("chat.routines.leave.action", "Leave", "Quitter"),
 	("chat.missions.panel.empty.title", "No missions yet", "Aucune mission pour l’instant"),
 	("chat.missions.panel.empty.description", "Missions your agents open in this space show up here.", "Les missions ouvertes par vos agents dans cet espace apparaissent ici."),
+	("chat.missions.page.title", "Missions", "Missions"),
+	("chat.missions.page.group.blockedOnYou", "Blocked on you", "Bloquées sur vous"),
+	("chat.missions.page.group.readyToMerge", "Ready to merge", "Prêtes à fusionner"),
+	("chat.missions.page.group.working", "Working", "En cours"),
+	("chat.missions.page.group.waitingOnAgent", "Waiting on an agent", "En attente d’un agent"),
+	("chat.missions.page.group.completed", "Completed", "Terminées"),
+	("chat.missions.page.group.blocked", "Blocked", "Bloquées"),
 	("chat.missions.state.waiting_human", "Blocked on you", "Bloquée sur vous"),
 	("chat.missions.state.ready_to_merge", "Ready to merge", "Prête à fusionner"),
 	("chat.missions.state.failed", "Blocked", "Bloquée"),
@@ -1306,6 +1321,7 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("common.sidebar.toggle", "Toggle sidebar", "Afficher ou masquer la barre latérale"),
 	("common.sidebar.close", "Close sidebar", "Fermer la barre latérale"),
 	("common.sidebar.resize", "Resize sidebar", "Redimensionner la barre latérale"),
+	("common.sidebar.collapseUnsaved", "Couldn’t remember the sidebar layout. Toggle the sidebar again to save it.", "Impossible de mémoriser l’affichage de la barre latérale. Basculez-la de nouveau pour l’enregistrer."),
 	("common.windowControls.minimize", "Minimize", "Réduire"),
 	("common.windowControls.maximize", "Maximize", "Agrandir"),
 	("common.windowControls.restore", "Restore", "Restaurer"),
@@ -2091,6 +2107,7 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 	("settings.space.danger.last", "You can’t delete your last space.", "Vous ne pouvez pas supprimer votre dernier espace."),
 	("settings.space.danger.confirm.title", "Delete {{name}}?", "Supprimer {{name}} ?"),
 	("bots.roster.backgroundTasks_many", "waiting on {{count}} background tasks", "attend {{count}} tâches en arrière-plan"),
+	("bots.rail.missionCount_many", "{{count}} missions", "{{count}} missions"),
 	("bots.spaces.switchInvited_many", "Change space, {{name}} open, {{count}} invitations", "Changer d’espace, {{name}} ouvert, {{count}} invitations"),
 	("bots.spaces.switchHostedInvited_many", "Change space, {{name}} open, {{host}}, {{count}} invitations", "Changer d’espace, {{name}} ouvert, {{host}}, {{count}} invitations"),
 	("bots.history.summary_many", "Lists {{count}} changes since {{date}}. Undoing one writes a new change, so nothing’s ever removed.", "Liste {{count}} modifications depuis le {{date}}. Annuler une modification en écrit une nouvelle : rien n’est jamais supprimé."),
@@ -2157,547 +2174,554 @@ pub(super) static ENTRIES: [(&str, &str, &str); 2153] = [
 pub mod bots {
 	pub mod applications {
 		use crate::strings::Key;
-		pub const UNTITLED: Key = Key(277);
-		pub const ADD: Key = Key(278);
-		pub const CREATE: Key = Key(279);
-		pub const SAVE: Key = Key(280);
-		pub const UNSAVED: Key = Key(281);
-		pub const BACK: Key = Key(282);
-		pub const SEARCH: Key = Key(283);
-		pub const PASTE: Key = Key(284);
-		pub const VERIFIED: Key = Key(285);
-		pub const USES_ONE: Key = Key(286);
-		pub const USES_OTHER: Key = Key(287);
-		pub const HOSTED_ON: Key = Key(288);
-		pub const OPEN: Key = Key(294);
-		pub const NOTICE: Key = Key(360);
-		pub const UNAVAILABLE: Key = Key(400);
-		pub const USES_MANY: Key = Key(2099);
+		pub const UNTITLED: Key = Key(285);
+		pub const ADD: Key = Key(286);
+		pub const CREATE: Key = Key(287);
+		pub const SAVE: Key = Key(288);
+		pub const UNSAVED: Key = Key(289);
+		pub const BACK: Key = Key(290);
+		pub const SEARCH: Key = Key(291);
+		pub const PASTE: Key = Key(292);
+		pub const VERIFIED: Key = Key(293);
+		pub const USES_ONE: Key = Key(294);
+		pub const USES_OTHER: Key = Key(295);
+		pub const HOSTED_ON: Key = Key(296);
+		pub const OPEN: Key = Key(302);
+		pub const NOTICE: Key = Key(368);
+		pub const UNAVAILABLE: Key = Key(408);
+		pub const USES_MANY: Key = Key(2116);
 		pub mod args {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(418);
-			pub const PLACEHOLDER: Key = Key(419);
-			pub const HINT: Key = Key(420);
+			pub const LABEL: Key = Key(426);
+			pub const PLACEHOLDER: Key = Key(427);
+			pub const HINT: Key = Key(428);
 		}
 		pub mod catalogue {
 			use crate::strings::Key;
-			pub const LOADING: Key = Key(367);
-			pub const DIRECTORY: Key = Key(368);
-			pub const EMPTY: Key = Key(369);
-			pub const FAILED: Key = Key(370);
-			pub const PARTLY_FAILED: Key = Key(371);
-			pub const STALE: Key = Key(372);
-			pub const RETRY: Key = Key(373);
-			pub const UNAVAILABLE: Key = Key(392);
-			pub const NOTHING: Key = Key(395);
+			pub const LOADING: Key = Key(375);
+			pub const DIRECTORY: Key = Key(376);
+			pub const EMPTY: Key = Key(377);
+			pub const FAILED: Key = Key(378);
+			pub const PARTLY_FAILED: Key = Key(379);
+			pub const STALE: Key = Key(380);
+			pub const RETRY: Key = Key(381);
+			pub const UNAVAILABLE: Key = Key(400);
+			pub const NOTHING: Key = Key(403);
 			pub mod category {
 				use crate::strings::Key;
-				pub const EVERYTHING: Key = Key(374);
-				pub const ON_THIS_MACHINE: Key = Key(375);
-				pub const COMMERCE_SHOPPING: Key = Key(376);
-				pub const COMMUNICATION: Key = Key(377);
-				pub const CONSUMER_HEALTH: Key = Key(378);
-				pub const CREATIVE: Key = Key(379);
-				pub const DATA_ANALYTICS: Key = Key(380);
-				pub const DEVELOPER_TOOLS: Key = Key(381);
-				pub const EDUCATION: Key = Key(382);
-				pub const FINANCIAL_SERVICES: Key = Key(383);
-				pub const HEALTH_LIFE_SCIENCES: Key = Key(384);
-				pub const LEGAL: Key = Key(385);
-				pub const MEDIA_ENTERTAINMENT: Key = Key(386);
-				pub const NONPROFIT: Key = Key(387);
-				pub const PRODUCTIVITY: Key = Key(388);
-				pub const SALES_MARKETING: Key = Key(389);
-				pub const TRAVEL: Key = Key(390);
-				pub const OTHER: Key = Key(391);
+				pub const EVERYTHING: Key = Key(382);
+				pub const ON_THIS_MACHINE: Key = Key(383);
+				pub const COMMERCE_SHOPPING: Key = Key(384);
+				pub const COMMUNICATION: Key = Key(385);
+				pub const CONSUMER_HEALTH: Key = Key(386);
+				pub const CREATIVE: Key = Key(387);
+				pub const DATA_ANALYTICS: Key = Key(388);
+				pub const DEVELOPER_TOOLS: Key = Key(389);
+				pub const EDUCATION: Key = Key(390);
+				pub const FINANCIAL_SERVICES: Key = Key(391);
+				pub const HEALTH_LIFE_SCIENCES: Key = Key(392);
+				pub const LEGAL: Key = Key(393);
+				pub const MEDIA_ENTERTAINMENT: Key = Key(394);
+				pub const NONPROFIT: Key = Key(395);
+				pub const PRODUCTIVITY: Key = Key(396);
+				pub const SALES_MARKETING: Key = Key(397);
+				pub const TRAVEL: Key = Key(398);
+				pub const OTHER: Key = Key(399);
 			}
 			pub mod setup {
 				use crate::strings::Key;
-				pub const SIGN_IN: Key = Key(396);
-				pub const API_KEY: Key = Key(397);
-				pub const NONE: Key = Key(398);
-				pub const UNAVAILABLE: Key = Key(399);
+				pub const SIGN_IN: Key = Key(404);
+				pub const API_KEY: Key = Key(405);
+				pub const NONE: Key = Key(406);
+				pub const UNAVAILABLE: Key = Key(407);
 			}
 			pub mod unrefreshed {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(393);
-				pub const DESCRIPTION: Key = Key(394);
-			}
-		}
-		pub mod command {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(415);
-			pub const PLACEHOLDER: Key = Key(416);
-			pub const HINT: Key = Key(417);
-		}
-		pub mod config {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(407);
-			pub const PLACEHOLDER: Key = Key(408);
-			pub const HINT: Key = Key(409);
-			pub const INVALID: Key = Key(410);
-		}
-		pub mod connection {
-			use crate::strings::Key;
-			pub const CONNECT: Key = Key(302);
-			pub const RETRY: Key = Key(303);
-			pub const CANCEL: Key = Key(304);
-			pub const DISCONNECT: Key = Key(305);
-			pub const WAITING: Key = Key(308);
-			pub const FAILED: Key = Key(309);
-			pub mod confirm {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(320);
-				pub const DESCRIPTION: Key = Key(321);
-			}
-			pub mod description {
-				use crate::strings::Key;
-				pub const NEEDS_AUTHORIZATION: Key = Key(310);
-				pub const CONNECTING: Key = Key(311);
-				pub const UNSAVED: Key = Key(312);
-			}
-			pub mod reason {
-				use crate::strings::Key;
-				pub const ALREADY_RUNNING: Key = Key(313);
-				pub const STORE: Key = Key(314);
-				pub const TRANSPORT: Key = Key(315);
-				pub const REFUSED_URL: Key = Key(316);
-				pub const BROWSER_REFUSED: Key = Key(317);
-				pub const TIMED_OUT: Key = Key(318);
-				pub const UNKNOWN: Key = Key(319);
-			}
-			pub mod refused {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(323);
-				pub const DESCRIPTION_ONE: Key = Key(324);
-				pub const DESCRIPTION_OTHER: Key = Key(325);
-				pub const SESSIONS_ONE: Key = Key(326);
-				pub const SESSIONS_OTHER: Key = Key(327);
-				pub const ACTION: Key = Key(328);
-				pub const DESCRIPTION_MANY: Key = Key(2100);
-				pub const SESSIONS_MANY: Key = Key(2101);
-			}
-			pub mod row {
-				use crate::strings::Key;
-				pub const CONNECT: Key = Key(306);
-				pub const RETRY: Key = Key(307);
-			}
-			pub mod session {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(322);
-			}
-			pub mod state {
-				use crate::strings::Key;
-				pub const CONNECTED: Key = Key(298);
-				pub const NEEDS_AUTHORIZATION: Key = Key(299);
-				pub const CONNECTING: Key = Key(300);
-				pub const FAILED: Key = Key(301);
-			}
-		}
-		pub mod delete {
-			use crate::strings::Key;
-			pub const ACTION: Key = Key(443);
-			pub const DESCRIPTION: Key = Key(444);
-			pub mod confirm {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(445);
-			}
-		}
-		pub mod empty {
-			pub mod description {
-				use crate::strings::Key;
-				pub const AGENT: Key = Key(364);
-				pub const SPACE: Key = Key(365);
-				pub const PROFILE: Key = Key(366);
-			}
-			pub mod title {
-				use crate::strings::Key;
-				pub const AGENT: Key = Key(361);
-				pub const SPACE: Key = Key(362);
-				pub const PROFILE: Key = Key(363);
-			}
-		}
-		pub mod endpoint {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(424);
-			pub const HINT: Key = Key(425);
-			pub mod option {
-				use crate::strings::Key;
-				pub const HTTP: Key = Key(426);
-				pub const SSE: Key = Key(427);
-				pub const WS: Key = Key(428);
-			}
-		}
-		pub mod footnote {
-			use crate::strings::Key;
-			pub const SPACE: Key = Key(292);
-			pub const PROFILE: Key = Key(293);
-		}
-		pub mod headers {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(429);
-			pub const PLACEHOLDER: Key = Key(430);
-			pub const HINT: Key = Key(431);
-		}
-		pub mod install {
-			use crate::strings::Key;
-			pub const NONE: Key = Key(341);
-			pub const HOSTED_NONE: Key = Key(342);
-			pub const HOSTING: Key = Key(345);
-			pub const DONE: Key = Key(355);
-			pub const FAILED: Key = Key(356);
-			pub const MISSING: Key = Key(357);
-			pub mod footnote {
-				use crate::strings::Key;
-				pub const AGENT: Key = Key(349);
-				pub const SPACE: Key = Key(350);
-				pub const PROFILE: Key = Key(351);
-			}
-			pub mod hosted_footnote {
-				use crate::strings::Key;
-				pub const AGENT: Key = Key(352);
-				pub const SPACE: Key = Key(353);
-				pub const PROFILE: Key = Key(354);
-			}
-			pub mod key {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(333);
-				pub const REVEAL: Key = Key(334);
-				pub const CONCEAL: Key = Key(335);
-				pub const REVEAL_LABEL: Key = Key(336);
-				pub const CONCEAL_LABEL: Key = Key(337);
-				pub mod description {
-					use crate::strings::Key;
-					pub const AGENT: Key = Key(338);
-					pub const SPACE: Key = Key(339);
-					pub const PROFILE: Key = Key(340);
-				}
-			}
-			pub mod rollback {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(358);
-				pub const DESCRIPTION: Key = Key(359);
-			}
-			pub mod sign_in {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(329);
-				pub const DESCRIPTION: Key = Key(330);
-				pub const ACTION: Key = Key(331);
-				pub const FACT: Key = Key(332);
-			}
-			pub mod tools {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(346);
-				pub mod count {
-					use crate::strings::Key;
-					pub const PLAIN_ONE: Key = Key(347);
-					pub const PLAIN_OTHER: Key = Key(348);
-					pub const PLAIN_MANY: Key = Key(2102);
-				}
-			}
-			pub mod unavailable {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(343);
-				pub const DESCRIPTION: Key = Key(344);
-			}
-		}
-		pub mod intro {
-			use crate::strings::Key;
-			pub const AGENT: Key = Key(289);
-			pub const SPACE: Key = Key(290);
-			pub const PROFILE: Key = Key(291);
-		}
-		pub mod launch {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(438);
-			pub const SECRETS: Key = Key(439);
-			pub const UNKNOWN: Key = Key(440);
-			pub const REVEAL: Key = Key(441);
-			pub const CONCEAL: Key = Key(442);
-		}
-		pub mod leave {
-			use crate::strings::Key;
-			pub const TITLE: Key = Key(435);
-			pub const DESCRIPTION: Key = Key(436);
-			pub const ACTION: Key = Key(437);
-		}
-		pub mod name {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(403);
-			pub const PLACEHOLDER: Key = Key(404);
-			pub const HINT: Key = Key(405);
-			pub const BLANK: Key = Key(406);
-		}
-		pub mod reopen {
-			pub mod refused {
 				use crate::strings::Key;
 				pub const TITLE: Key = Key(401);
 				pub const DESCRIPTION: Key = Key(402);
 			}
 		}
-		pub mod secrets {
+		pub mod command {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(423);
+			pub const PLACEHOLDER: Key = Key(424);
+			pub const HINT: Key = Key(425);
+		}
+		pub mod config {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(415);
+			pub const PLACEHOLDER: Key = Key(416);
+			pub const HINT: Key = Key(417);
+			pub const INVALID: Key = Key(418);
+		}
+		pub mod connection {
+			use crate::strings::Key;
+			pub const CONNECT: Key = Key(310);
+			pub const RETRY: Key = Key(311);
+			pub const CANCEL: Key = Key(312);
+			pub const DISCONNECT: Key = Key(313);
+			pub const WAITING: Key = Key(316);
+			pub const FAILED: Key = Key(317);
+			pub mod confirm {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(328);
+				pub const DESCRIPTION: Key = Key(329);
+			}
+			pub mod description {
+				use crate::strings::Key;
+				pub const NEEDS_AUTHORIZATION: Key = Key(318);
+				pub const CONNECTING: Key = Key(319);
+				pub const UNSAVED: Key = Key(320);
+			}
+			pub mod reason {
+				use crate::strings::Key;
+				pub const ALREADY_RUNNING: Key = Key(321);
+				pub const STORE: Key = Key(322);
+				pub const TRANSPORT: Key = Key(323);
+				pub const REFUSED_URL: Key = Key(324);
+				pub const BROWSER_REFUSED: Key = Key(325);
+				pub const TIMED_OUT: Key = Key(326);
+				pub const UNKNOWN: Key = Key(327);
+			}
+			pub mod refused {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(331);
+				pub const DESCRIPTION_ONE: Key = Key(332);
+				pub const DESCRIPTION_OTHER: Key = Key(333);
+				pub const SESSIONS_ONE: Key = Key(334);
+				pub const SESSIONS_OTHER: Key = Key(335);
+				pub const ACTION: Key = Key(336);
+				pub const DESCRIPTION_MANY: Key = Key(2117);
+				pub const SESSIONS_MANY: Key = Key(2118);
+			}
+			pub mod row {
+				use crate::strings::Key;
+				pub const CONNECT: Key = Key(314);
+				pub const RETRY: Key = Key(315);
+			}
+			pub mod session {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(330);
+			}
+			pub mod state {
+				use crate::strings::Key;
+				pub const CONNECTED: Key = Key(306);
+				pub const NEEDS_AUTHORIZATION: Key = Key(307);
+				pub const CONNECTING: Key = Key(308);
+				pub const FAILED: Key = Key(309);
+			}
+		}
+		pub mod delete {
+			use crate::strings::Key;
+			pub const ACTION: Key = Key(451);
+			pub const DESCRIPTION: Key = Key(452);
+			pub mod confirm {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(453);
+			}
+		}
+		pub mod empty {
+			pub mod description {
+				use crate::strings::Key;
+				pub const AGENT: Key = Key(372);
+				pub const SPACE: Key = Key(373);
+				pub const PROFILE: Key = Key(374);
+			}
+			pub mod title {
+				use crate::strings::Key;
+				pub const AGENT: Key = Key(369);
+				pub const SPACE: Key = Key(370);
+				pub const PROFILE: Key = Key(371);
+			}
+		}
+		pub mod endpoint {
 			use crate::strings::Key;
 			pub const LABEL: Key = Key(432);
-			pub const PLACEHOLDER: Key = Key(433);
-			pub const HINT: Key = Key(434);
+			pub const HINT: Key = Key(433);
+			pub mod option {
+				use crate::strings::Key;
+				pub const HTTP: Key = Key(434);
+				pub const SSE: Key = Key(435);
+				pub const WS: Key = Key(436);
+			}
+		}
+		pub mod footnote {
+			use crate::strings::Key;
+			pub const SPACE: Key = Key(300);
+			pub const PROFILE: Key = Key(301);
+		}
+		pub mod headers {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(437);
+			pub const PLACEHOLDER: Key = Key(438);
+			pub const HINT: Key = Key(439);
+		}
+		pub mod install {
+			use crate::strings::Key;
+			pub const NONE: Key = Key(349);
+			pub const HOSTED_NONE: Key = Key(350);
+			pub const HOSTING: Key = Key(353);
+			pub const DONE: Key = Key(363);
+			pub const FAILED: Key = Key(364);
+			pub const MISSING: Key = Key(365);
+			pub mod footnote {
+				use crate::strings::Key;
+				pub const AGENT: Key = Key(357);
+				pub const SPACE: Key = Key(358);
+				pub const PROFILE: Key = Key(359);
+			}
+			pub mod hosted_footnote {
+				use crate::strings::Key;
+				pub const AGENT: Key = Key(360);
+				pub const SPACE: Key = Key(361);
+				pub const PROFILE: Key = Key(362);
+			}
+			pub mod key {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(341);
+				pub const REVEAL: Key = Key(342);
+				pub const CONCEAL: Key = Key(343);
+				pub const REVEAL_LABEL: Key = Key(344);
+				pub const CONCEAL_LABEL: Key = Key(345);
+				pub mod description {
+					use crate::strings::Key;
+					pub const AGENT: Key = Key(346);
+					pub const SPACE: Key = Key(347);
+					pub const PROFILE: Key = Key(348);
+				}
+			}
+			pub mod rollback {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(366);
+				pub const DESCRIPTION: Key = Key(367);
+			}
+			pub mod sign_in {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(337);
+				pub const DESCRIPTION: Key = Key(338);
+				pub const ACTION: Key = Key(339);
+				pub const FACT: Key = Key(340);
+			}
+			pub mod tools {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(354);
+				pub mod count {
+					use crate::strings::Key;
+					pub const PLAIN_ONE: Key = Key(355);
+					pub const PLAIN_OTHER: Key = Key(356);
+					pub const PLAIN_MANY: Key = Key(2119);
+				}
+			}
+			pub mod unavailable {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(351);
+				pub const DESCRIPTION: Key = Key(352);
+			}
+		}
+		pub mod intro {
+			use crate::strings::Key;
+			pub const AGENT: Key = Key(297);
+			pub const SPACE: Key = Key(298);
+			pub const PROFILE: Key = Key(299);
+		}
+		pub mod launch {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(446);
+			pub const SECRETS: Key = Key(447);
+			pub const UNKNOWN: Key = Key(448);
+			pub const REVEAL: Key = Key(449);
+			pub const CONCEAL: Key = Key(450);
+		}
+		pub mod leave {
+			use crate::strings::Key;
+			pub const TITLE: Key = Key(443);
+			pub const DESCRIPTION: Key = Key(444);
+			pub const ACTION: Key = Key(445);
+		}
+		pub mod name {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(411);
+			pub const PLACEHOLDER: Key = Key(412);
+			pub const HINT: Key = Key(413);
+			pub const BLANK: Key = Key(414);
+		}
+		pub mod reopen {
+			pub mod refused {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(409);
+				pub const DESCRIPTION: Key = Key(410);
+			}
+		}
+		pub mod secrets {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(440);
+			pub const PLACEHOLDER: Key = Key(441);
+			pub const HINT: Key = Key(442);
 		}
 		pub mod section {
 			use crate::strings::Key;
-			pub const CONNECTION: Key = Key(295);
-			pub const SECRETS: Key = Key(296);
-			pub const ADVANCED: Key = Key(297);
+			pub const CONNECTION: Key = Key(303);
+			pub const SECRETS: Key = Key(304);
+			pub const ADVANCED: Key = Key(305);
 		}
 		pub mod transport {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(411);
-			pub const HINT: Key = Key(412);
+			pub const LABEL: Key = Key(419);
+			pub const HINT: Key = Key(420);
 			pub mod option {
 				use crate::strings::Key;
-				pub const LOCAL: Key = Key(413);
-				pub const REMOTE: Key = Key(414);
+				pub const LOCAL: Key = Key(421);
+				pub const REMOTE: Key = Key(422);
 			}
 		}
 		pub mod url {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(421);
-			pub const PLACEHOLDER: Key = Key(422);
-			pub const HINT: Key = Key(423);
+			pub const LABEL: Key = Key(429);
+			pub const PLACEHOLDER: Key = Key(430);
+			pub const HINT: Key = Key(431);
 		}
 	}
 	pub mod approvals {
 		pub mod mode {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(495);
+			pub const LABEL: Key = Key(503);
 			pub mod option {
 				pub mod accept_edits {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(500);
-					pub const HINT: Key = Key(501);
+					pub const LABEL: Key = Key(508);
+					pub const HINT: Key = Key(509);
 				}
 				pub mod auto {
-					use crate::strings::Key;
-					pub const LABEL: Key = Key(496);
-					pub const HINT: Key = Key(497);
-				}
-				pub mod default {
-					use crate::strings::Key;
-					pub const LABEL: Key = Key(498);
-					pub const HINT: Key = Key(499);
-				}
-				pub mod dont_ask {
 					use crate::strings::Key;
 					pub const LABEL: Key = Key(504);
 					pub const HINT: Key = Key(505);
 				}
+				pub mod default {
+					use crate::strings::Key;
+					pub const LABEL: Key = Key(506);
+					pub const HINT: Key = Key(507);
+				}
+				pub mod dont_ask {
+					use crate::strings::Key;
+					pub const LABEL: Key = Key(512);
+					pub const HINT: Key = Key(513);
+				}
 				pub mod plan {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(502);
-					pub const HINT: Key = Key(503);
+					pub const LABEL: Key = Key(510);
+					pub const HINT: Key = Key(511);
 				}
 			}
 		}
 		pub mod rule {
 			use crate::strings::Key;
-			pub const ADD: Key = Key(506);
-			pub const PLACEHOLDER: Key = Key(507);
-			pub const INVALID: Key = Key(508);
-			pub const REMOVE: Key = Key(509);
+			pub const ADD: Key = Key(514);
+			pub const PLACEHOLDER: Key = Key(515);
+			pub const INVALID: Key = Key(516);
+			pub const REMOVE: Key = Key(517);
 			pub mod allow {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(510);
-				pub const HINT: Key = Key(511);
-				pub const EMPTY: Key = Key(512);
+				pub const LABEL: Key = Key(518);
+				pub const HINT: Key = Key(519);
+				pub const EMPTY: Key = Key(520);
 			}
 			pub mod ask {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(513);
-				pub const HINT: Key = Key(514);
-				pub const EMPTY: Key = Key(515);
+				pub const LABEL: Key = Key(521);
+				pub const HINT: Key = Key(522);
+				pub const EMPTY: Key = Key(523);
 			}
 			pub mod deny {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(516);
-				pub const HINT: Key = Key(517);
-				pub const EMPTY: Key = Key(518);
+				pub const LABEL: Key = Key(524);
+				pub const HINT: Key = Key(525);
+				pub const EMPTY: Key = Key(526);
 			}
 		}
 	}
 	pub mod danger {
 		use crate::strings::Key;
-		pub const DELETE: Key = Key(539);
-		pub const DESCRIPTION: Key = Key(540);
-		pub const FAILED: Key = Key(542);
+		pub const DELETE: Key = Key(547);
+		pub const DESCRIPTION: Key = Key(548);
+		pub const FAILED: Key = Key(550);
 		pub mod confirm {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(541);
+			pub const TITLE: Key = Key(549);
 		}
 	}
 	pub mod dialog {
 		use crate::strings::Key;
-		pub const UNTITLED: Key = Key(109);
-		pub const BREADCRUMB: Key = Key(110);
+		pub const UNTITLED: Key = Key(117);
+		pub const BREADCRUMB: Key = Key(118);
 		pub mod instructions {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(125);
-			pub const PLACEHOLDER: Key = Key(126);
+			pub const LABEL: Key = Key(133);
+			pub const PLACEHOLDER: Key = Key(134);
 		}
 		pub mod memory {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(127);
-			pub const HINT: Key = Key(128);
-			pub const EMPTY: Key = Key(129);
-			pub const SAVE: Key = Key(130);
+			pub const LABEL: Key = Key(135);
+			pub const HINT: Key = Key(136);
+			pub const EMPTY: Key = Key(137);
+			pub const SAVE: Key = Key(138);
 			pub mod clear {
 				use crate::strings::Key;
-				pub const ACTION: Key = Key(131);
-				pub const TITLE: Key = Key(132);
-				pub const DESCRIPTION: Key = Key(133);
-				pub const CONFIRM: Key = Key(134);
+				pub const ACTION: Key = Key(139);
+				pub const TITLE: Key = Key(140);
+				pub const DESCRIPTION: Key = Key(141);
+				pub const CONFIRM: Key = Key(142);
 			}
 		}
 		pub mod name {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(121);
-			pub const PLACEHOLDER: Key = Key(122);
+			pub const LABEL: Key = Key(129);
+			pub const PLACEHOLDER: Key = Key(130);
 		}
 		pub mod tab {
 			use crate::strings::Key;
-			pub const GENERAL: Key = Key(111);
-			pub const APPEARANCE: Key = Key(112);
-			pub const INSTRUCTIONS: Key = Key(113);
-			pub const SKILLS: Key = Key(114);
-			pub const APPLICATIONS: Key = Key(115);
-			pub const SECRETS: Key = Key(116);
-			pub const HISTORY: Key = Key(117);
-			pub const APPROVALS: Key = Key(118);
-			pub const RUNTIME: Key = Key(119);
-			pub const DANGER: Key = Key(120);
+			pub const GENERAL: Key = Key(119);
+			pub const APPEARANCE: Key = Key(120);
+			pub const INSTRUCTIONS: Key = Key(121);
+			pub const SKILLS: Key = Key(122);
+			pub const APPLICATIONS: Key = Key(123);
+			pub const SECRETS: Key = Key(124);
+			pub const HISTORY: Key = Key(125);
+			pub const APPROVALS: Key = Key(126);
+			pub const RUNTIME: Key = Key(127);
+			pub const DANGER: Key = Key(128);
 		}
 		pub mod title {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(123);
-			pub const PLACEHOLDER: Key = Key(124);
+			pub const LABEL: Key = Key(131);
+			pub const PLACEHOLDER: Key = Key(132);
 		}
 	}
 	pub mod history {
 		use crate::strings::Key;
-		pub const EMPTY: Key = Key(135);
-		pub const UNAVAILABLE: Key = Key(136);
-		pub const SUMMARY_ONE: Key = Key(137);
-		pub const SUMMARY_OTHER: Key = Key(138);
-		pub const NO_MATCH: Key = Key(139);
-		pub const RETOUCHES_ONE: Key = Key(140);
-		pub const RETOUCHES_OTHER: Key = Key(141);
-		pub const UNDONE: Key = Key(142);
-		pub const SUMMARY_MANY: Key = Key(2094);
-		pub const RETOUCHES_MANY: Key = Key(2095);
+		pub const EMPTY: Key = Key(143);
+		pub const UNAVAILABLE: Key = Key(144);
+		pub const SUMMARY_ONE: Key = Key(145);
+		pub const SUMMARY_OTHER: Key = Key(146);
+		pub const NO_MATCH: Key = Key(147);
+		pub const RETOUCHES_ONE: Key = Key(148);
+		pub const RETOUCHES_OTHER: Key = Key(149);
+		pub const UNDONE: Key = Key(150);
+		pub const SUMMARY_MANY: Key = Key(2111);
+		pub const RETOUCHES_MANY: Key = Key(2112);
 		pub mod author {
 			use crate::strings::Key;
-			pub const USER: Key = Key(152);
+			pub const USER: Key = Key(160);
 		}
 		pub mod change {
 			use crate::strings::Key;
-			pub const BACK: Key = Key(162);
-			pub const DATE: Key = Key(163);
-			pub const ADDED_ONE: Key = Key(164);
-			pub const ADDED_OTHER: Key = Key(165);
-			pub const REMOVED_ONE: Key = Key(166);
-			pub const REMOVED_OTHER: Key = Key(167);
-			pub const UNAVAILABLE: Key = Key(171);
-			pub const ADDED_MANY: Key = Key(2096);
-			pub const REMOVED_MANY: Key = Key(2097);
+			pub const BACK: Key = Key(170);
+			pub const DATE: Key = Key(171);
+			pub const ADDED_ONE: Key = Key(172);
+			pub const ADDED_OTHER: Key = Key(173);
+			pub const REMOVED_ONE: Key = Key(174);
+			pub const REMOVED_OTHER: Key = Key(175);
+			pub const UNAVAILABLE: Key = Key(179);
+			pub const ADDED_MANY: Key = Key(2113);
+			pub const REMOVED_MANY: Key = Key(2114);
 			pub mod consequence {
 				use crate::strings::Key;
-				pub const COUNTED_ONE: Key = Key(168);
-				pub const COUNTED_OTHER: Key = Key(169);
-				pub const UNCOUNTED: Key = Key(170);
-				pub const COUNTED_MANY: Key = Key(2098);
+				pub const COUNTED_ONE: Key = Key(176);
+				pub const COUNTED_OTHER: Key = Key(177);
+				pub const UNCOUNTED: Key = Key(178);
+				pub const COUNTED_MANY: Key = Key(2115);
 			}
 		}
 		pub mod day {
 			use crate::strings::Key;
-			pub const TODAY: Key = Key(147);
-			pub const YESTERDAY: Key = Key(148);
+			pub const TODAY: Key = Key(155);
+			pub const YESTERDAY: Key = Key(156);
 		}
 		pub mod diff {
 			use crate::strings::Key;
-			pub const SHOW: Key = Key(153);
-			pub const HIDE: Key = Key(154);
-			pub const LOADING: Key = Key(155);
-			pub const FILENAME: Key = Key(156);
+			pub const SHOW: Key = Key(161);
+			pub const HIDE: Key = Key(162);
+			pub const LOADING: Key = Key(163);
+			pub const FILENAME: Key = Key(164);
 		}
 		pub mod record_failed {
 			use crate::strings::Key;
-			pub const DESCRIPTION: Key = Key(146);
+			pub const DESCRIPTION: Key = Key(154);
 			pub mod title {
 				use crate::strings::Key;
-				pub const BOT: Key = Key(143);
-				pub const USER: Key = Key(144);
-				pub const SPACE: Key = Key(145);
+				pub const BOT: Key = Key(151);
+				pub const USER: Key = Key(152);
+				pub const SPACE: Key = Key(153);
 			}
 		}
 		pub mod search {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(149);
-			pub const PLACEHOLDER: Key = Key(150);
-			pub const CLEAR: Key = Key(151);
+			pub const LABEL: Key = Key(157);
+			pub const PLACEHOLDER: Key = Key(158);
+			pub const CLEAR: Key = Key(159);
 		}
 		pub mod undo {
 			use crate::strings::Key;
-			pub const ACTION: Key = Key(157);
-			pub const LABEL: Key = Key(158);
-			pub const TITLE: Key = Key(159);
-			pub const DESCRIPTION: Key = Key(160);
-			pub const CONFIRM: Key = Key(161);
+			pub const ACTION: Key = Key(165);
+			pub const LABEL: Key = Key(166);
+			pub const TITLE: Key = Key(167);
+			pub const DESCRIPTION: Key = Key(168);
+			pub const CONFIRM: Key = Key(169);
 		}
 	}
 	pub mod identity {
 		use crate::strings::Key;
-		pub const AVATAR: Key = Key(519);
-		pub const UPLOADED_IMAGE: Key = Key(520);
+		pub const AVATAR: Key = Key(527);
+		pub const UPLOADED_IMAGE: Key = Key(528);
 		pub mod colour {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(521);
-			pub const NONE: Key = Key(522);
-			pub const OWN: Key = Key(523);
-			pub const OWN_VALUE: Key = Key(524);
-			pub const DEGREE: Key = Key(525);
+			pub const LABEL: Key = Key(529);
+			pub const NONE: Key = Key(530);
+			pub const OWN: Key = Key(531);
+			pub const OWN_VALUE: Key = Key(532);
+			pub const DEGREE: Key = Key(533);
 			pub mod option {
 				use crate::strings::Key;
-				pub const RED: Key = Key(526);
-				pub const YELLOW: Key = Key(527);
-				pub const GREEN: Key = Key(528);
-				pub const CYAN: Key = Key(529);
-				pub const BLUE: Key = Key(530);
-				pub const PURPLE: Key = Key(531);
-				pub const PINK: Key = Key(532);
-				pub const ORANGE: Key = Key(533);
+				pub const RED: Key = Key(534);
+				pub const YELLOW: Key = Key(535);
+				pub const GREEN: Key = Key(536);
+				pub const CYAN: Key = Key(537);
+				pub const BLUE: Key = Key(538);
+				pub const PURPLE: Key = Key(539);
+				pub const PINK: Key = Key(540);
+				pub const ORANGE: Key = Key(541);
 			}
 		}
 		pub mod picture {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(534);
-			pub const FILE: Key = Key(535);
-			pub const ADD: Key = Key(536);
-			pub const CHANGE: Key = Key(537);
-			pub const REMOVE: Key = Key(538);
+			pub const LABEL: Key = Key(542);
+			pub const FILE: Key = Key(543);
+			pub const ADD: Key = Key(544);
+			pub const CHANGE: Key = Key(545);
+			pub const REMOVE: Key = Key(546);
 		}
 	}
 	pub mod rail {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(60);
-		pub const HOME: Key = Key(61);
-		pub const CONVERSATIONS: Key = Key(62);
-		pub const MISSIONS: Key = Key(63);
-		pub const LIBRARY: Key = Key(64);
-		pub const SEARCH_MISSIONS: Key = Key(65);
-		pub const SPACE_SETTINGS: Key = Key(66);
-		pub const DOT: Key = Key(67);
+		pub const LABEL: Key = Key(62);
+		pub const HOME: Key = Key(63);
+		pub const NEW_CONVERSATION: Key = Key(64);
+		pub const CONVERSATIONS: Key = Key(65);
+		pub const MISSIONS: Key = Key(66);
+		pub const LIBRARY: Key = Key(67);
+		pub const SEARCH_MISSIONS: Key = Key(68);
+		pub const SPACE_SETTINGS: Key = Key(69);
+		pub const DOT: Key = Key(70);
+		pub const PERSON_SETTINGS: Key = Key(74);
+		pub const DETAIL: Key = Key(75);
+		pub const MISSION_COUNT_ONE: Key = Key(76);
+		pub const MISSION_COUNT_OTHER: Key = Key(77);
+		pub const MORE_MISSIONS: Key = Key(78);
+		pub const MISSION_COUNT_MANY: Key = Key(2108);
 		pub mod badge {
 			use crate::strings::Key;
-			pub const ATTENTION: Key = Key(68);
-			pub const DONE: Key = Key(69);
-			pub const FAILED: Key = Key(70);
+			pub const ATTENTION: Key = Key(71);
+			pub const DONE: Key = Key(72);
+			pub const FAILED: Key = Key(73);
 		}
 	}
 	pub mod roster {
@@ -2712,28 +2736,29 @@ pub mod bots {
 		pub const PREVIEW_UNREADABLE: Key = Key(12);
 		pub const SETTINGS_UNSAVED: Key = Key(13);
 		pub const CONVERSATION_UNSAVED: Key = Key(14);
-		pub const ACTIONS: Key = Key(21);
-		pub const TITLED: Key = Key(22);
-		pub const OPEN_IN_NEW_TAB: Key = Key(23);
-		pub const SETTINGS: Key = Key(24);
-		pub const DUPLICATE: Key = Key(25);
-		pub const PIN: Key = Key(28);
-		pub const PIN_DROP: Key = Key(29);
-		pub const UNPIN: Key = Key(30);
-		pub const MOVED: Key = Key(31);
-		pub const MOVED_IN_SECTION: Key = Key(32);
-		pub const DELETE: Key = Key(33);
-		pub const NEEDS_YOU: Key = Key(34);
-		pub const WORKING: Key = Key(35);
-		pub const BACKGROUND_TASKS_ONE: Key = Key(36);
-		pub const BACKGROUND_TASKS_OTHER: Key = Key(37);
-		pub const IDLE: Key = Key(43);
-		pub const SEED_REFUSED: Key = Key(59);
-		pub const BACKGROUND_TASKS_MANY: Key = Key(2091);
+		pub const ACTIONS: Key = Key(22);
+		pub const TITLED: Key = Key(23);
+		pub const OPEN_IN_NEW_TAB: Key = Key(24);
+		pub const SETTINGS: Key = Key(25);
+		pub const DUPLICATE: Key = Key(26);
+		pub const PIN: Key = Key(29);
+		pub const PINNED: Key = Key(30);
+		pub const PIN_DROP: Key = Key(31);
+		pub const UNPIN: Key = Key(32);
+		pub const MOVED: Key = Key(33);
+		pub const MOVED_IN_SECTION: Key = Key(34);
+		pub const DELETE: Key = Key(35);
+		pub const NEEDS_YOU: Key = Key(36);
+		pub const WORKING: Key = Key(37);
+		pub const BACKGROUND_TASKS_ONE: Key = Key(38);
+		pub const BACKGROUND_TASKS_OTHER: Key = Key(39);
+		pub const IDLE: Key = Key(45);
+		pub const SEED_REFUSED: Key = Key(61);
+		pub const BACKGROUND_TASKS_MANY: Key = Key(2107);
 		pub mod announcement {
 			use crate::strings::Key;
-			pub const NONE: Key = Key(44);
-			pub const SELECTED: Key = Key(45);
+			pub const NONE: Key = Key(46);
+			pub const SELECTED: Key = Key(47);
 		}
 		pub mod conversation {
 			use crate::strings::Key;
@@ -2750,425 +2775,426 @@ pub mod bots {
 				pub const FAILED: Key = Key(16);
 				pub const READY: Key = Key(17);
 				pub const WORKING: Key = Key(18);
+				pub const WAITING_AGENT: Key = Key(19);
 			}
 			pub mod unavailable {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(19);
-				pub const DESCRIPTION: Key = Key(20);
+				pub const TITLE: Key = Key(20);
+				pub const DESCRIPTION: Key = Key(21);
 			}
 		}
 		pub mod pose {
 			use crate::strings::Key;
-			pub const THINKING: Key = Key(38);
-			pub const SEARCHING: Key = Key(39);
-			pub const WORKING: Key = Key(40);
-			pub const WRITING: Key = Key(41);
-			pub const WAITING: Key = Key(42);
+			pub const THINKING: Key = Key(40);
+			pub const SEARCHING: Key = Key(41);
+			pub const WORKING: Key = Key(42);
+			pub const WRITING: Key = Key(43);
+			pub const WAITING: Key = Key(44);
 		}
 		pub mod section {
 			use crate::strings::Key;
-			pub const ACTIONS: Key = Key(46);
-			pub const MOVE_TO: Key = Key(47);
-			pub const NONE: Key = Key(48);
-			pub const CREATE: Key = Key(49);
-			pub const CREATE_FIELD: Key = Key(50);
-			pub const CREATE_DEFAULT: Key = Key(51);
-			pub const RENAME: Key = Key(52);
-			pub const RENAME_FIELD: Key = Key(53);
-			pub const MOVE_UP: Key = Key(54);
-			pub const MOVE_DOWN: Key = Key(55);
-			pub const DELETE: Key = Key(56);
-			pub const EMPTY: Key = Key(57);
-			pub const UNREADABLE: Key = Key(58);
+			pub const ACTIONS: Key = Key(48);
+			pub const MOVE_TO: Key = Key(49);
+			pub const NONE: Key = Key(50);
+			pub const CREATE: Key = Key(51);
+			pub const CREATE_FIELD: Key = Key(52);
+			pub const CREATE_DEFAULT: Key = Key(53);
+			pub const RENAME: Key = Key(54);
+			pub const RENAME_FIELD: Key = Key(55);
+			pub const MOVE_UP: Key = Key(56);
+			pub const MOVE_DOWN: Key = Key(57);
+			pub const DELETE: Key = Key(58);
+			pub const EMPTY: Key = Key(59);
+			pub const UNREADABLE: Key = Key(60);
 		}
 		pub mod spaces {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(26);
-			pub const LAST_SPACE: Key = Key(27);
+			pub const LABEL: Key = Key(27);
+			pub const LAST_SPACE: Key = Key(28);
 		}
 	}
 	pub mod runtime {
 		pub mod effort {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(483);
+			pub const LABEL: Key = Key(491);
 			pub mod option {
 				use crate::strings::Key;
-				pub const DEFAULT: Key = Key(484);
-				pub const LOW: Key = Key(485);
-				pub const MEDIUM: Key = Key(486);
-				pub const HIGH: Key = Key(487);
-				pub const XHIGH: Key = Key(488);
-				pub const MAX: Key = Key(489);
+				pub const DEFAULT: Key = Key(492);
+				pub const LOW: Key = Key(493);
+				pub const MEDIUM: Key = Key(494);
+				pub const HIGH: Key = Key(495);
+				pub const XHIGH: Key = Key(496);
+				pub const MAX: Key = Key(497);
 			}
 		}
 		pub mod model {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(480);
-			pub const PLACEHOLDER: Key = Key(481);
-			pub const UNREADABLE: Key = Key(482);
+			pub const LABEL: Key = Key(488);
+			pub const PLACEHOLDER: Key = Key(489);
+			pub const UNREADABLE: Key = Key(490);
 		}
 		pub mod output_style {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(490);
+			pub const LABEL: Key = Key(498);
 			pub mod option {
 				pub mod concise {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(491);
-					pub const HINT: Key = Key(492);
+					pub const LABEL: Key = Key(499);
+					pub const HINT: Key = Key(500);
 				}
 				pub mod default {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(493);
-					pub const HINT: Key = Key(494);
+					pub const LABEL: Key = Key(501);
+					pub const HINT: Key = Key(502);
 				}
 			}
 		}
 	}
 	pub mod secrets {
 		use crate::strings::Key;
-		pub const ADD: Key = Key(446);
-		pub const NOTICE: Key = Key(447);
+		pub const ADD: Key = Key(454);
+		pub const NOTICE: Key = Key(455);
 		pub mod empty {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(450);
-			pub const DESCRIPTION: Key = Key(451);
+			pub const TITLE: Key = Key(458);
+			pub const DESCRIPTION: Key = Key(459);
 		}
 		pub mod remove {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(476);
-			pub const DESCRIPTION: Key = Key(477);
-			pub const ACTION: Key = Key(478);
-			pub const FAILED: Key = Key(479);
+			pub const TITLE: Key = Key(484);
+			pub const DESCRIPTION: Key = Key(485);
+			pub const ACTION: Key = Key(486);
+			pub const FAILED: Key = Key(487);
 		}
 		pub mod row {
 			use crate::strings::Key;
-			pub const SCOPES: Key = Key(456);
-			pub const OVERRIDDEN: Key = Key(457);
-			pub const OVERRIDING: Key = Key(458);
-			pub const NEEDS_VALUE: Key = Key(459);
-			pub const UNSET_HERE: Key = Key(460);
-			pub const NO_VALUE: Key = Key(461);
-			pub const REPLACE: Key = Key(462);
-			pub const REMOVE: Key = Key(463);
+			pub const SCOPES: Key = Key(464);
+			pub const OVERRIDDEN: Key = Key(465);
+			pub const OVERRIDING: Key = Key(466);
+			pub const NEEDS_VALUE: Key = Key(467);
+			pub const UNSET_HERE: Key = Key(468);
+			pub const NO_VALUE: Key = Key(469);
+			pub const REPLACE: Key = Key(470);
+			pub const REMOVE: Key = Key(471);
 		}
 		pub mod scope {
 			use crate::strings::Key;
-			pub const USER: Key = Key(452);
-			pub const SPACE: Key = Key(453);
-			pub const BOT: Key = Key(454);
-			pub const SERVER: Key = Key(455);
+			pub const USER: Key = Key(460);
+			pub const SPACE: Key = Key(461);
+			pub const BOT: Key = Key(462);
+			pub const SERVER: Key = Key(463);
 		}
 		pub mod set {
 			use crate::strings::Key;
-			pub const SUBMIT: Key = Key(474);
-			pub const FAILED: Key = Key(475);
+			pub const SUBMIT: Key = Key(482);
+			pub const FAILED: Key = Key(483);
 			pub mod add {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(464);
-				pub const DESCRIPTION: Key = Key(465);
+				pub const TITLE: Key = Key(472);
+				pub const DESCRIPTION: Key = Key(473);
 			}
 			pub mod name {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(468);
-				pub const PLACEHOLDER: Key = Key(469);
-				pub const HINT: Key = Key(470);
-				pub const INVALID: Key = Key(471);
+				pub const LABEL: Key = Key(476);
+				pub const PLACEHOLDER: Key = Key(477);
+				pub const HINT: Key = Key(478);
+				pub const INVALID: Key = Key(479);
 			}
 			pub mod replace {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(466);
-				pub const DESCRIPTION: Key = Key(467);
+				pub const TITLE: Key = Key(474);
+				pub const DESCRIPTION: Key = Key(475);
 			}
 			pub mod value {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(472);
-				pub const HINT: Key = Key(473);
+				pub const LABEL: Key = Key(480);
+				pub const HINT: Key = Key(481);
 			}
 		}
 		pub mod unreadable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(448);
-			pub const DESCRIPTION: Key = Key(449);
+			pub const TITLE: Key = Key(456);
+			pub const DESCRIPTION: Key = Key(457);
 		}
 	}
 	pub mod skills {
 		use crate::strings::Key;
-		pub const UNTITLED: Key = Key(172);
-		pub const ADD: Key = Key(173);
-		pub const CREATE: Key = Key(174);
-		pub const SAVE: Key = Key(175);
-		pub const UNSAVED: Key = Key(176);
-		pub const BACK: Key = Key(177);
+		pub const UNTITLED: Key = Key(180);
+		pub const ADD: Key = Key(181);
+		pub const CREATE: Key = Key(182);
+		pub const SAVE: Key = Key(183);
+		pub const UNSAVED: Key = Key(184);
+		pub const BACK: Key = Key(185);
 		pub mod agent {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(232);
-			pub const PLACEHOLDER: Key = Key(233);
-			pub const HINT: Key = Key(234);
+			pub const LABEL: Key = Key(240);
+			pub const PLACEHOLDER: Key = Key(241);
+			pub const HINT: Key = Key(242);
 		}
 		pub mod allowed_tools {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(237);
-			pub const PLACEHOLDER: Key = Key(238);
-			pub const HINT: Key = Key(239);
+			pub const LABEL: Key = Key(245);
+			pub const PLACEHOLDER: Key = Key(246);
+			pub const HINT: Key = Key(247);
 		}
 		pub mod argument_hint {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(199);
-			pub const PLACEHOLDER: Key = Key(200);
-			pub const HINT: Key = Key(201);
+			pub const LABEL: Key = Key(207);
+			pub const PLACEHOLDER: Key = Key(208);
+			pub const HINT: Key = Key(209);
 		}
 		pub mod arguments {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(202);
-			pub const PLACEHOLDER: Key = Key(203);
+			pub const LABEL: Key = Key(210);
+			pub const PLACEHOLDER: Key = Key(211);
 		}
 		pub mod background {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(235);
-			pub const DESCRIPTION: Key = Key(236);
+			pub const LABEL: Key = Key(243);
+			pub const DESCRIPTION: Key = Key(244);
 		}
 		pub mod body {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(197);
-			pub const PLACEHOLDER: Key = Key(198);
+			pub const LABEL: Key = Key(205);
+			pub const PLACEHOLDER: Key = Key(206);
 		}
 		pub mod budget {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(194);
-			pub const HINT: Key = Key(195);
-			pub const OVER: Key = Key(196);
+			pub const LABEL: Key = Key(202);
+			pub const HINT: Key = Key(203);
+			pub const OVER: Key = Key(204);
 		}
 		pub mod compatibility {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(247);
-			pub const PLACEHOLDER: Key = Key(248);
-			pub const HINT: Key = Key(249);
+			pub const LABEL: Key = Key(255);
+			pub const PLACEHOLDER: Key = Key(256);
+			pub const HINT: Key = Key(257);
 		}
 		pub mod context {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(224);
-			pub const DEFAULT: Key = Key(225);
-			pub const HINT: Key = Key(226);
+			pub const LABEL: Key = Key(232);
+			pub const DEFAULT: Key = Key(233);
+			pub const HINT: Key = Key(234);
 			pub mod option {
 				use crate::strings::Key;
-				pub const SHARED: Key = Key(227);
-				pub const FORK: Key = Key(228);
+				pub const SHARED: Key = Key(235);
+				pub const FORK: Key = Key(236);
 			}
 		}
 		pub mod delete {
 			use crate::strings::Key;
-			pub const ACTION: Key = Key(256);
-			pub const DESCRIPTION: Key = Key(257);
+			pub const ACTION: Key = Key(264);
+			pub const DESCRIPTION: Key = Key(265);
 			pub mod confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(258);
+				pub const TITLE: Key = Key(266);
 			}
 		}
 		pub mod description {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(190);
-			pub const PLACEHOLDER: Key = Key(191);
+			pub const LABEL: Key = Key(198);
+			pub const PLACEHOLDER: Key = Key(199);
 		}
 		pub mod disallowed_tools {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(240);
-			pub const PLACEHOLDER: Key = Key(241);
+			pub const LABEL: Key = Key(248);
+			pub const PLACEHOLDER: Key = Key(249);
 		}
 		pub mod effort {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(219);
-			pub const DEFAULT: Key = Key(220);
+			pub const LABEL: Key = Key(227);
+			pub const DEFAULT: Key = Key(228);
 			pub mod option {
 				use crate::strings::Key;
-				pub const LOW: Key = Key(221);
-				pub const MEDIUM: Key = Key(222);
-				pub const HIGH: Key = Key(223);
+				pub const LOW: Key = Key(229);
+				pub const MEDIUM: Key = Key(230);
+				pub const HIGH: Key = Key(231);
 			}
 		}
 		pub mod empty {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(184);
-			pub const DESCRIPTION: Key = Key(185);
+			pub const TITLE: Key = Key(192);
+			pub const DESCRIPTION: Key = Key(193);
 		}
 		pub mod files {
 			use crate::strings::Key;
-			pub const BACK: Key = Key(259);
-			pub const SAVE: Key = Key(260);
-			pub const LOADING: Key = Key(261);
-			pub const RETRY: Key = Key(262);
+			pub const BACK: Key = Key(267);
+			pub const SAVE: Key = Key(268);
+			pub const LOADING: Key = Key(269);
+			pub const RETRY: Key = Key(270);
 			pub mod add {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(263);
-				pub const PLACEHOLDER: Key = Key(264);
-				pub const HINT: Key = Key(265);
-				pub const BLANK: Key = Key(266);
-				pub const TAKEN: Key = Key(267);
-				pub const ACTION: Key = Key(268);
+				pub const LABEL: Key = Key(271);
+				pub const PLACEHOLDER: Key = Key(272);
+				pub const HINT: Key = Key(273);
+				pub const BLANK: Key = Key(274);
+				pub const TAKEN: Key = Key(275);
+				pub const ACTION: Key = Key(276);
 			}
 			pub mod delete {
 				use crate::strings::Key;
-				pub const ACTION: Key = Key(274);
-				pub const DESCRIPTION: Key = Key(275);
+				pub const ACTION: Key = Key(282);
+				pub const DESCRIPTION: Key = Key(283);
 				pub mod confirm {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(276);
+					pub const TITLE: Key = Key(284);
 				}
 			}
 			pub mod failure {
 				use crate::strings::Key;
-				pub const READ: Key = Key(271);
-				pub const WRITE: Key = Key(272);
-				pub const DELETE: Key = Key(273);
+				pub const READ: Key = Key(279);
+				pub const WRITE: Key = Key(280);
+				pub const DELETE: Key = Key(281);
 			}
 			pub mod text {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(269);
-				pub const PLACEHOLDER: Key = Key(270);
+				pub const LABEL: Key = Key(277);
+				pub const PLACEHOLDER: Key = Key(278);
 			}
 		}
 		pub mod hooks {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(242);
-			pub const PLACEHOLDER: Key = Key(243);
-			pub const HINT: Key = Key(244);
-		}
-		pub mod leave {
-			use crate::strings::Key;
-			pub const TITLE: Key = Key(253);
-			pub const DESCRIPTION: Key = Key(254);
-			pub const ACTION: Key = Key(255);
-		}
-		pub mod license {
-			use crate::strings::Key;
-			pub const LABEL: Key = Key(245);
-			pub const PLACEHOLDER: Key = Key(246);
-		}
-		pub mod metadata {
 			use crate::strings::Key;
 			pub const LABEL: Key = Key(250);
 			pub const PLACEHOLDER: Key = Key(251);
 			pub const HINT: Key = Key(252);
 		}
+		pub mod leave {
+			use crate::strings::Key;
+			pub const TITLE: Key = Key(261);
+			pub const DESCRIPTION: Key = Key(262);
+			pub const ACTION: Key = Key(263);
+		}
+		pub mod license {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(253);
+			pub const PLACEHOLDER: Key = Key(254);
+		}
+		pub mod metadata {
+			use crate::strings::Key;
+			pub const LABEL: Key = Key(258);
+			pub const PLACEHOLDER: Key = Key(259);
+			pub const HINT: Key = Key(260);
+		}
 		pub mod model {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(216);
-			pub const PLACEHOLDER: Key = Key(217);
-			pub const HINT: Key = Key(218);
+			pub const LABEL: Key = Key(224);
+			pub const PLACEHOLDER: Key = Key(225);
+			pub const HINT: Key = Key(226);
 		}
 		pub mod model_invocation {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(207);
-			pub const DESCRIPTION: Key = Key(208);
+			pub const LABEL: Key = Key(215);
+			pub const DESCRIPTION: Key = Key(216);
 		}
 		pub mod name {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(186);
-			pub const PLACEHOLDER: Key = Key(187);
-			pub const HINT: Key = Key(188);
-			pub const BLANK: Key = Key(189);
+			pub const LABEL: Key = Key(194);
+			pub const PLACEHOLDER: Key = Key(195);
+			pub const HINT: Key = Key(196);
+			pub const BLANK: Key = Key(197);
 		}
 		pub mod paths {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(204);
-			pub const PLACEHOLDER: Key = Key(205);
-			pub const HINT: Key = Key(206);
+			pub const LABEL: Key = Key(212);
+			pub const PLACEHOLDER: Key = Key(213);
+			pub const HINT: Key = Key(214);
 		}
 		pub mod preloaded {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(211);
-			pub const TAG: Key = Key(212);
-			pub const DESCRIPTION: Key = Key(213);
+			pub const LABEL: Key = Key(219);
+			pub const TAG: Key = Key(220);
+			pub const DESCRIPTION: Key = Key(221);
 		}
 		pub mod section {
 			use crate::strings::Key;
-			pub const INSTRUCTIONS: Key = Key(178);
-			pub const TRIGGERING: Key = Key(179);
-			pub const EXECUTION: Key = Key(180);
-			pub const TOOLS: Key = Key(181);
-			pub const FILES: Key = Key(182);
-			pub const ADVANCED: Key = Key(183);
+			pub const INSTRUCTIONS: Key = Key(186);
+			pub const TRIGGERING: Key = Key(187);
+			pub const EXECUTION: Key = Key(188);
+			pub const TOOLS: Key = Key(189);
+			pub const FILES: Key = Key(190);
+			pub const ADVANCED: Key = Key(191);
 		}
 		pub mod shell {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(229);
-			pub const PLACEHOLDER: Key = Key(230);
-			pub const HINT: Key = Key(231);
+			pub const LABEL: Key = Key(237);
+			pub const PLACEHOLDER: Key = Key(238);
+			pub const HINT: Key = Key(239);
 		}
 		pub mod system {
 			use crate::strings::Key;
-			pub const TAG: Key = Key(214);
-			pub const NOTICE: Key = Key(215);
+			pub const TAG: Key = Key(222);
+			pub const NOTICE: Key = Key(223);
 		}
 		pub mod user_invocable {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(209);
-			pub const DESCRIPTION: Key = Key(210);
+			pub const LABEL: Key = Key(217);
+			pub const DESCRIPTION: Key = Key(218);
 		}
 		pub mod when_to_use {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(192);
-			pub const PLACEHOLDER: Key = Key(193);
+			pub const LABEL: Key = Key(200);
+			pub const PLACEHOLDER: Key = Key(201);
 		}
 	}
 	pub mod spaces {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(71);
-		pub const SWITCH: Key = Key(72);
-		pub const SWITCH_HOSTED: Key = Key(73);
-		pub const SWITCH_INVITED_ONE: Key = Key(74);
-		pub const SWITCH_INVITED_OTHER: Key = Key(75);
-		pub const SWITCH_HOSTED_INVITED_ONE: Key = Key(76);
-		pub const SWITCH_HOSTED_INVITED_OTHER: Key = Key(77);
-		pub const OPEN: Key = Key(78);
-		pub const CREATE: Key = Key(79);
-		pub const SHORTCUT: Key = Key(80);
-		pub const SWITCH_INVITED_MANY: Key = Key(2092);
-		pub const SWITCH_HOSTED_INVITED_MANY: Key = Key(2093);
+		pub const LABEL: Key = Key(79);
+		pub const SWITCH: Key = Key(80);
+		pub const SWITCH_HOSTED: Key = Key(81);
+		pub const SWITCH_INVITED_ONE: Key = Key(82);
+		pub const SWITCH_INVITED_OTHER: Key = Key(83);
+		pub const SWITCH_HOSTED_INVITED_ONE: Key = Key(84);
+		pub const SWITCH_HOSTED_INVITED_OTHER: Key = Key(85);
+		pub const OPEN: Key = Key(86);
+		pub const CREATE: Key = Key(87);
+		pub const SHORTCUT: Key = Key(88);
+		pub const SWITCH_INVITED_MANY: Key = Key(2109);
+		pub const SWITCH_HOSTED_INVITED_MANY: Key = Key(2110);
 		pub mod host {
 			use crate::strings::Key;
-			pub const SHARED: Key = Key(81);
-			pub const UP: Key = Key(82);
-			pub const CONNECTING: Key = Key(83);
-			pub const DOWN: Key = Key(84);
+			pub const SHARED: Key = Key(89);
+			pub const UP: Key = Key(90);
+			pub const CONNECTING: Key = Key(91);
+			pub const DOWN: Key = Key(92);
 		}
 		pub mod invitations {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(87);
-			pub const INVITED_BY: Key = Key(88);
-			pub const EXPIRES: Key = Key(89);
-			pub const ACCEPT: Key = Key(90);
-			pub const DECLINE: Key = Key(91);
-			pub const JOINING: Key = Key(92);
-			pub const RETRY: Key = Key(93);
-			pub const WITHDRAWN: Key = Key(96);
-			pub const EXPIRED: Key = Key(97);
-			pub const HOST_OFFLINE: Key = Key(98);
+			pub const LABEL: Key = Key(95);
+			pub const INVITED_BY: Key = Key(96);
+			pub const EXPIRES: Key = Key(97);
+			pub const ACCEPT: Key = Key(98);
+			pub const DECLINE: Key = Key(99);
+			pub const JOINING: Key = Key(100);
+			pub const RETRY: Key = Key(101);
+			pub const WITHDRAWN: Key = Key(104);
+			pub const EXPIRED: Key = Key(105);
+			pub const HOST_OFFLINE: Key = Key(106);
 			pub mod failed {
 				use crate::strings::Key;
-				pub const SERVERS: Key = Key(94);
-				pub const OFFLINE: Key = Key(95);
+				pub const SERVERS: Key = Key(102);
+				pub const OFFLINE: Key = Key(103);
 			}
 		}
 		pub mod remove {
 			use crate::strings::Key;
-			pub const LAST_SPACE: Key = Key(85);
-			pub const FAILED: Key = Key(86);
+			pub const LAST_SPACE: Key = Key(93);
+			pub const FAILED: Key = Key(94);
 		}
 		pub mod removed {
 			use crate::strings::Key;
-			pub const NOTICE: Key = Key(99);
-			pub const NOTICE_DESCRIPTION: Key = Key(100);
-			pub const MEMBER_NOTICE: Key = Key(101);
-			pub const MEMBER_NOTICE_DESCRIPTION: Key = Key(102);
-			pub const DELETED_NOTICE: Key = Key(103);
-			pub const DELETED_NOTICE_DESCRIPTION: Key = Key(104);
+			pub const NOTICE: Key = Key(107);
+			pub const NOTICE_DESCRIPTION: Key = Key(108);
+			pub const MEMBER_NOTICE: Key = Key(109);
+			pub const MEMBER_NOTICE_DESCRIPTION: Key = Key(110);
+			pub const DELETED_NOTICE: Key = Key(111);
+			pub const DELETED_NOTICE_DESCRIPTION: Key = Key(112);
 		}
 		pub mod sign_out {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(105);
-			pub const DESCRIPTION: Key = Key(106);
-			pub const CONFIRM: Key = Key(107);
-			pub const NOTICE: Key = Key(108);
+			pub const TITLE: Key = Key(113);
+			pub const DESCRIPTION: Key = Key(114);
+			pub const CONFIRM: Key = Key(115);
+			pub const NOTICE: Key = Key(116);
 		}
 	}
 }
@@ -3176,2828 +3202,2842 @@ pub mod chat {
 	pub mod activity {
 		pub mod empty {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1004);
-			pub const DESCRIPTION: Key = Key(1005);
+			pub const TITLE: Key = Key(1012);
+			pub const DESCRIPTION: Key = Key(1013);
 		}
 		pub mod failure {
 			pub mod activity {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1010);
-				pub const DESCRIPTION: Key = Key(1011);
+				pub const TITLE: Key = Key(1018);
+				pub const DESCRIPTION: Key = Key(1019);
 			}
 			pub mod missions {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1006);
-				pub const DESCRIPTION: Key = Key(1007);
+				pub const TITLE: Key = Key(1014);
+				pub const DESCRIPTION: Key = Key(1015);
 			}
 			pub mod routines {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1008);
-				pub const DESCRIPTION: Key = Key(1009);
+				pub const TITLE: Key = Key(1016);
+				pub const DESCRIPTION: Key = Key(1017);
 			}
 			pub mod write {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1012);
-				pub const DESCRIPTION: Key = Key(1013);
+				pub const TITLE: Key = Key(1020);
+				pub const DESCRIPTION: Key = Key(1021);
 			}
 		}
 		pub mod missions {
 			pub mod group {
 				use crate::strings::Key;
-				pub const WAITING: Key = Key(998);
-				pub const IN_PROGRESS: Key = Key(999);
-				pub const EARLIER_TODAY: Key = Key(1000);
+				pub const WAITING: Key = Key(1006);
+				pub const IN_PROGRESS: Key = Key(1007);
+				pub const EARLIER_TODAY: Key = Key(1008);
 			}
 		}
 		pub mod panel {
 			use crate::strings::Key;
-			pub const CLOSE: Key = Key(994);
-			pub const LABEL: Key = Key(995);
-			pub const TOGGLE: Key = Key(996);
-			pub const TITLE: Key = Key(997);
+			pub const CLOSE: Key = Key(1002);
+			pub const LABEL: Key = Key(1003);
+			pub const TOGGLE: Key = Key(1004);
+			pub const TITLE: Key = Key(1005);
 		}
 		pub mod routines {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1001);
-			pub const BACK: Key = Key(1002);
+			pub const TITLE: Key = Key(1009);
+			pub const BACK: Key = Key(1010);
 		}
 		pub mod runs {
 			use crate::strings::Key;
-			pub const REPORTED: Key = Key(1003);
+			pub const REPORTED: Key = Key(1011);
 		}
 	}
 	pub mod answer_block {
 		pub mod callout {
 			use crate::strings::Key;
-			pub const NOTE: Key = Key(804);
-			pub const TIP: Key = Key(805);
-			pub const WARNING: Key = Key(806);
+			pub const NOTE: Key = Key(812);
+			pub const TIP: Key = Key(813);
+			pub const WARNING: Key = Key(814);
 		}
 		pub mod checklist {
 			use crate::strings::Key;
-			pub const COPY: Key = Key(785);
+			pub const COPY: Key = Key(793);
 		}
 		pub mod gallery {
 			use crate::strings::Key;
-			pub const TILE: Key = Key(807);
-			pub const MORE_ONE: Key = Key(808);
-			pub const MORE_OTHER: Key = Key(809);
-			pub const MORE_MANY: Key = Key(2123);
+			pub const TILE: Key = Key(815);
+			pub const MORE_ONE: Key = Key(816);
+			pub const MORE_OTHER: Key = Key(817);
+			pub const MORE_MANY: Key = Key(2140);
 		}
 		pub mod image {
 			use crate::strings::Key;
-			pub const UNTITLED: Key = Key(801);
-			pub const COPY_FAILED: Key = Key(802);
-			pub const OPEN_FAILED: Key = Key(803);
+			pub const UNTITLED: Key = Key(809);
+			pub const COPY_FAILED: Key = Key(810);
+			pub const OPEN_FAILED: Key = Key(811);
 		}
 		pub mod interactive {
 			use crate::strings::Key;
-			pub const RESULT: Key = Key(797);
-			pub const NOT_DEFINED: Key = Key(798);
-			pub const USE: Key = Key(799);
-			pub const SUMMARY: Key = Key(800);
+			pub const RESULT: Key = Key(805);
+			pub const NOT_DEFINED: Key = Key(806);
+			pub const USE: Key = Key(807);
+			pub const SUMMARY: Key = Key(808);
 		}
 		pub mod map {
 			use crate::strings::Key;
-			pub const OPEN: Key = Key(796);
+			pub const OPEN: Key = Key(804);
 		}
 		pub mod sourced_image {
 			use crate::strings::Key;
-			pub const SAVE: Key = Key(786);
-			pub const SAVING: Key = Key(787);
-			pub const UNAVAILABLE: Key = Key(788);
-			pub const OPEN_ORIGINAL: Key = Key(789);
+			pub const SAVE: Key = Key(794);
+			pub const SAVING: Key = Key(795);
+			pub const UNAVAILABLE: Key = Key(796);
+			pub const OPEN_ORIGINAL: Key = Key(797);
 		}
 		pub mod video {
 			use crate::strings::Key;
-			pub const PLAY: Key = Key(792);
-			pub const PAUSE: Key = Key(793);
-			pub const SEEK: Key = Key(794);
-			pub const FAILED: Key = Key(795);
+			pub const PLAY: Key = Key(800);
+			pub const PAUSE: Key = Key(801);
+			pub const SEEK: Key = Key(802);
+			pub const FAILED: Key = Key(803);
 		}
 		pub mod web_page {
 			use crate::strings::Key;
-			pub const OPEN: Key = Key(790);
-			pub const OPEN_FAILED: Key = Key(791);
+			pub const OPEN: Key = Key(798);
+			pub const OPEN_FAILED: Key = Key(799);
 		}
 	}
 	pub mod answered_question {
 		use crate::strings::Key;
-		pub const BY_VIEWER: Key = Key(747);
-		pub const BY_MEMBER: Key = Key(748);
+		pub const BY_VIEWER: Key = Key(755);
+		pub const BY_MEMBER: Key = Key(756);
 	}
 	pub mod application_install {
 		use crate::strings::Key;
-		pub const OPEN_SETTINGS: Key = Key(757);
-		pub const SECRET_ONE: Key = Key(761);
-		pub const SECRET_OTHER: Key = Key(762);
-		pub const UNREADABLE: Key = Key(763);
-		pub const SECRET_MANY: Key = Key(2121);
+		pub const OPEN_SETTINGS: Key = Key(765);
+		pub const SECRET_ONE: Key = Key(769);
+		pub const SECRET_OTHER: Key = Key(770);
+		pub const UNREADABLE: Key = Key(771);
+		pub const SECRET_MANY: Key = Key(2138);
 		pub mod receipt {
 			use crate::strings::Key;
-			pub const AGENT: Key = Key(758);
-			pub const SPACE: Key = Key(759);
-			pub const USER: Key = Key(760);
+			pub const AGENT: Key = Key(766);
+			pub const SPACE: Key = Key(767);
+			pub const USER: Key = Key(768);
 		}
 	}
 	pub mod attachments {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(701);
-		pub const OPEN: Key = Key(702);
-		pub const REMOVE: Key = Key(703);
-		pub const ATTACH: Key = Key(704);
-		pub const ADD: Key = Key(705);
+		pub const LABEL: Key = Key(709);
+		pub const OPEN: Key = Key(710);
+		pub const REMOVE: Key = Key(711);
+		pub const ATTACH: Key = Key(712);
+		pub const ADD: Key = Key(713);
 	}
 	pub mod code {
 		use crate::strings::Key;
-		pub const SNIPPET: Key = Key(764);
-		pub const NAMED_SNIPPET: Key = Key(765);
-		pub const COPY: Key = Key(766);
-		pub const COPIED: Key = Key(767);
-		pub const COPY_TOOLTIP: Key = Key(768);
-		pub const COPY_ANNOUNCED: Key = Key(769);
-		pub const COPY_FAILED: Key = Key(770);
-		pub const WRITING: Key = Key(771);
-		pub const READY: Key = Key(772);
+		pub const SNIPPET: Key = Key(772);
+		pub const NAMED_SNIPPET: Key = Key(773);
+		pub const COPY: Key = Key(774);
+		pub const COPIED: Key = Key(775);
+		pub const COPY_TOOLTIP: Key = Key(776);
+		pub const COPY_ANNOUNCED: Key = Key(777);
+		pub const COPY_FAILED: Key = Key(778);
+		pub const WRITING: Key = Key(779);
+		pub const READY: Key = Key(780);
 	}
 	pub mod composer {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(706);
-		pub const PLACEHOLDER: Key = Key(707);
-		pub const SEND: Key = Key(708);
-		pub const OFFLINE: Key = Key(709);
-		pub const COMMANDS: Key = Key(710);
-		pub const MENTIONS: Key = Key(711);
-		pub const LEAD: Key = Key(712);
-		pub const MENTIONED_ONE: Key = Key(713);
-		pub const MENTIONED_OTHER: Key = Key(714);
-		pub const OUTSIDE: Key = Key(715);
-		pub const INVITE: Key = Key(716);
-		pub const FURTHER_ONE: Key = Key(717);
-		pub const FURTHER_OTHER: Key = Key(718);
-		pub const MENTIONED_MANY: Key = Key(2119);
-		pub const FURTHER_MANY: Key = Key(2120);
+		pub const LABEL: Key = Key(714);
+		pub const PLACEHOLDER: Key = Key(715);
+		pub const SEND: Key = Key(716);
+		pub const OFFLINE: Key = Key(717);
+		pub const COMMANDS: Key = Key(718);
+		pub const MENTIONS: Key = Key(719);
+		pub const LEAD: Key = Key(720);
+		pub const MENTIONED_ONE: Key = Key(721);
+		pub const MENTIONED_OTHER: Key = Key(722);
+		pub const OUTSIDE: Key = Key(723);
+		pub const INVITE: Key = Key(724);
+		pub const FURTHER_ONE: Key = Key(725);
+		pub const FURTHER_OTHER: Key = Key(726);
+		pub const MENTIONED_MANY: Key = Key(2136);
+		pub const FURTHER_MANY: Key = Key(2137);
 	}
 	pub mod connection {
 		use crate::strings::Key;
-		pub const CHECKING: Key = Key(565);
-		pub const READY: Key = Key(566);
-		pub const UNAVAILABLE: Key = Key(567);
-		pub const CRASHED: Key = Key(568);
+		pub const CHECKING: Key = Key(573);
+		pub const READY: Key = Key(574);
+		pub const UNAVAILABLE: Key = Key(575);
+		pub const CRASHED: Key = Key(576);
 	}
 	pub mod conversation_arrival {
 		use crate::strings::Key;
-		pub const INVITED_BY_PERSON: Key = Key(562);
-		pub const INVITED_BY_AGENT: Key = Key(563);
-		pub const CREATED_BY: Key = Key(564);
+		pub const INVITED_BY_PERSON: Key = Key(570);
+		pub const INVITED_BY_AGENT: Key = Key(571);
+		pub const CREATED_BY: Key = Key(572);
 	}
 	pub mod conversation_empty_state {
 		use crate::strings::Key;
-		pub const DESCRIPTION_ONE: Key = Key(556);
-		pub const DESCRIPTION_OTHER: Key = Key(557);
-		pub const HINT: Key = Key(558);
-		pub const DESCRIPTION_MANY: Key = Key(2103);
+		pub const DESCRIPTION_ONE: Key = Key(564);
+		pub const DESCRIPTION_OTHER: Key = Key(565);
+		pub const HINT: Key = Key(566);
+		pub const DESCRIPTION_MANY: Key = Key(2120);
 		pub mod nobody {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(559);
-			pub const DESCRIPTION: Key = Key(560);
-			pub const SUGGESTED: Key = Key(561);
+			pub const TITLE: Key = Key(567);
+			pub const DESCRIPTION: Key = Key(568);
+			pub const SUGGESTED: Key = Key(569);
 		}
 	}
 	pub mod conversation_seating {
 		use crate::strings::Key;
-		pub const FAILED: Key = Key(947);
-		pub const REFUSED: Key = Key(948);
-		pub const UNAVAILABLE: Key = Key(949);
+		pub const FAILED: Key = Key(955);
+		pub const REFUSED: Key = Key(956);
+		pub const UNAVAILABLE: Key = Key(957);
 	}
 	pub mod conversation_settings {
 		use crate::strings::Key;
-		pub const BREADCRUMB: Key = Key(950);
-		pub const UNTITLED: Key = Key(951);
+		pub const BREADCRUMB: Key = Key(958);
+		pub const UNTITLED: Key = Key(959);
 		pub mod danger {
 			use crate::strings::Key;
-			pub const DELETE: Key = Key(990);
-			pub const DESCRIPTION: Key = Key(991);
-			pub const FAILED: Key = Key(993);
+			pub const DELETE: Key = Key(998);
+			pub const DESCRIPTION: Key = Key(999);
+			pub const FAILED: Key = Key(1001);
 			pub mod confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(992);
+				pub const TITLE: Key = Key(1000);
 			}
 		}
 		pub mod icon {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(958);
+			pub const LABEL: Key = Key(966);
 			pub mod option {
 				use crate::strings::Key;
-				pub const MESSAGE_SQUARE: Key = Key(959);
-				pub const BUG: Key = Key(960);
-				pub const ROCKET: Key = Key(961);
-				pub const SHIELD_KEY: Key = Key(962);
-				pub const PEN: Key = Key(963);
-				pub const FILE_TEXT: Key = Key(964);
-				pub const DOWNLOAD: Key = Key(965);
-				pub const LAPTOP: Key = Key(966);
-				pub const SMARTPHONE: Key = Key(967);
-				pub const BOOK_OPEN: Key = Key(968);
-				pub const CREDIT_CARD: Key = Key(969);
-				pub const MEGAPHONE: Key = Key(970);
-				pub const PANEL_LEFT: Key = Key(971);
-				pub const CODE: Key = Key(972);
-				pub const TERMINAL: Key = Key(973);
-				pub const SERVER: Key = Key(974);
-				pub const GLOBE: Key = Key(975);
-				pub const PALETTE: Key = Key(976);
-				pub const LIGHTBULB: Key = Key(977);
-				pub const CHART_LINE: Key = Key(978);
-				pub const CALENDAR: Key = Key(979);
-				pub const USERS: Key = Key(980);
-				pub const FLAG: Key = Key(981);
-				pub const SPARKLES: Key = Key(982);
+				pub const MESSAGE_SQUARE: Key = Key(967);
+				pub const BUG: Key = Key(968);
+				pub const ROCKET: Key = Key(969);
+				pub const SHIELD_KEY: Key = Key(970);
+				pub const PEN: Key = Key(971);
+				pub const FILE_TEXT: Key = Key(972);
+				pub const DOWNLOAD: Key = Key(973);
+				pub const LAPTOP: Key = Key(974);
+				pub const SMARTPHONE: Key = Key(975);
+				pub const BOOK_OPEN: Key = Key(976);
+				pub const CREDIT_CARD: Key = Key(977);
+				pub const MEGAPHONE: Key = Key(978);
+				pub const PANEL_LEFT: Key = Key(979);
+				pub const CODE: Key = Key(980);
+				pub const TERMINAL: Key = Key(981);
+				pub const SERVER: Key = Key(982);
+				pub const GLOBE: Key = Key(983);
+				pub const PALETTE: Key = Key(984);
+				pub const LIGHTBULB: Key = Key(985);
+				pub const CHART_LINE: Key = Key(986);
+				pub const CALENDAR: Key = Key(987);
+				pub const USERS: Key = Key(988);
+				pub const FLAG: Key = Key(989);
+				pub const SPARKLES: Key = Key(990);
 			}
 		}
 		pub mod instructions {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(983);
-			pub const PLACEHOLDER: Key = Key(984);
+			pub const LABEL: Key = Key(991);
+			pub const PLACEHOLDER: Key = Key(992);
 		}
 		pub mod name {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(956);
-			pub const PLACEHOLDER: Key = Key(957);
+			pub const LABEL: Key = Key(964);
+			pub const PLACEHOLDER: Key = Key(965);
 		}
 		pub mod participants {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(985);
-			pub const LEAD: Key = Key(986);
-			pub const PROMOTE: Key = Key(987);
-			pub const DISMISS: Key = Key(988);
-			pub const LAST: Key = Key(989);
+			pub const LABEL: Key = Key(993);
+			pub const LEAD: Key = Key(994);
+			pub const PROMOTE: Key = Key(995);
+			pub const DISMISS: Key = Key(996);
+			pub const LAST: Key = Key(997);
 		}
 		pub mod tab {
 			use crate::strings::Key;
-			pub const GENERAL: Key = Key(952);
-			pub const PARTICIPANTS: Key = Key(953);
-			pub const INSTRUCTIONS: Key = Key(954);
-			pub const DANGER: Key = Key(955);
+			pub const GENERAL: Key = Key(960);
+			pub const PARTICIPANTS: Key = Key(961);
+			pub const INSTRUCTIONS: Key = Key(962);
+			pub const DANGER: Key = Key(963);
 		}
 	}
 	pub mod diagram {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(776);
+		pub const LABEL: Key = Key(784);
 	}
 	pub mod empty_state {
 		use crate::strings::Key;
-		pub const SETTINGS: Key = Key(552);
-		pub const HINT: Key = Key(553);
-		pub const SETUP: Key = Key(554);
-		pub const SIGN_IN: Key = Key(555);
+		pub const SETTINGS: Key = Key(560);
+		pub const HINT: Key = Key(561);
+		pub const SETUP: Key = Key(562);
+		pub const SIGN_IN: Key = Key(563);
 		pub mod not_connected {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(550);
-			pub const DESCRIPTION: Key = Key(551);
+			pub const TITLE: Key = Key(558);
+			pub const DESCRIPTION: Key = Key(559);
 		}
 		pub mod ready {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(543);
-			pub const DESCRIPTION: Key = Key(544);
-			pub const DESCRIPTION_NAMED: Key = Key(545);
+			pub const TITLE: Key = Key(551);
+			pub const DESCRIPTION: Key = Key(552);
+			pub const DESCRIPTION_NAMED: Key = Key(553);
 		}
 		pub mod unavailable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(546);
-			pub const TITLE_NAMED: Key = Key(547);
-			pub const DESCRIPTION: Key = Key(548);
-			pub const DESCRIPTION_NAMED: Key = Key(549);
+			pub const TITLE: Key = Key(554);
+			pub const TITLE_NAMED: Key = Key(555);
+			pub const DESCRIPTION: Key = Key(556);
+			pub const DESCRIPTION_NAMED: Key = Key(557);
 		}
 	}
 	pub mod file_reference {
 		use crate::strings::Key;
-		pub const WRITING: Key = Key(779);
+		pub const WRITING: Key = Key(787);
 	}
 	pub mod home {
 		use crate::strings::Key;
-		pub const SAVED: Key = Key(1281);
-		pub const IN: Key = Key(1286);
+		pub const SAVED: Key = Key(1296);
+		pub const IN: Key = Key(1301);
 		pub mod band {
 			use crate::strings::Key;
-			pub const CONNECT: Key = Key(1279);
-			pub const DISMISS: Key = Key(1280);
+			pub const CONNECT: Key = Key(1294);
+			pub const DISMISS: Key = Key(1295);
 		}
 		pub mod composer {
 			use crate::strings::Key;
-			pub const PLACEHOLDER: Key = Key(1277);
-			pub const AGENTS: Key = Key(1278);
+			pub const PLACEHOLDER: Key = Key(1292);
+			pub const AGENTS: Key = Key(1293);
 		}
 		pub mod failure {
 			pub mod rooms {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1289);
-				pub const DESCRIPTION: Key = Key(1290);
+				pub const TITLE: Key = Key(1304);
+				pub const DESCRIPTION: Key = Key(1305);
 			}
 			pub mod send {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1287);
-				pub const DESCRIPTION: Key = Key(1288);
+				pub const TITLE: Key = Key(1302);
+				pub const DESCRIPTION: Key = Key(1303);
 			}
 		}
 		pub mod greeting {
 			use crate::strings::Key;
-			pub const MORNING: Key = Key(1269);
-			pub const MORNING_UNNAMED: Key = Key(1270);
-			pub const AFTERNOON: Key = Key(1271);
-			pub const AFTERNOON_UNNAMED: Key = Key(1272);
-			pub const EVENING: Key = Key(1273);
-			pub const EVENING_UNNAMED: Key = Key(1274);
-			pub const NIGHT: Key = Key(1275);
-			pub const NIGHT_UNNAMED: Key = Key(1276);
+			pub const MORNING: Key = Key(1284);
+			pub const MORNING_UNNAMED: Key = Key(1285);
+			pub const AFTERNOON: Key = Key(1286);
+			pub const AFTERNOON_UNNAMED: Key = Key(1287);
+			pub const EVENING: Key = Key(1288);
+			pub const EVENING_UNNAMED: Key = Key(1289);
+			pub const NIGHT: Key = Key(1290);
+			pub const NIGHT_UNNAMED: Key = Key(1291);
 		}
 		pub mod mission {
 			use crate::strings::Key;
-			pub const COMPLETED: Key = Key(1284);
-			pub const BLOCKED: Key = Key(1285);
+			pub const COMPLETED: Key = Key(1299);
+			pub const BLOCKED: Key = Key(1300);
 		}
 		pub mod room {
 			use crate::strings::Key;
-			pub const WORKING: Key = Key(1282);
-			pub const WORKED: Key = Key(1283);
+			pub const WORKING: Key = Key(1297);
+			pub const WORKED: Key = Key(1298);
 		}
 	}
 	pub mod interactive_view {
 		use crate::strings::Key;
-		pub const MADE_BY: Key = Key(749);
-		pub const MODES: Key = Key(750);
-		pub const INLINE: Key = Key(751);
-		pub const PINNED: Key = Key(752);
-		pub const FULLSCREEN: Key = Key(753);
+		pub const MADE_BY: Key = Key(757);
+		pub const MODES: Key = Key(758);
+		pub const INLINE: Key = Key(759);
+		pub const PINNED: Key = Key(760);
+		pub const FULLSCREEN: Key = Key(761);
 	}
 	pub mod missions {
 		use crate::strings::Key;
-		pub const LIVE: Key = Key(1116);
+		pub const LIVE: Key = Key(1131);
 		pub mod activity {
 			use crate::strings::Key;
-			pub const COMMITS_AHEAD_ONE: Key = Key(1144);
-			pub const COMMITS_AHEAD_OTHER: Key = Key(1145);
-			pub const COMMITS_AHEAD_MANY: Key = Key(2127);
+			pub const COMMITS_AHEAD_ONE: Key = Key(1159);
+			pub const COMMITS_AHEAD_OTHER: Key = Key(1160);
+			pub const COMMITS_AHEAD_MANY: Key = Key(2144);
 		}
 		pub mod card {
 			use crate::strings::Key;
-			pub const OPEN: Key = Key(1167);
+			pub const OPEN: Key = Key(1182);
 		}
 		pub mod composer {
 			use crate::strings::Key;
-			pub const PLACEHOLDER: Key = Key(1174);
+			pub const PLACEHOLDER: Key = Key(1189);
 		}
 		pub mod event {
 			use crate::strings::Key;
-			pub const LINK: Key = Key(1143);
+			pub const LINK: Key = Key(1158);
 			pub mod kind {
 				use crate::strings::Key;
-				pub const OPENED: Key = Key(1132);
-				pub const NOTE: Key = Key(1133);
-				pub const AGENT_ASKED: Key = Key(1134);
-				pub const ANSWERED: Key = Key(1135);
-				pub const ESCALATED: Key = Key(1136);
-				pub const READY: Key = Key(1137);
-				pub const CHECKS_FAILED: Key = Key(1138);
-				pub const FAILED: Key = Key(1139);
-				pub const CLOSED: Key = Key(1140);
-				pub const DISMISSED: Key = Key(1141);
-				pub const REOPENED: Key = Key(1142);
+				pub const OPENED: Key = Key(1147);
+				pub const NOTE: Key = Key(1148);
+				pub const AGENT_ASKED: Key = Key(1149);
+				pub const ANSWERED: Key = Key(1150);
+				pub const ESCALATED: Key = Key(1151);
+				pub const READY: Key = Key(1152);
+				pub const CHECKS_FAILED: Key = Key(1153);
+				pub const FAILED: Key = Key(1154);
+				pub const CLOSED: Key = Key(1155);
+				pub const DISMISSED: Key = Key(1156);
+				pub const REOPENED: Key = Key(1157);
 			}
 			pub mod line {
 				use crate::strings::Key;
-				pub const OPENED: Key = Key(1121);
-				pub const NOTE: Key = Key(1122);
-				pub const AGENT_ASKED: Key = Key(1123);
-				pub const ANSWERED: Key = Key(1124);
-				pub const ESCALATED: Key = Key(1125);
-				pub const READY: Key = Key(1126);
-				pub const CHECKS_FAILED: Key = Key(1127);
-				pub const FAILED: Key = Key(1128);
-				pub const CLOSED: Key = Key(1129);
-				pub const DISMISSED: Key = Key(1130);
-				pub const REOPENED: Key = Key(1131);
+				pub const OPENED: Key = Key(1136);
+				pub const NOTE: Key = Key(1137);
+				pub const AGENT_ASKED: Key = Key(1138);
+				pub const ANSWERED: Key = Key(1139);
+				pub const ESCALATED: Key = Key(1140);
+				pub const READY: Key = Key(1141);
+				pub const CHECKS_FAILED: Key = Key(1142);
+				pub const FAILED: Key = Key(1143);
+				pub const CLOSED: Key = Key(1144);
+				pub const DISMISSED: Key = Key(1145);
+				pub const REOPENED: Key = Key(1146);
 			}
 			pub mod source {
 				use crate::strings::Key;
-				pub const BOT: Key = Key(1117);
-				pub const READER: Key = Key(1118);
-				pub const AGENT: Key = Key(1119);
-				pub const GITHUB: Key = Key(1120);
+				pub const BOT: Key = Key(1132);
+				pub const READER: Key = Key(1133);
+				pub const AGENT: Key = Key(1134);
+				pub const GITHUB: Key = Key(1135);
 			}
 		}
 		pub mod failure {
 			pub mod read {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1175);
-				pub const DESCRIPTION: Key = Key(1176);
+				pub const TITLE: Key = Key(1190);
+				pub const DESCRIPTION: Key = Key(1191);
 			}
 			pub mod run {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1179);
-				pub const DESCRIPTION: Key = Key(1180);
+				pub const TITLE: Key = Key(1194);
+				pub const DESCRIPTION: Key = Key(1195);
 			}
 			pub mod send {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1177);
-				pub const DESCRIPTION: Key = Key(1178);
+				pub const TITLE: Key = Key(1192);
+				pub const DESCRIPTION: Key = Key(1193);
 			}
 		}
 		pub mod feed {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1171);
+			pub const LABEL: Key = Key(1186);
 		}
 		pub mod header {
 			use crate::strings::Key;
-			pub const TOOLS: Key = Key(1168);
-			pub const BACK: Key = Key(1169);
-			pub const OPENED_AT: Key = Key(1170);
+			pub const TOOLS: Key = Key(1183);
+			pub const BACK: Key = Key(1184);
+			pub const OPENED_AT: Key = Key(1185);
 		}
 		pub mod menu {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1148);
-			pub const OPEN: Key = Key(1149);
-			pub const OPEN_PULL_REQUEST: Key = Key(1150);
-			pub const COPY: Key = Key(1151);
-			pub const MESSAGE_AGENT: Key = Key(1156);
-			pub const STOP_AGENT: Key = Key(1157);
-			pub const ANSWER: Key = Key(1158);
-			pub const CLOSE: Key = Key(1159);
-			pub const REOPEN: Key = Key(1160);
-			pub const COPIED: Key = Key(1161);
+			pub const LABEL: Key = Key(1163);
+			pub const OPEN: Key = Key(1164);
+			pub const OPEN_PULL_REQUEST: Key = Key(1165);
+			pub const COPY: Key = Key(1166);
+			pub const MESSAGE_AGENT: Key = Key(1171);
+			pub const STOP_AGENT: Key = Key(1172);
+			pub const ANSWER: Key = Key(1173);
+			pub const CLOSE: Key = Key(1174);
+			pub const REOPEN: Key = Key(1175);
+			pub const COPIED: Key = Key(1176);
 			pub mod copy_kind {
 				use crate::strings::Key;
-				pub const ISSUE_ID: Key = Key(1152);
-				pub const BRANCH: Key = Key(1153);
-				pub const PULL_REQUEST_URL: Key = Key(1154);
-				pub const WORKSPACE_PATH: Key = Key(1155);
+				pub const ISSUE_ID: Key = Key(1167);
+				pub const BRANCH: Key = Key(1168);
+				pub const PULL_REQUEST_URL: Key = Key(1169);
+				pub const WORKSPACE_PATH: Key = Key(1170);
 			}
 			pub mod failed {
 				use crate::strings::Key;
-				pub const OPEN_PULL_REQUEST: Key = Key(1162);
-				pub const COPY: Key = Key(1163);
-				pub const STOP_AGENT: Key = Key(1164);
-				pub const CLOSE: Key = Key(1165);
-				pub const REOPEN: Key = Key(1166);
+				pub const OPEN_PULL_REQUEST: Key = Key(1177);
+				pub const COPY: Key = Key(1178);
+				pub const STOP_AGENT: Key = Key(1179);
+				pub const CLOSE: Key = Key(1180);
+				pub const REOPEN: Key = Key(1181);
+			}
+		}
+		pub mod page {
+			use crate::strings::Key;
+			pub const TITLE: Key = Key(1119);
+			pub mod group {
+				use crate::strings::Key;
+				pub const BLOCKED_ON_YOU: Key = Key(1120);
+				pub const READY_TO_MERGE: Key = Key(1121);
+				pub const WORKING: Key = Key(1122);
+				pub const WAITING_ON_AGENT: Key = Key(1123);
+				pub const COMPLETED: Key = Key(1124);
+				pub const BLOCKED: Key = Key(1125);
 			}
 		}
 		pub mod panel {
 			pub mod empty {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1109);
-				pub const DESCRIPTION: Key = Key(1110);
+				pub const TITLE: Key = Key(1117);
+				pub const DESCRIPTION: Key = Key(1118);
 			}
 		}
 		pub mod pull_request {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1146);
-			pub const OPEN: Key = Key(1147);
+			pub const LABEL: Key = Key(1161);
+			pub const OPEN: Key = Key(1162);
 		}
 		pub mod state {
 			use crate::strings::Key;
-			pub const WAITING_HUMAN: Key = Key(1111);
-			pub const READY_TO_MERGE: Key = Key(1112);
-			pub const FAILED: Key = Key(1113);
-			pub const DONE: Key = Key(1114);
-			pub const CLOSED: Key = Key(1115);
+			pub const WAITING_HUMAN: Key = Key(1126);
+			pub const READY_TO_MERGE: Key = Key(1127);
+			pub const FAILED: Key = Key(1128);
+			pub const DONE: Key = Key(1129);
+			pub const CLOSED: Key = Key(1130);
 		}
 		pub mod summons {
 			use crate::strings::Key;
-			pub const WORKING: Key = Key(1172);
-			pub const WAITING_BOT: Key = Key(1173);
+			pub const WORKING: Key = Key(1187);
+			pub const WAITING_BOT: Key = Key(1188);
 		}
 	}
 	pub mod nameless_conversation {
 		use crate::strings::Key;
-		pub const SEPARATOR: Key = Key(946);
+		pub const SEPARATOR: Key = Key(954);
 	}
 	pub mod notice {
 		use crate::strings::Key;
-		pub const RETRY: Key = Key(685);
-		pub const DISMISS: Key = Key(686);
+		pub const RETRY: Key = Key(693);
+		pub const DISMISS: Key = Key(694);
 	}
 	pub mod onboarding {
 		pub mod access {
 			use crate::strings::Key;
-			pub const HEADER: Key = Key(1187);
-			pub const QUESTION: Key = Key(1188);
+			pub const HEADER: Key = Key(1202);
+			pub const QUESTION: Key = Key(1203);
 			pub mod api_key {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1191);
-				pub const DESCRIPTION: Key = Key(1192);
+				pub const LABEL: Key = Key(1206);
+				pub const DESCRIPTION: Key = Key(1207);
 			}
 			pub mod sign_in {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1189);
-				pub const DESCRIPTION: Key = Key(1190);
+				pub const LABEL: Key = Key(1204);
+				pub const DESCRIPTION: Key = Key(1205);
 			}
 		}
 		pub mod account {
 			use crate::strings::Key;
-			pub const HEADER: Key = Key(1181);
-			pub const QUESTION: Key = Key(1182);
+			pub const HEADER: Key = Key(1196);
+			pub const QUESTION: Key = Key(1197);
 			pub mod another {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1185);
-				pub const DESCRIPTION: Key = Key(1186);
+				pub const LABEL: Key = Key(1200);
+				pub const DESCRIPTION: Key = Key(1201);
 			}
 			pub mod r#use {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1183);
-				pub const DESCRIPTION: Key = Key(1184);
+				pub const LABEL: Key = Key(1198);
+				pub const DESCRIPTION: Key = Key(1199);
 			}
 		}
 		pub mod api_key {
 			use crate::strings::Key;
-			pub const HEADER: Key = Key(1198);
-			pub const QUESTION: Key = Key(1199);
-			pub const ENTRY: Key = Key(1200);
-			pub const PLACEHOLDER: Key = Key(1201);
-			pub const EXIT: Key = Key(1202);
+			pub const HEADER: Key = Key(1213);
+			pub const QUESTION: Key = Key(1214);
+			pub const ENTRY: Key = Key(1215);
+			pub const PLACEHOLDER: Key = Key(1216);
+			pub const EXIT: Key = Key(1217);
 		}
 		pub mod arrival {
 			use crate::strings::Key;
-			pub const FAILURE: Key = Key(1213);
-			pub const FIRST_COMPANION_MISSING: Key = Key(1214);
-			pub const UNKNOWN_COMPANION: Key = Key(1215);
+			pub const FAILURE: Key = Key(1228);
+			pub const FIRST_COMPANION_MISSING: Key = Key(1229);
+			pub const UNKNOWN_COMPANION: Key = Key(1230);
 		}
 		pub mod code {
 			use crate::strings::Key;
-			pub const HEADER: Key = Key(1193);
-			pub const QUESTION: Key = Key(1194);
-			pub const LINK: Key = Key(1195);
-			pub const ENTRY: Key = Key(1196);
-			pub const EXIT: Key = Key(1197);
+			pub const HEADER: Key = Key(1208);
+			pub const QUESTION: Key = Key(1209);
+			pub const LINK: Key = Key(1210);
+			pub const ENTRY: Key = Key(1211);
+			pub const EXIT: Key = Key(1212);
 		}
 		pub mod connect {
 			use crate::strings::Key;
-			pub const FOUND_IN: Key = Key(1252);
-			pub const CONTINUE: Key = Key(1260);
-			pub const CONNECTING: Key = Key(1261);
+			pub const FOUND_IN: Key = Key(1267);
+			pub const CONTINUE: Key = Key(1275);
+			pub const CONNECTING: Key = Key(1276);
 			pub mod agent_missing {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1265);
-				pub const BODY: Key = Key(1266);
-				pub const DOWNLOAD: Key = Key(1267);
+				pub const TITLE: Key = Key(1280);
+				pub const BODY: Key = Key(1281);
+				pub const DOWNLOAD: Key = Key(1282);
 			}
 			pub mod browser {
 				use crate::strings::Key;
-				pub const BODY: Key = Key(1255);
-				pub const WAITING: Key = Key(1256);
-				pub const CHECKING: Key = Key(1257);
-				pub const PLACEHOLDER: Key = Key(1258);
-				pub const REOPEN: Key = Key(1259);
+				pub const BODY: Key = Key(1270);
+				pub const WAITING: Key = Key(1271);
+				pub const CHECKING: Key = Key(1272);
+				pub const PLACEHOLDER: Key = Key(1273);
+				pub const REOPEN: Key = Key(1274);
 			}
 			pub mod failed {
 				use crate::strings::Key;
-				pub const CANCELLED: Key = Key(1262);
-				pub const TIMED_OUT: Key = Key(1263);
-				pub const LINK_REFUSED: Key = Key(1264);
+				pub const CANCELLED: Key = Key(1277);
+				pub const TIMED_OUT: Key = Key(1278);
+				pub const LINK_REFUSED: Key = Key(1279);
 			}
 			pub mod key {
 				use crate::strings::Key;
-				pub const BODY: Key = Key(1268);
+				pub const BODY: Key = Key(1283);
 			}
 			pub mod provider {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1253);
-				pub const BODY: Key = Key(1254);
+				pub const TITLE: Key = Key(1268);
+				pub const BODY: Key = Key(1269);
 			}
 		}
 		pub mod connection {
 			pub mod key_failed {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1208);
-				pub const SENTENCE: Key = Key(1209);
-				pub const ANOTHER_KEY: Key = Key(1210);
-				pub const ANOTHER_KEY_DESCRIPTION: Key = Key(1211);
-				pub const SIGN_IN: Key = Key(1212);
+				pub const TITLE: Key = Key(1223);
+				pub const SENTENCE: Key = Key(1224);
+				pub const ANOTHER_KEY: Key = Key(1225);
+				pub const ANOTHER_KEY_DESCRIPTION: Key = Key(1226);
+				pub const SIGN_IN: Key = Key(1227);
 			}
 		}
 		pub mod intro {
 			use crate::strings::Key;
-			pub const SKIP: Key = Key(1216);
-			pub const BACK: Key = Key(1217);
-			pub const NEXT: Key = Key(1218);
-			pub const GET_STARTED: Key = Key(1219);
-			pub const PROGRESS: Key = Key(1220);
-			pub const POSITION: Key = Key(1221);
+			pub const SKIP: Key = Key(1231);
+			pub const BACK: Key = Key(1232);
+			pub const NEXT: Key = Key(1233);
+			pub const GET_STARTED: Key = Key(1234);
+			pub const PROGRESS: Key = Key(1235);
+			pub const POSITION: Key = Key(1236);
 			pub mod companions {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1222);
-				pub const BODY: Key = Key(1223);
+				pub const TITLE: Key = Key(1237);
+				pub const BODY: Key = Key(1238);
 				pub mod atlas {
 					use crate::strings::Key;
-					pub const NAME: Key = Key(1224);
-					pub const JOB: Key = Key(1225);
+					pub const NAME: Key = Key(1239);
+					pub const JOB: Key = Key(1240);
 				}
 				pub mod juniper {
 					use crate::strings::Key;
-					pub const NAME: Key = Key(1226);
-					pub const JOB: Key = Key(1227);
+					pub const NAME: Key = Key(1241);
+					pub const JOB: Key = Key(1242);
 				}
 				pub mod wren {
 					use crate::strings::Key;
-					pub const NAME: Key = Key(1228);
-					pub const JOB: Key = Key(1229);
+					pub const NAME: Key = Key(1243);
+					pub const JOB: Key = Key(1244);
 				}
 			}
 			pub mod conversations {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1230);
-				pub const BODY: Key = Key(1231);
-				pub const THREAD: Key = Key(1232);
-				pub const ASK: Key = Key(1233);
-				pub const REPLY: Key = Key(1234);
-				pub const MISSION: Key = Key(1235);
-				pub const MISSION_DETAIL: Key = Key(1236);
-				pub const STATUS: Key = Key(1237);
+				pub const TITLE: Key = Key(1245);
+				pub const BODY: Key = Key(1246);
+				pub const THREAD: Key = Key(1247);
+				pub const ASK: Key = Key(1248);
+				pub const REPLY: Key = Key(1249);
+				pub const MISSION: Key = Key(1250);
+				pub const MISSION_DETAIL: Key = Key(1251);
+				pub const STATUS: Key = Key(1252);
 			}
 			pub mod spaces {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1238);
-				pub const BODY: Key = Key(1239);
+				pub const TITLE: Key = Key(1253);
+				pub const BODY: Key = Key(1254);
 				pub mod personal {
 					use crate::strings::Key;
-					pub const NAME: Key = Key(1242);
-					pub const DETAIL: Key = Key(1243);
+					pub const NAME: Key = Key(1257);
+					pub const DETAIL: Key = Key(1258);
 				}
 				pub mod work {
 					use crate::strings::Key;
-					pub const NAME: Key = Key(1240);
-					pub const DETAIL: Key = Key(1241);
+					pub const NAME: Key = Key(1255);
+					pub const DETAIL: Key = Key(1256);
 				}
 			}
 			pub mod tools {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1244);
-				pub const BODY: Key = Key(1245);
-				pub const FOLDERS: Key = Key(1246);
-				pub const FOLDERS_DETAIL: Key = Key(1247);
-				pub const APPLICATIONS: Key = Key(1248);
-				pub const APPLICATIONS_DETAIL: Key = Key(1249);
-				pub const SECRETS: Key = Key(1250);
-				pub const SECRETS_DETAIL: Key = Key(1251);
+				pub const TITLE: Key = Key(1259);
+				pub const BODY: Key = Key(1260);
+				pub const FOLDERS: Key = Key(1261);
+				pub const FOLDERS_DETAIL: Key = Key(1262);
+				pub const APPLICATIONS: Key = Key(1263);
+				pub const APPLICATIONS_DETAIL: Key = Key(1264);
+				pub const SECRETS: Key = Key(1265);
+				pub const SECRETS_DETAIL: Key = Key(1266);
 			}
 		}
 		pub mod sign_in_failed {
 			use crate::strings::Key;
-			pub const HEADER: Key = Key(1203);
-			pub const QUESTION: Key = Key(1204);
-			pub const TITLE: Key = Key(1205);
+			pub const HEADER: Key = Key(1218);
+			pub const QUESTION: Key = Key(1219);
+			pub const TITLE: Key = Key(1220);
 			pub mod retry {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1206);
-				pub const DESCRIPTION: Key = Key(1207);
+				pub const LABEL: Key = Key(1221);
+				pub const DESCRIPTION: Key = Key(1222);
 			}
 		}
 	}
 	pub mod pinned {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(640);
-		pub const COUNTED_ONE: Key = Key(641);
-		pub const COUNTED_OTHER: Key = Key(642);
-		pub const JUMP: Key = Key(643);
-		pub const JUMP_TO: Key = Key(644);
-		pub const UNPIN: Key = Key(645);
-		pub const EMPTY: Key = Key(646);
-		pub const COUNTED_MANY: Key = Key(2110);
+		pub const TITLE: Key = Key(648);
+		pub const COUNTED_ONE: Key = Key(649);
+		pub const COUNTED_OTHER: Key = Key(650);
+		pub const JUMP: Key = Key(651);
+		pub const JUMP_TO: Key = Key(652);
+		pub const UNPIN: Key = Key(653);
+		pub const EMPTY: Key = Key(654);
+		pub const COUNTED_MANY: Key = Key(2127);
 		pub mod unavailable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(647);
-			pub const DESCRIPTION: Key = Key(648);
+			pub const TITLE: Key = Key(655);
+			pub const DESCRIPTION: Key = Key(656);
 		}
 	}
 	pub mod queue {
 		use crate::strings::Key;
-		pub const TITLE_ONE: Key = Key(629);
-		pub const TITLE_OTHER: Key = Key(630);
-		pub const YOU: Key = Key(631);
-		pub const NEXT: Key = Key(632);
-		pub const SEND_NOW: Key = Key(633);
-		pub const REMOVE: Key = Key(634);
-		pub const TITLE_MANY: Key = Key(2109);
+		pub const TITLE_ONE: Key = Key(637);
+		pub const TITLE_OTHER: Key = Key(638);
+		pub const YOU: Key = Key(639);
+		pub const NEXT: Key = Key(640);
+		pub const SEND_NOW: Key = Key(641);
+		pub const REMOVE: Key = Key(642);
+		pub const TITLE_MANY: Key = Key(2126);
 	}
 	pub mod reply {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(635);
-		pub const JUMP: Key = Key(636);
-		pub const DISMISS: Key = Key(637);
-		pub const DISMISS_FROM: Key = Key(638);
-		pub const EXCERPT: Key = Key(639);
+		pub const LABEL: Key = Key(643);
+		pub const JUMP: Key = Key(644);
+		pub const DISMISS: Key = Key(645);
+		pub const DISMISS_FROM: Key = Key(646);
+		pub const EXCERPT: Key = Key(647);
 	}
 	pub mod rich_block {
 		use crate::strings::Key;
-		pub const BUILDING: Key = Key(620);
+		pub const BUILDING: Key = Key(628);
 		pub mod pending {
 			use crate::strings::Key;
-			pub const INTERACTIVE: Key = Key(621);
-			pub const GALLERY: Key = Key(622);
-			pub const ILLUSTRATED_LIST: Key = Key(623);
-			pub const CHECKLIST: Key = Key(624);
-			pub const COLLAPSIBLE: Key = Key(625);
-			pub const WEB_PAGE: Key = Key(626);
-			pub const VIDEO: Key = Key(627);
-			pub const MAP: Key = Key(628);
+			pub const INTERACTIVE: Key = Key(629);
+			pub const GALLERY: Key = Key(630);
+			pub const ILLUSTRATED_LIST: Key = Key(631);
+			pub const CHECKLIST: Key = Key(632);
+			pub const COLLAPSIBLE: Key = Key(633);
+			pub const WEB_PAGE: Key = Key(634);
+			pub const VIDEO: Key = Key(635);
+			pub const MAP: Key = Key(636);
 		}
 	}
 	pub mod routines {
 		pub mod confirm {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1100);
-			pub const DESCRIPTION: Key = Key(1101);
-			pub const LABEL: Key = Key(1102);
-			pub const FAILURE: Key = Key(1103);
+			pub const TITLE: Key = Key(1108);
+			pub const DESCRIPTION: Key = Key(1109);
+			pub const LABEL: Key = Key(1110);
+			pub const FAILURE: Key = Key(1111);
 		}
 		pub mod detail {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1073);
-			pub const BACK: Key = Key(1074);
+			pub const TITLE: Key = Key(1081);
+			pub const BACK: Key = Key(1082);
 			pub mod history {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1080);
-				pub const READING: Key = Key(1081);
-				pub const COUNTED_ONE: Key = Key(1082);
-				pub const COUNTED_OTHER: Key = Key(1083);
-				pub const PAGE_ONE: Key = Key(1084);
-				pub const PAGE_OTHER: Key = Key(1085);
-				pub const REPORTED_ONE: Key = Key(1086);
-				pub const REPORTED_OTHER: Key = Key(1087);
-				pub const LATEST: Key = Key(1088);
-				pub const COUNTED_MANY: Key = Key(2124);
-				pub const PAGE_MANY: Key = Key(2125);
-				pub const REPORTED_MANY: Key = Key(2126);
+				pub const LABEL: Key = Key(1088);
+				pub const READING: Key = Key(1089);
+				pub const COUNTED_ONE: Key = Key(1090);
+				pub const COUNTED_OTHER: Key = Key(1091);
+				pub const PAGE_ONE: Key = Key(1092);
+				pub const PAGE_OTHER: Key = Key(1093);
+				pub const REPORTED_ONE: Key = Key(1094);
+				pub const REPORTED_OTHER: Key = Key(1095);
+				pub const LATEST: Key = Key(1096);
+				pub const COUNTED_MANY: Key = Key(2141);
+				pub const PAGE_MANY: Key = Key(2142);
+				pub const REPORTED_MANY: Key = Key(2143);
 				pub mod empty {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(1094);
-					pub const DESCRIPTION: Key = Key(1095);
+					pub const TITLE: Key = Key(1102);
+					pub const DESCRIPTION: Key = Key(1103);
 				}
 				pub mod failure {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(1096);
-					pub const DESCRIPTION: Key = Key(1097);
+					pub const TITLE: Key = Key(1104);
+					pub const DESCRIPTION: Key = Key(1105);
 				}
 				pub mod outcome {
 					use crate::strings::Key;
-					pub const REPORTED: Key = Key(1089);
-					pub const NOTHING: Key = Key(1090);
-					pub const SKIPPED: Key = Key(1091);
-					pub const FAILED: Key = Key(1092);
-					pub const RUNNING: Key = Key(1093);
+					pub const REPORTED: Key = Key(1097);
+					pub const NOTHING: Key = Key(1098);
+					pub const SKIPPED: Key = Key(1099);
+					pub const FAILED: Key = Key(1100);
+					pub const RUNNING: Key = Key(1101);
 				}
 			}
 			pub mod run_now {
 				use crate::strings::Key;
-				pub const ACTION: Key = Key(1075);
+				pub const ACTION: Key = Key(1083);
 				pub mod refusal {
 					use crate::strings::Key;
-					pub const DISABLED: Key = Key(1076);
-					pub const FILTER: Key = Key(1077);
-					pub const DEDUPE_VALUE_MISSING: Key = Key(1078);
-					pub const ALREADY_SEEN: Key = Key(1079);
+					pub const DISABLED: Key = Key(1084);
+					pub const FILTER: Key = Key(1085);
+					pub const DEDUPE_VALUE_MISSING: Key = Key(1086);
+					pub const ALREADY_SEEN: Key = Key(1087);
 				}
 			}
 		}
 		pub mod empty {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1104);
-			pub const DESCRIPTION: Key = Key(1105);
+			pub const TITLE: Key = Key(1112);
+			pub const DESCRIPTION: Key = Key(1113);
 		}
 		pub mod form {
 			use crate::strings::Key;
-			pub const NEW: Key = Key(1014);
-			pub const EDIT: Key = Key(1015);
-			pub const BACK: Key = Key(1016);
-			pub const SAVE: Key = Key(1017);
+			pub const NEW: Key = Key(1022);
+			pub const EDIT: Key = Key(1023);
+			pub const BACK: Key = Key(1024);
+			pub const SAVE: Key = Key(1025);
 			pub mod error {
 				use crate::strings::Key;
-				pub const BLANK_TITLE: Key = Key(1067);
-				pub const BLANK_INSTRUCTION: Key = Key(1068);
-				pub const BLANK_VALUE: Key = Key(1069);
-				pub const UNTYPED_COMPARISON: Key = Key(1070);
-				pub const UNREADABLE_EXPRESSION: Key = Key(1071);
-				pub const UNSUPPORTED_OPERATOR: Key = Key(1072);
+				pub const BLANK_TITLE: Key = Key(1075);
+				pub const BLANK_INSTRUCTION: Key = Key(1076);
+				pub const BLANK_VALUE: Key = Key(1077);
+				pub const UNTYPED_COMPARISON: Key = Key(1078);
+				pub const UNREADABLE_EXPRESSION: Key = Key(1079);
+				pub const UNSUPPORTED_OPERATOR: Key = Key(1080);
 			}
 			pub mod expression {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1025);
-				pub const PLACEHOLDER: Key = Key(1026);
+				pub const LABEL: Key = Key(1033);
+				pub const PLACEHOLDER: Key = Key(1034);
 			}
 			pub mod filter {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1037);
-				pub const EVERY_EVENT: Key = Key(1038);
-				pub const ADD: Key = Key(1039);
-				pub const ROW: Key = Key(1040);
-				pub const REMOVE: Key = Key(1041);
+				pub const LABEL: Key = Key(1045);
+				pub const EVERY_EVENT: Key = Key(1046);
+				pub const ADD: Key = Key(1047);
+				pub const ROW: Key = Key(1048);
+				pub const REMOVE: Key = Key(1049);
 				pub mod field {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1045);
-					pub const OTHER_PATH: Key = Key(1046);
+					pub const LABEL: Key = Key(1053);
+					pub const OTHER_PATH: Key = Key(1054);
 				}
 				pub mod field_types {
 					use crate::strings::Key;
-					pub const STRING: Key = Key(1063);
-					pub const NUMBER: Key = Key(1064);
-					pub const BOOLEAN: Key = Key(1065);
-					pub const DATETIME: Key = Key(1066);
+					pub const STRING: Key = Key(1071);
+					pub const NUMBER: Key = Key(1072);
+					pub const BOOLEAN: Key = Key(1073);
+					pub const DATETIME: Key = Key(1074);
 				}
 				pub mod match_mode {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1042);
-					pub const ALL: Key = Key(1043);
-					pub const ANY: Key = Key(1044);
+					pub const LABEL: Key = Key(1050);
+					pub const ALL: Key = Key(1051);
+					pub const ANY: Key = Key(1052);
 				}
 				pub mod operator {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1049);
+					pub const LABEL: Key = Key(1057);
 				}
 				pub mod operators {
 					use crate::strings::Key;
-					pub const EXISTS: Key = Key(1053);
-					pub const NOT_EXISTS: Key = Key(1054);
-					pub const EQUALS: Key = Key(1055);
-					pub const NOT_EQUALS: Key = Key(1056);
-					pub const CONTAINS: Key = Key(1057);
-					pub const NOT_CONTAINS: Key = Key(1058);
-					pub const STARTS_WITH: Key = Key(1059);
-					pub const ENDS_WITH: Key = Key(1060);
-					pub const GT: Key = Key(1061);
-					pub const LT: Key = Key(1062);
+					pub const EXISTS: Key = Key(1061);
+					pub const NOT_EXISTS: Key = Key(1062);
+					pub const EQUALS: Key = Key(1063);
+					pub const NOT_EQUALS: Key = Key(1064);
+					pub const CONTAINS: Key = Key(1065);
+					pub const NOT_CONTAINS: Key = Key(1066);
+					pub const STARTS_WITH: Key = Key(1067);
+					pub const ENDS_WITH: Key = Key(1068);
+					pub const GT: Key = Key(1069);
+					pub const LT: Key = Key(1070);
 				}
 				pub mod path {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1047);
-					pub const PLACEHOLDER: Key = Key(1048);
+					pub const LABEL: Key = Key(1055);
+					pub const PLACEHOLDER: Key = Key(1056);
 				}
 				pub mod value {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1050);
-					pub const TRUE: Key = Key(1051);
-					pub const FALSE: Key = Key(1052);
+					pub const LABEL: Key = Key(1058);
+					pub const TRUE: Key = Key(1059);
+					pub const FALSE: Key = Key(1060);
 				}
 			}
 			pub mod instruction {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1020);
-				pub const PLACEHOLDER: Key = Key(1021);
+				pub const LABEL: Key = Key(1028);
+				pub const PLACEHOLDER: Key = Key(1029);
 			}
 			pub mod path {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1027);
-				pub const PLACEHOLDER: Key = Key(1028);
+				pub const LABEL: Key = Key(1035);
+				pub const PLACEHOLDER: Key = Key(1036);
 			}
 			pub mod source {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1022);
-				pub const PLACEHOLDER: Key = Key(1023);
-				pub const TIED: Key = Key(1024);
+				pub const LABEL: Key = Key(1030);
+				pub const PLACEHOLDER: Key = Key(1031);
+				pub const TIED: Key = Key(1032);
 			}
 			pub mod title {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1018);
-				pub const PLACEHOLDER: Key = Key(1019);
+				pub const LABEL: Key = Key(1026);
+				pub const PLACEHOLDER: Key = Key(1027);
 			}
 			pub mod webhook {
 				use crate::strings::Key;
-				pub const URL: Key = Key(1029);
-				pub const KEY: Key = Key(1030);
-				pub const HEADER: Key = Key(1031);
-				pub const COPY: Key = Key(1032);
-				pub const COPIED: Key = Key(1033);
-				pub const READING: Key = Key(1034);
-				pub const PENDING: Key = Key(1035);
-				pub const FAILURE: Key = Key(1036);
+				pub const URL: Key = Key(1037);
+				pub const KEY: Key = Key(1038);
+				pub const HEADER: Key = Key(1039);
+				pub const COPY: Key = Key(1040);
+				pub const COPIED: Key = Key(1041);
+				pub const READING: Key = Key(1042);
+				pub const PENDING: Key = Key(1043);
+				pub const FAILURE: Key = Key(1044);
 			}
 		}
 		pub mod leave {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1106);
-			pub const DESCRIPTION: Key = Key(1107);
-			pub const ACTION: Key = Key(1108);
+			pub const TITLE: Key = Key(1114);
+			pub const DESCRIPTION: Key = Key(1115);
+			pub const ACTION: Key = Key(1116);
 		}
 		pub mod row {
 			use crate::strings::Key;
-			pub const DELETE: Key = Key(1098);
-			pub const STOPPED: Key = Key(1099);
+			pub const DELETE: Key = Key(1106);
+			pub const STOPPED: Key = Key(1107);
 		}
 	}
 	pub mod screen {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(810);
-		pub const IDENTITY: Key = Key(811);
-		pub const CONVERSATION_IDENTITY: Key = Key(812);
-		pub const PLACEHOLDER: Key = Key(813);
-		pub const ATTACHMENTS_REFUSED: Key = Key(818);
-		pub const RESTART: Key = Key(819);
+		pub const LABEL: Key = Key(818);
+		pub const IDENTITY: Key = Key(819);
+		pub const CONVERSATION_IDENTITY: Key = Key(820);
+		pub const PLACEHOLDER: Key = Key(821);
+		pub const ATTACHMENTS_REFUSED: Key = Key(826);
+		pub const RESTART: Key = Key(827);
 		pub mod approval {
 			use crate::strings::Key;
-			pub const DESCRIPTION: Key = Key(814);
-			pub const DESCRIPTION_NAMED: Key = Key(815);
-			pub const PATH: Key = Key(816);
+			pub const DESCRIPTION: Key = Key(822);
+			pub const DESCRIPTION_NAMED: Key = Key(823);
+			pub const PATH: Key = Key(824);
 		}
 		pub mod attachment {
 			use crate::strings::Key;
-			pub const MEGABYTES: Key = Key(938);
-			pub const STORAGE: Key = Key(939);
-			pub const UNKNOWN_CONVERSATION: Key = Key(940);
-			pub const TOO_MANY: Key = Key(941);
-			pub const TOO_LARGE: Key = Key(942);
-			pub const TOO_LARGE_TOGETHER: Key = Key(943);
-			pub const UNREADABLE: Key = Key(944);
-			pub const UNWRITABLE: Key = Key(945);
+			pub const MEGABYTES: Key = Key(946);
+			pub const STORAGE: Key = Key(947);
+			pub const UNKNOWN_CONVERSATION: Key = Key(948);
+			pub const TOO_MANY: Key = Key(949);
+			pub const TOO_LARGE: Key = Key(950);
+			pub const TOO_LARGE_TOGETHER: Key = Key(951);
+			pub const UNREADABLE: Key = Key(952);
+			pub const UNWRITABLE: Key = Key(953);
 		}
 		pub mod notice {
 			use crate::strings::Key;
-			pub const CRASHED: Key = Key(820);
-			pub const CRASHED_NAMED: Key = Key(821);
-			pub const RESUME_FAILED: Key = Key(822);
-			pub const SETTINGS_REJECTED: Key = Key(823);
-			pub const SETTINGS_REJECTED_NAMED: Key = Key(824);
-			pub const SERVER_ENV_REJECTED: Key = Key(825);
-			pub const NOT_AUTHENTICATED: Key = Key(826);
-			pub const UNAVAILABLE: Key = Key(827);
-			pub const UNAVAILABLE_NAMED: Key = Key(828);
-			pub const FAILED: Key = Key(829);
-			pub const STOP_FAILED: Key = Key(830);
-			pub const STOP_FAILED_NAMED: Key = Key(831);
-			pub const DOCK_BADGE_FAILED: Key = Key(832);
-			pub const HOST_ONLY: Key = Key(837);
-			pub const READ_FAILED: Key = Key(900);
+			pub const CRASHED: Key = Key(828);
+			pub const CRASHED_NAMED: Key = Key(829);
+			pub const RESUME_FAILED: Key = Key(830);
+			pub const SETTINGS_REJECTED: Key = Key(831);
+			pub const SETTINGS_REJECTED_NAMED: Key = Key(832);
+			pub const SERVER_ENV_REJECTED: Key = Key(833);
+			pub const NOT_AUTHENTICATED: Key = Key(834);
+			pub const UNAVAILABLE: Key = Key(835);
+			pub const UNAVAILABLE_NAMED: Key = Key(836);
+			pub const FAILED: Key = Key(837);
+			pub const STOP_FAILED: Key = Key(838);
+			pub const STOP_FAILED_NAMED: Key = Key(839);
+			pub const DOCK_BADGE_FAILED: Key = Key(840);
+			pub const HOST_ONLY: Key = Key(845);
+			pub const READ_FAILED: Key = Key(908);
 			pub mod describe_refused {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(840);
-				pub const DESCRIPTION: Key = Key(841);
+				pub const TITLE: Key = Key(848);
+				pub const DESCRIPTION: Key = Key(849);
 			}
 			pub mod host_offline {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(838);
-				pub const DESCRIPTION: Key = Key(839);
+				pub const TITLE: Key = Key(846);
+				pub const DESCRIPTION: Key = Key(847);
 			}
 			pub mod join_refused {
 				pub mod bad_signature {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(878);
-					pub const DESCRIPTION: Key = Key(879);
+					pub const TITLE: Key = Key(886);
+					pub const DESCRIPTION: Key = Key(887);
 				}
 				pub mod could_not_accept {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(872);
-					pub const DESCRIPTION: Key = Key(873);
-				}
-				pub mod invitation_expired {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(864);
-					pub const DESCRIPTION: Key = Key(865);
-				}
-				pub mod invitation_other_email {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(870);
-					pub const DESCRIPTION: Key = Key(871);
-				}
-				pub mod invitation_used {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(868);
-					pub const DESCRIPTION: Key = Key(869);
-				}
-				pub mod invitation_withdrawn {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(866);
-					pub const DESCRIPTION: Key = Key(867);
-				}
-				pub mod key_store {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(896);
-					pub const DESCRIPTION: Key = Key(897);
-				}
-				pub mod needs_sign_in {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(854);
-					pub const DESCRIPTION: Key = Key(855);
-				}
-				pub mod no_invitation {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(874);
-					pub const DESCRIPTION: Key = Key(875);
-				}
-				pub mod not_in_roster {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(876);
-					pub const DESCRIPTION: Key = Key(877);
-				}
-				pub mod owner_not_removable {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(852);
-					pub const DESCRIPTION: Key = Key(853);
-				}
-				pub mod proxy_unavailable {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(850);
-					pub const DESCRIPTION: Key = Key(851);
-				}
-				pub mod relay_refused {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(862);
-					pub const DESCRIPTION: Key = Key(863);
-				}
-				pub mod relay_unreachable {
-					use crate::strings::Key;
-					pub const TITLE: Key = Key(860);
-					pub const DESCRIPTION: Key = Key(861);
-				}
-				pub mod removed_by_rotation {
 					use crate::strings::Key;
 					pub const TITLE: Key = Key(880);
 					pub const DESCRIPTION: Key = Key(881);
 				}
-				pub mod session_revoked {
+				pub mod invitation_expired {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(856);
-					pub const DESCRIPTION: Key = Key(857);
+					pub const TITLE: Key = Key(872);
+					pub const DESCRIPTION: Key = Key(873);
 				}
-				pub mod session_store {
+				pub mod invitation_other_email {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(878);
+					pub const DESCRIPTION: Key = Key(879);
+				}
+				pub mod invitation_used {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(876);
+					pub const DESCRIPTION: Key = Key(877);
+				}
+				pub mod invitation_withdrawn {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(874);
+					pub const DESCRIPTION: Key = Key(875);
+				}
+				pub mod key_store {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(904);
+					pub const DESCRIPTION: Key = Key(905);
+				}
+				pub mod needs_sign_in {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(862);
+					pub const DESCRIPTION: Key = Key(863);
+				}
+				pub mod no_invitation {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(882);
+					pub const DESCRIPTION: Key = Key(883);
+				}
+				pub mod not_in_roster {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(884);
+					pub const DESCRIPTION: Key = Key(885);
+				}
+				pub mod owner_not_removable {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(860);
+					pub const DESCRIPTION: Key = Key(861);
+				}
+				pub mod proxy_unavailable {
 					use crate::strings::Key;
 					pub const TITLE: Key = Key(858);
 					pub const DESCRIPTION: Key = Key(859);
 				}
+				pub mod relay_refused {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(870);
+					pub const DESCRIPTION: Key = Key(871);
+				}
+				pub mod relay_unreachable {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(868);
+					pub const DESCRIPTION: Key = Key(869);
+				}
+				pub mod removed_by_rotation {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(888);
+					pub const DESCRIPTION: Key = Key(889);
+				}
+				pub mod session_revoked {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(864);
+					pub const DESCRIPTION: Key = Key(865);
+				}
+				pub mod session_store {
+					use crate::strings::Key;
+					pub const TITLE: Key = Key(866);
+					pub const DESCRIPTION: Key = Key(867);
+				}
 				pub mod storage {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(844);
-					pub const DESCRIPTION: Key = Key(845);
+					pub const TITLE: Key = Key(852);
+					pub const DESCRIPTION: Key = Key(853);
 				}
 				pub mod unavailable {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(842);
-					pub const DESCRIPTION: Key = Key(843);
+					pub const TITLE: Key = Key(850);
+					pub const DESCRIPTION: Key = Key(851);
 				}
 				pub mod undeliverable {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(848);
-					pub const DESCRIPTION: Key = Key(849);
+					pub const TITLE: Key = Key(856);
+					pub const DESCRIPTION: Key = Key(857);
 				}
 				pub mod unexpected {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(898);
-					pub const DESCRIPTION: Key = Key(899);
+					pub const TITLE: Key = Key(906);
+					pub const DESCRIPTION: Key = Key(907);
 				}
 				pub mod unknown_joined_space {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(846);
-					pub const DESCRIPTION: Key = Key(847);
+					pub const TITLE: Key = Key(854);
+					pub const DESCRIPTION: Key = Key(855);
 				}
 				pub mod waiting_for_host {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(882);
-					pub const DESCRIPTION: Key = Key(883);
+					pub const TITLE: Key = Key(890);
+					pub const DESCRIPTION: Key = Key(891);
 					pub mod reasons {
 						use crate::strings::Key;
-						pub const RELAY_UNREACHABLE: Key = Key(884);
-						pub const REKEY_SEND_FAILED: Key = Key(885);
-						pub const HOST_SILENT: Key = Key(886);
-						pub const SOCKET_CLOSED: Key = Key(887);
-						pub const REKEY_NOT_VERIFIED: Key = Key(888);
-						pub const NOT_MEMBER: Key = Key(889);
-						pub const UNKNOWN_INSTANCE: Key = Key(890);
-						pub const DEVICE_KEYS_UNREADABLE: Key = Key(891);
-						pub const DEVICE_AWAITING_APPROVAL: Key = Key(892);
-						pub const SOCKET_URL_FAILED: Key = Key(893);
-						pub const ROSTER_MISSING: Key = Key(894);
-						pub const KEYCHAIN_READ_FAILED: Key = Key(895);
+						pub const RELAY_UNREACHABLE: Key = Key(892);
+						pub const REKEY_SEND_FAILED: Key = Key(893);
+						pub const HOST_SILENT: Key = Key(894);
+						pub const SOCKET_CLOSED: Key = Key(895);
+						pub const REKEY_NOT_VERIFIED: Key = Key(896);
+						pub const NOT_MEMBER: Key = Key(897);
+						pub const UNKNOWN_INSTANCE: Key = Key(898);
+						pub const DEVICE_KEYS_UNREADABLE: Key = Key(899);
+						pub const DEVICE_AWAITING_APPROVAL: Key = Key(900);
+						pub const SOCKET_URL_FAILED: Key = Key(901);
+						pub const ROSTER_MISSING: Key = Key(902);
+						pub const KEYCHAIN_READ_FAILED: Key = Key(903);
 					}
 				}
 			}
 			pub mod question_run_failed {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(833);
-				pub const DESCRIPTION: Key = Key(834);
+				pub const TITLE: Key = Key(841);
+				pub const DESCRIPTION: Key = Key(842);
 			}
 			pub mod unauthorized {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(835);
-				pub const DESCRIPTION: Key = Key(836);
+				pub const TITLE: Key = Key(843);
+				pub const DESCRIPTION: Key = Key(844);
 			}
 		}
 		pub mod question {
 			use crate::strings::Key;
-			pub const RECALL: Key = Key(817);
+			pub const RECALL: Key = Key(825);
 		}
 		pub mod transport {
 			use crate::strings::Key;
-			pub const BINARY_NOT_FOUND: Key = Key(901);
-			pub const BINARY_NOT_FOUND_NAMED: Key = Key(902);
-			pub const NOT_AUTHENTICATED: Key = Key(903);
-			pub const NOT_CONNECTED: Key = Key(904);
-			pub const AUTH_CHECK_FAILED: Key = Key(905);
-			pub const SPAWN_FAILED: Key = Key(906);
-			pub const SPAWN_FAILED_NAMED: Key = Key(907);
-			pub const STARTUP_TIMEOUT: Key = Key(908);
-			pub const STARTUP_TIMEOUT_NAMED: Key = Key(909);
-			pub const CRASHED: Key = Key(910);
-			pub const CRASHED_NAMED: Key = Key(911);
-			pub const CRASHED_DETAIL: Key = Key(912);
-			pub const CRASHED_DETAIL_NAMED: Key = Key(913);
-			pub const CRASHED_UNKNOWN_CODE: Key = Key(914);
-			pub const CRASHED_UNKNOWN_CODE_NAMED: Key = Key(915);
-			pub const CRASHED_UNKNOWN_CODE_DETAIL: Key = Key(916);
-			pub const CRASHED_UNKNOWN_CODE_DETAIL_NAMED: Key = Key(917);
-			pub const RESUME_FAILED: Key = Key(918);
-			pub const RESUME_FAILED_NAMED: Key = Key(919);
-			pub const INVALID_FRAME: Key = Key(920);
-			pub const SETTINGS_REJECTED: Key = Key(921);
-			pub const SERVER_ENV_REJECTED: Key = Key(922);
-			pub const NOT_STARTED: Key = Key(923);
-			pub const TURN_ALREADY_RUNNING: Key = Key(924);
-			pub const TRANSITION_IN_PROGRESS: Key = Key(925);
-			pub const NO_ACTIVE_TURN: Key = Key(926);
-			pub const STALE_RUNTIME_SESSION: Key = Key(927);
-			pub const UNKNOWN_PERMISSION: Key = Key(928);
-			pub const WRITE_FAILED: Key = Key(929);
-			pub const RUN_LAPSED_SILENT: Key = Key(930);
-			pub const RUN_LAPSED_SILENT_NAMED: Key = Key(931);
-			pub const RUN_LAPSED_INTERRUPT: Key = Key(932);
-			pub const RUN_LAPSED_INTERRUPT_NAMED: Key = Key(933);
-			pub const RUN_LAPSED_TASKS_PENDING: Key = Key(934);
-			pub const RUN_LAPSED_TASKS_PENDING_NAMED: Key = Key(935);
-			pub const READ_FAILED: Key = Key(936);
-			pub const UNKNOWN_FAILURE: Key = Key(937);
+			pub const BINARY_NOT_FOUND: Key = Key(909);
+			pub const BINARY_NOT_FOUND_NAMED: Key = Key(910);
+			pub const NOT_AUTHENTICATED: Key = Key(911);
+			pub const NOT_CONNECTED: Key = Key(912);
+			pub const AUTH_CHECK_FAILED: Key = Key(913);
+			pub const SPAWN_FAILED: Key = Key(914);
+			pub const SPAWN_FAILED_NAMED: Key = Key(915);
+			pub const STARTUP_TIMEOUT: Key = Key(916);
+			pub const STARTUP_TIMEOUT_NAMED: Key = Key(917);
+			pub const CRASHED: Key = Key(918);
+			pub const CRASHED_NAMED: Key = Key(919);
+			pub const CRASHED_DETAIL: Key = Key(920);
+			pub const CRASHED_DETAIL_NAMED: Key = Key(921);
+			pub const CRASHED_UNKNOWN_CODE: Key = Key(922);
+			pub const CRASHED_UNKNOWN_CODE_NAMED: Key = Key(923);
+			pub const CRASHED_UNKNOWN_CODE_DETAIL: Key = Key(924);
+			pub const CRASHED_UNKNOWN_CODE_DETAIL_NAMED: Key = Key(925);
+			pub const RESUME_FAILED: Key = Key(926);
+			pub const RESUME_FAILED_NAMED: Key = Key(927);
+			pub const INVALID_FRAME: Key = Key(928);
+			pub const SETTINGS_REJECTED: Key = Key(929);
+			pub const SERVER_ENV_REJECTED: Key = Key(930);
+			pub const NOT_STARTED: Key = Key(931);
+			pub const TURN_ALREADY_RUNNING: Key = Key(932);
+			pub const TRANSITION_IN_PROGRESS: Key = Key(933);
+			pub const NO_ACTIVE_TURN: Key = Key(934);
+			pub const STALE_RUNTIME_SESSION: Key = Key(935);
+			pub const UNKNOWN_PERMISSION: Key = Key(936);
+			pub const WRITE_FAILED: Key = Key(937);
+			pub const RUN_LAPSED_SILENT: Key = Key(938);
+			pub const RUN_LAPSED_SILENT_NAMED: Key = Key(939);
+			pub const RUN_LAPSED_INTERRUPT: Key = Key(940);
+			pub const RUN_LAPSED_INTERRUPT_NAMED: Key = Key(941);
+			pub const RUN_LAPSED_TASKS_PENDING: Key = Key(942);
+			pub const RUN_LAPSED_TASKS_PENDING_NAMED: Key = Key(943);
+			pub const READ_FAILED: Key = Key(944);
+			pub const UNKNOWN_FAILURE: Key = Key(945);
 		}
 	}
 	pub mod selection_quote {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(754);
-		pub const GROUP: Key = Key(755);
-		pub const REMOVE: Key = Key(756);
+		pub const LABEL: Key = Key(762);
+		pub const GROUP: Key = Key(763);
+		pub const REMOVE: Key = Key(764);
 	}
 	pub mod space_access_banner {
 		pub mod offline {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(687);
-			pub const BODY: Key = Key(688);
+			pub const TITLE: Key = Key(695);
+			pub const BODY: Key = Key(696);
 			pub mod reasons {
 				use crate::strings::Key;
-				pub const RELAY_UNREACHABLE: Key = Key(689);
-				pub const REKEY_SEND_FAILED: Key = Key(690);
-				pub const HOST_SILENT: Key = Key(691);
-				pub const SOCKET_CLOSED: Key = Key(692);
-				pub const REKEY_NOT_VERIFIED: Key = Key(693);
-				pub const NOT_MEMBER: Key = Key(694);
-				pub const UNKNOWN_INSTANCE: Key = Key(695);
-				pub const DEVICE_KEYS_UNREADABLE: Key = Key(696);
-				pub const DEVICE_AWAITING_APPROVAL: Key = Key(697);
-				pub const SOCKET_URL_FAILED: Key = Key(698);
-				pub const ROSTER_MISSING: Key = Key(699);
-				pub const KEYCHAIN_READ_FAILED: Key = Key(700);
+				pub const RELAY_UNREACHABLE: Key = Key(697);
+				pub const REKEY_SEND_FAILED: Key = Key(698);
+				pub const HOST_SILENT: Key = Key(699);
+				pub const SOCKET_CLOSED: Key = Key(700);
+				pub const REKEY_NOT_VERIFIED: Key = Key(701);
+				pub const NOT_MEMBER: Key = Key(702);
+				pub const UNKNOWN_INSTANCE: Key = Key(703);
+				pub const DEVICE_KEYS_UNREADABLE: Key = Key(704);
+				pub const DEVICE_AWAITING_APPROVAL: Key = Key(705);
+				pub const SOCKET_URL_FAILED: Key = Key(706);
+				pub const ROSTER_MISSING: Key = Key(707);
+				pub const KEYCHAIN_READ_FAILED: Key = Key(708);
 			}
 		}
 	}
 	pub mod table {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(773);
-		pub const COPY: Key = Key(774);
-		pub const COPY_ANNOUNCED: Key = Key(775);
+		pub const LABEL: Key = Key(781);
+		pub const COPY: Key = Key(782);
+		pub const COPY_ANNOUNCED: Key = Key(783);
 	}
 	pub mod task {
 		use crate::strings::Key;
-		pub const DONE: Key = Key(777);
-		pub const TODO: Key = Key(778);
+		pub const DONE: Key = Key(785);
+		pub const TODO: Key = Key(786);
 	}
 	pub mod tool_approval {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(719);
-		pub const SENSITIVE: Key = Key(723);
-		pub const INPUT: Key = Key(724);
-		pub const ALLOW_ONCE: Key = Key(725);
-		pub const DENY: Key = Key(726);
+		pub const TITLE: Key = Key(727);
+		pub const SENSITIVE: Key = Key(731);
+		pub const INPUT: Key = Key(732);
+		pub const ALLOW_ONCE: Key = Key(733);
+		pub const DENY: Key = Key(734);
 		pub mod status {
 			use crate::strings::Key;
-			pub const PENDING: Key = Key(720);
-			pub const ALLOWED: Key = Key(721);
-			pub const DENIED: Key = Key(722);
+			pub const PENDING: Key = Key(728);
+			pub const ALLOWED: Key = Key(729);
+			pub const DENIED: Key = Key(730);
 		}
 	}
 	pub mod tool_question {
 		use crate::strings::Key;
-		pub const FREE_TEXT: Key = Key(727);
-		pub const FREE_TEXT_PLACEHOLDER: Key = Key(728);
-		pub const BLANK: Key = Key(729);
-		pub const PREVIEW: Key = Key(730);
-		pub const SUBMIT: Key = Key(731);
-		pub const SEND: Key = Key(732);
-		pub const NEXT: Key = Key(733);
-		pub const NEXT_LABEL: Key = Key(734);
-		pub const CONTINUE: Key = Key(735);
-		pub const SKIP: Key = Key(736);
-		pub const MINIMISE: Key = Key(737);
-		pub const PICK_ANY: Key = Key(738);
-		pub const COPY: Key = Key(743);
-		pub const COPIED: Key = Key(744);
-		pub const COPY_ANNOUNCED: Key = Key(745);
-		pub const COPY_FAILED: Key = Key(746);
+		pub const FREE_TEXT: Key = Key(735);
+		pub const FREE_TEXT_PLACEHOLDER: Key = Key(736);
+		pub const BLANK: Key = Key(737);
+		pub const PREVIEW: Key = Key(738);
+		pub const SUBMIT: Key = Key(739);
+		pub const SEND: Key = Key(740);
+		pub const NEXT: Key = Key(741);
+		pub const NEXT_LABEL: Key = Key(742);
+		pub const CONTINUE: Key = Key(743);
+		pub const SKIP: Key = Key(744);
+		pub const MINIMISE: Key = Key(745);
+		pub const PICK_ANY: Key = Key(746);
+		pub const COPY: Key = Key(751);
+		pub const COPIED: Key = Key(752);
+		pub const COPY_ANNOUNCED: Key = Key(753);
+		pub const COPY_FAILED: Key = Key(754);
 		pub mod waiting {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(739);
-			pub const UNNAMED_TITLE: Key = Key(740);
-			pub const MARK: Key = Key(741);
-			pub const ANSWER: Key = Key(742);
+			pub const TITLE: Key = Key(747);
+			pub const UNNAMED_TITLE: Key = Key(748);
+			pub const MARK: Key = Key(749);
+			pub const ANSWER: Key = Key(750);
 		}
 	}
 	pub mod transcript {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(569);
-		pub const LOAD_NEWER: Key = Key(570);
-		pub const JUMP_TO_LATEST: Key = Key(571);
-		pub const NEW_MESSAGES: Key = Key(572);
-		pub const START_OF_HISTORY: Key = Key(573);
-		pub const SHOW_MORE: Key = Key(583);
-		pub const SHOW_LESS: Key = Key(584);
+		pub const LABEL: Key = Key(577);
+		pub const LOAD_NEWER: Key = Key(578);
+		pub const JUMP_TO_LATEST: Key = Key(579);
+		pub const NEW_MESSAGES: Key = Key(580);
+		pub const START_OF_HISTORY: Key = Key(581);
+		pub const SHOW_MORE: Key = Key(591);
+		pub const SHOW_LESS: Key = Key(592);
 		pub mod author {
 			use crate::strings::Key;
-			pub const LEAD: Key = Key(585);
-			pub const DELETED: Key = Key(586);
+			pub const LEAD: Key = Key(593);
+			pub const DELETED: Key = Key(594);
 		}
 		pub mod cause {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(587);
-			pub const MISSION: Key = Key(588);
+			pub const LABEL: Key = Key(595);
+			pub const MISSION: Key = Key(596);
 			pub mod unavailable {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(589);
-				pub const DESCRIPTION: Key = Key(590);
-				pub const SOLO_DESCRIPTION: Key = Key(591);
+				pub const TITLE: Key = Key(597);
+				pub const DESCRIPTION: Key = Key(598);
+				pub const SOLO_DESCRIPTION: Key = Key(599);
 			}
 		}
 		pub mod day {
 			use crate::strings::Key;
-			pub const TODAY: Key = Key(574);
-			pub const YESTERDAY: Key = Key(575);
+			pub const TODAY: Key = Key(582);
+			pub const YESTERDAY: Key = Key(583);
 		}
 		pub mod landing {
 			pub mod unavailable {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(576);
-				pub const DESCRIPTION: Key = Key(577);
+				pub const TITLE: Key = Key(584);
+				pub const DESCRIPTION: Key = Key(585);
 			}
 		}
 		pub mod mention {
 			use crate::strings::Key;
-			pub const UNKNOWN: Key = Key(592);
-			pub const COUNTED_ONE: Key = Key(593);
-			pub const COUNTED_OTHER: Key = Key(594);
-			pub const COUNTED_MANY: Key = Key(2104);
+			pub const UNKNOWN: Key = Key(600);
+			pub const COUNTED_ONE: Key = Key(601);
+			pub const COUNTED_OTHER: Key = Key(602);
+			pub const COUNTED_MANY: Key = Key(2121);
 			pub mod never_started {
 				use crate::strings::Key;
-				pub const DESCRIPTION: Key = Key(603);
+				pub const DESCRIPTION: Key = Key(611);
 			}
 			pub mod not_started {
 				use crate::strings::Key;
-				pub const TITLE_ONE: Key = Key(599);
-				pub const TITLE_OTHER: Key = Key(600);
-				pub const DESCRIPTION_ONE: Key = Key(601);
-				pub const DESCRIPTION_OTHER: Key = Key(602);
-				pub const TITLE_MANY: Key = Key(2107);
-				pub const DESCRIPTION_MANY: Key = Key(2108);
+				pub const TITLE_ONE: Key = Key(607);
+				pub const TITLE_OTHER: Key = Key(608);
+				pub const DESCRIPTION_ONE: Key = Key(609);
+				pub const DESCRIPTION_OTHER: Key = Key(610);
+				pub const TITLE_MANY: Key = Key(2124);
+				pub const DESCRIPTION_MANY: Key = Key(2125);
 			}
 			pub mod summon_limit {
 				use crate::strings::Key;
-				pub const DESCRIPTION: Key = Key(604);
+				pub const DESCRIPTION: Key = Key(612);
 			}
 			pub mod unresolved {
 				use crate::strings::Key;
-				pub const TITLE_ONE: Key = Key(595);
-				pub const TITLE_OTHER: Key = Key(596);
-				pub const DESCRIPTION_ONE: Key = Key(597);
-				pub const DESCRIPTION_OTHER: Key = Key(598);
-				pub const TITLE_MANY: Key = Key(2105);
-				pub const DESCRIPTION_MANY: Key = Key(2106);
+				pub const TITLE_ONE: Key = Key(603);
+				pub const TITLE_OTHER: Key = Key(604);
+				pub const DESCRIPTION_ONE: Key = Key(605);
+				pub const DESCRIPTION_OTHER: Key = Key(606);
+				pub const TITLE_MANY: Key = Key(2122);
+				pub const DESCRIPTION_MANY: Key = Key(2123);
 			}
 		}
 		pub mod message {
 			use crate::strings::Key;
-			pub const USER: Key = Key(578);
-			pub const ASSISTANT: Key = Key(579);
-			pub const PERSON: Key = Key(580);
-			pub const MISSION: Key = Key(581);
-			pub const ACTIONS: Key = Key(582);
+			pub const USER: Key = Key(586);
+			pub const ASSISTANT: Key = Key(587);
+			pub const PERSON: Key = Key(588);
+			pub const MISSION: Key = Key(589);
+			pub const ACTIONS: Key = Key(590);
 		}
 	}
 	pub mod turn {
 		use crate::strings::Key;
-		pub const COPY: Key = Key(605);
-		pub const YOU: Key = Key(606);
-		pub const REPLY: Key = Key(607);
-		pub const SELECTION: Key = Key(608);
-		pub const PIN: Key = Key(609);
-		pub const UNPIN: Key = Key(610);
-		pub const SAVE_AS_DOCUMENT: Key = Key(611);
-		pub const COPIED: Key = Key(612);
-		pub const RETRY: Key = Key(613);
-		pub const CANCEL: Key = Key(614);
-		pub const NOT_SENT: Key = Key(618);
-		pub const NOT_SENT_BECAUSE: Key = Key(619);
+		pub const COPY: Key = Key(613);
+		pub const YOU: Key = Key(614);
+		pub const REPLY: Key = Key(615);
+		pub const SELECTION: Key = Key(616);
+		pub const PIN: Key = Key(617);
+		pub const UNPIN: Key = Key(618);
+		pub const SAVE_AS_DOCUMENT: Key = Key(619);
+		pub const COPIED: Key = Key(620);
+		pub const RETRY: Key = Key(621);
+		pub const CANCEL: Key = Key(622);
+		pub const NOT_SENT: Key = Key(626);
+		pub const NOT_SENT_BECAUSE: Key = Key(627);
 		pub mod footer {
 			use crate::strings::Key;
-			pub const CANCELLED: Key = Key(615);
-			pub const FAILED: Key = Key(616);
-			pub const QUEUED: Key = Key(617);
+			pub const CANCELLED: Key = Key(623);
+			pub const FAILED: Key = Key(624);
+			pub const QUEUED: Key = Key(625);
 		}
 	}
 	pub mod web_sources {
 		use crate::strings::Key;
-		pub const LIST: Key = Key(780);
-		pub const COUNTED_ONE: Key = Key(781);
-		pub const COUNTED_OTHER: Key = Key(782);
-		pub const OPEN: Key = Key(783);
-		pub const OPEN_TITLED: Key = Key(784);
-		pub const COUNTED_MANY: Key = Key(2122);
+		pub const LIST: Key = Key(788);
+		pub const COUNTED_ONE: Key = Key(789);
+		pub const COUNTED_OTHER: Key = Key(790);
+		pub const OPEN: Key = Key(791);
+		pub const OPEN_TITLED: Key = Key(792);
+		pub const COUNTED_MANY: Key = Key(2139);
 	}
 	pub mod work_line {
 		use crate::strings::Key;
-		pub const AND: Key = Key(668);
-		pub const AGENTS_ONE: Key = Key(669);
-		pub const AGENTS_OTHER: Key = Key(670);
-		pub const STATE_ONE: Key = Key(671);
-		pub const STATE_OTHER: Key = Key(672);
-		pub const OTHERS_ONE: Key = Key(673);
-		pub const OTHERS_OTHER: Key = Key(674);
-		pub const RETRY: Key = Key(683);
-		pub const TOGGLE: Key = Key(684);
-		pub const AGENTS_MANY: Key = Key(2112);
-		pub const STATE_MANY: Key = Key(2113);
-		pub const OTHERS_MANY: Key = Key(2114);
+		pub const AND: Key = Key(676);
+		pub const AGENTS_ONE: Key = Key(677);
+		pub const AGENTS_OTHER: Key = Key(678);
+		pub const STATE_ONE: Key = Key(679);
+		pub const STATE_OTHER: Key = Key(680);
+		pub const OTHERS_ONE: Key = Key(681);
+		pub const OTHERS_OTHER: Key = Key(682);
+		pub const RETRY: Key = Key(691);
+		pub const TOGGLE: Key = Key(692);
+		pub const AGENTS_MANY: Key = Key(2129);
+		pub const STATE_MANY: Key = Key(2130);
+		pub const OTHERS_MANY: Key = Key(2131);
 		pub mod breakdown {
 			use crate::strings::Key;
-			pub const WRITING_ONE: Key = Key(675);
-			pub const WRITING_OTHER: Key = Key(676);
-			pub const TOOL_ONE: Key = Key(677);
-			pub const TOOL_OTHER: Key = Key(678);
-			pub const THINKING_ONE: Key = Key(679);
-			pub const THINKING_OTHER: Key = Key(680);
-			pub const UP_NEXT_ONE: Key = Key(681);
-			pub const UP_NEXT_OTHER: Key = Key(682);
-			pub const WRITING_MANY: Key = Key(2115);
-			pub const TOOL_MANY: Key = Key(2116);
-			pub const THINKING_MANY: Key = Key(2117);
-			pub const UP_NEXT_MANY: Key = Key(2118);
+			pub const WRITING_ONE: Key = Key(683);
+			pub const WRITING_OTHER: Key = Key(684);
+			pub const TOOL_ONE: Key = Key(685);
+			pub const TOOL_OTHER: Key = Key(686);
+			pub const THINKING_ONE: Key = Key(687);
+			pub const THINKING_OTHER: Key = Key(688);
+			pub const UP_NEXT_ONE: Key = Key(689);
+			pub const UP_NEXT_OTHER: Key = Key(690);
+			pub const WRITING_MANY: Key = Key(2132);
+			pub const TOOL_MANY: Key = Key(2133);
+			pub const THINKING_MANY: Key = Key(2134);
+			pub const UP_NEXT_MANY: Key = Key(2135);
 		}
 	}
 	pub mod working {
 		use crate::strings::Key;
-		pub const NAME: Key = Key(649);
-		pub const STATE: Key = Key(655);
-		pub const LABELLED: Key = Key(656);
-		pub const MCP: Key = Key(657);
-		pub const BACKGROUND_TASKS_ONE: Key = Key(658);
-		pub const BACKGROUND_TASKS_OTHER: Key = Key(659);
-		pub const WAITING_TITLED: Key = Key(660);
-		pub const UP_NEXT: Key = Key(661);
-		pub const STOP: Key = Key(662);
-		pub const BACKGROUND_TASKS_MANY: Key = Key(2111);
+		pub const NAME: Key = Key(657);
+		pub const STATE: Key = Key(663);
+		pub const LABELLED: Key = Key(664);
+		pub const MCP: Key = Key(665);
+		pub const BACKGROUND_TASKS_ONE: Key = Key(666);
+		pub const BACKGROUND_TASKS_OTHER: Key = Key(667);
+		pub const WAITING_TITLED: Key = Key(668);
+		pub const UP_NEXT: Key = Key(669);
+		pub const STOP: Key = Key(670);
+		pub const BACKGROUND_TASKS_MANY: Key = Key(2128);
 		pub mod line {
 			use crate::strings::Key;
-			pub const STATE: Key = Key(663);
-			pub const UP_NEXT: Key = Key(664);
-			pub const WAITING_TITLED: Key = Key(665);
-			pub const SEPARATOR: Key = Key(666);
-			pub const TITLED: Key = Key(667);
+			pub const STATE: Key = Key(671);
+			pub const UP_NEXT: Key = Key(672);
+			pub const WAITING_TITLED: Key = Key(673);
+			pub const SEPARATOR: Key = Key(674);
+			pub const TITLED: Key = Key(675);
 		}
 		pub mod verb {
 			use crate::strings::Key;
-			pub const THINKING: Key = Key(650);
-			pub const SEARCHING: Key = Key(651);
-			pub const WORKING: Key = Key(652);
-			pub const WRITING: Key = Key(653);
-			pub const WAITING: Key = Key(654);
+			pub const THINKING: Key = Key(658);
+			pub const SEARCHING: Key = Key(659);
+			pub const WORKING: Key = Key(660);
+			pub const WRITING: Key = Key(661);
+			pub const WAITING: Key = Key(662);
 		}
 	}
 }
 pub mod common {
 	use crate::strings::Key;
-	pub const SKIP_LINK: Key = Key(1299);
+	pub const SKIP_LINK: Key = Key(1314);
 	pub mod agent {
 		use crate::strings::Key;
-		pub const UNNAMED: Key = Key(1300);
+		pub const UNNAMED: Key = Key(1315);
 	}
 	pub mod board {
 		pub mod canvas {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1735);
-			pub const LOADING: Key = Key(1736);
-			pub const OBJECTS: Key = Key(1737);
+			pub const LABEL: Key = Key(1751);
+			pub const LOADING: Key = Key(1752);
+			pub const OBJECTS: Key = Key(1753);
 		}
 		pub mod card {
 			use crate::strings::Key;
-			pub const OPEN: Key = Key(1728);
-			pub const DRAWING_ONE: Key = Key(1729);
-			pub const DRAWING_OTHER: Key = Key(1730);
-			pub const AT_REST_ONE: Key = Key(1731);
-			pub const AT_REST_OTHER: Key = Key(1732);
-			pub const FAILED: Key = Key(1733);
-			pub const DRAWING_MANY: Key = Key(2145);
-			pub const AT_REST_MANY: Key = Key(2146);
+			pub const OPEN: Key = Key(1744);
+			pub const DRAWING_ONE: Key = Key(1745);
+			pub const DRAWING_OTHER: Key = Key(1746);
+			pub const AT_REST_ONE: Key = Key(1747);
+			pub const AT_REST_OTHER: Key = Key(1748);
+			pub const FAILED: Key = Key(1749);
+			pub const DRAWING_MANY: Key = Key(2162);
+			pub const AT_REST_MANY: Key = Key(2163);
 		}
 		pub mod connector {
 			use crate::strings::Key;
-			pub const EDIT_LABEL: Key = Key(1748);
+			pub const EDIT_LABEL: Key = Key(1764);
 		}
 		pub mod connector_flyout {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1749);
+			pub const LABEL: Key = Key(1765);
 			pub mod routing {
 				use crate::strings::Key;
-				pub const STRAIGHT: Key = Key(1750);
-				pub const ELBOW: Key = Key(1751);
+				pub const STRAIGHT: Key = Key(1766);
+				pub const ELBOW: Key = Key(1767);
 			}
 		}
 		pub mod dock {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1764);
+			pub const LABEL: Key = Key(1780);
 			pub mod tool {
 				use crate::strings::Key;
-				pub const SELECT: Key = Key(1765);
-				pub const HAND: Key = Key(1766);
-				pub const STICKY: Key = Key(1767);
-				pub const SHAPE: Key = Key(1768);
-				pub const TEXT: Key = Key(1769);
-				pub const CONNECTOR: Key = Key(1770);
-				pub const SECTION: Key = Key(1771);
-				pub const IMAGE: Key = Key(1772);
-				pub const LIBRARY: Key = Key(1773);
+				pub const SELECT: Key = Key(1781);
+				pub const HAND: Key = Key(1782);
+				pub const STICKY: Key = Key(1783);
+				pub const SHAPE: Key = Key(1784);
+				pub const TEXT: Key = Key(1785);
+				pub const CONNECTOR: Key = Key(1786);
+				pub const SECTION: Key = Key(1787);
+				pub const IMAGE: Key = Key(1788);
+				pub const LIBRARY: Key = Key(1789);
 			}
 		}
 		pub mod drop {
 			use crate::strings::Key;
-			pub const IMAGES_ONE: Key = Key(1777);
-			pub const IMAGES_OTHER: Key = Key(1778);
-			pub const FILES_ONE: Key = Key(1779);
-			pub const FILES_OTHER: Key = Key(1780);
-			pub const UNKNOWN: Key = Key(1781);
-			pub const IMAGES_MANY: Key = Key(2147);
-			pub const FILES_MANY: Key = Key(2148);
+			pub const IMAGES_ONE: Key = Key(1793);
+			pub const IMAGES_OTHER: Key = Key(1794);
+			pub const FILES_ONE: Key = Key(1795);
+			pub const FILES_OTHER: Key = Key(1796);
+			pub const UNKNOWN: Key = Key(1797);
+			pub const IMAGES_MANY: Key = Key(2164);
+			pub const FILES_MANY: Key = Key(2165);
 		}
 		pub mod empty {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1720);
-			pub const BODY: Key = Key(1721);
+			pub const TITLE: Key = Key(1736);
+			pub const BODY: Key = Key(1737);
 		}
 		pub mod library_card {
 			use crate::strings::Key;
-			pub const DOCUMENT_META: Key = Key(1734);
+			pub const DOCUMENT_META: Key = Key(1750);
 		}
 		pub mod object {
 			use crate::strings::Key;
-			pub const NAMED: Key = Key(1738);
-			pub const EDIT_TEXT: Key = Key(1739);
-			pub const MOVED: Key = Key(1746);
-			pub const RESIZED: Key = Key(1747);
+			pub const NAMED: Key = Key(1754);
+			pub const EDIT_TEXT: Key = Key(1755);
+			pub const MOVED: Key = Key(1762);
+			pub const RESIZED: Key = Key(1763);
 			pub mod kind {
 				use crate::strings::Key;
-				pub const STICKY: Key = Key(1740);
-				pub const TEXT: Key = Key(1741);
-				pub const SHAPE: Key = Key(1742);
-				pub const SECTION: Key = Key(1743);
-				pub const IMAGE: Key = Key(1744);
-				pub const LINK: Key = Key(1745);
+				pub const STICKY: Key = Key(1756);
+				pub const TEXT: Key = Key(1757);
+				pub const SHAPE: Key = Key(1758);
+				pub const SECTION: Key = Key(1759);
+				pub const IMAGE: Key = Key(1760);
+				pub const LINK: Key = Key(1761);
 			}
 		}
 		pub mod picker {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1774);
-			pub const HINT: Key = Key(1775);
-			pub const EMPTY: Key = Key(1776);
+			pub const TITLE: Key = Key(1790);
+			pub const HINT: Key = Key(1791);
+			pub const EMPTY: Key = Key(1792);
 		}
 		pub mod presence {
 			use crate::strings::Key;
-			pub const DRAWING_ONE: Key = Key(1726);
-			pub const DRAWING_OTHER: Key = Key(1727);
-			pub const DRAWING_MANY: Key = Key(2144);
+			pub const DRAWING_ONE: Key = Key(1742);
+			pub const DRAWING_OTHER: Key = Key(1743);
+			pub const DRAWING_MANY: Key = Key(2161);
 		}
 		pub mod selection_bar {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1752);
-			pub const SHAPE_TYPE: Key = Key(1753);
-			pub const TEXT_SIZE: Key = Key(1761);
-			pub const TEXT_SIZE_MEDIUM: Key = Key(1762);
-			pub const MORE: Key = Key(1763);
+			pub const LABEL: Key = Key(1768);
+			pub const SHAPE_TYPE: Key = Key(1769);
+			pub const TEXT_SIZE: Key = Key(1777);
+			pub const TEXT_SIZE_MEDIUM: Key = Key(1778);
+			pub const MORE: Key = Key(1779);
 			pub mod fill {
 				use crate::strings::Key;
-				pub const SURFACE: Key = Key(1756);
-				pub const YELLOW: Key = Key(1757);
-				pub const GREEN: Key = Key(1758);
-				pub const BLUE: Key = Key(1759);
-				pub const PINK: Key = Key(1760);
+				pub const SURFACE: Key = Key(1772);
+				pub const YELLOW: Key = Key(1773);
+				pub const GREEN: Key = Key(1774);
+				pub const BLUE: Key = Key(1775);
+				pub const PINK: Key = Key(1776);
 			}
 			pub mod shape {
 				use crate::strings::Key;
-				pub const ROUNDED_RECTANGLE: Key = Key(1754);
-				pub const ELLIPSE: Key = Key(1755);
+				pub const ROUNDED_RECTANGLE: Key = Key(1770);
+				pub const ELLIPSE: Key = Key(1771);
 			}
 		}
 		pub mod zoom {
 			use crate::strings::Key;
-			pub const CONTROLS: Key = Key(1722);
-			pub const ZOOM_OUT: Key = Key(1723);
-			pub const ZOOM_IN: Key = Key(1724);
-			pub const LEVEL: Key = Key(1725);
+			pub const CONTROLS: Key = Key(1738);
+			pub const ZOOM_OUT: Key = Key(1739);
+			pub const ZOOM_IN: Key = Key(1740);
+			pub const LEVEL: Key = Key(1741);
 		}
 	}
 	pub mod boot {
 		use crate::strings::Key;
-		pub const STATUS: Key = Key(1291);
+		pub const STATUS: Key = Key(1306);
 	}
 	pub mod claude_import {
 		use crate::strings::Key;
-		pub const LIST_LABEL: Key = Key(1380);
+		pub const LIST_LABEL: Key = Key(1396);
 		pub mod done {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1401);
-			pub const COMPANIONS_ONE: Key = Key(1402);
-			pub const COMPANIONS_OTHER: Key = Key(1403);
-			pub const COMPANIONS_WITH_ONE: Key = Key(1404);
-			pub const COMPANIONS_WITH_OTHER: Key = Key(1405);
-			pub const INSTRUCTIONS: Key = Key(1406);
-			pub const INSTRUCTIONS_AND_SKILLS_ONE: Key = Key(1407);
-			pub const INSTRUCTIONS_AND_SKILLS_OTHER: Key = Key(1408);
-			pub const ONLY_INSTRUCTIONS: Key = Key(1409);
-			pub const ONLY_SKILLS_ONE: Key = Key(1410);
-			pub const ONLY_SKILLS_OTHER: Key = Key(1411);
-			pub const CONTINUE: Key = Key(1412);
-			pub const COMPANIONS_MANY: Key = Key(2130);
-			pub const COMPANIONS_WITH_MANY: Key = Key(2131);
-			pub const INSTRUCTIONS_AND_SKILLS_MANY: Key = Key(2132);
-			pub const ONLY_SKILLS_MANY: Key = Key(2133);
+			pub const TITLE: Key = Key(1417);
+			pub const COMPANIONS_ONE: Key = Key(1418);
+			pub const COMPANIONS_OTHER: Key = Key(1419);
+			pub const COMPANIONS_WITH_ONE: Key = Key(1420);
+			pub const COMPANIONS_WITH_OTHER: Key = Key(1421);
+			pub const INSTRUCTIONS: Key = Key(1422);
+			pub const INSTRUCTIONS_AND_SKILLS_ONE: Key = Key(1423);
+			pub const INSTRUCTIONS_AND_SKILLS_OTHER: Key = Key(1424);
+			pub const ONLY_INSTRUCTIONS: Key = Key(1425);
+			pub const ONLY_SKILLS_ONE: Key = Key(1426);
+			pub const ONLY_SKILLS_OTHER: Key = Key(1427);
+			pub const CONTINUE: Key = Key(1428);
+			pub const COMPANIONS_MANY: Key = Key(2147);
+			pub const COMPANIONS_WITH_MANY: Key = Key(2148);
+			pub const INSTRUCTIONS_AND_SKILLS_MANY: Key = Key(2149);
+			pub const ONLY_SKILLS_MANY: Key = Key(2150);
 		}
 		pub mod from_settings {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1395);
-			pub const BODY: Key = Key(1396);
-			pub const CANCEL: Key = Key(1397);
+			pub const TITLE: Key = Key(1411);
+			pub const BODY: Key = Key(1412);
+			pub const CANCEL: Key = Key(1413);
 		}
 		pub mod importing {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1398);
-			pub const BODY: Key = Key(1399);
-			pub const ACTION: Key = Key(1400);
+			pub const TITLE: Key = Key(1414);
+			pub const BODY: Key = Key(1415);
+			pub const ACTION: Key = Key(1416);
 		}
 		pub mod partly_failed {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1413);
-			pub const BODY: Key = Key(1414);
-			pub const BODY_NAMED: Key = Key(1415);
-			pub const RETRY: Key = Key(1416);
+			pub const TITLE: Key = Key(1429);
+			pub const BODY: Key = Key(1430);
+			pub const BODY_NAMED: Key = Key(1431);
+			pub const RETRY: Key = Key(1432);
 		}
 		pub mod row {
 			use crate::strings::Key;
-			pub const IN_KIROSHI: Key = Key(1420);
-			pub const SKILLS_ONE: Key = Key(1421);
-			pub const SKILLS_OTHER: Key = Key(1422);
-			pub const NEW_SKILLS_ONE: Key = Key(1423);
-			pub const NEW_SKILLS_OTHER: Key = Key(1424);
-			pub const NAME_TAKEN: Key = Key(1425);
-			pub const COMPANION_NAME_TAKEN: Key = Key(1426);
-			pub const UNPARSABLE: Key = Key(1427);
-			pub const SKILLS_MANY: Key = Key(2134);
-			pub const NEW_SKILLS_MANY: Key = Key(2135);
+			pub const IN_KIROSHI: Key = Key(1436);
+			pub const SKILLS_ONE: Key = Key(1437);
+			pub const SKILLS_OTHER: Key = Key(1438);
+			pub const NEW_SKILLS_ONE: Key = Key(1439);
+			pub const NEW_SKILLS_OTHER: Key = Key(1440);
+			pub const NAME_TAKEN: Key = Key(1441);
+			pub const COMPANION_NAME_TAKEN: Key = Key(1442);
+			pub const UNPARSABLE: Key = Key(1443);
+			pub const SKILLS_MANY: Key = Key(2151);
+			pub const NEW_SKILLS_MANY: Key = Key(2152);
 			pub mod r#type {
 				use crate::strings::Key;
-				pub const COMPANION: Key = Key(1428);
-				pub const INSTRUCTIONS: Key = Key(1429);
-				pub const SKILL: Key = Key(1430);
+				pub const COMPANION: Key = Key(1444);
+				pub const INSTRUCTIONS: Key = Key(1445);
+				pub const SKILL: Key = Key(1446);
 			}
 			pub mod status {
 				use crate::strings::Key;
-				pub const DONE: Key = Key(1431);
-				pub const PENDING: Key = Key(1432);
-				pub const FAILED: Key = Key(1433);
+				pub const DONE: Key = Key(1447);
+				pub const PENDING: Key = Key(1448);
+				pub const FAILED: Key = Key(1449);
 			}
 		}
 		pub mod select {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1381);
-			pub const BODY: Key = Key(1382);
-			pub const BODY_MANY: Key = Key(1383);
-			pub const NOTHING_SELECTED: Key = Key(1384);
-			pub const IMPORT: Key = Key(1388);
-			pub const IMPORT_ITEMS_ONE: Key = Key(1389);
-			pub const IMPORT_ITEMS_OTHER: Key = Key(1390);
-			pub const IMPORT_COMPANIONS_ONE: Key = Key(1391);
-			pub const IMPORT_COMPANIONS_OTHER: Key = Key(1392);
-			pub const SKIP: Key = Key(1393);
-			pub const NOT_NOW: Key = Key(1394);
-			pub const IMPORT_ITEMS_MANY: Key = Key(2128);
-			pub const IMPORT_COMPANIONS_MANY: Key = Key(2129);
+			pub const TITLE: Key = Key(1397);
+			pub const BODY: Key = Key(1398);
+			pub const BODY_MANY: Key = Key(1399);
+			pub const NOTHING_SELECTED: Key = Key(1400);
+			pub const IMPORT: Key = Key(1404);
+			pub const IMPORT_ITEMS_ONE: Key = Key(1405);
+			pub const IMPORT_ITEMS_OTHER: Key = Key(1406);
+			pub const IMPORT_COMPANIONS_ONE: Key = Key(1407);
+			pub const IMPORT_COMPANIONS_OTHER: Key = Key(1408);
+			pub const SKIP: Key = Key(1409);
+			pub const NOT_NOW: Key = Key(1410);
+			pub const IMPORT_ITEMS_MANY: Key = Key(2145);
+			pub const IMPORT_COMPANIONS_MANY: Key = Key(2146);
 			pub mod names_taken {
 				use crate::strings::Key;
-				pub const ONE: Key = Key(1385);
-				pub const TWO: Key = Key(1386);
-				pub const OTHER: Key = Key(1387);
+				pub const ONE: Key = Key(1401);
+				pub const TWO: Key = Key(1402);
+				pub const OTHER: Key = Key(1403);
 			}
 		}
 		pub mod unreadable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1417);
-			pub const BODY: Key = Key(1418);
-			pub const RETRY: Key = Key(1419);
+			pub const TITLE: Key = Key(1433);
+			pub const BODY: Key = Key(1434);
+			pub const RETRY: Key = Key(1435);
 		}
 	}
 	pub mod confirm {
 		use crate::strings::Key;
-		pub const CANCEL: Key = Key(1302);
+		pub const CANCEL: Key = Key(1317);
 	}
 	pub mod devices {
 		pub mod approval {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1352);
-			pub const BODY: Key = Key(1353);
-			pub const NOT_ME: Key = Key(1354);
-			pub const APPROVE: Key = Key(1355);
-			pub const APPROVING: Key = Key(1356);
-			pub const RETRY: Key = Key(1357);
-			pub const FAILED: Key = Key(1358);
+			pub const TITLE: Key = Key(1368);
+			pub const BODY: Key = Key(1369);
+			pub const NOT_ME: Key = Key(1370);
+			pub const APPROVE: Key = Key(1371);
+			pub const APPROVING: Key = Key(1372);
+			pub const RETRY: Key = Key(1373);
+			pub const FAILED: Key = Key(1374);
 			pub mod approved {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1359);
-				pub const DESCRIPTION: Key = Key(1360);
-			}
-			pub mod rejected {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(1361);
-				pub const DESCRIPTION: Key = Key(1362);
-			}
-		}
-		pub mod new_device {
-			use crate::strings::Key;
-			pub const THIS_DEVICE: Key = Key(1363);
-			pub const NO_OTHER_DEVICE: Key = Key(1364);
-			pub const SIGN_OUT: Key = Key(1365);
-			pub mod code {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(1369);
-				pub const BODY: Key = Key(1370);
-				pub const LABEL: Key = Key(1371);
-				pub const APPROVE: Key = Key(1372);
-				pub const RESEND: Key = Key(1373);
-			}
-			pub mod expired {
-				use crate::strings::Key;
-				pub const TITLE: Key = Key(1374);
-				pub const BODY: Key = Key(1375);
-				pub const ASK_AGAIN: Key = Key(1376);
+				pub const TITLE: Key = Key(1375);
+				pub const DESCRIPTION: Key = Key(1376);
 			}
 			pub mod rejected {
 				use crate::strings::Key;
 				pub const TITLE: Key = Key(1377);
-				pub const BODY: Key = Key(1378);
-				pub const BACK_TO_SIGN_IN: Key = Key(1379);
+				pub const DESCRIPTION: Key = Key(1378);
+			}
+		}
+		pub mod new_device {
+			use crate::strings::Key;
+			pub const THIS_DEVICE: Key = Key(1379);
+			pub const NO_OTHER_DEVICE: Key = Key(1380);
+			pub const SIGN_OUT: Key = Key(1381);
+			pub mod code {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(1385);
+				pub const BODY: Key = Key(1386);
+				pub const LABEL: Key = Key(1387);
+				pub const APPROVE: Key = Key(1388);
+				pub const RESEND: Key = Key(1389);
+			}
+			pub mod expired {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(1390);
+				pub const BODY: Key = Key(1391);
+				pub const ASK_AGAIN: Key = Key(1392);
+			}
+			pub mod rejected {
+				use crate::strings::Key;
+				pub const TITLE: Key = Key(1393);
+				pub const BODY: Key = Key(1394);
+				pub const BACK_TO_SIGN_IN: Key = Key(1395);
 			}
 			pub mod waiting {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1366);
-				pub const BODY: Key = Key(1367);
-				pub const STATUS: Key = Key(1368);
+				pub const TITLE: Key = Key(1382);
+				pub const BODY: Key = Key(1383);
+				pub const STATUS: Key = Key(1384);
 			}
 		}
 	}
 	pub mod dialog {
 		use crate::strings::Key;
-		pub const CLOSE: Key = Key(1301);
+		pub const CLOSE: Key = Key(1316);
 	}
 	pub mod library {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(1453);
-		pub const SUBTITLE: Key = Key(1454);
-		pub const SEARCH: Key = Key(1455);
-		pub const IMPORT: Key = Key(1456);
-		pub const NEW_DOCUMENT: Key = Key(1457);
-		pub const NEW_BOARD: Key = Key(1458);
-		pub const BOARD_FILE_REPLACED: Key = Key(1459);
-		pub const BLANK_BOARD: Key = Key(1460);
-		pub const START: Key = Key(1473);
+		pub const TITLE: Key = Key(1469);
+		pub const SUBTITLE: Key = Key(1470);
+		pub const SEARCH: Key = Key(1471);
+		pub const IMPORT: Key = Key(1472);
+		pub const NEW_DOCUMENT: Key = Key(1473);
+		pub const NEW_BOARD: Key = Key(1474);
+		pub const BOARD_FILE_REPLACED: Key = Key(1475);
+		pub const BLANK_BOARD: Key = Key(1476);
+		pub const START: Key = Key(1489);
 		pub mod added {
 			use crate::strings::Key;
-			pub const TITLE_ONE: Key = Key(1609);
-			pub const TITLE_OTHER: Key = Key(1610);
-			pub const STILL_IMPORTING_ONE: Key = Key(1611);
-			pub const STILL_IMPORTING_OTHER: Key = Key(1612);
-			pub const TITLE_MANY: Key = Key(2139);
-			pub const STILL_IMPORTING_MANY: Key = Key(2140);
+			pub const TITLE_ONE: Key = Key(1625);
+			pub const TITLE_OTHER: Key = Key(1626);
+			pub const STILL_IMPORTING_ONE: Key = Key(1627);
+			pub const STILL_IMPORTING_OTHER: Key = Key(1628);
+			pub const TITLE_MANY: Key = Key(2156);
+			pub const STILL_IMPORTING_MANY: Key = Key(2157);
 		}
 		pub mod bring_in {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1599);
-			pub const DROP: Key = Key(1600);
-			pub const FORMATS: Key = Key(1601);
-			pub const ACTION: Key = Key(1602);
+			pub const TITLE: Key = Key(1615);
+			pub const DROP: Key = Key(1616);
+			pub const FORMATS: Key = Key(1617);
+			pub const ACTION: Key = Key(1618);
 		}
 		pub mod document {
 			use crate::strings::Key;
-			pub const BACK: Key = Key(1642);
-			pub const MORE: Key = Key(1643);
-			pub const DOWNLOAD: Key = Key(1644);
-			pub const COPY: Key = Key(1645);
-			pub const COPIED: Key = Key(1646);
-			pub const CLOSE: Key = Key(1647);
-			pub const READ_ONLY: Key = Key(1657);
-			pub const PLACEHOLDER: Key = Key(1658);
-			pub const DROP_ONE: Key = Key(1664);
-			pub const DROP_OTHER: Key = Key(1665);
-			pub const DROP_MANY: Key = Key(2143);
+			pub const BACK: Key = Key(1658);
+			pub const MORE: Key = Key(1659);
+			pub const DOWNLOAD: Key = Key(1660);
+			pub const COPY: Key = Key(1661);
+			pub const COPIED: Key = Key(1662);
+			pub const CLOSE: Key = Key(1663);
+			pub const READ_ONLY: Key = Key(1673);
+			pub const PLACEHOLDER: Key = Key(1674);
+			pub const DROP_ONE: Key = Key(1680);
+			pub const DROP_OTHER: Key = Key(1681);
+			pub const DROP_MANY: Key = Key(2160);
 			pub mod agents {
 				use crate::strings::Key;
-				pub const WRITING_ONE: Key = Key(1648);
-				pub const WRITING_OTHER: Key = Key(1649);
-				pub const STOP_ALL: Key = Key(1650);
-				pub const CARET: Key = Key(1651);
-				pub const TITLE: Key = Key(1652);
-				pub const SUMMARY_ONE: Key = Key(1653);
-				pub const SUMMARY_OTHER: Key = Key(1654);
-				pub const STOP: Key = Key(1655);
-				pub const OPEN_CONVERSATION: Key = Key(1656);
-				pub const WRITING_MANY: Key = Key(2141);
-				pub const SUMMARY_MANY: Key = Key(2142);
+				pub const WRITING_ONE: Key = Key(1664);
+				pub const WRITING_OTHER: Key = Key(1665);
+				pub const STOP_ALL: Key = Key(1666);
+				pub const CARET: Key = Key(1667);
+				pub const TITLE: Key = Key(1668);
+				pub const SUMMARY_ONE: Key = Key(1669);
+				pub const SUMMARY_OTHER: Key = Key(1670);
+				pub const STOP: Key = Key(1671);
+				pub const OPEN_CONVERSATION: Key = Key(1672);
+				pub const WRITING_MANY: Key = Key(2158);
+				pub const SUMMARY_MANY: Key = Key(2159);
 			}
 			pub mod failed_import {
 				use crate::strings::Key;
-				pub const CHOOSE: Key = Key(1666);
-				pub const REMOVE: Key = Key(1667);
+				pub const CHOOSE: Key = Key(1682);
+				pub const REMOVE: Key = Key(1683);
 			}
 			pub mod start {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1659);
-				pub const CHECKLIST: Key = Key(1660);
-				pub const GALLERY: Key = Key(1661);
-				pub const TABLE: Key = Key(1662);
-				pub const TEMPLATE: Key = Key(1663);
+				pub const LABEL: Key = Key(1675);
+				pub const CHECKLIST: Key = Key(1676);
+				pub const GALLERY: Key = Key(1677);
+				pub const TABLE: Key = Key(1678);
+				pub const TEMPLATE: Key = Key(1679);
 			}
 		}
 		pub mod document_picker {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1679);
-			pub const SEARCH: Key = Key(1680);
-			pub const ATTACH_FILES: Key = Key(1681);
+			pub const LABEL: Key = Key(1695);
+			pub const SEARCH: Key = Key(1696);
+			pub const ATTACH_FILES: Key = Key(1697);
 		}
 		pub mod drop {
 			use crate::strings::Key;
-			pub const TITLE_ONE: Key = Key(1603);
-			pub const TITLE_OTHER: Key = Key(1604);
-			pub const MORE_ONE: Key = Key(1605);
-			pub const MORE_OTHER: Key = Key(1606);
-			pub const TITLE_MANY: Key = Key(2137);
-			pub const MORE_MANY: Key = Key(2138);
+			pub const TITLE_ONE: Key = Key(1619);
+			pub const TITLE_OTHER: Key = Key(1620);
+			pub const MORE_ONE: Key = Key(1621);
+			pub const MORE_OTHER: Key = Key(1622);
+			pub const TITLE_MANY: Key = Key(2154);
+			pub const MORE_MANY: Key = Key(2155);
 		}
 		pub mod editor {
 			use crate::strings::Key;
-			pub const UNTITLED: Key = Key(1502);
-			pub const CREATED: Key = Key(1503);
-			pub const CREATED_FROM: Key = Key(1504);
-			pub const TITLE: Key = Key(1505);
-			pub const BODY: Key = Key(1506);
+			pub const UNTITLED: Key = Key(1518);
+			pub const CREATED: Key = Key(1519);
+			pub const CREATED_FROM: Key = Key(1520);
+			pub const TITLE: Key = Key(1521);
+			pub const BODY: Key = Key(1522);
 			pub mod blocks {
 				pub mod callout {
 					use crate::strings::Key;
-					pub const TEXT: Key = Key(1573);
-					pub const TONE: Key = Key(1574);
+					pub const TEXT: Key = Key(1589);
+					pub const TONE: Key = Key(1590);
 				}
 				pub mod checklist {
 					use crate::strings::Key;
-					pub const ITEM: Key = Key(1571);
-					pub const MOVE: Key = Key(1572);
+					pub const ITEM: Key = Key(1587);
+					pub const MOVE: Key = Key(1588);
 				}
 				pub mod code {
 					use crate::strings::Key;
-					pub const BODY: Key = Key(1579);
-					pub const LANGUAGE: Key = Key(1580);
-					pub const SEARCH: Key = Key(1581);
-					pub const NO_MATCH: Key = Key(1582);
+					pub const BODY: Key = Key(1595);
+					pub const LANGUAGE: Key = Key(1596);
+					pub const SEARCH: Key = Key(1597);
+					pub const NO_MATCH: Key = Key(1598);
 					pub mod languages {
 						use crate::strings::Key;
-						pub const TEXT: Key = Key(1583);
-						pub const BASH: Key = Key(1584);
-						pub const JSON: Key = Key(1585);
-						pub const TYPESCRIPT: Key = Key(1586);
-						pub const PYTHON: Key = Key(1587);
-						pub const CSS: Key = Key(1588);
-						pub const DIFF: Key = Key(1589);
-						pub const HTML: Key = Key(1590);
-						pub const MARKDOWN: Key = Key(1591);
-						pub const RUST: Key = Key(1592);
-						pub const TSX: Key = Key(1593);
-						pub const YAML: Key = Key(1594);
+						pub const TEXT: Key = Key(1599);
+						pub const BASH: Key = Key(1600);
+						pub const JSON: Key = Key(1601);
+						pub const TYPESCRIPT: Key = Key(1602);
+						pub const PYTHON: Key = Key(1603);
+						pub const CSS: Key = Key(1604);
+						pub const DIFF: Key = Key(1605);
+						pub const HTML: Key = Key(1606);
+						pub const MARKDOWN: Key = Key(1607);
+						pub const RUST: Key = Key(1608);
+						pub const TSX: Key = Key(1609);
+						pub const YAML: Key = Key(1610);
 					}
 				}
 				pub mod gallery {
 					use crate::strings::Key;
-					pub const ADD: Key = Key(1564);
-					pub const HINT: Key = Key(1565);
-					pub const ADD_FAILED: Key = Key(1566);
-					pub const TILE: Key = Key(1567);
-					pub const REMOVE: Key = Key(1568);
-					pub const CAPTION: Key = Key(1569);
-					pub const CAPTION_PLACEHOLDER: Key = Key(1570);
+					pub const ADD: Key = Key(1580);
+					pub const HINT: Key = Key(1581);
+					pub const ADD_FAILED: Key = Key(1582);
+					pub const TILE: Key = Key(1583);
+					pub const REMOVE: Key = Key(1584);
+					pub const CAPTION: Key = Key(1585);
+					pub const CAPTION_PLACEHOLDER: Key = Key(1586);
 				}
 				pub mod handle {
 					use crate::strings::Key;
-					pub const INSERT: Key = Key(1548);
-					pub const MENU: Key = Key(1549);
+					pub const INSERT: Key = Key(1564);
+					pub const MENU: Key = Key(1565);
 				}
 				pub mod markdown {
 					use crate::strings::Key;
-					pub const HEADING: Key = Key(1534);
-					pub const LIST: Key = Key(1535);
-					pub const CHECKLIST: Key = Key(1536);
-					pub const QUOTE: Key = Key(1537);
-					pub const CODE: Key = Key(1538);
+					pub const HEADING: Key = Key(1550);
+					pub const LIST: Key = Key(1551);
+					pub const CHECKLIST: Key = Key(1552);
+					pub const QUOTE: Key = Key(1553);
+					pub const CODE: Key = Key(1554);
 				}
 				pub mod menu {
 					use crate::strings::Key;
-					pub const TURN_INTO: Key = Key(1550);
-					pub const DUPLICATE: Key = Key(1551);
-					pub const MOVE_UP: Key = Key(1552);
-					pub const MOVE_DOWN: Key = Key(1553);
-					pub const DELETE: Key = Key(1554);
+					pub const TURN_INTO: Key = Key(1566);
+					pub const DUPLICATE: Key = Key(1567);
+					pub const MOVE_UP: Key = Key(1568);
+					pub const MOVE_DOWN: Key = Key(1569);
+					pub const DELETE: Key = Key(1570);
 					pub mod shortcuts {
 						pub mod mac {
 							use crate::strings::Key;
-							pub const DUPLICATE: Key = Key(1555);
-							pub const MOVE_UP: Key = Key(1556);
-							pub const MOVE_DOWN: Key = Key(1557);
-							pub const DELETE: Key = Key(1558);
+							pub const DUPLICATE: Key = Key(1571);
+							pub const MOVE_UP: Key = Key(1572);
+							pub const MOVE_DOWN: Key = Key(1573);
+							pub const DELETE: Key = Key(1574);
 						}
 						pub mod other {
 							use crate::strings::Key;
-							pub const DUPLICATE: Key = Key(1559);
-							pub const MOVE_UP: Key = Key(1560);
-							pub const MOVE_DOWN: Key = Key(1561);
-							pub const DELETE: Key = Key(1562);
+							pub const DUPLICATE: Key = Key(1575);
+							pub const MOVE_UP: Key = Key(1576);
+							pub const MOVE_DOWN: Key = Key(1577);
+							pub const DELETE: Key = Key(1578);
 						}
 					}
 				}
 				pub mod skeleton {
 					use crate::strings::Key;
-					pub const COLUMN: Key = Key(1563);
+					pub const COLUMN: Key = Key(1579);
 				}
 				pub mod slash {
 					use crate::strings::Key;
-					pub const LABEL: Key = Key(1539);
-					pub const TEXT: Key = Key(1540);
-					pub const RICH: Key = Key(1541);
-					pub const MOVE_KEYS: Key = Key(1542);
-					pub const MOVE: Key = Key(1543);
-					pub const INSERT_KEY: Key = Key(1544);
-					pub const INSERT: Key = Key(1545);
-					pub const CLOSE_KEY: Key = Key(1546);
-					pub const CLOSE: Key = Key(1547);
+					pub const LABEL: Key = Key(1555);
+					pub const TEXT: Key = Key(1556);
+					pub const RICH: Key = Key(1557);
+					pub const MOVE_KEYS: Key = Key(1558);
+					pub const MOVE: Key = Key(1559);
+					pub const INSERT_KEY: Key = Key(1560);
+					pub const INSERT: Key = Key(1561);
+					pub const CLOSE_KEY: Key = Key(1562);
+					pub const CLOSE: Key = Key(1563);
 				}
 				pub mod table {
 					use crate::strings::Key;
-					pub const CELL: Key = Key(1575);
-					pub const EMPTY: Key = Key(1576);
-					pub const ADD_ROW: Key = Key(1577);
-					pub const ADD_COLUMN: Key = Key(1578);
+					pub const CELL: Key = Key(1591);
+					pub const EMPTY: Key = Key(1592);
+					pub const ADD_ROW: Key = Key(1593);
+					pub const ADD_COLUMN: Key = Key(1594);
 				}
 				pub mod types {
 					use crate::strings::Key;
-					pub const PARAGRAPH: Key = Key(1522);
-					pub const HEADING: Key = Key(1523);
-					pub const LIST: Key = Key(1524);
-					pub const CHECKLIST: Key = Key(1525);
-					pub const QUOTE: Key = Key(1526);
-					pub const GALLERY: Key = Key(1527);
-					pub const CALLOUT: Key = Key(1528);
-					pub const TABLE: Key = Key(1529);
-					pub const CODE: Key = Key(1530);
-					pub const WEB_PAGE: Key = Key(1531);
-					pub const COLLAPSIBLE: Key = Key(1532);
-					pub const OTHER: Key = Key(1533);
+					pub const PARAGRAPH: Key = Key(1538);
+					pub const HEADING: Key = Key(1539);
+					pub const LIST: Key = Key(1540);
+					pub const CHECKLIST: Key = Key(1541);
+					pub const QUOTE: Key = Key(1542);
+					pub const GALLERY: Key = Key(1543);
+					pub const CALLOUT: Key = Key(1544);
+					pub const TABLE: Key = Key(1545);
+					pub const CODE: Key = Key(1546);
+					pub const WEB_PAGE: Key = Key(1547);
+					pub const COLLAPSIBLE: Key = Key(1548);
+					pub const OTHER: Key = Key(1549);
 				}
 				pub mod web_page {
 					use crate::strings::Key;
-					pub const LINK: Key = Key(1595);
-					pub const UPDATE_KEY: Key = Key(1596);
-					pub const UPDATE: Key = Key(1597);
-					pub const FAILED: Key = Key(1598);
+					pub const LINK: Key = Key(1611);
+					pub const UPDATE_KEY: Key = Key(1612);
+					pub const UPDATE: Key = Key(1613);
+					pub const FAILED: Key = Key(1614);
 				}
 			}
 			pub mod toolbar {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1507);
-				pub const BOLD: Key = Key(1508);
-				pub const ITALIC: Key = Key(1509);
-				pub const STRIKETHROUGH: Key = Key(1510);
-				pub const CODE: Key = Key(1511);
-				pub const LINK: Key = Key(1512);
-				pub const HEADING: Key = Key(1513);
-				pub const LIST: Key = Key(1514);
-				pub const BOLD_SHORTCUT: Key = Key(1515);
-				pub const ITALIC_SHORTCUT: Key = Key(1516);
-				pub const STRIKETHROUGH_SHORTCUT: Key = Key(1517);
-				pub const CODE_SHORTCUT: Key = Key(1518);
-				pub const LINK_SHORTCUT: Key = Key(1519);
-				pub const LINK_FIELD: Key = Key(1520);
-				pub const CONFIRM_LINK: Key = Key(1521);
+				pub const LABEL: Key = Key(1523);
+				pub const BOLD: Key = Key(1524);
+				pub const ITALIC: Key = Key(1525);
+				pub const STRIKETHROUGH: Key = Key(1526);
+				pub const CODE: Key = Key(1527);
+				pub const LINK: Key = Key(1528);
+				pub const HEADING: Key = Key(1529);
+				pub const LIST: Key = Key(1530);
+				pub const BOLD_SHORTCUT: Key = Key(1531);
+				pub const ITALIC_SHORTCUT: Key = Key(1532);
+				pub const STRIKETHROUGH_SHORTCUT: Key = Key(1533);
+				pub const CODE_SHORTCUT: Key = Key(1534);
+				pub const LINK_SHORTCUT: Key = Key(1535);
+				pub const LINK_FIELD: Key = Key(1536);
+				pub const CONFIRM_LINK: Key = Key(1537);
 			}
 		}
 		pub mod failure {
 			use crate::strings::Key;
-			pub const LIST: Key = Key(1682);
-			pub const IMAGE: Key = Key(1683);
-			pub const SAVE: Key = Key(1684);
-			pub const COPY: Key = Key(1685);
-			pub const REVEAL: Key = Key(1686);
-			pub const DELETE: Key = Key(1687);
+			pub const LIST: Key = Key(1698);
+			pub const IMAGE: Key = Key(1699);
+			pub const SAVE: Key = Key(1700);
+			pub const COPY: Key = Key(1701);
+			pub const REVEAL: Key = Key(1702);
+			pub const DELETE: Key = Key(1703);
 			pub mod board {
 				use crate::strings::Key;
-				pub const OPEN: Key = Key(1696);
-				pub const SAVE: Key = Key(1697);
-				pub const REFUSED: Key = Key(1698);
-				pub const STOP_ALL: Key = Key(1699);
+				pub const OPEN: Key = Key(1712);
+				pub const SAVE: Key = Key(1713);
+				pub const REFUSED: Key = Key(1714);
+				pub const STOP_ALL: Key = Key(1715);
 			}
 			pub mod document {
 				use crate::strings::Key;
-				pub const CREATE: Key = Key(1688);
-				pub const OPEN: Key = Key(1689);
-				pub const SAVE: Key = Key(1690);
-				pub const WRITE: Key = Key(1691);
-				pub const CARET: Key = Key(1692);
-				pub const STOP_ALL: Key = Key(1693);
-				pub const STOP: Key = Key(1694);
-				pub const SAVE_AS_DOCUMENT: Key = Key(1695);
+				pub const CREATE: Key = Key(1704);
+				pub const OPEN: Key = Key(1705);
+				pub const SAVE: Key = Key(1706);
+				pub const WRITE: Key = Key(1707);
+				pub const CARET: Key = Key(1708);
+				pub const STOP_ALL: Key = Key(1709);
+				pub const STOP: Key = Key(1710);
+				pub const SAVE_AS_DOCUMENT: Key = Key(1711);
 			}
 			pub mod import {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1700);
-				pub const TOO_LARGE: Key = Key(1701);
-				pub const INVALID_NAME: Key = Key(1702);
-				pub const UNSUPPORTED: Key = Key(1703);
-				pub const UNDECODABLE: Key = Key(1704);
-				pub const NOT_UTF8: Key = Key(1705);
-				pub const MISSING: Key = Key(1706);
-				pub const UNWRITABLE: Key = Key(1707);
-				pub const UNREADABLE: Key = Key(1708);
-				pub const UNKNOWN_SPACE: Key = Key(1709);
-				pub const UNAVAILABLE: Key = Key(1710);
-				pub const STORAGE: Key = Key(1711);
-				pub const IMAGE_UNREADABLE: Key = Key(1712);
-				pub const REFUSED: Key = Key(1713);
-				pub const GENERIC: Key = Key(1714);
+				pub const TITLE: Key = Key(1716);
+				pub const TOO_LARGE: Key = Key(1717);
+				pub const INVALID_NAME: Key = Key(1718);
+				pub const UNSUPPORTED: Key = Key(1719);
+				pub const UNDECODABLE: Key = Key(1720);
+				pub const NOT_UTF8: Key = Key(1721);
+				pub const MISSING: Key = Key(1722);
+				pub const UNWRITABLE: Key = Key(1723);
+				pub const UNREADABLE: Key = Key(1724);
+				pub const UNKNOWN_SPACE: Key = Key(1725);
+				pub const UNAVAILABLE: Key = Key(1726);
+				pub const STORAGE: Key = Key(1727);
+				pub const IMAGE_UNREADABLE: Key = Key(1728);
+				pub const REFUSED: Key = Key(1729);
+				pub const GENERIC: Key = Key(1730);
 				pub mod url {
 					use crate::strings::Key;
-					pub const UNSUPPORTED_SCHEME: Key = Key(1715);
-					pub const PRIVATE_ADDRESS: Key = Key(1716);
-					pub const NETWORK_FAILURE: Key = Key(1717);
-					pub const TOO_LARGE: Key = Key(1718);
-					pub const UNKNOWN_SPACE: Key = Key(1719);
+					pub const UNSUPPORTED_SCHEME: Key = Key(1731);
+					pub const PRIVATE_ADDRESS: Key = Key(1732);
+					pub const NETWORK_FAILURE: Key = Key(1733);
+					pub const TOO_LARGE: Key = Key(1734);
+					pub const UNKNOWN_SPACE: Key = Key(1735);
 				}
 			}
 		}
 		pub mod filters {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1464);
-			pub const ALL: Key = Key(1465);
-			pub const IMAGES: Key = Key(1466);
-			pub const DOCUMENTS: Key = Key(1467);
-			pub const BOARDS: Key = Key(1468);
+			pub const LABEL: Key = Key(1480);
+			pub const ALL: Key = Key(1481);
+			pub const IMAGES: Key = Key(1482);
+			pub const DOCUMENTS: Key = Key(1483);
+			pub const BOARDS: Key = Key(1484);
 		}
 		pub mod image_menu {
 			use crate::strings::Key;
-			pub const SAVE_TO_LIBRARY: Key = Key(1624);
-			pub const COPY_IMAGE: Key = Key(1625);
-			pub const OPEN_IN_VIEWER: Key = Key(1626);
+			pub const SAVE_TO_LIBRARY: Key = Key(1640);
+			pub const COPY_IMAGE: Key = Key(1641);
+			pub const OPEN_IN_VIEWER: Key = Key(1642);
 		}
 		pub mod importing {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1607);
-			pub const DETAIL: Key = Key(1608);
+			pub const LABEL: Key = Key(1623);
+			pub const DETAIL: Key = Key(1624);
 		}
 		pub mod item_menu {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1613);
-			pub const OPEN: Key = Key(1614);
-			pub const OPEN_IN_NEW_TAB: Key = Key(1615);
-			pub const RENAME: Key = Key(1616);
-			pub const COPY: Key = Key(1617);
-			pub const DOWNLOAD: Key = Key(1618);
-			pub const SHOW_IN_FOLDER: Key = Key(1619);
-			pub const DELETE: Key = Key(1620);
+			pub const LABEL: Key = Key(1629);
+			pub const OPEN: Key = Key(1630);
+			pub const OPEN_IN_NEW_TAB: Key = Key(1631);
+			pub const RENAME: Key = Key(1632);
+			pub const COPY: Key = Key(1633);
+			pub const DOWNLOAD: Key = Key(1634);
+			pub const SHOW_IN_FOLDER: Key = Key(1635);
+			pub const DELETE: Key = Key(1636);
 			pub mod delete_confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1621);
-				pub const DESCRIPTION: Key = Key(1622);
-				pub const FAILURE: Key = Key(1623);
+				pub const TITLE: Key = Key(1637);
+				pub const DESCRIPTION: Key = Key(1638);
+				pub const FAILURE: Key = Key(1639);
 			}
 		}
 		pub mod lightbox {
 			use crate::strings::Key;
-			pub const DOWNLOAD: Key = Key(1627);
-			pub const COPY: Key = Key(1628);
-			pub const COPIED: Key = Key(1629);
-			pub const MORE: Key = Key(1630);
-			pub const BACK: Key = Key(1631);
-			pub const CLOSE: Key = Key(1632);
-			pub const PREVIOUS: Key = Key(1633);
-			pub const NEXT: Key = Key(1634);
-			pub const ZOOM_OUT: Key = Key(1635);
-			pub const ZOOM_IN: Key = Key(1636);
-			pub const FIT: Key = Key(1637);
-			pub const FIT_TO_STAGE: Key = Key(1638);
-			pub const ZOOM: Key = Key(1639);
-			pub const ZOOM_THEN_FIT: Key = Key(1640);
-			pub const POSITION: Key = Key(1641);
+			pub const DOWNLOAD: Key = Key(1643);
+			pub const COPY: Key = Key(1644);
+			pub const COPIED: Key = Key(1645);
+			pub const MORE: Key = Key(1646);
+			pub const BACK: Key = Key(1647);
+			pub const CLOSE: Key = Key(1648);
+			pub const PREVIOUS: Key = Key(1649);
+			pub const NEXT: Key = Key(1650);
+			pub const ZOOM_OUT: Key = Key(1651);
+			pub const ZOOM_IN: Key = Key(1652);
+			pub const FIT: Key = Key(1653);
+			pub const FIT_TO_STAGE: Key = Key(1654);
+			pub const ZOOM: Key = Key(1655);
+			pub const ZOOM_THEN_FIT: Key = Key(1656);
+			pub const POSITION: Key = Key(1657);
 		}
 		pub mod no_result {
 			use crate::strings::Key;
-			pub const IMAGES: Key = Key(1469);
-			pub const DOCUMENTS: Key = Key(1470);
-			pub const BOARDS: Key = Key(1471);
-			pub const SEARCH: Key = Key(1472);
+			pub const IMAGES: Key = Key(1485);
+			pub const DOCUMENTS: Key = Key(1486);
+			pub const BOARDS: Key = Key(1487);
+			pub const SEARCH: Key = Key(1488);
 		}
 		pub mod panel {
 			use crate::strings::Key;
-			pub const OPEN_IN_LIBRARY: Key = Key(1668);
-			pub const CLOSE: Key = Key(1669);
-			pub const RESIZE: Key = Key(1670);
+			pub const OPEN_IN_LIBRARY: Key = Key(1684);
+			pub const CLOSE: Key = Key(1685);
+			pub const RESIZE: Key = Key(1686);
 		}
 		pub mod picker {
 			use crate::strings::Key;
-			pub const SUBTITLE: Key = Key(1498);
-			pub const TEMPLATES: Key = Key(1499);
-			pub const CANCEL: Key = Key(1500);
-			pub const CREATE: Key = Key(1501);
+			pub const SUBTITLE: Key = Key(1514);
+			pub const TEMPLATES: Key = Key(1515);
+			pub const CANCEL: Key = Key(1516);
+			pub const CREATE: Key = Key(1517);
 		}
 		pub mod saved {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1461);
-			pub const IMAGE: Key = Key(1462);
-			pub const OPEN: Key = Key(1463);
+			pub const TITLE: Key = Key(1477);
+			pub const IMAGE: Key = Key(1478);
+			pub const OPEN: Key = Key(1479);
 		}
 		pub mod tab {
 			use crate::strings::Key;
-			pub const LOADING_DOCUMENT: Key = Key(1671);
-			pub const LOADING_IMAGE: Key = Key(1672);
+			pub const LOADING_DOCUMENT: Key = Key(1687);
+			pub const LOADING_IMAGE: Key = Key(1688);
 			pub mod unavailable {
 				pub mod missing {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(1673);
-					pub const BODY: Key = Key(1674);
-					pub const ACTION: Key = Key(1675);
+					pub const TITLE: Key = Key(1689);
+					pub const BODY: Key = Key(1690);
+					pub const ACTION: Key = Key(1691);
 				}
 				pub mod unreadable {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(1676);
-					pub const BODY: Key = Key(1677);
-					pub const ACTION: Key = Key(1678);
+					pub const TITLE: Key = Key(1692);
+					pub const BODY: Key = Key(1693);
+					pub const ACTION: Key = Key(1694);
 				}
 			}
 		}
 		pub mod templates {
 			pub mod blank {
 				use crate::strings::Key;
-				pub const NAME: Key = Key(1474);
-				pub const DESCRIPTION: Key = Key(1475);
-				pub const PLACEHOLDER: Key = Key(1476);
+				pub const NAME: Key = Key(1490);
+				pub const DESCRIPTION: Key = Key(1491);
+				pub const PLACEHOLDER: Key = Key(1492);
 			}
 			pub mod brief {
 				use crate::strings::Key;
-				pub const NAME: Key = Key(1477);
-				pub const PREVIEW: Key = Key(1478);
-				pub const DESCRIPTION: Key = Key(1479);
-				pub const INTRO: Key = Key(1480);
+				pub const NAME: Key = Key(1493);
+				pub const PREVIEW: Key = Key(1494);
+				pub const DESCRIPTION: Key = Key(1495);
+				pub const INTRO: Key = Key(1496);
 				pub mod done_when {
 					use crate::strings::Key;
-					pub const HEADING: Key = Key(1483);
-					pub const PLACEHOLDER: Key = Key(1484);
+					pub const HEADING: Key = Key(1499);
+					pub const PLACEHOLDER: Key = Key(1500);
 				}
 				pub mod goal {
 					use crate::strings::Key;
-					pub const HEADING: Key = Key(1481);
-					pub const PLACEHOLDER: Key = Key(1482);
+					pub const HEADING: Key = Key(1497);
+					pub const PLACEHOLDER: Key = Key(1498);
 				}
 			}
 			pub mod checklist {
 				use crate::strings::Key;
-				pub const NAME: Key = Key(1494);
-				pub const PREVIEW: Key = Key(1495);
-				pub const DESCRIPTION: Key = Key(1496);
-				pub const ITEM: Key = Key(1497);
+				pub const NAME: Key = Key(1510);
+				pub const PREVIEW: Key = Key(1511);
+				pub const DESCRIPTION: Key = Key(1512);
+				pub const ITEM: Key = Key(1513);
 			}
 			pub mod meeting_notes {
 				use crate::strings::Key;
-				pub const NAME: Key = Key(1485);
-				pub const PREVIEW: Key = Key(1486);
-				pub const DESCRIPTION: Key = Key(1487);
-				pub const TITLE: Key = Key(1488);
-				pub const INTRO: Key = Key(1489);
+				pub const NAME: Key = Key(1501);
+				pub const PREVIEW: Key = Key(1502);
+				pub const DESCRIPTION: Key = Key(1503);
+				pub const TITLE: Key = Key(1504);
+				pub const INTRO: Key = Key(1505);
 				pub mod decisions {
 					use crate::strings::Key;
-					pub const HEADING: Key = Key(1490);
-					pub const PLACEHOLDER: Key = Key(1491);
+					pub const HEADING: Key = Key(1506);
+					pub const PLACEHOLDER: Key = Key(1507);
 				}
 				pub mod next_steps {
 					use crate::strings::Key;
-					pub const HEADING: Key = Key(1492);
-					pub const PLACEHOLDER: Key = Key(1493);
+					pub const HEADING: Key = Key(1508);
+					pub const PLACEHOLDER: Key = Key(1509);
 				}
 			}
 		}
 	}
 	pub mod notice {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1347);
-		pub const CLOSE: Key = Key(1348);
-		pub const COPY: Key = Key(1349);
-		pub const COPIED: Key = Key(1350);
-		pub const COPY_FAILED: Key = Key(1351);
+		pub const LABEL: Key = Key(1363);
+		pub const CLOSE: Key = Key(1364);
+		pub const COPY: Key = Key(1365);
+		pub const COPIED: Key = Key(1366);
+		pub const COPY_FAILED: Key = Key(1367);
 	}
 	pub mod notification {
 		use crate::strings::Key;
-		pub const QUESTION: Key = Key(1434);
-		pub const APPROVAL: Key = Key(1435);
-		pub const FINISHED_TURN: Key = Key(1436);
-		pub const SPOKE: Key = Key(1437);
+		pub const QUESTION: Key = Key(1450);
+		pub const APPROVAL: Key = Key(1451);
+		pub const FINISHED_TURN: Key = Key(1452);
+		pub const SPOKE: Key = Key(1453);
 		pub mod failure {
 			use crate::strings::Key;
-			pub const CLICKS: Key = Key(1441);
-			pub const FOCUS: Key = Key(1442);
-			pub const REVEAL: Key = Key(1443);
-			pub const SEND: Key = Key(1444);
+			pub const CLICKS: Key = Key(1457);
+			pub const FOCUS: Key = Key(1458);
+			pub const REVEAL: Key = Key(1459);
+			pub const SEND: Key = Key(1460);
 		}
 		pub mod mission {
 			use crate::strings::Key;
-			pub const QUESTION: Key = Key(1438);
-			pub const WAITING_HUMAN: Key = Key(1439);
-			pub const READY_TO_MERGE: Key = Key(1440);
+			pub const QUESTION: Key = Key(1454);
+			pub const WAITING_HUMAN: Key = Key(1455);
+			pub const READY_TO_MERGE: Key = Key(1456);
 		}
 	}
 	pub mod sidebar {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1303);
-		pub const TOGGLE: Key = Key(1304);
-		pub const CLOSE: Key = Key(1305);
-		pub const RESIZE: Key = Key(1306);
+		pub const LABEL: Key = Key(1318);
+		pub const TOGGLE: Key = Key(1319);
+		pub const CLOSE: Key = Key(1320);
+		pub const RESIZE: Key = Key(1321);
+		pub const COLLAPSE_UNSAVED: Key = Key(1322);
 	}
 	pub mod spaces {
 		pub mod leave {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1294);
-			pub const DESCRIPTION: Key = Key(1295);
-			pub const ACTION: Key = Key(1296);
+			pub const TITLE: Key = Key(1309);
+			pub const DESCRIPTION: Key = Key(1310);
+			pub const ACTION: Key = Key(1311);
 		}
 		pub mod unavailable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1292);
-			pub const DESCRIPTION: Key = Key(1293);
+			pub const TITLE: Key = Key(1307);
+			pub const DESCRIPTION: Key = Key(1308);
 		}
 		pub mod unnamed {
 			use crate::strings::Key;
-			pub const HOST: Key = Key(1297);
-			pub const SPACE: Key = Key(1298);
+			pub const HOST: Key = Key(1312);
+			pub const SPACE: Key = Key(1313);
 		}
 	}
 	pub mod title_bar {
 		use crate::strings::Key;
-		pub const TABS: Key = Key(1317);
-		pub const BACK: Key = Key(1318);
-		pub const FORWARD: Key = Key(1319);
-		pub const NEW_TAB: Key = Key(1320);
-		pub const CLOSE_TAB: Key = Key(1321);
-		pub const CLOSE_TAB_NAMED: Key = Key(1322);
-		pub const PIN_TAB: Key = Key(1323);
-		pub const UNPIN_TAB: Key = Key(1324);
-		pub const CLOSE_OTHER_TABS: Key = Key(1325);
-		pub const DUPLICATE_TAB: Key = Key(1326);
-		pub const REOPEN_CLOSED_TAB: Key = Key(1327);
-		pub const MOVE_TAB_TO_NEW_WINDOW: Key = Key(1328);
-		pub const PIN_TAB_SHORTCUT: Key = Key(1339);
-		pub const NEW_TAB_SHORTCUT: Key = Key(1340);
-		pub const REOPEN_CLOSED_TAB_SHORTCUT: Key = Key(1341);
-		pub const CLOSE_TAB_SHORTCUT: Key = Key(1342);
-		pub const CLOSE_OTHER_TABS_SHORTCUT: Key = Key(1343);
-		pub const MORE: Key = Key(1344);
-		pub const TAB_NEEDS_YOU: Key = Key(1345);
-		pub const TAB_MOVED: Key = Key(1346);
+		pub const TABS: Key = Key(1333);
+		pub const BACK: Key = Key(1334);
+		pub const FORWARD: Key = Key(1335);
+		pub const NEW_TAB: Key = Key(1336);
+		pub const CLOSE_TAB: Key = Key(1337);
+		pub const CLOSE_TAB_NAMED: Key = Key(1338);
+		pub const PIN_TAB: Key = Key(1339);
+		pub const UNPIN_TAB: Key = Key(1340);
+		pub const CLOSE_OTHER_TABS: Key = Key(1341);
+		pub const DUPLICATE_TAB: Key = Key(1342);
+		pub const REOPEN_CLOSED_TAB: Key = Key(1343);
+		pub const MOVE_TAB_TO_NEW_WINDOW: Key = Key(1344);
+		pub const PIN_TAB_SHORTCUT: Key = Key(1355);
+		pub const NEW_TAB_SHORTCUT: Key = Key(1356);
+		pub const REOPEN_CLOSED_TAB_SHORTCUT: Key = Key(1357);
+		pub const CLOSE_TAB_SHORTCUT: Key = Key(1358);
+		pub const CLOSE_OTHER_TABS_SHORTCUT: Key = Key(1359);
+		pub const MORE: Key = Key(1360);
+		pub const TAB_NEEDS_YOU: Key = Key(1361);
+		pub const TAB_MOVED: Key = Key(1362);
 		pub mod move_tab_failed {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1329);
-			pub const DESCRIPTION: Key = Key(1330);
-			pub const DESCRIPTION_WITH_REASON: Key = Key(1331);
+			pub const TITLE: Key = Key(1345);
+			pub const DESCRIPTION: Key = Key(1346);
+			pub const DESCRIPTION_WITH_REASON: Key = Key(1347);
 		}
 		pub mod redock_tab_failed {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1332);
-			pub const DESCRIPTION: Key = Key(1333);
+			pub const TITLE: Key = Key(1348);
+			pub const DESCRIPTION: Key = Key(1349);
 		}
 		pub mod reopen_window_failed {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1336);
-			pub const DESCRIPTION: Key = Key(1337);
-			pub const DESCRIPTION_WITH_REASON: Key = Key(1338);
+			pub const TITLE: Key = Key(1352);
+			pub const DESCRIPTION: Key = Key(1353);
+			pub const DESCRIPTION_WITH_REASON: Key = Key(1354);
 		}
 		pub mod reveal_tab_failed {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1334);
-			pub const DESCRIPTION: Key = Key(1335);
+			pub const TITLE: Key = Key(1350);
+			pub const DESCRIPTION: Key = Key(1351);
 		}
 	}
 	pub mod update {
 		pub mod badge {
 			use crate::strings::Key;
-			pub const AVAILABLE: Key = Key(1445);
-			pub const DOWNLOADING: Key = Key(1446);
-			pub const READY: Key = Key(1447);
-			pub const READY_VERSION: Key = Key(1448);
-			pub const BOTS_BUSY_ONE: Key = Key(1449);
-			pub const BOTS_BUSY_OTHER: Key = Key(1450);
-			pub const ERROR: Key = Key(1451);
-			pub const RETRY: Key = Key(1452);
-			pub const BOTS_BUSY_MANY: Key = Key(2136);
+			pub const AVAILABLE: Key = Key(1461);
+			pub const DOWNLOADING: Key = Key(1462);
+			pub const READY: Key = Key(1463);
+			pub const READY_VERSION: Key = Key(1464);
+			pub const BOTS_BUSY_ONE: Key = Key(1465);
+			pub const BOTS_BUSY_OTHER: Key = Key(1466);
+			pub const ERROR: Key = Key(1467);
+			pub const RETRY: Key = Key(1468);
+			pub const BOTS_BUSY_MANY: Key = Key(2153);
 		}
 	}
 	pub mod whats_new {
 		use crate::strings::Key;
-		pub const BETA: Key = Key(1788);
-		pub const RELEASE_NOTES: Key = Key(1789);
+		pub const BETA: Key = Key(1804);
+		pub const RELEASE_NOTES: Key = Key(1805);
 		pub mod first_launch {
 			use crate::strings::Key;
-			pub const EYEBROW: Key = Key(1782);
-			pub const LEGEND: Key = Key(1783);
-			pub const DISMISS: Key = Key(1784);
+			pub const EYEBROW: Key = Key(1798);
+			pub const LEGEND: Key = Key(1799);
+			pub const DISMISS: Key = Key(1800);
 		}
 		pub mod from_about {
 			use crate::strings::Key;
-			pub const EYEBROW: Key = Key(1785);
-			pub const LEGEND: Key = Key(1786);
-			pub const DISMISS: Key = Key(1787);
+			pub const EYEBROW: Key = Key(1801);
+			pub const LEGEND: Key = Key(1802);
+			pub const DISMISS: Key = Key(1803);
 		}
 	}
 	pub mod window_controls {
 		use crate::strings::Key;
-		pub const MINIMIZE: Key = Key(1307);
-		pub const MAXIMIZE: Key = Key(1308);
-		pub const RESTORE: Key = Key(1309);
-		pub const CLOSE: Key = Key(1310);
+		pub const MINIMIZE: Key = Key(1323);
+		pub const MAXIMIZE: Key = Key(1324);
+		pub const RESTORE: Key = Key(1325);
+		pub const CLOSE: Key = Key(1326);
 		pub mod failure {
 			use crate::strings::Key;
-			pub const MINIMIZE: Key = Key(1311);
-			pub const MAXIMIZE: Key = Key(1312);
-			pub const CLOSE: Key = Key(1313);
-			pub const STATE: Key = Key(1314);
-			pub const SNAP: Key = Key(1315);
-			pub const POINTER: Key = Key(1316);
+			pub const MINIMIZE: Key = Key(1327);
+			pub const MAXIMIZE: Key = Key(1328);
+			pub const CLOSE: Key = Key(1329);
+			pub const STATE: Key = Key(1330);
+			pub const SNAP: Key = Key(1331);
+			pub const POINTER: Key = Key(1332);
 		}
 	}
 }
 pub mod search {
 	use crate::strings::Key;
-	pub const OPEN: Key = Key(1790);
-	pub const CHORD: Key = Key(1791);
-	pub const PLACEHOLDER: Key = Key(1792);
-	pub const RESULTS: Key = Key(1793);
-	pub const SEE_ALL: Key = Key(1799);
-	pub const SOLO: Key = Key(1800);
+	pub const OPEN: Key = Key(1806);
+	pub const CHORD: Key = Key(1807);
+	pub const PLACEHOLDER: Key = Key(1808);
+	pub const RESULTS: Key = Key(1809);
+	pub const SEE_ALL: Key = Key(1815);
+	pub const SOLO: Key = Key(1816);
 	pub mod empty {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(1814);
-		pub const DESCRIPTION: Key = Key(1815);
+		pub const TITLE: Key = Key(1830);
+		pub const DESCRIPTION: Key = Key(1831);
 	}
 	pub mod rest {
 		use crate::strings::Key;
-		pub const CHATS: Key = Key(1803);
-		pub const MISSIONS: Key = Key(1804);
-		pub const ROUTINES: Key = Key(1805);
+		pub const CHATS: Key = Key(1819);
+		pub const MISSIONS: Key = Key(1820);
+		pub const ROUTINES: Key = Key(1821);
 		pub mod messages {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1806);
-			pub const BODY: Key = Key(1807);
+			pub const TITLE: Key = Key(1822);
+			pub const BODY: Key = Key(1823);
 		}
 		pub mod none {
 			use crate::strings::Key;
-			pub const CHATS: Key = Key(1808);
-			pub const MISSIONS: Key = Key(1809);
-			pub const ROUTINES: Key = Key(1810);
+			pub const CHATS: Key = Key(1824);
+			pub const MISSIONS: Key = Key(1825);
+			pub const ROUTINES: Key = Key(1826);
 			pub mod body {
 				use crate::strings::Key;
-				pub const CHATS: Key = Key(1811);
-				pub const MISSIONS: Key = Key(1812);
-				pub const ROUTINES: Key = Key(1813);
+				pub const CHATS: Key = Key(1827);
+				pub const MISSIONS: Key = Key(1828);
+				pub const ROUTINES: Key = Key(1829);
 			}
 		}
 	}
 	pub mod tab {
 		use crate::strings::Key;
-		pub const ALL: Key = Key(1794);
-		pub const MESSAGES: Key = Key(1795);
-		pub const CHATS: Key = Key(1796);
-		pub const MISSIONS: Key = Key(1797);
-		pub const ROUTINES: Key = Key(1798);
+		pub const ALL: Key = Key(1810);
+		pub const MESSAGES: Key = Key(1811);
+		pub const CHATS: Key = Key(1812);
+		pub const MISSIONS: Key = Key(1813);
+		pub const ROUTINES: Key = Key(1814);
 	}
 	pub mod unavailable {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(1801);
-		pub const DESCRIPTION: Key = Key(1802);
+		pub const TITLE: Key = Key(1817);
+		pub const DESCRIPTION: Key = Key(1818);
 	}
 }
 pub mod settings {
 	pub mod about {
 		use crate::strings::Key;
-		pub const VERSION: Key = Key(1929);
+		pub const VERSION: Key = Key(1945);
 		pub mod action {
 			use crate::strings::Key;
-			pub const CHECK: Key = Key(1940);
-			pub const DOWNLOAD: Key = Key(1941);
-			pub const RESTART: Key = Key(1942);
-			pub const DOWNLOAD_AGAIN: Key = Key(1943);
+			pub const CHECK: Key = Key(1956);
+			pub const DOWNLOAD: Key = Key(1957);
+			pub const RESTART: Key = Key(1958);
+			pub const DOWNLOAD_AGAIN: Key = Key(1959);
 		}
 		pub mod beta_notice {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1948);
-			pub const DESCRIPTION: Key = Key(1949);
+			pub const TITLE: Key = Key(1964);
+			pub const DESCRIPTION: Key = Key(1965);
 		}
 		pub mod channel {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1944);
-			pub const DESCRIPTION: Key = Key(1945);
+			pub const LABEL: Key = Key(1960);
+			pub const DESCRIPTION: Key = Key(1961);
 			pub mod option {
 				use crate::strings::Key;
-				pub const STABLE: Key = Key(1946);
-				pub const BETA: Key = Key(1947);
+				pub const STABLE: Key = Key(1962);
+				pub const BETA: Key = Key(1963);
 			}
 		}
 		pub mod getting_started {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1952);
+			pub const LABEL: Key = Key(1968);
 			pub mod import_from_claude_code {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1953);
-				pub const DESCRIPTION: Key = Key(1954);
-				pub const NOTHING_TO_IMPORT: Key = Key(1955);
+				pub const LABEL: Key = Key(1969);
+				pub const DESCRIPTION: Key = Key(1970);
+				pub const NOTHING_TO_IMPORT: Key = Key(1971);
 			}
 			pub mod replay_onboarding {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1956);
-				pub const DESCRIPTION: Key = Key(1957);
+				pub const LABEL: Key = Key(1972);
+				pub const DESCRIPTION: Key = Key(1973);
 			}
 		}
 		pub mod kiroshi {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1958);
-			pub const WHATS_NEW: Key = Key(1959);
-			pub const RELEASE_NOTES: Key = Key(1960);
-			pub const RELEASE_NOTES_NAME: Key = Key(1961);
+			pub const LABEL: Key = Key(1974);
+			pub const WHATS_NEW: Key = Key(1975);
+			pub const RELEASE_NOTES: Key = Key(1976);
+			pub const RELEASE_NOTES_NAME: Key = Key(1977);
 		}
 		pub mod status {
 			use crate::strings::Key;
-			pub const UP_TO_DATE: Key = Key(1930);
-			pub const CHECKING: Key = Key(1931);
-			pub const AVAILABLE: Key = Key(1932);
-			pub const DOWNLOADING: Key = Key(1933);
-			pub const READY: Key = Key(1934);
-			pub const READY_HELD: Key = Key(1935);
-			pub const RUNNING_ONE: Key = Key(1936);
-			pub const RUNNING_OTHER: Key = Key(1937);
-			pub const FAILED: Key = Key(1938);
-			pub const FAILED_HINT: Key = Key(1939);
-			pub const RUNNING_MANY: Key = Key(2149);
+			pub const UP_TO_DATE: Key = Key(1946);
+			pub const CHECKING: Key = Key(1947);
+			pub const AVAILABLE: Key = Key(1948);
+			pub const DOWNLOADING: Key = Key(1949);
+			pub const READY: Key = Key(1950);
+			pub const READY_HELD: Key = Key(1951);
+			pub const RUNNING_ONE: Key = Key(1952);
+			pub const RUNNING_OTHER: Key = Key(1953);
+			pub const FAILED: Key = Key(1954);
+			pub const FAILED_HINT: Key = Key(1955);
+			pub const RUNNING_MANY: Key = Key(2166);
 		}
 		pub mod updates {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1928);
+			pub const LABEL: Key = Key(1944);
 		}
 		pub mod whats_new {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1950);
-			pub const DESCRIPTION: Key = Key(1951);
+			pub const LABEL: Key = Key(1966);
+			pub const DESCRIPTION: Key = Key(1967);
 		}
 	}
 	pub mod account {
 		use crate::strings::Key;
-		pub const READ_FAILED: Key = Key(1877);
-		pub const SIGN_IN_FAILED: Key = Key(1878);
-		pub const CANCEL_FAILED: Key = Key(1879);
-		pub const SIGN_IN_LINK_COPIED: Key = Key(1880);
-		pub const COPY_SIGN_IN_LINK_FAILED: Key = Key(1881);
-		pub const MANAGE_ACCOUNT_FAILED: Key = Key(1882);
-		pub const SIGN_OUT_FAILED: Key = Key(1883);
+		pub const READ_FAILED: Key = Key(1893);
+		pub const SIGN_IN_FAILED: Key = Key(1894);
+		pub const CANCEL_FAILED: Key = Key(1895);
+		pub const SIGN_IN_LINK_COPIED: Key = Key(1896);
+		pub const COPY_SIGN_IN_LINK_FAILED: Key = Key(1897);
+		pub const MANAGE_ACCOUNT_FAILED: Key = Key(1898);
+		pub const SIGN_OUT_FAILED: Key = Key(1899);
 		pub mod device_revoked {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1870);
-			pub const DESCRIPTION: Key = Key(1871);
+			pub const TITLE: Key = Key(1886);
+			pub const DESCRIPTION: Key = Key(1887);
 		}
 		pub mod devices {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1884);
-			pub const THIS_DEVICE: Key = Key(1885);
-			pub const ACTIVE_NOW: Key = Key(1886);
-			pub const OTHER_DEVICES: Key = Key(1887);
-			pub const REMOVE: Key = Key(1888);
-			pub const EMPTY: Key = Key(1889);
+			pub const TITLE: Key = Key(1900);
+			pub const THIS_DEVICE: Key = Key(1901);
+			pub const ACTIVE_NOW: Key = Key(1902);
+			pub const OTHER_DEVICES: Key = Key(1903);
+			pub const REMOVE: Key = Key(1904);
+			pub const EMPTY: Key = Key(1905);
 			pub mod confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1890);
-				pub const BODY: Key = Key(1891);
-				pub const REMOVE: Key = Key(1892);
-				pub const REMOVING: Key = Key(1893);
-				pub const CANCEL: Key = Key(1894);
-				pub const FAILED: Key = Key(1895);
+				pub const TITLE: Key = Key(1906);
+				pub const BODY: Key = Key(1907);
+				pub const REMOVE: Key = Key(1908);
+				pub const REMOVING: Key = Key(1909);
+				pub const CANCEL: Key = Key(1910);
+				pub const FAILED: Key = Key(1911);
 			}
 			pub mod removed {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1896);
-				pub const DESCRIPTION: Key = Key(1897);
+				pub const TITLE: Key = Key(1912);
+				pub const DESCRIPTION: Key = Key(1913);
 			}
 		}
 		pub mod failed {
 			use crate::strings::Key;
-			pub const CANCELLED: Key = Key(1874);
-			pub const TIMED_OUT: Key = Key(1875);
-			pub const DESCRIPTION: Key = Key(1876);
+			pub const CANCELLED: Key = Key(1890);
+			pub const TIMED_OUT: Key = Key(1891);
+			pub const DESCRIPTION: Key = Key(1892);
 		}
 		pub mod onboarding {
 			use crate::strings::Key;
-			pub const BODY: Key = Key(1863);
-			pub const SKIP: Key = Key(1864);
+			pub const BODY: Key = Key(1879);
+			pub const SKIP: Key = Key(1880);
 			pub mod signed_in {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1865);
-				pub const BODY: Key = Key(1866);
-				pub const CONTINUE: Key = Key(1867);
+				pub const TITLE: Key = Key(1881);
+				pub const BODY: Key = Key(1882);
+				pub const CONTINUE: Key = Key(1883);
 			}
 		}
 		pub mod signed_in {
 			use crate::strings::Key;
-			pub const MANAGE: Key = Key(1861);
-			pub const SIGN_OUT: Key = Key(1862);
+			pub const MANAGE: Key = Key(1877);
+			pub const SIGN_OUT: Key = Key(1878);
 			pub mod plan {
 				use crate::strings::Key;
-				pub const BETA: Key = Key(1858);
-				pub const PRO: Key = Key(1859);
-				pub const FREE: Key = Key(1860);
+				pub const BETA: Key = Key(1874);
+				pub const PRO: Key = Key(1875);
+				pub const FREE: Key = Key(1876);
 			}
 		}
 		pub mod signed_out {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1849);
-			pub const BODY: Key = Key(1850);
-			pub const SIGN_IN: Key = Key(1851);
-			pub const CAPTION: Key = Key(1852);
+			pub const TITLE: Key = Key(1865);
+			pub const BODY: Key = Key(1866);
+			pub const SIGN_IN: Key = Key(1867);
+			pub const CAPTION: Key = Key(1868);
 		}
 		pub mod signed_out_from_the_site {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1868);
-			pub const DESCRIPTION: Key = Key(1869);
+			pub const TITLE: Key = Key(1884);
+			pub const DESCRIPTION: Key = Key(1885);
 		}
 		pub mod unreachable {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1872);
-			pub const DESCRIPTION: Key = Key(1873);
+			pub const TITLE: Key = Key(1888);
+			pub const DESCRIPTION: Key = Key(1889);
 		}
 		pub mod waiting {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1853);
-			pub const CANCEL: Key = Key(1854);
-			pub const CAPTION: Key = Key(1855);
-			pub const BROWSER_DID_NOT_OPEN: Key = Key(1856);
-			pub const COPY_SIGN_IN_LINK: Key = Key(1857);
+			pub const LABEL: Key = Key(1869);
+			pub const CANCEL: Key = Key(1870);
+			pub const CAPTION: Key = Key(1871);
+			pub const BROWSER_DID_NOT_OPEN: Key = Key(1872);
+			pub const COPY_SIGN_IN_LINK: Key = Key(1873);
 		}
 	}
 	pub mod appearance {
 		pub mod scheme {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1914);
+			pub const LABEL: Key = Key(1930);
 			pub mod option {
 				use crate::strings::Key;
-				pub const LIGHT: Key = Key(1915);
-				pub const DARK: Key = Key(1916);
-				pub const SYSTEM: Key = Key(1917);
+				pub const LIGHT: Key = Key(1931);
+				pub const DARK: Key = Key(1932);
+				pub const SYSTEM: Key = Key(1933);
 			}
 		}
 	}
 	pub mod breadcrumb {
 		use crate::strings::Key;
-		pub const TITLE: Key = Key(1816);
+		pub const TITLE: Key = Key(1832);
 	}
 	pub mod diagnostics {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1918);
-		pub const DESCRIPTION: Key = Key(1919);
-		pub const COPY: Key = Key(1920);
-		pub const COPY_FAILED: Key = Key(1921);
-		pub const REVEAL: Key = Key(1922);
-		pub const REVEAL_FAILED: Key = Key(1923);
+		pub const LABEL: Key = Key(1934);
+		pub const DESCRIPTION: Key = Key(1935);
+		pub const COPY: Key = Key(1936);
+		pub const COPY_FAILED: Key = Key(1937);
+		pub const REVEAL: Key = Key(1938);
+		pub const REVEAL_FAILED: Key = Key(1939);
 		pub mod clear {
 			use crate::strings::Key;
-			pub const ACTION: Key = Key(1924);
-			pub const TITLE: Key = Key(1925);
-			pub const DESCRIPTION: Key = Key(1926);
-			pub const FAILED: Key = Key(1927);
+			pub const ACTION: Key = Key(1940);
+			pub const TITLE: Key = Key(1941);
+			pub const DESCRIPTION: Key = Key(1942);
+			pub const FAILED: Key = Key(1943);
 		}
 	}
 	pub mod language {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1912);
-		pub const MACHINE: Key = Key(1913);
+		pub const LABEL: Key = Key(1928);
+		pub const MACHINE: Key = Key(1929);
 	}
 	pub mod notifications {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1899);
+		pub const LABEL: Key = Key(1915);
 		pub mod event {
 			pub mod permission {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1902);
-				pub const DESCRIPTION: Key = Key(1903);
+				pub const LABEL: Key = Key(1918);
+				pub const DESCRIPTION: Key = Key(1919);
 			}
 			pub mod question {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1900);
-				pub const DESCRIPTION: Key = Key(1901);
+				pub const LABEL: Key = Key(1916);
+				pub const DESCRIPTION: Key = Key(1917);
 			}
 			pub mod turn {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(1904);
-				pub const DESCRIPTION: Key = Key(1905);
+				pub const LABEL: Key = Key(1920);
+				pub const DESCRIPTION: Key = Key(1921);
 			}
 		}
 		pub mod sound {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1906);
-			pub const SWITCH: Key = Key(1907);
-			pub const DESCRIPTION: Key = Key(1908);
+			pub const LABEL: Key = Key(1922);
+			pub const SWITCH: Key = Key(1923);
+			pub const DESCRIPTION: Key = Key(1924);
 		}
 	}
 	pub mod open_on {
 		use crate::strings::Key;
-		pub const LABEL: Key = Key(1909);
+		pub const LABEL: Key = Key(1925);
 		pub mod option {
 			use crate::strings::Key;
-			pub const NEW_CONVERSATION: Key = Key(1910);
-			pub const LAST_CONVERSATION: Key = Key(1911);
+			pub const NEW_CONVERSATION: Key = Key(1926);
+			pub const LAST_CONVERSATION: Key = Key(1927);
 		}
 	}
 	pub mod plugin {
 		pub mod author {
 			use crate::strings::Key;
-			pub const BOT: Key = Key(1898);
+			pub const BOT: Key = Key(1914);
 		}
 	}
 	pub mod rail {
 		use crate::strings::Key;
-		pub const ACCOUNT: Key = Key(1833);
-		pub const GENERAL: Key = Key(1834);
-		pub const SPACE: Key = Key(1835);
-		pub const MEMBERS: Key = Key(1836);
-		pub const AGENTS: Key = Key(1837);
-		pub const SECRETS: Key = Key(1838);
-		pub const APPEARANCE: Key = Key(1839);
-		pub const NOTIFICATIONS: Key = Key(1840);
-		pub const LANGUAGE: Key = Key(1841);
-		pub const SKILLS: Key = Key(1842);
-		pub const APPLICATIONS: Key = Key(1843);
-		pub const HISTORY: Key = Key(1844);
-		pub const DIAGNOSTICS: Key = Key(1845);
-		pub const DANGER: Key = Key(1846);
-		pub const ABOUT: Key = Key(1847);
-		pub const INVITATION: Key = Key(1848);
+		pub const ACCOUNT: Key = Key(1849);
+		pub const GENERAL: Key = Key(1850);
+		pub const SPACE: Key = Key(1851);
+		pub const MEMBERS: Key = Key(1852);
+		pub const AGENTS: Key = Key(1853);
+		pub const SECRETS: Key = Key(1854);
+		pub const APPEARANCE: Key = Key(1855);
+		pub const NOTIFICATIONS: Key = Key(1856);
+		pub const LANGUAGE: Key = Key(1857);
+		pub const SKILLS: Key = Key(1858);
+		pub const APPLICATIONS: Key = Key(1859);
+		pub const HISTORY: Key = Key(1860);
+		pub const DIAGNOSTICS: Key = Key(1861);
+		pub const DANGER: Key = Key(1862);
+		pub const ABOUT: Key = Key(1863);
+		pub const INVITATION: Key = Key(1864);
 	}
 	pub mod screen {
 		use crate::strings::Key;
-		pub const BACK: Key = Key(1817);
-		pub const BACK_TO_AGENTS: Key = Key(1818);
-		pub const BACK_TO_SETTINGS: Key = Key(1819);
-		pub const MENU: Key = Key(1820);
+		pub const BACK: Key = Key(1833);
+		pub const BACK_TO_AGENTS: Key = Key(1834);
+		pub const BACK_TO_SETTINGS: Key = Key(1835);
+		pub const MENU: Key = Key(1836);
 		pub mod group {
 			use crate::strings::Key;
-			pub const SETTINGS: Key = Key(1826);
-			pub const SUBJECT_SETTINGS: Key = Key(1827);
-			pub const SPACES: Key = Key(1828);
+			pub const SETTINGS: Key = Key(1842);
+			pub const SUBJECT_SETTINGS: Key = Key(1843);
+			pub const SPACES: Key = Key(1844);
 		}
 		pub mod space {
 			use crate::strings::Key;
-			pub const CURRENT: Key = Key(1829);
-			pub const INVITATION: Key = Key(1830);
+			pub const CURRENT: Key = Key(1845);
+			pub const INVITATION: Key = Key(1846);
 			pub mod left {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(1831);
-				pub const DESCRIPTION: Key = Key(1832);
+				pub const TITLE: Key = Key(1847);
+				pub const DESCRIPTION: Key = Key(1848);
 			}
 		}
 		pub mod subtitle {
 			use crate::strings::Key;
-			pub const SPACE: Key = Key(1821);
-			pub const AGENT: Key = Key(1822);
-			pub const CONVERSATION: Key = Key(1823);
-			pub const USER: Key = Key(1824);
-			pub const INVITATION: Key = Key(1825);
+			pub const SPACE: Key = Key(1837);
+			pub const AGENT: Key = Key(1838);
+			pub const CONVERSATION: Key = Key(1839);
+			pub const USER: Key = Key(1840);
+			pub const INVITATION: Key = Key(1841);
 		}
 	}
 	pub mod space {
 		use crate::strings::Key;
-		pub const UNTITLED: Key = Key(1962);
-		pub const OPEN: Key = Key(1968);
+		pub const UNTITLED: Key = Key(1978);
+		pub const OPEN: Key = Key(1984);
 		pub mod agents {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1991);
-			pub const CAPTION: Key = Key(1992);
-			pub const CREATE: Key = Key(1993);
-			pub const EMPTY: Key = Key(1994);
-			pub const COUNTS: Key = Key(1995);
-			pub const COUNTS_UNREADABLE: Key = Key(1996);
-			pub const SKILLS_ZERO: Key = Key(1997);
-			pub const SKILLS_ONE: Key = Key(1998);
-			pub const SKILLS_OTHER: Key = Key(1999);
-			pub const APPLICATIONS_ZERO: Key = Key(2000);
-			pub const APPLICATIONS_ONE: Key = Key(2001);
-			pub const APPLICATIONS_OTHER: Key = Key(2002);
-			pub const SKILLS_MANY: Key = Key(2150);
-			pub const APPLICATIONS_MANY: Key = Key(2151);
+			pub const TITLE: Key = Key(2007);
+			pub const CAPTION: Key = Key(2008);
+			pub const CREATE: Key = Key(2009);
+			pub const EMPTY: Key = Key(2010);
+			pub const COUNTS: Key = Key(2011);
+			pub const COUNTS_UNREADABLE: Key = Key(2012);
+			pub const SKILLS_ZERO: Key = Key(2013);
+			pub const SKILLS_ONE: Key = Key(2014);
+			pub const SKILLS_OTHER: Key = Key(2015);
+			pub const APPLICATIONS_ZERO: Key = Key(2016);
+			pub const APPLICATIONS_ONE: Key = Key(2017);
+			pub const APPLICATIONS_OTHER: Key = Key(2018);
+			pub const SKILLS_MANY: Key = Key(2167);
+			pub const APPLICATIONS_MANY: Key = Key(2168);
 		}
 		pub mod colour {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1976);
-			pub const NONE: Key = Key(1977);
-			pub const HINT: Key = Key(1978);
+			pub const LABEL: Key = Key(1992);
+			pub const NONE: Key = Key(1993);
+			pub const HINT: Key = Key(1994);
 		}
 		pub mod danger {
 			use crate::strings::Key;
-			pub const DELETE: Key = Key(2087);
-			pub const DESCRIPTION: Key = Key(2088);
-			pub const LAST: Key = Key(2089);
+			pub const DELETE: Key = Key(2103);
+			pub const DESCRIPTION: Key = Key(2104);
+			pub const LAST: Key = Key(2105);
 			pub mod confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(2090);
+				pub const TITLE: Key = Key(2106);
 			}
 		}
 		pub mod host {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1974);
-			pub const HINT: Key = Key(1975);
+			pub const LABEL: Key = Key(1990);
+			pub const HINT: Key = Key(1991);
 		}
 		pub mod hosting {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(2069);
-			pub const DESCRIPTION: Key = Key(2070);
-			pub const SIGNED_OUT: Key = Key(2071);
-			pub const SIGN_IN: Key = Key(2072);
-			pub const CONNECTING: Key = Key(2073);
-			pub const ONLINE: Key = Key(2074);
+			pub const LABEL: Key = Key(2085);
+			pub const DESCRIPTION: Key = Key(2086);
+			pub const SIGNED_OUT: Key = Key(2087);
+			pub const SIGN_IN: Key = Key(2088);
+			pub const CONNECTING: Key = Key(2089);
+			pub const ONLINE: Key = Key(2090);
 			pub mod failed {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(2075);
-				pub const DESCRIPTION: Key = Key(2076);
+				pub const TITLE: Key = Key(2091);
+				pub const DESCRIPTION: Key = Key(2092);
 				pub mod reasons {
 					use crate::strings::Key;
-					pub const NOT_OWNER: Key = Key(2077);
-					pub const DEVICE_AWAITING_APPROVAL: Key = Key(2078);
-					pub const DEVICE_REFUSED: Key = Key(2079);
-					pub const KEYS_MISSING: Key = Key(2080);
-					pub const INSTANCE_GONE: Key = Key(2081);
-					pub const TAKEN_OVER: Key = Key(2082);
-					pub const STREAM_CLOSED: Key = Key(2083);
-					pub const UNKNOWN: Key = Key(2084);
+					pub const NOT_OWNER: Key = Key(2093);
+					pub const DEVICE_AWAITING_APPROVAL: Key = Key(2094);
+					pub const DEVICE_REFUSED: Key = Key(2095);
+					pub const KEYS_MISSING: Key = Key(2096);
+					pub const INSTANCE_GONE: Key = Key(2097);
+					pub const TAKEN_OVER: Key = Key(2098);
+					pub const STREAM_CLOSED: Key = Key(2099);
+					pub const UNKNOWN: Key = Key(2100);
 				}
 			}
 			pub mod stop_failed {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(2085);
-				pub const DESCRIPTION: Key = Key(2086);
+				pub const TITLE: Key = Key(2101);
+				pub const DESCRIPTION: Key = Key(2102);
 			}
 		}
 		pub mod members {
 			use crate::strings::Key;
-			pub const INVITATIONS: Key = Key(2013);
-			pub const LIST: Key = Key(2014);
-			pub const PENDING_ONE: Key = Key(2017);
-			pub const PENDING_OTHER: Key = Key(2018);
-			pub const EXPIRED: Key = Key(2019);
-			pub const YOU: Key = Key(2020);
-			pub const REMOVE: Key = Key(2021);
-			pub const REMOVE_LABEL: Key = Key(2022);
-			pub const WITHDRAW_LABEL: Key = Key(2023);
-			pub const INVITE_AGAIN_LABEL: Key = Key(2024);
-			pub const NEEDS_INVITATION: Key = Key(2025);
-			pub const INVITE_MEMBER_AGAIN: Key = Key(2026);
-			pub const SENT: Key = Key(2035);
-			pub const SENT_DESCRIPTION: Key = Key(2036);
-			pub const WITHDRAWN: Key = Key(2037);
-			pub const WITHDRAWN_DESCRIPTION: Key = Key(2038);
-			pub const PENDING_MANY: Key = Key(2152);
+			pub const INVITATIONS: Key = Key(2029);
+			pub const LIST: Key = Key(2030);
+			pub const PENDING_ONE: Key = Key(2033);
+			pub const PENDING_OTHER: Key = Key(2034);
+			pub const EXPIRED: Key = Key(2035);
+			pub const YOU: Key = Key(2036);
+			pub const REMOVE: Key = Key(2037);
+			pub const REMOVE_LABEL: Key = Key(2038);
+			pub const WITHDRAW_LABEL: Key = Key(2039);
+			pub const INVITE_AGAIN_LABEL: Key = Key(2040);
+			pub const NEEDS_INVITATION: Key = Key(2041);
+			pub const INVITE_MEMBER_AGAIN: Key = Key(2042);
+			pub const SENT: Key = Key(2051);
+			pub const SENT_DESCRIPTION: Key = Key(2052);
+			pub const WITHDRAWN: Key = Key(2053);
+			pub const WITHDRAWN_DESCRIPTION: Key = Key(2054);
+			pub const PENDING_MANY: Key = Key(2169);
 			pub mod confirm {
 				use crate::strings::Key;
-				pub const TITLE: Key = Key(2033);
-				pub const DESCRIPTION: Key = Key(2034);
+				pub const TITLE: Key = Key(2049);
+				pub const DESCRIPTION: Key = Key(2050);
 			}
 			pub mod failure {
 				pub mod invite {
 					use crate::strings::Key;
-					pub const NOT_HOSTING: Key = Key(2039);
-					pub const LIMIT_REACHED: Key = Key(2040);
-					pub const NOT_OWNER: Key = Key(2041);
-					pub const NEEDS_SIGN_IN: Key = Key(2042);
-					pub const UNREACHABLE: Key = Key(2043);
-					pub const OFFLINE: Key = Key(2044);
-					pub const TIMED_OUT: Key = Key(2045);
-					pub const UNSENT: Key = Key(2046);
-					pub const RELAY_STATUS: Key = Key(2047);
-					pub const RELAY_CONFLICT: Key = Key(2048);
-					pub const UNREADABLE_CONFLICT: Key = Key(2049);
-					pub const UNREADABLE_LIST: Key = Key(2050);
-					pub const LIST_NOT_READ_BACK: Key = Key(2051);
-					pub const GENERIC: Key = Key(2052);
+					pub const NOT_HOSTING: Key = Key(2055);
+					pub const LIMIT_REACHED: Key = Key(2056);
+					pub const NOT_OWNER: Key = Key(2057);
+					pub const NEEDS_SIGN_IN: Key = Key(2058);
+					pub const UNREACHABLE: Key = Key(2059);
+					pub const OFFLINE: Key = Key(2060);
+					pub const TIMED_OUT: Key = Key(2061);
+					pub const UNSENT: Key = Key(2062);
+					pub const RELAY_STATUS: Key = Key(2063);
+					pub const RELAY_CONFLICT: Key = Key(2064);
+					pub const UNREADABLE_CONFLICT: Key = Key(2065);
+					pub const UNREADABLE_LIST: Key = Key(2066);
+					pub const LIST_NOT_READ_BACK: Key = Key(2067);
+					pub const GENERIC: Key = Key(2068);
 				}
 				pub mod remove {
 					use crate::strings::Key;
-					pub const GONE: Key = Key(2060);
-					pub const PENDING: Key = Key(2061);
-					pub const HOST: Key = Key(2062);
-					pub const HOSTED_BY: Key = Key(2063);
-					pub const NOT_HOSTING: Key = Key(2064);
-					pub const NOT_OWNER: Key = Key(2065);
-					pub const NEEDS_SIGN_IN: Key = Key(2066);
-					pub const UNREACHABLE: Key = Key(2067);
-					pub const GENERIC: Key = Key(2068);
+					pub const GONE: Key = Key(2076);
+					pub const PENDING: Key = Key(2077);
+					pub const HOST: Key = Key(2078);
+					pub const HOSTED_BY: Key = Key(2079);
+					pub const NOT_HOSTING: Key = Key(2080);
+					pub const NOT_OWNER: Key = Key(2081);
+					pub const NEEDS_SIGN_IN: Key = Key(2082);
+					pub const UNREACHABLE: Key = Key(2083);
+					pub const GENERIC: Key = Key(2084);
 				}
 				pub mod withdraw {
 					use crate::strings::Key;
-					pub const GONE: Key = Key(2053);
-					pub const JOINED: Key = Key(2054);
-					pub const NOT_HOSTING: Key = Key(2055);
-					pub const NOT_OWNER: Key = Key(2056);
-					pub const NEEDS_SIGN_IN: Key = Key(2057);
-					pub const UNREACHABLE: Key = Key(2058);
-					pub const GENERIC: Key = Key(2059);
+					pub const GONE: Key = Key(2069);
+					pub const JOINED: Key = Key(2070);
+					pub const NOT_HOSTING: Key = Key(2071);
+					pub const NOT_OWNER: Key = Key(2072);
+					pub const NEEDS_SIGN_IN: Key = Key(2073);
+					pub const UNREACHABLE: Key = Key(2074);
+					pub const GENERIC: Key = Key(2075);
 				}
 			}
 			pub mod invite {
 				use crate::strings::Key;
-				pub const LABEL: Key = Key(2003);
-				pub const PLACEHOLDER: Key = Key(2004);
-				pub const ACTION: Key = Key(2005);
-				pub const HINT: Key = Key(2006);
-				pub const NOT_SHARED: Key = Key(2010);
-				pub const SIGNED_OUT: Key = Key(2011);
-				pub const HOST_OFFLINE: Key = Key(2012);
+				pub const LABEL: Key = Key(2019);
+				pub const PLACEHOLDER: Key = Key(2020);
+				pub const ACTION: Key = Key(2021);
+				pub const HINT: Key = Key(2022);
+				pub const NOT_SHARED: Key = Key(2026);
+				pub const SIGNED_OUT: Key = Key(2027);
+				pub const HOST_OFFLINE: Key = Key(2028);
 				pub mod refusal {
 					use crate::strings::Key;
-					pub const INVITED: Key = Key(2007);
-					pub const SELF: Key = Key(2008);
-					pub const MALFORMED: Key = Key(2009);
+					pub const INVITED: Key = Key(2023);
+					pub const SELF: Key = Key(2024);
+					pub const MALFORMED: Key = Key(2025);
 				}
 			}
 			pub mod invited_again_failure {
 				pub mod generic {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(2031);
-					pub const DESCRIPTION: Key = Key(2032);
+					pub const TITLE: Key = Key(2047);
+					pub const DESCRIPTION: Key = Key(2048);
 				}
 				pub mod listed {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(2027);
-					pub const DESCRIPTION: Key = Key(2028);
+					pub const TITLE: Key = Key(2043);
+					pub const DESCRIPTION: Key = Key(2044);
 				}
 				pub mod removed {
 					use crate::strings::Key;
-					pub const TITLE: Key = Key(2029);
-					pub const DESCRIPTION: Key = Key(2030);
+					pub const TITLE: Key = Key(2045);
+					pub const DESCRIPTION: Key = Key(2046);
 				}
 			}
 			pub mod status {
 				use crate::strings::Key;
-				pub const HOST: Key = Key(2015);
-				pub const EXPIRED: Key = Key(2016);
+				pub const HOST: Key = Key(2031);
+				pub const EXPIRED: Key = Key(2032);
 			}
 		}
 		pub mod name {
 			use crate::strings::Key;
-			pub const LABEL: Key = Key(1972);
-			pub const PLACEHOLDER: Key = Key(1973);
+			pub const LABEL: Key = Key(1988);
+			pub const PLACEHOLDER: Key = Key(1989);
 		}
 		pub mod not_shared {
 			use crate::strings::Key;
-			pub const TITLE: Key = Key(1969);
-			pub const DESCRIPTION: Key = Key(1970);
-			pub const SHARE: Key = Key(1971);
+			pub const TITLE: Key = Key(1985);
+			pub const DESCRIPTION: Key = Key(1986);
+			pub const SHARE: Key = Key(1987);
 		}
 		pub mod standing {
 			use crate::strings::Key;
-			pub const YOURS: Key = Key(1963);
-			pub const YOURS_SHARED: Key = Key(1964);
-			pub const JOINED: Key = Key(1965);
-			pub const JOINED_NOT_CONNECTED: Key = Key(1966);
-			pub const INVITATION: Key = Key(1967);
+			pub const YOURS: Key = Key(1979);
+			pub const YOURS_SHARED: Key = Key(1980);
+			pub const JOINED: Key = Key(1981);
+			pub const JOINED_NOT_CONNECTED: Key = Key(1982);
+			pub const INVITATION: Key = Key(1983);
 		}
 		pub mod transfer {
 			use crate::strings::Key;
-			pub const EXPORT: Key = Key(1979);
-			pub const IMPORT: Key = Key(1980);
-			pub const EXPORTED: Key = Key(1981);
-			pub const IMPORTED: Key = Key(1982);
-			pub const EXPORT_FAILED: Key = Key(1983);
-			pub const IMPORT_FAILED: Key = Key(1984);
-			pub const RETRY: Key = Key(1985);
+			pub const EXPORT: Key = Key(1995);
+			pub const IMPORT: Key = Key(1996);
+			pub const EXPORTED: Key = Key(1997);
+			pub const IMPORTED: Key = Key(1998);
+			pub const EXPORT_FAILED: Key = Key(1999);
+			pub const IMPORT_FAILED: Key = Key(2000);
+			pub const RETRY: Key = Key(2001);
 			pub mod reason {
 				use crate::strings::Key;
-				pub const UNSUPPORTED_ARCHIVE: Key = Key(1986);
-				pub const UNVERSIONED_ARCHIVE: Key = Key(1987);
-				pub const UNREADABLE_ARCHIVE: Key = Key(1988);
-				pub const UNWRITABLE_ARCHIVE: Key = Key(1989);
-				pub const GENERIC: Key = Key(1990);
+				pub const UNSUPPORTED_ARCHIVE: Key = Key(2002);
+				pub const UNVERSIONED_ARCHIVE: Key = Key(2003);
+				pub const UNREADABLE_ARCHIVE: Key = Key(2004);
+				pub const UNWRITABLE_ARCHIVE: Key = Key(2005);
+				pub const GENERIC: Key = Key(2006);
 			}
 		}
 	}

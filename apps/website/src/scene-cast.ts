@@ -15,7 +15,6 @@ import type {
 	MissionCardModel,
 	MissionState,
 } from "@workspace/ui/components/mission"
-import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
@@ -404,20 +403,6 @@ const CONVERSATIONS_BY_SPACE: Record<string, AppSidebarConversation[]> =
 const SECTIONS_BY_SPACE: Record<string, AppSidebarSection[]> =
 	Object.fromEntries(SCENE_SPACES.map((space) => [space.id, space.sections]))
 
-const missionsPanelOf = (space: SceneSpace): MissionsPanelProps => ({
-	open: space.missions.map((mission) => ({
-		...mission,
-		conversationId: mission.id,
-	})),
-	earlierToday: [],
-	onOpen: () => {},
-})
-
-const MISSIONS_BY_SPACE: Record<string, MissionsPanelProps> =
-	Object.fromEntries(
-		SCENE_SPACES.map((space) => [space.id, missionsPanelOf(space)]),
-	)
-
 const READER: UserChipIdentity = { name: SCENE_COPY.reader }
 
 export {
@@ -425,7 +410,6 @@ export {
 	CONVERSATIONS_BY_SPACE,
 	IVY,
 	JUNO,
-	MISSIONS_BY_SPACE,
 	MOCHI,
 	MOVE,
 	OLIVE,

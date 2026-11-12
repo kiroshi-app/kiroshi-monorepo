@@ -49,6 +49,46 @@ export const DESK_ROOM: AppSidebarConversation = {
 	pinPosition: 1,
 }
 
+export const PINNED_CONVERSATIONS: AppSidebarConversation[] = [
+	DESK_ROOM,
+	{
+		id: "roadmap",
+		name: "Roadmap",
+		participants: [ATLAS],
+		lastMessage: "Q3 themes are drafted.",
+		lastSpeaker: "Atlas",
+		timestamp: "Yesterday",
+		pinPosition: 2,
+	},
+]
+
+export const RECENT_CONVERSATIONS: AppSidebarConversation[] = [
+	{
+		id: "hiring",
+		name: "Hiring loop",
+		participants: [BEACON],
+		lastMessage: "Two candidates booked for Thursday.",
+		lastSpeaker: "Beacon",
+		timestamp: "09:12",
+	},
+	{
+		id: "pricing",
+		name: "Pricing page",
+		participants: [ATLAS, BEACON],
+		lastMessage: "The new tiers read well.",
+		lastSpeaker: "Atlas",
+		timestamp: "Mon",
+	},
+	{
+		id: "support",
+		name: "Support inbox",
+		participants: [BEACON],
+		lastMessage: "Three tickets need a reply.",
+		lastSpeaker: "Beacon",
+		timestamp: "Sun",
+	},
+]
+
 export const SIDEBAR_BOTS: AppSidebarBot[] = [ATLAS, BEACON]
 
 export const SIDEBAR_CONVERSATIONS: AppSidebarConversation[] = [DESK_ROOM]

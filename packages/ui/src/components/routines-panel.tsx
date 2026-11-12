@@ -26,6 +26,8 @@ import { Icons } from "@workspace/ui/components/icons"
 import {
 	ListSkeleton,
 	SkeletonBar,
+	SkeletonRow,
+	type SkeletonRowProps,
 } from "@workspace/ui/components/list-skeleton"
 import type { MissionCardModel } from "@workspace/ui/components/mission"
 import {
@@ -33,7 +35,6 @@ import {
 	type MissionCardWrap,
 	wrapCard,
 } from "@workspace/ui/components/mission-card"
-import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
 import { NestedSidebarProvider } from "@workspace/ui/components/nested-sidebar-provider"
 import { Notice } from "@workspace/ui/components/notice"
 import {
@@ -69,6 +70,7 @@ import {
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import type { ClickModifiers } from "@workspace/ui/lib/click-modifiers"
+import { cn } from "@workspace/ui/lib/utils"
 
 const ROUTINES_PANEL_WIDTH = 320
 
@@ -83,7 +85,7 @@ const ROUTINE_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const PANEL_HEADER =
-	"h-12 shrink-0 flex-row items-center px-[calc(var(--shell-inset)+--spacing(2.5))] py-0"
+	"h-12 shrink-0 flex-row items-center ps-[calc(var(--shell-inset)+--spacing(2.5))] pe-[calc(var(--shell-inset)+--spacing(0.5))] py-0"
 
 type PanelWidthStyle = CSSProperties & { "--sidebar-width": string }
 
@@ -186,6 +188,60 @@ const RoutineRowSkeleton = () => (
 		<SkeletonBar className="h-5 w-8 shrink-0" isFaint />
 		<div className="size-7 shrink-0" />
 	</div>
+)
+
+type MissionRowWidths = Pick<
+	SkeletonRowProps,
+	"titleClassName" | "previewClassName"
+>
+
+type MissionsGroupShape = {
+	headerClassName: string
+	rows: MissionRowWidths[]
+}
+
+const MISSIONS_GROUP_CYCLE: MissionsGroupShape[] = [
+	{
+		headerClassName: "w-23",
+		rows: [
+			{ titleClassName: "w-37.5", previewClassName: "w-42.5" },
+			{ titleClassName: "w-31", previewClassName: "w-37.5" },
+		],
+	},
+	{
+		headerClassName: "w-17.5",
+		rows: [
+			{ titleClassName: "w-42", previewClassName: "w-46" },
+			{ titleClassName: "w-33", previewClassName: "w-24" },
+			{ titleClassName: "w-36", previewClassName: "w-40" },
+		],
+	},
+]
+
+const MissionSkeletonRow = (widths: MissionRowWidths) => (
+	<SkeletonRow hexagonClassName="size-8" stampClassName="w-7" {...widths} />
+)
+
+const missionsGroupAt = (index: number) => {
+	const { headerClassName, rows } =
+		MISSIONS_GROUP_CYCLE[index % MISSIONS_GROUP_CYCLE.length]
+
+	return (
+		<div className="flex flex-col">
+			<div className="flex h-7 items-center px-1.5">
+				<SkeletonBar className={cn("h-2.25", headerClassName)} />
+			</div>
+			<div className="flex flex-col gap-0.5">
+				{rows.map((widths) => (
+					<MissionSkeletonRow key={widths.titleClassName} {...widths} />
+				))}
+			</div>
+		</div>
+	)
+}
+
+const MissionsGroupsSkeleton = () => (
+	<ListSkeleton className="gap-3" row={missionsGroupAt} />
 )
 
 const RoutinesPanelBody = ({
@@ -310,7 +366,7 @@ const RoutinesPanelBody = ({
 					className="flex min-h-0 flex-1 flex-col"
 					data-slot="missions-pending"
 				>
-					{missionsPhase === "skeleton" ? <MissionsFeedSkeleton /> : null}
+					{missionsPhase === "skeleton" ? <MissionsGroupsSkeleton /> : null}
 				</div>
 			</>
 		)

@@ -4,7 +4,10 @@ import type { TFunction } from "i18next"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { AuthorLineName } from "@workspace/ui/components/author-line"
+import {
+	AuthorLineName,
+	GIVES_WAY_TO_THE_NAME,
+} from "@workspace/ui/components/author-line"
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
@@ -222,7 +225,8 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 				<span
 					data-slot="bot-working-label"
 					className={cn(
-						"block min-w-0 max-w-full truncate text-compact leading-5",
+						"block text-compact leading-5",
+						GIVES_WAY_TO_THE_NAME,
 						labelToneOf(kind, waitingOn),
 						props.stoppable &&
 							"group-focus-within/work:hidden group-hover/work:hidden",
