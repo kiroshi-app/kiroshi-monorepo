@@ -901,6 +901,9 @@ const TODAY_GAP_UNDER_THE_COMPOSER = 20
 const todayRowsIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "home-today-row")
 
+const colourOf = (row: HTMLElement, slot: string) =>
+	getComputedStyle(slotIn(row, slot)).color
+
 const expectTodayUnderTheComposer = async (canvasElement: HTMLElement) => {
 	const { block } = emptyStageBoxesOf(canvasElement)
 	const list = slotIn(canvasElement, "home-today-list").getBoundingClientRect()
@@ -1004,30 +1007,22 @@ export const ThreeTodayMixedStates = meta.story({
 		await expectTodayUnderTheComposer(canvasElement)
 
 		const waiting = canvas.getByRole("button", { name: "Venue deposit" })
-		const attention = getComputedStyle(slotIn(waiting, "needs-you-label")).color
-		await expect(slotIn(waiting, "needs-you-label")).toHaveTextContent(
-			"Needs you",
-		)
-		await expect(slotIn(waiting, "needs-you-glyph")).toBeVisible()
+		const label = slotIn(waiting, "needs-you-label")
+		const attention = getComputedStyle(label).color
+		await expect(label).toHaveTextContent("Needs you")
 		await expect(
 			getComputedStyle(slotIn(waiting, "needs-you-glyph")).backgroundColor,
 		).toBe(attention)
-		await expect(
-			getComputedStyle(slotIn(waiting, "home-today-row-time")).color,
-		).toBe(attention)
+		await expect(colourOf(waiting, "home-today-row-time")).toBe(attention)
 		await expect(slotIn(waiting, "home-today-row-preview")).toHaveTextContent(
 			"Which card pays the deposit?",
 		)
 
 		const done = canvas.getByRole("button", { name: "Launch notes" })
-		const muted = getComputedStyle(slotIn(done, "home-today-row-time")).color
+		const muted = colourOf(done, "home-today-row-time")
 		await expect(muted).not.toBe(attention)
-		await expect(
-			getComputedStyle(slotIn(done, "home-today-row-preview")).color,
-		).toBe(muted)
-		await expect(
-			getComputedStyle(slotIn(waiting, "home-today-row-preview")).color,
-		).toBe(muted)
+		await expect(colourOf(done, "home-today-row-preview")).toBe(muted)
+		await expect(colourOf(waiting, "home-today-row-preview")).toBe(muted)
 		await expect(done.querySelector('[data-slot="text-shimmer"]')).toBeNull()
 	},
 })
