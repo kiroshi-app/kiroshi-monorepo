@@ -524,7 +524,7 @@
 	}
 }
 
-.group\/button.transition-all {
+.group\/button.transition-all:hover {
 	will-change: transform;
 }
 
