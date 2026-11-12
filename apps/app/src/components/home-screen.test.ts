@@ -34,6 +34,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import type { TodayRoster } from "@/lib/home/today-conversations"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const shelf = vi.hoisted(() => ({ items: [] as LibraryItem[] }))
@@ -51,6 +52,20 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 }))
 
 const SPACE = "personal"
+
+const NOON = new Date(2026, 10, 12, 12).getTime()
+
+const spokenAtNoon = (conversations: Conversation[]): TodayRoster => ({
+	conversations,
+	previews: Object.fromEntries(
+		conversations.map(({ id, title }) => [
+			id,
+			{ at: NOON, text: `Last word on ${title}` },
+		]),
+	),
+	hostStates: {},
+	now: NOON,
+})
 
 type HomeFixture = {
 	atlas: Bot
@@ -95,8 +110,10 @@ const emptyStageOf = (
 		isBandDismissed: true,
 		notice: null,
 		isReadOnly: false,
+		today: spokenAtNoon([]),
 		onSelectAgent: vi.fn(),
 		onDismissBand: vi.fn(),
+		onOpenConversation: vi.fn(),
 		...stage,
 	})
 
@@ -414,4 +431,65 @@ it("puts the keyboard in the composer when another agent is picked", async () =>
 
 	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	expect(document.activeElement).toBe(fieldOf("Nyx"))
+})
+
+const todayListOf = (agentName: string) =>
+	screen.queryByRole("list", { name: `Today with ${agentName}` })
+
+const todayRow = (title: string) =>
+	screen.queryByRole("button", { name: title })
+
+it("swaps the Today list to the conversations of the agent picked in the composer", async () => {
+	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
+	const report = await fixture.store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Quarterly report",
+		botIds: [nyx.id],
+	})
+	const stage = {
+		bots: [fixture.atlas, nyx],
+		today: spokenAtNoon([fixture.room, report]),
+	}
+	const { rerender } = render(emptyStageOf(fixture, stage), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	expect(todayListOf("Atlas")).toBeTruthy()
+	expect(todayRow("Lisbon offsite")).toBeTruthy()
+	expect(screen.getByText("Last word on Lisbon offsite")).toBeTruthy()
+	expect(todayRow("Quarterly report")).toBeNull()
+
+	rerender(emptyStageOf(fixture, { ...stage, agent: nyx }))
+
+	expect(todayListOf("Atlas")).toBeNull()
+	expect(todayListOf("Nyx")).toBeTruthy()
+	expect(todayRow("Quarterly report")).toBeTruthy()
+	expect(todayRow("Lisbon offsite")).toBeNull()
+})
+
+it("opens the conversation of the Today row that is clicked", () => {
+	const onOpenConversation = vi.fn()
+	render(
+		emptyStageOf(fixture, {
+			today: spokenAtNoon([fixture.room]),
+			onOpenConversation,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	fireEvent.click(screen.getByRole("button", { name: "Lisbon offsite" }))
+
+	expect(onOpenConversation).toHaveBeenCalledWith(fixture.room.id)
+})
+
+it("draws no Today list and no header when the agent has no conversation today", () => {
+	const yesterday = { ...spokenAtNoon([fixture.room]), now: NOON + 86_400_000 }
+	render(emptyStageOf(fixture, { today: yesterday }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	expect(screen.queryByRole("heading", { name: /Today with/ })).toBeNull()
+	expect(screen.queryByRole("list")).toBeNull()
+	expect(todayRow("Lisbon offsite")).toBeNull()
 })

@@ -798,6 +798,12 @@ describe("WorkspaceBody Home", () => {
 						home: {
 							visits: homeVisits,
 							store,
+							today: {
+								conversations: [],
+								previews: {},
+								hostStates: {},
+								now: Date.now(),
+							},
 							onSelectAgent: () => undefined,
 							startConversation: () => Promise.resolve(null),
 							discardConversation: () => Promise.resolve(),
