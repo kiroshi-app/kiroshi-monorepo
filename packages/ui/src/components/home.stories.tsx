@@ -1034,6 +1034,42 @@ export const ThreeTodayMixedStates = meta.story({
 	},
 })
 
+const TODAY_SHORT_PANEL_HEIGHT = 560
+
+const TODAY_SHORT_WINDOW = inWindowAround(TODAY_SHORT_PANEL_HEIGHT)
+
+const PANEL_BOTTOM_PADDING = 16
+
+export const ThreeTodayInAShortPanel = meta.story({
+	name: "Today · Three rows in a short panel, reached by scrolling",
+	render: () => <EmptyHome today={TODAY_MIXED} />,
+	globals: TODAY_SHORT_WINDOW.globals,
+	parameters: {
+		...TODAY_SHORT_WINDOW.parameters,
+		...withDescription(
+			"Three conversations today in a 560px panel, too short to show the list under the centred composer. Check that the greeting and composer stay in the middle and that the content area scrolls until the third row is whole, with the panel bottom padding under it.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const third = todayRowsIn(canvasElement)[2]
+
+		await expectBlockInTheMiddle(canvasElement)
+		await expect(third.getBoundingClientRect().bottom).toBeGreaterThan(
+			scroller.getBoundingClientRect().bottom,
+		)
+
+		scroller.scrollTop = scroller.scrollHeight
+
+		const contentArea = scroller.getBoundingClientRect()
+		const row = third.getBoundingClientRect()
+		await expect(row.top).toBeGreaterThanOrEqual(contentArea.top)
+		await expect(
+			Math.abs(contentArea.bottom - row.bottom - PANEL_BOTTOM_PADDING),
+		).toBeLessThanOrEqual(1)
+	},
+})
+
 export const MoreThanThreeCappedAtThree = meta.story({
 	name: "Today 4 · More than three, capped at three",
 	render: () => <EmptyHome today={[...TODAY_MIXED, TODAY_FOURTH]} />,

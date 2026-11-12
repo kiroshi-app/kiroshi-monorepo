@@ -200,6 +200,7 @@ conversation-home-home--picker-open-over-today
 conversation-home-home--picker-without-agents
 conversation-home-home--pico-chosen-today
 conversation-home-home--sending
+conversation-home-home--three-today-in-a-short-panel
 conversation-home-home--three-today-mixed-states
 conversation-home-home--today-long-content
 conversation-home-home--with-a-first-name

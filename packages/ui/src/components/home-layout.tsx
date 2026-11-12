@@ -22,7 +22,10 @@ const HomeLayout = ({ stage, children, below }: HomeLayoutProps) => (
 		<div className="relative my-auto flex w-170 max-w-full flex-col gap-4">
 			{children}
 			<div
-				className="absolute inset-x-0 top-full pt-5 empty:hidden"
+				className={cn(
+					"absolute inset-x-0 top-full pt-5 empty:hidden",
+					EVENS_SCREEN_COLUMN_PADDING,
+				)}
 				data-slot="home-layout-below"
 			>
 				{below}
