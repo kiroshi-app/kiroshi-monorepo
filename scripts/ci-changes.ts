@@ -63,7 +63,7 @@ const touchesRust = (path: string) =>
 		"packages/shared/",
 	]) ||
 	FILES_SRC_TAURI_EMBEDS.includes(path) ||
-	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
+	["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"].includes(fileName(path))
 
 const touchesVitest = (path: string) =>
 	isUnder(path, ["packages/", "scripts/", "baselines/"]) ||
