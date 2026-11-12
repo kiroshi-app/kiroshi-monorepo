@@ -113,11 +113,11 @@ fn unaliased(theme_inline: &Declarations) -> Vec<String> {
 		.iter()
 		.filter(|(name, _)| name.starts_with("--color-"))
 		.filter_map(|(name, value)| {
-			let Some(source) = value.strip_prefix("var(").and_then(|rest| rest.strip_suffix(')'))
-			else {
+			let alias = value.strip_prefix("var(").and_then(|rest| rest.strip_suffix(')'));
+			let Some(source) = alias.map(str::trim) else {
 				return Some(format!("{name} is {value}, not the alias of a token"));
 			};
-			(!rust.contains(source.trim())).then(|| format!("{name} reads {}", source.trim()))
+			(!rust.contains(source)).then(|| format!("{name} reads {source}"))
 		})
 		.collect()
 }
