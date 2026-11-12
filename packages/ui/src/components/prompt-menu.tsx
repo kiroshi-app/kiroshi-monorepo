@@ -1,6 +1,5 @@
 "use client"
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
 	type PointerEventHandler,
 	type ReactNode,
@@ -11,15 +10,10 @@ import {
 } from "react"
 
 import { POPUP_CLASS } from "@workspace/ui/components/settings-styles"
-import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { useDismiss } from "@workspace/ui/lib/hooks/use-dismiss"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TRAVEL_STEPS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 }
-
-const PANEL_HIDDEN = { y: 6, scale: 0.98 } as const
-const PANEL_VISIBLE = { y: 0, scale: 1 } as const
-const PANEL_LEAVING = { ...PANEL_HIDDEN, pointerEvents: "none" } as const
 
 const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 	row?.scrollIntoView({ block: "nearest" })
@@ -121,39 +115,28 @@ const PromptMenuSurface = ({
 	footer,
 	children,
 	className,
-}: PromptMenuSurfaceProps) => {
-	const reduce = useReducedMotion() ?? false
+}: PromptMenuSurfaceProps) => (
+	<div ref={rootRef} data-slot={slot} className={cn("relative", className)}>
+		{isOpen ? (
+			<div
+				onPointerDown={(event) => event.preventDefault()}
+				className={cn(POPUP_CLASS, panelClassName)}
+			>
+				<div
+					role="listbox"
+					aria-label={label}
+					tabIndex={0}
+					className="max-h-64 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+				>
+					{rows}
+				</div>
+				{footer}
+			</div>
+		) : null}
 
-	return (
-		<div ref={rootRef} data-slot={slot} className={cn("relative", className)}>
-			<AnimatePresence>
-				{isOpen ? (
-					<motion.div
-						initial={PANEL_HIDDEN}
-						animate={PANEL_VISIBLE}
-						exit={PANEL_LEAVING}
-						transition={reduce ? TRANSITION_NONE : SPRING_PANEL}
-						onPointerDown={(event) => event.preventDefault()}
-						style={{ transformOrigin: "bottom left" }}
-						className={cn(POPUP_CLASS, panelClassName)}
-					>
-						<div
-							role="listbox"
-							aria-label={label}
-							tabIndex={0}
-							className="max-h-64 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-						>
-							{rows}
-						</div>
-						{footer}
-					</motion.div>
-				) : null}
-			</AnimatePresence>
-
-			{children}
-		</div>
-	)
-}
+		{children}
+	</div>
+)
 
 type PromptMenuRowProps = {
 	isActive: boolean
