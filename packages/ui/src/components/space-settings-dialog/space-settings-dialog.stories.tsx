@@ -10,6 +10,7 @@ import {
 	FRAME_POLL,
 	glyphIn,
 	probedStyleOf,
+	shown,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -317,12 +318,10 @@ export const Skills = meta.story({
 			within(panel).getByRole("button", { name: /release-notes/ }),
 		)
 		const back = within(dialog).getByRole("button", { name: "All skills" })
-		await expect(back).toBeVisible()
+		await shown(back)
 
 		await userEvent.click(back)
-		await expect(
-			within(dialog).getByRole("tab", { name: "Skills" }),
-		).toBeVisible()
+		await shown(within(dialog).getByRole("tab", { name: "Skills" }))
 	},
 })
 
@@ -349,12 +348,10 @@ export const McpServers = meta.story({
 		const back = within(dialog).getByRole("button", {
 			name: "All applications",
 		})
-		await expect(back).toBeVisible()
+		await shown(back)
 
 		await userEvent.click(back)
-		await expect(
-			within(dialog).getByRole("tab", { name: "Applications" }),
-		).toBeVisible()
+		await shown(within(dialog).getByRole("tab", { name: "Applications" }))
 	},
 })
 
@@ -373,12 +370,12 @@ export const OpensOnAnApplication = meta.story({
 		const back = await within(dialog).findByRole("button", {
 			name: "All applications",
 		})
-		await expect(back).toBeVisible()
+		await shown(back)
 
 		await userEvent.click(back)
-		await expect(
+		await shown(
 			await within(dialog).findByRole("tabpanel", { name: "Applications" }),
-		).toBeVisible()
+		)
 	},
 })
 

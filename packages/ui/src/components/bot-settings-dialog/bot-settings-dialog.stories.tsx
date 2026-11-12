@@ -12,6 +12,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	pictureOf,
+	shown,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
@@ -607,9 +608,7 @@ export const HistoryChange = meta.story({
 		)
 
 		await expect(args.history?.onOpen).toHaveBeenCalledTimes(1)
-		await expect(
-			within(dialog).getByRole("tab", { name: "AGENTS.md" }),
-		).toBeVisible()
+		await shown(within(dialog).getByRole("tab", { name: "AGENTS.md" }))
 
 		await userEvent.click(
 			within(dialog).getByRole("button", { name: "History" }),
@@ -618,9 +617,9 @@ export const HistoryChange = meta.story({
 		await expect(
 			within(railIn(dialog)).getByRole("tab", { name: "History" }),
 		).toHaveAttribute("aria-selected", "true")
-		await expect(
+		await shown(
 			within(dialog).getByRole("heading", { level: 3, name: "Today" }),
-		).toBeVisible()
+		)
 	},
 })
 
@@ -771,9 +770,7 @@ export const WithSkillOpen = meta.story({
 			"Tools",
 			"Advanced",
 		])
-		await expect(
-			within(dialog).getByRole("button", { name: "All skills" }),
-		).toBeVisible()
+		await shown(within(dialog).getByRole("button", { name: "All skills" }))
 	},
 })
 
@@ -798,9 +795,9 @@ export const WithServerOpen = meta.story({
 			.getAllByRole("tab")
 			.map((tab) => tab.textContent)
 		await expect(sections).toEqual(["Connection", "Secrets", "Advanced"])
-		await expect(
+		await shown(
 			within(dialog).getByRole("button", { name: "All applications" }),
-		).toBeVisible()
+		)
 	},
 })
 
