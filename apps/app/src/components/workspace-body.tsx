@@ -145,40 +145,38 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 	}
 
 	return (
-		<ScreenLayout width="full">
-			<HomeEmptyStage
-				{...send}
-				{...rooms}
-				arrivalKey={seat.arrivalKey}
-				bots={body.bots}
-				isBandDismissed={visit?.isBandDismissed ?? false}
-				isReadOnly={Boolean(joinedHost?.departure)}
-				lines={
-					<HomeLines
-						{...rooms}
-						key={bot.id}
-						openedAt={visit?.openedAt ?? null}
-						roomLinesOf={(workingIds) =>
-							seat.visits.roomLinesOf(bot.id, spaceId, workingIds)
-						}
+		<HomeEmptyStage
+			{...send}
+			{...rooms}
+			arrivalKey={seat.arrivalKey}
+			bots={body.bots}
+			isBandDismissed={visit?.isBandDismissed ?? false}
+			isReadOnly={Boolean(joinedHost?.departure)}
+			lines={
+				<HomeLines
+					{...rooms}
+					key={bot.id}
+					openedAt={visit?.openedAt ?? null}
+					roomLinesOf={(workingIds) =>
+						seat.visits.roomLinesOf(bot.id, spaceId, workingIds)
+					}
+				/>
+			}
+			notice={
+				joinedHost && access ? (
+					<SpaceAccessBanner
+						host={joinedHost.hostName}
+						reason={access.reason}
+						space={joinedHost.spaceName}
+						waitReason={access.waitReason}
 					/>
-				}
-				notice={
-					joinedHost && access ? (
-						<SpaceAccessBanner
-							host={joinedHost.hostName}
-							reason={access.reason}
-							space={joinedHost.spaceName}
-							waitReason={access.waitReason}
-						/>
-					) : null
-				}
-				onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
-				onSelectAgent={seat.onSelectAgent}
-				readerName={body.readerName}
-				runtimes={body.conversationRuntimes}
-			/>
-		</ScreenLayout>
+				) : null
+			}
+			onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
+			onSelectAgent={seat.onSelectAgent}
+			readerName={body.readerName}
+			runtimes={body.conversationRuntimes}
+		/>
 	)
 }
 

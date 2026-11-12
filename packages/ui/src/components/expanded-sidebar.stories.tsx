@@ -323,12 +323,12 @@ const sectionHeadersIn = (canvasElement: HTMLElement) =>
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
 export const ExpandedNewConversation = meta.story({
-	name: "1 Expanded New conversation",
+	name: "1 Expanded New",
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New conversation open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New conversation alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New conversation row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 30px from the sidebar edge, each avatar 8px from its row's start edge and from its top. Check both section headers are 32px tall with their label 8px in, the first row starts 34px under the top of the list and Conversations sits 12px under the last pinned row, the numbers the loading skeleton holds in `L1LoadingExpanded`. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and both avatars and the navigation icons share one vertical line 30px from the sidebar edge, each avatar 8px from its row's start edge and from its top. Check both section headers are 32px tall with their label 8px in, the first row starts 34px under the top of the list and Conversations sits 12px under the last pinned row, the numbers the loading skeleton holds in `L1LoadingExpanded`. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -337,7 +337,7 @@ export const ExpandedNewConversation = meta.story({
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 
 		const sidebar = within(sidebarIn(canvasElement))
-		const current = sidebar.getByRole("button", { name: "New conversation" })
+		const current = sidebar.getByRole("button", { name: "New" })
 		await expect(current).toHaveAttribute("aria-current", "page")
 		await expect(
 			sidebar.getByRole("button", { name: /^Missions/ }),
@@ -383,7 +383,7 @@ export const ExpandedNewConversation = meta.story({
 
 		const drawingOf = (name: string) =>
 			canvas.getByRole("button", { name }).querySelector("svg")?.innerHTML
-		await expect(drawingOf("New conversation")).toBe(drawingOf("New tab"))
+		await expect(drawingOf("New")).toBe(drawingOf("New tab"))
 
 		const row = slotIn(canvasElement, "expanded-sidebar-switcher-row")
 		const switcher = slotIn(row, "space-switcher")
@@ -453,7 +453,7 @@ export const ExpandedMissions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 2, sidebar side: the Missions page is open. Check that Missions wears the selected fill with its count still muted on the right, and that New conversation went back to rest.",
+					"Artboard 2, sidebar side: the Missions page is open. Check that Missions wears the selected fill with its count still muted on the right, and that New went back to rest.",
 			},
 		},
 	},
@@ -463,7 +463,7 @@ export const ExpandedMissions = meta.story({
 			sidebar.getByRole("button", { name: /^Missions/ }),
 		).toHaveAttribute("aria-current", "page")
 		await expect(
-			sidebar.getByRole("button", { name: "New conversation" }),
+			sidebar.getByRole("button", { name: "New" }),
 		).not.toHaveAttribute("aria-current")
 	},
 })
@@ -554,7 +554,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 	]
 	for (const row of rows) await expect(paddingOf(row)).toEqual(ROW_PADDING)
 
-	for (const name of ["New conversation", /^Missions/, "Library"]) {
+	for (const name of ["New", /^Missions/, "Library"]) {
 		const item = within(sidebar).getByRole("button", { name })
 		const slot = item.querySelector("span[aria-hidden]") as HTMLElement
 		await expect(boxOf(item).height).toBe(TOP_MENU_HEIGHT)
@@ -1680,7 +1680,7 @@ const activeRowHoverStory = (globals: typeof DARK) => ({
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const row = within(canvasElement).getByRole("button", {
-			name: "New conversation",
+			name: "New",
 		})
 		const resting = getComputedStyle(row).backgroundColor
 		const hoverFill = tokenStyleIn(

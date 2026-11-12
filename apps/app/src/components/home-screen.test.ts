@@ -8,17 +8,28 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, useState } from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
-import "@workspace/ui/lib/i18n"
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	HomeEmptyStage,
 	type HomeEmptyStageProps,
 	HomeLines,
 } from "@/components/home-screen"
-import type { MissionInSpace, MissionState } from "@/lib/bindings"
+import { useHomeSend } from "@/components/use-home-send"
+import type { LibraryItem, MissionInSpace, MissionState } from "@/lib/bindings"
+import {
+	type AttachmentsController,
+	type AttachmentsPort,
+	createAttachmentsController,
+} from "@/lib/chat/attachments-controller"
+import {
+	createDraftsController,
+	type DraftsController,
+} from "@/lib/chat/drafts-controller"
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
@@ -38,6 +49,20 @@ vi.mock("@/lib/missions/use-space-missions", () => ({
 		inProgress: [],
 		earlierToday: feed.entries,
 	}),
+}))
+
+const shelf = vi.hoisted(() => ({ items: [] as LibraryItem[] }))
+
+vi.mock("@/lib/library/library-reads", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/library/library-reads")>()),
+	readLibraryItems: () => Promise.resolve(shelf.items),
+}))
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseFailureNotice: vi.fn(() => "notice"),
 }))
 
 const SPACE = "personal"
@@ -125,6 +150,7 @@ const emptyStageOf = (
 		onDraftChange: vi.fn(),
 		onSubmit: vi.fn(),
 		onAttach: vi.fn(),
+		onStageDocument: vi.fn(),
 		attachments: [],
 		onRemoveAttachment: vi.fn(),
 		agent: fixture.atlas,
@@ -150,11 +176,16 @@ let fixture: HomeFixture
 
 beforeEach(async () => {
 	feed.entries = []
+	shelf.items = []
 	fixture = await homeFixture()
+	vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:home-preview")
+	vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined)
 })
 
 afterEach(() => {
 	cleanup()
+	vi.restoreAllMocks()
+	vi.clearAllMocks()
 })
 
 const workingIn = (conversationIds: string[]) =>
@@ -388,4 +419,194 @@ it("puts the keyboard after the draft on each arrival, and leaves it alone in be
 	expect(field().value).toBe("Also the hotel")
 	expect(field().selectionStart).toBe("Also the hotel".length)
 	expect(field().selectionEnd).toBe("Also the hotel".length)
+})
+
+const storeEveryFile: AttachmentsPort["store"] = (_owner, files) =>
+	Promise.resolve(files.map((file) => `/data/${file.name}`))
+
+type HomePageProps = {
+	attachments: AttachmentsController
+	drafts: DraftsController
+	bots: Bot[]
+}
+
+const HomePage = ({ attachments, drafts, bots }: HomePageProps) => {
+	const [agent, setAgent] = useState(bots[0])
+	const send = useHomeSend({
+		agentId: agent.id,
+		spaceId: SPACE,
+		attachments,
+		drafts,
+		runtimes: fixture.runtimes,
+		startConversation: () => Promise.resolve(fixture.room),
+		discardConversation: () => Promise.resolve(),
+		openConversation: () => undefined,
+	})
+
+	return emptyStageOf(fixture, {
+		...send,
+		agent,
+		bots,
+		arrivalKey: "arrival",
+		onSelectAgent: (botId) =>
+			setAgent(bots.find(({ id }) => id === botId) ?? agent),
+	})
+}
+
+const mountHomePage = (
+	bots = [fixture.atlas],
+	send: AttachmentsPort["send"] = () => true,
+) =>
+	render(
+		createElement(HomePage, {
+			attachments: createAttachmentsController({ store: storeEveryFile, send }),
+			drafts: createDraftsController(),
+			bots,
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+const screenshot = () =>
+	new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" })
+
+const fileDrag = (type: string, files: File[]) => {
+	const event = new Event(type, { bubbles: true, cancelable: true })
+	Object.defineProperty(event, "dataTransfer", {
+		value: {
+			types: ["Files"],
+			files,
+			items: files.map(() => ({ kind: "file" })),
+		},
+	})
+	return event
+}
+
+const greeting = () => screen.getByRole("heading", { level: 1 })
+
+const dragOverGreeting = (type: string, files: File[]) => {
+	act(() => {
+		greeting().dispatchEvent(fileDrag(type, files))
+	})
+}
+
+const fieldOf = (agentName: string) =>
+	screen.getByPlaceholderText<HTMLTextAreaElement>(`Message ${agentName}`)
+
+const isComposerDropTarget = () =>
+	fieldOf("Atlas").closest("form")?.getAttribute("data-drop-target")
+
+const chipOf = (name: RegExp) => screen.findByRole("button", { name })
+
+const documentIn = (name: string): LibraryItem => ({
+	name,
+	kind: "document",
+	path: `/library/${name}`,
+	bytes: 2048,
+	modifiedAt: 1,
+	createdAt: 1,
+})
+
+const pickAgent = async (from: string, to: string) => {
+	fireEvent.click(screen.getByRole("button", { name: new RegExp(from) }))
+	fireEvent.click(
+		await screen.findByRole("menuitemradio", { name: new RegExp(to) }),
+	)
+}
+
+it("stages an image dropped away from the composer as a chip in it", async () => {
+	mountHomePage()
+
+	dragOverGreeting("drop", [screenshot()])
+
+	expect(await chipOf(/shot\.png/)).toBeTruthy()
+})
+
+it("shows the composer as the drop target while a file is dragged over the page", () => {
+	mountHomePage()
+	expect(isComposerDropTarget()).toBe("false")
+
+	dragOverGreeting("dragenter", [screenshot()])
+	expect(isComposerDropTarget()).toBe("true")
+
+	dragOverGreeting("dragleave", [screenshot()])
+	expect(isComposerDropTarget()).toBe("false")
+})
+
+it("stages nothing dropped on a page that is read only", () => {
+	const onAttach = vi.fn()
+	render(emptyStageOf(fixture, { isReadOnly: true, onAttach }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	dragOverGreeting("drop", [screenshot()])
+
+	expect(onAttach).not.toHaveBeenCalled()
+})
+
+it("lists the Library documents of the Space under the attach button, and attaches the picked one", async () => {
+	shelf.items = [
+		documentIn("lisbon-brief.md"),
+		{ ...documentIn("venue.png"), kind: "image" },
+	]
+	mountHomePage()
+
+	fireEvent.click(
+		screen.getByRole("combobox", { name: i18n.t("chat:attachments.add") }),
+	)
+	const document = await screen.findByRole("option", { name: /lisbon-brief/ })
+	expect(screen.queryByRole("option", { name: /venue/ })).toBeNull()
+	fireEvent.click(document)
+
+	expect(await chipOf(/lisbon-brief/)).toBeTruthy()
+})
+
+it("opens the commands of the selected agent on a slash, and writes the picked one", async () => {
+	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
+	await fixture.store.recordBotCommands(fixture.atlas.id, [
+		{ name: "review", description: "Review the diff" },
+	])
+	await fixture.store.recordBotCommands(nyx.id, [{ name: "deploy" }])
+	mountHomePage([fixture.atlas, nyx])
+
+	fireEvent.change(fieldOf("Atlas"), { target: { value: "/" } })
+	const review = await screen.findByRole("option", { name: /\/review/ })
+	expect(screen.queryByRole("option", { name: /\/deploy/ })).toBeNull()
+	fireEvent.click(review)
+	expect(fieldOf("Atlas").value).toBe("/review ")
+
+	await pickAgent("Atlas", "Nyx")
+	fireEvent.change(fieldOf("Nyx"), { target: { value: "/" } })
+
+	expect(await screen.findByRole("option", { name: /\/deploy/ })).toBeTruthy()
+	expect(screen.queryByRole("option", { name: /\/review/ })).toBeNull()
+})
+
+it("keeps the typed text and the files in the composer when the send fails", async () => {
+	mountHomePage([fixture.atlas], () => false)
+	fireEvent.change(fieldOf("Atlas"), { target: { value: "Look at this" } })
+	dragOverGreeting("drop", [screenshot()])
+	await chipOf(/shot\.png/)
+
+	fireEvent.click(screen.getByRole("button", { name: "Send" }))
+
+	await waitFor(() =>
+		expect(vi.mocked(raiseFailureNotice)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: i18n.t("chat:home.failure.send.title"),
+			}),
+		),
+	)
+	expect(fieldOf("Atlas").value).toBe("Look at this")
+	expect(await chipOf(/shot\.png/)).toBeTruthy()
+})
+
+it("puts the keyboard in the composer when another agent is picked", async () => {
+	const [nyx] = await seatBots(fixture.store, SPACE, ["Nyx"])
+	mountHomePage([fixture.atlas, nyx])
+	await waitFor(() => expect(document.activeElement).toBe(fieldOf("Atlas")))
+
+	await pickAgent("Atlas", "Nyx")
+
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+	expect(document.activeElement).toBe(fieldOf("Nyx"))
 })

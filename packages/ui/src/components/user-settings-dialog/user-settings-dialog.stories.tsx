@@ -242,7 +242,7 @@ export const General = meta.story({
 		docs: {
 			description: {
 				story:
-					"A host that passes the launch page gets a General entry right after Account, holding the Open on row. Check the order, that the row reads New conversation, and that picking Last conversation reports `lastConversation` once and leaves the value alone. Pick `OpensOnGeneralWithoutAnAccount` for a host that passes no account.",
+					"A host that passes the launch page gets a General entry right after Account, holding the Open on row. Check the order, that the row reads New, and that picking Last conversation reports `lastConversation` once and leaves the value alone. Pick `OpensOnGeneralWithoutAnAccount` for a host that passes no account.",
 			},
 		},
 	},
@@ -262,7 +262,7 @@ export const General = meta.story({
 			name: "General",
 		})
 		const trigger = within(panel).getByRole("combobox", { name: "Open on" })
-		await expect(trigger).toHaveTextContent("New conversation")
+		await expect(trigger).toHaveTextContent("New")
 
 		await userEvent.click(trigger)
 		await userEvent.click(

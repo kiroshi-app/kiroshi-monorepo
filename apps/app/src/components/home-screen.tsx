@@ -2,8 +2,11 @@ import {
 	Fragment,
 	type MouseEvent,
 	type ReactNode,
+	type RefObject,
 	useContext,
+	useEffect,
 	useRef,
+	useState,
 } from "react"
 
 import { greetingPeriodOf } from "@workspace/ui/components/greeting-period"
@@ -27,12 +30,18 @@ import {
 	PromptAttachments,
 } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { PromptLibraryPicker } from "@workspace/ui/components/prompt-library-picker"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import { botThreadMenu } from "@/components/thread-menu"
 import { ApprovalPrompt, QuestionPrompt } from "@/components/thread-prompt"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
+import { useBotCommands } from "@/lib/bots/use-bot-commands"
 import { useMcpServers } from "@/lib/bots/use-mcp-servers"
+import { watchConversationDrags } from "@/lib/chat/conversation-drags"
+import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import { faceOfBot } from "@/lib/chat/thread-contract"
 import type {
 	ConversationController,
@@ -49,6 +58,7 @@ import {
 import { homeMissionLinesOf } from "@/lib/home/home-mission-lines"
 import type { HomeRoomLineModel } from "@/lib/home/home-room-lines"
 import { useAgentRooms } from "@/lib/home/use-agent-rooms"
+import { useComposerLibrary } from "@/lib/library/use-composer-library"
 import { useSpaceMissions } from "@/lib/missions/use-space-missions"
 import { conversationHrefOf } from "@/lib/tabs/conversation-tab-opening"
 
@@ -318,6 +328,7 @@ export type HomeSend = {
 	onDraftChange: (draft: string) => void
 	onSubmit: (text: string) => void
 	onAttach: (files: File[]) => void
+	onStageDocument: (document: PromptAttachment) => void
 	attachments: PromptAttachment[]
 	onRemoveAttachment: (id: string) => void
 }
@@ -325,59 +336,131 @@ export type HomeSend = {
 type HomeDraftComposerProps = HomeSend & {
 	agent: Bot
 	bots: Bot[]
+	store: Pick<TranscriptStore, "botCommands">
+	spaceId: string | null
 	band?: ReactNode
+	isDropTarget: boolean
 	onSelectAgent: (botId: string) => void
 	arrivalKey?: string
 }
 
+const arrivalAt = (arrivalKey: string | undefined, agent: Bot) =>
+	arrivalKey === undefined ? undefined : `${arrivalKey}:${agent.id}`
+
 const HomeDraftComposer = ({
 	agent,
 	bots,
+	store,
+	spaceId,
 	band,
+	isDropTarget,
 	onSelectAgent,
 	draft,
 	isSending,
 	onDraftChange,
 	onSubmit,
 	onAttach,
+	onStageDocument,
 	attachments,
 	onRemoveAttachment,
 	arrivalKey,
 }: HomeDraftComposerProps) => {
 	const t = useChatCopy()
 	const fieldRef = useRef<HTMLTextAreaElement>(null)
+	const [wasDismissed, setWasDismissed] = useState(false)
+	const library = useComposerLibrary(spaceId, onStageDocument)
+	const { queryIn, menu } = botThreadMenu({
+		commands: useBotCommands(store, agent.id),
+		isOverlayOpen: false,
+	})
 	const selected = homeAgentOf(agent)
+
+	const query = queryIn(draft)
+	const isDismissed = holdsDismissal(wasDismissed, query)
+	if (wasDismissed !== isDismissed) {
+		setWasDismissed(isDismissed)
+	}
+
+	const focusField = () => fieldRef.current?.focus({ preventScroll: true })
 
 	const removeAttachment = (id: string) => {
 		onRemoveAttachment(id)
-		fieldRef.current?.focus({ preventScroll: true })
+		focusField()
 	}
 
-	return (
-		<PromptInput
-			arrivalKey={arrivalKey}
-			attachments={
-				<PromptAttachments items={attachments} onRemove={removeAttachment} />
-			}
-			band={band}
-			leading={<PromptAttachButton hasLabel onAttach={onAttach} />}
-			onAttach={onAttach}
-			onSubmit={onSubmit}
-			onValueChange={onDraftChange}
-			placeholder={t("home.composer.placeholder", { name: selected.name })}
-			sending={isSending}
-			size="large"
-			textareaRef={fieldRef}
-			trailing={
-				<HomeAgentPicker
-					agents={bots.map(homeAgentOf)}
-					onSelectAgent={onSelectAgent}
-					selected={selected}
-				/>
-			}
-			value={draft}
-		/>
+	const pickCommand = (text: string) => {
+		onDraftChange(text)
+		focusField()
+	}
+
+	return menu({
+		prompt: draft,
+		query: query ?? "",
+		isOpen: query !== null && !isDismissed,
+		onDismiss: () => setWasDismissed(true),
+		onPick: pickCommand,
+		children: (
+			<PromptInput
+				arrivalKey={arrivalAt(arrivalKey, agent)}
+				attachments={
+					<PromptAttachments items={attachments} onRemove={removeAttachment} />
+				}
+				band={band}
+				dropTarget={isDropTarget}
+				leading={
+					library ? (
+						<PromptLibraryPicker
+							documents={library.documents}
+							hasLabel
+							onAttach={onAttach}
+							onPick={library.onPick}
+						/>
+					) : (
+						<PromptAttachButton hasLabel onAttach={onAttach} />
+					)
+				}
+				onAttach={onAttach}
+				onSubmit={onSubmit}
+				onValueChange={onDraftChange}
+				placeholder={t("home.composer.placeholder", { name: selected.name })}
+				sending={isSending}
+				size="large"
+				textareaRef={fieldRef}
+				trailing={
+					<HomeAgentPicker
+						agents={bots.map(homeAgentOf)}
+						onSelectAgent={onSelectAgent}
+						selected={selected}
+					/>
+				}
+				value={draft}
+			/>
+		),
+	})
+}
+
+const usePageDrop = (
+	page: RefObject<HTMLElement | null>,
+	canAttach: boolean,
+	onAttach: (files: File[]) => void,
+) => {
+	const [isDropTarget, setIsDropTarget] = useState(false)
+
+	useEffect(
+		() =>
+			watchConversationDrags({
+				conversation: page,
+				onHover: setIsDropTarget,
+				onDrop: (files) => {
+					if (canAttach) {
+						onAttach(files)
+					}
+				},
+			}),
+		[page, canAttach, onAttach],
 	)
+
+	return isDropTarget
 }
 
 export type HomeEmptyStageProps = HomeSend &
@@ -453,37 +536,44 @@ export const HomeEmptyStage = ({
 		isDismissed: isBandDismissed,
 		onDismiss: onDismissBand,
 	})
+	const page = useRef<HTMLDivElement>(null)
+	const isDropTarget = usePageDrop(page, !isReadOnly, send.onAttach)
 
 	return (
-		<HomeLayout stage="empty">
-			<HomeGreeting
-				agent={homeAgentOf(agent)}
-				firstName={firstNameOf(readerName)}
-				period={periodAt(Date.now())}
-			/>
-			{notice}
-			{isReadOnly ? null : (
-				<HomeComposerSlot
-					agent={agent}
-					bots={bots}
-					composer={
-						<HomeDraftComposer
-							{...send}
-							agent={agent}
-							arrivalKey={arrivalKey}
-							band={band}
-							bots={bots}
-							onSelectAgent={onSelectAgent}
-						/>
-					}
-					conversations={conversations}
-					onOpenRoom={onOpenRoom}
-					runtimes={runtimes}
-					spaceId={spaceId}
-					store={store}
+		<ScreenLayout ref={page} width="full">
+			<HomeLayout stage="empty">
+				<HomeGreeting
+					agent={homeAgentOf(agent)}
+					firstName={firstNameOf(readerName)}
+					period={periodAt(Date.now())}
 				/>
-			)}
-			{lines}
-		</HomeLayout>
+				{notice}
+				{isReadOnly ? null : (
+					<HomeComposerSlot
+						agent={agent}
+						bots={bots}
+						composer={
+							<HomeDraftComposer
+								{...send}
+								agent={agent}
+								arrivalKey={arrivalKey}
+								band={band}
+								bots={bots}
+								isDropTarget={isDropTarget}
+								onSelectAgent={onSelectAgent}
+								spaceId={spaceId}
+								store={store}
+							/>
+						}
+						conversations={conversations}
+						onOpenRoom={onOpenRoom}
+						runtimes={runtimes}
+						spaceId={spaceId}
+						store={store}
+					/>
+				)}
+				{lines}
+			</HomeLayout>
+		</ScreenLayout>
 	)
 }

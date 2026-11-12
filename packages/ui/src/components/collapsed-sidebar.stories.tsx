@@ -237,7 +237,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New conversation, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe over the list changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
+					"The 60px icon rail of the collapsed navigation shell, top to bottom: the Space avatar, Search, New, Missions, Library, the pinned and conversation items with their missions grouped under them, then the update button and the person when they apply. A two finger horizontal swipe over the list changes Space. Every item names itself in a tooltip to the right of the rail. One story per Paper page A artboard.",
 			},
 		},
 	},
@@ -339,7 +339,7 @@ export const Hover3b = meta.story({
 		docs: {
 			description: {
 				story:
-					"The collapsed rail with the pointer on a mission cell. Check the whole Release train group lights white 8 percent as one surface, the only tooltip is the conversation's, right of the rail, it stays one tooltip while the pointer moves to the next cell, a click on the cell opens Release train, and Missions carries the attention dot. Check too that New conversation follows the Space avatar as the first destination, that no Search button sits in the rail, and that with a single Space the carousel refuses a sideways scroll and reports no selection.",
+					"The collapsed rail with the pointer on a mission cell. Check the whole Release train group lights white 8 percent as one surface, the only tooltip is the conversation's, right of the rail, it stays one tooltip while the pointer moves to the next cell, a click on the cell opens Release train, and Missions carries the attention dot. Check too that New follows the Space avatar as the first destination, that no Search button sits in the rail, and that with a single Space the carousel refuses a sideways scroll and reports no selection.",
 			},
 		},
 	},
@@ -350,7 +350,7 @@ export const Hover3b = meta.story({
 		const buttons = rail(canvasElement).getAllByRole("button")
 		const space = slotIn(canvasElement, "collapsed-sidebar-space")
 		const newConversation = rail(canvasElement).getByRole("button", {
-			name: "New conversation",
+			name: "New",
 		})
 		await expect(buttons[buttons.indexOf(space) + 1]).toBe(newConversation)
 		await expect(
@@ -1328,7 +1328,7 @@ const currentDestinationHoverStory = (globals: typeof DARK) => ({
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const slot = rail(canvasElement).getByRole("button", {
-			name: "New conversation",
+			name: "New",
 		})
 		const resting = backgroundOf(slot)
 		const hoverFill = tokenStyleIn(

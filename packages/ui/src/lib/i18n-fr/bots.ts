@@ -90,7 +90,7 @@ const bots = {
 	rail: {
 		label: "Navigation",
 		home: "Accueil",
-		newConversation: "Nouvelle conversation",
+		newConversation: "Nouveau",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",
