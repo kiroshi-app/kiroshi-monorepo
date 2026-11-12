@@ -16,7 +16,7 @@ import { cn } from "@workspace/ui/lib/utils"
 type SidebarListRowGeometry = "roster" | "agent" | "conversation" | "menu"
 
 const ROSTER_ROW =
-	"flex-nowrap border-0 text-foreground transition-[width,height,padding,scale] will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0"
+	"flex-nowrap border-0 text-foreground transition-[width,height,padding,scale] duration-160 ease-out will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0"
 
 const ROW: Record<SidebarListRowGeometry, string> = {
 	roster: cn(ROSTER_ROW, "py-1.5 pl-1.5 pe-1.5"),

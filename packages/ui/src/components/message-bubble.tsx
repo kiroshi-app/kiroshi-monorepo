@@ -100,7 +100,7 @@ export function MessageBubble({
 export const MESSAGE_BUBBLE_INLINE_PADDING = "px-4.5"
 
 export const MESSAGE_BUBBLE_INTERACTIVE =
-	"cursor-pointer text-left outline-none transition-[scale] duration-200 ease-out will-change-transform hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
+	"cursor-pointer text-left outline-none transition-[scale] duration-160 ease-out will-change-transform hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
 
 const BUBBLE_FOCUS_RING =
 	"outline-none focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
