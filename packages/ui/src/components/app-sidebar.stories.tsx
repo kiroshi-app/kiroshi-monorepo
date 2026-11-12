@@ -4733,6 +4733,9 @@ export const DragBotToSection = meta.story({
 			Math.abs(centreOf(handle).clientY - centreOf(shipping).clientY),
 		).toBeLessThanOrEqual(1)
 		await expect(liftedSlot()?.style.getPropertyValue("--lift-dy")).not.toBe("")
+		await expect(getComputedStyle(handle).getPropertyValue("--lift-dy")).toBe(
+			"0px",
+		)
 		await expect(
 			slotIn(canvasElement, "roster-lift-frame").style.getPropertyValue(
 				"--lift-dy",
