@@ -5,6 +5,7 @@ import type { ReactElement, ReactNode } from "react"
 import {
 	Tooltip,
 	TooltipContent,
+	TooltipProvider,
 	TooltipTrigger,
 } from "@workspace/ui/components/ui/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
@@ -36,4 +37,17 @@ const TooltipHint = ({ content, children, side = "top" }: TooltipHintProps) => (
 	</Tooltip>
 )
 
-export { HOVER_INTENT_DELAY_MS, TooltipHint, type TooltipHintSide }
+type TooltipHintProviderProps = {
+	children: ReactNode
+}
+
+const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => (
+	<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>{children}</TooltipProvider>
+)
+
+export {
+	HOVER_INTENT_DELAY_MS,
+	TooltipHint,
+	TooltipHintProvider,
+	type TooltipHintSide,
+}

@@ -1307,7 +1307,7 @@ export const SpacesMenuGestures = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const logo = entryNamed(canvasElement, SPACES_MENU)
-		await expect(getComputedStyle(logo).transitionDuration).toBe("0s")
+		await expect(getComputedStyle(logo).transitionProperty).toBe("none")
 		const pick = async (role: "menuitem" | "menuitemradio", name: string) => {
 			await userEvent.click(logo)
 			const menu = await settled(await screen.findByRole("menu"))

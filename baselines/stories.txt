@@ -2425,6 +2425,7 @@ overlays-tooltip--default
 overlays-tooltip--long-content
 overlays-tooltip--on-dark-surface
 overlays-tooltip--with-side
+overlays-tooltiphint--adjacent-hints
 overlays-tooltiphint--default
 overlays-tooltiphint--in-row
 overlays-tooltiphint--long-content

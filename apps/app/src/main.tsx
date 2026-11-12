@@ -4,6 +4,7 @@ import { lazy, StrictMode, Suspense } from "react"
 import { createRoot } from "react-dom/client"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
+import { TooltipHintProvider } from "@workspace/ui/components/tooltip-hint"
 
 import { App } from "./App"
 
@@ -60,7 +61,9 @@ const renderApp = (windowIdentity?: WindowIdentity) => {
 		<StrictMode>
 			<QueryClientProvider client={queryClient}>
 				<I18nProvider>
-					<App windowIdentity={windowIdentity} />
+					<TooltipHintProvider>
+						<App windowIdentity={windowIdentity} />
+					</TooltipHintProvider>
 				</I18nProvider>
 				{import.meta.env.DEV && <ReactQueryDevtools />}
 				{AnnotationToolbar && (

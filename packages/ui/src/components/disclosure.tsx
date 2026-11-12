@@ -1,6 +1,7 @@
 "use client"
 
 import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
+import { useState } from "react"
 
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
@@ -17,6 +18,11 @@ export function Disclosure({
 	...props
 }: DisclosureProps) {
 	const reduce = useReducedMotion() ?? false
+	const [hasFolded, setHasFolded] = useState(!open)
+
+	if (open && hasFolded) setHasFolded(false)
+
+	const isFlat = reduce ? !open : hasFolded
 
 	return (
 		<motion.div
@@ -36,10 +42,13 @@ export function Disclosure({
 				duration: reduce ? 0 : open ? 0.22 : 0.14,
 				ease: EASE_OUT,
 			}}
+			onAnimationComplete={() => {
+				if (!open) setHasFolded(true)
+			}}
 			className={cn("overflow-hidden", className)}
 			style={{
 				...style,
-				height: open ? "auto" : 0,
+				height: isFlat ? 0 : "auto",
 				pointerEvents: open ? undefined : "none",
 				transformOrigin: "top",
 			}}

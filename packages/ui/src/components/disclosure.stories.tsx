@@ -69,7 +69,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The reveal every collapsible agent surface shares: content wipes down from its top edge on the way in and clips back up on the way out, opening a touch slower than it closes so the arrival reads as content and the dismissal as gone. It animates a clip path and a 4px lift rather than the height itself, which keeps the reveal off the layout thread. Closed, it is inert and hidden from assistive tech, so a folded trace is not in the tab order. Under `prefers-reduced-motion` the wipe drops and only the opacity remains. It draws nothing: bring your own trigger, spacing and border.",
+					"The reveal every collapsible agent surface shares: content wipes down from its top edge on the way in and clips back up on the way out, opening a touch slower than it closes so the arrival reads as content and the dismissal as gone. It animates a clip path and a 4px lift rather than the height itself, which keeps the reveal off the layout thread. The height drops to zero only once the closing wipe has finished, so the content below moves up after the reveal has left. Closed, it is inert and hidden from assistive tech, so a folded trace is not in the tab order. Under `prefers-reduced-motion` the wipe drops and only the opacity remains. It draws nothing: bring your own trigger, spacing and border.",
 			},
 		},
 	},
@@ -116,6 +116,7 @@ export const Closed = meta.story({
 
 		await expect(disclosure).toHaveAttribute("aria-hidden", "true")
 		await expect(disclosure).toHaveAttribute("inert")
+		await expect(disclosure?.getBoundingClientRect().height).toBe(0)
 	},
 })
 

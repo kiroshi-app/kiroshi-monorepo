@@ -73,7 +73,7 @@ export function MessageQuoteCard({
 			onClick={onJump}
 			className={cn(
 				JUMP_BUTTON_RESET,
-				"w-full min-w-0 shrink gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2 transition-none focus-visible:[outline-style:auto]",
+				"w-full min-w-0 shrink gap-2 rounded-[10px] bg-foreground/8 p-2 text-start outline-offset-2 transition-none focus-visible:[outline-style:auto] active:scale-none!",
 			)}
 		>
 			<Icons.Reply

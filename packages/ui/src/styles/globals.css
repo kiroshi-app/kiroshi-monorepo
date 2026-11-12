@@ -242,6 +242,10 @@
 	--font-mono: "Geist Mono Variable", monospace;
 }
 
+@theme {
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 @layer components {
 	.typeset-chat {
 		--typeset-size: calc(0.875rem / 1.125);
@@ -469,7 +473,7 @@
 }
 
 @utility animate-thread-arrive {
-	animation: ui-thread-arrive 200ms cubic-bezier(0.16, 1, 0.3, 1);
+	animation: ui-thread-arrive 200ms var(--ease-out);
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
@@ -484,7 +488,7 @@
 }
 
 @utility animate-run-fade {
-	animation: ui-run-fade 1000ms ease-out forwards;
+	animation: ui-run-fade 1000ms var(--ease-out) forwards;
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
@@ -522,18 +526,20 @@
 
 .group\/button.transition-all {
 	will-change: transform;
+}
 
-	&:active:not([aria-haspopup]) {
-		translate: none;
-		scale: 0.98;
-	}
+.group\/button:is(.transition-all, .transition-none):active:not(
+	[aria-haspopup]
+) {
+	translate: none;
+	scale: 0.98;
 }
 
 @media (prefers-reduced-motion: no-preference) {
 	.group\/button.transition-all {
 		transition:
 			opacity 150ms,
-			scale 200ms ease-out;
+			scale 160ms var(--ease-out);
 	}
 }
 
@@ -569,19 +575,35 @@
 :is(
 	[data-slot="context-menu-content"],
 	[data-slot="context-menu-sub-content"],
-	[data-slot="popover-content"],
-	[data-slot="tooltip-content"]
+	[data-slot="dropdown-menu-content"],
+	[data-slot="dropdown-menu-sub-content"],
+	[data-slot="popover-content"]
 ):not([data-closed]) {
+	animation: none;
+}
+
+[data-slot="tooltip-content"] {
 	animation: none;
 }
 
 :is(
 	[data-slot="dialog-content"],
 	[data-slot="context-menu-content"],
-	[data-slot="context-menu-sub-content"]
+	[data-slot="context-menu-sub-content"],
+	[data-slot="dropdown-menu-content"],
+	[data-slot="dropdown-menu-sub-content"]
 ) {
 	--tw-exit-scale: 0.98;
 	--tw-exit-blur: 4px;
+}
+
+:is([data-slot="dialog-overlay"], [data-slot="dialog-content"]) {
+	--tw-duration: 150ms;
+	--tw-ease: var(--ease-out);
+}
+
+[data-slot="dialog-content"] {
+	--tw-enter-scale: 0.98;
 }
 
 :is(
@@ -679,7 +701,7 @@ svg[focusable="false"] {
 		transition-duration: 0.01ms;
 	}
 
-	[data-slot="button"],
+	.group\/button,
 	[data-slot="switch-thumb"] {
 		transition-duration: 0.01ms;
 	}
