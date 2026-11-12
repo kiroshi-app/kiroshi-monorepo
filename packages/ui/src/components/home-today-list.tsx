@@ -33,6 +33,11 @@ type HomeTodayListProps = {
 	onOpenRow: (id: string) => void
 }
 
+type HomeTodayRowButtonProps = {
+	row: HomeTodayRow
+	onOpenRow: (id: string) => void
+}
+
 const TODAY_ROW_LIMIT = 3
 
 const HEADER =
@@ -57,6 +62,43 @@ const previewOf = (row: HomeTodayRow) => {
 	)
 }
 
+const HomeTodayRowButton = ({ row, onOpenRow }: HomeTodayRowButtonProps) => {
+	const timeId = useId()
+	const previewId = useId()
+
+	return (
+		<button
+			aria-describedby={`${timeId} ${previewId}`}
+			aria-label={row.title}
+			className={ROW}
+			data-slot="home-today-row"
+			data-state={row.state}
+			onClick={() => onOpenRow(row.id)}
+			type="button"
+		>
+			<RowAnatomy
+				geometry="activity"
+				media={
+					<ConversationSubjectIcon
+						hue={row.hue}
+						icon={row.icon}
+						side={MISSION_AVATAR_SIZE}
+					/>
+				}
+				name={row.title}
+				nameSlot="home-today-row-title"
+				pendingQuestion={row.state === "needs-you" ? row.question : undefined}
+				preview={previewOf(row)}
+				previewId={previewId}
+				previewSlot="home-today-row-preview"
+				timestamp={row.timestamp}
+				timestampId={timeId}
+				timestampSlot="home-today-row-time"
+			/>
+		</button>
+	)
+}
+
 const HomeTodayList = ({ agentName, rows, onOpenRow }: HomeTodayListProps) => {
 	const { t } = useTranslation("chat")
 	const headerId = useId()
@@ -71,34 +113,7 @@ const HomeTodayList = ({ agentName, rows, onOpenRow }: HomeTodayListProps) => {
 			<ul aria-labelledby={headerId} className="flex flex-col gap-1">
 				{rows.slice(0, TODAY_ROW_LIMIT).map((row) => (
 					<li key={row.id}>
-						<button
-							aria-label={row.title}
-							className={ROW}
-							data-slot="home-today-row"
-							data-state={row.state}
-							onClick={() => onOpenRow(row.id)}
-							type="button"
-						>
-							<RowAnatomy
-								geometry="activity"
-								media={
-									<ConversationSubjectIcon
-										hue={row.hue}
-										icon={row.icon}
-										side={MISSION_AVATAR_SIZE}
-									/>
-								}
-								name={row.title}
-								nameSlot="home-today-row-title"
-								pendingQuestion={
-									row.state === "needs-you" ? row.question : undefined
-								}
-								preview={previewOf(row)}
-								previewSlot="home-today-row-preview"
-								timestamp={row.timestamp}
-								timestampSlot="home-today-row-time"
-							/>
-						</button>
+						<HomeTodayRowButton onOpenRow={onOpenRow} row={row} />
 					</li>
 				))}
 			</ul>

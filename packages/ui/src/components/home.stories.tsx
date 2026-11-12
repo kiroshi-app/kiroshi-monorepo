@@ -1014,12 +1014,19 @@ export const ThreeTodayMixedStates = meta.story({
 			getComputedStyle(slotIn(waiting, "needs-you-glyph")).backgroundColor,
 		).toBe(attention)
 		await expect(colourOf(waiting, "home-today-row-time")).toBe(attention)
+		await expect(waiting).toHaveAccessibleName("Venue deposit")
+		await expect(waiting).toHaveAccessibleDescription(
+			"09:15 Needs you Which card pays the deposit?",
+		)
 		await expect(slotIn(waiting, "home-today-row-preview")).toHaveTextContent(
 			"Which card pays the deposit?",
 		)
 
 		const done = canvas.getByRole("button", { name: "Launch notes" })
 		const muted = colourOf(done, "home-today-row-time")
+		await expect(done).toHaveAccessibleDescription(
+			"08:30 Atlas: The draft is ready for your review.",
+		)
 		await expect(muted).not.toBe(attention)
 		await expect(colourOf(done, "home-today-row-preview")).toBe(muted)
 		await expect(colourOf(waiting, "home-today-row-preview")).toBe(muted)
