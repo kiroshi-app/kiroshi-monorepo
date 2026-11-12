@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 
 import {
 	LibraryDocumentEditor,
@@ -60,6 +60,7 @@ import {
 } from "@/lib/library/use-library-items"
 import { useStopLibraryWriters } from "@/lib/library/use-stop-library-writers"
 import type { LibraryOpening } from "@/lib/navigation/library-search"
+import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import { isNewTabClickInFlight } from "@/lib/tabs/new-tab-clicks"
 
 export type LibraryScreenProps = {
@@ -163,6 +164,7 @@ type OpeningRead = {
 	isListing: boolean
 	hasListed: boolean
 	isListed: boolean
+	isImageListed: boolean
 	isDocumentOpened: boolean
 	isDocumentRead: boolean
 	hasFailedToOpen: boolean
@@ -173,13 +175,22 @@ const openingStatusOf = (read: OpeningRead) => {
 	const isMissing = read.hasListed && !read.isListed && !read.isDocumentOpened
 	const hasNoOpenFailure =
 		read.opening?.kind !== "document" || read.isDocumentRead
+	const hasFailedToRead =
+		read.hasFailedToOpen ||
+		read.hasBoardFailed ||
+		(!read.isListing && !read.hasListed)
+	const isShown =
+		read.isImageListed || (read.isDocumentOpened && read.isDocumentRead)
 	return {
 		isMissing,
 		notifiedMissing: isMissing && hasNoOpenFailure ? read.opening : undefined,
-		hasFailedToRead:
-			read.hasFailedToOpen ||
-			read.hasBoardFailed ||
-			(!read.isListing && !read.hasListed),
+		hasFailedToRead,
+		isAwaited:
+			read.opening !== undefined &&
+			read.opening.kind !== "board" &&
+			!isShown &&
+			!isMissing &&
+			!hasFailedToRead,
 	}
 }
 
@@ -262,6 +273,7 @@ type LibraryOpeningStateProps = {
 	boardSummary: LibraryBoardSummary | undefined
 	isMissing: boolean
 	hasFailedToRead: boolean
+	skeleton: ReactNode
 	onCloseTab?: () => void
 	onBackToLibrary: () => void
 	onDelete: () => void
@@ -303,6 +315,7 @@ const LibraryBoardOpening = ({
 const LibraryOpeningState = ({
 	isMissing,
 	hasFailedToRead,
+	skeleton,
 	onCloseTab,
 	...opened
 }: LibraryOpeningStateProps) => {
@@ -325,13 +338,39 @@ const LibraryOpeningState = ({
 			/>
 		)
 	}
-	switch (opening.kind) {
-		case "document":
-			return <LibraryDocumentSkeleton />
-		case "image":
-			return <LibraryImageSkeleton />
-		case "board":
-			return <LibraryBoardOpening {...opened} />
+	if (opening.kind === "board") {
+		return <LibraryBoardOpening {...opened} />
+	}
+	return skeleton
+}
+
+const DOCUMENT_OPENING_SKELETON = <LibraryDocumentSkeleton />
+
+const IMAGE_OPENING_SKELETON = <LibraryImageSkeleton />
+
+type OpeningWait = {
+	opening: LibraryOpening | undefined
+	isAwaited: boolean
+	isImageListed: boolean
+}
+
+const useOpeningSkeleton = ({
+	opening,
+	isAwaited,
+	isImageListed,
+}: OpeningWait) => {
+	const slot = useSkeletonSlot(
+		isAwaited,
+		opening?.kind === "image"
+			? IMAGE_OPENING_SKELETON
+			: DOCUMENT_OPENING_SKELETON,
+	)
+	const skeleton = opening ? slot : undefined
+	const isStandingIn = skeleton !== undefined
+	return {
+		skeleton,
+		isStandingIn,
+		isImageShown: isImageListed && !isStandingIn,
 	}
 }
 
@@ -407,17 +446,20 @@ export const LibraryScreen = ({
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
 	const { stopAll, stop } = useStopLibraryWriters(spaceId)
-	const { isMissing, notifiedMissing, hasFailedToRead } = openingStatusOf({
-		opening,
-		isListing: library.isLoading,
-		hasListed: library.hasLoaded,
-		isListed: listedOpened !== undefined,
-		isDocumentOpened: openedDocument !== null,
-		isDocumentRead: document !== null,
-		hasFailedToOpen,
-		hasBoardFailed: openedBoard.hasFailedToRead,
-	})
+	const { isMissing, notifiedMissing, hasFailedToRead, isAwaited } =
+		openingStatusOf({
+			opening,
+			isListing: library.isLoading,
+			hasListed: library.hasLoaded,
+			isListed: listedOpened !== undefined,
+			isImageListed,
+			isDocumentOpened: openedDocument !== null,
+			isDocumentRead: document !== null,
+			hasFailedToOpen,
+			hasBoardFailed: openedBoard.hasFailedToRead,
+		})
 	useMissingOpeningNotice(spaceId, notifiedMissing)
+	const openingWait = useOpeningSkeleton({ opening, isAwaited, isImageListed })
 
 	const shownItems = library.items
 		.filter((item) => matchesQuery(item, query))
@@ -508,7 +550,7 @@ export const LibraryScreen = ({
 		}
 	}
 
-	if (openedDocument && document) {
+	if (openedDocument && document && !openingWait.isStandingIn) {
 		const openedItem = { id: openedDocument.name, kind: "document" } as const
 		return (
 			<LibraryDocumentEditor
@@ -545,7 +587,7 @@ export const LibraryScreen = ({
 		)
 	}
 
-	if (opening && !isImageListed) {
+	if (opening && !openingWait.isImageShown) {
 		return (
 			<LibraryOpeningState
 				boardSummary={openedBoard.summary}
@@ -557,6 +599,7 @@ export const LibraryScreen = ({
 				onCloseTab={onCloseTab}
 				onDelete={() => deleteAndClose({ id: opening.name })}
 				opening={opening}
+				skeleton={openingWait.skeleton}
 				spaceId={spaceId}
 			/>
 		)

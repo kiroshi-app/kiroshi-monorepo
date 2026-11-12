@@ -396,7 +396,7 @@ const relist = () =>
 
 describe("a tab opening a Library item", () => {
 	it.each(SPACES)(
-		"loads the document alongside the list and shows the document skeleton while both load, on %s",
+		"loads the document alongside the list and shows the document skeleton once both are slow to load, on %s",
 		async (_space, isJoined) => {
 			const releaseList = holdHostCall("library_list")
 			const releaseDocument = holdHostCall("library_open_document")
@@ -409,8 +409,9 @@ describe("a tab opening a Library item", () => {
 				]),
 			)
 			expect(callsOf("library_list")).toHaveLength(1)
-			expect(skeletonShown("loadingDocument")).toBe(true)
+			expect(skeletonShown("loadingDocument")).toBe(false)
 			expect(gridItemShown()).toBe(false)
+			await waitFor(() => expect(skeletonShown("loadingDocument")).toBe(true))
 
 			await releaseDocument()
 			expect(skeletonShown("loadingDocument")).toBe(true)
@@ -424,14 +425,15 @@ describe("a tab opening a Library item", () => {
 	)
 
 	it.each(SPACES)(
-		"shows the image skeleton until the list loads, then the image, on %s",
+		"shows the image skeleton once the list is slow to load, then the image, on %s",
 		async (_space, isJoined) => {
 			const releaseList = holdHostCall("library_list")
 
 			await renderLibraryScreen({ isJoined, openedFirst: IMAGE_OPENING })
 			await settle()
-			expect(skeletonShown("loadingImage")).toBe(true)
+			expect(skeletonShown("loadingImage")).toBe(false)
 			expect(gridItemShown()).toBe(false)
+			await waitFor(() => expect(skeletonShown("loadingImage")).toBe(true))
 
 			await releaseList()
 			expect(

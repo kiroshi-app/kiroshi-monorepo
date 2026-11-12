@@ -30,6 +30,7 @@ import {
 	ToggleGroup,
 	ToggleGroupItem,
 } from "@workspace/ui/components/ui/toggle-group"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryFilter = "all" | "images" | "documents" | "boards"
@@ -225,8 +226,10 @@ const LibraryPanel = ({
 		() => ({ current: overlayElement }),
 		[overlayElement],
 	)
-	const isLoading = state === "loading"
-	const isEmpty = !isLoading && items.length === 0 && searchQuery === ""
+	const phase = useSkeletonTiming(state === "loading")
+	const isSkeletonShown = phase === "skeleton"
+	const isAwaiting = isSkeletonShown || phase === "delay"
+	const isEmpty = !isAwaiting && items.length === 0 && searchQuery === ""
 	const shownItems =
 		filter === "all"
 			? items
@@ -277,9 +280,9 @@ const LibraryPanel = ({
 		</div>
 	)
 
-	const filters = isLoading ? (
+	const filters = isSkeletonShown ? (
 		<FiltersSkeleton />
-	) : isEmpty ? null : (
+	) : isAwaiting || isEmpty ? null : (
 		<LibraryFilters
 			counts={counts}
 			filter={filter}
@@ -295,13 +298,13 @@ const LibraryPanel = ({
 				ref={setOverlayElement}
 			>
 				<div
-					aria-busy={isLoading}
+					aria-busy={isAwaiting}
 					className="flex min-h-0 flex-1 flex-col overflow-y-auto"
 				>
 					<LibraryHeader actions={actions} filters={filters} />
-					{isLoading ? (
+					{isSkeletonShown ? (
 						<LibraryGridSkeleton />
-					) : isEmpty ? (
+					) : isAwaiting ? null : isEmpty ? (
 						<LibraryEmptyState
 							onImport={onImport}
 							onNewBoard={onNewBoard}

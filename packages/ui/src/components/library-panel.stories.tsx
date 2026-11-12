@@ -1059,7 +1059,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library before its first read lands, as artboard 6b draws it, dark theme: the header and its actions stay, the four filters and the grid are drawn as a skeleton whose tiles keep the loaded tile geometry and reach the bottom of the card. Check that the last skeleton row crosses the card's bottom edge and that the panel says it is busy.",
+					"The Library before its first read lands, as artboard 6b draws it, dark theme: the header and its actions stay, and once the read has been slow for 300ms the four filters and the grid are drawn as a skeleton whose tiles keep the loaded tile geometry and reach the bottom of the card. Check that nothing is drawn under the header at first, that the last skeleton row then crosses the card's bottom edge, and that the panel says it is busy throughout.",
 			},
 		},
 	},
@@ -1068,9 +1068,15 @@ export const Loading = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "New board" }),
 		).toBeVisible()
-		await expect(
-			slotIn(canvasElement, "library-filters-skeleton").children,
-		).toHaveLength(4)
+		await expect(slotsIn(canvasElement, "library-grid-skeleton")).toHaveLength(
+			0,
+		)
+		await waitFor(() =>
+			expect(
+				slotIn(canvasElement, "library-filters-skeleton").children,
+			).toHaveLength(4),
+		)
+		await expect(canvasElement.querySelector("[aria-busy=true]")).not.toBe(null)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 	},
 })
