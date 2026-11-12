@@ -411,7 +411,7 @@ pub async fn joined<R: Runtime>(
 		inviter_email,
 		listing,
 	};
-	let wait = held::wait(app, &instance_id)?;
+	let wait = held::wait(app, &instance_id).await?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	guests.unlisted().remove(&joined.id);

@@ -63,7 +63,7 @@ pub(super) async fn joins_started<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
-		if held::wait_or_unread(app, &joined.id, &instance_id).is_none() {
+		if held::wait_or_unread(app, &joined.id, &instance_id).await.is_none() {
 			continue;
 		}
 		let mut waiting = guests.waiting();

@@ -38,6 +38,7 @@ use crate::conversations::contract::Hue;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::fingerprint::fingerprint;
+use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_space_members::JoinedSpaceRole;
 use crate::db::{self, DatabaseState};
@@ -520,6 +521,27 @@ impl Member {
 	fn device(&self) -> DeviceKeys {
 		let state = self.app.state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
+	}
+
+	fn holds_a_key_without_its_roster(&self) {
+		let key = HeldSpaceKey::first().expect("randomness");
+		let keys = self.app.state::<SpaceKeys>();
+		keys.stored(&format!("joined-{INSTANCE}"), key).expect("the key is kept");
+	}
+
+	async fn restarted(&self, name: &str) -> AppOfItsOwn {
+		let cloud = self.relay.served().await;
+		let app = an_app_of_its_own(name, mock_builder());
+		app.manage::<DatabaseState>(Ok(db::open(&self._temporary[0])));
+		app.manage(DeviceKeysState::new(Ok(self.device())));
+		let profile = self.app.path().app_data_dir().expect("the data folder resolves");
+		let identifier = self.app.config().identifier.clone();
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(self.root.clone()), &cloud));
+		let guests = RelayGuests::new(&cloud).answering_within(HOST_ANSWER_BOUND);
+		app.manage(guests.resending_every(RESEND_EVERY));
+		app.manage(Invitations::new(&cloud));
+		app
 	}
 }
 
@@ -1075,6 +1097,57 @@ fn a_space_held_under_another_relay_device_never_connected_comes_online_on_the_s
 		let room = member.relay.room();
 		assert_eq!(room.connections, sockets_before_the_admission + 1);
 		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
+	});
+}
+
+#[test]
+fn a_space_holding_its_key_and_no_roster_says_its_hello_and_comes_online_on_the_roster_handed() {
+	run(async {
+		let member = Member::facing_a_silent_host("join-roster-missing").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		member.holds_a_key_without_its_roster();
+		let sockets_before = member.relay.connections();
+
+		relay::reconciled(member.app.handle()).await;
+		within(HOST_ANSWER_BOUND, "a hello on a member socket of the waiting join", || async {
+			let room = member.relay.room();
+			(room.connections > sockets_before && room.joins.len() >= 2).then_some(())
+		})
+		.await;
+		let state_without_roster = member.listed().await.remove(0).state;
+		member.relay.hosting(HostSide::Answering(member.host().admitted()));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert_eq!(joined.remote_space_id, None);
+		assert_eq!(state_without_roster, JoinedSpaceState::WaitingForHost);
+		assert!(member.held_roster().await.is_some());
+		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
+		assert!(member.relay.joins().iter().all(is_missed_rekey));
+	});
+}
+
+#[test]
+fn a_space_holding_its_key_and_no_roster_keeps_its_local_id_across_two_restarts() {
+	run(async {
+		let member = Member::facing_a_silent_host("join-restarted").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		member.holds_a_key_without_its_roster();
+
+		let mut ids = Vec::new();
+		for name in ["join-restarted-once", "join-restarted-twice"] {
+			let restarted = member.restarted(name).await;
+			relay::reconciled(restarted.handle()).await;
+			let listed = joined_spaces_list(restarted.handle().clone()).await.expect("the list");
+			ids.extend(listed.into_iter().map(|joined| joined.id));
+		}
+
+		assert_eq!(ids, vec![joined.id.clone(), joined.id]);
 	});
 }
 
