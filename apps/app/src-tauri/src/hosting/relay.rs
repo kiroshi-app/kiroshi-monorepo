@@ -933,7 +933,16 @@ async fn rekeys_sent(
 	};
 	for member in recipients_of(&handover, hosted, recipients) {
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
-			Ok(frame) => sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?,
+			Ok(frame) => {
+				sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?;
+				log::info!(
+					"hosted space {} (instance {}) sent a rekey to relay device {}: space key_id {}",
+					hosted.space_id,
+					hosted.instance_id,
+					json!(member.relay_device_id),
+					handover.key_id
+				);
+			}
 			Err(reason) => {
 				rekey_dropped(hosted, Recipients::Device(&member.relay_device_id), &reason)
 			}

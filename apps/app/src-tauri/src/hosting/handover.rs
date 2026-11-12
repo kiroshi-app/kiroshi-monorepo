@@ -22,6 +22,7 @@ pub(crate) struct KeyHandover {
 }
 
 pub(super) struct Handover {
+	pub(super) key_id: u32,
 	pub(super) plaintext: Zeroizing<Vec<u8>>,
 	pub(super) roster: VerifiedRoster,
 }
@@ -45,7 +46,7 @@ pub(super) async fn current(
 	handover.space_key.zeroize();
 	let plaintext =
 		plaintext.map_err(|failure| format!("the key handover did not serialise: {failure}"))?;
-	Ok(Handover { plaintext, roster })
+	Ok(Handover { key_id: space.key_id, plaintext, roster })
 }
 
 impl Handover {

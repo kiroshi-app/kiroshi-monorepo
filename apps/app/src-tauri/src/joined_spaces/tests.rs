@@ -1033,6 +1033,52 @@ fn a_space_held_under_another_relay_device_awaits_its_approval_and_comes_online_
 }
 
 #[test]
+fn a_space_held_under_another_relay_device_never_connected_comes_online_on_the_socket_opened_after_its_admission(
+) {
+	run(async {
+		let member = Member::new("join-readmitted-unconnected").await;
+		let host = member.host();
+		member.relay.hosting(HostSide::Answering(host.admitted_on(STALE_RELAY_ID, 1)));
+		let joined = member.accepted().await.expect("the join");
+		let pinned = pinned_host(member.held_roster().await);
+		let refused = json!({ "v": 2, "instance": INSTANCE, "to": MEMBER_RELAY_ID, "refused": "notAdmitted" });
+		member.relay.hosting(HostSide::Answering(refused.to_string()));
+
+		relay::reconciled(member.app.handle()).await;
+		let waited = within(HOST_ANSWER_BOUND, "the refusal kept as the wait", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("not in its roster"))
+		})
+		.await;
+		let state_while_refused = member.listed().await.remove(0).state;
+		member.relay.hosting(HostSide::Vanishing);
+		until("the waiting socket to close", || async {
+			member.last_waited().filter(|wait| wait.detail.contains("no close code reached"))
+		})
+		.await;
+		let sockets_before_the_admission = member.relay.connections();
+		member.relay.hosting(HostSide::Answering(host.admitted_on(MEMBER_RELAY_ID, 2)));
+		until("the waiting socket to stop", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert_eq!(
+			waited.reason,
+			JoinedSpaceWaitReason::DeviceAwaitingApproval,
+			"{}",
+			waited.detail
+		);
+		assert_eq!(state_while_refused, JoinedSpaceState::WaitingForHost);
+		assert_eq!(member.listed().await.remove(0).state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
+		assert_eq!(pinned_host(member.held_roster().await), pinned);
+		let room = member.relay.room();
+		assert_eq!(room.connections, sockets_before_the_admission + 1);
+		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
+	});
+}
+
+#[test]
 fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_once_answered() {
 	run(async {
 		let member = Member::facing_a_silent_host("join-unreadable-key").await;
