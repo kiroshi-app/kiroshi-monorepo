@@ -9,6 +9,8 @@ use crate::db::repositories::user;
 use crate::db::DatabaseError;
 use crate::updates::contract::UpdateChannel;
 
+pub const PREFERENCES_CHANGED_EVENT: &str = "user://preferences-changed";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ColorScheme {

@@ -13,15 +13,18 @@ use tokio::sync::{MutexGuard, Notify, OnceCell};
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
+use crate::avatars::Avatars;
 use crate::crypto::commands::DeviceKeysState;
 use crate::db::{Database, DatabaseState};
 use crate::devices;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, ACCOUNT_CHANGED};
+use crate::events::{self, ACCOUNT_CHANGED, USER_PREFERENCES_CHANGED};
+use crate::file_store::FileStore;
 use crate::hosting;
 use crate::invitations;
 use crate::joined_spaces;
+use crate::user::contract::UserPreferences;
 use crate::window_controls;
 
 const SIGNED_OUT: AccountState = AccountState::SignedOut { reason: None };
@@ -360,10 +363,15 @@ async fn name_sent<R: Runtime>(
 	};
 	let display_name = match to_send {
 		NameToSend::Renamed(display_name) => display_name,
-		NameToSend::Stored => match stored_display_name(app).await {
-			Some(display_name) => display_name,
-			None => return last_sent,
-		},
+		NameToSend::Stored => {
+			if is_filled_from_account(app, account.name.as_deref()).await {
+				return last_sent;
+			}
+			match stored_display_name(app).await {
+				Some(display_name) => display_name,
+				None => return last_sent,
+			}
+		}
 	};
 	let sending =
 		SentName { account_id: account.id, name: trimmed_to(&display_name, DISPLAY_NAME_LIMIT) };
@@ -392,6 +400,37 @@ async fn name_sent<R: Runtime>(
 			last_sent
 		}
 	}
+}
+
+async fn is_filled_from_account<R: Runtime>(
+	app: &AppHandle<R>,
+	account_name: Option<&str>,
+) -> bool {
+	let Some(account_name) = account_name else {
+		return false;
+	};
+	let filled = match signed_in_database(app) {
+		Ok(database) => database
+			.user()
+			.fill_blank_display_name(trimmed_to(account_name, DISPLAY_NAME_LIMIT))
+			.await
+			.map_err(|failure| format!("{failure:?}")),
+		Err(failure) => Err(failure),
+	};
+	let stored = match filled {
+		Ok(Some(stored)) => stored,
+		Ok(None) => return false,
+		Err(failure) => {
+			eprintln!("the display name was not filled from the account: {failure}");
+			return false;
+		}
+	};
+	let preferences = UserPreferences::of(stored, Avatars::dir(app).as_deref());
+	if let Err(error) = events::emit(app, USER_PREFERENCES_CHANGED, preferences) {
+		eprintln!("the filled display name did not reach the front: {error}");
+	}
+	hosting::renamed(app);
+	true
 }
 
 async fn stored_display_name<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
@@ -840,6 +879,16 @@ mod tests {
 				.expect("the preferences are stored")
 		}
 
+		fn hearing_preferences(&self) -> Arc<Mutex<Vec<UserPreferences>>> {
+			let heard = Arc::new(Mutex::new(Vec::new()));
+			let hearing = Arc::clone(&heard);
+			self.app.listen(USER_PREFERENCES_CHANGED.name(), move |event| {
+				let preferences = serde_json::from_str(event.payload()).expect("the preferences");
+				hearing.lock().expect("the events").push(preferences);
+			});
+			heard
+		}
+
 		fn opened(&self) -> Vec<String> {
 			self.opened.lock().expect("the browser").clone()
 		}
@@ -907,12 +956,23 @@ mod tests {
 	}
 
 	fn signed_in() -> AccountState {
+		signed_in_as(None)
+	}
+
+	fn signed_in_as(name: Option<&str>) -> AccountState {
 		AccountState::SignedIn(crate::account::contract::KiroshiAccount {
 			id: "u1".to_owned(),
 			email: EMAIL.to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: name.map(str::to_owned),
 			plan: Some(AccountPlan::Pro),
 		})
+	}
+
+	fn account_named(name: Value) -> Value {
+		let mut account = account_answered();
+		account["name"] = name;
+		account
 	}
 
 	fn waiting() -> AccountState {
@@ -1285,6 +1345,140 @@ mod tests {
 			harness.names_settled().await;
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
+		});
+	}
+
+	#[test]
+	fn the_account_carries_the_name_the_cloud_answers_and_none_when_null_or_blank() {
+		run(async {
+			for (answered, name) in [
+				(account_named(json!("Ada Lovelace")), Some("Ada Lovelace")),
+				(account_answered(), None),
+				(account_named(Value::Null), None),
+				(account_named(json!("")), None),
+				(account_named(json!("   ")), None),
+			] {
+				let cloudy = Cloudy { account: Some(answered.clone()), ..Cloudy::default() };
+				let cloud = Cloud::new(&stub(cloudy).await);
+
+				let account = cloud.me(BEARER).await.expect("the account parses");
+
+				assert_eq!(account.name.as_deref(), name, "{:?}", answered.get("name"));
+			}
+		});
+	}
+
+	#[test]
+	fn a_sign_in_fills_an_empty_display_name_from_the_account_and_announces_it_once() {
+		run(async {
+			let cloudy = Cloudy {
+				account: Some(account_named(json!("Ada Lovelace"))),
+				..Cloudy::polled_with(vec![approved()])
+			};
+			let harness = Harness::new("filled-sign-in", &stub(cloudy.clone()).await);
+			let announced = harness.hearing_preferences();
+
+			harness.sign_in().await.expect("the sign-in starts");
+			harness.flow_ended().await;
+			harness.names_settled().await;
+
+			let stored = harness.preferences().await;
+			assert_eq!(harness.state(), signed_in_as(Some("Ada Lovelace")));
+			assert_eq!(stored.display_name, "Ada Lovelace");
+			assert_eq!(*announced.lock().expect("the events"), vec![stored]);
+			assert_eq!(cloudy.renamed(), Vec::<Value>::new());
+		});
+	}
+
+	#[test]
+	fn a_restore_fills_a_blank_display_name_with_the_account_name_cut_to_80_characters() {
+		run(async {
+			let named = format!(" {} ", "é".repeat(100));
+			let cloudy = Cloudy { account: Some(account_named(json!(named))), ..Cloudy::default() };
+			let harness = Harness::new("filled-restore", &stub(cloudy.clone()).await);
+			let announced = harness.hearing_preferences();
+			harness.named_as("   ").await;
+			harness.store(BEARER);
+
+			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
+
+			let stored = harness.preferences().await;
+			assert_eq!(stored.display_name, "é".repeat(80));
+			assert_eq!(*announced.lock().expect("the events"), vec![stored]);
+			assert_eq!(cloudy.renamed(), Vec::<Value>::new());
+		});
+	}
+
+	#[test]
+	fn a_stored_display_name_is_kept_and_sent_whatever_the_account_name() {
+		run(async {
+			let cloudy = Cloudy {
+				account: Some(account_named(json!("Ada Lovelace"))),
+				..Cloudy::polled_with(vec![approved()])
+			};
+			let harness = Harness::new("kept-sign-in", &stub(cloudy.clone()).await);
+			let announced = harness.hearing_preferences();
+			harness.named_as("Grace").await;
+
+			harness.sign_in().await.expect("the sign-in starts");
+			harness.flow_ended().await;
+			harness.names_settled().await;
+
+			assert_eq!(harness.state(), signed_in_as(Some("Ada Lovelace")));
+			assert_eq!(harness.preferences().await.display_name, "Grace");
+			assert_eq!(*announced.lock().expect("the events"), Vec::new());
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
+		});
+	}
+
+	#[test]
+	fn blank_names_on_both_sides_send_nothing_and_write_nothing() {
+		run(async {
+			let cloudy = Cloudy { account: Some(account_named(json!("  "))), ..Cloudy::default() };
+			let harness = Harness::new("blank-restore", &stub(cloudy.clone()).await);
+			let announced = harness.hearing_preferences();
+			harness.named_as("   ").await;
+			harness.store(BEARER);
+
+			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
+
+			assert_eq!(harness.state(), signed_in());
+			assert_eq!(harness.preferences().await.display_name, "   ");
+			assert_eq!(*announced.lock().expect("the events"), Vec::new());
+			assert_eq!(cloudy.renamed(), Vec::<Value>::new());
+		});
+	}
+
+	#[test]
+	fn a_rename_saved_before_the_fill_runs_is_kept_and_sent() {
+		run(async {
+			let held = Arc::new(Semaphore::new(0));
+			let cloudy = Cloudy {
+				account: Some(account_named(json!("Ada Lovelace"))),
+				rename_held: Some(Arc::clone(&held)),
+				..Cloudy::default()
+			};
+			let harness = Harness::new("filled-behind-a-rename", &stub(cloudy.clone()).await);
+			let announced = harness.hearing_preferences();
+			harness.named_as("Ada").await;
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
+
+			harness.renamed_to("  ").await;
+			stored_name_sent(harness.app.handle());
+			harness.renamed_to("Grace").await;
+			held.add_permits(2);
+			harness.names_settled().await;
+
+			assert_eq!(harness.preferences().await.display_name, "Grace");
+			assert_eq!(*announced.lock().expect("the events"), Vec::new());
+			assert_eq!(
+				cloudy.renamed(),
+				vec![json!({ "name": "Ada" }), json!({ "name": "Grace" })]
+			);
 		});
 	}
 

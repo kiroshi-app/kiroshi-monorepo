@@ -10,6 +10,8 @@ pub struct KiroshiAccount {
 	pub id: String,
 	pub email: String,
 	pub created_at: String,
+	#[specta(optional)]
+	pub name: Option<String>,
 	pub plan: Option<AccountPlan>,
 }
 
@@ -91,6 +93,7 @@ mod tests {
 			id: "u1".to_owned(),
 			email: "steve@example.com".to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: Some("Ada Lovelace".to_owned()),
 			plan: Some(AccountPlan::Pro),
 		});
 
@@ -101,6 +104,7 @@ mod tests {
 				"id": "u1",
 				"email": "steve@example.com",
 				"createdAt": "2026-10-01T00:00:00.000Z",
+				"name": "Ada Lovelace",
 				"plan": "pro"
 			})
 		);
@@ -112,10 +116,24 @@ mod tests {
 			id: "u1".to_owned(),
 			email: "steve@example.com".to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: None,
 			plan: None,
 		});
 
 		assert_eq!(to_value(state).expect("the state serializes")["plan"], json!(null));
+	}
+
+	#[test]
+	fn an_account_without_a_name_crosses_with_a_null_name() {
+		let state = AccountState::SignedIn(KiroshiAccount {
+			id: "u1".to_owned(),
+			email: "steve@example.com".to_owned(),
+			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: None,
+			plan: None,
+		});
+
+		assert_eq!(to_value(state).expect("the state serializes")["name"], json!(null));
 	}
 
 	#[test]

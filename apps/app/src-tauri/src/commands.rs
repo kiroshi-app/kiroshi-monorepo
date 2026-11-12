@@ -39,6 +39,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("LIBRARY_CHANGED_EVENT", library::contract::CHANGED_EVENT)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
+		.constant("USER_PREFERENCES_CHANGED_EVENT", user::contract::PREFERENCES_CHANGED_EVENT)
 		.constant("FILE_MENU_EVENT", menu_contract::FILE_MENU_EVENT)
 		.constant("TAB_DRAG_EVENT", window_controls::tab_drag::TAB_DRAG_EVENT)
 		.constant("NATIVE_MOVE_ENDED_EVENT", window_controls::native_move::NATIVE_MOVE_ENDED_EVENT)

@@ -300,6 +300,26 @@ impl UserRepository {
 			.await
 	}
 
+	pub async fn fill_blank_display_name(
+		&self,
+		display_name: String,
+	) -> Result<Option<Preferences>, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = write_transaction(connection)?;
+				let is_named = setting_in(&transaction, DISPLAY_NAME_KEY)?
+					.is_some_and(|stored| !stored.trim().is_empty());
+				if is_named {
+					return Ok(None);
+				}
+				SETTINGS.write(&transaction, None, DISPLAY_NAME_KEY, &display_name)?;
+				let stored = stored_in(&transaction)?;
+				transaction.commit()?;
+				Ok(Some(stored))
+			})
+			.await
+	}
+
 	pub async fn swap_avatar_image_path(
 		&self,
 		path: Option<String>,
@@ -1438,6 +1458,45 @@ mod tests {
 		assert_eq!(swapped.previous, a_record().avatar_image_path);
 		assert_eq!(swapped.stored.avatar_image_path, Some("/data/avatars/two.png".to_owned()));
 		assert_eq!(swapped.stored.display_name, "Nyx", "a picture write moved another field");
+	}
+
+	#[tokio::test]
+	async fn a_blank_display_name_is_filled_and_every_other_field_stays() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let blank = Preferences { display_name: "   ".to_owned(), ..a_record() };
+		database.user().set_preferences(blank).await.expect("the write");
+
+		let filled =
+			database.user().fill_blank_display_name("Ada".to_owned()).await.expect("the fill");
+
+		let named = Preferences { display_name: "Ada".to_owned(), ..a_record() };
+		assert_eq!(filled, Some(named.clone()));
+		assert_eq!(database.user().preferences().await.expect("the read"), named);
+	}
+
+	#[tokio::test]
+	async fn a_display_name_never_stored_is_filled() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let filled =
+			database.user().fill_blank_display_name("Ada".to_owned()).await.expect("the fill");
+
+		assert_eq!(filled.map(|stored| stored.display_name), Some("Ada".to_owned()));
+	}
+
+	#[tokio::test]
+	async fn a_stored_display_name_is_never_filled_over() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database.user().set_preferences(a_record()).await.expect("the write");
+
+		let filled =
+			database.user().fill_blank_display_name("Ada".to_owned()).await.expect("the fill");
+
+		assert_eq!(filled, None);
+		assert_eq!(database.user().preferences().await.expect("the read"), a_record());
 	}
 
 	#[tokio::test]
