@@ -50,7 +50,6 @@ import {
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
-import { homeQueryKeys } from "@/lib/home/home-query-keys"
 import { createHomeVisits } from "@/lib/home/home-visits"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
@@ -59,8 +58,6 @@ import type {
 	MissionChanged,
 	MissionDetail,
 	MissionEvent,
-	MissionInSpace,
-	MissionState,
 } from "@/lib/missions/mission-contract"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
@@ -167,15 +164,6 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 		reopen: vi.fn(),
 		onChanged: vi.fn(),
 	},
-}))
-
-const homeFeed = vi.hoisted(() => ({ entries: [] as MissionInSpace[] }))
-vi.mock("@/lib/missions/use-space-missions", () => ({
-	useSpaceMissions: () => ({
-		waitingOnYou: [],
-		inProgress: [],
-		earlierToday: homeFeed.entries,
-	}),
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
@@ -775,7 +763,6 @@ describe("WorkspaceBody frame", () => {
 describe("WorkspaceBody Home", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		homeFeed.entries = []
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
 		listSources.mockResolvedValue([])
@@ -812,10 +799,6 @@ describe("WorkspaceBody Home", () => {
 						home: {
 							visits: homeVisits,
 							store,
-							conversations: [
-								workspace.conversation,
-								workspace.otherConversation,
-							],
 							onSelectAgent: () => undefined,
 							startConversation: () => Promise.resolve(null),
 							discardConversation: () => Promise.resolve(),
@@ -836,33 +819,6 @@ describe("WorkspaceBody Home", () => {
 			open,
 			rerender,
 			onOpenThreadInNewTab,
-		}
-	}
-
-	type HomeMission = {
-		id: string
-		title: string
-		state: MissionState
-		at: number
-	}
-
-	const homeMissionOf = (
-		bot: Bot,
-		room: Conversation,
-		{ id, title, state, at }: HomeMission,
-	): MissionInSpace => {
-		const mission = missionOf(bot, room)
-		return {
-			conversationId: room.id,
-			conversationTitle: room.title,
-			mission: {
-				...mission,
-				id,
-				state,
-				ticket: { ...mission.ticket, title },
-				closedAt: at,
-				lastActivityAt: at,
-			},
 		}
 	}
 
@@ -976,33 +932,6 @@ describe("WorkspaceBody Home", () => {
 		expect(homeSlot("prompt-input")).toBeNull()
 	})
 
-	it("shows only the missions that completed or blocked after the Home opened", async () => {
-		const home = await launchHome()
-		await home.open()
-		const openedAt = Date.now()
-		const { bot, conversation } = home.workspace
-		homeFeed.entries = [
-			homeMissionOf(bot, conversation, {
-				id: "before",
-				title: "Earlier booking",
-				state: "done",
-				at: openedAt - 60_000,
-			}),
-			homeMissionOf(bot, conversation, {
-				id: "after",
-				title: "Book flights",
-				state: "waiting_human",
-				at: openedAt + 60_000,
-			}),
-		]
-
-		home.rerender()
-
-		expect(screen.getByText("Book flights")).toBeTruthy()
-		expect(screen.getByText("Blocked")).toBeTruthy()
-		expect(screen.queryByText("Earlier booking")).toBeNull()
-	})
-
 	it("suggests Applications to an agent that has none, until the suggestion is hidden", async () => {
 		const home = await launchHome()
 		await home.open()
@@ -1049,31 +978,62 @@ describe("WorkspaceBody Home", () => {
 		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
-	it("keeps a done room line when the person switches to another agent and back", async () => {
+	const askInRoom = async ({
+		bot,
+		conversation,
+		driver,
+		runtimes,
+	}: Workspace) => {
+		const room = runtimes.runtimeFor(conversation.id)
+		await room.open(conversation)
+		await room.send("@Nyx pick the deposit date")
+		await waitFor(() => expect(driver.submissions).toHaveLength(1))
+		driver.pushTo(bot.id, [
+			{
+				type: "questionRequested",
+				request: {
+					id: "ask-1",
+					questions: [
+						{
+							header: "Deposit",
+							question: "When should the deposit go out?",
+							options: [],
+							multiSelect: false,
+						},
+					],
+				},
+			},
+		])
+		await waitFor(() =>
+			expect(room.getState().pendingPrompt?.request.id).toBe("ask-1"),
+		)
+	}
+
+	const roomReads = () =>
+		queries.queryClient
+			.getQueryCache()
+			.getAll()
+			.filter(({ queryKey }) => queryKey.includes("agent-rooms"))
+
+	it("keeps the composer and opens no room of the agent while one of them holds a question", async () => {
 		const store = createFakeTranscriptStore()
 		const seated = await workspaceOf(store)
-		const { bot, conversation } = seated
-		const rooms = vi
-			.spyOn(store, "agentRooms")
-			.mockResolvedValue([
-				{ botId: bot.id, conversationIds: [conversation.id] },
-			])
+		await askInRoom(seated)
+		const openRoom = vi.spyOn(seated.runtimes, "runtimeFor")
+		const watchRooms = vi.spyOn(seated.runtimes, "subscribe")
 		const home = await launchHome({ store, seated })
 		await home.open()
-		expect(await screen.findByText("Nyx is working in")).toBeTruthy()
+		await settle()
 
-		rooms.mockResolvedValue([{ botId: bot.id, conversationIds: [] }])
-		await act(() =>
-			queries.queryClient.invalidateQueries({ queryKey: homeQueryKeys.all }),
-		)
-		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
+		typeOnHome("Book the flights.")
 
-		const [vega] = await seatBots(store, SPACE, ["Vega"])
-		home.rerender({ bot: vega, bots: [bot, vega] })
-		expect(screen.queryByText("Nyx worked in")).toBeNull()
-		home.rerender({ bot, bots: [bot, vega] })
-
-		expect(await screen.findByText("Nyx worked in")).toBeTruthy()
+		expect(screen.getByDisplayValue("Book the flights.")).toBeTruthy()
+		expect(screen.queryByText("When should the deposit go out?")).toBeNull()
+		expect(screen.queryByRole("link", { name: "Walls" })).toBeNull()
+		expect(screen.queryByText(/working in|worked in/)).toBeNull()
+		expect(openRoom).not.toHaveBeenCalled()
+		expect(watchRooms).not.toHaveBeenCalled()
+		expect(roomReads()).toEqual([])
 	})
 })
 

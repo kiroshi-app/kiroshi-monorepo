@@ -6,7 +6,7 @@ import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { BareAppHeader } from "@/components/bare-app-header"
-import { HomeEmptyStage, HomeLines } from "@/components/home-screen"
+import { HomeEmptyStage } from "@/components/home-screen"
 import { MissionThreadScreen } from "@/components/mission-thread-screen"
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
@@ -36,7 +36,6 @@ import {
 type HomeSeat = HomeConversationStart & {
 	visits: HomeVisits
 	store: TranscriptStore
-	conversations: Conversation[]
 	onSelectAgent: (botId: string) => void
 	arrivalKey?: string
 }
@@ -117,7 +116,7 @@ type HomeViewProps = {
 }
 
 const HomeView = ({ body, seat, bot }: HomeViewProps) => {
-	const { onOpenThreadInNewTab, spaceId } = body
+	const { spaceId } = body
 	const visits = useSyncExternalStore(
 		seat.visits.subscribe,
 		seat.visits.getState,
@@ -135,33 +134,15 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 		discardConversation: seat.discardConversation,
 		openConversation: seat.openConversation,
 	})
-	const rooms = {
-		agent: bot,
-		conversations: seat.conversations,
-		store: seat.store,
-		spaceId,
-		onOpenRoom: (conversationId: string) =>
-			onOpenThreadInNewTab({ conversation: conversationId }),
-	}
 
 	return (
 		<HomeEmptyStage
 			{...send}
-			{...rooms}
+			agent={bot}
 			arrivalKey={seat.arrivalKey}
 			bots={body.bots}
 			isBandDismissed={visit?.isBandDismissed ?? false}
 			isReadOnly={Boolean(joinedHost?.departure)}
-			lines={
-				<HomeLines
-					{...rooms}
-					key={bot.id}
-					openedAt={visit?.openedAt ?? null}
-					roomLinesOf={(workingIds) =>
-						seat.visits.roomLinesOf(bot.id, spaceId, workingIds)
-					}
-				/>
-			}
 			notice={
 				joinedHost && access ? (
 					<SpaceAccessBanner
@@ -175,7 +156,8 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 			onDismissBand={() => seat.visits.dismissBand(bot.id, spaceId)}
 			onSelectAgent={seat.onSelectAgent}
 			readerName={body.readerName}
-			runtimes={body.conversationRuntimes}
+			spaceId={spaceId}
+			store={seat.store}
 		/>
 	)
 }
