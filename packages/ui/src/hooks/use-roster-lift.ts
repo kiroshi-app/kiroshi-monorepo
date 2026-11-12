@@ -66,9 +66,9 @@ const isSlidingHome = (node: HTMLElement) =>
 		)
 
 const settleFrom = (node: HTMLElement, dropped: Point) => {
-	if (!node.isConnected || isSlidingHome(node)) return
+	if (!node.isConnected || isSlidingHome(node)) return null
 	const rest = centreOf(node)
-	node.animate(
+	return node.animate(
 		[
 			{ translate: `${dropped.x - rest.x}px ${dropped.y - rest.y}px` },
 			{ translate: "0px 0px" },
@@ -148,6 +148,7 @@ export const useRosterLift = <Landing>({
 	const at = useRef<Point>({ x: 0, y: 0 })
 	const followed = useRef<HTMLElement | null>(null)
 	const hasDropped = useRef(false)
+	const settling = useRef<Animation | null>(null)
 	const isStill = usePrefersReducedMotion()
 	const landingFor = useStableCallback(landingAt)
 	const isSame = useStableCallback(isSameLanding)
@@ -189,7 +190,9 @@ export const useRosterLift = <Landing>({
 			const dropped = followed.current
 			if (dropped && !isStill) {
 				const from = centreOf(dropped)
-				requestAnimationFrame(() => settleFrom(dropped, from))
+				requestAnimationFrame(() => {
+					settling.current = settleFrom(dropped, from)
+				})
 			}
 			hasDropped.current = true
 			landing.write(null)
@@ -206,6 +209,7 @@ export const useRosterLift = <Landing>({
 				)
 				if (travelled < LIFT_THRESHOLD) return
 				isLifted = true
+				settling.current?.cancel()
 				capturePointer(element, pointerId)
 				element.addEventListener("lostpointercapture", cancel)
 				window.addEventListener("keydown", cancelOnEscape, true)

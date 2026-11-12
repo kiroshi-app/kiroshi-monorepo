@@ -25,6 +25,7 @@ import {
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
 	barIn,
@@ -4751,6 +4752,38 @@ export const DragBotToSection = meta.story({
 		await expect(args.onSelectBot).not.toHaveBeenCalled()
 		await expect(liftedSlot()).toBeNull()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+	},
+})
+
+const glidesOf = (node: HTMLElement) =>
+	node
+		.getAnimations()
+		.filter((animation) => !(animation instanceof CSSTransition))
+
+export const DragBotAgainBeforeItLands = meta.story({
+	tags: ["test-only"],
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row dropped, then lifted again while it still glides onto its slot. Check that the glide stops at the second lift, so the row rides the pointer at once instead of finishing its way home first.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowFor(canvasElement, "Atlas")
+		const handle = rowButton(row)
+
+		await withMotionAllowed(async () => {
+			await new Promise(requestAnimationFrame)
+			dragOnto(handle, dropAreaFor(canvasElement, "shipping"))
+			await waitFor(() => expect(glidesOf(row)).toHaveLength(1), FRAME_POLL)
+
+			lift(handle)
+			await expect(liftedSlot()).toBe(row)
+			await expect(glidesOf(row)).toHaveLength(0)
+		})
 	},
 })
 
