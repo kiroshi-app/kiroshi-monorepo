@@ -1,9 +1,11 @@
-import type {
-	AppSidebarBot,
-	AppSidebarConversation,
-	AppSidebarRowMission,
-	AppSidebarSection,
-	RosterPin,
+import {
+	type AppSidebarBot,
+	type AppSidebarConversation,
+	type AppSidebarRowMission,
+	type AppSidebarSection,
+	badgeOf,
+	isNeedingYou,
+	type RosterPin,
 } from "@workspace/ui/components/app-sidebar-model"
 
 interface RosterRow {
@@ -50,16 +52,31 @@ const hasWaitingMission = (missions: AppSidebarRowMission[] | undefined) =>
 const isWaitingOnReader = ({ bot, conversation }: PinnedEntry) =>
 	hasWaitingMission(bot?.missions) || hasWaitingMission(conversation?.missions)
 
-const hasPendingQuestion = ({ bot, conversation }: PinnedEntry) =>
+type LeadingEntry = (entry: PinnedEntry) => boolean
+
+const hasPendingQuestion: LeadingEntry = ({ bot, conversation }) =>
 	Boolean(bot?.pendingQuestion || conversation?.pendingQuestion)
 
-const waitRankOf = (entry: PinnedEntry) => {
-	if (hasPendingQuestion(entry)) return 0
+const showsNeedsYou: LeadingEntry = ({ bot, conversation }) =>
+	(bot !== undefined && isNeedingYou(bot)) ||
+	(conversation !== undefined &&
+		isNeedingYou({
+			badge: badgeOf(conversation),
+			pendingQuestion: conversation.pendingQuestion,
+		}))
+
+const waitRankOf = (entry: PinnedEntry, leads: LeadingEntry) => {
+	if (leads(entry)) return 0
 	return isWaitingOnReader(entry) ? 1 : 2
 }
 
-const waitingFirst = (entries: PinnedEntry[]) =>
-	entries.toSorted((one, other) => waitRankOf(one) - waitRankOf(other))
+const waitingFirst = (
+	entries: PinnedEntry[],
+	leads: LeadingEntry = hasPendingQuestion,
+) =>
+	entries.toSorted(
+		(one, other) => waitRankOf(one, leads) - waitRankOf(other, leads),
+	)
 
 const toPin = ({ id, sectionId }: PinnedEntry): RosterPin => ({ id, sectionId })
 
@@ -109,6 +126,7 @@ export {
 	SORTED,
 	SORTED_ZONE,
 	sectionOf,
+	showsNeedsYou,
 	toPin,
 	waitingFirst,
 }

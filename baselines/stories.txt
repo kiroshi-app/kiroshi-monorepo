@@ -1878,6 +1878,8 @@ navigation-expandedsidebar--compact-coloured-icons-expanded
 navigation-expandedsidebar--compact-focus-expanded
 navigation-expandedsidebar--compact-hover-expanded
 navigation-expandedsidebar--compact-needs-you-expanded
+navigation-expandedsidebar--compact-needs-you-light-expanded
+navigation-expandedsidebar--compact-needs-you-without-question-expanded
 navigation-expandedsidebar--compact-rest-expanded
 navigation-expandedsidebar--compact-selected-expanded
 navigation-expandedsidebar--compact-working-expanded

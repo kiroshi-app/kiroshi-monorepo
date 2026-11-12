@@ -19,6 +19,7 @@ import {
 	inRuns,
 	PINNED_ZONE,
 	type PinnedEntry,
+	showsNeedsYou,
 	waitingFirst,
 } from "@workspace/ui/components/app-sidebar-pins"
 import {
@@ -160,21 +161,33 @@ const rosterMenuOf = (
 	</RosterMenu>
 )
 
-const recentMenuOf = (
-	conversations: AppSidebarConversation[],
-	bots: AppSidebarBot[],
-	rows: RosterRowsContext,
-) =>
-	rosterMenuOf(
+interface RecentMenuProps {
+	conversations: AppSidebarConversation[]
+	bots: AppSidebarBot[]
+	rows: RosterRowsContext
+}
+
+const RecentMenu = ({ conversations, bots, rows }: RecentMenuProps) => {
+	const leads = useIsCompactRows() ? showsNeedsYou : undefined
+
+	return rosterMenuOf(
 		waitingFirst(
 			[
 				...conversations.map((conversation) => conversationEntry(conversation)),
 				...bots.map((bot) => botEntry(bot)),
 			].toSorted(byMostRecent),
+			leads,
 		),
 		false,
 		rows,
 	)
+}
+
+const recentMenuOf = (
+	conversations: AppSidebarConversation[],
+	bots: AppSidebarBot[],
+	rows: RosterRowsContext,
+) => <RecentMenu bots={bots} conversations={conversations} rows={rows} />
 
 const PINNED_ZONE_STACK = "flex flex-col gap-1.5"
 

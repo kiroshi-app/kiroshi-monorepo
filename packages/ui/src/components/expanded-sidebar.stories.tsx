@@ -2386,56 +2386,161 @@ const NEEDS_YOU_ROWS = {
 	],
 }
 
+const ATTENTION: AppSidebarConversation["badge"] = "attention"
+
+const NEEDS_YOU_WITHOUT_QUESTION_ROWS = {
+	agents: [ATLAS_LINE, { ...NOVA_LINE, badge: ATTENTION }],
+	conversations: [
+		COMPACT_RELEASE_TRAIN,
+		COMPACT_ROADMAP,
+		COMPACT_ONBOARDING,
+		{ ...COMPACT_OFFSITE, badge: ATTENTION },
+	],
+}
+
+const NEEDS_YOU_NAMES = [NOVA_LINE.name, COMPACT_OFFSITE.name]
+
+const MEASURED_NEEDS_YOU = "rgb(242, 165, 58)"
+
+const AA_TEXT_CONTRAST = 4.5
+
+const srgbOf = (colour: string) => {
+	const context = document.createElement("canvas").getContext("2d")
+	if (!context) throw new Error("No canvas to resolve a colour on")
+	context.fillStyle = colour
+	context.fillRect(0, 0, 1, 1)
+	return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3))
+}
+
+const luminanceOf = (colour: string) => {
+	const [red, green, blue] = srgbOf(colour).map((channel) => {
+		const share = channel / 255
+		return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4
+	})
+	return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const contrastOf = (one: string, other: string) => {
+	const [lighter, darker] = [luminanceOf(one), luminanceOf(other)].sort(
+		(first, second) => second - first,
+	)
+	return (lighter + 0.05) / (darker + 0.05)
+}
+
+const expectNeedsYouState = async ({ canvasElement }: StoryCanvas) => {
+	const conversations = slotsIn(canvasElement, "fold-section")[1]
+	await expect(namesOf(slotsIn(conversations, "sidebar-menu-button"))).toEqual([
+		COMPACT_OFFSITE.name,
+		COMPACT_RELEASE_TRAIN.name,
+		COMPACT_ROADMAP.name,
+		COMPACT_ONBOARDING.name,
+	])
+	await expect(slotsIn(canvasElement, "needs-you-label")).toHaveLength(
+		NEEDS_YOU_NAMES.length,
+	)
+
+	for (const name of NEEDS_YOU_NAMES) {
+		const row = rowHolding(canvasElement, name)
+		const title = slotIn(row, "roster-row-name")
+		const needsYou = slotIn(row, "roster-row-needs-you")
+		const glyph = slotIn(needsYou, "needs-you-glyph")
+		const label = slotIn(needsYou, "needs-you-label")
+		const orange = tokenStyleIn(row, "text-needs-you", "color")
+		await expect(label).toHaveTextContent("Needs you")
+		await expect(row).toHaveAccessibleName(`${name} Needs you`)
+		await expect(boxOf(row).height).toBe(ROW_HEIGHT)
+		await expect(getComputedStyle(title).fontWeight).toBe("500")
+		await expect(colourOf(title)).toBe(
+			tokenStyleIn(row, "text-foreground", "color"),
+		)
+		await expect(
+			row.querySelector(
+				'[data-slot="roster-row-timestamp"], [data-slot="conversation-bot-pile"]',
+			),
+		).toBeNull()
+		await expect([boxOf(glyph).width, boxOf(glyph).height]).toEqual([12, 12])
+		await expect(fillOf(glyph)).toBe(orange)
+		await expect(getComputedStyle(glyph, "::before").content).toBe('"?"')
+		await expect(boxOf(label).left - boxOf(glyph).right).toBe(4)
+		await expect([
+			colourOf(label),
+			getComputedStyle(label).fontSize,
+			getComputedStyle(label).lineHeight,
+			getComputedStyle(label).fontWeight,
+		]).toEqual([orange, "11px", "16px", "600"])
+		await expect(getComputedStyle(needsYou).paddingInlineStart).toBe("4px")
+	}
+}
+
+const expectMeasuredOrange = async ({ canvasElement }: StoryCanvas) => {
+	for (const name of NEEDS_YOU_NAMES) {
+		const row = rowHolding(canvasElement, name)
+		await expect([
+			colourOf(slotIn(row, "needs-you-label")),
+			fillOf(slotIn(row, "needs-you-glyph")),
+		]).toEqual([MEASURED_NEEDS_YOU, MEASURED_NEEDS_YOU])
+	}
+}
+
+const NEEDS_YOU_CHECKS =
+	"Check Lisbon offsite plan, the oldest conversation, now leads Conversations, and that both rows draw their title in medium foreground and swap pile and time for a 12px disc holding a question mark, 4px before Needs you in 11/16 semibold, the label part of the row's accessible name and the row still 28px tall."
+
 export const CompactNeedsYouExpanded = meta.story({
 	name: "D Needs you",
 	args: compactArtboardOf(NEEDS_YOU_ROWS),
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan each wait on an answer. Check Lisbon offsite plan, the oldest conversation, now leads Conversations, and that both rows draw their title in medium foreground and swap pile and time for a 12px warning disc holding a question mark, 4px before Needs you in 11/16 semibold warning, the row still 28px tall.`,
+				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan each wait on an answer. ${NEEDS_YOU_CHECKS} Check the label and the disc wear the orange measured on the artboard, #F2A53A.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const conversations = slotsIn(canvasElement, "fold-section")[1]
-		await expect(
-			namesOf(slotsIn(conversations, "sidebar-menu-button")),
-		).toEqual([
-			WAITING_OFFSITE.name,
-			COMPACT_RELEASE_TRAIN.name,
-			COMPACT_ROADMAP.name,
-			COMPACT_ONBOARDING.name,
-		])
+		await expectNeedsYouState({ canvasElement })
+		await expectMeasuredOrange({ canvasElement })
+	},
+})
 
-		for (const name of [NOVA_LINE.name, WAITING_OFFSITE.name]) {
+export const CompactNeedsYouWithoutQuestionExpanded = meta.story({
+	name: "D Needs you without a question",
+	args: compactArtboardOf(NEEDS_YOU_WITHOUT_QUESTION_ROWS),
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan carry the attention badge and no question text, what a host waiting on the person reports when its prompt is empty. ${NEEDS_YOU_CHECKS} Nothing tells these rows from the ones of D Needs you.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectNeedsYouState({ canvasElement })
+		await expectMeasuredOrange({ canvasElement })
+	},
+})
+
+export const CompactNeedsYouLightExpanded = meta.story({
+	name: "D Needs you Light",
+	globals: LIGHT,
+	args: compactArtboardOf(NEEDS_YOU_ROWS),
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan each wait on an answer, in the light theme. ${NEEDS_YOU_CHECKS} Check the label reads at 4.5:1 or more against the sidebar surface and against the selected fill, and the question mark as much against its disc.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectNeedsYouState({ canvasElement })
+		for (const name of NEEDS_YOU_NAMES) {
 			const row = rowHolding(canvasElement, name)
-			const title = slotIn(row, "roster-row-name")
-			const needsYou = slotIn(row, "roster-row-needs-you")
-			const glyph = slotIn(needsYou, "needs-you-glyph")
-			const label = slotIn(needsYou, "needs-you-label")
-			const warning = tokenStyleIn(row, "text-warning", "color")
-			await expect(row).toHaveAccessibleName(`${name} Needs you`)
-			await expect(boxOf(row).height).toBe(ROW_HEIGHT)
-			await expect(getComputedStyle(title).fontWeight).toBe("500")
-			await expect(colourOf(title)).toBe(
-				tokenStyleIn(row, "text-foreground", "color"),
-			)
+			const label = colourOf(slotIn(row, "needs-you-label"))
+			const glyph = slotIn(row, "needs-you-glyph")
+			for (const surface of ["bg-sidebar", "bg-sidebar-accent"])
+				await expect(
+					contrastOf(label, tokenStyleIn(row, surface, "backgroundColor")),
+				).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
 			await expect(
-				row.querySelector(
-					'[data-slot="roster-row-timestamp"], [data-slot="conversation-bot-pile"]',
-				),
-			).toBeNull()
-			await expect([boxOf(glyph).width, boxOf(glyph).height]).toEqual([12, 12])
-			await expect(fillOf(glyph)).toBe(warning)
-			await expect(getComputedStyle(glyph, "::before").content).toBe('"?"')
-			await expect(boxOf(label).left - boxOf(glyph).right).toBe(4)
-			await expect([
-				colourOf(label),
-				getComputedStyle(label).fontSize,
-				getComputedStyle(label).lineHeight,
-				getComputedStyle(label).fontWeight,
-			]).toEqual([warning, "11px", "16px", "600"])
-			await expect(getComputedStyle(needsYou).paddingInlineStart).toBe("4px")
+				contrastOf(colourOf(glyph), fillOf(glyph)),
+			).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
 		}
 	},
 })

@@ -151,7 +151,9 @@ const COMPACT_META =
 const COMPACT_TIME = "min-w-5.5 shrink-0 text-end"
 
 const COMPACT_NEEDS_YOU =
-	"flex items-center gap-1 ps-1 font-semibold text-warning"
+	"flex items-center gap-1 ps-1 font-semibold text-needs-you"
+
+const COMPACT_NEEDS_YOU_GLYPH = cn(NEEDS_YOU_GLYPH, "bg-needs-you")
 
 type CompactRowTitleProps = {
 	name: string
@@ -211,7 +213,7 @@ const CompactRowMeta = ({
 				<span className={COMPACT_NEEDS_YOU} data-slot="roster-row-needs-you">
 					<span
 						aria-hidden="true"
-						className={NEEDS_YOU_GLYPH}
+						className={COMPACT_NEEDS_YOU_GLYPH}
 						data-slot="needs-you-glyph"
 					/>
 					<span data-slot="needs-you-label">{t("roster.needsYou")}</span>

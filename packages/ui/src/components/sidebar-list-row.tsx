@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 
+import { isNeedingYou } from "@workspace/ui/components/app-sidebar-model"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import {
 	CompactRowMeta,
@@ -92,7 +93,7 @@ const SidebarListRow = ({
 	const hasStrips = Boolean(strips) && state !== "collapsed"
 
 	if (geometry === "compact") {
-		const isNeedingYou = Boolean(pendingQuestion)
+		const needsYou = isNeedingYou({ badge, pendingQuestion })
 
 		return (
 			<SidebarMenuRow
@@ -103,7 +104,7 @@ const SidebarListRow = ({
 				render={<button type="button" />}
 				trailing={
 					<CompactRowMeta
-						isNeedingYou={isNeedingYou}
+						isNeedingYou={needsYou}
 						isTimestampDestructive={isTimestampDestructive}
 						pile={previewTrailing}
 						timestamp={timestamp}
@@ -112,7 +113,7 @@ const SidebarListRow = ({
 				variant="navigation"
 			>
 				<CompactRowTitle
-					isNeedingYou={isNeedingYou}
+					isNeedingYou={needsYou}
 					isWorking={isWorking}
 					name={name}
 				/>
