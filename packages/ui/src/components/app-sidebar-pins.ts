@@ -54,9 +54,6 @@ const isWaitingOnReader = ({ bot, conversation }: PinnedEntry) =>
 
 type LeadingEntry = (entry: PinnedEntry) => boolean
 
-const hasPendingQuestion: LeadingEntry = ({ bot, conversation }) =>
-	Boolean(bot?.pendingQuestion || conversation?.pendingQuestion)
-
 const showsNeedsYou: LeadingEntry = ({ bot, conversation }) =>
 	(bot !== undefined && isNeedingYou(bot)) ||
 	(conversation !== undefined &&
@@ -65,15 +62,12 @@ const showsNeedsYou: LeadingEntry = ({ bot, conversation }) =>
 			pendingQuestion: conversation.pendingQuestion,
 		}))
 
-const waitRankOf = (entry: PinnedEntry, leads: LeadingEntry) => {
-	if (leads(entry)) return 0
+const waitRankOf = (entry: PinnedEntry, leads?: LeadingEntry) => {
+	if (leads?.(entry)) return 0
 	return isWaitingOnReader(entry) ? 1 : 2
 }
 
-const waitingFirst = (
-	entries: PinnedEntry[],
-	leads: LeadingEntry = hasPendingQuestion,
-) =>
+const waitingFirst = (entries: PinnedEntry[], leads?: LeadingEntry) =>
 	entries.toSorted(
 		(one, other) => waitRankOf(one, leads) - waitRankOf(other, leads),
 	)
