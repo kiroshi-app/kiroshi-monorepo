@@ -2126,6 +2126,7 @@ navigation-librarypanel--floating-header-control-states
 navigation-librarypanel--floating-header-control-states-dark
 navigation-librarypanel--floating-header-dark
 navigation-librarypanel--floating-header-narrow
+navigation-librarypanel--floating-header-narrow-scrolled
 navigation-librarypanel--floating-header-scrolled
 navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all

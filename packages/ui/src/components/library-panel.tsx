@@ -74,7 +74,7 @@ type FilterSegmentProps = {
 
 const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
 	<ToggleGroupItem
-		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
+		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-header-island-control-hover aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
 		data-slot="library-filter"
 		size="sm"
 		value={value}
@@ -325,6 +325,10 @@ const LibraryPanel = ({
 						isSkeletonShown && "h-full pb-0",
 					)}
 					header={<LibraryHeader actions={actions} filters={filters} />}
+					headerFadeClassName={cn(
+						filters &&
+							"@max-4xl:h-28 @max-4xl:from-[percentage:calc(100%-2rem)]",
+					)}
 					isHeaderFloating
 				>
 					{isSkeletonShown ? (

@@ -1723,6 +1723,9 @@ export const FloatingHeaderScrolled = FloatingHeader.extend({
 			boxOf(fade).width,
 			boxOf(fade).height,
 		]).toEqual([frame.top, frame.width, 64])
+		await expect(getComputedStyle(fade).backgroundImage).toContain(
+			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} 50%, ${TRANSPARENT} 100%`,
+		)
 		await expect(boxOf(firstItem).top).toBeLessThan(boxOf(title).top)
 		await expect(
 			scroller.contains(
@@ -1807,6 +1810,50 @@ export const FloatingHeaderAt320 = FloatingHeader.extend({
 	},
 })
 
+export const FloatingHeaderNarrowScrolled = FloatingHeaderNarrow.extend({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The grid scrolled under the two rows of the 560 wide header. Check that the three islands stay in place, that the top fade is solid down to 32 px from its end and reaches past the bottom of the filters island, so no tile shows between or around the two rows, and that the first row passes under the islands.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { panel, title, filters } = headerIn(canvasElement)
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const firstItem = slotIn(canvasElement, "library-item")
+		const frame = boxOf(panel)
+
+		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
+
+		scroller.scrollTo({ top: SCROLLED_AWAY })
+		const fade = await waitFor(() =>
+			slotIn(canvasElement, "screen-layout-fade"),
+		)
+		const solidBottom = boxOf(fade).bottom - 32
+
+		await expectIslandsAtTheEdges(canvasElement)
+		await expect([
+			boxOf(filters).left - frame.left,
+			boxOf(filters).top - frame.top,
+		]).toEqual([8, 56])
+		await expect([
+			boxOf(fade).top,
+			boxOf(fade).width,
+			boxOf(fade).height,
+		]).toEqual([frame.top, frame.width, 112])
+		await expect(getComputedStyle(fade).backgroundImage).toContain(
+			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} calc(100% - 32px), ${TRANSPARENT} 100%`,
+		)
+		await expect(solidBottom).toBeGreaterThan(boxOf(filters).top)
+		await expect(boxOf(fade).bottom).toBeGreaterThanOrEqual(
+			boxOf(filters).bottom,
+		)
+		await expect(boxOf(firstItem).top).toBeLessThan(boxOf(title).top)
+	},
+})
+
 const CONTROL_STATE_ROWS = [
 	{ row: "rest", label: "At rest" },
 	{ row: "hover", label: "Hover" },
@@ -1880,8 +1927,20 @@ export const FloatingHeaderControlStates = meta.story({
 		if (!(all && images && icon)) throw new Error("The header lost a control")
 		const pointer = await realPointer()
 
+		const isDark = images.closest(".dark") !== null
 		await pointer.hover(images)
-		await expectFill(images, "bg-header-island-control-pressed")
+		await expectFill(
+			images,
+			isDark
+				? "bg-header-island-control-hover"
+				: "bg-header-island-control-pressed",
+		)
+		await expect(getComputedStyle(images).backgroundColor).not.toBe(
+			tokenStyleIn(images, "bg-muted", "backgroundColor"),
+		)
+		await expect(getComputedStyle(images).transitionProperty).toBe("none")
+		await pointer.hover(all)
+		await expectFill(all, "bg-primary")
 		await pointer.hover(newBoard)
 		await expectFill(newBoard, "bg-muted")
 		await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
