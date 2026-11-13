@@ -8,6 +8,9 @@ import {
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTooltipCard,
+	expectTooltipPastTheSidebarEdge,
+	openTooltipOf,
 	SidebarFrame,
 	slotIn,
 	slotsIn,
@@ -21,10 +24,12 @@ import {
 	PENDING_QUESTION,
 	SIDEBAR_SECTION,
 	SIDEBAR_SPACES,
+	SPOKEN_AT,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
+import { formatSentDate } from "@workspace/ui/components/message"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -261,3 +266,46 @@ export const CompactRowAtRestHoveredAndActive = meta.story(
 export const CompactRowAtRestHoveredAndActiveDark = meta.story(
 	compactRowStatesStory({ theme: "dark" }),
 )
+
+const SPOKEN_ATLAS: AppSidebarBot = { ...ATLAS, lastActivityAt: SPOKEN_AT }
+
+export const TooltipCarriesTheAgentNameAndTitle = meta.story({
+	args: { bot: SPOKEN_ATLAS, isSelected: false },
+	decorators: [
+		(Story) => (
+			<>
+				<li aria-hidden="true" className="h-40" />
+				<Story />
+			</>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on an agent row. Check the tooltip names the agent with its title on one line, then its last message and the full date of that message, with no line for seated agents, that it sits just past the sidebar edge and centred on the row, and that the row gains it as its description.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const tooltip = await openTooltipOf(row)
+		const sentDate = formatSentDate(SPOKEN_AT)
+
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-heading"),
+		).toHaveTextContent("Atlas · Research")
+		await expect(slotsIn(tooltip, "sidebar-row-tooltip-agents")).toEqual([])
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-message"),
+		).toHaveTextContent(ATLAS.lastMessage ?? "")
+		await expect(slotIn(tooltip, "sidebar-row-tooltip-time")).toHaveTextContent(
+			sentDate,
+		)
+		await expectTooltipCard(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleDescription(
+			["Atlas · Research", ATLAS.lastMessage, sentDate].join("\n"),
+		)
+	},
+})

@@ -1526,6 +1526,7 @@ navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active
 navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active-dark
 navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks
 navigation-appsidebarbotrow--selected-bot
+navigation-appsidebarbotrow--tooltip-carries-the-agent-name-and-title
 navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarbotrow--working-bot-waiting-on-one-background-task
 navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
@@ -1559,6 +1560,7 @@ navigation-appsidebarconversationrow--muted-tint-row
 navigation-appsidebarconversationrow--muted-tint-row-dark
 navigation-appsidebarconversationrow--muted-tint-row-free-hue
 navigation-appsidebarconversationrow--muted-tint-row-free-hue-dark
+navigation-appsidebarconversationrow--no-tooltip-while-the-row-is-lifted
 navigation-appsidebarconversationrow--not-sent-selected
 navigation-appsidebarconversationrow--not-sent-selected-dark
 navigation-appsidebarconversationrow--open-row-with-mission-capsules
@@ -1582,6 +1584,12 @@ navigation-appsidebarconversationrow--row-with-three-bots
 navigation-appsidebarconversationrow--row-with-two-bots
 navigation-appsidebarconversationrow--row-without-icon-or-colour
 navigation-appsidebarconversationrow--solo-conversation-row-dark
+navigation-appsidebarconversationrow--tooltip-carries-a-long-title-and-several-agents
+navigation-appsidebarconversationrow--tooltip-carries-a-long-title-and-several-agents-dark
+navigation-appsidebarconversationrow--tooltip-closes-while-the-row-menu-is-open
+navigation-appsidebarconversationrow--tooltip-on-the-first-row-stays-beside-the-sidebar
+navigation-appsidebarconversationrow--tooltip-on-the-icon-rail
+navigation-appsidebarconversationrow--tooltip-without-a-message-yet
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
 navigation-appsidebarconversationrow--working-conversation-waiting-on-one-background-task
 navigation-appsidebarconversationrow--working-conversation-waiting-on-two-background-tasks
@@ -2230,6 +2238,9 @@ navigation-sidebarresize--clamped
 navigation-sidebarresize--dragged-then-released
 navigation-sidebarresize--restored-below-the-minimum
 navigation-sidebarresize--right-side
+navigation-sidebarrowtooltip--default
+navigation-sidebarrowtooltip--long-content
+navigation-sidebarrowtooltip--sparse-data
 navigation-skiplink--custom-label
 navigation-skiplink--focused
 navigation-skiplink--hidden

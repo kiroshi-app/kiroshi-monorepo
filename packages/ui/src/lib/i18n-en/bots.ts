@@ -15,6 +15,8 @@ const bots = {
 		conversation: {
 			create: "Start a conversation",
 			others: "+{{count}}",
+			agents_one: "Agent: {{names}}",
+			agents_other: "Agents: {{names}}",
 			preview: "{{name}}: {{text}}",
 			you: "You",
 			notSent: "Not sent",

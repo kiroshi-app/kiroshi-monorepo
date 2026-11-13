@@ -5,6 +5,7 @@ import {
 	fn,
 	screen,
 	userEvent,
+	waitFor,
 	within,
 } from "storybook/test"
 
@@ -13,13 +14,19 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	colourTransitionsOf,
 	expectAnswered,
+	expectClampedTo,
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTooltipBesideTheSidebar,
+	expectTooltipCard,
+	expectTooltipPastTheSidebarEdge,
 	glyphIn,
 	isInBrowserRunner,
+	openTooltipOf,
 	pictureOf,
 	realPointer,
+	rightClick,
 	SidebarFrame,
 	shown,
 	slotIn,
@@ -36,6 +43,7 @@ import {
 	LONG_PENDING_QUESTION,
 	PENDING_QUESTION,
 	SIDEBAR_SECTION,
+	SPOKEN_AT,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import {
@@ -46,6 +54,7 @@ import type { AppSidebarConversation } from "@workspace/ui/components/app-sideba
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import { formatSentDate } from "@workspace/ui/components/message"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import {
@@ -1416,4 +1425,189 @@ export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 	},
 	play: ({ canvasElement }) =>
 		expectLongQuestionBesideAWholePile(canvasElement),
+})
+
+const LONG_TITLE =
+	"Launch readiness review with the platform, design and support teams before the autumn release"
+
+const LONG_MESSAGE =
+	"The changelog is ready for a read. I grouped the fixes by surface, moved the two breaking changes to the top and linked every entry to its pull request. The migration note still needs a second pair of eyes before it ships, and the screenshots for the settings page are a release behind. Tell me which of the three open questions you want answered first and I will draft the rest around it."
+
+const FIVE_AGENTS_SEATED = "Agents: Atlas, Beacon, Cinder, Dune, Ember"
+
+const LONG_TITLED_ROOM: AppSidebarConversation = {
+	...roomOf(FIVE_BOTS),
+	name: LONG_TITLE,
+	lastMessage: LONG_MESSAGE,
+	lastActivityAt: SPOKEN_AT,
+}
+
+const ROOM_WITHOUT_A_MESSAGE: AppSidebarConversation = {
+	id: "fresh-room",
+	name: "Fresh room",
+	participants: [ATLAS, BEACON],
+	lastActivityAt: SPOKEN_AT,
+}
+
+const SPOKEN_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	lastActivityAt: SPOKEN_AT,
+}
+
+const withRoomAboveTheRow = (Story: () => ReactNode) => (
+	<>
+		<li aria-hidden="true" className="h-40" />
+		<Story />
+	</>
+)
+
+const tooltipOfALongTitledRoomStory = (globals?: typeof DARK) => ({
+	globals,
+	args: { conversation: LONG_TITLED_ROOM },
+	decorators: [withRoomAboveTheRow],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation whose title the row cuts, with five agents seated and a message of several sentences. Check the tooltip carries the whole title, every agent, the message stopped at four lines and the full date of that message, that it sits just past the sidebar edge and centred on the row, and that the row keeps its name and gains the tooltip as its description. Pick `TooltipWithoutAMessageYet` for a conversation nobody wrote in.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+		const message = slotIn(tooltip, "sidebar-row-tooltip-message")
+		const sentDate = formatSentDate(SPOKEN_AT)
+
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-heading"),
+		).toHaveTextContent(LONG_TITLE)
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-agents"),
+		).toHaveTextContent(FIVE_AGENTS_SEATED)
+		await expect(message).toHaveTextContent(LONG_MESSAGE)
+		await expectClampedTo(message, 4)
+		await expect(slotIn(tooltip, "sidebar-row-tooltip-time")).toHaveTextContent(
+			sentDate,
+		)
+		await expectTooltipCard(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).not.toHaveAttribute("aria-label")
+		await expect(row).toHaveAccessibleDescription(
+			[LONG_TITLE, FIVE_AGENTS_SEATED, LONG_MESSAGE, sentDate].join("\n"),
+		)
+	},
+})
+
+export const TooltipCarriesALongTitleAndSeveralAgents = meta.story(
+	tooltipOfALongTitledRoomStory(),
+)
+
+export const TooltipCarriesALongTitleAndSeveralAgentsDark = meta.story(
+	tooltipOfALongTitledRoomStory(DARK),
+)
+
+export const TooltipOnTheFirstRowStaysBesideTheSidebar = meta.story({
+	tags: ["test-only"],
+	args: { conversation: LONG_TITLED_ROOM },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+		const bubble = tooltip.getBoundingClientRect()
+		const held = row.getBoundingClientRect()
+
+		await expect(bubble.height / 2).toBeGreaterThan(held.top + held.height / 2)
+		await expect(bubble.top).toBeGreaterThanOrEqual(0)
+		await expectTooltipBesideTheSidebar(row, tooltip)
+	},
+})
+
+export const TooltipWithoutAMessageYet = meta.story({
+	args: { conversation: ROOM_WITHOUT_A_MESSAGE },
+	decorators: [withRoomAboveTheRow],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation nobody wrote in yet. Check the tooltip stops at the title and the agents seated: no message, no date, no empty line and no placeholder. Pick `TooltipCarriesALongTitleAndSeveralAgents` for a conversation with a message.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+		const card = slotIn(tooltip, "sidebar-row-tooltip")
+
+		await expect(card).toHaveTextContent(/^Fresh roomAgents: Atlas, Beacon$/)
+		await expect(card.children).toHaveLength(1)
+		await expect(card.querySelector(":empty")).toBeNull()
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleDescription(
+			"Fresh room\nAgents: Atlas, Beacon",
+		)
+	},
+})
+
+export const TooltipOnTheIconRail = meta.story({
+	args: { conversation: SPOKEN_ROOM },
+	decorators: [withRoomAboveTheRow],
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar. Check the tooltip is the same one the expanded sidebar shows, title, agents, message and date, in place of the name alone, that it sits just past the rail edge and centred on the tile, and that the tile keeps the conversation name as its accessible name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-heading"),
+		).toHaveTextContent(DESK_ROOM.name)
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-agents"),
+		).toHaveTextContent("Agents: Atlas, Beacon")
+		await expect(
+			slotIn(tooltip, "sidebar-row-tooltip-message"),
+		).toHaveTextContent(DESK_ROOM.lastMessage ?? "")
+		await expect(slotIn(tooltip, "sidebar-row-tooltip-time")).toHaveTextContent(
+			formatSentDate(SPOKEN_AT),
+		)
+		await expectTooltipCard(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(DESK_ROOM.name)
+	},
+})
+
+export const TooltipClosesWhileTheRowMenuIsOpen = meta.story({
+	tags: ["test-only"],
+	args: { conversation: SPOKEN_ROOM },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		await openTooltipOf(row)
+
+		rightClick(row)
+		await screen.findByRole("menu", {
+			name: `Actions for ${DESK_ROOM.name}`,
+		})
+
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+	},
+})
+
+export const NoTooltipWhileTheRowIsLifted = meta.story({
+	tags: ["test-only"],
+	args: { conversation: SPOKEN_ROOM, isLifted: true },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+		await userEvent.tab()
+		await expect(row).toHaveFocus()
+		await expect(screen.queryByRole("tooltip")).toBeNull()
+	},
 })

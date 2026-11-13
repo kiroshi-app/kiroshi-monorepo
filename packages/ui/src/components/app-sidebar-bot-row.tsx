@@ -1,10 +1,11 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
 	type AppSidebarBot,
 	type AppSidebarSection,
 	botPreviewOf,
+	botTooltipOf,
 	isBusy,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
@@ -102,6 +103,7 @@ const BotRosterRow = ({
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
 	const isCompact = useIsCompactRows()
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const rowRef = useRef<HTMLElement | null>(null)
 
 	const focusAfterClose = useRef<HTMLElement | null>(null)
@@ -128,7 +130,7 @@ const BotRosterRow = ({
 			data-tauri-drag-region="false"
 			ref={mergeRefs<HTMLElement>(rowRef, (node) => keepFocus?.(bot.id, node))}
 		>
-			<ContextMenu>
+			<ContextMenu onOpenChange={setIsMenuOpen}>
 				<ContextMenuTrigger
 					className={isCompact ? COMPACT_ROW_STACK : undefined}
 				>
@@ -139,6 +141,7 @@ const BotRosterRow = ({
 						geometry={isCompact ? "compact" : "agent"}
 						isActive={isSelected}
 						isMiddleClickSelectable
+						isTooltipHidden={isLifted || isMenuOpen}
 						isWorking={working}
 						media={
 							<BotRowAvatar
@@ -155,6 +158,7 @@ const BotRosterRow = ({
 						preview={botPreviewOf(t, bot)}
 						strips={missionStripsOf(bot.missions)}
 						timestamp={bot.timestamp ?? ""}
+						tooltip={botTooltipOf(t, bot)}
 						trailing={
 							<BotTitleBadge
 								className={TITLE_BADGE}
