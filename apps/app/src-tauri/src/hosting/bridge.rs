@@ -30,6 +30,8 @@ const INVOKE_BOUND: Duration = Duration::from_secs(300);
 
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
+const UNKNOWN_COMMAND_REFUSAL: &str = "this host knows no command named";
+
 const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
 
 const OTHER_PERSON_REFUSAL: &str = "this command reaches the main conversation of another person";
@@ -94,6 +96,11 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 		Some(args) => Some(args.clone()).filter(Value::is_object),
 	};
 	match (id, command, args) {
+		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
+			log::warn!("a member called {command}, a command this host does not know");
+			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
+			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
+		}
 		(Some(id), Some(command), Some(args)) if belongs_to_the_host(command, &args) => {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
 		}
@@ -189,7 +196,7 @@ pub(super) fn shared_space_answer(text: &str, shared_space_id: &str) -> Option<S
 }
 
 pub(super) fn belongs_to_the_host(command: &str, args: &Value) -> bool {
-	matches!(reach::reach_of(command), None | Some(Reach::HostOnly))
+	reach::reach_of(command) == Some(Reach::HostOnly)
 		|| (command.starts_with("plugin_") && args["scope"]["kind"] == "user")
 }
 
@@ -478,6 +485,7 @@ mod tests {
 
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
+	use crate::test_log::{capturing, logged_naming};
 
 	fn status_of(answer: &str) -> (Value, Value) {
 		let answer: Value = serde_json::from_str(answer).expect("a json answer");
@@ -568,12 +576,12 @@ mod tests {
 	}
 
 	#[test]
-	fn a_member_command_of_the_host_or_one_left_unclassified_is_refused_with_403() {
+	fn a_member_command_of_the_host_is_refused_with_403() {
 		let host_only = reach::REACHES
 			.iter()
 			.filter(|(_, reach)| *reach == Reach::HostOnly)
 			.map(|(command, _)| *command);
-		for command in host_only.chain(["a_command_nobody_classified"]) {
+		for command in host_only {
 			let frame = json!({ "id": "m", "command": command, "args": { "spaceId": "s" } });
 			let refusal = member_call(&frame.to_string(), "a1").expect_err(command);
 			assert_eq!(
@@ -582,6 +590,153 @@ mod tests {
 				"{command}"
 			);
 		}
+	}
+
+	#[test]
+	fn a_member_command_this_host_does_not_know_is_refused_with_404_naming_it() {
+		let frame = json!({ "id": "m", "command": "a_command_nobody_classified" });
+
+		let refusal = member_call(&frame.to_string(), "a1").expect_err("an unknown command");
+
+		assert_eq!(
+			serde_json::from_str::<Value>(&refusal).expect("a json answer"),
+			json!({
+				"id": "m",
+				"status": 404,
+				"body": "this host knows no command named a_command_nobody_classified",
+			})
+		);
+	}
+
+	#[test]
+	fn a_member_command_this_host_does_not_know_is_logged_once_by_its_name_only() {
+		capturing();
+		let sender = "an-account-kept-out-of-the-log";
+		let frame = json!({
+			"id": "m",
+			"command": "a_command_logged",
+			"args": { "spaceId": "an-argument-kept-out-of-the-log" },
+		});
+
+		member_call(&frame.to_string(), sender).expect_err("an unknown command");
+
+		assert_eq!(
+			logged_naming("a_command_logged"),
+			["a member called a_command_logged, a command this host does not know"]
+		);
+		assert_eq!(logged_naming("kept-out-of-the-log"), Vec::<String>::new());
+	}
+
+	#[test]
+	fn a_member_frame_refused_for_another_reason_is_not_logged() {
+		capturing();
+		let sender = "account-of-the-other-refusals";
+		let refused = [
+			json!({ "id": "m", "command": "account_state" }),
+			json!({ "id": "m", "command": "plugin_skills", "args": { "scope": { "kind": "user" } } }),
+			json!({ "id": "m", "command": "agent_models", "args": [1] }),
+			json!({ "command": "agent_models" }),
+		];
+
+		for frame in &refused {
+			member_call(&frame.to_string(), sender).expect_err("a refused frame");
+		}
+
+		assert_eq!(logged_naming(sender), Vec::<String>::new());
+	}
+
+	const HOST_ONLY_SCREENS: &[(&str, &str)] = &[("mcp_oauth_connect", "Applications")];
+
+	const LOCAL_COMMANDS_OPENING: &str = "LOCAL_COMMANDS: ReadonlySet<string> = new Set([";
+
+	struct AppSources {
+		sources: Vec<String>,
+		kept_on_this_mac: Vec<String>,
+	}
+
+	impl AppSources {
+		fn read() -> Self {
+			let sources: Vec<String> =
+				app_source_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../src"))
+					.iter()
+					.map(|path| std::fs::read_to_string(path).expect("the app source reads"))
+					.collect();
+			let kept_on_this_mac = sources
+				.iter()
+				.find_map(|source| source.split_once(LOCAL_COMMANDS_OPENING))
+				.and_then(|(_, rest)| rest.split_once("])"))
+				.expect("the app declares LOCAL_COMMANDS")
+				.0
+				.split(',')
+				.map(str::trim)
+				.filter(|entry| !entry.is_empty())
+				.map(|entry| match entry.strip_prefix('"') {
+					Some(quoted) => quoted.trim_end_matches('"').to_owned(),
+					None => text_constant(&sources, entry),
+				})
+				.collect();
+			Self { sources, kept_on_this_mac }
+		}
+
+		fn sends_to_a_joined_host(&self, command: &str) -> bool {
+			let named = format!("\"{command}\"");
+			!self.kept_on_this_mac.iter().any(|kept| kept == command)
+				&& self.sources.iter().any(|source| source.contains(&named))
+		}
+	}
+
+	fn app_source_files(dir: &Path) -> Vec<std::path::PathBuf> {
+		std::fs::read_dir(dir)
+			.expect("the app source dir reads")
+			.map(|entry| entry.expect("an entry").path())
+			.flat_map(|path| match path.is_dir() {
+				true => app_source_files(&path),
+				false => vec![path],
+			})
+			.filter(|path| {
+				let name = path.to_string_lossy();
+				(name.ends_with(".ts") || name.ends_with(".tsx"))
+					&& !name.contains(".test.")
+					&& !path.ends_with("lib/bindings.ts")
+			})
+			.collect()
+	}
+
+	fn text_constant(sources: &[String], name: &str) -> String {
+		let declared = format!("const {name} = \"");
+		sources
+			.iter()
+			.find_map(|source| source.split_once(&declared))
+			.and_then(|(_, rest)| rest.split('"').next())
+			.unwrap_or_else(|| panic!("the app declares no text constant {name}"))
+			.to_owned()
+	}
+
+	#[test]
+	fn the_app_sources_tell_a_command_kept_on_this_mac_from_one_sent_to_a_joined_host() {
+		let app = AppSources::read();
+
+		assert!(!app.sends_to_a_joined_host("space_list"));
+		assert!(!app.sends_to_a_joined_host("conversation_local_ids"));
+		assert!(!app.sends_to_a_joined_host("a_command_no_screen_names"));
+		assert!(app.sends_to_a_joined_host("conversation_today_of_agent"));
+	}
+
+	#[test]
+	fn a_host_only_command_the_app_sends_to_a_joined_host_is_listed_with_its_host_only_screen() {
+		let app = AppSources::read();
+		let mut sent: Vec<&str> = reach::REACHES
+			.iter()
+			.filter(|(command, reach)| {
+				*reach == Reach::HostOnly && app.sends_to_a_joined_host(command)
+			})
+			.map(|(command, _)| *command)
+			.collect();
+		let mut listed: Vec<&str> = HOST_ONLY_SCREENS.iter().map(|(command, _)| *command).collect();
+		sent.sort_unstable();
+		listed.sort_unstable();
+
+		assert_eq!(sent, listed);
 	}
 
 	fn registered_commands() -> Vec<String> {

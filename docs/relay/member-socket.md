@@ -116,7 +116,8 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 500 | `commands.<command>.error`, or a string when the host could not read the args |
 | 400 | a string: the frame is not `{id, command, args}` with `args` an object |
 | 400 | `commands.chat_store_attachments.error` with `kind` `unreadable`: an attachment of [Attachments](#attachments) carries no content the host can read |
-| 403 | `"this command belongs to the host"`: the command is not open to members, or no command bears this name |
+| 403 | `"this command belongs to the host"`: the command is not open to members |
+| 404 | `"this host knows no command named <command>"`: the build the host runs has no such command |
 | 403 | `"this command reaches outside the shared space"`: an id in `args` names something outside the shared space |
 | 403 | `{ "kind": "refusedToAMember" }`: the command would reach what belongs to the host person |
 | 413 | a string: the call is larger than the host accepts |
