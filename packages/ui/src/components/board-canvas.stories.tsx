@@ -5068,9 +5068,7 @@ const DraftFollowingClicks = ({
 		<CommentedBoard
 			{...props}
 			commentDraft={
-				commentDraft && anchor !== undefined
-					? { ...commentDraft, anchor }
-					: undefined
+				commentDraft && anchor ? { ...commentDraft, anchor } : undefined
 			}
 			onStartComment={(next) => {
 				setAnchor(next)
