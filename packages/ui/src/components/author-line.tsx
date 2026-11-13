@@ -59,6 +59,9 @@ const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 
 const GIVES_WAY_TO_THE_NAME = "min-w-0 max-w-max grow basis-0 truncate"
 
+const AGENT_TITLE_BADGE =
+	"rounded-[5px] bg-muted px-1.5 py-[3px] font-medium text-[11px] text-muted-foreground leading-3"
+
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 
 const AUTHOR_LINE_STICKY =
@@ -131,7 +134,7 @@ const AuthorLineName = ({ tone, name, hue }: AuthorLineNameProps) => {
 			data-hue={isTinted ? hue : undefined}
 			style={isTinted ? hueStyle(hue) : undefined}
 			className={cn(
-				"min-w-0 truncate font-semibold text-compact leading-5",
+				"min-w-0 truncate font-semibold text-compact leading-4",
 				NAME_TONE[tone],
 			)}
 		>
@@ -206,7 +209,7 @@ const AuthorLineWriting = () => {
 	return (
 		<span
 			data-slot="author-line-writing"
-			className="shrink-0 text-muted-foreground text-xs leading-5"
+			className="shrink-0 text-muted-foreground text-xs leading-4"
 		>
 			{t("turn.footer.writing")}
 		</span>
@@ -234,7 +237,7 @@ const AuthorLine = ({
 		time && end !== "failed" && !isWriting ? (
 			<span
 				className={cn(
-					"shrink-0 text-xs leading-5",
+					"shrink-0 text-xs leading-4",
 					isOnOwnBubble
 						? "text-user-bubble-muted-foreground"
 						: "text-muted-foreground",
@@ -278,7 +281,11 @@ const AuthorLine = ({
 				{isEndSide ? actionRow : null}
 				{renderIdentity ? renderIdentity(identity) : identity}
 				{tone === "agent" ? (
-					<BotTitleBadge title={badge} variant="line" />
+					<BotTitleBadge
+						title={badge}
+						variant="line"
+						className={AGENT_TITLE_BADGE}
+					/>
 				) : null}
 				{shownTime}
 				{isWriting ? <AuthorLineWriting /> : null}

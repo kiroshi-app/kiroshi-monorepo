@@ -923,7 +923,7 @@ The design system holds every visual, the Tauri shell only places them.
 
 ### What the shell owns
 
-- Commands, drivers and state machines
+- **Commands**, drivers and state machines
 - Routing, providers and wiring
 - Mapping domain models to component props`
 
@@ -993,25 +993,98 @@ const expectActionsAtRest = async (reply: HTMLElement) => {
 	}
 }
 
-const expectBubblelessReply = async (canvasElement: HTMLElement) => {
+type ReplyColours = {
+	text: string
+	muted: string
+	marker: string
+	badgeFill: string
+}
+
+const REPLY_COLOURS = {
+	light: {
+		text: "rgb(10, 10, 10)",
+		muted: "rgb(107, 107, 107)",
+		marker: "rgb(143, 143, 143)",
+		badgeFill: "rgb(242, 242, 242)",
+	},
+	dark: {
+		text: "rgb(245, 245, 245)",
+		muted: "rgb(163, 163, 163)",
+		marker: "rgb(115, 115, 115)",
+		badgeFill: "rgb(38, 38, 38)",
+	},
+} as const satisfies Record<string, ReplyColours>
+
+const expectBullets = async (reply: HTMLElement, colours: ReplyColours) => {
+	const list = tagIn(reply, "ul")
+	const [firstItem, secondItem] = Array.from(list.querySelectorAll("li"))
+	const marker = getComputedStyle(firstItem, "::before")
+	await expect(typeOf(secondItem)).toEqual(["16px", "28px", "400"])
+	await expect(spaceAbove(secondItem)).toBe("8px")
+	await expect(getComputedStyle(list).paddingInlineStart).toBe("0px")
+	await expect(getComputedStyle(firstItem).paddingInlineStart).toBe("24px")
+	await expect(marker.content).toBe('"•" / ""')
+	await expect([marker.left, marker.width]).toEqual(["0px", "14px"])
+	await expect([marker.fontSize, marker.lineHeight]).toEqual(["16px", "28px"])
+	await expect(marker.color).toBe(colours.marker)
+	await expect(getComputedStyle(firstItem, "::marker").color).toBe(
+		"rgba(0, 0, 0, 0)",
+	)
+	await expect(getComputedStyle(tagIn(firstItem, "strong")).fontWeight).toBe(
+		"600",
+	)
+}
+
+const expectAuthorLineType = async (
+	reply: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const line = slotIn(reply, "author-line")
+	const badge = slotIn(line, "bot-title-badge")
+	const badgeStyle = getComputedStyle(badge)
+	const [time] = timesIn(line)
+	await expect(typeOf(slotIn(line, "author-line-name"))).toEqual([
+		"13px",
+		"16px",
+		"600",
+	])
+	await expect(badge.getBoundingClientRect().height).toBe(18)
+	await expect([
+		badgeStyle.borderTopLeftRadius,
+		badgeStyle.paddingInlineStart,
+		badgeStyle.paddingInlineEnd,
+		badgeStyle.borderTopWidth,
+	]).toEqual(["5px", "6px", "6px", "0px"])
+	await expect(typeOf(badge)).toEqual(["11px", "12px", "500"])
+	await expect(badgeStyle.color).toBe(colours.muted)
+	await expect(badgeStyle.backgroundColor).toBe(colours.badgeFill)
+	await expect(typeOf(time)).toEqual(["12px", "16px", "400"])
+	await expect(getComputedStyle(time).color).toBe(colours.muted)
+}
+
+const expectBubblelessReply = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
 	const column = slotIn(canvasElement, "thread-column")
 	const [reply] = agentRepliesIn(canvasElement)
 	await expectNoBubble(reply, column)
 
 	const [opening, underHeading] = Array.from(reply.querySelectorAll("p"))
-	const [, secondItem] = Array.from(reply.querySelectorAll("li"))
 	const heading = tagIn(reply, "h2")
 	const subheading = tagIn(reply, "h3")
 	await expect(typeOf(opening)).toEqual(["16px", "28px", "400"])
+	await expect(getComputedStyle(opening).color).toBe(colours.text)
 	await expect(typeOf(heading)).toEqual(["20px", "28px", "600"])
 	await expect(getComputedStyle(heading).letterSpacing).toBe("-0.2px")
 	await expect(spaceAbove(heading)).toBe("24px")
 	await expect(spaceAbove(underHeading)).toBe("16px")
 	await expect(typeOf(subheading)).toEqual(["17px", "28px", "600"])
+	await expect(getComputedStyle(subheading).letterSpacing).toBe("normal")
 	await expect(spaceAbove(subheading)).toBe("20px")
-	await expect(typeOf(secondItem)).toEqual(["16px", "28px", "400"])
-	await expect(spaceAbove(secondItem)).toBe("8px")
 
+	await expectBullets(reply, colours)
+	await expectAuthorLineType(reply, colours)
 	await expectActionsAtRest(reply)
 }
 
@@ -1057,11 +1130,12 @@ export const BubblelessReply = meta.story({
 		docs: {
 			description: {
 				story:
-					"Conversation feed, artboards 1 to 11, light. Reach for this for the agent reply as the thread draws it. Check that it spans the 680 column with no fill, padding or radius, that its words read 16 on 28 with 16 between blocks, the heading 20 on 28 with 24 above and the subheading 17 on 28 with 20 above, and that Pin, Reply and Copy sit in the author line 8 below the words, after the divider, with nothing pointed at or focused. Pick `BubblelessReplyDark` for the dark theme.",
+					"Conversation feed, artboards 1 to 11, light. Reach for this for the agent reply as the thread draws it. Check that it spans the 680 column with no fill, padding or radius, that its words read 16 on 28 with 16 between blocks, the heading 20 on 28 with 24 above and the subheading 17 on 28 with 20 above, that each bullet sits in a 14 wide column 10 before its text in a grey lighter than the time, with 8 between items, that the role badge is 18 high with radius 5, an 11 on 12 medium label and no border, and that Pin, Reply and Copy sit in the author line 8 below the words, after the divider, with nothing pointed at or focused. Pick `BubblelessReplyDark` for the dark theme.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectBubblelessReply(canvasElement),
+	play: async ({ canvasElement }) =>
+		expectBubblelessReply(canvasElement, REPLY_COLOURS.light),
 })
 
 export const BubblelessReplyDark = meta.story({
@@ -1071,11 +1145,12 @@ export const BubblelessReplyDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Conversation feed, artboards 1 to 11, dark. The same reply as `BubblelessReply` on the dark thread. Check that no fill shows behind the answer and that the three actions stay readable in the author line at rest.",
+					"Conversation feed, artboards 1 to 11, dark. The same reply as `BubblelessReply` on the dark thread. Check that no fill shows behind the answer, that the bullets and the role badge keep their place and stay readable on the dark card, and that the three actions stay readable in the author line at rest.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectBubblelessReply(canvasElement),
+	play: async ({ canvasElement }) =>
+		expectBubblelessReply(canvasElement, REPLY_COLOURS.dark),
 })
 
 export const BubblelessReplySeveralAgents = meta.story({
@@ -1193,7 +1268,7 @@ export const Writing = meta.story({
 		docs: {
 			description: {
 				story:
-					"Conversation feed, artboards 9 to 11. Reach for this while the agent writes its reply. Check that the author line keeps the avatar, the name and the role badge, and that the word writing… replaces the time, the divider and the three actions, in the muted 12 of the time. Pick `Working` for the work line that takes the whole foot.",
+					"Conversation feed, artboards 9 to 11. Reach for this while the agent writes its reply. Check that the author line keeps the avatar, the name and the role badge, that the word writing… comes right after the badge and replaces the time, the divider and the three actions, in the muted 12 on 16 of the time, and that the line sits 16 under the words instead of the 8 it rests at. Pick `Working` for the work line that takes the whole foot.",
 			},
 		},
 	},
@@ -1207,7 +1282,17 @@ export const Writing = meta.story({
 
 		const writing = slotIn(line, "author-line-writing")
 		await expect(writing).toHaveTextContent("writing…")
-		await expect(getComputedStyle(writing).fontSize).toBe("12px")
+		await expect(typeOf(writing)).toEqual(["12px", "16px", "400"])
+		await expect(slotIn(line, "bot-title-badge").nextElementSibling).toBe(
+			writing,
+		)
+		await expect(
+			line.getBoundingClientRect().top -
+				slotIn(reply, "message-bubble-text").getBoundingClientRect().bottom,
+		).toBe(16)
+		await expect(reply.getBoundingClientRect().bottom).toBe(
+			line.getBoundingClientRect().bottom,
+		)
 		await expect(timesIn(line)).toHaveLength(0)
 		await expect(line.querySelector("[data-slot='author-line-actions']")).toBe(
 			null,
