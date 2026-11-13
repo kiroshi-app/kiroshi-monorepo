@@ -1828,6 +1828,8 @@ navigation-conversationbotpile--edged-members
 navigation-conversationbotpile--edged-members-dark
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
+navigation-conversationbotpile--piles-on-rows
+navigation-conversationbotpile--piles-on-rows-dark
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--blue
