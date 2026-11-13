@@ -205,6 +205,7 @@
 	--color-comment-card: var(--comment-card);
 	--color-comment-pin: var(--comment-pin);
 	--color-comment-pin-stage: var(--comment-pin-stage);
+	--color-lightbox-stage: var(--lightbox-stage);
 	--shadow-comment-pin: var(--comment-pin-shadow);
 	--shadow-comment-pin-selected: var(--comment-pin-selected-shadow);
 	--shadow-comment-pin-stage: var(--comment-pin-stage-shadow);
