@@ -660,7 +660,7 @@ const expectMissionIslands = async (canvasElement: HTMLElement) => {
 	await expect(state).toHaveTextContent("Ready to merge")
 	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
 	await expect(getComputedStyle(dot).backgroundColor).toBe(
-		tokenStyleIn(dot, "bg-mission-glyph-ready", "backgroundColor"),
+		tokenStyleIn(dot, "bg-success", "backgroundColor"),
 	)
 	await expect(getComputedStyle(state).fontSize).toBe("13px")
 	await expect(
