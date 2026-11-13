@@ -1,4 +1,4 @@
-import { skipToken, useQuery } from "@tanstack/react-query"
+import { skipToken } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
@@ -13,7 +13,11 @@ import {
 	joinedHostIdOf,
 	useReachableHostOf,
 } from "@/lib/host/use-reachable-host"
-import { hasLastReadFailed, isFirstReadPending } from "@/lib/query/last-read"
+import {
+	hasLastReadFailed,
+	isFirstReadPending,
+	useLastRead,
+} from "@/lib/query/last-read"
 import { hostOfSpaceRow } from "@/lib/spaces/joined-spaces-controller"
 
 export type MissionRead = {
@@ -56,7 +60,7 @@ export const useMissionDetail = (
 	const [isRetrying, setRetrying] = useState(false)
 	useMissionChanges()
 
-	const detail = useQuery({
+	const detail = useLastRead({
 		queryKey: missionQueryKeys.detail(missionId, host),
 		queryFn: host === null ? skipToken : () => readMission(host, missionId),
 		meta: { rendersErrorInline: true },

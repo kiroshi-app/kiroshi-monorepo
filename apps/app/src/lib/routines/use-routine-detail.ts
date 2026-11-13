@@ -1,4 +1,4 @@
-import { skipToken, useMutation, useQuery } from "@tanstack/react-query"
+import { skipToken, useMutation } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 
 import type { RoutineRunModel } from "@workspace/ui/components/routine-detail"
@@ -10,7 +10,7 @@ import { toRunModels } from "./routines-model"
 import { DEFAULT_RUN_PAGE, routinesTransport } from "./routines-transport"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { hasLastReadFailed } from "@/lib/query/last-read"
+import { hasLastReadFailed, useLastRead } from "@/lib/query/last-read"
 
 type RunsRead = {
 	runs: RoutineRunModel[]
@@ -40,7 +40,7 @@ export const useRoutineDetail = ({
 	const host = useReachableHost()
 	const canRead = openedId !== null && host !== null
 
-	const runsRead = useQuery({
+	const runsRead = useLastRead({
 		queryKey: routineQueryKeys.runsOf(openedId, host),
 		queryFn: canRead ? () => readRuns(openedId) : skipToken,
 		gcTime: 0,
