@@ -385,7 +385,12 @@ const chat = {
 	table: {
 		label: "Tableau",
 		copy: "Copier le tableau",
+		copyAction: "Copier",
 		copyAnnounced: "Tableau copié dans le presse-papiers",
+		counted_one: "Tableau · {{count}} ligne",
+		counted_many: "Tableau · {{count}} lignes",
+		counted_other: "Tableau · {{count}} lignes",
+		downloadCsv: "Télécharger en CSV",
 	},
 	diagram: {
 		label: "Diagramme",

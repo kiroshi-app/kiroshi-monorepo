@@ -93,6 +93,7 @@
 	--color-title-placeholder-foreground: var(--title-placeholder-foreground);
 	--color-list-marker-foreground: var(--list-marker-foreground);
 	--color-author-line-badge: var(--author-line-badge);
+	--color-answer-card-divider: var(--answer-card-divider);
 	--color-sketch-line: var(--sketch-line);
 	--color-sketch-mark: var(--sketch-mark);
 	--color-accent: var(--accent);
@@ -327,6 +328,7 @@
 		--color-muted-foreground: var(--muted-foreground);
 		--color-list-marker-foreground: var(--list-marker-foreground);
 		--color-author-line-badge: var(--author-line-badge);
+		--color-answer-card-divider: var(--answer-card-divider);
 		--color-border: var(--border);
 		--color-primary: var(--primary);
 		--color-primary-strong: var(--primary-strong);

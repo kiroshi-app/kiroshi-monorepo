@@ -111,6 +111,7 @@
 	--title-placeholder-foreground: #a8a8a8;
 	--list-marker-foreground: #8f8f8f;
 	--author-line-badge: oklch(0 0 0 / 5%);
+	--answer-card-divider: #ededed;
 	--sketch-line: #e5e5e5;
 	--sketch-mark: #a3a3a3;
 	--accent: #f2f2f2;
@@ -351,6 +352,7 @@
 	--title-placeholder-foreground: #525252;
 	--list-marker-foreground: #737373;
 	--author-line-badge: oklch(1 0 0 / 8%);
+	--answer-card-divider: var(--border);
 	--sketch-line: #333333;
 	--sketch-mark: #737373;
 	--accent: #262626;

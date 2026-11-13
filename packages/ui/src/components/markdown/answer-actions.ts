@@ -17,6 +17,7 @@ type MarkdownAnswerActions = {
 		isChecked: boolean,
 	) => void
 	onCopyChecklist?: (list: string) => void
+	onDownloadTable?: (csv: string) => void
 	imageMenu?: Pick<
 		ImageMenuActions<LibraryLightboxImage>,
 		"onSaveToLibrary" | "onCopyImage"

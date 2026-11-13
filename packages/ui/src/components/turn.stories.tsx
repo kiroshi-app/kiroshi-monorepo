@@ -1694,6 +1694,250 @@ export const NumberedListDark = meta.story({
 		expectNumberedList(canvasElement, REPLY_COLOURS.dark),
 })
 
+const RICH_ANSWER = `Here is the script, the four runs it produced and the page it reads its prices from.
+
+\`\`\`ts
+const total = runs.reduce((sum, run) => sum + run.cost, 0)
+\`\`\`
+
+| # | Run | Cost |
+| --- | --- | ---: |
+| 1 | Baseline | 12.40 |
+| 2 | Cached | 8.10 |
+| 3 | Batched | 6.75 |
+| 4 | Batched and cached | 4.20 |
+
+\`\`\`web-page
+url: https://docs.kiroshi.example/pricing
+title: Pricing, how a run is billed
+\`\`\`
+
+The batched and cached run is the cheapest of the four.`
+
+const RICH_TABLE_CSV =
+	"#,Run,Cost\r\n1,Baseline,12.40\r\n2,Cached,8.10\r\n3,Batched,6.75\r\n4,Batched and cached,4.20"
+
+const openWebPage = fn()
+
+const downloadTable = fn()
+
+const RICH_ANSWER_ACTIONS = {
+	agentName: ROLE_BOT.name,
+	onUseValues: fn(),
+	onOpenImage: fn(),
+	onOpenWebPage: openWebPage,
+	onDownloadTable: downloadTable,
+}
+
+type RichReplyColours = ReplyColours & {
+	cardRing: string
+	headerRule: string
+	raised: string
+	rowRule: string
+	pageRing: string
+}
+
+const RICH_REPLY_COLOURS = {
+	light: {
+		...REPLY_COLOURS.light,
+		cardRing: "rgb(229, 229, 229)",
+		headerRule: "rgb(237, 237, 237)",
+		raised: "rgb(250, 250, 250)",
+		rowRule: "rgb(242, 242, 242)",
+		pageRing: "oklch(0 0 0 / 0.08)",
+	},
+	dark: {
+		...REPLY_COLOURS.dark,
+		cardRing: "rgb(33, 34, 36)",
+		headerRule: "rgb(33, 34, 36)",
+		raised: "rgb(24, 24, 26)",
+		rowRule: "rgb(38, 38, 38)",
+		pageRing: "oklch(1 0 0 / 0.08)",
+	},
+} as const satisfies Record<string, RichReplyColours>
+
+const FOREGROUND_RING_AT_12_PERCENT = /oklab\([^)]+ \/ 0\.12\) 0px 0px 0px 1px/
+
+const ringOf = (colour: string) => `${colour} 0px 0px 0px 1px`
+
+const inlinePaddingOf = (element: Element) => {
+	const { paddingInlineStart, paddingInlineEnd } = getComputedStyle(element)
+	return [paddingInlineStart, paddingInlineEnd]
+}
+
+const expectAnswerCard = async (
+	card: HTMLElement,
+	colours: RichReplyColours,
+) => {
+	const header = slotIn(card, "markdown-answer-card-header")
+	const label = slotIn(card, "markdown-answer-card-label")
+	await expect(getComputedStyle(card).borderTopLeftRadius).toBe("16px")
+	await expect(getComputedStyle(card).boxShadow).toContain(
+		ringOf(colours.cardRing),
+	)
+	await expect(header.getBoundingClientRect().height).toBe(40)
+	await expect([
+		getComputedStyle(header).borderBottomWidth,
+		getComputedStyle(header).borderBottomColor,
+	]).toEqual(["1px", colours.headerRule])
+	await expect(typeOf(label)).toEqual(["12px", "16px", "400"])
+	await expect(getComputedStyle(label).color).toBe(colours.muted)
+	await expect(getComputedStyle(label).paddingInlineStart).toBe("8px")
+	for (const action of within(header).getAllByRole("button")) {
+		await expect(typeOf(action)).toEqual(["12px", "16px", "500"])
+		const { width, height } = boxOf(tagIn(action, "svg"))
+		await expect([width, height]).toEqual([14, 14])
+	}
+}
+
+const expectRichReply = async (
+	canvasElement: HTMLElement,
+	colours: RichReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const blocks = Array.from(slotIn(reply, "markdown").children)
+	await expect(typeOf(tagIn(reply, "p"))).toEqual(["16px", "28px", "400"])
+	for (const [at, block] of blocks.entries()) {
+		if (at === 0) continue
+		await expect(
+			block.getBoundingClientRect().top -
+				blocks[at - 1].getBoundingClientRect().bottom,
+		).toBe(16)
+	}
+	await expectActionsAtRest(reply)
+
+	const fence = slotIn(reply, "markdown-fence")
+	const code = tagIn(fence, "pre")
+	const codeStyle = getComputedStyle(code)
+	await expectAnswerCard(fence, colours)
+	await expect(slotIn(fence, "markdown-answer-card-label")).toHaveTextContent(
+		"ts",
+	)
+	await expect(
+		getComputedStyle(slotIn(fence, "markdown-answer-card-label")).fontFamily,
+	).toBe(codeStyle.fontFamily)
+	await expect(
+		within(fence).getByRole("button", { name: "Copy code" }),
+	).toHaveTextContent("Copy")
+	await expect(codeStyle.backgroundColor).toBe(colours.raised)
+	await expect([codeStyle.paddingTop, ...inlinePaddingOf(code)]).toEqual([
+		"14px",
+		"14px",
+		"14px",
+	])
+	await expect([codeStyle.fontSize, codeStyle.lineHeight]).toEqual([
+		"13px",
+		"22px",
+	])
+	await expect(codeStyle.fontFamily).toContain("Geist Mono")
+
+	const table = slotIn(reply, "markdown-table")
+	const [headings, ...rows] = Array.from(table.querySelectorAll("tr"))
+	const heading = tagIn(headings, "th")
+	await expectAnswerCard(table, colours)
+	await expect(slotIn(table, "markdown-answer-card-label")).toHaveTextContent(
+		"Table · 4 rows",
+	)
+	await expect(
+		within(table).getByRole("button", { name: "Copy table" }),
+	).toHaveTextContent("Copy")
+	await expect(headings.getBoundingClientRect().height).toBe(40)
+	await expect(typeOf(heading)).toEqual(["13px", "20px", "600"])
+	await expect(getComputedStyle(heading).borderBottomColor).toBe(
+		colours.headerRule,
+	)
+	await expect(inlinePaddingOf(heading)).toEqual(["14px", "14px"])
+	for (const row of rows) {
+		const cells = Array.from(row.querySelectorAll("td"))
+		const isLast = row === rows.at(-1)
+		await expect(row.getBoundingClientRect().height).toBe(44)
+		await expect(typeOf(cells[0])).toEqual(["14px", "20px", "400"])
+		await expect(inlinePaddingOf(cells[0])).toEqual(["14px", "14px"])
+		await expect(getComputedStyle(cells[0]).borderBottomWidth).toBe(
+			isLast ? "0px" : "1px",
+		)
+		if (!isLast)
+			await expect(getComputedStyle(cells[0]).borderBottomColor).toBe(
+				colours.rowRule,
+			)
+		await expect(getComputedStyle(cells[2]).textAlign).toBe("right")
+	}
+	await fireEvent.click(
+		within(table).getByRole("button", { name: "Download CSV" }),
+	)
+	await expect(downloadTable).toHaveBeenLastCalledWith(RICH_TABLE_CSV)
+
+	const page = slotIn(reply, "web-page-card")
+	const pageStyle = getComputedStyle(page)
+	const open = within(page).getByRole("button", { name: "Open as page" })
+	const openStyle = getComputedStyle(open)
+	const [host, title] = Array.from(page.querySelectorAll("p"))
+	await expect(page.getBoundingClientRect().width).toBe(460)
+	await expect(pageStyle.borderTopLeftRadius).toBe("14px")
+	await expect(pageStyle.boxShadow).toContain(ringOf(colours.pageRing))
+	await expect(pageStyle.borderTopWidth).toBe("0px")
+	await expect(host).toHaveTextContent("docs.kiroshi.example")
+	await expect(typeOf(host)).toEqual(["12px", "16px", "400"])
+	await expect(getComputedStyle(host).color).toBe(colours.muted)
+	await expect(typeOf(title)).toEqual(["14px", "20px", "600"])
+	await expect(host.getBoundingClientRect().left).toBe(
+		page.getBoundingClientRect().left + 12,
+	)
+	await expect(
+		open.getBoundingClientRect().left - title.getBoundingClientRect().right,
+	).toBe(12)
+	await expect(openStyle.borderTopLeftRadius).toBe("8px")
+	await expect(openStyle.boxShadow).toMatch(FOREGROUND_RING_AT_12_PERCENT)
+	await expect(openStyle.paddingTop).toBe("8px")
+	await expect(inlinePaddingOf(open)).toEqual(["8px", "8px"])
+	await expect(typeOf(open)).toEqual(["13px", "18px", "500"])
+}
+
+const RichReplyTurn = () => (
+	<ThreadColumn>
+		<AssistantTurn
+			author={ROLE_BOT}
+			copyText={RICH_ANSWER}
+			onPin={pin}
+			onReply={reply}
+			sentAt={sentOn(10, 9, 20)}
+			now={READ_ON}
+		>
+			<Markdown answerActions={RICH_ANSWER_ACTIONS}>{RICH_ANSWER}</Markdown>
+		</AssistantTurn>
+	</ThreadColumn>
+)
+
+export const RichReply = meta.story({
+	globals: { theme: "light" },
+	render: () => <RichReplyTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 7, light. Reach for this for an agent reply holding a code block, a table and a web page card. Check that the blocks sit 16 apart and the author line 8 under the last words. The code block and the table are cards of radius 16 with a one pixel ring and a 40 high header: the language in mono 12 on 16 and Copy for the code, on a raised body padded 14 in mono 13 on 22; the row count, Copy and Download CSV for the table, over a 40 high heading row in 13 on 20 semibold and 44 high rows in 14 on 20, the last one without a rule. The web page card is 460 wide with radius 14, a ring, 12 of padding and of gap, and an Open button of radius 8. Pick `RichReplyDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectRichReply(canvasElement, RICH_REPLY_COLOURS.light),
+})
+
+export const RichReplyDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <RichReplyTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 7, dark. The same reply as `RichReply` on the dark thread. Check that the two cards, their headers, the rules between rows and the web page card keep their geometry and take the dark values of the same tokens.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectRichReply(canvasElement, RICH_REPLY_COLOURS.dark),
+})
+
 export const Endings = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-170 flex-col gap-3">
