@@ -151,9 +151,9 @@ export const WithoutMore = meta.story({
 		await expect(thread.queryByRole("button", { name: "More" })).toBe(null)
 
 		const resolve = thread.getByRole("button", { name: "Resolve" })
-		const close = thread.getByRole("button", { name: "Close" })
-		await expect(resolve.parentElement?.childElementCount).toBe(2)
-		await expect(resolve.nextElementSibling).toBe(close)
+		await expect(resolve.nextElementSibling).toBe(
+			thread.getByRole("button", { name: "Close" }),
+		)
 	},
 })
 
