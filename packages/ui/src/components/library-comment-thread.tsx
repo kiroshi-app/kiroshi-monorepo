@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -54,7 +55,24 @@ const ROW = "flex gap-2 p-3"
 
 const AUTHOR_LINE = "break-words text-compact leading-4.5"
 
-const HEADER_BUTTON = cn(COMMENT_ICON_BUTTON, "text-foreground")
+type HeaderButtonProps = {
+	label: string
+	onClick: () => void
+	children: ReactNode
+}
+
+const HeaderButton = ({ label, onClick, children }: HeaderButtonProps) => (
+	<TooltipButton
+		aria-label={label}
+		className={cn(COMMENT_ICON_BUTTON, "text-foreground")}
+		onClick={onClick}
+		size="icon-sm"
+		tooltip={label}
+		variant="ghost"
+	>
+		{children}
+	</TooltipButton>
+)
 
 type CommentRowProps = { comment: LibraryComment; names: string[] }
 
@@ -146,37 +164,25 @@ const LibraryCommentThread = ({
 					</p>
 					<div className="flex shrink-0 items-center gap-0.5">
 						{isResolved ? null : (
-							<TooltipButton
-								aria-label={t("library.comments.thread.resolve")}
-								className={HEADER_BUTTON}
+							<HeaderButton
+								label={t("library.comments.thread.resolve")}
 								onClick={onResolve}
-								size="icon-sm"
-								tooltip={t("library.comments.thread.resolve")}
-								variant="ghost"
 							>
 								<Icons.Success aria-hidden="true" />
-							</TooltipButton>
+							</HeaderButton>
 						)}
-						<TooltipButton
-							aria-label={t("library.comments.thread.more")}
-							className={HEADER_BUTTON}
+						<HeaderButton
+							label={t("library.comments.thread.more")}
 							onClick={onMore}
-							size="icon-sm"
-							tooltip={t("library.comments.thread.more")}
-							variant="ghost"
 						>
 							<Icons.More aria-hidden="true" />
-						</TooltipButton>
-						<TooltipButton
-							aria-label={t("library.comments.thread.close")}
-							className={HEADER_BUTTON}
+						</HeaderButton>
+						<HeaderButton
+							label={t("library.comments.thread.close")}
 							onClick={onClose}
-							size="icon-sm"
-							tooltip={t("library.comments.thread.close")}
-							variant="ghost"
 						>
 							<Icons.Close aria-hidden="true" className="size-3.5" />
-						</TooltipButton>
+						</HeaderButton>
 					</div>
 				</header>
 				<ul>
