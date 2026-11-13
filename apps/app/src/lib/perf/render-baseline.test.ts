@@ -944,10 +944,10 @@ describe("PRF1 render baseline", () => {
 			  "cacheEvents": 26,
 			  "chunks": 11,
 			  "navigationSidebar": 6,
-			  "quietTurn": 2,
+			  "quietTurn": 1,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
-			  "streamingTurn": 12,
+			  "streamingTurn": 13,
 			}
 		`)
 	})
@@ -961,10 +961,10 @@ describe("PRF1 render baseline", () => {
 			  "cacheEvents": 37,
 			  "chunks": 22,
 			  "navigationSidebar": 6,
-			  "quietTurn": 2,
+			  "quietTurn": 1,
 			  "rosterBots": 7,
 			  "rosterBotsBySpace": 7,
-			  "streamingTurn": 23,
+			  "streamingTurn": 24,
 			}
 		`)
 	})
