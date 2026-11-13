@@ -2148,9 +2148,6 @@ const rowHolding = (canvasElement: HTMLElement, name: string) => {
 	return row
 }
 
-const listRowsIn = (canvasElement: HTMLElement) =>
-	rosterRowsIn(sidebarIn(canvasElement))
-
 const namesOf = (rows: HTMLElement[]) =>
 	rows.map((row) => slotIn(row, "roster-row-name").textContent)
 
@@ -2219,7 +2216,7 @@ export const CompactRestExpanded = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const rows = listRowsIn(canvasElement)
+		const rows = rosterRowsIn(sidebarIn(canvasElement))
 		await expect(namesOf(rows)).toEqual([
 			ATLAS_LINE.name,
 			NOVA_LINE.name,
@@ -2342,7 +2339,7 @@ export const CompactSelectedExpanded = meta.story({
 		const row = rowHolding(canvasElement, COMPACT_ROADMAP.name)
 		const title = slotIn(row, "roster-row-name")
 		await expect(
-			listRowsIn(canvasElement).filter(
+			rosterRowsIn(sidebarIn(canvasElement)).filter(
 				(candidate) => candidate.getAttribute("aria-current") === "page",
 			),
 		).toEqual([row])
