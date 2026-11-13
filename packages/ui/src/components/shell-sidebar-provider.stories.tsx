@@ -1,8 +1,10 @@
-import { expect, waitFor } from "storybook/test"
+import { StrictMode, useState } from "react"
+import { expect, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
 import { ShellSidebarProvider } from "@workspace/ui/components/shell-sidebar-provider"
+import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import {
 	Sidebar,
@@ -53,6 +55,72 @@ const FIELDS = [
 	{ name: "Model", role: "combobox" },
 	{ name: "Draft", role: "textbox" },
 ]
+
+const SHELLS = ["Boot", "Workspace"] as const
+
+type Shell = (typeof SHELLS)[number]
+
+const TwoShells = () => {
+	const [mounted, setMounted] = useState<Shell[]>([])
+	const toggle = (shell: Shell) =>
+		setMounted((shells) =>
+			shells.includes(shell)
+				? shells.filter((other) => other !== shell)
+				: [...shells, shell],
+		)
+
+	return (
+		<StrictMode>
+			<div className="flex justify-center gap-3 p-4">
+				{SHELLS.map((shell) => (
+					<Button key={shell} onClick={() => toggle(shell)}>
+						{mounted.includes(shell) ? `Unmount ${shell}` : `Mount ${shell}`}
+					</Button>
+				))}
+			</div>
+			{SHELLS.filter((shell) => mounted.includes(shell)).map((shell) => (
+				<ShellSidebarProvider className="min-h-0" key={shell}>
+					<Sidebar
+						collapsible="icon"
+						side={shell === "Boot" ? "left" : "right"}
+					>
+						<SidebarContent />
+					</Sidebar>
+					<SidebarInset className="p-4">
+						<Input aria-label={shell} />
+					</SidebarInset>
+				</ShellSidebarProvider>
+			))}
+		</StrictMode>
+	)
+}
+
+type ListenerRegistration = Parameters<typeof document.addEventListener>
+
+const trackDocumentKeydownHandlers = () => {
+	const live = new Set<ListenerRegistration[1]>()
+	const add = document.addEventListener.bind(document)
+	const remove = document.removeEventListener.bind(document)
+	spyOn(document, "addEventListener").mockImplementation(
+		(...registration: ListenerRegistration) => {
+			if (registration[0] === "keydown") live.add(registration[1])
+			add(...registration)
+		},
+	)
+	spyOn(document, "removeEventListener").mockImplementation(
+		(...registration: ListenerRegistration) => {
+			if (registration[0] === "keydown") live.delete(registration[1])
+			remove(...registration)
+		},
+	)
+	return () => [...live]
+}
+
+const shellOf = (field: HTMLElement) => {
+	const shell = field.closest<HTMLElement>('[data-slot="sidebar-wrapper"]')
+	if (!shell) throw new Error("This field sits under no sidebar provider")
+	return shell
+}
 
 const meta = preview.meta({
 	title: "Navigation/ShellSidebarProvider",
@@ -149,5 +217,55 @@ export const ShortcutInATextField = meta.story({
 		}
 		press(document.body, COMMAND_B)
 		await expectSidebar(canvasElement, "collapsed")
+	},
+})
+
+export const OneOfTwoProvidersUnmounted = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two providers mounted side by side under StrictMode, then one unmounted, each of the two in turn. Check that every mounted provider holds exactly one keydown handler on the document, that unmounting one removes its own handler and no other, and that the remaining sidebar still ignores Cmd+B inside its text field, default kept, and toggles exactly once on Cmd+B outside it.",
+			},
+		},
+	},
+	render: () => <TwoShells />,
+	play: async ({ canvas, userEvent }) => {
+		const liveKeydownHandlers = trackDocumentKeydownHandlers()
+		const click = (name: string) =>
+			userEvent.click(canvas.getByRole("button", { name }))
+
+		for (const leaving of SHELLS) {
+			const staying = SHELLS[leaving === "Boot" ? 1 : 0]
+			await click("Mount Boot")
+			await waitFor(() => expect(liveKeydownHandlers()).toHaveLength(1))
+			await click("Mount Workspace")
+			await waitFor(() => expect(liveKeydownHandlers()).toHaveLength(2))
+			const stayingHandler = liveKeydownHandlers()[SHELLS.indexOf(staying)]
+
+			await click(`Unmount ${leaving}`)
+			await waitFor(() =>
+				expect(liveKeydownHandlers()).toEqual([stayingHandler]),
+			)
+
+			const field = canvas.getByRole("textbox", { name: staying })
+			const shell = shellOf(field)
+			const received: Event[] = []
+			const receive = (event: Event) => received.push(event)
+			field.addEventListener("keydown", receive)
+			field.focus()
+			const event = press(field, COMMAND_B)
+			field.removeEventListener("keydown", receive)
+			await expect(received).toEqual([event])
+			await expect(event.defaultPrevented).toBe(false)
+			await expectSidebarStill(shell, "expanded")
+
+			press(document.body, COMMAND_B)
+			await expectSidebar(shell, "collapsed")
+			await expectSidebarStill(shell, "collapsed")
+
+			await click(`Unmount ${staying}`)
+			await waitFor(() => expect(liveKeydownHandlers()).toEqual([]))
+		}
 	},
 })
