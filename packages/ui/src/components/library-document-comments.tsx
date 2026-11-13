@@ -180,10 +180,6 @@ const useMentionNameOf = () => {
 		bots.find((bot) => bot.id === id)?.name ?? t("transcript.mention.unknown")
 }
 
-const focusFieldIn = (card: HTMLElement | null) => {
-	card?.querySelector("textarea")?.focus()
-}
-
 type ThreadPinProps = {
 	layer: LibraryDocumentCommentLayer
 	thread: LibraryDocumentThread
@@ -256,23 +252,21 @@ const DraftCard = ({ draft, anchor, participants }: DraftCardProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<div className="contents" ref={focusFieldIn}>
-			<LibraryCommentComposer
-				anchor={anchor}
-				className="w-80"
-				onSubmit={draft.onSubmit}
-				onValueChange={draft.onValueChange}
-				participants={participants}
-				shortcut={
-					draft.target.origin === "shortcut"
-						? t(
-								`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
-							)
-						: undefined
-				}
-				value={draft.value}
-			/>
-		</div>
+		<LibraryCommentComposer
+			anchor={anchor}
+			className="w-80"
+			onSubmit={draft.onSubmit}
+			onValueChange={draft.onValueChange}
+			participants={participants}
+			shortcut={
+				draft.target.origin === "shortcut"
+					? t(
+							`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
+						)
+					: undefined
+			}
+			value={draft.value}
+		/>
 	)
 }
 

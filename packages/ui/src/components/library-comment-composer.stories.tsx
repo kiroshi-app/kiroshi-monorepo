@@ -76,7 +76,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The card a new comment is written in, under its selected pin: the line naming what the comment is on, the field, the @ button and Send. Send stays disabled while the field is empty; Enter sends and Shift+Enter breaks the line. Typing @ or pressing the @ button opens the mention menu under the card, Agents then People, moved with the arrow keys and chosen with Enter, and the chosen name lands in the field in the Space colour. The card is 360 px wide and narrows with its container.",
+					"The card a new comment is written in, under its selected pin: the line naming what the comment is on, the field, the @ button and Send. The field takes the caret as soon as the card mounts, without scrolling the page. Send stays disabled while the field is empty; Enter sends and Shift+Enter breaks the line. Typing @ or pressing the @ button opens the mention menu under the card, Agents then People, moved with the arrow keys and chosen with Enter, and the chosen name lands in the field in the Space colour. The card is 360 px wide and narrows with its container.",
 			},
 		},
 	},
@@ -95,12 +95,13 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"The field before a word is typed, as artboard Thread 1 draws it. Check the placeholder, the caret in the Space colour once the field is focused, a disabled Send that Enter does not get past, and the names of the two icon buttons.",
+					"The field before a word is typed, as artboard Thread 1 draws it. Check the field holding the focus with no click, the placeholder, the caret in the Space colour, a disabled Send that Enter does not get past, and the names of the two icon buttons.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const field = fieldIn(canvasElement)
+		await expect(field).toHaveFocus()
 		await expect(field).toHaveAttribute("placeholder", "Comment, @ to mention")
 		await expect(sendIn(canvasElement)).toBeDisabled()
 		await expect(

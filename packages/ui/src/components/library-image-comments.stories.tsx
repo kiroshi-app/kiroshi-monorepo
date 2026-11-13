@@ -528,7 +528,7 @@ export const PointDraft = meta.story({
 		docs: {
 			description: {
 				story:
-					"A comment being written on a point, as artboard Img 3 draws it. Check the draft pin is selected with its sharp corner on the point, that the composer opens 8 px to its right with their top edges aligned, its line reading On a point of the image, and that no zone frame is drawn.",
+					"A comment being written on a point, as artboard Img 3 draws it. Check the draft pin is selected with its sharp corner on the point, that the composer opens 8 px to its right with their top edges aligned, its line reading On a point of the image, its field holding the focus with no click, and that no zone frame is drawn.",
 			},
 		},
 	},
@@ -541,6 +541,13 @@ export const PointDraft = meta.story({
 		const composer = slotIn(popup, "library-comment-composer")
 		await expectBesidePin(composer, draft)
 		await expect(within(composer).getByText(POINT_ANCHOR_LINE)).toBeVisible()
+		await waitFor(() =>
+			expect(
+				within(composer).getByRole("textbox", {
+					name: "Comment, @ to mention",
+				}),
+			).toHaveFocus(),
+		)
 		await expect(slotsIn(popup, "library-image-zone")).toHaveLength(0)
 		await expect(pinsIn(popup)).toHaveLength(IMAGE_THREADS.length + 1)
 	},
