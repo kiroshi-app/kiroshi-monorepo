@@ -97,6 +97,7 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 	};
 	match (id, command, args) {
 		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
+			log::warn!("member {sender} called {command}, a command this host does not know");
 			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
 			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
 		}
@@ -484,6 +485,7 @@ mod tests {
 
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
+	use crate::test_log::{capturing, logged_naming};
 
 	fn status_of(answer: &str) -> (Value, Value) {
 		let answer: Value = serde_json::from_str(answer).expect("a json answer");
@@ -604,6 +606,41 @@ mod tests {
 				"body": "this host knows no command named a_command_nobody_classified",
 			})
 		);
+	}
+
+	#[test]
+	fn a_member_command_this_host_does_not_know_is_logged_once_with_its_sender_and_no_args() {
+		capturing();
+		let frame = json!({
+			"id": "m",
+			"command": "a_command_logged",
+			"args": { "spaceId": "an-argument-kept-out-of-the-log" },
+		});
+
+		member_call(&frame.to_string(), "a-logged-account").expect_err("an unknown command");
+
+		assert_eq!(
+			logged_naming("a_command_logged"),
+			["member a-logged-account called a_command_logged, a command this host does not know"]
+		);
+	}
+
+	#[test]
+	fn a_member_frame_refused_for_another_reason_is_not_logged() {
+		capturing();
+		let sender = "account-of-the-other-refusals";
+		let refused = [
+			json!({ "id": "m", "command": "account_state" }),
+			json!({ "id": "m", "command": "plugin_skills", "args": { "scope": { "kind": "user" } } }),
+			json!({ "id": "m", "command": "agent_models", "args": [1] }),
+			json!({ "command": "agent_models" }),
+		];
+
+		for frame in &refused {
+			member_call(&frame.to_string(), sender).expect_err("a refused frame");
+		}
+
+		assert_eq!(logged_naming(sender), Vec::<String>::new());
 	}
 
 	const HOST_ONLY_SCREENS: &[(&str, &str)] = &[("mcp_oauth_connect", "Applications")];
