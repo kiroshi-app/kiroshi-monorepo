@@ -137,6 +137,9 @@ const HISTORY_TRAVEL =
 const TABS_FOLLOW_THE_SIDEBAR =
 	"motion-safe:in-data-[sidebar-sliding=true]:[&>:not([data-slot=title-bar-history])]:[transition:translate_var(--sidebar-slide-timing)] [[data-sidebar-layout=docked][data-sidebar-open=false]_&>:not([data-slot=title-bar-history])]:-translate-x-(--history-travel) [[data-sidebar-layout=collapsed][data-sidebar-open=true]_&>:not([data-slot=title-bar-history])]:translate-x-(--history-travel)"
 
+const TABS_KEEP_THE_DOCKED_ROOM =
+	"[[data-sidebar-layout=collapsed][data-sidebar-sliding=true]_&]:pe-(--history-travel)"
+
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
 
@@ -241,6 +244,7 @@ const fittingTabCount = (strip: HTMLElement, unpinnedCount: number) => {
 	)
 	const room =
 		strip.clientWidth -
+		pixelsOf(getComputedStyle(strip).paddingInlineEnd) -
 		pixelsOf(getComputedStyle(dragRegion).minWidth) -
 		stripGap -
 		besideTabs.reduce((sum, child) => sum + widthOf(child) + stripGap, 0) -
@@ -1082,6 +1086,7 @@ const TitleBarTabs = ({
 					onOpenSearch ? HISTORY_OF_FOUR : HISTORY_OF_THREE,
 					HISTORY_TRAVEL,
 					TABS_FOLLOW_THE_SIDEBAR,
+					TABS_KEEP_THE_DOCKED_ROOM,
 				],
 			)}
 			data-slot="title-bar-tabs"

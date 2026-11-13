@@ -30,17 +30,14 @@ const SLIDE_DISTANCE =
 
 const SLIDE_TIMING = "[--sidebar-slide-timing:150ms_var(--ease-out)]"
 
-const SIDEBAR_SLIDES_OFF_THE_LEFT_EDGE =
-	"motion-safe:data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-open=false]:*:data-[slot=navigation-sidebar]:-translate-x-full data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:-me-(--sidebar-slide) data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:starting:-translate-x-full"
-
-const CARD_FOLLOWS_THE_SIDEBAR =
-	"motion-safe:data-[sidebar-sliding=true]:*:data-content-card:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-layout=docked]:data-[sidebar-sliding=true]:*:data-content-card:me-[calc(var(--shell-inset)-var(--spacing)-var(--sidebar-slide))] data-[sidebar-layout=docked]:data-[sidebar-open=false]:*:data-content-card:-translate-x-(--sidebar-slide) data-[sidebar-layout=collapsed]:data-[sidebar-open=true]:*:data-content-card:translate-x-(--sidebar-slide)"
+const SIDEBAR_SLIDES_OVER_THE_CARD =
+	"motion-safe:data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:surface-shell data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:z-40 data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:-me-(--sidebar-slide) data-[sidebar-open=false]:*:data-[slot=navigation-sidebar]:-translate-x-full data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:starting:-translate-x-full"
 
 const SHELL_TITLE_BAR_HEIGHT = 40
 
 const SHELL_GUTTER = 4
 
-const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} ${SLIDE_DISTANCE} ${SLIDE_TIMING} ${SIDEBAR_SLIDES_OFF_THE_LEFT_EDGE} ${CARD_FOLLOWS_THE_SIDEBAR}`
+const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} ${SLIDE_DISTANCE} ${SLIDE_TIMING} ${SIDEBAR_SLIDES_OVER_THE_CARD}`
 
 const HELD_HANDLE_OVERLAY = "fixed inset-0 z-50 cursor-col-resize"
 

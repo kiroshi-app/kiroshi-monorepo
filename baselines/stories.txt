@@ -1319,6 +1319,8 @@ layout-workspaceshell--conversation-open-dark
 layout-workspaceshell--default
 layout-workspaceshell--drag-resizes-without-animation
 layout-workspaceshell--empty
+layout-workspaceshell--first-mount-collapsed-starts-no-transition
+layout-workspaceshell--first-mount-docked-starts-no-transition
 layout-workspaceshell--first-pinned-tab-on-the-panel-edge
 layout-workspaceshell--first-tab-after-the-history-collapsed
 layout-workspaceshell--first-tab-on-the-panel-edge
@@ -1331,6 +1333,7 @@ layout-workspaceshell--long-content
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable
 layout-workspaceshell--reduced-motion-swaps-at-once
+layout-workspaceshell--reopen-keeps-a-full-tab-strip-clear-of-window-controls
 layout-workspaceshell--reopen-slides-in
 layout-workspaceshell--resize-by-keyboard
 layout-workspaceshell--resized
