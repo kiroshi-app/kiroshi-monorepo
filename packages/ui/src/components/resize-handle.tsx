@@ -2,6 +2,7 @@
 
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
+	type MouseEvent as ReactMouseEvent,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useMemo,
@@ -96,6 +97,13 @@ const useResizableWidth = ({
 	)
 }
 
+const focusWithoutStartingASelection = (
+	event: ReactMouseEvent<HTMLDivElement>,
+) => {
+	event.preventDefault()
+	event.currentTarget.focus({ preventScroll: true })
+}
+
 type ResizeHandleProps = {
 	side: "left" | "right"
 	label: string
@@ -161,6 +169,7 @@ const ResizeHandle = ({ side, label, resize, slot }: ResizeHandleProps) => {
 			data-tauri-drag-region="false"
 			onDoubleClick={() => resize.commitWidth(resize.defaultWidth)}
 			onKeyDown={stepWidth}
+			onMouseDown={focusWithoutStartingASelection}
 			onPointerDown={startResize}
 			role="separator"
 			tabIndex={0}

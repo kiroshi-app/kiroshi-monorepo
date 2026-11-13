@@ -149,6 +149,62 @@ export const Clamped = meta.story({
 	},
 })
 
+const FIRST_PULL = 40
+
+const SECOND_PULL = 64
+
+const reportWidth = fn()
+
+export const DraggedThenReleased = meta.story({
+	render: () => <Shell onWidthChange={reportWidth} side="left" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader pulling the grip wider in two moves, then letting go. Check that the panel and the value the handle announces follow each move while the pointer is still down, that nothing is reported during the pull, and that the release reports the final width exactly once. Pick `Clamped` for a pull past the bounds.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		reportWidth.mockClear()
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", { name: "Workspace" })
+		const { right, top } = handle.getBoundingClientRect()
+		const pointerAt = (type: string, pulledBy: number) =>
+			new PointerEvent(type, {
+				bubbles: true,
+				button: 0,
+				clientX: right + pulledBy,
+				clientY: top,
+			})
+		const expectFollowed = async (pulledBy: number) => {
+			const followed = SIDEBAR_DEFAULT_WIDTH + pulledBy
+			await waitFor(async () => {
+				await expect(handle).toHaveAttribute("aria-valuenow", String(followed))
+			}, FRAME_POLL)
+			await waitFor(async () => {
+				await expect(panel.getBoundingClientRect().width).toBe(followed)
+			}, FRAME_POLL)
+		}
+
+		handle.dispatchEvent(pointerAt("pointerdown", 0))
+		window.dispatchEvent(pointerAt("pointermove", FIRST_PULL))
+		await expectFollowed(FIRST_PULL)
+		window.dispatchEvent(pointerAt("pointermove", SECOND_PULL))
+		await expectFollowed(SECOND_PULL)
+		await expect(reportWidth).not.toHaveBeenCalled()
+
+		window.dispatchEvent(pointerAt("pointerup", SECOND_PULL))
+		await waitFor(async () => {
+			await expect(reportWidth).toHaveBeenCalledTimes(1)
+		}, FRAME_POLL)
+		await expect(reportWidth).toHaveBeenCalledWith(
+			SIDEBAR_DEFAULT_WIDTH + SECOND_PULL,
+		)
+		await expectFollowed(SECOND_PULL)
+	},
+})
+
 const WIDTH_STORED_UNDER_THE_OLD_MINIMUM = 192
 
 export const RestoredBelowTheMinimum = meta.story({

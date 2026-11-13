@@ -29,6 +29,7 @@ import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-b
 import { hueTone } from "@workspace/ui/components/hue-palette"
 import { hueDistance } from "@workspace/ui/components/hue-recipe"
 import { Icons } from "@workspace/ui/components/icons"
+import { Markdown } from "@workspace/ui/components/markdown"
 import { NavigationSidebar } from "@workspace/ui/components/navigation-sidebar"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
@@ -41,6 +42,7 @@ import {
 } from "@workspace/ui/components/sidebar-resize"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type { TitleBarTab } from "@workspace/ui/components/title-bar-tabs"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import {
@@ -777,17 +779,25 @@ type NavigationShellProps = {
 	hasInsetControls?: boolean
 	isInitiallyOpen?: boolean
 	tabs?: TitleBarTab[]
+	onWidthChange?: (width: number) => void
+	children?: ReactNode
 }
 
 const NavigationShell = ({
 	hasInsetControls = true,
 	isInitiallyOpen = true,
 	tabs = [],
+	onWidthChange,
+	children,
 }: NavigationShellProps) => {
 	const [isOpen, setIsOpen] = useState(isInitiallyOpen)
 
 	return (
-		<WorkspaceShellRoot onOpenChange={setIsOpen} open={isOpen}>
+		<WorkspaceShellRoot
+			onOpenChange={setIsOpen}
+			onWidthChange={onWidthChange}
+			open={isOpen}
+		>
 			<AppTitleBar
 				insetWindowControls={hasInsetControls}
 				onOpenSearch={fn()}
@@ -821,7 +831,7 @@ const NavigationShell = ({
 				update={{ status: "available", onDownload: fn() }}
 				user={{ name: "Ada Martin" }}
 			/>
-			<ContentCard />
+			<ContentCard>{children}</ContentCard>
 		</WorkspaceShellRoot>
 	)
 }
@@ -912,6 +922,214 @@ export const FirstTabAfterTheHistoryCollapsed = meta.story({
 			FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
 		)
 		await expectNothingInTheLeftColumn(canvas, canvasElement)
+	},
+})
+
+const LONG_CONVERSATION_EXCHANGES = 150
+
+const centreOf = (element: HTMLElement) => {
+	const { left, width } = element.getBoundingClientRect()
+	return left + width / 2
+}
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+const LONG_CONVERSATION_QUESTION =
+	"Where does a turn go between the sidecar and the screen?"
+
+const LONG_CONVERSATION_ANSWER = [
+	"The design system lives in `packages/ui`: every component, token and story sits there, and the app only composes them. The Tauri shell in `apps/app` owns the commands, the drivers and the state machines that feed those components.",
+	"- A turn streams through the sidecar.\n- It lands in the transcript controller.\n- It reaches the screen as rows the transcript renders one by one.",
+	"```ts\nconst rows = toTranscriptRows(conversation.turns)\n```",
+].join("\n\n")
+
+const LONG_CONVERSATION_ROWS: TranscriptItem[] = Array.from(
+	{ length: LONG_CONVERSATION_EXCHANGES },
+	(_, exchange): TranscriptItem[] => [
+		{
+			key: `question-${exchange}`,
+			render: () => <UserTurn>{LONG_CONVERSATION_QUESTION}</UserTurn>,
+		},
+		{
+			key: `answer-${exchange}`,
+			render: () => (
+				<AssistantTurn copyText={LONG_CONVERSATION_ANSWER} identity={BOT}>
+					<Markdown>{LONG_CONVERSATION_ANSWER}</Markdown>
+				</AssistantTurn>
+			),
+		},
+	],
+).flat()
+
+const LONG_CONVERSATION_TABS: TitleBarTab[] = [
+	"Notes",
+	"Roadmap",
+	"Retro",
+	"Handover",
+	"Brief",
+	"Budget",
+].map((title) => ({
+	id: title.toLowerCase(),
+	title,
+	icon: <Icons.Library />,
+}))
+
+type LongConversationShellProps = {
+	onWidthChange?: (width: number) => void
+}
+
+const LongConversationShell = ({
+	onWidthChange,
+}: LongConversationShellProps) => (
+	<NavigationShell onWidthChange={onWidthChange} tabs={LONG_CONVERSATION_TABS}>
+		<ThreadLayout
+			composer={<PromptInput onSubmit={fn()} />}
+			rows={LONG_CONVERSATION_ROWS}
+		>
+			{null}
+		</ThreadLayout>
+	</NavigationShell>
+)
+
+export const LongContent = meta.story({
+	args: { onWidthChange: fn() },
+	render: ({ onWidthChange }) => (
+		<LongConversationShell onWidthChange={onWidthChange} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The shell with a conversation of 150 exchanges open behind the sidebar, the case `bun run --filter @workspace/ui profile:sidebar-drag` drags the handle across. Check that every exchange is in the transcript, that the window itself never scrolls, and that while the handle is held the transcript keeps the width it had and stays centred in the card, taking the card's width again on release. Pick `Resized` for the drag on a short conversation.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const page = document.scrollingElement as HTMLElement
+		await expect(page.scrollHeight).toBe(page.clientHeight)
+		await expect(
+			slotsIn(canvasElement, "message-bubble-content").length,
+		).toBeGreaterThanOrEqual(LONG_CONVERSATION_ROWS.length)
+
+		const card = canvas.getByRole("main")
+		const sidebar = navigationSidebarIn(canvasElement)
+		const transcript = slotIn(canvasElement, "message-scroller")
+		const handle = handleIn(canvas)
+		const { from, to } = grabHandle(handle, WIDER_BY)
+		await expect(
+			getComputedStyle(card).getPropertyValue("--sidebar-width"),
+		).toBe("")
+		await nextFrame()
+		const heldWidth = widthOf(transcript)
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: to },
+		])
+		await expectWidth(sidebar, SIDEBAR_DEFAULT_WIDTH + WIDER_BY)
+		await expect(widthOf(transcript)).toBe(heldWidth)
+		await expect(
+			Math.abs(centreOf(transcript) - centreOf(card)),
+		).toBeLessThanOrEqual(1)
+		await expect(args.onWidthChange).not.toHaveBeenCalled()
+
+		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		await expectWidth(transcript, heldWidth - WIDER_BY)
+		await expect(args.onWidthChange).toHaveBeenCalledTimes(1)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
+			SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
+		)
+	},
+})
+
+type ScreenPoint = { clientX: number; clientY: number }
+
+type RealMouseStep = ScreenPoint & {
+	type: "mousePressed" | "mouseMoved" | "mouseReleased"
+}
+
+const realMouse = async ({ type, clientX, clientY }: RealMouseStep) => {
+	const { cdp } = await import("vitest/browser")
+	const frame = window.frameElement?.getBoundingClientRect()
+	await cdp().send("Input.dispatchMouseEvent", {
+		type,
+		x: clientX + (frame?.left ?? 0),
+		y: clientY + (frame?.top ?? 0),
+		button: "left",
+		buttons: type === "mouseReleased" ? 0 : 1,
+		clickCount: 1,
+	})
+}
+
+const middleOf = (element: HTMLElement): ScreenPoint => {
+	const { left, top, width, height } = element.getBoundingClientRect()
+	return { clientX: left + width / 2, clientY: top + height / 2 }
+}
+
+const selectedText = () => document.getSelection()?.toString() ?? ""
+
+export const HandleHeld = meta.story({
+	render: () => <LongConversationShell />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The sidebar handle held while the pointer runs over the title bar, the panel and the conversation. Check that the column resize cursor shows over the whole window, that no text in the transcript gets selected as the pointer crosses it, and that the cursor and text selection come back on release. Pick `LongContent` for what the transcript does while the handle is held.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const shell = shellSurface(canvas)
+		const card = canvas.getByRole("main")
+		const overlay = slotIn(canvasElement, "sidebar-resize-overlay")
+		const handle = handleIn(canvas)
+		const { from, to } = grabHandle(handle, WIDER_BY)
+		const restingCursor = getComputedStyle(shell).cursor
+		const restingSelection = getComputedStyle(shell).userSelect
+		await expect(overlay).not.toBeVisible()
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: to },
+		])
+		await waitFor(() => expect(overlay).toBeVisible(), FRAME_POLL)
+		await expect(getComputedStyle(overlay).cursor).toBe("col-resize")
+		for (const covered of [
+			slotIn(canvasElement, "app-title-bar"),
+			navigationSidebarIn(canvasElement),
+			card,
+		]) {
+			const { clientX, clientY } = middleOf(covered)
+			await expect(document.elementFromPoint(clientX, clientY)).toBe(overlay)
+		}
+		await expect(getComputedStyle(shell).cursor).toBe(restingCursor)
+		await expect(getComputedStyle(shell).userSelect).toBe(restingSelection)
+		await expect(shell.className).not.toContain("cursor-col-resize")
+		await expect(shell).not.toHaveAttribute("data-resizing")
+
+		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
+		const overCard = middleOf(card)
+		await expect(
+			document.elementFromPoint(overCard.clientX, overCard.clientY),
+		).not.toBe(overlay)
+
+		if (!isInBrowserRunner()) return
+		const grip = middleOf(handle)
+		const acrossTranscript = middleOf(slotIn(canvasElement, "message-scroller"))
+		const furtherAcross = {
+			clientX: acrossTranscript.clientX + 120,
+			clientY: acrossTranscript.clientY + 120,
+		}
+		await realMouse({ type: "mousePressed", ...grip })
+		await realMouse({ type: "mouseMoved", ...acrossTranscript })
+		await realMouse({ type: "mouseMoved", ...furtherAcross })
+		await waitFor(() => expect(overlay).toBeVisible(), FRAME_POLL)
+		await expect(selectedText()).toBe("")
+		await realMouse({ type: "mouseReleased", ...furtherAcross })
+		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
+		await expect(selectedText()).toBe("")
+		await expect(handle).toHaveFocus()
 	},
 })
 

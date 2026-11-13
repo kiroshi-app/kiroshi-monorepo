@@ -1,4 +1,12 @@
-import { type ReactNode, type Ref, useMemo, useState } from "react"
+import {
+	type ReactNode,
+	type Ref,
+	type RefObject,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
 
 import { LibraryOverlayContainer } from "@workspace/ui/components/library-panel"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
@@ -8,6 +16,7 @@ import {
 	type ReplyQuote,
 } from "@workspace/ui/components/prompt-reply"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import { useIsSidebarResizing } from "@workspace/ui/components/sidebar-resize"
 import {
 	Transcript,
 	type TranscriptHandle,
@@ -26,6 +35,41 @@ const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
 const ASIDE_RESIZING =
 	"has-data-[resizing=true]:select-none has-data-[resizing=true]:**:cursor-col-resize"
+
+type TranscriptWidthHoldProps = {
+	transcriptRef: RefObject<HTMLDivElement | null>
+}
+
+const HoldTranscriptWidthWhileSidebarResizes = ({
+	transcriptRef,
+}: TranscriptWidthHoldProps) => {
+	const isSidebarResizing = useIsSidebarResizing()
+	const widthRef = useRef<number | null>(null)
+
+	useLayoutEffect(() => {
+		const transcript = transcriptRef.current
+		if (!transcript) return
+		const observer = new ResizeObserver(([entry]) => {
+			widthRef.current = entry.borderBoxSize[0].inlineSize
+		})
+		observer.observe(transcript)
+		return () => observer.disconnect()
+	}, [transcriptRef])
+
+	useLayoutEffect(() => {
+		const transcript = transcriptRef.current
+		const width = widthRef.current
+		if (!isSidebarResizing || !transcript || width === null) return
+		transcript.style.inlineSize = `${width}px`
+		transcript.style.marginInline = `calc((100% - ${width}px) / 2)`
+		return () => {
+			transcript.style.inlineSize = ""
+			transcript.style.marginInline = ""
+		}
+	}, [isSidebarResizing, transcriptRef])
+
+	return null
+}
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -89,6 +133,7 @@ function ThreadLayout({
 		() => ({ current: overlayElement }),
 		[overlayElement],
 	)
+	const transcriptRef = useRef<HTMLDivElement>(null)
 	const attachRoot = useMemo(
 		() => mergeRefs(rootRef, setOverlayElement),
 		[rootRef],
@@ -131,6 +176,7 @@ function ThreadLayout({
 						) : (
 							<MarkProvider transcriptKey={transcriptKey}>
 								<Transcript
+									ref={transcriptRef}
 									className="@container flex-1"
 									transcriptKey={transcriptKey}
 									autoScroll={autoScroll}
@@ -148,6 +194,10 @@ function ThreadLayout({
 								>
 									{children}
 								</Transcript>
+								<HoldTranscriptWidthWhileSidebarResizes
+									key={transcriptKey}
+									transcriptRef={transcriptRef}
+								/>
 							</MarkProvider>
 						)
 					}
