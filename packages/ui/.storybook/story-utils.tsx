@@ -1245,18 +1245,30 @@ const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
 
 const GAP_PAST_SIDEBAR_EDGE = 4
 
-export const expectTooltipPastTheSidebarEdge = async (
+export const expectTooltipBesideTheSidebar = async (
 	row: HTMLElement,
 	tooltip: HTMLElement,
 ) => {
 	const sidebar = row.closest(SIDEBAR_BOX)
 	if (!sidebar) throw new Error("The row sits in no sidebar")
+	await waitFor(
+		() =>
+			expect(
+				tooltip.getBoundingClientRect().left -
+					sidebar.getBoundingClientRect().right,
+			).toBeCloseTo(GAP_PAST_SIDEBAR_EDGE, 0),
+		FRAME_POLL,
+	)
+}
+
+export const expectTooltipPastTheSidebarEdge = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	await expectTooltipBesideTheSidebar(row, tooltip)
 	await waitFor(async () => {
 		const bubble = tooltip.getBoundingClientRect()
 		const held = row.getBoundingClientRect()
-		await expect(
-			bubble.left - sidebar.getBoundingClientRect().right,
-		).toBeCloseTo(GAP_PAST_SIDEBAR_EDGE, 0)
 		await expect(bubble.top + bubble.height / 2).toBeCloseTo(
 			held.top + held.height / 2,
 			0,

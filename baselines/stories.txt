@@ -1587,6 +1587,7 @@ navigation-appsidebarconversationrow--solo-conversation-row-dark
 navigation-appsidebarconversationrow--tooltip-carries-a-long-title-and-several-agents
 navigation-appsidebarconversationrow--tooltip-carries-a-long-title-and-several-agents-dark
 navigation-appsidebarconversationrow--tooltip-closes-while-the-row-menu-is-open
+navigation-appsidebarconversationrow--tooltip-on-the-first-row-stays-beside-the-sidebar
 navigation-appsidebarconversationrow--tooltip-on-the-icon-rail
 navigation-appsidebarconversationrow--tooltip-without-a-message-yet
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp

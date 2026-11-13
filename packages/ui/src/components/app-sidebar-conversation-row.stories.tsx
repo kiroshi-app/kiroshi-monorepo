@@ -18,6 +18,7 @@ import {
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTooltipBesideTheSidebar,
 	expectTooltipCard,
 	expectTooltipPastTheSidebarEdge,
 	glyphIn,
@@ -1505,6 +1506,21 @@ export const TooltipCarriesALongTitleAndSeveralAgents = meta.story(
 export const TooltipCarriesALongTitleAndSeveralAgentsDark = meta.story(
 	tooltipOfALongTitledRoomStory(DARK),
 )
+
+export const TooltipOnTheFirstRowStaysBesideTheSidebar = meta.story({
+	tags: ["test-only"],
+	args: { conversation: LONG_TITLED_ROOM },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+		const bubble = tooltip.getBoundingClientRect()
+		const held = row.getBoundingClientRect()
+
+		await expect(bubble.height / 2).toBeGreaterThan(held.top + held.height / 2)
+		await expect(bubble.top).toBeGreaterThanOrEqual(0)
+		await expectTooltipBesideTheSidebar(row, tooltip)
+	},
+})
 
 export const TooltipWithoutAMessageYet = meta.story({
 	args: { conversation: ROOM_WITHOUT_A_MESSAGE },
