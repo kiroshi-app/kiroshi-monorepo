@@ -1008,9 +1008,13 @@ feedback-appbootnotice--centred-in-700-px-window
 feedback-appbootnotice--default
 feedback-appbootscreen--centred-in-1100-px-window
 feedback-appbootscreen--centred-in-700-px-window
+feedback-appbootscreen--dark
 feedback-appbootscreen--default
-feedback-appbootscreen--window-surface
-feedback-appbootscreen--window-surface-dark
+feedback-appbootscreen--exit
+feedback-appbootscreen--exit-at-mount
+feedback-appbootscreen--exit-still
+feedback-appbootscreen--first-launch
+feedback-appbootscreen--still
 feedback-connectionstatus--default
 feedback-connectionstatus--default-dark
 feedback-connectionstatus--variants
