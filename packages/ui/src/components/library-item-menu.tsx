@@ -421,7 +421,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 
 	return (
 		<HeaderIsland
-			className={cn(surface === "lightbox" && LIBRARY_OVERLAY_ISLAND)}
+			className={surface === "lightbox" ? LIBRARY_OVERLAY_ISLAND : undefined}
 		>
 			{leading}
 			{onDownload ? (

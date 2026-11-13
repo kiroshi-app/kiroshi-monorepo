@@ -297,10 +297,7 @@ const LibraryLightbox = ({
 						}}
 						ref={surfaceRef}
 					>
-						<div
-							className={FLOATING_HEADER}
-							data-slot="library-lightbox-header"
-						>
+						<div className={FLOATING_HEADER}>
 							<HeaderIsland
 								className={cn(LIBRARY_OVERLAY_ISLAND, LIBRARY_ISLAND_CONTEXT)}
 							>
