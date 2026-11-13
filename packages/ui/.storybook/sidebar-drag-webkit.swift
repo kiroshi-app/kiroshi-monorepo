@@ -54,7 +54,7 @@ let drag = """
 		scenario: `${DRAG_MS} ms drag of the left handle, \(storyID), ${document.querySelectorAll('[data-slot="message-bubble-content"]').length} turns, ${innerWidth}x${innerHeight}`,
 		detector: `requestAnimationFrame deltas in WKWebView, a long frame is over ${LONG_FRAME_MS} ms, ${navigator.userAgent}`,
 		frames: { count: sorted.length, medianMs: at(0.5), p95Ms: at(0.95), maxMs: at(1) },
-		longFrames: frames.filter((frame) => frame > LONG_FRAME_MS).length,
+		longFramesAt: frames.flatMap((frame, index) => (frame > LONG_FRAME_MS ? [index] : [])),
 		edgeMoves,
 		releaseMs: Math.round((performance.now() - releasedAt) * 10) / 10,
 	}, null, "\\t")

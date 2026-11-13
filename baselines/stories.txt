@@ -1325,6 +1325,7 @@ layout-workspaceshell--first-tab-on-the-panel-edge-without-inset-controls
 layout-workspaceshell--four-companions-in-cold-space-dark
 layout-workspaceshell--four-companions-in-warm-space-dark
 layout-workspaceshell--free-hue
+layout-workspaceshell--long-content
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable
 layout-workspaceshell--resize-by-keyboard
@@ -2207,6 +2208,7 @@ navigation-sidebarpeek--peek-from-the-left-edge-light
 navigation-sidebarpeek--popup-opened-from-the-peek-keeps-it-open
 navigation-sidebarpeek--slides-and-fades
 navigation-sidebarresize--clamped
+navigation-sidebarresize--dragged-then-released
 navigation-sidebarresize--restored-below-the-minimum
 navigation-sidebarresize--right-side
 navigation-skiplink--custom-label

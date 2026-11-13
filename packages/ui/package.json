@@ -27,8 +27,7 @@
 		"build-storybook": "storybook build",
 		"test": "vitest run",
 		"test:storybook": "vitest run --project=storybook",
-		"profile:sidebar-drag": "bun .storybook/sidebar-drag-profile.ts",
-		"profile:sidebar-drag:webkit": "swift .storybook/sidebar-drag-webkit.swift"
+		"profile:sidebar-drag": "bun .storybook/sidebar-drag-profile.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.9.0",

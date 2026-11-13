@@ -56,6 +56,9 @@ const SidebarResizeProvider = ({
 	)
 }
 
+const useIsSidebarResizing = () =>
+	useContext(SidebarResizeContext)?.isResizing ?? false
+
 interface SidebarResizeHandleProps {
 	side: "left" | "right"
 }
@@ -85,4 +88,5 @@ export {
 	SIDEBAR_WIDTH_STEP,
 	SidebarResizeHandle,
 	SidebarResizeProvider,
+	useIsSidebarResizing,
 }

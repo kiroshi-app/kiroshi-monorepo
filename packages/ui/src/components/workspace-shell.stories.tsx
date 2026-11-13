@@ -927,6 +927,13 @@ export const FirstTabAfterTheHistoryCollapsed = meta.story({
 
 const LONG_CONVERSATION_EXCHANGES = 150
 
+const centreOf = (element: HTMLElement) => {
+	const { left, width } = element.getBoundingClientRect()
+	return left + width / 2
+}
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
 const LONG_CONVERSATION_QUESTION =
 	"Where does a turn go between the sidecar and the screen?"
 
@@ -986,16 +993,45 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"The shell with a conversation of 150 exchanges open behind the sidebar, the case `bun packages/ui/scripts/sidebar-drag-profile.ts` drags the handle across. Check that every exchange is in the transcript and that the window itself never scrolls. Pick `Resized` for the drag on a short conversation.",
+					"The shell with a conversation of 150 exchanges open behind the sidebar, the case `bun run --filter @workspace/ui profile:sidebar-drag` drags the handle across. Check that every exchange is in the transcript, that the window itself never scrolls, and that while the handle is held the transcript keeps the width it had and stays centred in the card, taking the card's width again on release. Pick `Resized` for the drag on a short conversation.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const page = document.scrollingElement as HTMLElement
 		await expect(page.scrollHeight).toBe(page.clientHeight)
 		await expect(
 			slotsIn(canvasElement, "message-bubble-content").length,
 		).toBeGreaterThanOrEqual(LONG_CONVERSATION_ROWS.length)
+
+		const card = canvas.getByRole("main")
+		const sidebar = navigationSidebarIn(canvasElement)
+		const transcript = slotIn(canvasElement, "message-scroller")
+		const handle = handleIn(canvas)
+		const { from, to } = grabHandle(handle, WIDER_BY)
+		await expect(
+			getComputedStyle(card).getPropertyValue("--sidebar-width"),
+		).toBe("")
+		await nextFrame()
+		const heldWidth = widthOf(transcript)
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: to },
+		])
+		await expectWidth(sidebar, SIDEBAR_DEFAULT_WIDTH + WIDER_BY)
+		await expect(widthOf(transcript)).toBe(heldWidth)
+		await expect(
+			Math.abs(centreOf(transcript) - centreOf(card)),
+		).toBeLessThanOrEqual(1)
+		await expect(args.onWidthChange).not.toHaveBeenCalled()
+
+		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		await expectWidth(transcript, heldWidth - WIDER_BY)
+		await expect(args.onWidthChange).toHaveBeenCalledTimes(1)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
+			SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
+		)
 	},
 })
 
