@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from "react"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	companionHueOf,
+	emulateMotion,
 	FRAME_POLL,
 	isInBrowserRunner,
 	slotIn,
@@ -1163,39 +1164,272 @@ export const DragResizesWithoutAnimation = meta.story({
 export const ToggleDuringDragSwapsAtOnce = meta.story({
 	render: () => <NavigationShell />,
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		const handle = handleIn(canvas)
-		const { from, to } = grabHandle(handle, WIDER_BY)
-		await userEvent.pointer([
-			{ keys: "[MouseLeft>]", target: handle, coords: from },
-			{ coords: to },
-		])
-		await userEvent.keyboard("{Control>}b{/Control}")
-		await expectNothingInTheLeftColumn(canvas, canvasElement)
-		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		const toggleWhileDragging = async () => {
+			const handle = handleIn(canvas)
+			const { from, to } = grabHandle(handle, WIDER_BY)
+			await userEvent.pointer([
+				{ keys: "[MouseLeft>]", target: handle, coords: from },
+				{ coords: to },
+			])
+			await userEvent.keyboard("{Control>}b{/Control}")
+			await expectNothingInTheLeftColumn(canvas, canvasElement)
+			await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		}
+		await (isInBrowserRunner()
+			? withMotionAllowed(toggleWhileDragging)
+			: toggleWhileDragging())
 	},
 })
 
-export const ToggleSwapsAtOnce = meta.story({
+const SLIDE_MS = 150
+
+const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)"
+
+const transitionsIn = (canvasElement: HTMLElement) =>
+	canvasElement
+		.getAnimations({ subtree: true })
+		.filter((animation) => animation instanceof CSSTransition)
+
+const holdAt = (slides: CSSTransition[], time: number) => {
+	for (const slide of slides) {
+		slide.pause()
+		slide.currentTime = time
+	}
+}
+
+const heldSlideIn = async (canvasElement: HTMLElement) => {
+	const slides = await waitFor(() => {
+		const running = transitionsIn(canvasElement)
+		expect(running.length).toBeGreaterThan(0)
+		return running
+	}, FRAME_POLL)
+	holdAt(slides, 0)
+	return slides
+}
+
+const expectTranslateOnly = async (slides: CSSTransition[]) => {
+	await expect([
+		...new Set(slides.map((slide) => slide.transitionProperty)),
+	]).toEqual(["translate"])
+	for (const slide of slides) {
+		const { duration, easing } = slide.effect?.getTiming() ?? {}
+		await expect(easing).toBe(EASE_OUT)
+		await expect(duration).toBeLessThanOrEqual(SLIDE_MS)
+	}
+}
+
+const expectFullLength = async (slides: CSSTransition[]) => {
+	for (const slide of slides) {
+		await expect(slide.effect?.getTiming().duration).toBe(SLIDE_MS)
+	}
+}
+
+const expectSlidingParts = async (
+	canvas: ShellCanvas,
+	canvasElement: HTMLElement,
+	slides: CSSTransition[],
+) => {
+	const sliding = slides.map((slide) =>
+		slide.effect instanceof KeyframeEffect ? slide.effect.target : null,
+	)
+	await expect(sliding).toContain(navigationSidebarIn(canvasElement))
+	await expect(sliding).toContain(canvas.getByRole("main"))
+	await expect(sliding).toContain(canvas.getByRole("tablist").parentElement)
+}
+
+const widthOfCard = (canvas: ShellCanvas) =>
+	canvas.getByRole("main").getBoundingClientRect().width
+
+const expectDocked = async (
+	canvas: ShellCanvas,
+	canvasElement: HTMLElement,
+) => {
+	const sidebar = navigationSidebarIn(canvasElement)
+	await expect(leftOf(sidebar)).toBe(0)
+	await expect(sidebar).not.toHaveAttribute("inert")
+	await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
+}
+
+const expectOffTheLeftEdge = async (
+	canvas: ShellCanvas,
+	canvasElement: HTMLElement,
+) => {
+	const sidebar = navigationSidebarIn(canvasElement)
+	await expect(sidebar.getBoundingClientRect().right).toBe(0)
+	await expect(leftOf(canvas.getByRole("main"))).toBe(shellInset())
+	await expect(leftOf(firstTabIn(canvas))).toBe(
+		FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
+	)
+}
+
+const finishAndSettle = async (
+	canvasElement: HTMLElement,
+	slides: CSSTransition[],
+) => {
+	for (const slide of slides) slide.finish()
+	await waitFor(
+		() =>
+			expect(canvasElement.firstElementChild).toHaveAttribute(
+				"data-sidebar-sliding",
+				"false",
+			),
+		FRAME_POLL,
+	)
+	await expect(transitionsIn(canvasElement)).toHaveLength(0)
+}
+
+export const CollapseSlidesOut = meta.story({
 	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
-	play: async ({ canvas, canvasElement, userEvent }) => {
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Motion allowed. Check nothing is armed at rest, a click on the toggle starts a 150ms translate on the ease-out token on the sidebar, the card and the tabs and on nothing else, the three leave from their docked spots, the card holds one width from the first frame to the last, the sidebar is inert while it leaves and unmounted once gone, and nothing moves when the slide settles.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(async () => {
-			const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
+			await expect(transitionsIn(canvasElement)).toHaveLength(0)
+			await expect(
+				getComputedStyle(navigationSidebarIn(canvasElement)).transitionDuration,
+			).toBe("0s")
 
-			await userEvent.click(toggle)
+			await fireEvent.click(
+				canvas.getByRole("button", { name: "Toggle sidebar" }),
+			)
+			const slides = await heldSlideIn(canvasElement)
+			await expectTranslateOnly(slides)
+			await expectFullLength(slides)
+			await expectSlidingParts(canvas, canvasElement, slides)
+			await expect(navigationSidebarIn(canvasElement)).toHaveAttribute("inert")
+			await expect(leftOf(navigationSidebarIn(canvasElement))).toBe(0)
+			await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
+			const widthAtTheStart = widthOfCard(canvas)
+
+			holdAt(slides, SLIDE_MS)
+			await expectOffTheLeftEdge(canvas, canvasElement)
+			await expect(widthOfCard(canvas)).toBe(widthAtTheStart)
+
+			await finishAndSettle(canvasElement, slides)
 			await expectNothingInTheLeftColumn(canvas, canvasElement)
-			await expect(canvas.getByRole("main").getAnimations()).toHaveLength(0)
 			await expect(leftOf(firstTabIn(canvas))).toBe(
 				FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
 			)
-
-			await userEvent.click(toggle)
-			await expect(
-				navigationSidebarIn(canvasElement).getAnimations(),
-			).toHaveLength(0)
-			await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
-			await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
+			await expect(widthOfCard(canvas)).toBe(widthAtTheStart)
 		})
+	},
+})
+
+export const ReopenSlidesIn = meta.story({
+	render: () => <NavigationShell isInitiallyOpen={false} tabs={[NOTES_TAB]} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Motion allowed. Check the sidebar shortcut starts a 150ms translate on the ease-out token on the sidebar, the card and the tabs and on nothing else, the sidebar enters from past the left edge while the card and the tabs leave from their collapsed spots, the card holds its width for the whole slide and takes the docked one when it settles, with its left edge and the first tab already on the panel edge.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			await expect(transitionsIn(canvasElement)).toHaveLength(0)
+			const widthCollapsed = widthOfCard(canvas)
+
+			await fireEvent.keyDown(canvasElement, { key: "b", ctrlKey: true })
+			const slides = await heldSlideIn(canvasElement)
+			await expectTranslateOnly(slides)
+			await expectFullLength(slides)
+			await expectSlidingParts(canvas, canvasElement, slides)
+			await expect(slotsIn(canvasElement, "sidebar-peek-edge")).toHaveLength(0)
+			await expectOffTheLeftEdge(canvas, canvasElement)
+			await expect(widthOfCard(canvas)).toBe(widthCollapsed)
+
+			holdAt(slides, SLIDE_MS)
+			await expectDocked(canvas, canvasElement)
+			await expect(widthOfCard(canvas)).toBe(widthCollapsed)
+
+			await finishAndSettle(canvasElement, slides)
+			await expectDocked(canvas, canvasElement)
+			await expect(widthOfCard(canvas)).toBe(
+				widthCollapsed - SIDEBAR_DEFAULT_WIDTH + shellInset(),
+			)
+		})
+	},
+})
+
+export const ToggleDuringSlideTurnsBack = meta.story({
+	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Motion allowed. Check a second toggle half-way through the collapse slide sends the sidebar, the card and the tabs back from where they stand, by translate only and in no more than 150ms, and that the shell settles docked with no peek panel and nothing left sliding.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
+			const widthDocked = widthOfCard(canvas)
+
+			await fireEvent.click(toggle)
+			holdAt(await heldSlideIn(canvasElement), SLIDE_MS / 2)
+			const halfWay = {
+				sidebar: leftOf(navigationSidebarIn(canvasElement)),
+				card: leftOf(canvas.getByRole("main")),
+				tab: leftOf(firstTabIn(canvas)),
+			}
+			await expect(halfWay.sidebar).toBeLessThan(0)
+			await expect(halfWay.sidebar).toBeGreaterThan(-SIDEBAR_DEFAULT_WIDTH)
+
+			await fireEvent.click(toggle)
+			const back = await heldSlideIn(canvasElement)
+			await expectTranslateOnly(back)
+			await expect({
+				sidebar: leftOf(navigationSidebarIn(canvasElement)),
+				card: leftOf(canvas.getByRole("main")),
+				tab: leftOf(firstTabIn(canvas)),
+			}).toEqual(halfWay)
+
+			await finishAndSettle(canvasElement, back)
+			await expectDocked(canvas, canvasElement)
+			await expect(widthOfCard(canvas)).toBe(widthDocked)
+			await expect(slotsIn(canvasElement, "sidebar-peek")).toHaveLength(0)
+			await expect(slotsIn(canvasElement, "sidebar-peek-edge")).toHaveLength(0)
+		})
+	},
+})
+
+export const ReducedMotionSwapsAtOnce = meta.story({
+	render: () => <NavigationShell tabs={[NOTES_TAB]} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reduce motion on. Check the toggle takes the sidebar away and brings it back in the same frame, with no transition anywhere in the shell.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		await emulateMotion("reduce")
+		const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
+
+		await fireEvent.click(toggle)
+		await expect(transitionsIn(canvasElement)).toHaveLength(0)
+		await expectNothingInTheLeftColumn(canvas, canvasElement)
+		await expect(leftOf(firstTabIn(canvas))).toBe(
+			FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
+		)
+
+		await fireEvent.click(toggle)
+		await expect(transitionsIn(canvasElement)).toHaveLength(0)
+		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
+		await expectDocked(canvas, canvasElement)
 	},
 })
 

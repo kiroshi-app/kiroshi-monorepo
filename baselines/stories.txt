@@ -1312,6 +1312,7 @@ layout-windowcontrols--rest
 layout-windowcontrols--rest-dark
 layout-windowcontrols--restore-forced-hover
 layout-workspaceshell--boxed-host
+layout-workspaceshell--collapse-slides-out
 layout-workspaceshell--composer-with-reply-on-shell-inset
 layout-workspaceshell--controls-fade-no-colour
 layout-workspaceshell--conversation-open-dark
@@ -1329,6 +1330,8 @@ layout-workspaceshell--handle-held
 layout-workspaceshell--long-content
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable
+layout-workspaceshell--reduced-motion-swaps-at-once
+layout-workspaceshell--reopen-slides-in
 layout-workspaceshell--resize-by-keyboard
 layout-workspaceshell--resized
 layout-workspaceshell--skips-to-the-conversation
@@ -1338,7 +1341,7 @@ layout-workspaceshell--switches-between-expanded-and-collapsed
 layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
 layout-workspaceshell--toggle-during-drag-swaps-at-once
-layout-workspaceshell--toggle-swaps-at-once
+layout-workspaceshell--toggle-during-slide-turns-back
 navigation-appframe--connecting-space
 navigation-appframe--holding-companion-settings
 navigation-appframe--holding-conversation-settings
@@ -2201,6 +2204,7 @@ navigation-sidebarpeek--click-on-the-collapse-icon-docks
 navigation-sidebarpeek--closes-after-the-grace-delay
 navigation-sidebarpeek--collapsed-rest
 navigation-sidebarpeek--docked
+navigation-sidebarpeek--docking-from-the-peek-hands-over-at-once
 navigation-sidebarpeek--escape-closes
 navigation-sidebarpeek--leaving-before-the-hover-intent-opens-nothing
 navigation-sidebarpeek--peek-from-the-collapse-icon

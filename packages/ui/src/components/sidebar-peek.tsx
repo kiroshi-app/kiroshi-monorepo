@@ -3,9 +3,11 @@
 import {
 	createContext,
 	type ReactNode,
+	type RefObject,
 	type TransitionEvent,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -45,7 +47,24 @@ type SidebarPeekHover = {
 	onPointerLeave: () => void
 }
 
+type SidebarDockLayout = "docked" | "collapsed"
+
+type SidebarDock = {
+	layout: SidebarDockLayout
+	isSliding: boolean
+}
+
+type SidebarDockShell = SidebarDock & {
+	shellRef: RefObject<HTMLDivElement | null>
+}
+
+const DOCKED_SIDEBAR = '[data-slot="navigation-sidebar"]'
+
+const layoutFor = (isDocked: boolean): SidebarDockLayout =>
+	isDocked ? "docked" : "collapsed"
+
 type SidebarPeekState = {
+	dock: SidebarDock
 	isCollapsed: boolean
 	isOpen: boolean
 	hover: SidebarPeekHover
@@ -56,19 +75,48 @@ type SidebarPeekState = {
 const SidebarPeekContext = createContext<SidebarPeekState | null>(null)
 
 type SidebarPeekProviderProps = {
-	children: ReactNode
+	isDocked: boolean
+	isResizing: boolean
+	children: (shell: SidebarDockShell) => ReactNode
 }
 
-const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
-	const { open: isDocked } = useSidebar()
+const SidebarPeekProvider = ({
+	isDocked,
+	isResizing,
+	children,
+}: SidebarPeekProviderProps) => {
 	const [isOpen, setIsOpen] = useState(false)
+	const [layout, setLayout] = useState(() => layoutFor(isDocked))
+	const [isSliding, setIsSliding] = useState(false)
+	const shellRef = useRef<HTMLDivElement>(null)
 	const pending = useRef<number | undefined>(undefined)
 	const isHovered = useRef(false)
 	const isHeld = useRef(false)
 
+	if (!isSliding && layout !== layoutFor(isDocked)) {
+		if (isResizing || isOpen) setLayout(layoutFor(isDocked))
+		else setIsSliding(true)
+	}
 	if (isDocked && isOpen) setIsOpen(false)
 
 	useEffect(() => () => window.clearTimeout(pending.current), [])
+
+	useLayoutEffect(() => {
+		if (!isSliding) return
+		let isCurrent = true
+		const settle = () => {
+			if (!isCurrent) return
+			setLayout(layoutFor(isDocked))
+			setIsSliding(false)
+		}
+		const slides =
+			shellRef.current?.querySelector(DOCKED_SIDEBAR)?.getAnimations?.() ?? []
+		if (slides.length === 0) settle()
+		else Promise.allSettled(slides.map((slide) => slide.finished)).then(settle)
+		return () => {
+			isCurrent = false
+		}
+	}, [isSliding, isDocked])
 
 	const peek = useMemo<SidebarPeekState>(() => {
 		const settleAfter = (next: boolean, delay: number) => {
@@ -76,6 +124,7 @@ const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
 			pending.current = window.setTimeout(() => setIsOpen(next), delay)
 		}
 		return {
+			dock: { layout, isSliding },
 			isCollapsed: !isDocked,
 			isOpen,
 			hover: {
@@ -100,13 +149,20 @@ const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
 				setIsOpen(false)
 			},
 		}
-	}, [isDocked, isOpen])
+	}, [isDocked, isOpen, layout, isSliding])
 
 	return (
 		<SidebarPeekContext.Provider value={peek}>
-			{children}
+			{children({ layout, isSliding, shellRef })}
 		</SidebarPeekContext.Provider>
 	)
+}
+
+const useSidebarDock = (): SidebarDock => {
+	const peek = useContext(SidebarPeekContext)
+	const { open } = useSidebar()
+
+	return peek?.dock ?? { layout: layoutFor(open), isSliding: false }
 }
 
 const useSidebarPeekTrigger = (): SidebarPeekHover | undefined => {
@@ -188,5 +244,6 @@ export {
 	PEEK_CLOSE_DELAY_MS,
 	SidebarPeek,
 	SidebarPeekProvider,
+	useSidebarDock,
 	useSidebarPeekTrigger,
 }

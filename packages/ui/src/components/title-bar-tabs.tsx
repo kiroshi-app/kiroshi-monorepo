@@ -125,7 +125,17 @@ const HISTORY_BESIDE_SIDEBAR =
 	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))]"
 
 const HISTORY_COLLAPSED =
-	"in-data-[sidebar-open=false]:w-auto in-data-[sidebar-open=false]:pe-2"
+	"in-data-[sidebar-layout=collapsed]:w-(--history-collapsed) in-data-[sidebar-layout=collapsed]:pe-2"
+
+const HISTORY_OF_THREE = "[--history-buttons:3]"
+
+const HISTORY_OF_FOUR = "[--history-buttons:4]"
+
+const HISTORY_TRAVEL =
+	"[--history-collapsed:calc(var(--history-buttons)_*_(--spacing(7)_+_--spacing(0.5))_-_--spacing(0.5)_+_--spacing(2))] [--history-travel:calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing)-var(--history-collapsed))]"
+
+const TABS_FOLLOW_THE_SIDEBAR =
+	"motion-safe:in-data-[sidebar-sliding=true]:[&>:not([data-slot=title-bar-history])]:[transition:translate_150ms_var(--ease-out)] [[data-sidebar-layout=docked][data-sidebar-open=false]_&>:not([data-slot=title-bar-history])]:-translate-x-(--history-travel) [[data-sidebar-layout=collapsed][data-sidebar-open=true]_&>:not([data-slot=title-bar-history])]:translate-x-(--history-travel)"
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
@@ -1065,7 +1075,18 @@ const TitleBarTabs = ({
 	)
 
 	return (
-		<div className={STRIP} data-slot="title-bar-tabs" ref={stripRef}>
+		<div
+			className={cn(
+				STRIP,
+				onToggleSidebar && [
+					onOpenSearch ? HISTORY_OF_FOUR : HISTORY_OF_THREE,
+					HISTORY_TRAVEL,
+					TABS_FOLLOW_THE_SIDEBAR,
+				],
+			)}
+			data-slot="title-bar-tabs"
+			ref={stripRef}
+		>
 			<div
 				className={cn(
 					HISTORY,

@@ -4,7 +4,10 @@ import {
 	ExpandedSidebar,
 	type ExpandedSidebarProps,
 } from "@workspace/ui/components/expanded-sidebar"
-import { SidebarPeek } from "@workspace/ui/components/sidebar-peek"
+import {
+	SidebarPeek,
+	useSidebarDock,
+} from "@workspace/ui/components/sidebar-peek"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import {
@@ -25,6 +28,7 @@ type NavigationSidebarProps = Omit<
 
 const NavigationSidebar = ({ update, ...sidebar }: NavigationSidebarProps) => {
 	const { open } = useSidebar()
+	const { layout, isSliding } = useSidebarDock()
 	const expanded = (
 		<ExpandedSidebar
 			{...sidebar}
@@ -32,10 +36,11 @@ const NavigationSidebar = ({ update, ...sidebar }: NavigationSidebarProps) => {
 		/>
 	)
 
-	if (!open) return <SidebarPeek>{expanded}</SidebarPeek>
+	if (layout === "collapsed" && !isSliding)
+		return <SidebarPeek>{expanded}</SidebarPeek>
 
 	return (
-		<div className={SIDEBAR} data-slot="navigation-sidebar">
+		<div className={SIDEBAR} data-slot="navigation-sidebar" inert={!open}>
 			<div className={CLIP}>{expanded}</div>
 			<SidebarResizeHandle side="left" />
 		</div>
