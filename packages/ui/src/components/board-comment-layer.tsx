@@ -55,18 +55,25 @@ type BoardCommentScene = {
 	viewport: BoardViewport
 }
 
+type BoardCommentPlace = {
+	anchor: BoardCommentAnchor
+	lastPoint?: BoardPoint
+}
+
 const placedOf = (
 	{ items, boundsOf, viewport }: BoardCommentScene,
-	anchor: BoardCommentAnchor,
-	lastPoint?: BoardPoint,
+	{ anchor, lastPoint }: BoardCommentPlace,
 ) => {
 	const node = isNodeAnchor(anchor) ? items.get(anchor) : undefined
+	const isGone = isNodeAnchor(anchor) && !node
 	const point = node
 		? commentPinPointOf(boundsOf(node))
 		: isNodeAnchor(anchor)
 			? lastPoint
 			: anchor
-	return point ? { node, pinTail: toScreenPoint(point, viewport) } : null
+	return point
+		? { node, isGone, pinTail: toScreenPoint(point, viewport) }
+		: null
 }
 
 const drawnRadiusOf = (object: Element | null | undefined) => {
@@ -247,23 +254,11 @@ const BoardCommentLayer = ({
 			: t("board.comments.anchor.board")
 
 	const pins = threads.flatMap((thread) => {
-		const placed = placedOf(
-			scene,
-			thread.anchor,
-			"lastPoint" in thread ? thread.lastPoint : undefined,
-		)
-		return placed
-			? [
-					{
-						...placed,
-						thread,
-						isGone: !placed.node && isNodeAnchor(thread.anchor),
-					},
-				]
-			: []
+		const placed = placedOf(scene, thread)
+		return placed ? [{ ...placed, thread }] : []
 	})
 	const open = pins.find(({ thread }) => thread.id === openThread?.id)
-	const drafted = draft ? placedOf(scene, draft.anchor) : null
+	const drafted = draft ? placedOf(scene, draft) : null
 	const ringedNodes = [
 		...new Set(
 			[open?.node, drafted?.node].filter((node) => node !== undefined),

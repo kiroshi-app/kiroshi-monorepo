@@ -4635,7 +4635,6 @@ const COMMENT_DRAFT = {
 const CommentedBoard = ({
 	isCommentMode: isInitiallyOn = false,
 	onLeaveCommentMode,
-	onOpenCommentThread,
 	...props
 }: BoardCanvasProps) => {
 	const [isCommentMode, setCommentMode] = useState(isInitiallyOn)
@@ -4651,7 +4650,7 @@ const CommentedBoard = ({
 					list: (
 						<LibraryCommentsList
 							counts={COMMENT_COUNTS}
-							onOpenThread={(id) => onOpenCommentThread?.(id)}
+							onOpenThread={(id) => props.onOpenCommentThread?.(id)}
 							onTabChange={setTab}
 							tab={tab}
 							threads={LISTED_THREADS[tab]}
@@ -4668,7 +4667,6 @@ const CommentedBoard = ({
 					setCommentMode(false)
 					onLeaveCommentMode?.()
 				}}
-				onOpenCommentThread={onOpenCommentThread}
 			/>
 		</>
 	)
@@ -4834,7 +4832,8 @@ export const CommentPins = meta.story({
 		await expect(selectedOptions(canvasElement)).toEqual([])
 		await expect(args.onIntent).not.toHaveBeenCalled()
 
-		;(objectNode(canvasElement, DINNER.id) as HTMLElement).focus()
+		const lastObject = objectNode(canvasElement, DINNER.id) as HTMLElement
+		lastObject.focus()
 		await userEvent.tab()
 		const firstPin = pinIn(dinner)
 		await expect(firstPin).toHaveFocus()
