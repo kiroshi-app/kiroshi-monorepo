@@ -454,7 +454,7 @@ const LibraryDocumentEditor = ({
 			{openThread && openedThread && isOpenedThreadGone ? (
 				<LibraryDocumentThreadCard
 					anchor={{ gone: "text" }}
-					className="absolute end-[12.625rem] top-14 z-10"
+					className="absolute end-[12.625rem] top-12 z-10"
 					open={openThread}
 					participants={commentParticipants ?? []}
 					thread={openedThread}

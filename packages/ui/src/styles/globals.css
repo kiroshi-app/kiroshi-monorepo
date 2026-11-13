@@ -205,10 +205,14 @@
 	--color-comment-card: var(--comment-card);
 	--color-comment-pin: var(--comment-pin);
 	--color-comment-pin-stage: var(--comment-pin-stage);
+	--color-comment-resolved-rule: var(--comment-resolved-rule);
 	--color-lightbox-stage: var(--lightbox-stage);
 	--shadow-comment-pin: var(--comment-pin-shadow);
 	--shadow-comment-pin-selected: var(--comment-pin-selected-shadow);
 	--shadow-comment-pin-stage: var(--comment-pin-stage-shadow);
+	--shadow-comment-pin-agent: var(--comment-pin-agent-shadow);
+	--shadow-comment-pin-resolved: var(--comment-pin-resolved-shadow);
+	--shadow-comment-cursor: var(--comment-cursor-shadow);
 	--shadow-comment-card: var(--comment-card-shadow);
 	--shadow-comment-list: var(--comment-list-shadow);
 	--shadow-comment-hint: var(--comment-hint-shadow);

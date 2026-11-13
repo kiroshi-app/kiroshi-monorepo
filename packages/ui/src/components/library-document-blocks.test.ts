@@ -24,6 +24,7 @@ import {
 	offsetsOf,
 	parseBlocks,
 	passageOfShown,
+	passageQuoteOf,
 	relaid,
 	rowAfter,
 	serializeBlocks,
@@ -912,5 +913,77 @@ describe("passageOfShown", () => {
 		expect(
 			passageOfShown(source, { shown, start, end: start + 1 }),
 		).toBeUndefined()
+	})
+})
+
+describe("passageOfShown over a mention", () => {
+	const source = "Ask <@bot-atlas> for the **notes**."
+	const shown = "Ask <> for the notes."
+
+	it("maps a selection that covers a mention to the markdown it covers", () => {
+		expect(passageOfShown(source, { shown, start: 0, end: 10 })).toEqual({
+			start: 0,
+			end: 20,
+			text: "Ask <@bot-atlas> for",
+		})
+	})
+
+	it("keeps a mention the selection ends on", () => {
+		expect(passageOfShown(source, { shown, start: 0, end: 6 })).toEqual({
+			start: 0,
+			end: 16,
+			text: "Ask <@bot-atlas>",
+		})
+	})
+
+	it("reads a mention written in code as the words it draws", () => {
+		expect(
+			passageOfShown("Write `<@bot-atlas>` here", {
+				shown: "Write <@bot-atlas> here",
+				start: 6,
+				end: 18,
+			}),
+		).toEqual({ start: 7, end: 19, text: "<@bot-atlas>" })
+	})
+})
+
+describe("passageQuoteOf", () => {
+	const nameOf = (id: string) => (id === "bot-atlas" ? "Atlas" : "Unknown")
+
+	const quoteOf = (source: string, text: string) => {
+		const start = source.indexOf(text)
+		return passageQuoteOf(
+			source,
+			{ start, end: start + text.length, text },
+			nameOf,
+		)
+	}
+
+	it("reads the words a passage across bold, a link and a mention draws", () => {
+		const source =
+			'The **boat** leaves from [the dock](https://example.com/dock "Pier") with <@bot-atlas> at 17:30.'
+
+		expect(
+			quoteOf(
+				source,
+				'boat** leaves from [the dock](https://example.com/dock "Pier") with <@bot-atlas>',
+			),
+		).toBe("boat leaves from the dock with Atlas")
+	})
+
+	it("reads a line break as one space, past the marker of the next line", () => {
+		expect(quoteOf("- one *two*\n- three", "two*\n- three")).toBe("two three")
+	})
+
+	it("keeps an escaped character without its backslash", () => {
+		expect(quoteOf("It costs 5\\* more.", "costs 5\\* more")).toBe(
+			"costs 5* more",
+		)
+	})
+
+	it("keeps a mention written in code as it is written", () => {
+		expect(quoteOf("Write `<@bot-atlas>` here.", "`<@bot-atlas>` here")).toBe(
+			"<@bot-atlas> here",
+		)
 	})
 })

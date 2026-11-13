@@ -1,6 +1,7 @@
 import { markdownLanguage } from "@codemirror/lang-markdown"
 
 import type { CalloutTone } from "@workspace/ui/components/answer-blocks/callout"
+import { BOT_MENTION_PATTERN } from "@workspace/ui/components/markdown/bot-mentions"
 
 const TEXT_BLOCK_TYPES = [
 	"paragraph",
@@ -266,9 +267,10 @@ const inkOffsetsOf = (text: string) => {
 	return offsets
 }
 
-const shownInkOffsetsOf = (source: string) => {
+const shownOf = (source: string) => {
 	const isUnshown = new Array<boolean>(source.length).fill(false)
-	markdownLanguage.parser.parse(source).iterate({
+	const tree = markdownLanguage.parser.parse(source)
+	tree.iterate({
 		enter: ({ name, from, to, node }) => {
 			const isWhole =
 				UNSHOWN_NODE.test(name) ||
@@ -278,7 +280,36 @@ const shownInkOffsetsOf = (source: string) => {
 			return !isWhole
 		},
 	})
+	const mentions = [...source.matchAll(BOT_MENTION_PATTERN)].flatMap(
+		({ 0: written, 1: id, index }) =>
+			/Code/.test(tree.resolveInner(index, 1).name)
+				? []
+				: [{ from: index, to: index + written.length, id }],
+	)
+	for (const { from, to } of mentions) isUnshown.fill(true, from + 1, to - 1)
+	return { isUnshown, mentions }
+}
+
+const shownInkOffsetsOf = (source: string) => {
+	const { isUnshown } = shownOf(source)
 	return inkOffsetsOf(source).filter((at) => !isUnshown[at])
+}
+
+const passageQuoteOf = (
+	source: string,
+	{ start, end }: LibraryBlockPassage,
+	mentionNameOf: (id: string) => string,
+) => {
+	const { isUnshown, mentions } = shownOf(source)
+	let quote = ""
+	for (let at = start; at < end; at++) {
+		const mention = mentions.find(({ from }) => from === at)
+		if (mention) {
+			quote += mentionNameOf(mention.id)
+			at = mention.to - 1
+		} else if (!isUnshown[at]) quote += source[at]
+	}
+	return quote.replace(/\s+/g, " ").trim()
 }
 
 type ShownSelection = {
@@ -854,6 +885,7 @@ export {
 	offsetsOf,
 	parseBlocks,
 	passageOfShown,
+	passageQuoteOf,
 	relaid,
 	rowAfter,
 	type ShownSelection,

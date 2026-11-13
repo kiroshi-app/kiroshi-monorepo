@@ -182,6 +182,8 @@ const SESSION_PASSAGE = "so the second session stops at 16:30."
 
 const DINNER_PASSAGE = "dinner on the terrace at 20:00"
 
+const OVERLAP_PASSAGE = "stops at 16:30. The boat leaves the dock"
+
 const passageIn = (source: string, text: string): LibraryBlockPassage => {
 	const start = source.indexOf(text)
 	return { start, end: start + text.length, text }
@@ -239,11 +241,33 @@ const BUDGET_THREAD: LibraryDocumentThread = {
 	],
 }
 
+const OVERLAP_THREAD: LibraryDocumentThread = {
+	id: "thread-dock",
+	anchor: {
+		blockId: SESSION_BLOCK,
+		passage: passageIn(SESSION_PARAGRAPH, OVERLAP_PASSAGE),
+	},
+	comments: [
+		{
+			id: "comment-dock",
+			author: MARTA,
+			time: "20 min",
+			body: "Is the dock a five minute walk from the room?",
+		},
+	],
+}
+
+const RESOLVED_SESSION_THREAD: LibraryDocumentThread = {
+	...SESSION_THREAD,
+	resolution: { by: STEVE.name, time: "10 min" },
+}
+
 const DOCUMENT_THREADS = [SESSION_THREAD, MARKET_THREAD, BUDGET_THREAD]
 
 export {
 	AGENT_REPLY,
 	ATLAS,
+	BUDGET_THREAD,
 	COMMENT_COUNTS,
 	COMMENT_PARTICIPANTS,
 	DINNER_PASSAGE,
@@ -261,8 +285,11 @@ export {
 	MEMBER_REPLY,
 	OFFSITE_DOCUMENT,
 	OPEN_THREADS,
+	OVERLAP_PASSAGE,
+	OVERLAP_THREAD,
 	PASSAGE_ANCHOR,
 	passageIn,
+	RESOLVED_SESSION_THREAD,
 	RESOLVED_THREADS,
 	SESSION_BLOCK,
 	SESSION_PARAGRAPH,

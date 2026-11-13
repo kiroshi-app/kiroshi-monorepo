@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
-import { Markdown } from "@workspace/ui/components/markdown"
+import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { RosterProvider } from "@workspace/ui/components/roster"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
@@ -558,5 +559,85 @@ describe("companion mentions", () => {
 		expect(renderInConversation("nothing here <@ or @companion")).not.toContain(
 			'data-slot="bot-mention"',
 		)
+	})
+})
+
+describe("markdown runs", () => {
+	const SOURCE = "The boat leaves the dock right after lunch."
+
+	const runOver = (id: string, text: string, source = SOURCE) => {
+		const start = source.indexOf(text)
+		return { id, start, end: start + text.length }
+	}
+
+	const renderRuns = (runs: MarkdownRun[], source = SOURCE) =>
+		renderToStaticMarkup(
+			createElement(
+				I18nProvider,
+				null,
+				createElement(
+					Markdown,
+					{
+						runs,
+						renderRun: ({ id, isEnd, children }) =>
+							createElement(
+								"mark",
+								{ "data-run": id, "data-end": isEnd || undefined },
+								children,
+							),
+					} as MarkdownProps,
+					source,
+				),
+			),
+		)
+
+	it("draws both of two runs that overlap, each ending on its own last piece", () => {
+		const html = renderRuns([
+			runOver("first", "boat leaves the dock"),
+			runOver("second", "the dock right after"),
+		])
+
+		expect(html).toContain(
+			'The <mark data-run="first">boat leaves </mark>' +
+				'<mark data-run="first" data-end="true"><mark data-run="second">the dock</mark></mark>' +
+				'<mark data-run="second" data-end="true"> right after</mark> lunch.',
+		)
+	})
+
+	it("draws a run that sits inside another", () => {
+		const html = renderRuns([
+			runOver("outer", "boat leaves the dock"),
+			runOver("inner", "leaves"),
+		])
+
+		expect(html).toContain(
+			'<mark data-run="outer">boat </mark>' +
+				'<mark data-run="outer"><mark data-run="inner" data-end="true">leaves</mark></mark>' +
+				'<mark data-run="outer" data-end="true"> the dock</mark>',
+		)
+	})
+
+	it("draws a caret that falls inside a run, and the run around it", () => {
+		const caret = SOURCE.indexOf("leaves")
+		const html = renderRuns([
+			{ id: "caret", start: caret, end: caret },
+			runOver("passage", "boat leaves"),
+		])
+
+		expect(html).toContain(
+			'<mark data-run="passage">boat </mark>' +
+				'<mark data-run="caret" data-end="true"></mark>' +
+				'<mark data-run="passage" data-end="true">leaves</mark>',
+		)
+	})
+
+	it("draws a run over the words that follow a mention", () => {
+		const source = "Ask <@bot-atlas> for the notes."
+		const html = renderRuns([runOver("passage", "the notes", source)], source)
+
+		expect(html).toContain(
+			' for <mark data-run="passage" data-end="true">the notes</mark>.',
+		)
+		expect(html).toContain('data-slot="bot-mention"')
 	})
 })
