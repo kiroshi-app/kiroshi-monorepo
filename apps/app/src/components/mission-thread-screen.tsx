@@ -160,6 +160,7 @@ export function MissionThreadScreen({
 						onBack={onLeave}
 					/>
 				}
+				isHeaderFloating
 				skeleton={detailSkeleton}
 			>
 				{null}

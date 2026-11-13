@@ -476,6 +476,7 @@ const ThreadHeader = ({
 	return (
 		<AppHeader
 			data-tauri-drag-region="deep"
+			isFloating
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
@@ -2013,6 +2014,7 @@ function ThreadView(props: ThreadViewProps) {
 						))
 			}
 			header={header}
+			isHeaderFloating
 			notice={notice}
 			overlay={overlay}
 			pending={departure ? undefined : approval}
