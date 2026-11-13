@@ -35,6 +35,9 @@ const ROW: Record<StackedRowGeometry, string> = {
 	menu: "flex-nowrap gap-2 rounded-control border-0 py-0 ps-1.5 pe-2 font-normal text-muted-foreground text-sm hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 }
 
+const COMPACT_ROW =
+	"hover:**:data-[slot=conversation-subject-icon]:text-sidebar-foreground data-active:**:data-[slot=conversation-subject-icon]:text-sidebar-foreground"
+
 const LIFTABLE_ROW = "touch-none select-none"
 
 const STRIPS = "flex flex-col gap-1"
@@ -96,7 +99,7 @@ const SidebarListRow = ({
 		return (
 			<SidebarMenuRow
 				{...rowProps}
-				className={isLiftable ? LIFTABLE_ROW : undefined}
+				className={cn(COMPACT_ROW, isLiftable && LIFTABLE_ROW)}
 				icon={media}
 				label={name}
 				render={<button type="button" />}
@@ -108,7 +111,7 @@ const SidebarListRow = ({
 						timestamp={timestamp}
 					/>
 				}
-				variant="navigation"
+				variant="compact"
 			>
 				<CompactRowTitle
 					isNeedingYou={needsYou}

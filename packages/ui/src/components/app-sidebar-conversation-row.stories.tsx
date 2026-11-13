@@ -13,6 +13,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	colourTransitionsOf,
 	expectAnswered,
+	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
 	glyphIn,
@@ -42,6 +43,7 @@ import {
 	ROW_ICON_SIDE,
 } from "@workspace/ui/components/app-sidebar-conversation-row"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
+import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
@@ -989,6 +991,84 @@ const missionGroupActiveStory = (globals?: typeof DARK) => ({
 export const MissionGroupActive = meta.story(missionGroupActiveStory())
 
 export const MissionGroupActiveDark = meta.story(missionGroupActiveStory(DARK))
+
+const AT_REST_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "at-rest",
+	name: "At rest",
+}
+
+const HOVERED_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "hovered",
+	name: "Hovered",
+}
+
+const ACTIVE_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "active",
+	name: "Active",
+}
+
+const renderCompactRowStates = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<CompactRowsContext.Provider value>
+		{[AT_REST_ROOM, HOVERED_ROOM, ACTIVE_ROOM].map((conversation) => (
+			<ConversationRosterRow
+				{...args}
+				conversation={conversation}
+				isSelected={conversation === ACTIVE_ROOM}
+				key={conversation.id}
+			/>
+		))}
+	</CompactRowsContext.Provider>
+)
+
+const compactRowStatesStory = (globals?: typeof DARK) => ({
+	globals,
+	render: renderCompactRowStates,
+	parameters: {
+		pseudo: { hover: 'li:nth-child(2) [data-slot="sidebar-menu-button"]' },
+		docs: {
+			description: {
+				story:
+					"Three conversations without a colour as the expanded sidebar lists them: one at rest, one under the pointer, one open. Check the name and the glyph sit in `--muted-foreground` at rest and in `--sidebar-foreground` under the pointer and on the open row, that the colour switches with no fade, and that the timestamp keeps `--sidebar-muted-foreground` on all three.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const [atRest, hovered, active] = rowsIn(canvasElement)
+		const timestampInk = tokenStyleIn(
+			atRest,
+			"text-sidebar-muted-foreground",
+			"color",
+		)
+
+		await expect(active).toHaveAttribute("aria-current", "page")
+		await expectMutedUntilHoveredOrActive({
+			states: { atRest, hovered, active },
+			inkedPartsOf: (row) => [
+				slotIn(row, "roster-row-name"),
+				slotIn(row, "conversation-subject-icon-pictogram"),
+			],
+			steadyPartsOf: (row) => [slotIn(row, "roster-row-timestamp")],
+			fullInk: "text-sidebar-foreground",
+		})
+		for (const row of [atRest, hovered, active])
+			await expect(
+				getComputedStyle(slotIn(row, "roster-row-timestamp")).color,
+			).toBe(timestampInk)
+	},
+})
+
+export const CompactRowAtRestHoveredAndActive = meta.story(
+	compactRowStatesStory(),
+)
+
+export const CompactRowAtRestHoveredAndActiveDark = meta.story(
+	compactRowStatesStory(DARK),
+)
 
 const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 	globals,

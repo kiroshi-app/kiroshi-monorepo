@@ -286,7 +286,7 @@ const playA1 = async ({ canvasElement, userEvent }: TabLadderPlayContext) => {
 		tokenStyleIn(inactive, "bg-title-bar-tab", "backgroundColor"),
 	)
 	await expect(rest.color).toBe(
-		tokenStyleIn(inactive, "text-foreground", "color"),
+		tokenStyleIn(inactive, "text-muted-foreground", "color"),
 	)
 
 	await userEvent.hover(inactive)
@@ -294,9 +294,11 @@ const playA1 = async ({ canvasElement, userEvent }: TabLadderPlayContext) => {
 	await expect(hovered.backgroundColor).toBe(
 		tokenStyleIn(inactive, "bg-title-bar-tab-hover", "backgroundColor"),
 	)
-	await expect(hovered.color).toBe(rest.color)
+	const foreground = tokenStyleIn(inactive, "text-foreground", "color")
+	await expect(hovered.color).toBe(foreground)
 	await userEvent.hover(active)
 	await expect(getComputedStyle(active).backgroundColor).toBe(selected)
+	await expect(getComputedStyle(active).color).toBe(foreground)
 	await userEvent.unhover(active)
 
 	const ladder = [rest.backgroundColor, hovered.backgroundColor, selected]
@@ -312,7 +314,7 @@ export const A1Tabs = meta.story({
 		docs: {
 			description: {
 				story:
-					"A1, light: three tabs on macOS, the first one open, Back available and Forward not. Check the bar is 40px with 14px and 8px of inline padding, the 57px slot the traffic lights take, Back and Forward 28px squares 2px apart, then the tab row and New tab, every tab 176px by 28px, the open one on the selected fill with the only Close tab button 5px off its end. Check the fills climb from an 8% black at rest to 12% under the pointer and 16% on the open tab, hovered or not, every tab in the foreground colour. Pick `A1TabsDark` for the dark theme.",
+					"A1, light: three tabs on macOS, the first one open, Back available and Forward not. Check the bar is 40px with 14px and 8px of inline padding, the 57px slot the traffic lights take, Back and Forward 28px squares 2px apart, then the tab row and New tab, every tab 176px by 28px, the open one on the selected fill with the only Close tab button 5px off its end. Check the fills climb from an 8% black at rest to 12% under the pointer and 16% on the open tab, hovered or not, a tab in the muted foreground at rest and in the foreground colour under the pointer or open. Pick `A1TabsDark` for the dark theme.",
 			},
 		},
 	},
@@ -326,7 +328,7 @@ export const A1TabsDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A1, dark: the same three tabs on the dark ground. Check the inactive tabs sit on an 8% white fill, 12% under the pointer, and the open one on the 16% fill, every tab in the foreground colour. Pick `A1Tabs` for the light theme.",
+					"A1, dark: the same three tabs on the dark ground. Check the inactive tabs sit on an 8% white fill, 12% under the pointer, and the open one on the 16% fill, a tab in the muted foreground at rest and in the foreground colour under the pointer or open. Pick `A1Tabs` for the light theme.",
 			},
 		},
 	},
@@ -635,6 +637,9 @@ const expectRealHoverOnThePinnedTab = async (pinned: HTMLElement) => {
 		await expect(getComputedStyle(pinned).backgroundColor).toBe(
 			tokenStyleIn(pinned, "bg-title-bar-tab-hover", "backgroundColor"),
 		)
+		await expect(getComputedStyle(pinned).color).toBe(
+			tokenStyleIn(pinned, "text-foreground", "color"),
+		)
 	} finally {
 		await pointer.unhover(pinned)
 	}
@@ -654,7 +659,7 @@ const playA4 = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		tokenStyleIn(pinned, "bg-title-bar-tab", "backgroundColor"),
 	)
 	await expect(getComputedStyle(pinned).color).toBe(
-		tokenStyleIn(pinned, "text-foreground", "color"),
+		tokenStyleIn(pinned, "text-muted-foreground", "color"),
 	)
 	if (isInBrowserRunner()) await expectRealHoverOnThePinnedTab(pinned)
 	const divider = slotIn(bar, "title-bar-pinned-divider")
@@ -683,7 +688,7 @@ export const A4PinnedTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, on the 8% black rest fill and the 12% fill under the pointer, its icon in the foreground colour, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, at least 220px wide and wider when a row needs it, offers Unpin tab in place of Pin tab with Close tab greyed out, since a pinned tab does not close. Pick `A1Tabs` for a row with nothing pinned.",
+					"A4, light: a pinned tab at the start of the row, its menu open. Check the pinned tab is a 28px icon-only square named by its title, on the 8% black rest fill and the 12% fill under the pointer, its icon in the muted foreground at rest and in the foreground colour under the pointer, followed by the 1px by 16px divider, that the unpinned tabs follow, and that its menu, at least 220px wide and wider when a row needs it, offers Unpin tab in place of Pin tab with Close tab greyed out, since a pinned tab does not close. Pick `A1Tabs` for a row with nothing pinned.",
 			},
 		},
 	},
@@ -698,7 +703,7 @@ export const A4PinnedTabDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"A4, dark: the pinned tab on its 8% white fill in the foreground colour and the 12% white divider. Pick `A4PinnedTab` for the light theme.",
+					"A4, dark: the pinned tab on its 8% white fill, its icon in the muted foreground at rest, and the 12% white divider. Pick `A4PinnedTab` for the light theme.",
 			},
 		},
 	},

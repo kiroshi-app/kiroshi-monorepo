@@ -34,15 +34,18 @@ const UNTINTED_TILE_STYLE = untintedStyleOf([
 	"conversation-icon-foreground",
 ])
 
-const UNTINTED_GLYPH_STYLE = untintedStyleOf(["avatar-ink"])
-
 const hueScopeOf = (hue: number | null | undefined, isBare: boolean) =>
 	hue == null
 		? {
 				"data-hue": "",
-				style: isBare ? UNTINTED_GLYPH_STYLE : UNTINTED_TILE_STYLE,
+				style: isBare ? undefined : UNTINTED_TILE_STYLE,
 			}
 		: { "data-hue": hue, style: hueStyle(hue) }
+
+const inkOf = (hue: number | null | undefined, isBare: boolean) => {
+	if (!isBare) return "var(--conversation-icon-foreground)"
+	return hue == null ? undefined : "var(--conversation-glyph)"
+}
 
 const isConversationIcon = (
 	icon: string | undefined,
@@ -72,9 +75,7 @@ const ConversationSubjectIcon = ({
 			data-slot="conversation-subject-icon"
 			style={{
 				...scope.style,
-				color: isBare
-					? "var(--conversation-glyph)"
-					: "var(--conversation-icon-foreground)",
+				color: inkOf(hue, isBare),
 				width: side,
 				height: side,
 			}}

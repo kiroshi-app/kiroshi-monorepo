@@ -4,6 +4,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectMutedUntilHoveredOrActive,
 	FRAME_POLL,
 	settled,
 	slotIn,
@@ -449,3 +450,73 @@ export const ColouredConversationTabsDark = meta.story({
 	play: ({ canvasElement }) =>
 		expectColouredConversationTabs(canvasElement, "dark"),
 })
+
+const TAB_STATES = ["At rest", "Hovered", "Selected"]
+
+const PINNED_TAB_STATES = [
+	"Pinned at rest",
+	"Pinned hovered",
+	"Pinned selected",
+]
+
+const stateTabsOf = (
+	titles: string[],
+	isPinned: boolean,
+): Pick<AppTitleBarProps, "tabs" | "activeTabId"> => ({
+	tabs: titles.map((title) => ({
+		...RELEASE_NOTES,
+		id: title,
+		title,
+		isPinned,
+	})),
+	activeTabId: titles.at(-1),
+})
+
+const TAB_STATE_BARS = [
+	stateTabsOf(TAB_STATES, false),
+	stateTabsOf(PINNED_TAB_STATES, true),
+]
+
+const tabStatesStory = (globals?: { theme: "dark" }) => ({
+	globals,
+	render: (args: AppTitleBarProps) => (
+		<div className="flex flex-col gap-2">
+			{TAB_STATE_BARS.map((bar) => (
+				<div
+					className="surface-shell relative h-10 w-320"
+					key={bar.activeTabId}
+				>
+					<AppTitleBar {...TITLE_BAR} {...args} {...bar} />
+				</div>
+			))}
+		</div>
+	),
+	parameters: {
+		pseudo: { hover: '[role="tablist"] > [role="tab"]:nth-of-type(2)' },
+		docs: {
+			description: {
+				story:
+					"Two title bars, the first with three tabs and the second with three pinned tabs, each showing one at rest, one under the pointer and the selected one. Check the label and the icon sit in `--muted-foreground` at rest and in `--foreground` under the pointer and on the selected tab, pinned or not, and that the colour switches with no fade.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const tab = (name: string) =>
+			within(canvasElement).getByRole("tab", { name })
+
+		for (const titles of [TAB_STATES, PINNED_TAB_STATES]) {
+			const [atRest, hovered, active] = titles.map(tab)
+			await expectMutedUntilHoveredOrActive({
+				states: { atRest, hovered, active },
+				inkedPartsOf: (owner) => [...owner.querySelectorAll("span, svg")],
+				fullInk: "text-foreground",
+			})
+		}
+	},
+})
+
+export const TabsAtRestHoveredAndSelected = meta.story(tabStatesStory())
+
+export const TabsAtRestHoveredAndSelectedDark = meta.story(
+	tabStatesStory({ theme: "dark" }),
+)
