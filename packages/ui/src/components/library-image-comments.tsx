@@ -119,16 +119,23 @@ const Marker = ({ anchor, beside, children }: MarkerProps) => (
 	</div>
 )
 
-type Press = { from: LibraryImagePoint; clientX: number; clientY: number }
+const zoneDraggedTo = (
+	from: LibraryImagePoint,
+	event: PointerEvent<HTMLElement>,
+) => {
+	const surface = event.currentTarget.getBoundingClientRect()
+	const zone = zoneBetween(from, spotOf(event))
+	const hasArea =
+		zone.width * surface.width >= DRAG_THRESHOLD &&
+		zone.height * surface.height >= DRAG_THRESHOLD
 
-const isDraggedFrom = (press: Press, event: PointerEvent) =>
-	Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY) >=
-	DRAG_THRESHOLD
+	return hasArea ? zone : null
+}
 
 type CommentSurfaceProps = Pick<LibraryImageCommentsProps, "onStartComment">
 
 const CommentSurface = ({ onStartComment }: CommentSurfaceProps) => {
-	const pressRef = useRef<Press | null>(null)
+	const pressRef = useRef<LibraryImagePoint | null>(null)
 	const [pointer, setPointer] = useState<LibraryImagePoint | null>(null)
 	const [drawn, setDrawn] = useState<LibraryImageZone | null>(null)
 
@@ -145,31 +152,19 @@ const CommentSurface = ({ onStartComment }: CommentSurfaceProps) => {
 			onPointerDown={(event) => {
 				if (event.button !== 0) return
 				event.currentTarget.setPointerCapture(event.pointerId)
-				pressRef.current = {
-					from: spotOf(event),
-					clientX: event.clientX,
-					clientY: event.clientY,
-				}
+				pressRef.current = spotOf(event)
 			}}
 			onPointerLeave={() => setPointer(null)}
 			onPointerMove={(event) => {
-				const spot = spotOf(event)
 				const press = pressRef.current
-				setPointer(spot)
-				if (press)
-					setDrawn(
-						isDraggedFrom(press, event) ? zoneBetween(press.from, spot) : null,
-					)
+				setPointer(spotOf(event))
+				if (press) setDrawn(zoneDraggedTo(press, event))
 			}}
 			onPointerUp={(event) => {
 				const press = pressRef.current
 				if (!press) return
 				dropPress()
-				onStartComment(
-					isDraggedFrom(press, event)
-						? zoneBetween(press.from, spotOf(event))
-						: press.from,
-				)
+				onStartComment(zoneDraggedTo(press, event) ?? press)
 			}}
 		>
 			{drawn ? <ZoneFrame state="written" zone={drawn} /> : null}

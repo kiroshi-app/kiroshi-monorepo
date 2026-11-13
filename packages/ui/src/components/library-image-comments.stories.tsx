@@ -321,7 +321,7 @@ export const CommentMode = meta.story({
 		docs: {
 			description: {
 				story:
-					"Comment mode on, as artboard Img 2 draws it: the hint above the zoom pill and the pin cursor under the pointer. Check a click reports a point and a drag a zone, both as fractions of the image, that the zone follows the pointer while it is drawn and stops at the edge of the image, and that Escape asks to leave the mode without closing the viewer.",
+					"Comment mode on, as artboard Img 2 draws it: the hint above the zoom pill and the pin cursor under the pointer. Check a click reports a point and a drag a zone, both as fractions of the image, that the zone follows the pointer while it is drawn and stops at the edge of the image, that a drag along one axis only draws no zone and reports the point where the press started, and that Escape asks to leave the mode without closing the viewer.",
 			},
 		},
 	},
@@ -387,7 +387,18 @@ export const CommentMode = meta.story({
 			width: expect.closeTo(0.1, 5),
 			height: expect.closeTo(0.2, 5),
 		})
-		await expect(args.onStartComment).toHaveBeenCalledTimes(3)
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", ...at(0.3, 0.6) },
+			at(0.5, 0.6),
+		])
+		await expect(slotsIn(surface, "library-image-zone")).toHaveLength(0)
+		await userEvent.pointer({ keys: "[/MouseLeft]", ...at(0.5, 0.6) })
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			x: expect.closeTo(0.3, 5),
+			y: expect.closeTo(0.6, 5),
+		})
+		await expect(args.onStartComment).toHaveBeenCalledTimes(4)
 
 		await userEvent.keyboard("{Escape}")
 		await expect(args.onCommentModeChange).toHaveBeenCalledOnce()
