@@ -1008,10 +1008,18 @@ describe("the list states of the expanded sidebar", () => {
 		)
 	})
 
-	it("draws the skeleton in place of both slots from the first moment the list is read, never the empty line", async () => {
+	it("draws the skeleton in place of both slots from the first moment the list is read again, never the empty line", async () => {
 		await mountApp(async ({ store }) => {
-			vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
+			vi.spyOn(store, "bots")
+				.mockRejectedValueOnce(new Error("no record"))
+				.mockReturnValue(new Promise(() => undefined))
 		})
+
+		await press(
+			within(sidebar()).getByRole("button", {
+				name: i18n.t("bots:roster.retry"),
+			}),
+		)
 
 		expect(slotOf("sidebar-list-skeleton")).not.toBeNull()
 		expect(emptyLine()).toBeNull()

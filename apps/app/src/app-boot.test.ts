@@ -64,7 +64,7 @@ const mountApp = async (store: TranscriptStore) => {
 
 const SKELETON_MS = 300
 
-it("mounts the sidebar with its skeleton while the roster is read", async () => {
+it("stays on the launch loader, never on a sidebar skeleton, while the first roster page is read", async () => {
 	const store = createFakeTranscriptStore()
 	vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
 
@@ -73,8 +73,8 @@ it("mounts the sidebar with its skeleton while the roster is read", async () => 
 		await vi.advanceTimersByTimeAsync(SKELETON_MS)
 	})
 
-	expect(isShowing("app-boot-screen")).toBe(false)
-	expect(isShowing("sidebar-list-skeleton")).toBe(true)
+	expect(isShowing("app-boot-screen")).toBe(true)
+	expect(isShowing("sidebar-list-skeleton")).toBe(false)
 })
 
 it("shows a roster failing at launch inside the sidebar, never on the startup screen", async () => {
