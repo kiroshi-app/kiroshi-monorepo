@@ -8,10 +8,7 @@ import {
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
-import {
-	TooltipHint,
-	TooltipHintProvider,
-} from "@workspace/ui/components/tooltip-hint"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 
 const COPY_BUTTON = (
@@ -29,13 +26,6 @@ const withMotion = (run: () => Promise<void>) =>
 const meta = preview.meta({
 	title: "Overlays/TooltipHint",
 	component: TooltipHint,
-	decorators: [
-		(Story) => (
-			<TooltipHintProvider>
-				<Story />
-			</TooltipHintProvider>
-		),
-	],
 	parameters: {
 		layout: "centered",
 		docs: {
@@ -214,7 +204,7 @@ export const AdjacentHints = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two hinted controls side by side under one `TooltipHintProvider`, the way the app mounts it at its root. Check that the pointer leaving the first control for its neighbour keeps the one bubble on screen: it glides over to the second control with the second label in it, and does not fade in again. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
+					"Two hinted controls side by side under the one `TooltipHintProvider` the app mounts at its root, which this Storybook mounts around every story too. Check that the pointer leaving the first control for its neighbour keeps the one bubble on screen: a short grace holds it open across the gap, it glides over to the second control with the second label in it, and it neither closes nor fades in again on the way. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
 			},
 		},
 	},
@@ -245,20 +235,34 @@ export const AdjacentHints = meta.story({
 				hasTravelled ||=
 					event.target === positioner && event.propertyName === "transform"
 			})
+			const flipped: string[] = []
+			const watch = new MutationObserver((records) => {
+				for (const { attributeName } of records) {
+					if (attributeName) flipped.push(attributeName)
+				}
+			})
+			watch.observe(bubble, {
+				attributeFilter: [
+					"data-open",
+					"data-closed",
+					"data-starting-style",
+					"data-ending-style",
+				],
+			})
 
 			const remove = canvas.getByRole("button", { name: "Delete" })
 			await userEvent.hover(remove)
 
 			await waitFor(async () => {
 				await expect(bubble).toHaveTextContent("Delete")
-				await expect(bubble).toHaveAttribute("data-instant", "delay")
-			}, FRAME_POLL)
-			await expect(screen.getByRole("tooltip")).toBe(bubble)
-			await expect(getComputedStyle(bubble).transitionProperty).toBe("none")
-			await expect(getComputedStyle(bubble).opacity).toBe("1")
-			await waitFor(async () => {
 				await expect(hasTravelled).toBe(true)
 			}, FRAME_POLL)
+			watch.disconnect()
+			await expect(screen.getByRole("tooltip")).toBe(bubble)
+			await expect(flipped).toEqual([])
+			await expect(bubble).toHaveAttribute("data-open")
+			await expect(bubble).not.toHaveAttribute("data-starting-style")
+			await expect(getComputedStyle(bubble).opacity).toBe("1")
 
 			await waitFor(async () => {
 				const over = bubble.getBoundingClientRect()

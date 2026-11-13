@@ -19,6 +19,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const HOVER_INTENT_DELAY_MS = 120
 
+const HINT_CLOSE_GRACE_MS = 80
+
 const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
 const BUBBLE = cn("break-words", STILL_UNDER_REDUCED_MOTION)
@@ -46,6 +48,7 @@ const TooltipHint = ({ content, children, side = "top" }: TooltipHintProps) => {
 	if (sharedBubble) {
 		return (
 			<TooltipPrimitive.Trigger
+				closeDelay={HINT_CLOSE_GRACE_MS}
 				data-slot="tooltip-trigger"
 				delay={HOVER_INTENT_DELAY_MS}
 				disabled={!content}

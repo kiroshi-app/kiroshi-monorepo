@@ -10,6 +10,7 @@ import {
 } from "@storybook/react-vite"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
+import { TooltipHintProvider } from "@workspace/ui/components/tooltip-hint"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
 import { isInBrowserRunner } from "./story-utils"
@@ -23,6 +24,12 @@ const withTranslations: Decorator = (Story) => (
 	<I18nProvider>
 		<Story />
 	</I18nProvider>
+)
+
+const withSharedHintBubble: Decorator = (Story) => (
+	<TooltipHintProvider>
+		<Story />
+	</TooltipHintProvider>
 )
 
 const withThemeLayout: Decorator = (Story, context) => {
@@ -82,6 +89,7 @@ export default definePreview({
 		}),
 		withThemeLayout,
 		withTranslations,
+		withSharedHintBubble,
 	],
 	globalTypes: {
 		theme_layout: {
