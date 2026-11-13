@@ -5,7 +5,6 @@ import {
 	rosterMenuOf,
 } from "@workspace/ui/components/app-sidebar-roster-menu"
 import { RosterDropArea } from "@workspace/ui/components/app-sidebar-roster-parts"
-import { CollapsedSidebarList } from "@workspace/ui/components/collapsed-sidebar"
 import {
 	ExpandedSidebarList,
 	type ExpandedSidebarSection,
@@ -19,7 +18,6 @@ import {
 	namedSectionsOf,
 	pinnedRowsOf,
 } from "@/lib/sidebar/drawn-roster"
-import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
 import { useSpaceSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
 
 const IGNORED = () => undefined
@@ -87,16 +85,6 @@ const ExpandedSpaceList = ({ spaceId }: SpaceListProps) => {
 	)
 }
 
-const RailSpaceList = ({ spaceId }: SpaceListProps) => (
-	<CollapsedSidebarList
-		zones={sidebarZonesOf(useSpaceSidebarConversations(spaceId))}
-	/>
-)
-
 export const expandedSpaceListOf = (space: Space) => (
 	<ExpandedSpaceList spaceId={space.id} />
-)
-
-export const railSpaceListOf = (space: Space) => (
-	<RailSpaceList spaceId={space.id} />
 )

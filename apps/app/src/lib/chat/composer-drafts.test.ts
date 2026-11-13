@@ -13,7 +13,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
@@ -58,7 +58,7 @@ const settle = async (ms: number) => {
 }
 
 const mountApp = async () => {
-	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed: true })
+	writeMirror({ ...readMirror(), firstRunDone: true })
 	layout = fakeLayout()
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
@@ -78,7 +78,7 @@ const mountApp = async () => {
 
 const open = async (name: string) => {
 	await act(async () => {
-		fireEvent.click(sidebarItemOf(name))
+		fireEvent.click(rosterRowOf(name))
 	})
 	await settle(SETTLE_MS)
 }

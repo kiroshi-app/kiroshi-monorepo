@@ -216,11 +216,6 @@ const sidebarOf = () =>
 const spaceSwitcherOf = () =>
 	sidebarOf().querySelector('[data-slot="space-switcher"]') as HTMLElement
 
-const collapsedSpaceSwitcherOf = () =>
-	sidebarOf().querySelector(
-		'[data-slot="collapsed-sidebar-space"]',
-	) as HTMLElement
-
 const openSpacesMenu = async () => {
 	await press(spaceSwitcherOf())
 	return screen.getByRole("menu", { name: i18n.t("bots:spaces.label") })
@@ -416,31 +411,24 @@ describe("the Space switcher of the sidebar", () => {
 		).toBeTruthy()
 	})
 
-	it.each([
-		{ layout: "expanded", switcher: spaceSwitcherOf },
-		{ layout: "collapsed", switcher: collapsedSpaceSwitcherOf },
-	])(
-		"opens the Space settings from its Space settings entry, $layout",
-		async ({ layout, switcher }) => {
-			writeMirror({ ...readMirror(), sidebarCollapsed: layout === "collapsed" })
-			const { router } = await mountApp()
+	it("opens the Space settings from its Space settings entry", async () => {
+		const { router } = await mountApp()
 
-			await press(switcher())
-			const menu = screen.getByRole("menu", {
-				name: i18n.t("bots:spaces.label"),
-			})
-			await press(
-				within(menu).getByRole("menuitem", {
-					name: i18n.t("bots:rail.spaceSettings"),
-				}),
-			)
+		await press(spaceSwitcherOf())
+		const menu = screen.getByRole("menu", {
+			name: i18n.t("bots:spaces.label"),
+		})
+		await press(
+			within(menu).getByRole("menuitem", {
+				name: i18n.t("bots:rail.spaceSettings"),
+			}),
+		)
 
-			expect(router.state.matches.at(-1)?.routeId).toBe(
-				"/settings/space/$spaceId",
-			)
-			expect(tabNames()).toEqual([i18n.t("settings:screen.subtitle.space")])
-		},
-	)
+		expect(router.state.matches.at(-1)?.routeId).toBe(
+			"/settings/space/$spaceId",
+		)
+		expect(tabNames()).toEqual([i18n.t("settings:screen.subtitle.space")])
+	})
 
 	it("switches to the Space picked and shows its own tabs", async () => {
 		const { botName, spaceName } = await mountApp()

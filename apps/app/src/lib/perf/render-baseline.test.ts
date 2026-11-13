@@ -22,7 +22,7 @@ import {
 	type SentinelScroll,
 	stubSentinelObserver,
 } from "@/lib/query/sentinel-test-observer"
-import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
@@ -728,7 +728,7 @@ type SeededThread = {
 
 const seedThreadApp = async ({ messages, pageSize }: SeededThread) => {
 	layout = fakeLayout()
-	seedFirstRunDone()
+	seedFirstRunDone("expanded")
 	const store = createFakeTranscriptStore({ pageSize })
 	const [space] = await store.spaces()
 	const bot = await store.createBot(
@@ -775,7 +775,7 @@ const openThread = async ({
 	const openedAt = commits.count
 	builds.markdownRenders = 0
 	await act(async () => {
-		fireEvent.click(sidebarItemOf(name))
+		fireEvent.click(rosterRowOf(name))
 	})
 	let tasksToLastMessage = 0
 	while (
@@ -853,7 +853,7 @@ const measureThreadReopen = async () => {
 	const grown = bubbleCount()
 
 	await act(async () => {
-		fireEvent.click(sidebarItemOf(other.name))
+		fireEvent.click(rosterRowOf(other.name))
 	})
 	await frames.flush(SETTLE_TASKS)
 	const reopened = await openThread(opening)
@@ -876,7 +876,7 @@ const measureLongTranscriptOpen = async () => {
 		hasPaintedRow ||= name === "ThreadTurn"
 	})
 	await act(async () => {
-		fireEvent.click(sidebarItemOf(bot.name))
+		fireEvent.click(rosterRowOf(bot.name))
 	})
 	for (let step = 0; step < OPEN_STEP_LIMIT && !hasPaintedRow; step += 1) {
 		await settle(STEP_MS)

@@ -160,9 +160,6 @@ const press = async (control: Element) => {
 	await settle()
 }
 
-const collapseSidebar = () =>
-	writeMirror({ ...readMirror(), sidebarCollapsed: true })
-
 const openConversation = () =>
 	press(within(railOf()).getByRole("button", { name: CONVERSATION_TITLE }))
 
@@ -170,9 +167,7 @@ const railOf = () =>
 	screen.getByRole("navigation", { name: i18n.t("bots:rail.label") })
 
 const spacesLogoOf = () =>
-	railOf().querySelector(
-		'[data-slot="space-switcher"], [data-slot="collapsed-sidebar-space"]',
-	) as HTMLElement
+	railOf().querySelector('[data-slot="space-switcher"]') as HTMLElement
 
 const currentSpaceRowOf = () =>
 	within(settingsMenuOf() as HTMLElement)
@@ -860,7 +855,6 @@ const answerLeave = (answer: string) =>
 	)
 
 const openUnsavedApplicationInSecondTab = async () => {
-	collapseSidebar()
 	await mountApp(twoSpaceApplications)
 	await openConversation()
 	await press(barButtonOf(NEW_TAB))

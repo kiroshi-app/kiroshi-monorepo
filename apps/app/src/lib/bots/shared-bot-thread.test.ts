@@ -17,7 +17,6 @@ import {
 } from "@/lib/notifications/fake-notification-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): {
@@ -93,7 +92,6 @@ const settle = async (ms: number) => {
 }
 
 const mount = async (store: TranscriptStore) => {
-	writeMirror({ ...readMirror(), sidebarCollapsed: true })
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	harness.notifications = createFakeNotificationPort()
@@ -139,18 +137,18 @@ const REFUSED_READ = "the transcript store refused it"
 const noticeText = () => textIn("chat-notice")
 
 const openFirstRow = async () => {
-	const row = document.querySelector(
-		'[data-slot="space-panel"]:not([inert]) [data-slot="collapsed-sidebar-conversation"]',
-	)
+	const row = document
+		.querySelector(
+			'[data-slot="space-panel"]:not([inert]) [data-slot="roster-row-name"]',
+		)
+		?.closest("button")
 	if (!row) throw new Error("no sidebar row")
 	fireEvent.click(row)
 	await settle(MOUNT_MS)
 }
 
 const enterSpace = async (name: string) => {
-	const switcher = document.querySelector(
-		'[data-slot="collapsed-sidebar-space"]',
-	)
+	const switcher = document.querySelector('[data-slot="space-switcher"]')
 	if (!switcher) throw new Error("no sidebar Space switcher")
 	fireEvent.click(switcher)
 	await settle(MOUNT_MS)
