@@ -15,6 +15,7 @@ import {
 	codeLanguageOf,
 	conversionsOf,
 	convertSource,
+	foundAnchorIn,
 	galleryItemsOf,
 	keepIds,
 	type LibraryBlock,
@@ -22,6 +23,7 @@ import {
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
 	relaid,
 	rowAfter,
 	serializeBlocks,
@@ -783,5 +785,132 @@ describe("unmarked", () => {
 
 		expect(gapsOf(unmarked(document))).toEqual(gapsOf(marked(document, ids)))
 		expect(plainOf(text)).toBe("```\ncode\n```\n\nAfter.")
+	})
+})
+
+describe("foundAnchorIn", () => {
+	const { blocks } = parseBlocks(
+		"# Plan ^aaaaaa\n\nThe boat leaves at 17:30, the boat is late. ^bbbbbb",
+		blockIdsOf(),
+	)
+
+	it("finds a block by its id", () => {
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb" })).toEqual({
+			blockId: "bbbbbb",
+		})
+	})
+
+	it("finds nothing for a block that left the document", () => {
+		expect(foundAnchorIn(blocks, { blockId: "cccccc" })).toBeUndefined()
+	})
+
+	it("keeps a passage whose text still sits at its range", () => {
+		const passage = { start: 26, end: 34, text: "the boat" }
+
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb", passage })).toEqual({
+			blockId: "bbbbbb",
+			passage,
+		})
+	})
+
+	it("follows a passage whose text moved inside its block", () => {
+		const passage = { start: 9, end: 15, text: "leaves" }
+
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { ...passage, start: 2, end: 8 },
+			}),
+		).toEqual({ blockId: "bbbbbb", passage })
+	})
+
+	it("finds nothing for a passage whose text left its block", () => {
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { start: 4, end: 9, text: "ferry" },
+			}),
+		).toBeUndefined()
+	})
+})
+
+describe("passageOfShown", () => {
+	const source =
+		"The **boat** leaves from [the dock](https://example.com/dock), then the boat waits."
+	const shown = "The boat leaves from the dock, then the boat waits."
+
+	const selected = (text: string, from = 0) => {
+		const start = shown.indexOf(text, from)
+		return { shown, start, end: start + text.length }
+	}
+
+	it("maps selected words to their place in the markdown", () => {
+		expect(passageOfShown(source, selected("leaves"))).toEqual({
+			start: 13,
+			end: 19,
+			text: "leaves",
+		})
+	})
+
+	it("keeps the occurrence that was selected", () => {
+		const start = source.lastIndexOf("boat")
+
+		expect(passageOfShown(source, selected("boat", 10))).toEqual({
+			start,
+			end: start + 4,
+			text: "boat",
+		})
+	})
+
+	it("maps a selection that spans bold text to the markdown it covers", () => {
+		expect(passageOfShown(source, selected("The boat leaves"))).toEqual({
+			start: 0,
+			end: 19,
+			text: "The **boat** leaves",
+		})
+	})
+
+	it("maps a selection that ends inside a link to the markdown it covers", () => {
+		const text = "boat** leaves from [the dock"
+
+		expect(
+			passageOfShown(source, selected("boat leaves from the dock")),
+		).toEqual({ start: 6, end: 6 + text.length, text })
+	})
+
+	it("leaves the blanks around the selected words out", () => {
+		const { start, end } = selected("leaves")
+
+		expect(
+			passageOfShown(source, { shown, start: start - 1, end: end + 1 }),
+		).toEqual({ start: 13, end: 19, text: "leaves" })
+	})
+
+	it("maps a list item past its marker and across its lines", () => {
+		expect(
+			passageOfShown("- one *two*\n- three", {
+				shown: "one two\nthree",
+				start: 4,
+				end: 13,
+			}),
+		).toEqual({ start: 7, end: 19, text: "two*\n- three" })
+	})
+
+	it("gives up when the block draws text its markdown does not write", () => {
+		expect(
+			passageOfShown("> [!NOTE]\n> Bring a coat.", {
+				shown: "Note Bring a coat.",
+				start: 5,
+				end: 10,
+			}),
+		).toBeUndefined()
+	})
+
+	it("gives up on a selection of blanks", () => {
+		const start = shown.indexOf(" boat")
+
+		expect(
+			passageOfShown(source, { shown, start, end: start + 1 }),
+		).toBeUndefined()
 	})
 })

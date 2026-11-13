@@ -515,6 +515,10 @@ const common = {
 				reply: "Reply, @ to mention",
 				mention: "Mention someone",
 				send: "Send",
+				shortcut: {
+					mac: "⌘⌥M",
+					other: "Ctrl+Alt+M",
+				},
 			},
 			mentions: {
 				label: "Mention",
@@ -553,6 +557,8 @@ const common = {
 				escape: "Esc",
 			},
 			anchor: {
+				block: "On this paragraph",
+				passage: "On “{{text}}”",
 				goneText: "On text that’s no longer in the document",
 				goneShape: "On a shape that’s no longer on the board",
 			},

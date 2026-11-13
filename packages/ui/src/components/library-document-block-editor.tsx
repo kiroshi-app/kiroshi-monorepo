@@ -67,13 +67,16 @@ import {
 	keepIds,
 	type LibraryBlock,
 	type LibraryBlockDocument,
+	type LibraryBlockPassage,
 	type LibraryBlockType,
 	MARKERS,
 	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
 	relaid,
+	type ShownSelection,
 	type SourceEdit,
 	serializeBlocks,
 	shiftedAcross,
@@ -95,6 +98,19 @@ import {
 	toggleItalic,
 	toggleStrikethrough,
 } from "@workspace/ui/components/library-document-commands"
+import {
+	COMMENT_CARD_SLOT,
+	commentLayerOf,
+	commentRunsIn,
+	hasBlockDraft,
+	isCommentRun,
+	LibraryDocumentBlockComments,
+	LibraryDocumentBlockTint,
+	type LibraryDocumentCommentOrigin,
+	type LibraryDocumentCommentProps,
+	LibraryDocumentCommentRun,
+	LibraryDocumentModeCursor,
+} from "@workspace/ui/components/library-document-comments"
 import {
 	type BlockTextType,
 	blockTextOf,
@@ -170,6 +186,13 @@ const REDUCED_MOTION = "(prefers-reduced-motion: reduce)"
 const BLOCK_SLOT = '[data-slot="library-document-block"]'
 
 const COLUMN = '[data-slot="library-document-column"]'
+
+const BODY_SLOT = "library-document-block-body"
+
+const UNWRITTEN_TEXT =
+	'button, [aria-hidden="true"], [data-slot="markdown-link-host"]'
+
+const COMMENT_MODE_PASS = `button, a, input, textarea, [data-slot="${COMMENT_CARD_SLOT}"]`
 
 type CommandFormat = Exclude<SelectionToolbarFormat, "link">
 
@@ -331,6 +354,34 @@ const anchorOf = (frame: HTMLElement): SelectionToolbarAnchor => {
 	}
 }
 
+const shownSelectionIn = (body: Element): ShownSelection | undefined => {
+	const selection = document.getSelection()
+	if (
+		!selection ||
+		selection.rangeCount === 0 ||
+		selection.isCollapsed ||
+		!body.contains(selection.anchorNode) ||
+		!body.contains(selection.focusNode)
+	)
+		return undefined
+	const range = selection.getRangeAt(0)
+	const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+	const found = { shown: "", start: 0, end: 0 }
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		if (node.parentElement?.closest(UNWRITTEN_TEXT)) continue
+		const text = node.textContent ?? ""
+		const side = range.comparePoint(node, 0)
+		if (node === range.startContainer)
+			found.start = found.shown.length + range.startOffset
+		else if (side < 0) found.start = found.shown.length + text.length
+		if (node === range.endContainer)
+			found.end = found.shown.length + range.endOffset
+		else if (side <= 0) found.end = found.shown.length + text.length
+		found.shown += text
+	}
+	return found
+}
+
 const isSameSelected = (first?: SelectedText, second?: SelectedText) =>
 	first?.id === second?.id &&
 	first?.from === second?.from &&
@@ -368,19 +419,21 @@ type LibraryDocumentBlockEditorHandle = {
 
 type LibraryDocumentFormat = "markdown" | "plain"
 
-type LibraryDocumentBlockEditorProps = WriterActions & {
-	body: string
-	format?: LibraryDocumentFormat
-	onBodyChange: (markdown: string) => void
-	writers?: LibraryDocumentWriter[]
-	people?: LibraryDocumentPerson[]
-	onAddImages?: () => Promise<LibraryGalleryImage[]>
-	resolveImage?: ResolveImage
-	onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
-	onCaretChange?: (caret: number | null) => void
-	placeholders?: LibraryDocumentPlaceholder[]
-	ref?: Ref<LibraryDocumentBlockEditorHandle>
-}
+type LibraryDocumentBlockEditorProps = WriterActions &
+	LibraryDocumentCommentProps & {
+		body: string
+		format?: LibraryDocumentFormat
+		onBodyChange: (markdown: string) => void
+		writers?: LibraryDocumentWriter[]
+		people?: LibraryDocumentPerson[]
+		onAddImages?: () => Promise<LibraryGalleryImage[]>
+		resolveImage?: ResolveImage
+		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
+		onCaretChange?: (caret: number | null) => void
+		placeholders?: LibraryDocumentPlaceholder[]
+		ref?: Ref<LibraryDocumentBlockEditorHandle>
+		isCommentMode?: boolean
+	}
 
 const LibraryDocumentBlockEditor = ({
 	body,
@@ -395,7 +448,10 @@ const LibraryDocumentBlockEditor = ({
 	onLinkPreview,
 	onCaretChange,
 	placeholders = NO_PLACEHOLDERS,
+	isCommentMode = false,
+	onStartComment,
 	ref,
+	...commentProps
 }: LibraryDocumentBlockEditorProps) => {
 	const { t } = useTranslation("common")
 	const [ids] = useState(blockIdsOf)
@@ -432,6 +488,8 @@ const LibraryDocumentBlockEditor = ({
 	const heldCount = useRef(0)
 	const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 	const heldDoc = useRef(doc)
+	const [hovered, setHovered] = useState<string>()
+	const modeCursor = useRef<HTMLSpanElement>(null)
 
 	const anchorsAfter = (markdown: string) => {
 		const before = serializeBlocks(latest.current)
@@ -808,7 +866,65 @@ const LibraryDocumentBlockEditor = ({
 		setToolbarMode("link")
 	}
 
-	const shownSelection = toolbarMode === "closed" ? undefined : selected
+	const shownSelection =
+		toolbarMode === "closed" || isCommentMode ? undefined : selected
+
+	const fieldPassageOf = (id: string): LibraryBlockPassage | undefined => {
+		const field = textField.current
+		const source = sourceOfEditing()
+		const range =
+			editing === id && field && document.activeElement === field
+				? fieldSelectionOf(field)
+				: undefined
+		return range && source !== undefined && range.start < range.end
+			? {
+					start: range.start,
+					end: range.end,
+					text: source.slice(range.start, range.end),
+				}
+			: undefined
+	}
+
+	const startComment = (
+		blockId: string,
+		origin: LibraryDocumentCommentOrigin,
+		passage = fieldPassageOf(blockId),
+	) => onStartComment?.({ blockId, ...(passage && { passage }), origin })
+
+	const startCommentAtPointer = (event: MouseEvent<HTMLDivElement>) => {
+		const { target } = event
+		if (!(target instanceof Element) || target.closest(COMMENT_MODE_PASS))
+			return
+		const id = target.closest<HTMLElement>(BLOCK_SLOT)?.dataset.blockId
+		const block = latest.current.blocks.find((each) => each.id === id)
+		if (!block) return
+		const body = target.closest(`[data-slot="${BODY_SLOT}"]`)
+		const selection = body ? shownSelectionIn(body) : undefined
+		const passage = selection
+			? passageOfShown(block.source, selection)
+			: fieldPassageOf(block.id)
+		const selected = document.getSelection()
+		const isSelecting =
+			selected !== null &&
+			!selected.isCollapsed &&
+			list.current?.contains(selected.anchorNode) === true
+		if (isSelecting && !passage) return
+		startComment(block.id, "pointer", passage)
+	}
+
+	const followPointer = (event: PointerEvent<HTMLDivElement>) => {
+		const { target, currentTarget, clientX, clientY } = event
+		const block =
+			target instanceof Element && !target.closest(COMMENT_MODE_PASS)
+				? target.closest<HTMLElement>(BLOCK_SLOT)
+				: null
+		setHovered(block?.dataset.blockId)
+		const cursor = modeCursor.current
+		if (!cursor) return
+		const frame = currentTarget.getBoundingClientRect()
+		cursor.style.left = `${clientX - frame.left}px`
+		cursor.style.top = `${clientY - frame.top}px`
+	}
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
 		const action = (name: CommandFormat) => ({
@@ -925,6 +1041,13 @@ const LibraryDocumentBlockEditor = ({
 				event.currentTarget.contains(event.target as Node)
 			)
 				run(() => focusHandle(id))
+			else if (
+				isCommand &&
+				event.altKey &&
+				event.code === "KeyM" &&
+				onStartComment
+			)
+				run(() => startComment(id, "shortcut"))
 			else if (isCommand && event.key.toLowerCase() === "d")
 				run(actions.onDuplicate)
 			else if (event.altKey && event.shiftKey && event.key === "ArrowUp")
@@ -1137,7 +1260,15 @@ const LibraryDocumentBlockEditor = ({
 			edit(insertAfter(index, carried), 0)
 		}
 
+	const commentLayer = commentLayerOf(doc.blocks, commentProps)
+
 	const renderRun = ({ id, isEnd, children }: MarkdownRunRenderProps) => {
+		if (isCommentRun(id))
+			return (
+				<LibraryDocumentCommentRun id={id} isEnd={isEnd} layer={commentLayer}>
+					{children}
+				</LibraryDocumentCommentRun>
+			)
 		if (id.startsWith(PERSON_RUN)) {
 			const person = people.find(
 				(candidate) => `${PERSON_RUN}${candidate.id}` === id,
@@ -1211,6 +1342,7 @@ const LibraryDocumentBlockEditor = ({
 				(!hasBlockEditor || isInnerControl)
 			)
 				return
+			if (isCommentMode && selectingBy.current === "pointer") return
 			enterPointed(id)
 		}
 
@@ -1264,8 +1396,12 @@ const LibraryDocumentBlockEditor = ({
 		<div
 			aria-label={t("library.editor.body")}
 			className={cn("relative flex flex-col gap-3.5", drop && "select-none")}
+			data-comment-mode={isCommentMode || undefined}
 			data-slot="library-document-blocks"
 			onBlur={leaveBody}
+			onClick={isCommentMode ? startCommentAtPointer : undefined}
+			onPointerLeave={isCommentMode ? () => setHovered(undefined) : undefined}
+			onPointerMove={isCommentMode ? followPointer : undefined}
 			ref={list}
 			role="group"
 		>
@@ -1275,13 +1411,16 @@ const LibraryDocumentBlockEditor = ({
 				const hasBlockEditor = BLOCK_EDITORS.includes(type)
 				const textType = textTypeOf(type)
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
-				const runs = runsIn({
-					writers,
-					held: heldRuns,
-					people,
-					start: offsets[index],
-					length: block.source.length,
-				})
+				const runs = [
+					...runsIn({
+						writers,
+						held: heldRuns,
+						people,
+						start: offsets[index],
+						length: block.source.length,
+					}),
+					...commentRunsIn(commentLayer, block.id),
+				]
 				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1
@@ -1291,6 +1430,7 @@ const LibraryDocumentBlockEditor = ({
 						className={cn(
 							"group/block relative",
 							type === "heading" && index > 0 && "mt-2.5",
+							isCommentMode && "cursor-none",
 						)}
 						data-block-id={block.id}
 						data-slot="library-document-block"
@@ -1353,14 +1493,26 @@ const LibraryDocumentBlockEditor = ({
 						) : (
 							// biome-ignore lint/a11y/noStaticElementInteractions: focusing a text block opens its field, the keyboard reaches it with Tab
 							<div
-								className={cn(isEditable && "min-h-6 cursor-text outline-none")}
+								className={cn(
+									isEditable && "min-h-6 cursor-text outline-none",
+									isCommentMode && "cursor-none",
+								)}
+								data-slot={BODY_SLOT}
 								onFocus={
 									isEditable
 										? startEditingOnFocus(block.id, hasBlockEditor)
 										: undefined
 								}
-								onMouseDown={isEditable ? enterAtPointer(block.id) : undefined}
-								onPointerDown={isEditable ? pointAt(hasBlockEditor) : undefined}
+								onMouseDown={
+									isEditable && !isCommentMode
+										? enterAtPointer(block.id)
+										: undefined
+								}
+								onPointerDown={
+									isEditable && !isCommentMode
+										? pointAt(hasBlockEditor)
+										: undefined
+								}
 								tabIndex={isEditable ? 0 : undefined}
 							>
 								{placeholder ? (
@@ -1400,6 +1552,14 @@ const LibraryDocumentBlockEditor = ({
 								)}
 							</div>
 						)}
+						{hasBlockDraft(commentLayer, block.id) ||
+						(isCommentMode && hovered === block.id) ? (
+							<LibraryDocumentBlockTint />
+						) : null}
+						<LibraryDocumentBlockComments
+							blockId={block.id}
+							layer={commentLayer}
+						/>
 						{isDropBefore || isDropAfter ? (
 							<span
 								aria-hidden="true"
@@ -1414,6 +1574,12 @@ const LibraryDocumentBlockEditor = ({
 				)
 			})}
 			{shownSelection ? toolbarFor(shownSelection) : null}
+			{isCommentMode ? (
+				<LibraryDocumentModeCursor
+					isShown={hovered !== undefined}
+					ref={modeCursor}
+				/>
+			) : null}
 		</div>
 	)
 }

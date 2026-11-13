@@ -9,6 +9,8 @@ import type {
 	LibraryCommentSummary,
 	LibraryCommentsCounts,
 } from "@workspace/ui/components/library-comments-list"
+import type { LibraryBlockPassage } from "@workspace/ui/components/library-document-blocks"
+import type { LibraryDocumentThread } from "@workspace/ui/components/library-document-comments"
 
 const STEVE: LibraryCommentPerson = {
 	kind: "person",
@@ -161,22 +163,111 @@ const OPEN_THREADS: LibraryCommentSummary[] = [
 	},
 ]
 
+const SESSION_PARAGRAPH =
+	"We open with the roadmap review at 14:00, so the second session stops at 16:30. The boat leaves the dock right after, and we are back for dinner on the terrace at 20:00."
+
+const MARKET_PARAGRAPH =
+	"Saturday morning is free: the market in the old town, or a swim before the train."
+
+const BUDGET_PARAGRAPH =
+	"The house, the boat and the meals come to 6,480 euros for the eight of us."
+
+const SESSION_BLOCK = "boat01"
+
+const MARKET_BLOCK = "market"
+
+const BUDGET_BLOCK = "money1"
+
+const SESSION_PASSAGE = "so the second session stops at 16:30."
+
+const DINNER_PASSAGE = "dinner on the terrace at 20:00"
+
+const passageIn = (source: string, text: string): LibraryBlockPassage => {
+	const start = source.indexOf(text)
+	return { start, end: start + text.length, text }
+}
+
+const OFFSITE_DOCUMENT = {
+	title: "Team offsite",
+	detail: "74 words · Edited today at 10:41",
+	body: [
+		"The offsite runs from Thursday to Saturday at the house above the harbour. ^intro1",
+		"## Thursday ^thursd",
+		`${SESSION_PARAGRAPH} ^${SESSION_BLOCK}`,
+		"## Saturday ^saturd",
+		`${MARKET_PARAGRAPH} ^${MARKET_BLOCK}`,
+		"## Budget ^budget",
+		`${BUDGET_PARAGRAPH} ^${BUDGET_BLOCK}`,
+	].join("\n\n"),
+}
+
+const SESSION_THREAD: LibraryDocumentThread = {
+	id: "thread-boat",
+	anchor: {
+		blockId: SESSION_BLOCK,
+		passage: passageIn(SESSION_PARAGRAPH, SESSION_PASSAGE),
+	},
+	comments: [FIRST_COMMENT, MEMBER_REPLY, AGENT_REPLY],
+}
+
+const MARKET_THREAD: LibraryDocumentThread = {
+	id: "thread-market",
+	anchor: { blockId: MARKET_BLOCK },
+	comments: [
+		{
+			id: "comment-market",
+			author: JUNIPER,
+			time: "1 h",
+			body: "I drafted two options for Saturday morning.",
+		},
+	],
+}
+
+const BUDGET_THREAD: LibraryDocumentThread = {
+	id: "thread-budget",
+	anchor: {
+		blockId: BUDGET_BLOCK,
+		passage: passageIn(BUDGET_PARAGRAPH, "6,480 euros"),
+	},
+	comments: [
+		{
+			id: "comment-budget",
+			author: LENA,
+			time: "Yesterday",
+			body: "Does this include the boat?",
+		},
+	],
+}
+
+const DOCUMENT_THREADS = [SESSION_THREAD, MARKET_THREAD, BUDGET_THREAD]
+
 export {
 	AGENT_REPLY,
 	ATLAS,
 	COMMENT_COUNTS,
 	COMMENT_PARTICIPANTS,
+	DINNER_PASSAGE,
+	DOCUMENT_THREADS,
 	FIRST_COMMENT,
 	JUNIPER,
 	LENA,
 	LONG_COMMENT,
 	LONG_NAMED_AGENT,
 	LONG_NAMED_PERSON,
+	MARKET_BLOCK,
+	MARKET_PARAGRAPH,
+	MARKET_THREAD,
 	MARTA,
 	MEMBER_REPLY,
+	OFFSITE_DOCUMENT,
 	OPEN_THREADS,
 	PASSAGE_ANCHOR,
+	passageIn,
 	RESOLVED_THREADS,
+	SESSION_BLOCK,
+	SESSION_PARAGRAPH,
+	SESSION_PASSAGE,
+	SESSION_THREAD,
 	STEVE,
 	UNBREAKABLE,
 }

@@ -225,6 +225,88 @@ const markdownOf = ({ source, written }: LibraryBlock) => written ?? source
 const serializeBlocks = ({ lead, blocks }: LibraryBlockDocument) =>
 	lead + blocks.map((block) => markdownOf(block) + block.gap).join("")
 
+type LibraryBlockPassage = {
+	start: number
+	end: number
+	text: string
+}
+
+type LibraryBlockAnchor = {
+	blockId: string
+	passage?: LibraryBlockPassage
+}
+
+const passageAt = (text: string, start: number): LibraryBlockPassage => ({
+	start,
+	end: start + text.length,
+	text,
+})
+
+const foundAnchorIn = (
+	blocks: LibraryBlock[],
+	{ blockId, passage }: LibraryBlockAnchor,
+): LibraryBlockAnchor | undefined => {
+	const block = blocks.find(({ id }) => id === blockId)
+	if (!block) return undefined
+	if (!passage) return { blockId }
+	const { text, start } = passage
+	const at = block.source.startsWith(text, start)
+		? start
+		: block.source.indexOf(text)
+	return at === -1 ? undefined : { blockId, passage: passageAt(text, at) }
+}
+
+const UNSHOWN_NODE =
+	/Mark$|^(?:TableDelimiter|LinkTitle|TaskMarker|Image|CodeInfo)$/
+
+const inkOffsetsOf = (text: string) => {
+	const offsets: number[] = []
+	for (let at = 0; at < text.length; at++)
+		if (/\S/.test(text[at])) offsets.push(at)
+	return offsets
+}
+
+const shownInkOffsetsOf = (source: string) => {
+	const isUnshown = new Array<boolean>(source.length).fill(false)
+	markdownLanguage.parser.parse(source).iterate({
+		enter: ({ name, from, to, node }) => {
+			const isWhole =
+				UNSHOWN_NODE.test(name) ||
+				(name === "URL" && node.parent?.name === "Link")
+			if (isWhole || name === "Escape")
+				isUnshown.fill(true, from, isWhole ? to : from + 1)
+			return !isWhole
+		},
+	})
+	return inkOffsetsOf(source).filter((at) => !isUnshown[at])
+}
+
+type ShownSelection = {
+	shown: string
+	start: number
+	end: number
+}
+
+const passageOfShown = (
+	source: string,
+	{ shown, start, end }: ShownSelection,
+): LibraryBlockPassage | undefined => {
+	const written = shownInkOffsetsOf(source)
+	const drawn = inkOffsetsOf(shown)
+	if (
+		drawn.length !== written.length ||
+		drawn.some((at, index) => shown[at] !== source[written[index]])
+	)
+		return undefined
+	const first = drawn.findIndex((at) => at >= start)
+	const last = drawn.findLastIndex((at) => at < end)
+	if (first === -1 || last < first) return undefined
+	return passageAt(
+		source.slice(written[first], written[last] + 1),
+		written[first],
+	)
+}
+
 const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	let at = lead.length
 	return blocks.map((block) => {
@@ -757,19 +839,24 @@ export {
 	conversionsOf,
 	convertSource,
 	fenceOf,
+	foundAnchorIn,
 	galleryItemsOf,
 	isTextBlockType,
 	keepIds,
 	type LibraryBlock,
+	type LibraryBlockAnchor,
 	type LibraryBlockDocument,
+	type LibraryBlockPassage,
 	type LibraryBlockType,
 	MARKERS,
 	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
 	relaid,
 	rowAfter,
+	type ShownSelection,
 	type SourceEdit,
 	serializeBlocks,
 	shiftedAcross,
