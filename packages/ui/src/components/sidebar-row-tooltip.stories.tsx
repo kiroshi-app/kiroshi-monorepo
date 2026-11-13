@@ -8,12 +8,11 @@ import {
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { SPOKEN_AT } from "@workspace/ui/components/app-sidebar.fixtures"
 import { formatSentDate } from "@workspace/ui/components/message"
 import { SidebarRowTooltip } from "@workspace/ui/components/sidebar-row-tooltip"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
-
-const SPOKEN_AT = new Date(2026, 10, 12, 9, 24).getTime()
 
 const UNBREAKABLE_TITLE =
 	"release-notes-2026-11-12-platform-design-support-final-final-reviewed"

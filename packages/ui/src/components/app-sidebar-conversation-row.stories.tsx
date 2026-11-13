@@ -42,6 +42,7 @@ import {
 	LONG_PENDING_QUESTION,
 	PENDING_QUESTION,
 	SIDEBAR_SECTION,
+	SPOKEN_AT,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import {
@@ -1424,8 +1425,6 @@ export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 	play: ({ canvasElement }) =>
 		expectLongQuestionBesideAWholePile(canvasElement),
 })
-
-const SPOKEN_AT = new Date(2026, 10, 12, 9, 24).getTime()
 
 const LONG_TITLE =
 	"Launch readiness review with the platform, design and support teams before the autumn release"

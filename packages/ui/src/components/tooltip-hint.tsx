@@ -26,9 +26,11 @@ const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
 type TooltipHintVariant = "hint" | "card"
 
+const HINT = cn("break-words", STILL_UNDER_REDUCED_MOTION)
+
 const BUBBLE: Record<TooltipHintVariant, string> = {
-	hint: cn("break-words", STILL_UNDER_REDUCED_MOTION),
-	card: cn("break-words py-3", STILL_UNDER_REDUCED_MOTION),
+	hint: HINT,
+	card: cn(HINT, "py-3"),
 }
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"

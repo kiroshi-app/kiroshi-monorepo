@@ -24,6 +24,7 @@ import {
 	PENDING_QUESTION,
 	SIDEBAR_SECTION,
 	SIDEBAR_SPACES,
+	SPOKEN_AT,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
@@ -265,8 +266,6 @@ export const CompactRowAtRestHoveredAndActive = meta.story(
 export const CompactRowAtRestHoveredAndActiveDark = meta.story(
 	compactRowStatesStory({ theme: "dark" }),
 )
-
-const SPOKEN_AT = new Date(2026, 10, 12, 9, 24).getTime()
 
 const SPOKEN_ATLAS: AppSidebarBot = { ...ATLAS, lastActivityAt: SPOKEN_AT }
 
