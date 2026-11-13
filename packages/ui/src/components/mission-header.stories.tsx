@@ -160,7 +160,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"The seven states a mission can be in, exhaustively, each one drawn twice: with a companion at work on it, then with nobody on it. Check that the pill names the five states it speaks for at the trailing edge of the first band and leaves that edge empty for `working` and `waiting_bot`, that the avatar holds the working pose in the first column and rests in the second whatever the state beside it says, that only `waiting_human` adds the attention dot, and that the two bands keep their height throughout. " +
+					"The seven states a mission can be in, exhaustively, each one drawn twice: with a companion at work on it, then with nobody on it. Check that the state island names the five states it speaks for at the trailing end of the first row and is not drawn at all for `working` and `waiting_bot`, that the avatar holds the working pose in the first column and rests in the second whatever the state beside it says, that only `waiting_human` adds the attention dot, and that the two island rows keep their height throughout. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -205,7 +205,7 @@ export const WithoutAPill = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first band of a mission nobody can act on yet, beside the band of one waiting on its reader. Check that the trailing edge of the `working` header holds nothing at all: `packages/ui/src/components/app-header.tsx:33` mounts its trailing container on the truthiness of the node it is handed, so a pill left to render nothing would still reserve width beside the objective. " +
+					"The first row of a mission nobody can act on yet, beside the first row of one waiting on its reader. Check that the `working` header draws no state island at all: `packages/ui/src/components/app-header.tsx:51` mounts its trailing island on the truthiness of the node it is handed, so a state left to render nothing would still draw an empty island beside the objective. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -234,7 +234,7 @@ export const TicketLink = meta.story({
 		docs: {
 			description: {
 				story:
-					"The ticket band on a mission whose ticket carries a url. Check that the link opens in a new tab, that it names the platform, the identifier and the title, and that tabbing to it draws a visible ring. Pick `Empty` for a mission whose ticket names nothing. " +
+					"The ticket island on a mission whose ticket carries a url. Check that the link opens in a new tab, that it names the platform, the identifier and the title, and that tabbing to it draws a visible ring. Pick `Empty` for a mission whose ticket names nothing. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -279,7 +279,7 @@ export const WithoutATool = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission carrying a ticket and no tool. Check that the rule that separates the ticket from the tool marks is left out rather than drawn against nothing, and that the opening time keeps the trailing edge. Pick `Default` for the band that draws both. " +
+					"A mission carrying a ticket and no tool. Check that the rule that separates the ticket from the tool marks is left out rather than drawn against nothing, and that the opening time keeps the trailing end of the ticket island. Pick `Default` for the ticket island that draws both. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -308,7 +308,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"An objective and a ticket title written as sentences, in a container squeezed to 480 pixels. Check that both truncate on one line, that the state pill, every tool mark and the opening time keep their room, and that neither band scrolls sideways. Read it at 200 percent zoom too. " +
+					"An objective and a ticket title written as sentences, in a container squeezed to 480 pixels. Check that the objective truncates on one line, that the state island, every tool mark and the opening time keep their room, and that the ticket island wraps rather than scrolling sideways. Read it at 200 percent zoom too. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
