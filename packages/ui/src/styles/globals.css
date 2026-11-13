@@ -91,6 +91,7 @@
 	--color-soft-foreground: var(--soft-foreground);
 	--color-placeholder-foreground: var(--placeholder-foreground);
 	--color-title-placeholder-foreground: var(--title-placeholder-foreground);
+	--color-list-marker-foreground: var(--list-marker-foreground);
 	--color-sketch-line: var(--sketch-line);
 	--color-sketch-mark: var(--sketch-mark);
 	--color-accent: var(--accent);
@@ -323,6 +324,7 @@
 		--color-foreground: var(--foreground);
 		--color-muted: var(--muted);
 		--color-muted-foreground: var(--muted-foreground);
+		--color-list-marker-foreground: var(--list-marker-foreground);
 		--color-border: var(--border);
 		--color-primary: var(--primary);
 		--color-primary-strong: var(--primary-strong);

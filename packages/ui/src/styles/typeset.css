@@ -46,12 +46,7 @@
     --typeset-size: 1rem;
     --typeset-leading: 1.75;
     --typeset-flow: 1rem;
-    --typeset-marker: #8f8f8f;
     font-size: var(--typeset-size);
-  }
-
-  .dark .typeset-answer {
-    --typeset-marker: #737373;
   }
 
   .typeset
@@ -256,7 +251,7 @@
       position: absolute;
       inset-inline-start: 0;
       inline-size: 0.875rem;
-      color: var(--typeset-marker);
+      color: var(--color-list-marker-foreground);
 
       @supports (content: "•" / "") {
         content: "•" / "";
