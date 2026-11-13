@@ -1559,6 +1559,24 @@ const headerIn = (canvasElement: HTMLElement) => {
 	}
 }
 
+const headerControlsIn = (canvasElement: HTMLElement) => {
+	const header = headerIn(canvasElement)
+	const [all, images] = within(header.title).getAllByRole("button")
+	const searchGlyph = header.searchField.querySelector("svg")
+	const boardGlyph = header.newBoard.querySelector("svg")
+	if (!(all && images && searchGlyph && boardGlyph))
+		throw new Error("The header lost a control")
+	return { ...header, all, images, searchGlyph, boardGlyph }
+}
+
+type RealPointer = Awaited<ReturnType<typeof realPointer>>
+
+const tabTo = async (pointer: RealPointer, control: HTMLElement) => {
+	for (let press = 0; press < 8 && document.activeElement !== control; press++)
+		await pointer.tab()
+	await expect(control).toHaveFocus()
+}
+
 const expectIslandsAtTheEdges = async (canvasElement: HTMLElement) => {
 	const { panel, title, actions } = headerIn(canvasElement)
 	const [frame, left, right] = [boxOf(panel), boxOf(title), boxOf(actions)]
@@ -1590,7 +1608,9 @@ const expectHeaderOnOneRow = async (
 		buttons,
 		newBoard,
 		newDocument,
-	} = headerIn(canvasElement)
+		searchGlyph,
+		boardGlyph,
+	} = headerControlsIn(canvasElement)
 	const frame = boxOf(panel)
 
 	await expectIslandsAtTheEdges(canvasElement)
@@ -1675,13 +1695,11 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(search).borderTopLeftRadius,
 	]).toEqual([200, 32, "8px"])
 	await expectFill(search, "bg-muted", searchField)
-	const icon = searchField.querySelector("svg")
-	if (!icon) throw new Error("The search lost its icon")
 	await expect([
-		boxOf(icon).width,
-		boxOf(icon).left - boxOf(search).left,
+		boxOf(searchGlyph).width,
+		boxOf(searchGlyph).left - boxOf(search).left,
 	]).toEqual([14, 8])
-	await expect(getComputedStyle(icon).color).toBe(
+	await expect(getComputedStyle(searchGlyph).color).toBe(
 		tokenStyleIn(searchField, "text-muted-foreground", "color"),
 	)
 	await expect([
@@ -1707,12 +1725,12 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(newBoard).fontSize,
 		getComputedStyle(newBoard).lineHeight,
 		getComputedStyle(newBoard).fontWeight,
-		newBoard.querySelector("svg")?.getBoundingClientRect().width,
+		boxOf(boardGlyph).width,
 	]).toEqual([32, "8px", "13px", "16px", "500", 14])
 	await expect(getComputedStyle(newBoard).backgroundColor).toBe(TRANSPARENT)
-	await expect(
-		getComputedStyle(newBoard.querySelector("svg") as SVGElement).color,
-	).toBe(tokenStyleIn(newBoard, "text-soft-foreground", "color"))
+	await expect(getComputedStyle(boardGlyph).color).toBe(
+		tokenStyleIn(newBoard, "text-soft-foreground", "color"),
+	)
 	await expect(boxOf(newDocument).height).toBe(32)
 	await expectFill(newDocument, "bg-primary")
 	await expect(getComputedStyle(newDocument).color).toBe(
@@ -2008,18 +2026,23 @@ export const FloatingHeaderControlStates = meta.story({
 			`#${controlStateRowId("rest")}`,
 		)
 		if (!atRest) throw new Error("The header at rest is missing")
-		const { title, heading, searchField, search, newBoard, newDocument } =
-			headerIn(atRest)
-		const [all, images] = within(title).getAllByRole("button")
-		const icon = searchField.querySelector("svg")
-		if (!(all && images && icon)) throw new Error("The header lost a control")
+		const {
+			heading,
+			all,
+			images,
+			searchField,
+			search,
+			searchGlyph,
+			newBoard,
+			boardGlyph,
+			newDocument,
+		} = headerControlsIn(atRest)
 		const pointer = await realPointer()
 
-		const isDark = images.closest(".dark") !== null
 		await pointer.hover(images)
 		await expectFill(
 			images,
-			isDark
+			isDarkAround(images)
 				? "bg-header-island-control-hover"
 				: "bg-header-island-control-pressed",
 		)
@@ -2029,7 +2052,6 @@ export const FloatingHeaderControlStates = meta.story({
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
 		await expectFill(all, "bg-primary")
-		const boardGlyph = newBoard.querySelector("svg") as SVGElement
 		await expect(getComputedStyle(boardGlyph).color).toBe(
 			tokenStyleIn(newBoard, "text-soft-foreground", "color"),
 		)
@@ -2056,25 +2078,17 @@ export const FloatingHeaderControlStates = meta.story({
 		await expect(all).toHaveFocus()
 		await expectSpaceColourRing(all)
 
-		await expect(getComputedStyle(icon).color).toBe(
+		await expect(getComputedStyle(searchGlyph).color).toBe(
 			tokenStyleIn(searchField, "text-muted-foreground", "color"),
 		)
-		for (let press = 0; press < 4 && document.activeElement !== search; press++)
-			await pointer.tab()
-		await expect(search).toHaveFocus()
+		await tabTo(pointer, search)
 		await expectSpaceColourRing(search, searchField)
 		await expect(getComputedStyle(search).backgroundColor).toBe(TRANSPARENT)
-		await expect(getComputedStyle(icon).color).toBe(
+		await expect(getComputedStyle(searchGlyph).color).toBe(
 			tokenStyleIn(searchField, "text-soft-foreground", "color"),
 		)
 
-		for (
-			let press = 0;
-			press < 4 && document.activeElement !== newDocument;
-			press++
-		)
-			await pointer.tab()
-		await expect(newDocument).toHaveFocus()
+		await tabTo(pointer, newDocument)
 		await expectSpaceColourRing(newDocument)
 	},
 })
@@ -2107,24 +2121,6 @@ const headerStateStory = (state: HeaderControlState) => ({
 		</div>
 	),
 })
-
-const headerControlsIn = (canvasElement: HTMLElement) => {
-	const header = headerIn(canvasElement)
-	const [all, images] = within(header.title).getAllByRole("button")
-	const searchGlyph = header.searchField.querySelector("svg")
-	const boardGlyph = header.newBoard.querySelector("svg")
-	if (!(all && images && searchGlyph && boardGlyph))
-		throw new Error("The header lost a control")
-	return { ...header, all, images, searchGlyph, boardGlyph }
-}
-
-type RealPointer = Awaited<ReturnType<typeof realPointer>>
-
-const tabTo = async (pointer: RealPointer, control: HTMLElement) => {
-	for (let press = 0; press < 8 && document.activeElement !== control; press++)
-		await pointer.tab()
-	await expect(control).toHaveFocus()
-}
 
 export const FloatingHeaderFilterHover = meta.story({
 	...headerStateStory("filter-hover"),
