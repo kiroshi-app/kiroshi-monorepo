@@ -147,13 +147,15 @@ interface RosterMenuProps {
 	children: ReactNode
 }
 
-const RosterMenu = ({ children }: RosterMenuProps) => (
-	<SidebarMenu
-		className={useIsCompactRows() ? COMPACT_ROW_GAP : NAVIGATION_ROW_GAP}
-	>
-		{children}
-	</SidebarMenu>
-)
+const RosterMenu = ({ children }: RosterMenuProps) => {
+	const isCompact = useIsCompactRows()
+
+	return (
+		<SidebarMenu className={isCompact ? COMPACT_ROW_GAP : NAVIGATION_ROW_GAP}>
+			{children}
+		</SidebarMenu>
+	)
+}
 
 const rosterMenuOf = (
 	entries: PinnedEntry[],

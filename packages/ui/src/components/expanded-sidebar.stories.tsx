@@ -1734,11 +1734,7 @@ const activeRowHoverStory = (globals: typeof DARK) => ({
 		const row = within(canvasElement).getByRole("button", {
 			name: "New",
 		})
-		const selectedFill = tokenStyleIn(
-			row,
-			"bg-sidebar-selected",
-			"backgroundColor",
-		)
+		const selectedFill = selectedFillOf(row)
 		await expect(getComputedStyle(row).backgroundColor).toBe(selectedFill)
 		const pointer = await realPointer()
 		try {
@@ -1824,7 +1820,7 @@ export const TopMenuHoveredExpanded = meta.story({
 			try {
 				await pointer.hover(item)
 				await expect(getComputedStyle(item).backgroundColor).toBe(
-					tokenStyleIn(item, "bg-sidebar-hover", "backgroundColor"),
+					hoverFillOf(item),
 				)
 				await expect(colourTransitionsOf(item)).toEqual([])
 				await expectTopMenuAlignedOnConversations(canvasElement)
@@ -2172,6 +2168,15 @@ const colourOf = (element: Element) => getComputedStyle(element).color
 
 const fillOf = (element: Element) => getComputedStyle(element).backgroundColor
 
+const hoverFillOf = (element: HTMLElement) =>
+	tokenStyleIn(element, "bg-sidebar-hover", "backgroundColor")
+
+const selectedFillOf = (element: HTMLElement) =>
+	tokenStyleIn(element, "bg-sidebar-selected", "backgroundColor")
+
+const subjectIconOf = (row: HTMLElement) =>
+	slotIn(row, "conversation-subject-icon")
+
 const pictogramOf = (row: Element) =>
 	slotIn(row as HTMLElement, "conversation-subject-icon-pictogram")
 
@@ -2253,7 +2258,7 @@ export const CompactRestExpanded = meta.story({
 		)
 
 		const releaseTrain = rowHolding(canvasElement, COMPACT_RELEASE_TRAIN.name)
-		const icon = slotIn(releaseTrain, "conversation-subject-icon")
+		const icon = subjectIconOf(releaseTrain)
 		const pictogram = slotIn(icon, "conversation-subject-icon-pictogram")
 		await expect(icon.children).toHaveLength(1)
 		await expect(boxOf(pictogram).width).toBe(COMPACT_LEAD_SIDE)
@@ -2329,9 +2334,7 @@ export const CompactHoverExpanded = meta.story({
 			try {
 				await pointer.hover(row)
 				await expect(row.matches(":hover")).toBe(true)
-				await expect(fillOf(row)).toBe(
-					tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
-				)
+				await expect(fillOf(row)).toBe(hoverFillOf(row))
 				await expect(colourTransitionsOf(row)).toEqual([])
 				await expect([colourOf(title), colourOf(meta)]).toEqual(resting)
 				await expectRestingRow(row)
@@ -2360,9 +2363,7 @@ export const CompactSelectedExpanded = meta.story({
 				(candidate) => candidate.getAttribute("aria-current") === "page",
 			),
 		).toEqual([row])
-		await expect(fillOf(row)).toBe(
-			tokenStyleIn(row, "bg-sidebar-selected", "backgroundColor"),
-		)
+		await expect(fillOf(row)).toBe(selectedFillOf(row))
 		await expect(colourOf(title)).toBe(
 			tokenStyleIn(row, "text-foreground", "color"),
 		)
@@ -2379,7 +2380,7 @@ export const CompactSelectedExpanded = meta.story({
 			conversations.map((candidate) => isDrawnFilled(pictogramOf(candidate))),
 		).toEqual(conversations.map((candidate) => candidate === row))
 		await expect(boxOf(pictogramOf(row)).width).toBe(COMPACT_LEAD_SIDE)
-		await expect(colourOf(slotIn(row, "conversation-subject-icon"))).toBe(
+		await expect(colourOf(subjectIconOf(row))).toBe(
 			tokenStyleIn(row, "text-muted-foreground", "color"),
 		)
 		await expect(colourTransitionsOf(row)).toEqual([])
@@ -2454,7 +2455,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 		const open = missionRowOf(canvasElement, OPEN_MISSION_ID)
 		const resting = missionRowOf(canvasElement, RESTING_MISSION_ID)
 		const parent = rowHolding(canvasElement, COMPACT_RELEASE_TRAIN.name)
-		const accent = tokenStyleIn(open, "bg-sidebar-selected", "backgroundColor")
+		const accent = selectedFillOf(open)
 		const muted = tokenStyleIn(open, "text-sidebar-muted-foreground", "color")
 		const titleOf = (row: HTMLElement) => slotIn(row, "mission-capsule-title")
 
@@ -2514,9 +2515,7 @@ export const CompactHoveredMissionExpanded = meta.story({
 			try {
 				await pointer.hover(row)
 				await expect(row.matches(":hover")).toBe(true)
-				await expect(fillOf(row)).toBe(
-					tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
-				)
+				await expect(fillOf(row)).toBe(hoverFillOf(row))
 				await expect([colourOf(title), colourOf(identifier)]).toEqual(resting)
 				await expectMissionFillsSpanTheRow(canvasElement)
 			} finally {
@@ -2530,9 +2529,7 @@ export const CompactHoveredMissionExpanded = meta.story({
 		try {
 			await pointer.hover(short, farEnd)
 			await expect(short.matches(":hover")).toBe(true)
-			await expect(fillOf(short)).toBe(
-				tokenStyleIn(short, "bg-sidebar-hover", "backgroundColor"),
-			)
+			await expect(fillOf(short)).toBe(hoverFillOf(short))
 			const farPoint = [
 				boxOf(short).right - 8,
 				boxOf(short).top + boxOf(short).height / 2,
@@ -2562,9 +2559,7 @@ export const CompactSelectedPersonExpanded = meta.story({
 		const person = slotIn(sidebar, "expanded-sidebar-footer")
 		await expect(currentControlsIn(sidebar)).toEqual([person])
 		await expect(person).toHaveAttribute("aria-current", "page")
-		await expect(fillOf(person)).toBe(
-			tokenStyleIn(person, "bg-sidebar-selected", "backgroundColor"),
-		)
+		await expect(fillOf(person)).toBe(selectedFillOf(person))
 		await expect(colourOf(person.children[1])).toBe(
 			tokenStyleIn(person, "text-foreground", "color"),
 		)
@@ -2605,9 +2600,7 @@ export const CompactSelectedDestinationExpanded = meta.story({
 		await expect(
 			destinations.map((row) => isDrawnFilled(glyphOf(row))),
 		).toEqual([false, true, false])
-		await expect(fillOf(missions)).toBe(
-			tokenStyleIn(missions, "bg-sidebar-selected", "backgroundColor"),
-		)
+		await expect(fillOf(missions)).toBe(selectedFillOf(missions))
 		await expect(boxOf(glyphOf(missions)).width).toBe(COMPACT_LEAD_SIDE)
 		await expect(colourOf(glyphOf(missions))).toBe(colourOf(glyphOf(resting)))
 		await expect(colourTransitionsOf(missions)).toEqual([])
@@ -2729,9 +2722,7 @@ export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
 
 		const selected = rowHolding(canvasElement, COMPACT_ROADMAP.name)
 		await expect(selected).toHaveAttribute("aria-current", "page")
-		await expect(fillOf(selected)).toBe(
-			tokenStyleIn(selected, "bg-sidebar-selected", "backgroundColor"),
-		)
+		await expect(fillOf(selected)).toBe(selectedFillOf(selected))
 		await expect([
 			boxOf(selected).left - boxOf(sidebar).left,
 			boxOf(sidebar).right - boxOf(selected).right,
@@ -3036,7 +3027,7 @@ export const CompactColouredIconsExpanded = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const iconOf = (name: string) =>
-			slotIn(rowHolding(canvasElement, name), "conversation-subject-icon")
+			subjectIconOf(rowHolding(canvasElement, name))
 		const coloured = COLOURED_ROWS.conversations.slice(0, 3)
 		const muted = tokenStyleIn(
 			rowHolding(canvasElement, COMPACT_OFFSITE.name),
@@ -3073,23 +3064,23 @@ export const CompactSelectedColouredIconExpanded = meta.story({
 		const [blue, pink, green] = COLOURED_ROWS.conversations.map(({ name }) =>
 			rowHolding(canvasElement, name),
 		)
-		const iconOf = (row: HTMLElement) =>
-			slotIn(row, "conversation-subject-icon")
 		const muted = tokenStyleIn(pink, "text-muted-foreground", "color")
 		await expect(pink).toHaveAttribute("aria-current", "page")
 		await expect(
 			[blue, pink, green].map((row) => isDrawnFilled(pictogramOf(row))),
 		).toEqual([false, true, false])
-		await expect(iconOf(pink).dataset.hue).toBe(String(BLOT_HUES.pink))
+		await expect(subjectIconOf(pink).dataset.hue).toBe(String(BLOT_HUES.pink))
 		await expect(
 			new Set([
-				...[blue, pink, green].map((row) => colourOf(iconOf(row))),
+				...[blue, pink, green].map((row) => colourOf(subjectIconOf(row))),
 				muted,
 			]).size,
 		).toBe(4)
 		for (const shape of filledShapesOf(pictogramOf(pink)))
-			await expect(getComputedStyle(shape).fill).toBe(colourOf(iconOf(pink)))
-		await expect(iconOf(pink).children).toHaveLength(1)
-		await expect(fillOf(iconOf(pink))).toBe("rgba(0, 0, 0, 0)")
+			await expect(getComputedStyle(shape).fill).toBe(
+				colourOf(subjectIconOf(pink)),
+			)
+		await expect(subjectIconOf(pink).children).toHaveLength(1)
+		await expect(fillOf(subjectIconOf(pink))).toBe("rgba(0, 0, 0, 0)")
 	},
 })

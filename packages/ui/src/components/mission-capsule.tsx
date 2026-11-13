@@ -14,6 +14,8 @@ const TREE =
 
 const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-rail-section-placeholder"
 
+const MARK_SIDE = 14
+
 const COMPACT_TREE = cn(
 	COMPACT_ROW_STACK,
 	"relative ps-6 before:pointer-events-none before:absolute before:inset-y-0 before:start-3.5 before:w-[1.5px] before:bg-sidebar-tree-line",
@@ -22,7 +24,6 @@ const COMPACT_TREE = cn(
 const STACKED_ROW = {
 	row: "flex w-full min-w-0 items-center gap-2 p-2 text-xs",
 	lead: BRANCH,
-	glyphSide: 14,
 	identifier: "shrink-0 font-medium text-foreground/70 tabular-nums",
 	title: "min-w-0 grow truncate text-muted-foreground",
 } as const
@@ -30,7 +31,6 @@ const STACKED_ROW = {
 const COMPACT_ROW = {
 	row: "group/mission flex h-7.5 w-full min-w-0 items-center gap-2 rounded-sm py-1.5 ps-2 pe-1.5 text-start text-compact text-sidebar-muted-foreground leading-4.5 outline-hidden ring-sidebar-ring hover:bg-sidebar-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-hover aria-[current]:bg-sidebar-selected aria-[current]:active:bg-sidebar-selected aria-[current]:hover:bg-sidebar-selected",
 	lead: null,
-	glyphSide: 14,
 	identifier: "shrink-0 font-medium tabular-nums",
 	title: "min-w-0 truncate group-aria-[current]/mission:text-foreground",
 } as const
@@ -66,7 +66,7 @@ const MissionTreeRow = ({
 			<span className="sr-only">{t(`roster.mission.state.${state}`)}</span>
 			<MissionStateMark
 				data-slot="mission-capsule-glyph"
-				size={drawn.glyphSide}
+				size={MARK_SIDE}
 				state={state}
 			/>
 			{missionTicketPlatform(ticket.platform).isNamed ? (
