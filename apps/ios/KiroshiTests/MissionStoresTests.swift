@@ -390,6 +390,37 @@ struct MissionStoresTests {
         await connection.stop()
     }
 
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named conversation_send_turn""#),
+    ])
+    func anAnswerTheHostDoesNotKnowAsksToUpdateKiroshiThere(status: Int, body: String) async {
+        let connection = makeConnection()
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        await waitUntil { store.isOnline }
+
+        store.draft = "Go"
+        store.send()
+        let call = await nextCall("conversation_send_turn", on: socket)
+        let id = call["id"] as? Int ?? 0
+        socket.push(.frame(#"{"id":\#(id),"status":\#(status),"body":\#(body)}"#))
+        await waitUntil { store.sendProblem != nil }
+
+        #expect(store.sendProblem == .olderHost)
+        #expect(
+            store.problem
+                == "Couldn’t send that request. The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
+        )
+        #expect(store.draft == "Go")
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func theThreadLoadsUntilItsPageArrivesThenAnEmptyThreadIsNoLongerLoading() async {
         let connection = makeConnection()
         let store = MissionThreadStore(

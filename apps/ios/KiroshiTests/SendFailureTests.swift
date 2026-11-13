@@ -50,7 +50,10 @@ struct SendFailureTests {
     @Test func anyOtherRefusalAsksToTryAgain() {
         #expect(SendFailure(refused(403, nil)) == .refused)
         #expect(SendFailure(ConversationCallError.unreadable) == .refused)
-        #expect(SendFailure(ConversationCallError.unknownToTheHost) == .refused)
+    }
+
+    @Test func aCommandTheHostDoesNotKnowSaysItRunsAnOlderKiroshi() {
+        #expect(SendFailure(ConversationCallError.unknownToTheHost) == .olderHost)
     }
 
     private func refused(_ status: Int, _ kind: String?) -> ConversationCallError {

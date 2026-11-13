@@ -8,6 +8,7 @@ enum SendFailure: Equatable {
     case tooMany
     case unreadableAttachment
     case hostFault
+    case olderHost
     case refused
 
     init(_ error: any Error) {
@@ -17,6 +18,7 @@ enum SendFailure: Equatable {
         case RelayCallError.counterUnreadable: self = .storageUnreadable
         case is RelayCallError: self = .unreachable
         case AttachmentRejection.tooMany: self = .tooMany
+        case ConversationCallError.unknownToTheHost: self = .olderHost
         case is AttachmentRejection: self = .tooLarge
         case ConversationCallError.refused(_, kind: "turnAlreadyRunning"): self = .stillWorking
         case ConversationCallError.refused(status: 413, kind: "tooMany"): self = .tooMany

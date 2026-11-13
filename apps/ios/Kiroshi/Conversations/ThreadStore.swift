@@ -570,6 +570,11 @@ extension ThreadStore: ThreadModel {
                 localized:
                     "Couldn’t send, something went wrong on the computer hosting this Space. Tap Send to try again."
             )
+        case .olderHost:
+            String(
+                localized:
+                    "Couldn’t send that request. The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
+            )
         case .refused: String(localized: "Couldn’t send. Tap Send to try again.")
         case nil: nil
         }

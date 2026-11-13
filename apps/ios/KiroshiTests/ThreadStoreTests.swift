@@ -685,6 +685,31 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named conversation_send_turn""#),
+    ])
+    func aHostThatDoesNotKnowSendingAsksToUpdateKiroshiThere(status: Int, body: String) async {
+        let host = TestHost { call in
+            guard call.command == "conversation_send_turn" else { return nil }
+            return TestHost.refused(call, status: status, body)
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+
+        store.draft = "Hello"
+        await store.send()?.value
+
+        #expect(store.sendFailure == .olderHost)
+        #expect(
+            store.problem
+                == "Couldn’t send that request. The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
+        )
+        #expect(store.draft == "Hello")
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aHostSideErrorSaysSomethingWentWrongOnTheHost() async {
         let host = TestHost { call in
             guard call.command == "conversation_send_turn" else { return nil }
