@@ -89,13 +89,18 @@ const glyphDrawnBy = (Glyph: (typeof Icons)[keyof typeof Icons]) => {
 const glyphNamedBy = ({ icon }: TitleBarTabDescriptor) =>
 	glyphDrawnBy(Icons[icon])
 
+const iconSlotOf = (owner: HTMLElement) => {
+	const slot = owner.querySelector<HTMLElement>('span[aria-hidden="true"]')
+	if (!slot) throw new Error(`No icon slot in ${owner.textContent}`)
+	return slot
+}
+
 const expectIconOf = async (
 	owner: HTMLElement,
 	descriptor: TitleBarTabDescriptor,
 	slotSide: number,
 ) => {
-	const slot = owner.querySelector<HTMLElement>('span[aria-hidden="true"]')
-	if (!slot) throw new Error(`No icon slot in ${owner.textContent}`)
+	const slot = iconSlotOf(owner)
 	await expect(boxOf(slot).width).toBe(slotSide)
 	await expect(boxOf(slot).height).toBe(slotSide)
 	const icon = slot.querySelector("svg")
@@ -364,9 +369,6 @@ const COLOURED_TABS = {
 	tabs: [COLOURED_ACTIVE, MONOCHROME, COLOURED_INACTIVE],
 	activeTabId: COLOURED_ACTIVE.id,
 } satisfies Partial<AppTitleBarProps>
-
-const iconSlotOf = (tab: HTMLElement) =>
-	tab.querySelector('span[aria-hidden="true"]') as HTMLElement
 
 const rgbOf = (hex: string) =>
 	`rgb(${[1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16)).join(", ")})`
