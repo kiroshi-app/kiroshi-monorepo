@@ -1,8 +1,12 @@
-import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	HeaderIsland,
+	HeaderIslandButton,
+	HeaderIslandCell,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	type MissionBot,
@@ -15,7 +19,7 @@ import {
 } from "@workspace/ui/components/mission"
 import {
 	hasActivityLine,
-	MissionActivityLine,
+	MissionLink,
 } from "@workspace/ui/components/mission-activity-line"
 import {
 	MissionStatusTime,
@@ -27,11 +31,12 @@ import {
 	MissionStatePill,
 } from "@workspace/ui/components/mission-state-pill"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
-import { Button } from "@workspace/ui/components/ui/button"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 const MISSION_HEADER_AVATAR_SIZE = 24
+
+const MISSION_HEADER_ROWS = "flex w-full min-w-0 flex-col gap-2"
 
 type MissionHeaderProps = {
 	bot: MissionBot
@@ -46,7 +51,6 @@ type MissionHeaderProps = {
 	commitsAhead?: number
 	pullRequest?: MissionPullRequest
 	onBack: () => void
-	windowControls?: ReactNode
 	dragRegion?: "deep"
 	className?: string
 }
@@ -69,10 +73,9 @@ const MissionHeader = ({
 	openedAt,
 	now,
 	status,
-	commitsAhead,
+	commitsAhead = 0,
 	pullRequest,
 	onBack,
-	windowControls,
 	dragRegion,
 	className,
 }: MissionHeaderProps) => {
@@ -83,61 +86,67 @@ const MissionHeader = ({
 
 	return (
 		<div
-			className={cn("flex w-full shrink-0 flex-col", className)}
+			className={cn(MISSION_HEADER_ROWS, className)}
 			data-slot="mission-header"
 		>
 			<AppHeader
 				data-tauri-drag-region={dragRegion}
+				isFloating
 				leading={
 					<>
-						<Button
+						<HeaderIslandButton
 							aria-label={t("missions.header.back")}
 							onClick={onBack}
-							size="icon"
-							variant="ghost"
 						>
 							<Icons.Previous aria-hidden="true" />
-						</Button>
-						<BotIdentityAvatar
-							badge={missionBadgeFor(state)}
-							hue={bot.blot}
-							image={bot.image}
-							kind="working"
-							name={bot.name}
-							seed={bot.seed}
-							size={MISSION_HEADER_AVATAR_SIZE}
-							working={isWorking}
-						/>
-						<span className="min-w-0 truncate" data-slot="mission-objective">
-							{objective}
-						</span>
+						</HeaderIslandButton>
+						<HeaderIslandCell className="p-1">
+							<BotIdentityAvatar
+								badge={missionBadgeFor(state)}
+								hue={bot.blot}
+								image={bot.image}
+								kind="working"
+								name={bot.name}
+								seed={bot.seed}
+								size={MISSION_HEADER_AVATAR_SIZE}
+								working={isWorking}
+							/>
+							<span className="min-w-0 truncate" data-slot="mission-objective">
+								{objective}
+							</span>
+						</HeaderIslandCell>
 					</>
 				}
 				trailing={
 					hasStatePill(state) ? <MissionStatePill state={state} /> : null
 				}
-				windowControls={windowControls}
 			/>
-			<div
-				className="flex h-8.5 shrink-0 items-center gap-2 border-border border-b pe-4 ps-12.5"
-				data-slot="mission-ticket-band"
+			<HeaderIsland
+				className="h-auto min-h-10 flex-wrap"
+				data-island="mission-ticket"
 			>
-				{hasTicket ? <MissionTicketLine layout="line" ticket={ticket} /> : null}
-				{hasTicket && hasTools ? <MissionTicketRule /> : null}
-				{hasTools ? (
-					<ul
-						aria-label={t("missions.header.tools")}
-						className="flex shrink-0 items-center gap-2"
-					>
-						{tools.map((tool) => (
-							<li className="flex" key={tool}>
-								<MissionToolMark className="size-3" tool={tool} />
-							</li>
-						))}
-					</ul>
+				{hasTicket || hasTools ? (
+					<HeaderIslandCell data-slot="mission-ticket-cell">
+						{hasTicket ? (
+							<MissionTicketLine layout="line" ticket={ticket} />
+						) : null}
+						{hasTicket && hasTools ? <MissionTicketRule /> : null}
+						{hasTools ? (
+							<ul
+								aria-label={t("missions.header.tools")}
+								className="flex shrink-0 items-center gap-2"
+							>
+								{tools.map((tool) => (
+									<li className="flex" key={tool}>
+										<MissionToolMark className="size-3" tool={tool} />
+									</li>
+								))}
+							</ul>
+						) : null}
+					</HeaderIslandCell>
 				) : null}
 				{shownStatus ? (
-					<>
+					<HeaderIslandCell data-slot="mission-status-cell">
 						{hasTicket || hasTools ? <MissionTicketRule /> : null}
 						<span
 							className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs leading-4"
@@ -148,26 +157,52 @@ const MissionHeader = ({
 							</TooltipHint>
 							<MissionStatusTime className="shrink-0" status={shownStatus} />
 						</span>
-					</>
+					</HeaderIslandCell>
 				) : null}
-				<time
-					className="ms-auto shrink-0 text-[11px] text-muted-foreground leading-4 tabular-nums"
-					dateTime={new Date(openedAt).toISOString()}
+				<span aria-hidden="true" className="flex-1" />
+				<HeaderIslandCell
+					className="shrink-0 gap-3 whitespace-nowrap text-xs leading-4"
+					data-slot="mission-opening-cell"
 				>
-					{t("missions.header.openedAt", {
-						time: toRelativeTime(openedAt, now),
-					})}
-				</time>
-			</div>
-			{hasActivityLine({ commitsAhead, pullRequest }) ? (
-				<MissionActivityLine
-					className="h-7 shrink-0 border-border border-b pe-4 ps-12.5"
-					commitsAhead={commitsAhead}
-					pullRequest={pullRequest}
-				/>
-			) : null}
+					{hasActivityLine({ commitsAhead, pullRequest }) ? (
+						<span
+							className="flex items-center gap-3"
+							data-slot="mission-activity"
+						>
+							{commitsAhead > 0 ? (
+								<span
+									className="tabular-nums"
+									data-slot="mission-commits-ahead"
+								>
+									{t("missions.activity.commitsAhead", { count: commitsAhead })}
+								</span>
+							) : null}
+							{pullRequest ? (
+								<span className="flex items-center gap-1">
+									<Icons.PullRequest
+										aria-hidden="true"
+										className="size-3.5 shrink-0"
+									/>
+									<MissionLink
+										pullRequest={pullRequest.number}
+										url={pullRequest.url}
+									/>
+								</span>
+							) : null}
+						</span>
+					) : null}
+					<time
+						className="text-muted-foreground tabular-nums"
+						dateTime={new Date(openedAt).toISOString()}
+					>
+						{t("missions.header.openedAt", {
+							time: toRelativeTime(openedAt, now),
+						})}
+					</time>
+				</HeaderIslandCell>
+			</HeaderIsland>
 		</div>
 	)
 }
 
-export { MissionHeader, type MissionHeaderProps }
+export { MISSION_HEADER_ROWS, MissionHeader, type MissionHeaderProps }

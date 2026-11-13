@@ -455,7 +455,7 @@ export const InAMissionThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"The header and the rows a mission thread is made of, in a container squeezed to 480 pixels. Check that no row is wider than the container, that the bubbles stop at 85 percent of the width left beside the gutter, and that the header bands hold their two lines. Pick this one before shipping any change to either component. `apps/app/src/components/thread-screen.tsx:308` draws the header and `apps/app/src/components/thread-screen.tsx:923` the rows under it.",
+					"The header and the rows a mission thread is made of, in a container squeezed to 480 pixels. Check that no row is wider than the container, that the bubbles stop at 85 percent of the width left beside the gutter, and that the header keeps its leading island and its state island on one row above the ticket island. Pick this one before shipping any change to either component. `apps/app/src/components/thread-screen.tsx:308` draws the header and `apps/app/src/components/thread-screen.tsx:923` the rows under it.",
 			},
 		},
 	},

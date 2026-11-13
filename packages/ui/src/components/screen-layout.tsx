@@ -22,6 +22,18 @@ interface ScreenLayoutProps extends ComponentProps<"div"> {
 
 const SCROLL_CONTAINER = /auto|scroll/
 
+const publishHeaderHeight = (header: HTMLDivElement) => {
+	const observer = new ResizeObserver(([entry]) => {
+		header.parentElement?.style.setProperty(
+			"--screen-layout-header-height",
+			`${entry.borderBoxSize[0].blockSize}px`,
+		)
+	})
+	observer.observe(header)
+
+	return () => observer.disconnect()
+}
+
 const isNestedScroller = (scrolled: Element, region: Element) => {
 	for (
 		let ancestor = scrolled.parentElement;
@@ -95,6 +107,7 @@ const ScreenLayout = ({
 					<div
 						className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-between p-2"
 						data-slot="screen-layout-floating-header"
+						ref={publishHeaderHeight}
 					>
 						{header}
 					</div>

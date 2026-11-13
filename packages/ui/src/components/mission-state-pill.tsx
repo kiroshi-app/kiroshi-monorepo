@@ -1,10 +1,15 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	HeaderIslandCell,
+	useIsInHeaderIsland,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { Badge } from "@workspace/ui/components/ui/badge"
+import { cn } from "@workspace/ui/lib/utils"
 
 const MISSION_STATE_MARK = {
 	waiting_human: <MissionStateMark data-icon="inline-start" state="waiting" />,
@@ -28,6 +33,14 @@ const MISSION_STATE_MARK = {
 
 type MissionStateWithPill = keyof typeof MISSION_STATE_MARK
 
+const MISSION_STATE_DOT = {
+	waiting_human: "bg-mission-glyph-waiting",
+	ready_to_merge: "bg-mission-glyph-ready",
+	failed: "bg-mission-glyph-failed",
+	done: "bg-bot-badge-done",
+	closed: "bg-muted-foreground",
+} as const satisfies Record<MissionStateWithPill, string>
+
 const hasStatePill = (state: MissionState): state is MissionStateWithPill =>
 	state in MISSION_STATE_MARK
 
@@ -38,8 +51,30 @@ type MissionStatePillProps = {
 
 const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 	const { t } = useTranslation("chat")
+	const isInIsland = useIsInHeaderIsland()
 
 	if (!hasStatePill(state)) return null
+
+	if (isInIsland)
+		return (
+			<HeaderIslandCell
+				className={cn(
+					"whitespace-nowrap font-medium text-compact leading-4",
+					className,
+				)}
+				data-slot="mission-state-pill"
+				data-state={state}
+			>
+				<span
+					aria-hidden="true"
+					className={cn(
+						"size-1.5 shrink-0 rounded-full",
+						MISSION_STATE_DOT[state],
+					)}
+				/>
+				{t(`missions.state.${state}`)}
+			</HeaderIslandCell>
+		)
 
 	return (
 		<Badge

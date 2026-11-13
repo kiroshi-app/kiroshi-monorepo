@@ -3,6 +3,10 @@
 import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	HeaderIslandButton,
+	useIsInHeaderIsland,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	PopoverPanel,
@@ -88,9 +92,17 @@ const PinnedMessages = ({
 }: PinnedMessagesProps) => {
 	const { t } = useTranslation("chat")
 	const [isOpen, setIsOpen] = useState(false)
+	const isInIsland = useIsInHeaderIsland()
 	const title = t("pinned.title")
 	const count = messages.length
 	const hasPins = count > 0
+	const triggerLabel = hasPins ? t("pinned.counted", { count }) : title
+	const triggerMark = (
+		<>
+			<Icons.Pin />
+			{hasPins ? count : null}
+		</>
+	)
 
 	const jumpTo = (messageId: string) => {
 		setIsOpen(false)
@@ -105,18 +117,29 @@ const PinnedMessages = ({
 			className={className}
 		>
 			<PopoverPanelTrigger>
-				<Button
-					data-slot="pinned-messages-trigger"
-					size={hasPins ? "sm" : "icon-sm"}
-					variant="ghost"
-					aria-label={hasPins ? t("pinned.counted", { count }) : title}
-					className={
-						hasPins ? "h-7 gap-1 px-2 text-xs tabular-nums" : undefined
-					}
-				>
-					<Icons.Pin />
-					{hasPins ? count : null}
-				</Button>
+				{isInIsland ? (
+					<HeaderIslandButton
+						data-slot="pinned-messages-trigger"
+						aria-label={triggerLabel}
+						className={
+							hasPins ? "w-auto gap-1 px-2 text-xs tabular-nums" : undefined
+						}
+					>
+						{triggerMark}
+					</HeaderIslandButton>
+				) : (
+					<Button
+						data-slot="pinned-messages-trigger"
+						size={hasPins ? "sm" : "icon-sm"}
+						variant="ghost"
+						aria-label={triggerLabel}
+						className={
+							hasPins ? "h-7 gap-1 px-2 text-xs tabular-nums" : undefined
+						}
+					>
+						{triggerMark}
+					</Button>
+				)}
 			</PopoverPanelTrigger>
 			<PopoverPanelContent
 				aria-label={title}
