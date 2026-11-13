@@ -509,38 +509,45 @@
 	}
 }
 
-@keyframes ui-text-shimmer {
+/* Shimmer text, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/cli/free/shimmer-text.md */
+@keyframes ui-shimmer-text {
 	from {
-		background-position: 200% 0;
+		background-position: calc(-1 * var(--shimmer-band)) 0;
 	}
 	to {
-		background-position: -200% 0;
+		background-position: 0 0;
 	}
 }
 
-@utility text-shimmer {
-	--text-shimmer-image: linear-gradient(
-		110deg in oklab,
-		var(--faint-foreground) 30%,
-		var(--foreground) 50%,
-		var(--faint-foreground) 70%
+@utility shimmer-text {
+	--shimmer-dur: 2000ms;
+	--shimmer-base: var(--muted-foreground);
+	--shimmer-highlight: var(--foreground);
+	--shimmer-band: 30rem;
+	--shimmer-ease: linear;
+	background-color: var(--shimmer-base);
+	background-image: linear-gradient(
+		90deg,
+		transparent 0%,
+		transparent 40%,
+		var(--shimmer-highlight) 50%,
+		transparent 60%,
+		transparent 100%
 	);
-	background-image: var(--text-shimmer-image);
-	background-size: 200% 100%;
+	background-size: var(--shimmer-band) 100%;
+	background-repeat: repeat-x;
 	-webkit-background-clip: text;
 	background-clip: text;
 	color: transparent;
-	animation: ui-text-shimmer var(--text-shimmer-duration) linear infinite;
+	animation: ui-shimmer-text var(--shimmer-dur) var(--shimmer-ease) infinite;
 
 	@media (prefers-reduced-motion: reduce) {
 		animation: none;
-		background-image: none;
-		color: var(--muted-foreground);
+		background-position: calc(var(--shimmer-band) * -0.4) 0;
 
-		&[data-held] {
-			background-image: var(--text-shimmer-image);
-			background-position: 50% 0;
-			color: transparent;
+		&:not([data-held]) {
+			background: none;
+			color: var(--shimmer-base);
 		}
 	}
 }

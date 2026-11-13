@@ -466,7 +466,7 @@ export const WaitingForYou = meta.story({
 		await expect(titled.textContent?.endsWith("?")).toBe(true)
 		await expect(canvas.getByText("is waiting for you…")).toBeVisible()
 		await expect(slotsIn(canvasElement, "bot-working-elapsed")).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "text-shimmer")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "shimmer-text")).toHaveLength(0)
 	},
 })
 
@@ -503,7 +503,7 @@ export const ReducedMotion = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const shimmer = slotIn(canvasElement, "text-shimmer")
+		const shimmer = slotIn(canvasElement, "shimmer-text")
 		const clock = slotIn(canvasElement, "bot-working-elapsed")
 		const first = clock.textContent
 

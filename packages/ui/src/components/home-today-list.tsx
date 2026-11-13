@@ -5,10 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { MISSION_AVATAR_SIZE } from "@workspace/ui/components/mission"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import {
 	ACTIVITY_ROW_CLASS,
 	RowAnatomy,
@@ -55,11 +52,7 @@ const previewOf = (row: HomeTodayRow) => {
 	if (row.state === "done")
 		return <span className={PREVIEW}>{row.preview}</span>
 
-	return (
-		<TextShimmer className={PREVIEW} duration={WORKING_SHIMMER_DURATION}>
-			{row.preview}
-		</TextShimmer>
-	)
+	return <ShimmerText className={PREVIEW}>{row.preview}</ShimmerText>
 }
 
 const HomeTodayRowButton = ({ row, onOpenRow }: HomeTodayRowButtonProps) => {

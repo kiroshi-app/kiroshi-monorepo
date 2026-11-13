@@ -2498,8 +2498,9 @@ primitives-separator--default
 primitives-sharedmark--default
 primitives-sharedmark--plain
 primitives-sharedmark--stable-box
-primitives-textshimmer--long-content
-primitives-textshimmer--playground
+primitives-shimmertext--default
+primitives-shimmertext--reduced-motion
+primitives-shimmertext--long-content
 primitives-tooltipbutton--default
 primitives-tooltipbutton--long-content
 primitives-tooltipbutton--states

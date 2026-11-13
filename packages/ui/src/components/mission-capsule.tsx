@@ -7,10 +7,7 @@ import {
 } from "@workspace/ui/components/compact-rows"
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TREE =
@@ -84,13 +81,9 @@ const MissionTreeRow = ({
 			) : null}
 			<span className={drawn.title} data-slot="mission-capsule-title">
 				{isLive ? (
-					<TextShimmer
-						className="inline"
-						duration={WORKING_SHIMMER_DURATION}
-						isHeldUnderReducedMotion
-					>
+					<ShimmerText className="inline" isHeldUnderReducedMotion>
 						{title}
-					</TextShimmer>
+					</ShimmerText>
 				) : (
 					title
 				)}

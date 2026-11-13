@@ -4,10 +4,7 @@ import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RowGeometry = "roster" | "activity"
@@ -176,13 +173,9 @@ const CompactRowTitle = ({
 		>
 			{isShimmering ? (
 				<>
-					<TextShimmer
-						className="inline"
-						duration={WORKING_SHIMMER_DURATION}
-						isHeldUnderReducedMotion
-					>
+					<ShimmerText className="inline" isHeldUnderReducedMotion>
 						{name}
-					</TextShimmer>{" "}
+					</ShimmerText>{" "}
 					<span className="sr-only">{t("roster.pose.working")}</span>
 				</>
 			) : (
@@ -293,9 +286,7 @@ const RowAnatomy = ({
 				id={previewId}
 			>
 				{isWorking ? (
-					<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
-						{preview}
-					</TextShimmer>
+					<ShimmerText className="inline">{preview}</ShimmerText>
 				) : (
 					preview
 				)}

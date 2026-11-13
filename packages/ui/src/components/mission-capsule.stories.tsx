@@ -5,7 +5,6 @@ import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
 import { BOT_MISSION_STATES } from "@workspace/ui/components/bot-badge"
 import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
-import { WORKING_SHIMMER_DURATION } from "@workspace/ui/components/motion/text-shimmer"
 
 const MISSIONS: AppSidebarRowMission[] = BOT_MISSION_STATES.map(
 	(state, index) => ({
@@ -103,12 +102,9 @@ export const LiveMission = meta.story({
 		for (const capsule of capsules) {
 			const shimmer = slotIn(
 				slotIn(capsule, "mission-capsule-title"),
-				"text-shimmer",
+				"shimmer-text",
 			)
 			await expect(shimmer.textContent).toBe(WORKING_MISSION.ticket.title)
-			await expect(
-				shimmer.style.getPropertyValue("--text-shimmer-duration"),
-			).toBe(`${WORKING_SHIMMER_DURATION}s`)
 			await expect(shimmer.dataset.held).toBe("true")
 			await expect(
 				capsule.textContent?.match(WORKING_ANNOUNCEMENT),
@@ -128,7 +124,7 @@ export const SilentMission = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expect(slotsIn(canvasElement, "text-shimmer")).toEqual([])
+		await expect(slotsIn(canvasElement, "shimmer-text")).toEqual([])
 		await expect(
 			slotIn(canvasElement, "mission-capsule-title").textContent,
 		).toBe(WORKING_MISSION.ticket.title)

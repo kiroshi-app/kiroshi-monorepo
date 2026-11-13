@@ -24,10 +24,7 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { Icons } from "@workspace/ui/components/icons"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -186,9 +183,7 @@ const StateText = ({ children }: StateTextProps) => (
 			GIVES_WAY_TO_THE_NAME,
 		)}
 	>
-		<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
-			{children}
-		</TextShimmer>
+		<ShimmerText className="inline">{children}</ShimmerText>
 	</span>
 )
 

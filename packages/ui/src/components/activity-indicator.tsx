@@ -15,10 +15,7 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { readableLabel } from "@workspace/ui/lib/agent-tool"
 import { cn } from "@workspace/ui/lib/utils"
@@ -232,13 +229,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 							"group-focus-within/work:hidden group-hover/work:hidden",
 					)}
 				>
-					{isBusy ? (
-						<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
-							{text}
-						</TextShimmer>
-					) : (
-						text
-					)}
+					{isBusy ? <ShimmerText className="inline">{text}</ShimmerText> : text}
 				</span>
 			</TooltipHint>
 			{props.stoppable ? (
