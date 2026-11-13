@@ -492,7 +492,11 @@ const ROW_GAP = 1
 
 const MISSION_GLYPH = 14
 
-const MISSION_INDENT = 26
+const MISSION_INDENT = 24
+
+const MISSION_MARK_GAP = 8
+
+const MISSION_PADDING = ["6px", "6px", "6px", "8px"]
 
 const PANEL_PADDING = 12
 
@@ -629,7 +633,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		for (const row of slotsIn(tree, "mission-capsule")) {
 			const glyph = slotIn(row, "mission-capsule-glyph")
 			await expect(boxOf(row).height).toBe(ROW_HEIGHT)
-			await expect(paddingOf(row)).toEqual(ROW_PADDING)
+			await expect(paddingOf(row)).toEqual(MISSION_PADDING)
 			await expect(
 				row.querySelector('[data-slot="mission-capsule-lane"]'),
 			).toBeNull()
@@ -647,7 +651,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 30px line padded 6 on all four sides, each mission is a button of its own under the pointer that starts 26px in, past the trunk under its conversation icon, and sits its 14px state mark 6px in, on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
+	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 30px line padded 6 on all four sides, each mission is a button of its own under the pointer that starts 24px in, past the trunk under its conversation icon, pads 8 at its start and sits its 14px state mark on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -2224,7 +2228,7 @@ export const CompactRestExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 14px mark, its identifier in 13/18 medium and its title, with no lane and no meta, and that the person button rests, unmarked, with its outline gear.`,
+				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides, a mission 8 at its start, with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 14px mark, its identifier in 13/18 medium and its title, with no lane and no meta, and that the person button rests, unmarked, with its outline gear.`,
 			},
 		},
 	},
@@ -2277,7 +2281,7 @@ export const CompactRestExpanded = meta.story({
 		for (const mission of missions) {
 			const identifier = slotIn(mission, "mission-capsule-identifier")
 			await expect(boxOf(mission).height).toBe(ROW_HEIGHT)
-			await expect(paddingOf(mission)).toEqual(ROW_PADDING)
+			await expect(paddingOf(mission)).toEqual(MISSION_PADDING)
 			await expect([
 				getComputedStyle(identifier).fontSize,
 				getComputedStyle(identifier).lineHeight,
@@ -2386,30 +2390,6 @@ const OPEN_MISSION_ID = "OPE-418"
 
 const RESTING_MISSION_ID = "OPE-412"
 
-const edgeToIconOf = (row: Element, icon: Element) =>
-	boxOf(icon).left - boxOf(row).left
-
-const expectMissionFillHugsContent = async (row: HTMLElement) => {
-	const tree = row.parentElement as HTMLElement
-	const trunk = getComputedStyle(tree, "::before")
-	const trunkEnd =
-		boxOf(tree).left +
-		Number.parseFloat(trunk.insetInlineStart) +
-		Number.parseFloat(trunk.width)
-	const destination = within(
-		row.closest('[data-slot="expanded-sidebar"]') as HTMLElement,
-	).getByRole("button", { name: "Library" })
-	await expect(edgeToIconOf(row, slotIn(row, "mission-capsule-glyph"))).toBe(
-		edgeToIconOf(destination, destination.querySelector("svg") as Element),
-	)
-	await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
-	await expect(boxOf(row).left).toBeGreaterThan(trunkEnd)
-	await expect(
-		boxOf(row).right - boxOf(slotIn(row, "mission-capsule-title")).right,
-	).toBeCloseTo(6, 1)
-	await expect(boxOf(row).right).toBeLessThan(boxOf(tree).right)
-}
-
 const missionRowOf = (canvasElement: HTMLElement, identifier: string) => {
 	const row = slotsIn(canvasElement, "mission-capsule").find(
 		(candidate) =>
@@ -2418,6 +2398,43 @@ const missionRowOf = (canvasElement: HTMLElement, identifier: string) => {
 	)
 	if (!row) throw new Error(`No mission row carries ${identifier}`)
 	return row
+}
+
+const expectMissionFillsSpanTheRow = async (canvasElement: HTMLElement) => {
+	const short = missionRowOf(canvasElement, OPEN_MISSION_ID)
+	const truncated = missionRowOf(canvasElement, RESTING_MISSION_ID)
+	const tree = short.parentElement as HTMLElement
+	const trunk = getComputedStyle(tree, "::before")
+	const trunkEnd =
+		boxOf(tree).left +
+		Number.parseFloat(trunk.insetInlineStart) +
+		Number.parseFloat(trunk.width)
+	const conversation = conversationButtonOf(tree)
+	for (const row of [short, truncated]) {
+		const title = slotIn(row, "mission-capsule-title")
+		const fill = boxOf(row)
+		const mark = boxOf(slotIn(row, "mission-capsule-glyph"))
+		await expect([
+			mark.left - fill.left,
+			mark.top - fill.top,
+			fill.bottom - mark.bottom,
+		]).toEqual([MISSION_MARK_GAP, MISSION_MARK_GAP, MISSION_MARK_GAP])
+		await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
+		await expect(boxOf(row).left).toBeGreaterThan(trunkEnd)
+		await expect(boxOf(row).right).toBe(boxOf(conversation).right)
+		await expect(boxOf(title).height).toBe(18)
+		await expect(boxOf(row).right - boxOf(title).right).toBeGreaterThanOrEqual(
+			6,
+		)
+	}
+	const shortTitle = slotIn(short, "mission-capsule-title")
+	const truncatedTitle = slotIn(truncated, "mission-capsule-title")
+	await expect(shortTitle.scrollWidth).toBe(shortTitle.clientWidth)
+	await expect(truncatedTitle.scrollWidth).toBeGreaterThan(
+		truncatedTitle.clientWidth,
+	)
+	await expect(getComputedStyle(truncatedTitle).textOverflow).toBe("ellipsis")
+	await expect(boxOf(truncated).right - boxOf(truncatedTitle).right).toBe(6)
 }
 
 export const CompactSelectedMissionExpanded = meta.story({
@@ -2429,7 +2446,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar selected fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Check the fill starts 6px before the state mark, the distance a destination keeps between its fill and its icon, to the right of the trunk and of the bare indent, and stops 6px after the title, short of the row's end. Check the other mission takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
+				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar selected fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Its title is short and the title of OPE-412 above it is truncated. Check both fills leave 8px between their start edge and the state mark, as much as above and below it, and start to the right of the trunk and of the bare indent, and both end on the end edge of the Release train row above, the truncated title staying on one line with its ellipsis 6px inside the fill. Check the other mission takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
 			},
 		},
 	},
@@ -2452,7 +2469,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 		)
 		await expect(boxOf(open).height).toBe(ROW_HEIGHT)
 		await expect(colourTransitionsOf(open)).toEqual([])
-		await expectMissionFillHugsContent(open)
+		await expectMissionFillsSpanTheRow(canvasElement)
 
 		await expect(fillOf(resting)).toBe("rgba(0, 0, 0, 0)")
 		await expect(colourOf(titleOf(resting))).toBe(muted)
@@ -2478,30 +2495,54 @@ export const CompactHoveredMissionExpanded = meta.story({
 		},
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The pointer rests on mission OPE-418. Check its row lights the sidebar hover fill at once, with no colour transition, its title, identifier and state mark keeping their resting colours. Check the fill starts 6px before the state mark, the distance a destination keeps between its fill and its icon, to the right of the trunk and of the bare indent, and stops 6px after the title, short of the row's end, and that no row reports itself as the current page.`,
+				story: `${COMPACT_DESCRIPTION} The pointer rests on mission OPE-418, whose title is short, then on OPE-412, whose title is truncated. Check each row lights the sidebar hover fill at once, with no colour transition, its title, identifier and state mark keeping their resting colours. Check both fills leave 8px between their start edge and the state mark, as much as above and below it, and start to the right of the trunk and of the bare indent, and both end on the end edge of the Release train row above, the truncated title staying on one line with its ellipsis 6px inside the fill. Check the pointer lights the short mission from the far end of its fill, that the mission is what lies under that point and that pressing it asks for that mission, and that no row reports itself as the current page.`,
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		const row = missionRowOf(canvasElement, OPEN_MISSION_ID)
-		await expect(row).not.toHaveAttribute("aria-current")
-		await expectMissionFillHugsContent(row)
-		await expect(colourTransitionsOf(row)).toEqual([])
+	play: async ({ canvasElement, userEvent }) => {
+		const short = missionRowOf(canvasElement, OPEN_MISSION_ID)
+		const truncated = missionRowOf(canvasElement, RESTING_MISSION_ID)
+		await expect(currentControlsIn(sidebarIn(canvasElement))).toEqual([])
+		await expectMissionFillsSpanTheRow(canvasElement)
 		if (!isInBrowserRunner()) return
-		const title = slotIn(row, "mission-capsule-title")
-		const identifier = slotIn(row, "mission-capsule-identifier")
-		const resting = [colourOf(title), colourOf(identifier)]
 		const pointer = await realPointer()
+		for (const row of [short, truncated]) {
+			const title = slotIn(row, "mission-capsule-title")
+			const identifier = slotIn(row, "mission-capsule-identifier")
+			const resting = [colourOf(title), colourOf(identifier)]
+			await expect(colourTransitionsOf(row)).toEqual([])
+			try {
+				await pointer.hover(row)
+				await expect(row.matches(":hover")).toBe(true)
+				await expect(fillOf(row)).toBe(
+					tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
+				)
+				await expect([colourOf(title), colourOf(identifier)]).toEqual(resting)
+				await expectMissionFillsSpanTheRow(canvasElement)
+			} finally {
+				await pointer.unhover(row)
+			}
+		}
+
+		const farEnd = {
+			position: { x: boxOf(short).width - 8, y: boxOf(short).height / 2 },
+		}
 		try {
-			await pointer.hover(row)
-			await expect(row.matches(":hover")).toBe(true)
-			await expect(fillOf(row)).toBe(
-				tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
+			await pointer.hover(short, farEnd)
+			await expect(short.matches(":hover")).toBe(true)
+			await expect(fillOf(short)).toBe(
+				tokenStyleIn(short, "bg-sidebar-hover", "backgroundColor"),
 			)
-			await expect([colourOf(title), colourOf(identifier)]).toEqual(resting)
-			await expectMissionFillHugsContent(row)
+			const farPoint = [
+				boxOf(short).right - 8,
+				boxOf(short).top + boxOf(short).height / 2,
+			] as const
+			await expect(document.elementFromPoint(...farPoint)).toBe(short)
+			await userEvent.click(short)
+			await expect(OPEN_MISSION).toHaveBeenCalledOnce()
+			await expect(OPEN_MISSION).toHaveBeenCalledWith(OPEN_MISSION_ID)
 		} finally {
-			await pointer.unhover(row)
+			await pointer.unhover(short)
 		}
 	},
 })

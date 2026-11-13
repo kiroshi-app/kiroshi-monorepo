@@ -16,7 +16,7 @@ const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-rail-section-placeholder"
 
 const COMPACT_TREE = cn(
 	COMPACT_ROW_STACK,
-	"relative ps-6.5 before:pointer-events-none before:absolute before:inset-y-0 before:start-3.5 before:w-[1.5px] before:bg-sidebar-tree-line",
+	"relative ps-6 before:pointer-events-none before:absolute before:inset-y-0 before:start-3.5 before:w-[1.5px] before:bg-sidebar-tree-line",
 )
 
 const STACKED_ROW = {
@@ -28,7 +28,7 @@ const STACKED_ROW = {
 } as const
 
 const COMPACT_ROW = {
-	row: "group/mission flex h-7.5 w-fit min-w-0 max-w-full items-center gap-2 self-start rounded-sm p-1.5 text-start text-compact text-sidebar-muted-foreground leading-4.5 outline-hidden ring-sidebar-ring hover:bg-sidebar-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-hover aria-[current]:bg-sidebar-selected aria-[current]:active:bg-sidebar-selected aria-[current]:hover:bg-sidebar-selected",
+	row: "group/mission flex h-7.5 w-full min-w-0 items-center gap-2 rounded-sm py-1.5 ps-2 pe-1.5 text-start text-compact text-sidebar-muted-foreground leading-4.5 outline-hidden ring-sidebar-ring hover:bg-sidebar-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-hover aria-[current]:bg-sidebar-selected aria-[current]:active:bg-sidebar-selected aria-[current]:hover:bg-sidebar-selected",
 	lead: null,
 	glyphSide: 14,
 	identifier: "shrink-0 font-medium tabular-nums",
