@@ -237,7 +237,7 @@ const CommentSurface = ({ onStartComment }: CommentSurfaceProps) => {
 			{pointer ? (
 				<span
 					aria-hidden="true"
-					className="pointer-events-none absolute size-5 -translate-y-full rounded-full rounded-bl-xs bg-primary shadow-comment-cursor ring-2 ring-comment-cursor-ring"
+					className="pointer-events-none absolute size-5 -translate-y-full rounded-full rounded-bl-xs bg-primary shadow-comment-cursor-stage ring-2 ring-comment-cursor-stage-ring"
 					data-slot="library-image-comment-cursor"
 					style={{ left: percentOf(pointer.x), top: percentOf(pointer.y) }}
 				/>

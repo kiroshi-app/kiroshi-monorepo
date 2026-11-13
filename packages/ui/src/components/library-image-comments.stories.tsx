@@ -331,6 +331,17 @@ const expectThreadPinsOn = async (popup: HTMLElement, image: HTMLElement) => {
 
 const groundOf = (pin: HTMLElement) => getComputedStyle(pin).backgroundColor
 
+const STAGE_CURSOR_RING = "rgb(10, 10, 10) 0px 0px 0px 2px"
+
+const STAGE_CURSOR_SHADOW = "rgba(0, 0, 0, 0.4) 0px 2px 6px 0px"
+
+const expectStageCursorLook = async (cursor: HTMLElement) => {
+	const look = getComputedStyle(cursor)
+	await expect(look.borderBottomLeftRadius).toBe("2px")
+	await expect(look.boxShadow).toContain(STAGE_CURSOR_RING)
+	await expect(look.boxShadow).toContain(STAGE_CURSOR_SHADOW)
+}
+
 const meta = preview.meta({
 	title: "Overlays/LibraryImageComments",
 	component: withStoryProps<ViewerWithCommentsProps>(LibraryImageComments),
@@ -383,7 +394,7 @@ export const CommentMode = meta.story({
 		docs: {
 			description: {
 				story:
-					"Comment mode on, as artboard Img 2 draws it: the hint above the zoom pill and the pin cursor under the pointer, with its 2 px ring and its shadow read from the cursor tokens. Check a click reports a point and a drag a zone, both as fractions of the image, that the zone follows the pointer while it is drawn, at radius 6, and stops at the edge of the image, that a drag along one axis only draws no zone and reports the point where the press started, and that Escape asks to leave the mode without closing the viewer.",
+					"Comment mode on, as artboard Img 2 draws it: the hint above the zoom pill and the pin cursor under the pointer, with its 2 px ring and its shadow read from the stage cursor tokens. Check a click reports a point and a drag a zone, both as fractions of the image, that the zone follows the pointer while it is drawn, at radius 6, and stops at the edge of the image, that a drag along one axis only draws no zone and reports the point where the press started, and that Escape asks to leave the mode without closing the viewer.",
 			},
 		},
 	},
@@ -430,14 +441,7 @@ export const CommentMode = meta.story({
 		await expect(getComputedStyle(cursor).backgroundColor).toBe(
 			getComputedStyle(drawn).borderTopColor,
 		)
-		const cursorLook = getComputedStyle(cursor)
-		await expect(cursorLook.borderBottomLeftRadius).toBe("2px")
-		await expect(cursorLook.boxShadow).toContain(
-			"rgb(10, 10, 10) 0px 0px 0px 2px",
-		)
-		await expect(cursorLook.boxShadow).toContain(
-			"rgba(0, 0, 0, 0.4) 0px 2px 6px 0px",
-		)
+		await expectStageCursorLook(cursor)
 		await userEvent.pointer({ keys: "[/MouseLeft]", ...at(0.4, 0.2) })
 		await expect(args.onStartComment).toHaveBeenLastCalledWith({
 			x: expect.closeTo(0.4, 5),
@@ -485,6 +489,36 @@ export const CommentMode = meta.story({
 		await expect(resting.left).toBeCloseTo(shown.left + 0.5 * shown.width, 0)
 		await expect(resting.bottom).toBeCloseTo(shown.top + 0.45 * shown.height, 0)
 		await expect(resting.width).toBe(20)
+	},
+})
+
+export const CommentModeLight = meta.story({
+	args: { isCommentMode: true },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Comment mode on while the app wears its light theme, the pointer resting over the image. Check the viewer is the only dark surface of a light app, and that the pin cursor keeps the 2 px ring and the shadow of its dark twin, since the stage cursor tokens do not follow the theme.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const { popup, image } = await viewer()
+		await expect(popup.parentElement?.closest(".dark")).toBe(null)
+
+		const surface = slotIn(popup, "library-image-comment-surface")
+		const shown = image.getBoundingClientRect()
+		await userEvent.pointer({
+			target: surface,
+			coords: {
+				clientX: shown.left + 0.5 * shown.width,
+				clientY: shown.top + 0.45 * shown.height,
+			},
+		})
+		const cursor = slotIn(surface, "library-image-comment-cursor")
+		await expect(cursor.getBoundingClientRect().width).toBe(20)
+		await expectStageCursorLook(cursor)
 	},
 })
 

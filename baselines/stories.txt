@@ -2456,6 +2456,7 @@ overlays-imagemenu--without-callbacks
 overlays-libraryimagecomments--at-rest
 overlays-libraryimagecomments--card-kept-inside-stage
 overlays-libraryimagecomments--comment-mode
+overlays-libraryimagecomments--comment-mode-light
 overlays-libraryimagecomments--escape-after-comment-button-leaves-mode
 overlays-libraryimagecomments--escape-closes-innermost
 overlays-libraryimagecomments--point-draft
