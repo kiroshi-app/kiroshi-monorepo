@@ -550,16 +550,16 @@
 
 @keyframes ui-launch-arrive {
 	from {
-		opacity: var(--launch-from-opacity, 0);
+		opacity: 0;
 		scale: var(--launch-from-scale, 1);
 		translate: var(--launch-from-x, 0px) var(--launch-from-y, 0px);
-		rotate: var(--launch-from-rotate, 0deg);
+		rotate: 0deg;
 	}
 }
 
 @utility animate-launch-arrive {
-	animation: ui-launch-arrive var(--launch-arrive-duration, 560ms)
-		cubic-bezier(0.34, 1.4, 0.64, 1) var(--launch-arrive-delay, 0ms) backwards;
+	animation: ui-launch-arrive 560ms cubic-bezier(0.34, 1.4, 0.64, 1)
+		var(--launch-arrive-delay, 0ms) backwards;
 }
 
 @keyframes ui-launch-step {
@@ -585,7 +585,7 @@
 
 @utility animate-launch-step {
 	animation: ui-launch-step var(--launch-period) cubic-bezier(0.8, 0, 0.2, 1)
-		var(--launch-delay, 0ms) infinite;
+		0ms infinite;
 }
 
 @keyframes ui-launch-lit {
