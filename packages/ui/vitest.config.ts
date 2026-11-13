@@ -45,6 +45,9 @@ export default defineConfig({
 			},
 			{
 				plugins: [storybookTest({ configDir: ".storybook" })],
+				optimizeDeps: {
+					include: ["storybook-addon-pseudo-states/preview"],
+				},
 				test: {
 					name: "storybook",
 					setupFiles: [".storybook/vitest.setup.ts"],
