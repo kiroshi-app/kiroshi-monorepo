@@ -813,6 +813,52 @@ export const expectInverseAtRest = async (button: HTMLElement) => {
 export const realPointer = async () =>
 	(await import("vitest/browser")).userEvent
 
+type InkStates = {
+	atRest: HTMLElement
+	hovered: HTMLElement
+	active: HTMLElement
+}
+
+type MutedUntilHoveredOrActive = {
+	states: InkStates
+	inkedPartsOf: (owner: HTMLElement) => Element[]
+	steadyPartsOf?: (owner: HTMLElement) => Element[]
+	fullInk: "text-foreground" | "text-sidebar-foreground"
+}
+
+const inksOf = (parts: Element[]) =>
+	parts.map((part) => getComputedStyle(part).color)
+
+export const expectMutedUntilHoveredOrActive = async ({
+	states: { atRest, hovered, active },
+	inkedPartsOf,
+	steadyPartsOf = () => [],
+	fullInk,
+}: MutedUntilHoveredOrActive) => {
+	const muted = tokenStyleIn(atRest, "text-muted-foreground", "color")
+	const full = tokenStyleIn(atRest, fullInk, "color")
+	const everyPartIn = (ink: string, owner: HTMLElement) =>
+		inkedPartsOf(owner).map(() => ink)
+	const steadyInks = [hovered, active].map((owner) =>
+		inksOf(steadyPartsOf(owner)),
+	)
+
+	await expect(full).not.toBe(muted)
+	await expect(inkedPartsOf(atRest).length).toBeGreaterThan(0)
+	for (const owner of [atRest, hovered, active])
+		await expect(colourTransitionsOf(owner)).toEqual([])
+	await expect(inksOf(inkedPartsOf(atRest))).toEqual(everyPartIn(muted, atRest))
+	await expect(inksOf(inkedPartsOf(active))).toEqual(everyPartIn(full, active))
+	if (!isInBrowserRunner()) return
+	const pointer = await realPointer()
+	for (const [index, owner] of [hovered, active].entries()) {
+		await pointer.hover(owner)
+		await expect(inksOf(inkedPartsOf(owner))).toEqual(everyPartIn(full, owner))
+		await expect(inksOf(steadyPartsOf(owner))).toEqual(steadyInks[index])
+	}
+	await pointer.unhover(active)
+}
+
 export const botIdentityAvatars = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-identity-avatar")
 

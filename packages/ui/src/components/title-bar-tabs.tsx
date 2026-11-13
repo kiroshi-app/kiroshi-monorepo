@@ -166,10 +166,10 @@ const TAB_ICON =
 	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
-	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-tab-hover aria-selected:bg-title-bar-tab-selected"
+	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-muted-foreground hover:bg-title-bar-tab-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-tab-hover data-pointer-within:text-foreground aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const PINNED_TAB =
-	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected"
+	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-tab-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const LIFTED_SURFACE =
 	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md"

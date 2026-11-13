@@ -1522,12 +1522,16 @@ navigation-appsidebarbotrow--bot-long-question-stays-on-one-line
 navigation-appsidebarbotrow--bot-needing-you
 navigation-appsidebarbotrow--bot-needing-you-dark
 navigation-appsidebarbotrow--bot-own-row-keeps-its-avatar-and-no-pile
+navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active
+navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active-dark
 navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks
 navigation-appsidebarbotrow--selected-bot
 navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarbotrow--working-bot-waiting-on-one-background-task
 navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
 navigation-appsidebarcarousel--list-per-space
+navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active
+navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active-dark
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
@@ -2203,6 +2207,8 @@ navigation-sidebarlistrow--with-strips
 navigation-sidebarlistrow--with-title-cut-before-name
 navigation-sidebarlistrow--with-trailing-badge-and-timestamp
 navigation-sidebarlistrow--working-preview
+navigation-sidebarmenurow--compact-row-at-rest-hovered-and-active
+navigation-sidebarmenurow--compact-row-at-rest-hovered-and-active-dark
 navigation-sidebarmenurow--default
 navigation-sidebarmenurow--long-content
 navigation-sidebarmenurow--selected
@@ -2289,6 +2295,8 @@ navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated
 navigation-titlebartabs--no-search-without-handler
 navigation-titlebartabs--search-after-forward
+navigation-titlebartabs--tabs-at-rest-hovered-and-selected
+navigation-titlebartabs--tabs-at-rest-hovered-and-selected-dark
 navigation-titlebartabs--whitespace-document-name-reads-untitled
 navigation-userchip--default
 navigation-userchip--long-content

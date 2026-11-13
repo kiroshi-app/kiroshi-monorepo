@@ -1,14 +1,19 @@
+import type { ComponentProps } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectAnswered,
+	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
 	SidebarFrame,
 	slotIn,
+	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
 	BEACON,
@@ -19,6 +24,7 @@ import {
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
+import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -191,3 +197,67 @@ export const BotLongQuestionStaysOnOneLine = meta.story({
 	play: ({ canvasElement }) =>
 		expectQuestionCutInsideTheRow(slotIn(canvasElement, "sidebar-menu-button")),
 })
+
+const AT_REST_BOT: AppSidebarBot = { ...ATLAS, id: "at-rest", name: "At rest" }
+
+const HOVERED_BOT: AppSidebarBot = { ...ATLAS, id: "hovered", name: "Hovered" }
+
+const ACTIVE_BOT: AppSidebarBot = { ...ATLAS, id: "active", name: "Active" }
+
+const renderCompactRowStates = (args: ComponentProps<typeof BotRosterRow>) => (
+	<CompactRowsContext.Provider value>
+		{[AT_REST_BOT, HOVERED_BOT, ACTIVE_BOT].map((bot) => (
+			<BotRosterRow
+				{...args}
+				bot={bot}
+				isSelected={bot === ACTIVE_BOT}
+				key={bot.id}
+			/>
+		))}
+	</CompactRowsContext.Provider>
+)
+
+const avatarPartsOf = (row: HTMLElement) => {
+	const avatar = slotIn(row, "bot-identity-avatar")
+	return [avatar, ...avatar.querySelectorAll("*")]
+}
+
+const compactRowStatesStory = (globals?: { theme: "dark" }) => ({
+	globals,
+	render: renderCompactRowStates,
+	parameters: {
+		pseudo: { hover: 'li:nth-child(2) [data-slot="sidebar-menu-button"]' },
+		docs: {
+			description: {
+				story:
+					"Three agents as the expanded sidebar lists them: one at rest, one under the pointer, one open. Check the name sits in `--muted-foreground` at rest and in `--sidebar-foreground` under the pointer and on the open row, that the colour switches with no fade, and that the avatar reads `--muted-foreground` from its slot on all three, under the pointer included.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const [atRest, hovered, active] = slotsIn(
+			canvasElement,
+			"sidebar-menu-button",
+		) as HTMLElement[]
+
+		await expect(active).toHaveAttribute("aria-current", "page")
+		await expectMutedUntilHoveredOrActive({
+			states: { atRest, hovered, active },
+			inkedPartsOf: (row) => [slotIn(row, "roster-row-name")],
+			steadyPartsOf: avatarPartsOf,
+			fullInk: "text-sidebar-foreground",
+		})
+		for (const row of [atRest, hovered, active])
+			await expect(
+				getComputedStyle(slotIn(row, "bot-identity-avatar")).color,
+			).toBe(tokenStyleIn(atRest, "text-muted-foreground", "color"))
+	},
+})
+
+export const CompactRowAtRestHoveredAndActive = meta.story(
+	compactRowStatesStory(),
+)
+
+export const CompactRowAtRestHoveredAndActiveDark = meta.story(
+	compactRowStatesStory({ theme: "dark" }),
+)
