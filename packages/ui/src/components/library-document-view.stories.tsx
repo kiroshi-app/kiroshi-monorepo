@@ -640,6 +640,8 @@ const isTruncatedOnOneLine = (element: HTMLElement) =>
 	element.offsetHeight ===
 		Number.parseFloat(getComputedStyle(element).lineHeight)
 
+const PRESENCE_AVATAR_SIZE = 22
+
 export const AgentsWriting = meta.story({
 	args: {
 		...AGENT_CALLBACKS,
@@ -650,13 +652,27 @@ export const AgentsWriting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Atlas and Mira writing in the document, as artboard 10 draws it, Mira's hover card open. Check that the presence pill counts the writers and reports Stop all, that each added run and its named caret paint in the agent's own colour, and that the card reports Stop Mira and Open conversation with Mira.",
+					"Atlas and Mira writing in the document, as artboard 10 draws it, Mira's hover card open. Check that the presence pill sits in the actions island with a padding of 4 around 22 px avatars set 2 apart, that it counts the writers and reports Stop all, that each added run and its named caret paint in the agent's own colour, and that the card reports Stop Mira and Open conversation with Mira.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const presence = slotIn(canvasElement, "library-document-presence")
 		await expect(presence).toHaveTextContent("2 agents writing")
+		await expect(islandsIn(canvasElement).actions).toContainElement(presence)
+		await expect(getComputedStyle(presence).padding).toBe("4px")
+		await expect(getComputedStyle(presence).columnGap).toBe("2px")
+		const avatars = Array.from(
+			presence.firstElementChild?.children ?? [],
+			(avatar) => avatar.getBoundingClientRect(),
+		)
+		await expect(avatars).toHaveLength(LIBRARY_WRITERS.length)
+		for (const [index, avatar] of avatars.entries()) {
+			await expect(avatar.width).toBe(PRESENCE_AVATAR_SIZE)
+			await expect(avatar.height).toBe(PRESENCE_AVATAR_SIZE)
+			const previous = avatars[index - 1]
+			if (previous) await expect(avatar.left - previous.right).toBe(2)
+		}
 		await userEvent.click(canvas.getByRole("button", { name: "Stop all" }))
 		await expect(args.onStopAll).toHaveBeenCalledOnce()
 

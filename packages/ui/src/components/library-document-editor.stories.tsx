@@ -1724,6 +1724,8 @@ const expectPeopleInBar = async (
 	await expect(names.map((name) => bar.getByRole("img", { name }))).toEqual(
 		avatars,
 	)
+	for (const avatar of avatars)
+		await expect(avatar.getBoundingClientRect().width).toBe(22)
 }
 
 export const PresencePeopleOnly = meta.story({

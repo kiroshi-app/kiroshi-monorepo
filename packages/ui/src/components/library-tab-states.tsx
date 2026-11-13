@@ -1,8 +1,9 @@
 "use client"
 
-import { useId } from "react"
+import { type ReactNode, useId } from "react"
 import { useTranslation } from "react-i18next"
 
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	FAILURE_CARD,
@@ -10,12 +11,16 @@ import {
 	FAILURE_PRIMARY_PILL,
 } from "@workspace/ui/components/library-document-states"
 import { DOCUMENT_COLUMN_MEASURE } from "@workspace/ui/components/library-document-view"
-import { LIBRARY_BAR } from "@workspace/ui/components/library-item-menu"
+import {
+	LIBRARY_ISLAND_CONTEXT,
+	LIBRARY_OVERLAY_ISLAND,
+} from "@workspace/ui/components/library-item-menu"
 import { LIGHTBOX_SURFACE } from "@workspace/ui/components/library-lightbox"
 import {
 	ListSkeleton,
 	SkeletonBar,
 } from "@workspace/ui/components/list-skeleton"
+import { FLOATING_HEADER } from "@workspace/ui/components/screen-layout"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
@@ -33,11 +38,37 @@ const SkeletonCircle = ({ className }: SkeletonCircleProps) => (
 	/>
 )
 
-const SkeletonBarActions = () => (
-	<div className="flex shrink-0 items-center gap-1">
-		<SkeletonCircle className="size-8" />
-		<SkeletonCircle className="size-8" />
-		<SkeletonCircle className="size-8" />
+const SkeletonControl = () => (
+	<span className="flex size-8 shrink-0 items-center justify-center">
+		<Skeleton className="size-4 animate-none rounded-sm bg-border" />
+	</span>
+)
+
+type SkeletonIslandsProps = {
+	children: ReactNode
+	islandClassName?: string
+}
+
+const SkeletonIslands = ({
+	children,
+	islandClassName,
+}: SkeletonIslandsProps) => (
+	<div aria-hidden="true" className={FLOATING_HEADER}>
+		<HeaderIsland className={cn(LIBRARY_ISLAND_CONTEXT, islandClassName)}>
+			<div className={cn("flex min-w-0 items-center gap-0.5", PULSE)}>
+				<SkeletonControl />
+				<div className="flex h-8 min-w-0 items-center gap-2.5 px-2">
+					{children}
+				</div>
+			</div>
+		</HeaderIsland>
+		<HeaderIsland className={islandClassName}>
+			<div className={cn("flex items-center gap-0.5", PULSE)}>
+				<SkeletonControl />
+				<SkeletonControl />
+				<SkeletonControl />
+			</div>
+		</HeaderIsland>
 	</div>
 )
 
@@ -86,17 +117,13 @@ const LibraryDocumentSkeleton = () => {
 		<section
 			aria-busy="true"
 			aria-label={t("library.tab.loadingDocument")}
-			className="flex size-full min-h-0 flex-col"
+			className="relative flex size-full min-h-0 flex-col"
 			data-slot="library-document-skeleton"
 		>
-			<div aria-hidden="true" className={cn(LIBRARY_BAR, PULSE)}>
-				<div className="flex min-w-0 items-center gap-3">
-					<SkeletonBar className="w-16" />
-					<SkeletonBar className="w-32" />
-				</div>
-				<SkeletonBarActions />
-			</div>
-			<div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-10">
+			<SkeletonIslands>
+				<SkeletonBar className="w-32" />
+			</SkeletonIslands>
+			<div className="flex min-h-0 flex-1 flex-col px-10 pt-14 pb-10">
 				<div
 					className={cn(
 						"mx-auto flex min-h-0 w-full flex-1 flex-col",
@@ -120,27 +147,29 @@ const LibraryImageSkeleton = () => {
 		<section
 			aria-busy="true"
 			aria-label={t("library.tab.loadingImage")}
-			className={cn(LIGHTBOX_SURFACE, "flex size-full min-h-0 flex-col")}
+			className={cn(
+				LIGHTBOX_SURFACE,
+				"relative flex size-full min-h-0 flex-col",
+			)}
 			data-slot="library-image-skeleton"
 		>
+			<SkeletonIslands islandClassName={LIBRARY_OVERLAY_ISLAND}>
+				<SkeletonBar className="w-40" />
+				<SkeletonBar className="w-24" isFaint />
+			</SkeletonIslands>
 			<div
 				aria-hidden="true"
 				className={cn("relative flex min-h-0 flex-1 flex-col", PULSE)}
 			>
-				<div className={LIBRARY_BAR}>
-					<div className="flex min-w-0 items-center gap-2">
-						<SkeletonCircle className="size-8" />
-						<div className="flex min-w-0 items-center gap-2.5">
-							<SkeletonBar className="w-40" />
-							<SkeletonBar className="w-24" isFaint />
-						</div>
-					</div>
-					<SkeletonBarActions />
-				</div>
 				<div className="flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
-					<SkeletonCircle className="size-10" />
-					<Skeleton className="h-full min-w-0 flex-1 animate-none rounded-md bg-border/60" />
-					<SkeletonCircle className="size-10" />
+					<SkeletonCircle className="mt-14 size-10" />
+					<div className="flex h-full min-w-0 flex-1 pt-14">
+						<Skeleton
+							className="h-full min-w-0 flex-1 animate-none rounded-md bg-border/60"
+							data-slot="library-image-skeleton-stage"
+						/>
+					</div>
+					<SkeletonCircle className="mt-14 size-10" />
 				</div>
 				<div className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center">
 					<Skeleton className="h-9 w-56 animate-none rounded-full bg-border" />

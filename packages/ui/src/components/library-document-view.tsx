@@ -9,6 +9,7 @@ import {
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
+	LibraryPresenceInIsland,
 	type WriterActions,
 } from "@workspace/ui/components/library-document-agents"
 import {
@@ -159,7 +160,9 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 				item={item}
 				leading={
 					<>
-						{presence}
+						<LibraryPresenceInIsland value={true}>
+							{presence}
+						</LibraryPresenceInIsland>
 						{isReadOnly ? <LibraryDocumentReadOnly /> : null}
 					</>
 				}

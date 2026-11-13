@@ -329,8 +329,6 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 	)
 }
 
-const LIBRARY_BAR = "flex h-14 shrink-0 items-center justify-between gap-4 px-3"
-
 const LIBRARY_BAR_ROUND = "rounded-full text-foreground transition-none"
 
 const LIBRARY_BAR_BARE = cn(LIBRARY_BAR_ROUND, "size-8 hover:bg-foreground/8")
@@ -509,7 +507,6 @@ export {
 	hasLibraryItemActions,
 	type ImageHandlers,
 	ImageMenuItems,
-	LIBRARY_BAR,
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
