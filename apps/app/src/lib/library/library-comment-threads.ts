@@ -78,12 +78,13 @@ export const withAnnouncedThread = (
 	threads: LibraryCommentThread[],
 	announced: LibraryCommentThread,
 ) => {
-	const replaced =
-		threads.find(({ id }) => id === announced.id) ??
-		threads.find((thread) => isBeingSentAs(thread, announced))
-	return replaced
-		? changedThread(threads, replaced.id, () => announced)
-		: [...threads, announced]
+	const isHeld = threads.some(({ id }) => id === announced.id)
+	const sending = isHeld
+		? undefined
+		: threads.find((thread) => isBeingSentAs(thread, announced))
+	return sending
+		? changedThread(threads, sending.id, () => announced)
+		: withThread(threads, announced)
 }
 
 export const withoutThread = (
