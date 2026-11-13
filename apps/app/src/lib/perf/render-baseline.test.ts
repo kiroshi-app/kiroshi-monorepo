@@ -938,8 +938,8 @@ describe("PRF1 render baseline", () => {
 	it("counts what one streamed turn re-renders", async () => {
 		vi.useFakeTimers()
 
-		// quietTurn 1: runPresentationsOf takes the mark off the last reply when botWork starts, its avatarFace no longer moves with botWork.
-		// streamingTurn 13: ReplyWork, seated in the reply being written, re-renders it once when botWork goes from the running tool to writing.
+		// quietTurn 1: runPresentationsOf unmarks the last reply when botWork starts.
+		// streamingTurn 13: ReplyWork re-renders the reply being written once, when botWork turns to writing.
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 17,
@@ -957,8 +957,8 @@ describe("PRF1 render baseline", () => {
 	it("counts what a turn twice as long re-renders", async () => {
 		vi.useFakeTimers()
 
-		// quietTurn 1: runPresentationsOf takes the mark off the last reply when botWork starts, its avatarFace no longer moves with botWork.
-		// streamingTurn 24: ReplyWork, seated in the reply being written, re-renders it once when botWork goes from the running tool to writing.
+		// quietTurn 1: runPresentationsOf unmarks the last reply when botWork starts.
+		// streamingTurn 24: ReplyWork re-renders the reply being written once, when botWork turns to writing.
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 28,
