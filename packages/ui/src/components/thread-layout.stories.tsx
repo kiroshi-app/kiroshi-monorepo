@@ -984,16 +984,18 @@ const expectThreadWithComposer = async (canvasElement: HTMLElement) => {
 	await expect([fontSize, lineHeight]).toEqual(["14px", "24px"])
 }
 
+const ThreadWithComposer = (props: ThreadLayoutProps) => (
+	<div data-slot="window-frame" className="h-svh w-[1280px]">
+		<ThreadLayout {...props} label="Thread with its composer" />
+	</div>
+)
+
 const COMPOSER_KEPT_AS_IT_IS =
 	"The composer is shared with other surfaces and stays as it is: the artboards draw it with radius 16, padding 12, a gap of 12, a 28 round send button and 16 under it, where it renders radius 25, padding 8, a gap of 4, a 32 round send button and 8 under it."
 
 export const WithComposer = meta.story({
 	globals: { theme: "light" },
-	render: (args) => (
-		<div data-slot="window-frame" className="h-svh w-[1280px]">
-			<ThreadLayout {...args} label="Thread with its composer" />
-		</div>
-	),
+	render: (args) => <ThreadWithComposer {...args} />,
 	args: { rows: CONVERSATION_ROWS, children: null },
 	parameters: {
 		docs: {
@@ -1007,11 +1009,7 @@ export const WithComposer = meta.story({
 
 export const WithComposerDark = meta.story({
 	globals: { theme: "dark" },
-	render: (args) => (
-		<div data-slot="window-frame" className="h-svh w-[1280px]">
-			<ThreadLayout {...args} label="Thread with its composer" />
-		</div>
-	),
+	render: (args) => <ThreadWithComposer {...args} />,
 	args: { rows: CONVERSATION_ROWS, children: null },
 	parameters: {
 		docs: {

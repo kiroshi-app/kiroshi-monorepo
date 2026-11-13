@@ -1354,6 +1354,12 @@ const StreamingReply = ({
 	</AssistantTurn>
 )
 
+const StreamingTailTurn = () => (
+	<ThreadColumn>
+		<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
+	</ThreadColumn>
+)
+
 const expectStreamingTail = async (
 	canvasElement: HTMLElement,
 	colours: ReplyColours,
@@ -1399,11 +1405,7 @@ const expectStreamingTail = async (
 
 export const StreamingTail = meta.story({
 	globals: { theme: "light" },
-	render: () => (
-		<ThreadColumn>
-			<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
-		</ThreadColumn>
-	),
+	render: () => <StreamingTailTurn />,
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
@@ -1419,11 +1421,7 @@ export const StreamingTail = meta.story({
 
 export const StreamingTailDark = meta.story({
 	globals: { theme: "dark" },
-	render: () => (
-		<ThreadColumn>
-			<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
-		</ThreadColumn>
-	),
+	render: () => <StreamingTailTurn />,
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {

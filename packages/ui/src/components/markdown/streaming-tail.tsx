@@ -80,10 +80,7 @@ const tailOf = (text: string, wordsLeft: number): HastNode[] | undefined => {
 			tagName: "span",
 			properties: {
 				[STREAMING_TAIL_FIRST_WORD_PROPERTY]: firstWordAt,
-				[STREAMING_TAIL_LAST_STEP_PROPERTY]: Math.max(
-					0,
-					wordsLeft - (WORDS_KEPT_MOUNTED - SOFTEST_STEP),
-				),
+				[STREAMING_TAIL_LAST_STEP_PROPERTY]: wordsLeft - 1,
 			},
 			children: [{ type: "text", value: text.slice(from, to) }],
 		},
