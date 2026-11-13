@@ -107,10 +107,7 @@ const LibraryEmptyState = ({
 	if (!canStart && !onImport) return null
 
 	return (
-		<div
-			className="flex flex-col gap-8 px-10 pt-4 pb-10"
-			data-slot="library-empty-state"
-		>
+		<div className="flex flex-col gap-8" data-slot="library-empty-state">
 			{canStart ? (
 				<LibrarySection title={t("library.start")}>
 					<div className="flex flex-wrap gap-4">
@@ -199,5 +196,4 @@ export {
 	LibraryEmptyState,
 	type LibraryEmptyStateProps,
 	type LibraryTemplate,
-	OUTLINED_PILL,
 }

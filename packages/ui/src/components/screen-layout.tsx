@@ -1,3 +1,4 @@
+import { clsx } from "clsx"
 import {
 	type ComponentProps,
 	type CSSProperties,
@@ -13,6 +14,7 @@ interface ScreenLayoutProps extends ComponentProps<"div"> {
 	header?: ReactNode
 	isHeaderFloating?: boolean
 	headerFadeStop?: number
+	headerFadeClassName?: string
 	footer?: ReactNode
 	width?: ScreenLayoutWidth
 	scroller?: (columnClassName: string) => ReactNode
@@ -34,6 +36,9 @@ const publishHeaderHeight = (header: HTMLDivElement) => {
 	return () => observer.disconnect()
 }
 
+const HEADER_FADE_UNMERGEABLE =
+	"pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-linear-to-b from-(percentage:--screen-layout-fade-stop) from-background to-transparent in-data-content-card:from-card"
+
 const isNestedScroller = (scrolled: Element, region: Element) => {
 	for (
 		let ancestor = scrolled.parentElement;
@@ -49,6 +54,7 @@ const ScreenLayout = ({
 	header,
 	isHeaderFloating = false,
 	headerFadeStop = 50,
+	headerFadeClassName,
 	footer,
 	width = "full",
 	scroller,
@@ -95,7 +101,7 @@ const ScreenLayout = ({
 					{isScrolledFromTop ? (
 						<div
 							aria-hidden
-							className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-linear-to-b from-(percentage:--screen-layout-fade-stop) from-background to-transparent in-data-content-card:from-card"
+							className={clsx(HEADER_FADE_UNMERGEABLE, headerFadeClassName)}
 							data-slot="screen-layout-fade"
 							style={
 								{
