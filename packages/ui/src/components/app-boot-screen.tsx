@@ -83,6 +83,16 @@ const colourTurnVariables = (index: number) =>
 		"--launch-lit-delay": `${Math.round(FIRST_COLOUR_AFTER + Math.round((index * COLOUR_TURNS) / CLUSTER_CELLS) * HOP)}ms`,
 	})
 
+const exitTransitionsUnder = (content: HTMLElement | null) => {
+	const canReadTransitions =
+		typeof content?.getAnimations === "function" &&
+		typeof CSSTransition !== "undefined"
+	if (!canReadTransitions) return []
+	return content
+		.getAnimations({ subtree: true })
+		.filter((animation) => animation instanceof CSSTransition)
+}
+
 type ClusterHexagonProps = {
 	agent: AppBootAgent
 	index: number
@@ -156,14 +166,11 @@ const AppBootScreen = ({
 	useEffect(() => {
 		if (!isExiting) return
 		let isCurrentExit = true
-		const exitTransitions = (
-			content.current?.getAnimations({ subtree: true }) ?? []
-		).filter((animation) => animation instanceof CSSTransition)
-		Promise.allSettled(exitTransitions.map(({ finished }) => finished)).then(
-			() => {
-				if (isCurrentExit) reportExitComplete()
-			},
-		)
+		Promise.allSettled(
+			exitTransitionsUnder(content.current).map(({ finished }) => finished),
+		).then(() => {
+			if (isCurrentExit) reportExitComplete()
+		})
 		return () => {
 			isCurrentExit = false
 		}
