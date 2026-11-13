@@ -78,6 +78,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 69, statements: MESSAGE_DOCUMENTS },
 	Migration { version: 70, statements: OPEN_TURNS_BY_CONVERSATION },
 	Migration { version: 71, statements: MAIN_CONVERSATION_OWNER },
+	Migration { version: 72, statements: LIBRARY_COMMENTS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1427,6 +1428,31 @@ WHEN NEW.kind = 'main' AND NEW.owner IS NULL
 BEGIN
 	UPDATE conversations SET owner = 'host' WHERE id = NEW.id;
 END;
+";
+
+const LIBRARY_COMMENTS: &str = "
+CREATE TABLE library_comment_threads (
+	id TEXT PRIMARY KEY,
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	item_name TEXT NOT NULL CHECK (item_name <> ''),
+	anchor TEXT NOT NULL CHECK (json_valid(anchor) AND json_type(anchor) = 'object'),
+	state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'resolved')),
+	created_at INTEGER NOT NULL
+);
+
+CREATE INDEX library_comment_threads_by_item ON library_comment_threads (space_id, item_name);
+
+CREATE TABLE library_comments (
+	thread_id TEXT NOT NULL REFERENCES library_comment_threads (id) ON DELETE CASCADE,
+	position INTEGER NOT NULL CHECK (position >= 0),
+	author_kind TEXT NOT NULL CHECK (author_kind IN ('person', 'agent')),
+	author_id TEXT NOT NULL CHECK (author_id <> ''),
+	created_at INTEGER NOT NULL,
+	text TEXT NOT NULL,
+	mentions TEXT NOT NULL DEFAULT '[]'
+		CHECK (json_valid(mentions) AND json_type(mentions) = 'array'),
+	PRIMARY KEY (thread_id, position)
+);
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

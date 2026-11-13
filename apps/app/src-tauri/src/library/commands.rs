@@ -11,36 +11,42 @@ use tokio::sync::oneshot;
 use futures_util::future::join_all;
 
 use super::contract::{
-	LibraryBoardSummary, LibraryDocument, LibraryDocumentState, LibraryError, LibraryFile,
-	LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem, LibraryPresenceAt,
-	LibraryTemplate,
+	LibraryBoardSummary, LibraryCommentAnchor, LibraryCommentCount, LibraryCommentParty,
+	LibraryCommentThread, LibraryCommentThreadState, LibraryDocument, LibraryDocumentState,
+	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem,
+	LibraryPresenceAt, LibraryTemplate,
 };
 use super::host::stop_writers;
 use super::presence::{seated_identity, share_presence, unseat_writer, Identity, Seat};
 use super::url_import::{admission_for, import_url};
 use super::{
-	apply_update, clipboard_payload, clipboard_payload_of_bytes, create_board, create_document,
-	delete_item, import, import_paths, list, open_document, read_document, read_file, read_image,
-	read_picked_image, read_thumbnail, rename_board, rename_linked_document, resolve, root, save,
-	save_bytes, save_message, summarise_board, templates, ClipboardPayload,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_threads, create_board,
+	create_document, delete_item, import, import_paths, list, open_comment_thread, open_document,
+	read_document, read_file, read_image, read_picked_image, read_thumbnail, rename_board,
+	rename_linked_document, reply_to_comment_thread, resolve, root, save, save_bytes, save_message,
+	set_comment_thread_state, summarise_board, templates, ClipboardPayload, Said,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
 use crate::agent::AgentState;
 use crate::conversations::host_turn::merged;
 use crate::db;
+use crate::db::repositories::library::ThreadOfItem;
 use crate::hosting::authorship::Caller;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::logging::scrub::scrubbed;
 
-async fn known_space(state: &db::DatabaseState, space_id: &str) -> Result<(), LibraryError> {
+async fn known_space<'a>(
+	state: &'a db::DatabaseState,
+	space_id: &str,
+) -> Result<&'a db::Database, LibraryError> {
 	let database =
 		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
 	let spaces = database.spaces().list().await?;
 	if !spaces.iter().any(|space| space.id == space_id) {
 		return Err(LibraryError::UnknownSpace { id: space_id.to_owned() });
 	}
-	Ok(())
+	Ok(database)
 }
 
 #[tauri::command]
@@ -182,8 +188,8 @@ pub async fn library_rename_board<R: Runtime>(
 	name: String,
 	new_name: String,
 ) -> Result<LibraryItem, LibraryError> {
-	known_space(&state, &space_id).await?;
-	rename_board(&app, &root(&app)?, &space_id, &name, &new_name)
+	let database = known_space(&state, &space_id).await?;
+	rename_board(&app, database, &root(&app)?, &space_id, &name, &new_name).await
 }
 
 #[tauri::command]
@@ -207,8 +213,97 @@ pub async fn library_delete<R: Runtime>(
 	space_id: String,
 	name: String,
 ) -> Result<(), LibraryError> {
-	known_space(&state, &space_id).await?;
-	delete_item(&app, &root(&app)?, &space_id, &name)
+	let database = known_space(&state, &space_id).await?;
+	delete_item(&app, database, &root(&app)?, &space_id, &name).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_comment_threads<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<Vec<LibraryCommentThread>, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	comment_threads(&app, database, &root(&app)?, &space_id, &name).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_comment_counts(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<LibraryCommentCount>, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	Ok(database.library().open_thread_counts(space_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::too_many_arguments)]
+pub async fn library_comment_create<R: Runtime>(
+	app: AppHandle<R>,
+	caller: Caller,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	anchor: LibraryCommentAnchor,
+	text: String,
+	mentions: Vec<LibraryCommentParty>,
+) -> Result<LibraryCommentThread, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	let said = Said::by_the_person_calling(&caller, &app, text, mentions)?;
+	open_comment_thread(&app, database, &root(&app)?, &space_id, &name, anchor, said).await
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::too_many_arguments)]
+pub async fn library_comment_reply<R: Runtime>(
+	app: AppHandle<R>,
+	caller: Caller,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	thread_id: String,
+	text: String,
+	mentions: Vec<LibraryCommentParty>,
+) -> Result<LibraryCommentThread, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	let said = Said::by_the_person_calling(&caller, &app, text, mentions)?;
+	let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+	reply_to_comment_thread(&app, database, &root(&app)?, thread, said).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_comment_resolve<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	thread_id: String,
+) -> Result<LibraryCommentThread, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+	let resolved = LibraryCommentThreadState::Resolved;
+	set_comment_thread_state(&app, database, &root(&app)?, thread, resolved).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_comment_reopen<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+	thread_id: String,
+) -> Result<LibraryCommentThread, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+	let open = LibraryCommentThreadState::Open;
+	set_comment_thread_state(&app, database, &root(&app)?, thread, open).await
 }
 
 #[tauri::command]

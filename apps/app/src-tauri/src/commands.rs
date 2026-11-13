@@ -37,6 +37,10 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("LIBRARY_DOCUMENT_RENAMED_EVENT", library::contract::DOCUMENT_RENAMED_EVENT)
 		.constant("LIBRARY_BOARD_FILE_REPLACED_EVENT", library::contract::BOARD_FILE_REPLACED_EVENT)
 		.constant("LIBRARY_CHANGED_EVENT", library::contract::CHANGED_EVENT)
+		.constant(
+			"LIBRARY_COMMENT_THREAD_CHANGED_EVENT",
+			library::contract::COMMENT_THREAD_CHANGED_EVENT,
+		)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("USER_PREFERENCES_CHANGED_EVENT", user::contract::PREFERENCES_CHANGED_EVENT)
@@ -70,6 +74,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<library::contract::LibraryDocumentPresence>()
 		.typ::<library::contract::LibraryDocumentWriterFinished>()
 		.typ::<library::contract::LibraryChanged>()
+		.typ::<library::contract::LibraryCommentThreadChanged>()
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
@@ -130,6 +135,12 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_rename_board::<tauri::Wry>,
 		library::commands::library_save_message::<tauri::Wry>,
 		library::commands::library_delete::<tauri::Wry>,
+		library::commands::library_comment_threads::<tauri::Wry>,
+		library::commands::library_comment_counts,
+		library::commands::library_comment_create::<tauri::Wry>,
+		library::commands::library_comment_reply::<tauri::Wry>,
+		library::commands::library_comment_resolve::<tauri::Wry>,
+		library::commands::library_comment_reopen::<tauri::Wry>,
 		library::link_preview::commands::library_read_link_preview,
 		badge::commands::badge_set::<tauri::Wry>,
 		claude_import::commands::claude_import_inventory,

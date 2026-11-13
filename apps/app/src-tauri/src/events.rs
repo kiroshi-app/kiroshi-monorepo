@@ -126,6 +126,8 @@ declared! {
 	LIBRARY_DOCUMENT_WRITER_FINISHED: library::contract::LibraryDocumentWriterFinished =
 		library::contract::DOCUMENT_WRITER_FINISHED_EVENT,
 	LIBRARY_CHANGED: library::contract::LibraryChanged = library::contract::CHANGED_EVENT,
+	LIBRARY_COMMENT_THREAD_CHANGED: library::contract::LibraryCommentThreadChanged =
+		library::contract::COMMENT_THREAD_CHANGED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

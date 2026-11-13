@@ -44,7 +44,7 @@ impl RelayedMembers {
 		Vouched { members: self, nonce }
 	}
 
-	fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
+	pub(super) fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
 		self.held().get(nonce).cloned()
 	}
 
@@ -99,6 +99,13 @@ impl Caller {
 		match self {
 			Caller::Relayed(Some(member)) => Some(&member.user_id),
 			_ => None,
+		}
+	}
+
+	pub fn account_id<R: Runtime>(&self, app: &AppHandle<R>) -> Option<String> {
+		match self {
+			Caller::Host => signed_in_account(app).map(|host| host.id),
+			Caller::Relayed(member) => member.as_ref().map(|member| member.user_id.clone()),
 		}
 	}
 

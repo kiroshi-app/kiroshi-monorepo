@@ -62,6 +62,12 @@ export const commands = {
 	libraryRenameBoard: (spaceId: string, name: string, newName: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_rename_board", { spaceId, name, newName })),
 	librarySaveMessage: (conversationId: string, messageId: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_save_message", { conversationId, messageId })),
 	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),
+	libraryCommentThreads: (spaceId: string, name: string) => typedError<LibraryCommentThread[], LibraryError>(__TAURI_INVOKE("library_comment_threads", { spaceId, name })),
+	libraryCommentCounts: (spaceId: string) => typedError<LibraryCommentCount[], LibraryError>(__TAURI_INVOKE("library_comment_counts", { spaceId })),
+	libraryCommentCreate: (spaceId: string, name: string, anchor: LibraryCommentAnchor, text: string, mentions: LibraryCommentParty[]) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_create", { spaceId, name, anchor, text, mentions })),
+	libraryCommentReply: (spaceId: string, name: string, threadId: string, text: string, mentions: LibraryCommentParty[]) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_reply", { spaceId, name, threadId, text, mentions })),
+	libraryCommentResolve: (spaceId: string, name: string, threadId: string) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_resolve", { spaceId, name, threadId })),
+	libraryCommentReopen: (spaceId: string, name: string, threadId: string) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_reopen", { spaceId, name, threadId })),
 	libraryReadLinkPreview: (url: string) => typedError<LibraryLinkPreview_Serialize, LibraryLinkPreviewError>(__TAURI_INVOKE("library_read_link_preview", { url })),
 	badgeSet: (count: number) => typedError<null, string>(__TAURI_INVOKE("badge_set", { count })),
 	claudeImportInventory: () => typedError<ClaudeInventory, TranscriptStoreError>(__TAURI_INVOKE("claude_import_inventory")),
@@ -365,6 +371,8 @@ export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 export const LIBRARY_BOARD_FILE_REPLACED_EVENT = "library://board-file-replaced" as const;
 
 export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
+
+export const LIBRARY_COMMENT_THREAD_CHANGED_EVENT = "library://comment-thread-changed" as const;
 
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
 
@@ -1268,6 +1276,45 @@ export type LibraryChanged = {
 	overwritten?: LibraryOverwritten | null,
 };
 
+export type LibraryComment = {
+	author: LibraryCommentParty,
+	createdAt: number,
+	text: string,
+	mentions: LibraryCommentParty[],
+};
+
+export type LibraryCommentAnchor = { kind: "block"; blockId: string } | { kind: "passage"; blockId: string; quote: string; start: number; end: number } | { kind: "imagePoint"; x: number | null; y: number | null } | { kind: "imageZone"; x: number | null; y: number | null; width: number | null; height: number | null } | { kind: "boardNode"; nodeId: string } | { kind: "boardPoint"; point: LibraryBoardPoint };
+
+export type LibraryCommentCount = {
+	itemName: string,
+	openThreads: number,
+};
+
+export type LibraryCommentParty = {
+	kind: LibraryCommentPartyKind,
+	id: string,
+};
+
+export type LibraryCommentPartyKind = "person" | "agent";
+
+export type LibraryCommentThread = {
+	id: string,
+	spaceId: string,
+	itemName: string,
+	anchor: LibraryCommentAnchor,
+	state: LibraryCommentThreadState,
+	comments: LibraryComment[],
+	targetMissing: boolean,
+};
+
+export type LibraryCommentThreadChanged = {
+	spaceId: string,
+	itemName: string,
+	thread: LibraryCommentThread,
+};
+
+export type LibraryCommentThreadState = "open" | "resolved";
+
 export type LibraryDocument = {
 	name: string,
 	format: LibraryDocumentFormat,
@@ -1307,7 +1354,7 @@ export type LibraryDocumentWriterFinished = {
 	outcome: LibraryWriteOutcome,
 };
 
-export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notABoard"; name: string } | { kind: "invalidBoard"; name: string; detail: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string };
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notABoard"; name: string } | { kind: "invalidBoard"; name: string; detail: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string } | { kind: "unknownThread"; id: string } | { kind: "invalidAnchor"; name: string } | { kind: "blankComment" } | { kind: "unknownAuthor" };
 
 export type LibraryFile = {
 	name: string,

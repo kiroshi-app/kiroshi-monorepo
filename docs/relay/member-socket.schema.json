@@ -3835,6 +3835,256 @@
       ],
       "type": "object"
     },
+    "LibraryComment": {
+      "properties": {
+        "author": {
+          "$ref": "#/$defs/LibraryCommentParty"
+        },
+        "createdAt": {
+          "type": "integer"
+        },
+        "mentions": {
+          "items": {
+            "$ref": "#/$defs/LibraryCommentParty"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "author",
+        "createdAt",
+        "text",
+        "mentions"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentAnchor": {
+      "anyOf": [
+        {
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "block"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "end": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "passage"
+            },
+            "quote": {
+              "type": "string"
+            },
+            "start": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "quote",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "imagePoint"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "height": {
+              "type": "number"
+            },
+            "kind": {
+              "const": "imageZone"
+            },
+            "width": {
+              "type": "number"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "boardNode"
+            },
+            "nodeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "boardPoint"
+            },
+            "point": {
+              "$ref": "#/$defs/LibraryBoardPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "point"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LibraryCommentCount": {
+      "properties": {
+        "itemName": {
+          "type": "string"
+        },
+        "openThreads": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "itemName",
+        "openThreads"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentParty": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/LibraryCommentPartyKind"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentPartyKind": {
+      "enum": [
+        "person",
+        "agent"
+      ]
+    },
+    "LibraryCommentThread": {
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/LibraryCommentAnchor"
+        },
+        "comments": {
+          "items": {
+            "$ref": "#/$defs/LibraryComment"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "itemName": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/LibraryCommentThreadState"
+        },
+        "targetMissing": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "spaceId",
+        "itemName",
+        "anchor",
+        "state",
+        "comments",
+        "targetMissing"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentThreadChanged": {
+      "properties": {
+        "itemName": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "thread": {
+          "$ref": "#/$defs/LibraryCommentThread"
+        }
+      },
+      "required": [
+        "spaceId",
+        "itemName",
+        "thread"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentThreadState": {
+      "enum": [
+        "open",
+        "resolved"
+      ]
+    },
     "LibraryDocument": {
       "properties": {
         "content": {
@@ -4283,6 +4533,58 @@
             "kind",
             "conversationId",
             "messageId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownThread"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "invalidAnchor"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "blankComment"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unknownAuthor"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }
@@ -12279,6 +12581,184 @@
         "$ref": "#/$defs/LibraryBoardSummary"
       }
     },
+    "library_comment_counts": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentCount"
+        },
+        "type": "array"
+      }
+    },
+    "library_comment_create": {
+      "args": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/$defs/LibraryCommentAnchor"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "anchor",
+          "text",
+          "mentions"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_reopen": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_reply": {
+      "args": {
+        "properties": {
+          "mentions": {
+            "items": {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId",
+          "text",
+          "mentions"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_resolve": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_threads": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentThread"
+        },
+        "type": "array"
+      }
+    },
     "library_create_board": {
       "args": {
         "properties": {
@@ -13970,6 +14450,11 @@
     "library://changed": {
       "payload": {
         "$ref": "#/$defs/LibraryChanged"
+      }
+    },
+    "library://comment-thread-changed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentThreadChanged"
       }
     },
     "library://document-presence": {

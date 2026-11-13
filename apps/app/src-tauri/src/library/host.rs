@@ -829,7 +829,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
-				delete_item(&self.app, &root, &space_id, &asked.name)?;
+				delete_item(&self.app, database, &root, &space_id, &asked.name).await?;
 				Self::answered(Deleted { name: asked.name })
 			}
 			Operation::PostDocument => {

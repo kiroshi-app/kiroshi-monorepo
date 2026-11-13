@@ -210,49 +210,180 @@ pub struct LibraryOverwritten {
 	pub modified_at: i64,
 }
 
+pub const COMMENT_THREAD_CHANGED_EVENT: &str = "library://comment-thread-changed";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LibraryCommentAnchor {
+	#[serde(rename_all = "camelCase")]
+	Block { block_id: String },
+	#[serde(rename_all = "camelCase")]
+	Passage { block_id: String, quote: String, start: u32, end: u32 },
+	#[serde(rename_all = "camelCase")]
+	ImagePoint { x: f64, y: f64 },
+	#[serde(rename_all = "camelCase")]
+	ImageZone { x: f64, y: f64, width: f64, height: f64 },
+	#[serde(rename_all = "camelCase")]
+	BoardNode { node_id: String },
+	#[serde(rename_all = "camelCase")]
+	BoardPoint { point: LibraryBoardPoint },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryCommentThreadState {
+	Open,
+	Resolved,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryCommentPartyKind {
+	Person,
+	Agent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentParty {
+	pub kind: LibraryCommentPartyKind,
+	pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryComment {
+	pub author: LibraryCommentParty,
+	pub created_at: i64,
+	pub text: String,
+	pub mentions: Vec<LibraryCommentParty>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentThread {
+	pub id: String,
+	pub space_id: String,
+	pub item_name: String,
+	pub anchor: LibraryCommentAnchor,
+	pub state: LibraryCommentThreadState,
+	pub comments: Vec<LibraryComment>,
+	pub target_missing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentThreadChanged {
+	pub space_id: String,
+	pub item_name: String,
+	pub thread: LibraryCommentThread,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentCount {
+	pub item_name: String,
+	pub open_threads: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryError {
 	#[serde(rename_all = "camelCase")]
-	Unavailable { failure: StorageFailure },
+	Unavailable {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	Storage { failure: StorageFailure },
+	Storage {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnknownSpace { id: String },
+	UnknownSpace {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	InvalidName { name: String },
+	InvalidName {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Unsupported { name: String },
+	Unsupported {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Missing { name: String },
+	Missing {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	AlreadyExists { name: String },
+	AlreadyExists {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnknownTemplate { id: String },
+	UnknownTemplate {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	NotADocument { name: String },
+	NotADocument {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	NotAnImage { name: String },
+	NotAnImage {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	NotABoard { name: String },
+	NotABoard {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	InvalidBoard { name: String, detail: String },
+	InvalidBoard {
+		name: String,
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	NotUtf8 { name: String },
+	NotUtf8 {
+		name: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	TooLarge { name: String, bytes: u64, limit: u64 },
+	TooLarge {
+		name: String,
+		bytes: u64,
+		limit: u64,
+	},
 	#[serde(rename_all = "camelCase")]
-	Unreadable { detail: String },
+	Unreadable {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Undecodable { name: String, detail: String },
+	Undecodable {
+		name: String,
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Unwritable { detail: String },
+	Unwritable {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	ClipboardRefused { detail: String },
+	ClipboardRefused {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Unrevealed { detail: String },
+	Unrevealed {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnknownMessage { conversation_id: String, message_id: String },
+	UnknownMessage {
+		conversation_id: String,
+		message_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownThread {
+		id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	InvalidAnchor {
+		name: String,
+	},
+	BlankComment,
+	UnknownAuthor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
