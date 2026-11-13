@@ -30,14 +30,9 @@ type SharedBubble = {
 	side: TooltipHintSide
 }
 
-const createSharedBubbleHandle = () =>
-	TooltipPrimitive.createHandle<SharedBubble>()
-
-type SharedBubbleHandle = ReturnType<typeof createSharedBubbleHandle>
-
-const SharedBubbleContext = createContext<SharedBubbleHandle | undefined>(
-	undefined,
-)
+const SharedBubbleContext = createContext<
+	TooltipPrimitive.Handle<SharedBubble> | undefined
+>(undefined)
 
 type TooltipHintProps = {
 	content: ReactNode
@@ -78,7 +73,9 @@ type TooltipHintProviderProps = {
 }
 
 const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
-	const [sharedBubble] = useState(createSharedBubbleHandle)
+	const [sharedBubble] = useState(() =>
+		TooltipPrimitive.createHandle<SharedBubble>(),
+	)
 
 	return (
 		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
