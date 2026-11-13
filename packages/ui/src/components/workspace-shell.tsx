@@ -28,17 +28,19 @@ const SETTINGS_MENU_ON_SHELL_INSET =
 const SLIDE_DISTANCE =
 	"[--sidebar-slide:calc(var(--sidebar-width)-var(--shell-inset))]"
 
+const SLIDE_TIMING = "[--sidebar-slide-timing:150ms_var(--ease-out)]"
+
 const SIDEBAR_SLIDES_OFF_THE_LEFT_EDGE =
-	"motion-safe:data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:[transition:translate_150ms_var(--ease-out)] data-[sidebar-open=false]:*:data-[slot=navigation-sidebar]:-translate-x-full data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:-me-(--sidebar-slide) data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:starting:-translate-x-full"
+	"motion-safe:data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-open=false]:*:data-[slot=navigation-sidebar]:-translate-x-full data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:-me-(--sidebar-slide) data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:starting:-translate-x-full"
 
 const CARD_FOLLOWS_THE_SIDEBAR =
-	"motion-safe:data-[sidebar-sliding=true]:*:data-content-card:[transition:translate_150ms_var(--ease-out)] data-[sidebar-layout=docked]:data-[sidebar-sliding=true]:*:data-content-card:me-[calc(var(--shell-inset)-var(--spacing)-var(--sidebar-slide))] data-[sidebar-layout=docked]:data-[sidebar-open=false]:*:data-content-card:-translate-x-(--sidebar-slide) data-[sidebar-layout=collapsed]:data-[sidebar-open=true]:*:data-content-card:translate-x-(--sidebar-slide)"
+	"motion-safe:data-[sidebar-sliding=true]:*:data-content-card:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-layout=docked]:data-[sidebar-sliding=true]:*:data-content-card:me-[calc(var(--shell-inset)-var(--spacing)-var(--sidebar-slide))] data-[sidebar-layout=docked]:data-[sidebar-open=false]:*:data-content-card:-translate-x-(--sidebar-slide) data-[sidebar-layout=collapsed]:data-[sidebar-open=true]:*:data-content-card:translate-x-(--sidebar-slide)"
 
 const SHELL_TITLE_BAR_HEIGHT = 40
 
 const SHELL_GUTTER = 4
 
-const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} ${SLIDE_DISTANCE} ${SIDEBAR_SLIDES_OFF_THE_LEFT_EDGE} ${CARD_FOLLOWS_THE_SIDEBAR}`
+const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} ${SLIDE_DISTANCE} ${SLIDE_TIMING} ${SIDEBAR_SLIDES_OFF_THE_LEFT_EDGE} ${CARD_FOLLOWS_THE_SIDEBAR}`
 
 const HELD_HANDLE_OVERLAY = "fixed inset-0 z-50 cursor-col-resize"
 

@@ -93,8 +93,10 @@ const SidebarPeekProvider = ({
 	const isHovered = useRef(false)
 	const isHeld = useRef(false)
 
-	if (!isSliding && layout !== layoutFor(isDocked)) {
-		if (isResizing || isOpen) setLayout(layoutFor(isDocked))
+	const settledLayout = layoutFor(isDocked)
+
+	if (!isSliding && layout !== settledLayout) {
+		if (isResizing || isOpen) setLayout(settledLayout)
 		else setIsSliding(true)
 	}
 	if (isDocked && isOpen) setIsOpen(false)
@@ -106,7 +108,7 @@ const SidebarPeekProvider = ({
 		let isCurrent = true
 		const settle = () => {
 			if (!isCurrent) return
-			setLayout(layoutFor(isDocked))
+			setLayout(settledLayout)
 			setIsSliding(false)
 		}
 		const slides =
@@ -116,7 +118,7 @@ const SidebarPeekProvider = ({
 		return () => {
 			isCurrent = false
 		}
-	}, [isSliding, isDocked])
+	}, [isSliding, settledLayout])
 
 	const peek = useMemo<SidebarPeekState>(() => {
 		const settleAfter = (next: boolean, delay: number) => {

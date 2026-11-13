@@ -12,6 +12,7 @@ import {
 	settled,
 	slotIn,
 	slotsIn,
+	transitionsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
@@ -499,11 +500,7 @@ export const DockingFromThePeekHandsOverAtOnce = meta.story({
 
 			await fireEvent.click(toggle)
 			await expect(peeksIn(canvasElement)).toHaveLength(0)
-			await expect(
-				canvasElement
-					.getAnimations({ subtree: true })
-					.filter((animation) => animation instanceof CSSTransition),
-			).toHaveLength(0)
+			await expect(transitionsIn(canvasElement)).toHaveLength(0)
 			await expect(
 				boxOf(slotIn(canvasElement, "navigation-sidebar")).left,
 			).toBe(0)

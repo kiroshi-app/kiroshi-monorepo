@@ -10,6 +10,7 @@ import {
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	transitionsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
@@ -1185,11 +1186,6 @@ const SLIDE_MS = 150
 
 const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)"
 
-const transitionsIn = (canvasElement: HTMLElement) =>
-	canvasElement
-		.getAnimations({ subtree: true })
-		.filter((animation) => animation instanceof CSSTransition)
-
 const holdAt = (slides: CSSTransition[], time: number) => {
 	for (const slide of slides) {
 		slide.pause()
@@ -1236,6 +1232,12 @@ const expectSlidingParts = async (
 	await expect(sliding).toContain(canvas.getByRole("main"))
 	await expect(sliding).toContain(canvas.getByRole("tablist").parentElement)
 }
+
+const leftEdgesIn = (canvas: ShellCanvas, canvasElement: HTMLElement) => ({
+	sidebar: leftOf(navigationSidebarIn(canvasElement)),
+	card: leftOf(canvas.getByRole("main")),
+	tab: leftOf(firstTabIn(canvas)),
+})
 
 const widthOfCard = (canvas: ShellCanvas) =>
 	canvas.getByRole("main").getBoundingClientRect().width
@@ -1378,22 +1380,14 @@ export const ToggleDuringSlideTurnsBack = meta.story({
 
 			await fireEvent.click(toggle)
 			holdAt(await heldSlideIn(canvasElement), SLIDE_MS / 2)
-			const halfWay = {
-				sidebar: leftOf(navigationSidebarIn(canvasElement)),
-				card: leftOf(canvas.getByRole("main")),
-				tab: leftOf(firstTabIn(canvas)),
-			}
+			const halfWay = leftEdgesIn(canvas, canvasElement)
 			await expect(halfWay.sidebar).toBeLessThan(0)
 			await expect(halfWay.sidebar).toBeGreaterThan(-SIDEBAR_DEFAULT_WIDTH)
 
 			await fireEvent.click(toggle)
 			const back = await heldSlideIn(canvasElement)
 			await expectTranslateOnly(back)
-			await expect({
-				sidebar: leftOf(navigationSidebarIn(canvasElement)),
-				card: leftOf(canvas.getByRole("main")),
-				tab: leftOf(firstTabIn(canvas)),
-			}).toEqual(halfWay)
+			await expect(leftEdgesIn(canvas, canvasElement)).toEqual(halfWay)
 
 			await finishAndSettle(canvasElement, back)
 			await expectDocked(canvas, canvasElement)

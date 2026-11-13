@@ -135,7 +135,7 @@ const HISTORY_TRAVEL =
 	"[--history-collapsed:calc(var(--history-buttons)_*_(--spacing(7)_+_--spacing(0.5))_-_--spacing(0.5)_+_--spacing(2))] [--history-travel:calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing)-var(--history-collapsed))]"
 
 const TABS_FOLLOW_THE_SIDEBAR =
-	"motion-safe:in-data-[sidebar-sliding=true]:[&>:not([data-slot=title-bar-history])]:[transition:translate_150ms_var(--ease-out)] [[data-sidebar-layout=docked][data-sidebar-open=false]_&>:not([data-slot=title-bar-history])]:-translate-x-(--history-travel) [[data-sidebar-layout=collapsed][data-sidebar-open=true]_&>:not([data-slot=title-bar-history])]:translate-x-(--history-travel)"
+	"motion-safe:in-data-[sidebar-sliding=true]:[&>:not([data-slot=title-bar-history])]:[transition:translate_var(--sidebar-slide-timing)] [[data-sidebar-layout=docked][data-sidebar-open=false]_&>:not([data-slot=title-bar-history])]:-translate-x-(--history-travel) [[data-sidebar-layout=collapsed][data-sidebar-open=true]_&>:not([data-slot=title-bar-history])]:translate-x-(--history-travel)"
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
