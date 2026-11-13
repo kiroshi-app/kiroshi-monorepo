@@ -1282,10 +1282,10 @@ export const HostOutdated = meta.story({
 		const notice = await failureNotice()
 		await expect(getComputedStyle(markOf(notice)).color).toBe(destructiveRole())
 		await expect(
-			within(viewport()).getByText("Couldn’t send that request"),
+			within(notice).getByText("Couldn’t send that request"),
 		).toBeVisible()
 		await expect(
-			within(viewport()).getByText(
+			within(notice).getByText(
 				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
 			),
 		).toBeVisible()
