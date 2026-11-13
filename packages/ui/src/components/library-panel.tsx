@@ -74,7 +74,7 @@ type FilterSegmentProps = {
 
 const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
 	<ToggleGroupItem
-		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-foreground text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
+		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
 		data-slot="library-filter"
 		size="sm"
 		value={value}
@@ -176,10 +176,10 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 
 	return (
 		<header
-			className="flex w-full min-w-0 flex-col items-start gap-2"
+			className="flex w-full min-w-0 flex-col gap-2"
 			data-slot="library-header"
 		>
-			<div className="flex w-full justify-between gap-2">
+			<div className="flex justify-between gap-2">
 				<HeaderIsland className="gap-1">
 					<h1 className="flex h-8 items-center px-2 font-medium text-sm leading-4">
 						{t("library.title")}
@@ -191,7 +191,7 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 				{actions}
 			</div>
 			{filters ? (
-				<HeaderIsland className="scrollbar-hide @4xl:hidden max-w-full overflow-x-auto">
+				<HeaderIsland className="scrollbar-hide @4xl:hidden max-w-full self-start overflow-x-auto">
 					{filters}
 				</HeaderIsland>
 			) : null}
