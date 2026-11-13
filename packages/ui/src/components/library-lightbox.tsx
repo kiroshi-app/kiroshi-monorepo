@@ -10,6 +10,7 @@ import {
 	type ImageMenuActions,
 	type ImageMenuProps,
 } from "@workspace/ui/components/image-menu"
+import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
 import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
 import {
 	LibraryImageComments,
@@ -96,7 +97,7 @@ const isOnScrollbar = (event: PointerEvent) => {
 
 type LibraryLightboxImageComments = Omit<
 	LibraryImageCommentsProps,
-	"isCommentMode"
+	"isCommentMode" | "stage"
 >
 
 type ZoomStageProps = {
@@ -118,6 +119,7 @@ const ZoomStage = ({
 }: ZoomStageProps) => {
 	const { t } = useTranslation("common")
 	const imageRef = useRef<HTMLImageElement>(null)
+	const [stage, setStage] = useState<HTMLDivElement | null>(null)
 	const [zoom, setZoom] = useState<number | null>(null)
 	const [naturalWidth, setNaturalWidth] = useState(0)
 
@@ -146,6 +148,7 @@ const ZoomStage = ({
 				className="flex min-h-0 flex-1 overflow-auto rounded-md [container-type:size] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
 				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
+				ref={setStage}
 				tabIndex={zoom === null ? undefined : 0}
 			>
 				<div className="relative m-auto">
@@ -177,6 +180,7 @@ const ZoomStage = ({
 						<LibraryImageComments
 							{...imageComments}
 							isCommentMode={isCommentMode}
+							stage={stage}
 						/>
 					) : null}
 				</div>
@@ -298,9 +302,16 @@ const LibraryLightbox = ({
 		<Dialog
 			onOpenChange={(open, details) => {
 				if (open) return
-				if (isCommentMode && details.reason === "escape-key")
-					comments?.onCommentModeChange(false)
-				else onClose()
+				const isAnsweredByComments =
+					details.reason === "escape-key" &&
+					closeInnermostCommentLayer({
+						draft: imageComments?.draft,
+						openThread: imageComments?.openThread,
+						leaveCommentMode: isCommentMode
+							? () => comments?.onCommentModeChange(false)
+							: undefined,
+					})
+				if (!isAnsweredByComments) onClose()
 			}}
 			open={image !== null}
 		>

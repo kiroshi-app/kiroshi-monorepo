@@ -561,6 +561,8 @@ const common = {
 				passage: "On “{{text}}”",
 				goneText: "On text that’s no longer in the document",
 				goneShape: "On a shape that’s no longer on the board",
+				imagePoint: "On a point of the image",
+				imageZone: "On a zone of the image",
 			},
 		},
 		itemMenu: {

@@ -1976,8 +1976,10 @@ const ReadyBoardCanvas = ({
 			target.closest('[data-slot="board-connector-flyout"]'),
 		)
 		if (event.metaKey || event.ctrlKey || stopArrowGesture.current) return
-		const isLeavingCommentMode = isCommentMode && event.key === "Escape"
-		if (isLeavingCommentMode) return
+		const isAnsweredByComments =
+			event.key === "Escape" &&
+			(isCommentMode || Boolean(commentDraft) || Boolean(openCommentThread))
+		if (isAnsweredByComments) return
 		const focusedObjectId =
 			target.dataset.slot === "board-object" ? target.dataset.objectId : null
 		if (isCommentMode && event.key === "Enter" && focusedObjectId) {

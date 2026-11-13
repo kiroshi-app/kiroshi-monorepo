@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
-	commentPinPointOf,
+	commentPinTailOf,
 	commentRingRadiusOf,
 	commentRingRectOf,
 	composerCornerOf,
@@ -25,9 +25,15 @@ describe("isNodeAnchor", () => {
 	})
 })
 
-describe("commentPinPointOf", () => {
-	it("puts the pin tail 10 inside the top right corner on both axes", () => {
-		expect(commentPinPointOf(NODE)).toEqual({ x: 350, y: 130 })
+describe("commentPinTailOf", () => {
+	it("puts the pin tail 10 screen pixels inside the top right corner", () => {
+		expect(commentPinTailOf(NODE, { offset: { x: 0, y: 0 }, zoom: 1 })).toEqual(
+			{ x: 350, y: 130 },
+		)
+	})
+
+	it("keeps the same 10 screen pixels when the board is zoomed", () => {
+		expect(commentPinTailOf(NODE, ZOOMED)).toEqual({ x: 734.25, y: 240 })
 	})
 })
 
@@ -52,13 +58,15 @@ describe("commentRingRectOf", () => {
 })
 
 describe("commentRingRadiusOf", () => {
-	it("is concentric with a square node", () => {
+	it("never goes under the 6 pixels of its outset", () => {
 		expect(commentRingRadiusOf("0px", 1)).toBe("6px")
+		expect(commentRingRadiusOf("4px", 1)).toBe("6px")
 	})
 
-	it("is concentric with a rounded node, at its zoomed radius", () => {
-		expect(commentRingRadiusOf("6px", 1)).toBe("12px")
-		expect(commentRingRadiusOf("6px", 2)).toBe("18px")
+	it("takes the drawn radius of a rounded node, at its zoomed size", () => {
+		expect(commentRingRadiusOf("12px", 1)).toBe("12px")
+		expect(commentRingRadiusOf("12px", 2)).toBe("24px")
+		expect(commentRingRadiusOf("12px", 0.25)).toBe("6px")
 	})
 
 	it("keeps the radius of an ellipse", () => {
@@ -77,18 +85,18 @@ describe("composerCornerOf", () => {
 })
 
 describe("threadCornerBesidePin", () => {
-	it("ends the thread card 8 left of the pin, on the pin top", () => {
+	it("ends the thread card 12 left of the pin, on the pin top", () => {
 		expect(threadCornerBesidePin({ x: 350, y: 130 })).toEqual({
-			x: 342,
+			x: 338,
 			y: 98,
 		})
 	})
 })
 
 describe("threadCornerUnderRing", () => {
-	it("ends the thread card on the ring right edge, 20 under the ring", () => {
+	it("ends the thread card on the ring right edge, 12 under the ring", () => {
 		expect(
 			threadCornerUnderRing({ x: 194, y: 114, width: 172, height: 108 }),
-		).toEqual({ x: 366, y: 242 })
+		).toEqual({ x: 366, y: 234 })
 	})
 })
