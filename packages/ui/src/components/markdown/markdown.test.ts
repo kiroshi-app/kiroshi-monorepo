@@ -91,8 +91,23 @@ describe("markdown constructions", () => {
 	it("renders lists nested three levels deep", () => {
 		const html = render("- one\n\t- two\n\t\t- three\n\n1. first\n2. second")
 
-		expect(html).toContain("<ol>")
+		expect(html).toContain('<ol style="--typeset-marker-digits:1">')
 		expect(html.match(/<ul>/g)).toHaveLength(3)
+	})
+
+	it("tells a numbered list how many digits its widest number holds", () => {
+		const twelve = Array.from(
+			{ length: 12 },
+			(_, index) => `${index + 1}. step`,
+		).join("\n")
+
+		expect(render(twelve)).toContain('<ol style="--typeset-marker-digits:2">')
+		expect(render("9. nine\n10. ten")).toContain(
+			'<ol start="9" style="--typeset-marker-digits:2">',
+		)
+		expect(render("100. hundred")).toContain(
+			'<ol start="100" style="--typeset-marker-digits:3">',
+		)
 	})
 
 	it("renders task lists as enabled checkboxes labelled by their text", () => {

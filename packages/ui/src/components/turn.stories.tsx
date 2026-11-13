@@ -1302,6 +1302,199 @@ export const Writing = meta.story({
 	},
 })
 
+const NESTED_BULLETS = `The shell owns three kinds of things:
+
+- Commands and drivers
+  - Tauri IPC
+    - Parsing the payload
+    - Mapping it to props
+  - Transports
+- Routing and providers`
+
+const MARKER_COLUMN = 14
+
+const MARKER_TO_TEXT = 10
+
+const ITEMS_APART = "8px"
+
+const listsIn = (reply: HTMLElement, tag: "ul" | "ol") =>
+	Array.from(reply.querySelectorAll<HTMLElement>(tag))
+
+const itemsOf = (list: HTMLElement) =>
+	Array.from(list.querySelectorAll<HTMLElement>(":scope > li"))
+
+const expectNestedBullets = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const levels = listsIn(reply, "ul")
+	await expect(levels).toHaveLength(3)
+
+	for (const [depth, list] of levels.entries()) {
+		await expect(getComputedStyle(list).paddingInlineStart).toBe("0px")
+		await expect(list.getBoundingClientRect().left).toBe(
+			levels[0].getBoundingClientRect().left +
+				depth * (MARKER_COLUMN + MARKER_TO_TEXT),
+		)
+		for (const [at, item] of itemsOf(list).entries()) {
+			const marker = getComputedStyle(item, "::before")
+			await expect(marker.content).toBe('"•" / ""')
+			await expect([marker.left, marker.width]).toEqual([
+				"0px",
+				`${MARKER_COLUMN}px`,
+			])
+			await expect(marker.color).toBe(colours.marker)
+			await expect(getComputedStyle(item, "::marker").color).toBe(
+				"rgba(0, 0, 0, 0)",
+			)
+			await expect(getComputedStyle(item).paddingInlineStart).toBe(
+				`${MARKER_COLUMN + MARKER_TO_TEXT}px`,
+			)
+			await expect(typeOf(item)).toEqual(["16px", "28px", "400"])
+			if (at > 0) await expect(spaceAbove(item)).toBe(ITEMS_APART)
+		}
+		if (depth > 0) await expect(spaceAbove(list)).toBe(ITEMS_APART)
+	}
+}
+
+type ListReplyProps = {
+	children: string
+}
+
+const ListReply = ({ children }: ListReplyProps) => (
+	<ThreadColumn>
+		<AssistantTurn
+			author={ROLE_BOT}
+			copyText={children}
+			onPin={pin}
+			onReply={reply}
+			sentAt={sentOn(10, 9, 20)}
+			now={READ_ON}
+		>
+			<Markdown>{children}</Markdown>
+		</AssistantTurn>
+	</ThreadColumn>
+)
+
+export const NestedBulletList = meta.story({
+	globals: { theme: "light" },
+	render: () => <ListReply>{NESTED_BULLETS}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bullet list nested three levels deep in the agent reply, light. No artboard of the Conversation feed draws a nested list, so every level keeps the bullet the artboards draw. Check that each level draws the same round bullet in the 14 wide column, 10 before its text, in the marker grey, that items stay 8 apart at every level, and that each level starts under the text of the level above. Pick `NestedBulletListDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNestedBullets(canvasElement, REPLY_COLOURS.light),
+})
+
+export const NestedBulletListDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <ListReply>{NESTED_BULLETS}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same three levels as `NestedBulletList` on the dark thread. Check that every bullet keeps its column and the dark marker grey.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNestedBullets(canvasElement, REPLY_COLOURS.dark),
+})
+
+const NUMBERED_STEPS = [
+	"Read the ticket and its contract",
+	"Open every entrypoint it names",
+	"List the states the change touches",
+	"List the densities and both themes",
+	"Look for the pattern the repo already holds",
+	"Write the smallest change that fits",
+	"Add the story that proves each state",
+	"Run the type check",
+	"Run the lint",
+	"Run the stories the change touches",
+	"Commit the work on its own",
+	"Report what changed and what did not",
+]
+
+const NUMBERED_LIST = NUMBERED_STEPS.map(
+	(step, index) => `${index + 1}. ${step}`,
+).join("\n")
+
+const inkWidthOf = (text: string, like: Element) => {
+	const context = document.createElement("canvas").getContext("2d")
+	if (!context) throw new globalThis.Error("This browser draws no canvas")
+	context.font = getComputedStyle(like).font
+	return context.measureText(text).width
+}
+
+const expectNumberedList = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const list = tagIn(reply, "ol")
+	const items = itemsOf(list)
+	const column = MARKER_COLUMN + inkWidthOf("0", items[0])
+	await expect(items).toHaveLength(NUMBERED_STEPS.length)
+	await expect(getComputedStyle(list).paddingInlineStart).toBe("0px")
+	await expect(inkWidthOf("9.", items[0])).toBeLessThanOrEqual(MARKER_COLUMN)
+	await expect(inkWidthOf("12.", items[0])).toBeLessThanOrEqual(column)
+
+	for (const [at, item] of items.entries()) {
+		const marker = getComputedStyle(item, "::before")
+		await expect(marker.content).toBe('counter(list-item) "." / ""')
+		await expect(marker.left).toBe("0px")
+		await expect(Number.parseFloat(marker.width)).toBeCloseTo(column, 1)
+		await expect(marker.textAlign).toBe("end")
+		await expect(marker.color).toBe(colours.marker)
+		await expect([marker.fontSize, marker.lineHeight]).toEqual(["16px", "28px"])
+		await expect(getComputedStyle(item, "::marker").color).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect(
+			Number.parseFloat(getComputedStyle(item).paddingInlineStart),
+		).toBeCloseTo(column + MARKER_TO_TEXT, 1)
+		await expect(typeOf(item)).toEqual(["16px", "28px", "400"])
+		if (at > 0) await expect(spaceAbove(item)).toBe(ITEMS_APART)
+	}
+}
+
+export const NumberedList = meta.story({
+	globals: { theme: "light" },
+	render: () => <ListReply>{NUMBERED_LIST}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A numbered list from 1 to 12 in the agent reply, light. No artboard of the Conversation feed draws a numbered list, so it keeps the column, the grey, the gap and the rhythm the artboards draw for bullets. Check that the numbers end on one edge 10 before the text, in the marker grey, that items stay 8 apart, and that the column is the 14 of a bullet plus the one digit that 12 adds. Pick `NumberedListDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNumberedList(canvasElement, REPLY_COLOURS.light),
+})
+
+export const NumberedListDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <ListReply>{NUMBERED_LIST}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same twelve steps as `NumberedList` on the dark thread. Check that the numbers keep their column and the dark marker grey.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNumberedList(canvasElement, REPLY_COLOURS.dark),
+})
+
 export const Endings = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-170 flex-col gap-3">
