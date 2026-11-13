@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor, within } from "storybook/test"
+import { expect, fireEvent, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -12,6 +12,7 @@ import {
 	settled,
 	slotIn,
 	slotsIn,
+	transitionsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar"
@@ -475,6 +476,38 @@ export const ClickOnTheCollapseIconDocks = meta.story({
 		await userEvent.click(toggle)
 		await pastTheGraceDelay()
 		await expectNothingOnTheLeft(canvas, canvasElement)
+	},
+})
+
+export const DockingFromThePeekHandsOverAtOnce = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Motion allowed. Check a click on the collapse icon, the panel open under it, swaps the panel for the docked sidebar in one frame: no panel left, the sidebar in place with nothing sliding, and the card on its edge.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		await withMotionAllowed(async () => {
+			const toggle = toggleIn(canvas)
+			await userEvent.hover(toggle)
+			await waitFor(
+				() => expect(peeksIn(canvasElement)).toHaveLength(1),
+				FRAME_POLL,
+			)
+
+			await fireEvent.click(toggle)
+			await expect(peeksIn(canvasElement)).toHaveLength(0)
+			await expect(transitionsIn(canvasElement)).toHaveLength(0)
+			await expect(
+				boxOf(slotIn(canvasElement, "navigation-sidebar")).left,
+			).toBe(0)
+			await expect(boxOf(canvas.getByRole("main")).left).toBe(
+				ARTBOARD_SIDEBAR_WIDTH,
+			)
+		})
 	},
 })
 

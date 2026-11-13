@@ -25,11 +25,16 @@ const SIDEBAR_WIDTH_STOPS_AT_THE_CARD =
 const SETTINGS_MENU_ON_SHELL_INSET =
 	"*:data-[slot=settings-menu]:mb-[calc(var(--shell-inset)-var(--spacing))]"
 
+const SLIDE_TIMING = "[--sidebar-slide-timing:150ms_var(--ease-out)]"
+
+const SIDEBAR_SLIDES_OVER_THE_CARD =
+	"motion-safe:data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:[transition:translate_var(--sidebar-slide-timing)] data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:surface-shell data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:z-40 data-[sidebar-sliding=true]:*:data-[slot=navigation-sidebar]:me-[calc(var(--shell-inset)-var(--sidebar-width))] data-[sidebar-open=false]:*:data-[slot=navigation-sidebar]:-translate-x-full data-[sidebar-layout=collapsed]:*:data-[slot=navigation-sidebar]:starting:-translate-x-full"
+
 const SHELL_TITLE_BAR_HEIGHT = 40
 
 const SHELL_GUTTER = 4
 
-const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL}`
+const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} ${SLIDE_TIMING} ${SIDEBAR_SLIDES_OVER_THE_CARD}`
 
 const HELD_HANDLE_OVERLAY = "fixed inset-0 z-50 cursor-col-resize"
 
@@ -73,29 +78,36 @@ const WorkspaceShellRoot = ({
 			width={width}
 		>
 			{(resize) => (
-				<ShellSidebarProvider
-					className={cn(SHELL, className)}
-					data-sidebar-open={open}
-					data-hue={spaceHue}
-					onOpenChange={onOpenChange}
-					open={open}
-					style={shellStyle(resize.width, spaceHue)}
-				>
-					<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
-						{isLandmark ? <SkipLink targetId={mainId} /> : null}
-						<SidebarPeekProvider>{children}</SidebarPeekProvider>
-					</ContentCardLandmarkId>
-					{resize.isResizable ? (
-						<div
-							aria-hidden="true"
-							className={cn(
-								HELD_HANDLE_OVERLAY,
-								!resize.isResizing && "hidden",
-							)}
-							data-slot="sidebar-resize-overlay"
-						/>
-					) : null}
-				</ShellSidebarProvider>
+				<SidebarPeekProvider isDocked={open} isResizing={resize.isResizing}>
+					{(dock) => (
+						<ShellSidebarProvider
+							className={cn(SHELL, className)}
+							data-sidebar-layout={dock.layout}
+							data-sidebar-open={open}
+							data-sidebar-sliding={dock.isSliding}
+							data-hue={spaceHue}
+							onOpenChange={onOpenChange}
+							open={open}
+							ref={dock.shellRef}
+							style={shellStyle(resize.width, spaceHue)}
+						>
+							<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
+								{isLandmark ? <SkipLink targetId={mainId} /> : null}
+								{children}
+							</ContentCardLandmarkId>
+							{resize.isResizable ? (
+								<div
+									aria-hidden="true"
+									className={cn(
+										HELD_HANDLE_OVERLAY,
+										!resize.isResizing && "hidden",
+									)}
+									data-slot="sidebar-resize-overlay"
+								/>
+							) : null}
+						</ShellSidebarProvider>
+					)}
+				</SidebarPeekProvider>
 			)}
 		</SidebarResizeProvider>
 	)

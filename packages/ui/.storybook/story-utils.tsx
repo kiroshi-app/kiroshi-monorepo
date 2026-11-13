@@ -128,6 +128,11 @@ export const withMotionAllowed = async (run: () => Promise<void>) => {
 	}
 }
 
+export const transitionsIn = (root: HTMLElement) =>
+	root
+		.getAnimations({ subtree: true })
+		.filter((animation) => animation instanceof CSSTransition)
+
 export const enterStartOf = (element: HTMLElement) => {
 	const [enter] = element.getAnimations()
 	if (!enter) throw new Error("Nothing here enters by an animation")
