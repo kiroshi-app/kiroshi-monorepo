@@ -376,6 +376,12 @@ const ExpandedSidebar = ({
 			))}
 		</SidebarMenu>
 	)
+	const neighbourMenu = <div aria-hidden="true">{menu}</div>
+	const renderNeighbourList = (space: Space) => (
+		<ScrollingMenuContext.Provider value={neighbourMenu}>
+			{renderSpaceList?.(space)}
+		</ScrollingMenuContext.Provider>
+	)
 
 	return (
 		<nav
@@ -390,7 +396,7 @@ const ExpandedSidebar = ({
 				<CurrentSpaceCarousel
 					isSwitchingEnabled={isSpaceSwitchingEnabled}
 					onSelectSpace={switcher.onSelectSpace}
-					renderSpaceList={renderSpaceList}
+					renderSpaceList={renderNeighbourList}
 					selectedSpaceId={switcher.selectedSpaceId}
 					spaces={switcher.spaces}
 				>

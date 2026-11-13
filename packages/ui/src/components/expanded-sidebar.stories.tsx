@@ -988,7 +988,7 @@ export const NeighbourListShowsMidSwipeExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet.",
+					"A swipe carried four tenths of a panel towards the next Space, short of the crossing, with the list of every Space handed in. Check the next Space's list is drawn in the incoming panel and already under the fingers, and that no Space is selected yet. Check the incoming panel leads with a copy of the destinations menu at the height of the real one, inert and hidden from assistive technology, so one Library button is exposed and the list does not shift when the swipe lands.",
 			},
 		},
 	},
@@ -1000,6 +1000,19 @@ export const NeighbourListShowsMidSwipeExpanded = meta.story({
 		await expect(neighbour.getBoundingClientRect().left).toBeGreaterThanOrEqual(
 			carouselRight,
 		)
+
+		const menu = navigationMenuIn(view)
+		const menuCopy = neighbour.closest('[data-slot="sidebar-content"]')
+			?.firstElementChild as HTMLElement
+		await expect(
+			within(view).getAllByRole("button", { name: "Library" }),
+		).toHaveLength(1)
+		await expect(menuCopy).toHaveAttribute("aria-hidden", "true")
+		await expect(menuCopy.closest("[inert]")).not.toBeNull()
+		await expect([boxOf(menuCopy).top, boxOf(menuCopy).height]).toEqual([
+			boxOf(menu).top,
+			boxOf(menu).height,
+		])
 
 		await carrySpaceCarousel(view, 0.4)
 		await expect(neighbour.getBoundingClientRect().left).toBeLessThan(
