@@ -25,6 +25,7 @@ import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { JoinedHosts } from "../host/joined-hosts"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
+import { isReadErrorShown } from "../query/last-read"
 import { runMutation } from "../query/run-mutation"
 
 type SpaceDescription = Pick<Space, "name" | "colour">
@@ -164,11 +165,16 @@ export const createSpacesController = (
 	const listQuery = spaceListQueryOf(() => enqueue(() => store.spaces()))
 	const listKey = listQuery.queryKey
 
+	const hasListFailed = () => {
+		const read = queryClient.getQueryState(listKey)
+		return read?.status === "error" && isReadErrorShown(read.error)
+	}
+
 	const current = memoizedOn(
 		() => [
 			choiceStore.getState(),
 			queryClient.getQueryData<Space[]>(listKey) ?? NO_SPACES,
-			queryClient.getQueryState(listKey)?.status === "error",
+			hasListFailed(),
 		],
 		spacesStateOf,
 	)

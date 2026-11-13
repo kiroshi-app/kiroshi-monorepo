@@ -108,10 +108,10 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 				state: openedState.update,
 				send,
 				authorOf,
-				onRefused: () => {
+				onRefused: (reason) => {
 					void reportFailure(
 						{ title: i18n.t("common:library.failure.board.refused") },
-						{ space: spaceId },
+						{ space: spaceId, reason },
 					)
 				},
 			})

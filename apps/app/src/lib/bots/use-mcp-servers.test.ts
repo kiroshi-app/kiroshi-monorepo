@@ -10,6 +10,7 @@ import { INSTALLED_EVENT } from "../applications/application-transport"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { HostRefused } from "../host/host-refused"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({
@@ -110,6 +111,25 @@ describe("useMcpServers", () => {
 		const { result } = await opened(store)
 
 		expect(result.current.hasFailedToLoad).toBe(true)
+	})
+
+	it("opens on an empty panel when the joined host knows no such listing", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "pluginMcpServers").mockRejectedValue(
+			new HostRefused(
+				"this host knows no command named plugin_mcp_servers",
+				null,
+				"unknownCommand",
+			),
+		)
+
+		const { result } = await opened(store)
+
+		expect(result.current).toMatchObject({
+			servers: [],
+			isPending: false,
+			hasFailedToLoad: false,
+		})
 	})
 
 	it("clears the reported failure once the listing reads again", async () => {

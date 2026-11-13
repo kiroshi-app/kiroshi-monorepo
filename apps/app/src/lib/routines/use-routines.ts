@@ -32,7 +32,7 @@ import { useRoutineDetail } from "./use-routine-detail"
 import { useRoutineForm } from "./use-routine-form"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { isFirstReadPending } from "@/lib/query/last-read"
+import { isFirstReadPending, isReadErrorShown } from "@/lib/query/last-read"
 
 const NO_SOURCES: RoutineTriggerSource[] = []
 
@@ -67,7 +67,7 @@ const leadSourcesIn = (
 		return []
 	}
 	if (read.status === "rejected") {
-		return null
+		return isReadErrorShown(read.reason) ? null : []
 	}
 	const lead = read.value.find(({ botId }) => botId === leadBotId)
 	if (!lead) {
@@ -87,7 +87,7 @@ const reportedRunsOf = (
 	read: PromiseSettledResult<RunsOfRoutine[]>,
 ): ReportedRunsRead => {
 	if (read.status === "rejected") {
-		return { reported: [], hasFailed: true }
+		return { reported: [], hasFailed: isReadErrorShown(read.reason) }
 	}
 	const runsByRoutineId = new Map(
 		read.value.map(({ routineId, runs }) => [routineId, runs]),
@@ -139,7 +139,11 @@ const readRoutines = async ({
 	const sources = declared ? toTriggerSources(declared) : NO_SOURCES
 
 	if (listing.status === "rejected") {
-		return { ...(held ?? NOTHING_READ), sources, failure: "routines" }
+		return {
+			...(held ?? NOTHING_READ),
+			sources,
+			failure: isReadErrorShown(listing.reason) ? "routines" : null,
+		}
 	}
 
 	const known = toKnownSources(declarations)

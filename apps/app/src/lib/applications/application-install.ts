@@ -8,7 +8,7 @@ import type {
 	InstallField,
 } from "./application-port"
 
-import { describeFailure } from "../failure-report"
+import { describeFailure, type ReporterFacts } from "../failure-report"
 import {
 	declaredServers,
 	declareServer,
@@ -75,7 +75,7 @@ export type InstallRun = {
 export type InstallDependencies = {
 	port: ApplicationPort
 	store: TranscriptStore
-	reportFailure: (notice: NoticeMessage) => void
+	reportFailure: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 export const installFailureOf = (reason: unknown) =>
@@ -121,12 +121,15 @@ const rollBackDeclaration = async (
 	if (!refusal) {
 		return
 	}
-	reportFailure({
-		title: i18n.t("bots:applications.install.rollback.title", { name }),
-		description: i18n.t("bots:applications.install.rollback.description", {
-			reason: refusalTextOf(refusal),
-		}),
-	})
+	reportFailure(
+		{
+			title: i18n.t("bots:applications.install.rollback.title", { name }),
+			description: i18n.t("bots:applications.install.rollback.description", {
+				reason: refusalTextOf(refusal),
+			}),
+		},
+		{ reason: refusal },
+	)
 }
 
 const writeKeys = async (

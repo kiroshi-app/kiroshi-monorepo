@@ -398,7 +398,9 @@ describe("useApplications", () => {
 		expect(controller.getState().directory).toEqual([LINEAR])
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
 		expect(reportFailure).toHaveBeenCalledTimes(1)
-		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE, {
+			reason: expect.anything(),
+		})
 	})
 
 	it("narrows what it holds on a keystroke without calling the port", async () => {
@@ -544,7 +546,9 @@ describe("useApplications", () => {
 
 		expect(controller.getState().directory).toEqual([LINEAR])
 		expect(reportFailure).toHaveBeenCalledTimes(1)
-		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE, {
+			reason: undefined,
+		})
 	})
 
 	it("raises no notice for a directory read where both sides answered", async () => {
@@ -735,7 +739,9 @@ describe("useApplications", () => {
 
 		expect(controller.getState().directory).toEqual([LINEAR])
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
-		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE, {
+			reason: undefined,
+		})
 	})
 
 	it("keeps the held rows and raises a notice when a refresh read is refused", async () => {
@@ -751,7 +757,9 @@ describe("useApplications", () => {
 
 		expect(controller.getState().directory).toEqual([LINEAR])
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
-		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE, {
+			reason: expect.anything(),
+		})
 	})
 
 	it("reads no refreshed directory while every catalogue view is closed", async () => {

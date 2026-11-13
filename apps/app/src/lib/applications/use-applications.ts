@@ -29,8 +29,9 @@ import type { Application, ApplicationPort } from "./application-port"
 import { applicationQueryKeys } from "./application-query-keys"
 import { useReadBound } from "./use-read-bound"
 
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import type { TranscriptStore } from "../conversations/store-port"
+import { isReadErrorShown } from "../query/last-read"
 
 export type ApplicationsState = {
 	curated: Application[]
@@ -65,7 +66,7 @@ export type Applications = {
 
 type ApplicationsOptions = {
 	isCatalogueOpen: boolean
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 type CatalogueStatus = {
@@ -162,7 +163,11 @@ const useCatalogueRead = (port: ApplicationPort) => {
 	})
 	const curated = catalogue.data ?? NO_APPLICATIONS
 	const hasOverrun = useReadBound(catalogue.isFetching && curated.length === 0)
-	const hasFailed = (catalogue.isError && !catalogue.isFetching) || hasOverrun
+	const hasFailed =
+		(catalogue.isError &&
+			isReadErrorShown(catalogue.error) &&
+			!catalogue.isFetching) ||
+		hasOverrun
 
 	return {
 		curated,
@@ -176,7 +181,7 @@ const useCatalogueRead = (port: ApplicationPort) => {
 
 type DirectoryReadOptions = {
 	isEnabled: boolean
-	reportFailure: (notice: NoticeMessage) => void
+	reportFailure: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const useDirectoryRead = (
@@ -193,8 +198,8 @@ const useDirectoryRead = (
 			readDirectory(
 				port,
 				queryClient.getQueryData<ApplicationDirectory>(queryKey),
-				() => {
-					if (!signal.aborted) reportFailure(unrefreshedNotice())
+				(reason) => {
+					if (!signal.aborted) reportFailure(unrefreshedNotice(), { reason })
 				},
 			),
 		enabled: isBrowsing && isEnabled,
@@ -207,7 +212,11 @@ const useDirectoryRead = (
 	return {
 		applications: answered.applications,
 		isReading: directory.isFetching && !hasOverrun,
-		hasFailed: (directory.isError && !directory.isFetching) || hasOverrun,
+		hasFailed:
+			(directory.isError &&
+				isReadErrorShown(directory.error) &&
+				!directory.isFetching) ||
+			hasOverrun,
 		hasPartlyFailed:
 			answered.hasPartlyFailed && (holdsRows || !directory.isFetching),
 		isStale: !directory.isError && answered.isStale,

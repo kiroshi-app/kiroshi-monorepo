@@ -18,7 +18,7 @@ import {
 
 import { isHostRefused } from "@/lib/host/host-refused"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { isFirstReadPending } from "@/lib/query/last-read"
+import { isFirstReadPending, isReadErrorShown } from "@/lib/query/last-read"
 
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
@@ -79,7 +79,8 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		() => (data ? toSpaceMissionGroups(data) : NO_GROUPS),
 		[data],
 	)
-	const hasFailed = isError && !isFetching && !isRetrying
+	const hasFailed =
+		isError && isReadErrorShown(error) && !isFetching && !isRetrying
 	const isFailureRaised = hasFailed && isHostRefused(error)
 
 	return useMemo(

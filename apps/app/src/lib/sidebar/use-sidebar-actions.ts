@@ -143,10 +143,10 @@ export const useSidebarActions = ({
 				try {
 					await runtimes.release(id)
 					await roster.removeConversation(id)
-				} catch {
+				} catch (reason) {
 					void reportFailure(
 						{ title: i18n.t("chat:conversationSettings.danger.failed") },
-						{ conversation: id },
+						{ conversation: id, reason },
 					)
 					return false
 				}

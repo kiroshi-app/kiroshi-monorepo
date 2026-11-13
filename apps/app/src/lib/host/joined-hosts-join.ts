@@ -120,6 +120,7 @@ export const createJoinedHostsJoin = ({
 }: JoinedHostsJoinOptions) => {
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
 	const reportedRefusals = new Set<string>()
+	const outdatedHostsOnNotice = new Set<string>()
 
 	const reportRefusalOnce = (
 		id: string,
@@ -165,17 +166,27 @@ export const createJoinedHostsJoin = ({
 		return refuse(id, { failure: describeFailure(reason) })
 	}
 
-	const isOutdatedOffScreen = (id: string, refusal: HostRefusal) =>
-		refusalKindOf(refusal) === "unknownCommand" &&
-		store.getState().active !== id
-
-	const reportRefusal = (id: string, refusal: HostRefusal) => {
-		if (isOutdatedOffScreen(id, refusal)) {
+	const reportOutdatedHostOnce = (id: string, refusal: HostRefusal) => {
+		if (store.getState().active !== id) {
 			logOutdatedHost(id, refusal)
 			return
 		}
-		reportFailure(refusal)
+		if (outdatedHostsOnNotice.has(id)) {
+			return
+		}
+		outdatedHostsOnNotice.add(id)
+		reportFailure(refusal, {
+			cause: `host-outdated:${id}`,
+			onClose: () => {
+				outdatedHostsOnNotice.delete(id)
+			},
+		})
 	}
+
+	const reportRefusal = (id: string, refusal: HostRefusal) =>
+		refusalKindOf(refusal) === "unknownCommand"
+			? reportOutdatedHostOnce(id, refusal)
+			: reportFailure(refusal)
 
 	const openHost = (
 		id: string,

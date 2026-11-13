@@ -97,6 +97,7 @@ export const createMissionRunFailures = (
 				mission: burst.failure.missionId,
 				...(burst.failure.spaceId ? { space: burst.failure.spaceId } : {}),
 				count: burst.count,
+				reason: burst.failure.error,
 			},
 		)
 	}

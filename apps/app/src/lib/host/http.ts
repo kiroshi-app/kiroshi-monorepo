@@ -10,7 +10,11 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { hostOfflineOf } from "./host-offline"
 import { type HostRefusalKind, HostRefused } from "./host-refused"
 
-import { describeFailure, raiseReportedFailure } from "../failure-report"
+import {
+	describeFailure,
+	raiseReportedFailure,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { countInvoke } from "../perf/invoke-tally-devtools"
 
 export type HostSocket = Pick<
@@ -173,13 +177,24 @@ const refusalNoticeOf = (refusal: HostRefusal): NoticeMessage => {
 	)
 }
 
-export const raiseRefusalNotice = (refusal: HostRefusal) =>
-	raiseReportedFailure(refusalNoticeOf(refusal), {
-		raisedIn: "host-refusal",
-		command: refusal.command,
-		httpStatus: refusal.status,
-		side: refusal.side,
-	})
+export type RefusalNoticeLifetime = Pick<
+	UnreportedFailureNotice,
+	"cause" | "onClose"
+>
+
+export const raiseRefusalNotice = (
+	refusal: HostRefusal,
+	lifetime?: RefusalNoticeLifetime,
+) =>
+	raiseReportedFailure(
+		{ ...refusalNoticeOf(refusal), ...lifetime },
+		{
+			raisedIn: "host-refusal",
+			command: refusal.command,
+			httpStatus: refusal.status,
+			side: refusal.side,
+		},
+	)
 
 const isFrame = (value: unknown): value is Frame =>
 	typeof value === "object" &&

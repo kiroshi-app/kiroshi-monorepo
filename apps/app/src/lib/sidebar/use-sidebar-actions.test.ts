@@ -328,7 +328,7 @@ describe("deleting a conversation", () => {
 			expect(isDeleted).toBe(false)
 			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
 				{ title: i18n.t("chat:conversationSettings.danger.failed") },
-				{ conversation: "c-1" },
+				{ conversation: "c-1", reason: expect.anything() },
 			)
 			expect(refused.drafts.read("c-1")).toBe("Half a thought")
 			expect(refused.attachments.forget).not.toHaveBeenCalled()

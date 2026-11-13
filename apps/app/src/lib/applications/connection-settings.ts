@@ -122,7 +122,7 @@ const raiseConnectRefusal = (title: string, refusal: unknown) => {
 			title: i18n.t("bots:applications.connection.failed", { name: title }),
 			description: refusalSentenceOf(refusal),
 		},
-		{ command: "connect" },
+		{ command: "connect", reason: refusal },
 	)
 }
 

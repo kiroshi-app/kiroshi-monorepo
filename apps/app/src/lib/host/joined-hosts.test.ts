@@ -691,8 +691,18 @@ describe("a joined space whose host runs an older Kiroshi", () => {
 
 	const outdated = () => new Response(UNKNOWN_COMMAND, { status: 404 })
 
-	const hostOnly = () =>
-		new Response("this command belongs to the host", { status: 403 })
+	const HOST_ONLY = "this command belongs to the host"
+
+	const UNAUTHORIZED = "no valid bearer token"
+
+	const heldByGarage = {
+		cause: "host-outdated:garage",
+		onClose: expect.any(Function),
+	}
+
+	const onScreen = (hosts: JoinedHosts) => hosts.invoke
+
+	const offScreen = (hosts: JoinedHosts) => hosts.invokeOn("attic")
 
 	const onGarageBesideAttic = async (answer: () => Response) => {
 		const joined = joinedHostsOf({ answer })
@@ -713,13 +723,55 @@ describe("a joined space whose host runs an older Kiroshi", () => {
 			refusalKind: "unknownCommand",
 		})
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
-			message: UNKNOWN_COMMAND,
-			command: "bot_list",
-			status: 404,
-			side: "member",
-		})
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				message: UNKNOWN_COMMAND,
+				command: "bot_list",
+				status: 404,
+				side: "member",
+			},
+			heldByGarage,
+		)
 		expect(console.warn).not.toHaveBeenCalled()
+	})
+
+	it("reports once the three commands the space on screen is refused", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(outdated)
+
+		await Promise.allSettled(
+			["bot_list", "agent_models", "routine_list"].map((command) =>
+				hosts.invoke(command),
+			),
+		)
+
+		expect(reportFailure).toHaveBeenCalledOnce()
+	})
+
+	it("reports the refusal again once its notice is closed", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(outdated)
+		await expect(hosts.invoke("bot_list")).rejects.toThrow()
+		const [[, lifetime]] = reportFailure.mock.calls
+
+		await expect(hosts.invoke("bot_list")).rejects.toThrow()
+		expect(reportFailure).toHaveBeenCalledOnce()
+
+		lifetime.onClose()
+		await expect(hosts.invoke("bot_list")).rejects.toThrow()
+		expect(reportFailure).toHaveBeenCalledTimes(2)
+	})
+
+	it("holds one notice per space", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(outdated)
+		await expect(hosts.invoke("bot_list")).rejects.toThrow()
+
+		await hosts.activate("attic")
+		await expect(hosts.invoke("bot_list")).rejects.toThrow()
+		await expect(hosts.invoke("agent_models")).rejects.toThrow()
+
+		expect(reportFailure.mock.calls.map(([, { cause }]) => cause)).toEqual([
+			"host-outdated:garage",
+			"host-outdated:attic",
+		])
 	})
 
 	it("reports nothing for a space off screen, and logs its refusal", async () => {
@@ -740,20 +792,28 @@ describe("a joined space whose host runs an older Kiroshi", () => {
 		)
 	})
 
-	it("keeps reporting a command a host off screen keeps to itself", async () => {
-		const { hosts, reportFailure } = await onGarageBesideAttic(hostOnly)
+	it.each([
+		["keeps to itself", "on screen", HOST_ONLY, 403, onScreen],
+		["keeps to itself", "off screen", HOST_ONLY, 403, offScreen],
+		["answers no bearer for", "on screen", UNAUTHORIZED, 401, onScreen],
+		["answers no bearer for", "off screen", UNAUTHORIZED, 401, offScreen],
+	])(
+		"keeps reporting each command a host %s, %s",
+		async (_refusal, _place, message, status, invokeOf) => {
+			const { hosts, reportFailure } = await onGarageBesideAttic(
+				() => new Response(message, { status }),
+			)
+			const invoke = invokeOf(hosts)
 
-		await expect(hosts.invokeOn("attic")("bot_list")).rejects.toMatchObject({
-			refusalKind: "hostOnly",
-		})
+			await expect(invoke("bot_list")).rejects.toThrow()
+			await expect(invoke("bot_list")).rejects.toThrow()
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
-			message: "this command belongs to the host",
-			command: "bot_list",
-			status: 403,
-			side: "member",
-		})
-	})
+			expect(reportFailure.mock.calls).toEqual([
+				[{ message, command: "bot_list", status, side: "member" }],
+				[{ message, command: "bot_list", status, side: "member" }],
+			])
+		},
+	)
 })
 
 describe("a joined space on screen", () => {

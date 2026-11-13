@@ -16,6 +16,7 @@ import {
 } from "./library-reads"
 
 import type { LibraryBoardSummary, LibraryItem } from "../bindings"
+import { isReadErrorShown } from "../query/last-read"
 
 const EXCERPT_LENGTH = 1_000
 
@@ -99,8 +100,10 @@ const useBoardSummaries = (spaceId: string, items: LibraryItem[]) => {
 	)
 	return {
 		summaryOf: (item: LibraryItem) => summaryByName.get(item.name)?.data,
-		hasSummaryFailed: (item: LibraryItem) =>
-			summaryByName.get(item.name)?.isError ?? false,
+		hasSummaryFailed: (item: LibraryItem) => {
+			const summary = summaryByName.get(item.name)
+			return summary?.isError === true && isReadErrorShown(summary.error)
+		},
 	}
 }
 

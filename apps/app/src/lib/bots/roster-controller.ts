@@ -40,7 +40,7 @@ import {
 	withPageRow,
 } from "./roster-pages"
 
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -69,6 +69,7 @@ import type {
 	LastWord,
 } from "../conversations/transcript-state"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
+import { isReadErrorShown } from "../query/last-read"
 import type { FailureMeta } from "../query/query-client"
 import { runMutation } from "../query/run-mutation"
 import {
@@ -552,7 +553,7 @@ const rosterStateOf = (
 
 export type RosterControllerOptions = {
 	queryClient: QueryClient
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 export const createRosterController = (
@@ -643,9 +644,10 @@ export const createRosterController = (
 	const rosterReadIn = (spaceRowId: string) =>
 		queryClient.getQueryData(rosterQuery(spaceRowId).queryKey)
 
-	const hasRosterFailedIn = (spaceRowId: string) =>
-		queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)?.status ===
-		"error"
+	const hasRosterFailedIn = (spaceRowId: string) => {
+		const read = queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)
+		return read?.status === "error" && isReadErrorShown(read.error)
+	}
 
 	const isRosterPendingIn = (spaceRowId: string) => {
 		const read = queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)
@@ -801,11 +803,14 @@ export const createRosterController = (
 	}
 
 	const refuseMembership = (reason: unknown) => {
-		reportFailure({
-			title: namesTheLastSpace(reason)
-				? i18n.t("bots:spaces.remove.lastSpace")
-				: i18n.t("bots:spaces.remove.failed"),
-		})
+		reportFailure(
+			{
+				title: namesTheLastSpace(reason)
+					? i18n.t("bots:spaces.remove.lastSpace")
+					: i18n.t("bots:spaces.remove.failed"),
+			},
+			{ reason },
+		)
 	}
 
 	const reload = () =>
@@ -1042,8 +1047,8 @@ export const createRosterController = (
 		},
 	})
 
-	const refuseSeatMove = async (title: string) => {
-		reportFailure({ title })
+	const refuseSeatMove = async (title: string, reason: unknown) => {
+		reportFailure({ title }, { reason })
 		return reloadAndYield()
 	}
 
@@ -1057,7 +1062,7 @@ export const createRosterController = (
 			const seated = await move(conversationId, botId)
 			applyConversation(seated)
 			return seated
-		}).catch(() => refuseSeatMove(refusal))
+		}).catch((reason: unknown) => refuseSeatMove(refusal, reason))
 
 	const seatMove =
 		(move: (conversationId: string, botId: string) => Promise<Conversation>) =>

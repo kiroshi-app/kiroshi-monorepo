@@ -8,8 +8,10 @@ import {
 	type HostRefusal,
 	type HostSocket,
 	raiseRefusalNotice,
+	refusalKindOf,
 } from "./http"
 
+import bridgeSource from "../../../src-tauri/src/hosting/bridge.rs?raw"
 import { toTransportError } from "../chat/chat-state"
 
 vi.mock("@workspace/ui/components/notice-surface", () => ({
@@ -427,6 +429,23 @@ describe("the refusal notice", () => {
 			report: refusalReport(undefined),
 		})
 	})
+
+	it("carries the lifetime its caller holds the notice by", async () => {
+		const lifetime = { cause: "host-outdated:garage", onClose: vi.fn() }
+
+		await raiseRefusalNotice(
+			memberRefusal("this host knows no command named bot_list", 404),
+			lifetime,
+		)
+
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t send that request",
+			description:
+				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
+			...lifetime,
+			report: refusalReport(404),
+		})
+	})
 })
 
 describe("a call the host refuses", () => {
@@ -477,6 +496,20 @@ describe("a call the host refuses", () => {
 			expect(isHostRefused(reason) && reason.refusalKind).toBe(kind)
 		},
 	)
+})
+
+describe("the sentence of a host that knows no such command", () => {
+	const SENTENCE_THE_BRIDGE_ANSWERS =
+		/const UNKNOWN_COMMAND_REFUSAL: &str = "([^"]+)";/
+
+	it("is matched as the bridge answers it", () => {
+		const [, sentence] = bridgeSource.match(SENTENCE_THE_BRIDGE_ANSWERS) ?? []
+
+		expect(sentence).toBeDefined()
+		expect(
+			refusalKindOf({ message: `${sentence} agent_models`, status: 404 }),
+		).toBe("unknownCommand")
+	})
 })
 
 describe("listen over the event socket", () => {

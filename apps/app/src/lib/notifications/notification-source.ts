@@ -16,6 +16,7 @@ import {
 import { createSpokenWordNotifier } from "./notification-source-spoken"
 
 import type { JoinedSpace } from "../bindings"
+import type { ReporterFacts } from "../failure-report"
 import type { ChatState } from "../chat/chat-state"
 import type { SpokenWords } from "../conversations/spoken-words"
 import type { Conversation } from "../conversations/store-contract"
@@ -83,7 +84,10 @@ type MissionsSource = {
 export type NotificationSourceSwitches = NotificationSwitches &
 	Pick<UserPreferences, "notifyWithSound">
 
-type FailureNoticeReporter = (notice: NoticeMessage) => void
+type FailureNoticeReporter = (
+	notice: NoticeMessage,
+	facts?: ReporterFacts,
+) => void
 
 export type NotificationSourceOptions = {
 	chat: ChatSource

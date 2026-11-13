@@ -5,7 +5,7 @@ import {
 	notificationFailureTitleFor,
 } from "./notification-words"
 
-import { describeFailure } from "../failure-report"
+import { describeFailure, type ReporterFacts } from "../failure-report"
 import { isHostOffline } from "../host/host-offline"
 
 export type FailWith = (
@@ -13,7 +13,7 @@ export type FailWith = (
 ) => (reason: unknown) => undefined
 
 export const createFailWith = (
-	reportFailure: (notice: NoticeMessage) => void,
+	reportFailure: (notice: NoticeMessage, facts?: ReporterFacts) => void,
 ): FailWith => {
 	const reportedFailures = new Set<NotificationFailure>()
 
@@ -22,9 +22,12 @@ export const createFailWith = (
 			return
 		}
 		reportedFailures.add(failure)
-		reportFailure({
-			title: notificationFailureTitleFor(failure),
-			description: describeFailure(reason),
-		})
+		reportFailure(
+			{
+				title: notificationFailureTitleFor(failure),
+				description: describeFailure(reason),
+			},
+			{ reason },
+		)
 	}
 }
