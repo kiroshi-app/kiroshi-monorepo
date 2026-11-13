@@ -11,11 +11,8 @@ type LaunchReads = {
 	roster: LaunchRoster
 }
 
-const isLocalRow = (spaceRowId: string | null) =>
-	spaceRowId !== null && !isJoinedRowId(spaceRowId)
-
 const awaitsFirstRosterPage = ({ isRosterPending, spaceRowId }: LaunchRoster) =>
-	isRosterPending && isLocalRow(spaceRowId)
+	isRosterPending && spaceRowId !== null && !isJoinedRowId(spaceRowId)
 
 export const haveLaunchReadsSettled = ({
 	hasLoadedPreferences,

@@ -117,11 +117,11 @@ const completeLoaderExit = async () => {
 	await settle()
 }
 
-const sidebar = () =>
-	screen.queryByRole("navigation", { name: i18n.t("bots:rail.label") })
+const SIDEBAR = { name: i18n.t("bots:rail.label") }
 
-const shownSidebar = () =>
-	within(screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }))
+const sidebar = () => screen.queryByRole("navigation", SIDEBAR)
+
+const shownSidebar = () => within(screen.getByRole("navigation", SIDEBAR))
 
 it("reveals the window once the launch loader is mounted", async () => {
 	const store = createFakeTranscriptStore()
@@ -129,7 +129,7 @@ it("reveals the window once the launch loader is mounted", async () => {
 
 	await mountApp(store)
 
-	expect(shownLaunchLoader()).toBeTruthy()
+	expect(launchLoader()).not.toBeNull()
 	expect(harness.revealWindow).toHaveBeenCalledExactlyOnceWith()
 })
 
