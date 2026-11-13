@@ -563,7 +563,6 @@
     margin-block-start: 0;
   }
 
-  /* A nested list follows the text of its item, which is no element. */
   .typeset-answer
     :where(
       li:not(.task-list-item) > :is(ul, ol):not(.contains-task-list)
