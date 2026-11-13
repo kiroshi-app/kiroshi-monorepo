@@ -14,6 +14,7 @@ import {
 	type SentComment,
 	type SentReply,
 	threadBeingSent,
+	withAnnouncedThread,
 	withComment,
 	withoutComment,
 	withoutThread,
@@ -130,7 +131,9 @@ const useHeardThreadChanges = (
 			LIBRARY_COMMENT_THREAD_CHANGED_EVENT,
 			({ payload }) => {
 				if (payload.spaceId === spaceId && payload.itemName === name) {
-					change(name, (threads) => withThread(threads, payload.thread))
+					change(name, (threads) =>
+						withAnnouncedThread(threads, payload.thread),
+					)
 				}
 			},
 		).catch(reportUnheard(LIBRARY_COMMENT_THREAD_CHANGED_EVENT))

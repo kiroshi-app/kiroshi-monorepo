@@ -1,3 +1,5 @@
+import { hashKey } from "@tanstack/react-query"
+
 import type {
 	LibraryComment,
 	LibraryCommentAnchor,
@@ -39,11 +41,24 @@ export const threadBeingSent = (
 	targetMissing: false,
 })
 
-const isSameComment = (one: LibraryComment, other: LibraryComment) =>
-	one.createdAt === other.createdAt &&
+const isSameSaying = (one: LibraryComment, other: LibraryComment) =>
 	one.text === other.text &&
 	one.author.kind === other.author.kind &&
 	one.author.id === other.author.id
+
+const isSameComment = (one: LibraryComment, other: LibraryComment) =>
+	one.createdAt === other.createdAt && isSameSaying(one, other)
+
+const isSameAnchor = (one: LibraryCommentAnchor, other: LibraryCommentAnchor) =>
+	hashKey([one]) === hashKey([other])
+
+const isBeingSentAs = (
+	thread: LibraryCommentThread,
+	announced: LibraryCommentThread,
+) =>
+	thread.id.startsWith(SENDING_ID) &&
+	isSameAnchor(thread.anchor, announced.anchor) &&
+	isSameSaying(thread.comments[0], announced.comments[0])
 
 const changedThread = (
 	threads: LibraryCommentThread[],
@@ -58,6 +73,18 @@ export const withThread = (
 	threads.some(({ id }) => id === thread.id)
 		? changedThread(threads, thread.id, () => thread)
 		: [...threads, thread]
+
+export const withAnnouncedThread = (
+	threads: LibraryCommentThread[],
+	announced: LibraryCommentThread,
+) => {
+	const replaced =
+		threads.find(({ id }) => id === announced.id) ??
+		threads.find((thread) => isBeingSentAs(thread, announced))
+	return replaced
+		? changedThread(threads, replaced.id, () => announced)
+		: [...threads, announced]
+}
 
 export const withoutThread = (
 	threads: LibraryCommentThread[],

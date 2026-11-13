@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { SentComment } from "./library-comment-threads"
 import { useLibraryCommentThreads } from "./use-library-comment-threads"
 
 import {
@@ -72,6 +73,19 @@ const INTRO_THREAD = threadOf("thread-intro")
 const BUDGET_THREAD = threadOf("thread-budget", {
 	anchor: { kind: "block", blockId: "budget" },
 })
+
+const OUTRO_COMMENT = {
+	anchor: { kind: "block", blockId: "outro" },
+	text: "Ship it",
+	mentions: [],
+} satisfies SentComment
+
+const OUTRO_THREAD = threadOf("thread-outro", {
+	anchor: OUTRO_COMMENT.anchor,
+	comments: [{ author: SELF, createdAt: 2_000, ...OUTRO_COMMENT }],
+})
+
+const settle = () => act(() => new Promise((flush) => setTimeout(flush, 0)))
 
 const answeredLater = (command: string): Answer => {
 	let answer: Answer | undefined
@@ -190,6 +204,54 @@ describe("useLibraryCommentThreads", () => {
 		await waitFor(() =>
 			expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, answered]),
 		)
+	})
+
+	it("shows one thread when the host announces a sent comment before answering it", async () => {
+		const { hook, threads, hear } = await mountThreads()
+		const created = answeredLater("library_comment_create")
+
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		await waitFor(() => expect(threads()).toHaveLength(3))
+		hear({ ...OUTRO_THREAD, anchor: { blockId: "outro", kind: "block" } })
+
+		await waitFor(() =>
+			expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, OUTRO_THREAD]),
+		)
+
+		await act(async () => created.settle(OUTRO_THREAD))
+		await settle()
+
+		expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, OUTRO_THREAD])
+	})
+
+	it("shows one thread when the host announces a sent comment after answering it", async () => {
+		const { hook, threads, hear } = await mountThreads()
+		const created = answeredLater("library_comment_create")
+
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		await waitFor(() => expect(threads()).toHaveLength(3))
+		await act(async () => created.settle(OUTRO_THREAD))
+		await waitFor(() =>
+			expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, OUTRO_THREAD]),
+		)
+
+		hear(OUTRO_THREAD)
+		await settle()
+
+		expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, OUTRO_THREAD])
+	})
+
+	it("keeps a comment being sent beside another thread announced on the same anchor", async () => {
+		const { hook, threads, hear } = await mountThreads()
+		answeredLater("library_comment_create")
+		const fromLena = threadOf("thread-lena", { anchor: OUTRO_COMMENT.anchor })
+
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		await waitFor(() => expect(threads()).toHaveLength(3))
+		hear(fromLena)
+
+		await waitFor(() => expect(threads()).toHaveLength(4))
+		expect(threads()[3]).toEqual(fromLena)
 	})
 
 	it("rolls a refused comment back and raises a failure notice", async () => {
