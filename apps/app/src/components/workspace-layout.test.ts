@@ -18,6 +18,7 @@ import type { Bot } from "@/lib/bindings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { armLaunchRevealSafetyNet } from "@/lib/host/launch-reveal"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type LaunchLoaderProps = ComponentProps<typeof AppBootScreen>
@@ -70,6 +71,7 @@ vi.mock("@workspace/ui/components/app-boot-screen", async (importOriginal) => ({
 const { App } = await import("@/App")
 
 const MOUNT_MS = 200
+const LATE_REVEAL_MS = 3000
 
 afterEach(() => {
 	cleanup()
@@ -86,6 +88,7 @@ const settle = async () => {
 
 const mountApp = async (store: TranscriptStore) => {
 	vi.useFakeTimers()
+	armLaunchRevealSafetyNet()
 	harness.store = store
 	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle()
@@ -131,6 +134,23 @@ it("reveals the window once the launch loader is mounted", async () => {
 
 	expect(launchLoader()).not.toBeNull()
 	expect(harness.revealWindow).toHaveBeenCalledExactlyOnceWith()
+})
+
+it("leaves the window alone when the late reveal delay passes after the launch loader showed it", async () => {
+	const logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+	const store = createFakeTranscriptStore()
+	await holdFirstRosterPage(store)
+	await mountApp(store)
+
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(LATE_REVEAL_MS)
+	})
+
+	expect(harness.revealWindow).toHaveBeenCalledOnce()
+	expect(logged).not.toHaveBeenCalledWith(
+		expect.stringContaining("did not show the window"),
+	)
+	logged.mockRestore()
 })
 
 it("reveals the window on the notice of a Spaces list that failed to load", async () => {

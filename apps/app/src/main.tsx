@@ -13,6 +13,7 @@ import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
 import { commands, type WindowIdentity } from "@/lib/bindings"
 import { isDesktopHost } from "@/lib/host"
 import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
+import { armLaunchRevealSafetyNet } from "@/lib/host/launch-reveal"
 import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
@@ -28,6 +29,7 @@ import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
 forwardConsoleToLogFile()
 installInvokeTally()
+armLaunchRevealSafetyNet()
 
 exposeLiveSessions()
 exposeScrollTrace()
