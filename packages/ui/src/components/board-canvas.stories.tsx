@@ -338,7 +338,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes. Comments come in through props: `commentThreads` draws one pin per open thread, on its node or on its board point, a click on a pin sends `onOpenCommentThread`, `openCommentThread` opens the thread card, `commentDraft` the composer, and `isCommentMode` shows the hint and the pin cursor, rings the hovered object and turns a click into `onStartComment` with a node id or a board point, Esc sending `onLeaveCommentMode`.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes. Comments come in through props: `commentThreads` draws one pin per open thread, on its node or on its board point, a click on a pin sends `onOpenCommentThread`, `openCommentThread` opens the thread card, `commentDraft` the composer, and `isCommentMode` shows the hint and the pin cursor, rings the hovered object and turns a click into `onStartComment` with a node id or a board point, Esc from the board or the page sending `onLeaveCommentMode`. A composer takes the keyboard focus when it opens and each time its anchor changes.",
 			},
 		},
 	},
@@ -4754,6 +4754,14 @@ const expectTabLandsIn = async (from: HTMLElement, card: HTMLElement) => {
 	return focused
 }
 
+const expectComposerFieldFocused = async (root: HTMLElement) => {
+	const field = slotIn(
+		slotIn(root, "library-comment-composer"),
+		"library-comment-field",
+	).querySelector("textarea")
+	await expect(field).toHaveFocus()
+}
+
 const expectComposerBesidePin = async (
 	root: HTMLElement,
 	anchorLine: string,
@@ -4869,7 +4877,7 @@ export const CommentMode = meta.story({
 	args: { ...COMMENT_ARGS, isCommentMode: true },
 	render: renderCommentedBoard,
 	parameters: commentDocs(
-		"Artboard Board 2: comment mode on, the Comment button of the bar pressed. Check the hint pill centred 64 above the dock, the dock unchanged and without a Comment tool, the 20px pin cursor in the Space colour with its tail on the pointer in place of the system cursor, the ring 6 outside a hovered object, 2 wide, in the Space colour and concentric with the object, a press and a drag on an object selecting and moving nothing, a click on an object sending its id, a click on the empty board sending the board point, Enter on a focused object sending its id, a creation tool creating nothing, and Esc leaving the mode.",
+		"Artboard Board 2: comment mode on, the Comment button of the bar pressed. Check the hint pill centred 64 above the dock, the dock unchanged and without a Comment tool, the 20px pin cursor in the Space colour with its tail on the pointer in place of the system cursor, the ring 6 outside a hovered object, 2 wide, in the Space colour and concentric with the object, a press and a drag on an object selecting and moving nothing, a click on an object sending its id, a click on the empty board sending the board point, Enter on a focused object sending its id, a creation tool creating nothing, and Esc leaving the mode from the board or the page, not from the bar.",
 	),
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement)
@@ -4959,6 +4967,10 @@ export const CommentMode = meta.story({
 		await expect(slotsIn(canvasElement, "board-text-editor")).toEqual([])
 		commentButton.focus()
 		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+		commentButton.blur()
+		await expect(document.body).toHaveFocus()
+		await userEvent.keyboard("{Escape}")
 		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(2)
 	},
 })
@@ -4985,15 +4997,18 @@ export const CommentDraftOnNode = meta.story({
 	},
 	render: renderCommentedBoard,
 	parameters: commentDocs(
-		"Artboard Board 3: a comment being written on the Boat shape. Check the ring kept around the shape, the new pin in its selected state on the corner of the shape, the composer 320 wide, 8 right of the pin with its top on the pin top, its line naming the shape in curly quotes, and Tab going from the pin into the field.",
+		"Artboard Board 3: a comment being written on the Boat shape. Check the ring kept around the shape, the new pin in its selected state on the corner of the shape, the composer 320 wide, 8 right of the pin with its top on the pin top, its line naming the shape in curly quotes, the field holding the focus as soon as the composer opens so typing writes into it, Tab going from the pin into the field, and Esc from the field leaving comment mode.",
 	),
 	play: async ({ canvasElement, args }) => {
+		await expectComposerFieldFocused(canvasElement)
+		await userEvent.keyboard("a")
+		await expect(args.commentDraft?.onValueChange).toHaveBeenLastCalledWith("a")
 		await expectRingAround(canvasElement, BOAT.id, BOAT_RING_RADIUS)
 		const mark = await expectComposerBesidePin(canvasElement, BOAT_ANCHOR_LINE)
 		await expectPinOnNode(canvasElement, mark, BOAT.id)
-		await userEvent.keyboard("a")
-		await expect(args.commentDraft?.onValueChange).toHaveBeenLastCalledWith("a")
 		await expect(slotsIn(canvasElement, "board-comment-mark")).toHaveLength(3)
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
 	},
 })
 
@@ -5019,9 +5034,10 @@ export const CommentDraftOnBoard = meta.story({
 	},
 	render: renderCommentedBoard,
 	parameters: commentDocs(
-		"Artboard Board 4: a comment being written on a free point. Check that nothing is ringed, the new pin in its selected state with its tail on the point, the composer 320 wide, 8 right of the pin with its top on the pin top, and its line reading On the board.",
+		"Artboard Board 4: a comment being written on a free point. Check that nothing is ringed, the new pin in its selected state with its tail on the point, the composer 320 wide, 8 right of the pin with its top on the pin top, its line reading On the board, and the field holding the focus as soon as the composer opens.",
 	),
 	play: async ({ canvasElement }) => {
+		await expectComposerFieldFocused(canvasElement)
 		await expect(slotsIn(canvasElement, "board-comment-ring")).toEqual([])
 		const mark = await expectComposerBesidePin(canvasElement, "On the board")
 		await expectPinTailAt(mark, boardPointOnScreen(canvasElement, EMPTY_POINT))
@@ -5038,6 +5054,105 @@ export const CommentDraftOnBoardDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await CommentDraftOnBoard.input.play?.(context)
+	},
+})
+
+const DraftFollowingClicks = ({
+	commentDraft,
+	onStartComment,
+	...props
+}: BoardCanvasProps) => {
+	const [anchor, setAnchor] = useState(commentDraft?.anchor)
+
+	return (
+		<CommentedBoard
+			{...props}
+			commentDraft={
+				commentDraft && anchor !== undefined
+					? { ...commentDraft, anchor }
+					: undefined
+			}
+			onStartComment={(next) => {
+				setAnchor(next)
+				onStartComment?.(next)
+			}}
+		/>
+	)
+}
+
+const expectComposerOn = async (root: HTMLElement, anchorLine: string) => {
+	await waitFor(() =>
+		expect(
+			within(slotIn(root, "library-comment-composer")).getByText(anchorLine),
+		).toBeVisible(),
+	)
+	await expectComposerFieldFocused(root)
+}
+
+export const CommentDraftMovesWithAnchor = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CommentDraftOnNode.input.args,
+	render: (args) => <DraftFollowingClicks {...args} />,
+	parameters: commentDocs(
+		"A comment being written on the Boat shape, then a click on the Dinner sticky and a click on the empty board, each moving the draft. Check the composer following to the new anchor with its line renamed, and its field holding the focus again each time, so typing writes into it without a click or a Tab.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const surface = slotIn(canvasElement, "board-comment-surface")
+		const dinner = objectNode(canvasElement, DINNER.id) as HTMLElement
+
+		await expectComposerOn(canvasElement, BOAT_ANCHOR_LINE)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: centreOf(dinner),
+		})
+		await expectComposerOn(canvasElement, "On “Dinner on the terrace at 20:00”")
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: boardPointOnScreen(canvasElement, EMPTY_POINT),
+		})
+		await expectComposerOn(canvasElement, "On the board")
+		await userEvent.keyboard("a")
+		await expect(args.commentDraft?.onValueChange).toHaveBeenLastCalledWith("a")
+	},
+})
+
+export const CommentModeSurvivesListEscape = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		isCommentMode: true,
+		openCommentThread: OPEN_BOAT_THREAD,
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Comment mode on, the comments list opened from the counter of the bar, then Esc. Check the list closing while the hint stays and the Comment button stays pressed, the focus back on the counter, outside the board, and a second Esc there doing nothing, then Esc from the reply field of the open thread card leaving the mode.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		const counter = canvas.getByRole("button", { name: "3 open comments" })
+		const commentButton = canvas.getByRole("button", { name: "Comment" })
+
+		await userEvent.click(counter)
+		await screen.findByRole("tablist", { name: "Comments" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(screen.queryByRole("tablist", { name: "Comments" })).toBeNull(),
+		)
+		await expect(counter).toHaveAttribute("aria-expanded", "false")
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).not.toHaveBeenCalled()
+		await expect(commentButton).toHaveAttribute("aria-pressed", "true")
+		await expect(
+			slotIn(canvasElement, "library-comment-mode-hint"),
+		).toBeVisible()
+
+		const card = slotIn(canvasElement, "library-comment-thread")
+		within(card).getByPlaceholderText("Reply, @ to mention").focus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+		await expect(commentButton).toHaveAttribute("aria-pressed", "false")
 	},
 })
 

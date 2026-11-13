@@ -2376,6 +2376,7 @@ const ReadyBoardCanvas = ({
 				</div>
 			) : null}
 			<BoardCommentLayer
+				board={canvas}
 				boundsOf={liveBounds}
 				draft={commentDraft}
 				isCommentMode={isCommentMode}

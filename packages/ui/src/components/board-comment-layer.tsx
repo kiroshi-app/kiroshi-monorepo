@@ -1,6 +1,13 @@
 "use client"
 
-import { type PointerEvent, type ReactNode, useEffect, useState } from "react"
+import {
+	type PointerEvent,
+	type ReactNode,
+	type Ref,
+	type RefObject,
+	useEffect,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BoardClientPoint } from "@workspace/ui/components/board/board-dock"
@@ -141,17 +148,24 @@ const BoardCommentMark = ({
 
 type BoardCommentCornerProps = {
 	at: BoardPoint
+	ref?: Ref<HTMLDivElement>
 	children: ReactNode
 }
 
-const BoardCommentCorner = ({ at, children }: BoardCommentCornerProps) => (
+const BoardCommentCorner = ({ at, ref, children }: BoardCommentCornerProps) => (
 	<div
 		className="absolute z-10 size-0 select-text"
+		ref={ref}
 		style={{ left: at.x, top: at.y }}
 	>
 		{children}
 	</div>
 )
+
+const focusCommentField = (corner: HTMLElement | null) =>
+	corner
+		?.querySelector<HTMLElement>('[data-slot="library-comment-field"] textarea')
+		?.focus({ preventScroll: true })
 
 type BoardCommentAim = {
 	at: BoardPoint
@@ -159,6 +173,7 @@ type BoardCommentAim = {
 }
 
 type BoardCommentIntents = {
+	board: RefObject<HTMLElement | null>
 	nodeIdUnder: (pointer: BoardClientPoint) => string | null
 	onStartCommentAt: (pointer: BoardClientPoint) => void
 	onLeaveCommentMode?: () => void
@@ -170,6 +185,7 @@ type BoardCommentSurfaceProps = BoardCommentScene &
 	}
 
 const BoardCommentSurface = ({
+	board,
 	nodeIdUnder,
 	onStartCommentAt,
 	onLeaveCommentMode,
@@ -181,12 +197,14 @@ const BoardCommentSurface = ({
 
 	useEffect(() => {
 		const leaveOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && !event.defaultPrevented)
-				onLeaveCommentMode?.()
+			const focused = event.target as Node
+			const isFromBoard =
+				focused === document.body || board.current?.contains(focused)
+			if (event.key === "Escape" && isFromBoard) onLeaveCommentMode?.()
 		}
 		window.addEventListener("keydown", leaveOnEscape)
 		return () => window.removeEventListener("keydown", leaveOnEscape)
-	}, [onLeaveCommentMode])
+	}, [board, onLeaveCommentMode])
 
 	const aimWithPointer = (event: PointerEvent<HTMLDivElement>) => {
 		const surface = event.currentTarget.getBoundingClientRect()
@@ -239,6 +257,7 @@ const BoardCommentLayer = ({
 	draft,
 	isCommentMode,
 	onOpenThread,
+	board,
 	nodeIdUnder,
 	onStartCommentAt,
 	onLeaveCommentMode,
@@ -270,6 +289,7 @@ const BoardCommentLayer = ({
 			{isCommentMode ? (
 				<BoardCommentSurface
 					{...scene}
+					board={board}
 					nodeIdUnder={nodeIdUnder}
 					onLeaveCommentMode={onLeaveCommentMode}
 					onStartCommentAt={onStartCommentAt}
@@ -319,7 +339,11 @@ const BoardCommentLayer = ({
 				</BoardCommentCorner>
 			) : null}
 			{draft && drafted ? (
-				<BoardCommentCorner at={composerCornerOf(drafted.pinTail)}>
+				<BoardCommentCorner
+					at={composerCornerOf(drafted.pinTail)}
+					key={JSON.stringify(draft.anchor)}
+					ref={focusCommentField}
+				>
 					<LibraryCommentComposer
 						anchor={anchorLineOf(drafted.node)}
 						className="absolute top-0 left-0 w-80 max-w-none"
