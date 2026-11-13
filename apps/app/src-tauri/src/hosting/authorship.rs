@@ -102,13 +102,6 @@ impl Caller {
 		}
 	}
 
-	pub fn account_id<R: Runtime>(&self, app: &AppHandle<R>) -> Option<String> {
-		match self {
-			Caller::Host => signed_in_account(app).map(|host| host.id),
-			Caller::Relayed(member) => member.as_ref().map(|member| member.user_id.clone()),
-		}
-	}
-
 	pub fn chat_owner<R: Runtime>(&self, app: &AppHandle<R>) -> Option<ChatOwner> {
 		match self {
 			Caller::Host => Some(ChatOwner::Host),

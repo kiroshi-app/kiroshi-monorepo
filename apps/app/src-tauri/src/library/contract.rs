@@ -212,6 +212,8 @@ pub struct LibraryOverwritten {
 
 pub const COMMENT_THREAD_CHANGED_EVENT: &str = "library://comment-thread-changed";
 
+pub const COMMENT_HOST_AUTHOR_ID: &str = "host";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryCommentAnchor {
@@ -381,6 +383,11 @@ pub enum LibraryError {
 	#[serde(rename_all = "camelCase")]
 	InvalidAnchor {
 		name: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	MissingTarget {
+		name: String,
+		target: String,
 	},
 	BlankComment,
 	UnknownAuthor,

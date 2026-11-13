@@ -7,10 +7,12 @@ use super::blocks::{blocks_of, Block};
 use super::contract::{
 	LibraryComment, LibraryCommentAnchor as Anchor, LibraryCommentParty, LibraryCommentPartyKind,
 	LibraryCommentThread, LibraryCommentThreadChanged, LibraryCommentThreadState, LibraryError,
+	COMMENT_HOST_AUTHOR_ID,
 };
 use super::{document_text, documents, resolve, AcceptedType};
 use crate::agent::translate::now_ms;
 use crate::board::{holds_node, Board};
+use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::library::{NewThread, StoredThread, ThreadOfItem};
 use crate::db::Database;
 use crate::events;
@@ -29,7 +31,10 @@ impl Said {
 		text: String,
 		mentions: Vec<LibraryCommentParty>,
 	) -> Result<Self, LibraryError> {
-		let id = caller.account_id(app).ok_or(LibraryError::UnknownAuthor)?;
+		let id = match caller.chat_owner(app).ok_or(LibraryError::UnknownAuthor)? {
+			ChatOwner::Host => COMMENT_HOST_AUTHOR_ID.to_owned(),
+			ChatOwner::Member(account_id) => account_id,
+		};
 		let author = LibraryCommentParty { kind: LibraryCommentPartyKind::Person, id };
 		Ok(Said { author, text, mentions })
 	}
@@ -93,26 +98,33 @@ impl Commented {
 		if !is_well_formed(anchor) {
 			return Err(LibraryError::InvalidAnchor { name });
 		}
+		if let Some(target) = self.missing_target(anchor) {
+			return Err(LibraryError::MissingTarget { name, target: target.to_owned() });
+		}
 		Ok(())
 	}
 
-	fn lacks(&self, anchor: &Anchor) -> bool {
-		match (self, anchor) {
+	fn missing_target<'a>(&self, anchor: &'a Anchor) -> Option<&'a str> {
+		let (target, is_held) = match (self, anchor) {
 			(Commented::Document { blocks, .. }, Anchor::Block { block_id }) => {
-				block_of(blocks, block_id).is_none()
+				(block_id, block_of(blocks, block_id).is_some())
 			}
 			(Commented::Document { text, blocks }, Anchor::Passage { block_id, quote, .. }) => {
-				!block_of(blocks, block_id)
-					.is_some_and(|block| text[block.content.clone()].contains(quote.as_str()))
+				let holds_the_quote = block_of(blocks, block_id)
+					.is_some_and(|block| text[block.content.clone()].contains(quote.as_str()));
+				(block_id, holds_the_quote)
 			}
-			(Commented::Board(board), Anchor::BoardNode { node_id }) => !holds_node(board, node_id),
-			_ => false,
-		}
+			(Commented::Board(board), Anchor::BoardNode { node_id }) => {
+				(node_id, holds_node(board, node_id))
+			}
+			_ => return None,
+		};
+		(!is_held).then_some(target.as_str())
 	}
 
 	fn as_it_stands(&self, thread: StoredThread) -> LibraryCommentThread {
 		LibraryCommentThread {
-			target_missing: self.lacks(&thread.anchor),
+			target_missing: self.missing_target(&thread.anchor).is_some(),
 			id: thread.id,
 			space_id: thread.space_id,
 			item_name: thread.item_name,

@@ -96,8 +96,8 @@ use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{
-	LibraryCommentThreadState, LibraryError, COMMENT_THREAD_CHANGED_EVENT, DOCUMENT_RENAMED_EVENT,
-	DOCUMENT_UPDATED_EVENT,
+	LibraryCommentThreadState, LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_THREAD_CHANGED_EVENT,
+	DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
 };
 use crate::library::tests::YjsClient;
 use crate::library::Said;
@@ -3984,15 +3984,16 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 		let counted = guest.called("library_comment_counts", space_named(PERSONAL)).await;
 
 		let database = db::open(&guest.effects.database);
+		restore(app.clone()).await;
 		let mut by_the_host = Vec::new();
 		for space_id in [ELSEWHERE, PERSONAL] {
 			let said = Said::by_the_person_calling(
-				&relayed_as("host-account"),
+				&Caller::Host,
 				&app,
 				"From the host".to_owned(),
 				Vec::new(),
 			)
-			.expect("the author is named");
+			.expect("the host is named");
 			let anchor = typed(&a_library_comment_on_the_cover(space_id), "anchor");
 			let opened = library::open_comment_thread(
 				&app,
@@ -4008,6 +4009,12 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 			by_the_host.push(opened);
 		}
 		let heard = next_text(&mut guest.member, is_a_comment_change_outside(&thread_id)).await;
+		let read_after_the_host = guest
+			.called("library_comment_threads", a_library_entry_of("cover.png")(PERSONAL))
+			.await;
+		let by_the_host_person = json!({ "kind": "person", "id": COMMENT_HOST_AUTHOR_ID });
+		let is_signed_in =
+			matches!(app.state::<AccountSession>().current(), AccountState::SignedIn(_));
 
 		assert_eq!(created["status"], json!(200), "{created}");
 		assert_eq!(created["body"]["comments"][0]["author"], by_the_member, "{created}");
@@ -4021,6 +4028,12 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 		assert_eq!(reopened["body"]["state"], json!("open"), "{reopened}");
 		assert_eq!(read["body"], json!([reopened["body"]]), "{read}");
 		assert_eq!(counted["body"], json!([{ "itemName": "cover.png", "openThreads": 1 }]));
+		assert!(is_signed_in);
+		assert_ne!(by_the_host_person, by_the_member);
+		assert_eq!(
+			read_after_the_host["body"][1]["comments"][0]["author"], by_the_host_person,
+			"{read_after_the_host}"
+		);
 		assert_eq!(
 			heard["event"]["payload"],
 			json!({ "spaceId": PERSONAL, "itemName": "cover.png", "thread": by_the_host[1] })
@@ -4033,7 +4046,8 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 				"library_comment_resolve",
 				"library_comment_reopen",
 				"library_comment_threads",
-				"library_comment_counts"
+				"library_comment_counts",
+				"library_comment_threads"
 			]
 		);
 	});

@@ -4569,6 +4569,25 @@
         {
           "properties": {
             "kind": {
+              "const": "missingTarget"
+            },
+            "name": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
               "const": "blankComment"
             }
           },

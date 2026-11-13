@@ -41,6 +41,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 			"LIBRARY_COMMENT_THREAD_CHANGED_EVENT",
 			library::contract::COMMENT_THREAD_CHANGED_EVENT,
 		)
+		.constant("LIBRARY_COMMENT_HOST_AUTHOR_ID", library::contract::COMMENT_HOST_AUTHOR_ID)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("USER_PREFERENCES_CHANGED_EVENT", user::contract::PREFERENCES_CHANGED_EVENT)

@@ -372,6 +372,8 @@ export const LIBRARY_BOARD_FILE_REPLACED_EVENT = "library://board-file-replaced"
 
 export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
 
+export const LIBRARY_COMMENT_HOST_AUTHOR_ID = "host" as const;
+
 export const LIBRARY_COMMENT_THREAD_CHANGED_EVENT = "library://comment-thread-changed" as const;
 
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
@@ -1354,7 +1356,7 @@ export type LibraryDocumentWriterFinished = {
 	outcome: LibraryWriteOutcome,
 };
 
-export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notABoard"; name: string } | { kind: "invalidBoard"; name: string; detail: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string } | { kind: "unknownThread"; id: string } | { kind: "invalidAnchor"; name: string } | { kind: "blankComment" } | { kind: "unknownAuthor" };
+export type LibraryError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "invalidName"; name: string } | { kind: "unsupported"; name: string } | { kind: "missing"; name: string } | { kind: "alreadyExists"; name: string } | { kind: "unknownTemplate"; id: string } | { kind: "notADocument"; name: string } | { kind: "notAnImage"; name: string } | { kind: "notABoard"; name: string } | { kind: "invalidBoard"; name: string; detail: string } | { kind: "notUtf8"; name: string } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "unreadable"; detail: string } | { kind: "undecodable"; name: string; detail: string } | { kind: "unwritable"; detail: string } | { kind: "clipboardRefused"; detail: string } | { kind: "unrevealed"; detail: string } | { kind: "unknownMessage"; conversationId: string; messageId: string } | { kind: "unknownThread"; id: string } | { kind: "invalidAnchor"; name: string } | { kind: "missingTarget"; name: string; target: string } | { kind: "blankComment" } | { kind: "unknownAuthor" };
 
 export type LibraryFile = {
 	name: string,

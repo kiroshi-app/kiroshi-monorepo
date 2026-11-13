@@ -8,8 +8,9 @@ use super::*;
 use crate::board::BoardEdit;
 use crate::db;
 use crate::library::commands::{
-	library_comment_counts, library_comment_reopen, library_comment_resolve,
-	library_comment_threads, library_delete, library_rename_board, library_rename_document,
+	library_comment_counts, library_comment_create, library_comment_reopen, library_comment_reply,
+	library_comment_resolve, library_comment_threads, library_delete, library_rename_board,
+	library_rename_document,
 };
 use crate::library::contract::{
 	LibraryBoardPoint, LibraryCommentCount, COMMENT_THREAD_CHANGED_EVENT,
@@ -436,14 +437,95 @@ async fn an_anchor_of_another_kind_or_out_of_the_image_and_a_blank_comment_store
 	assert_eq!(shelf.stored_rows("library_comment_threads").await, 0);
 }
 
-#[tokio::test]
-async fn a_comment_of_a_caller_without_an_account_is_refused() {
-	let shelf = Shelf::of("unknown-author").await;
-	let by = |caller: Caller| {
-		Said::by_the_person_calling(&caller, shelf.app.handle(), "Here".to_owned(), Vec::new())
-			.map(|said| said.author)
-	};
+async fn refused_for_its_missing_target(name: &str, anchor: Anchor, target: &str) {
+	let shelf = Shelf::of("missing-target").await;
 
-	assert_eq!(by(Caller::Host), Err(LibraryError::UnknownAuthor));
-	assert_eq!(by(Caller::Relayed(None)), Err(LibraryError::UnknownAuthor));
+	let opened = shelf.opened_saying(name, anchor, said(person(BEA), "Here", &[])).await;
+
+	assert_eq!(
+		opened,
+		Err(LibraryError::MissingTarget { name: name.to_owned(), target: target.to_owned() })
+	);
+	assert_eq!(shelf.stored_rows("library_comment_threads").await, 0);
+	assert_eq!(shelf.stored_rows("library_comments").await, 0);
+}
+
+#[tokio::test]
+async fn a_thread_on_a_block_the_document_does_not_hold_is_refused_and_stores_nothing() {
+	refused_for_its_missing_target(NOTES, block("absent"), "absent").await;
+}
+
+#[tokio::test]
+async fn a_thread_on_a_passage_of_a_block_the_document_does_not_hold_is_refused() {
+	refused_for_its_missing_target(NOTES, passage("absent", "the beta"), "absent").await;
+}
+
+#[tokio::test]
+async fn a_thread_on_a_passage_whose_quote_is_not_in_its_block_is_refused() {
+	refused_for_its_missing_target(NOTES, passage("head01", "the beta"), "head01").await;
+}
+
+#[tokio::test]
+async fn a_thread_on_a_node_the_board_does_not_hold_is_refused_and_stores_nothing() {
+	refused_for_its_missing_target(PLAN, node("absent"), "absent").await;
+}
+
+impl Shelf {
+	async fn created_by(&self, caller: Caller) -> Result<LibraryCommentThread, LibraryError> {
+		library_comment_create(
+			self.app.handle().clone(),
+			caller,
+			self.app.state(),
+			self.space_id.clone(),
+			NOTES.to_owned(),
+			block("head01"),
+			"Tighten this".to_owned(),
+			Vec::new(),
+		)
+		.await
+	}
+
+	async fn replied_by(
+		&self,
+		caller: Caller,
+		thread_id: &str,
+	) -> Result<LibraryCommentThread, LibraryError> {
+		library_comment_reply(
+			self.app.handle().clone(),
+			caller,
+			self.app.state(),
+			self.space_id.clone(),
+			NOTES.to_owned(),
+			thread_id.to_owned(),
+			"Done".to_owned(),
+			Vec::new(),
+		)
+		.await
+	}
+}
+
+#[tokio::test]
+async fn the_host_comments_without_an_account_as_the_person_standing_for_the_host() {
+	let shelf = Shelf::of("host-author").await;
+
+	let created = shelf.created_by(Caller::Host).await.expect("the host comments");
+	shelf.replied_by(Caller::Host, &created.id).await.expect("the host replies");
+	let read = shelf.threads(NOTES).await.expect("the threads read");
+
+	let authors: Vec<_> = read[0].comments.iter().map(|comment| &comment.author).collect();
+	assert_eq!(authors, [&person(COMMENT_HOST_AUTHOR_ID), &person(COMMENT_HOST_AUTHOR_ID)]);
+}
+
+#[tokio::test]
+async fn a_relayed_caller_nobody_vouches_for_is_refused_and_stores_nothing() {
+	let shelf = Shelf::of("unknown-author").await;
+	let by_the_host = shelf.created_by(Caller::Host).await.expect("the host comments");
+
+	let created = shelf.created_by(Caller::Relayed(None)).await;
+	let replied = shelf.replied_by(Caller::Relayed(None), &by_the_host.id).await;
+
+	assert_eq!(created, Err(LibraryError::UnknownAuthor));
+	assert_eq!(replied, Err(LibraryError::UnknownAuthor));
+	assert_eq!(shelf.threads(NOTES).await, Ok(vec![by_the_host]));
+	assert_eq!(shelf.stored_rows("library_comments").await, 1);
 }
