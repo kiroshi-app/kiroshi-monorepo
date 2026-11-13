@@ -12,6 +12,7 @@ import {
 	fn,
 	screen,
 	spyOn,
+	type UserEventObject,
 	waitFor,
 	within,
 } from "storybook/test"
@@ -2694,6 +2695,13 @@ const openThreadOf = (id: string) => ({
 	onClose: fn(),
 })
 
+type CommentPlay = {
+	args: LibraryDocumentEditorProps
+	canvas: ReturnType<typeof within>
+	canvasElement: HTMLElement
+	userEvent: UserEventObject
+}
+
 const describedAs = (story: string) => ({
 	docs: { description: { story } },
 })
@@ -2787,15 +2795,7 @@ const doc1 = {
 	parameters: describedAs(
 		"Artboard Doc 1: a document carrying three open threads, two on a passage and one on a paragraph. Check one pin per thread, the paragraph pin 16px right of the column and centred on the first line of its block, each passage pin starting on the end of its passage and centred on its last line, the passages washed at 8 percent over a 2px underline, and that pressing a pin raises `onOpenThread` with its thread.",
 	),
-	play: async ({
-		args,
-		canvasElement,
-		userEvent,
-	}: {
-		args: LibraryDocumentEditorProps
-		canvasElement: HTMLElement
-		userEvent: { click: (element: Element) => Promise<void> }
-	}) => {
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(3)
 
 		const column = slotIn(canvasElement, "library-document-column")
@@ -2834,15 +2834,7 @@ const doc2 = {
 	parameters: describedAs(
 		"Artboard Doc 2: comment mode on, the pointer over a paragraph. Check the hint centred on the card 24px above its bottom, that Escape raises `onCommentModeChange` with false, and that the block under the pointer wears the tint 8px outside itself while the 20px pin cursor sets its tip on the pointer.",
 	),
-	play: async ({
-		args,
-		canvasElement,
-		userEvent,
-	}: {
-		args: LibraryDocumentEditorProps
-		canvasElement: HTMLElement
-		userEvent: { keyboard: (keys: string) => Promise<void> }
-	}) => {
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		const card = boxOf(slotIn(canvasElement, "library-document-editor"))
 		const hint = boxOf(slotIn(canvasElement, "library-comment-mode-hint"))
 		await expectClose(
@@ -2886,13 +2878,7 @@ const doc3 = {
 	parameters: describedAs(
 		"Artboard Doc 3: a paragraph clicked in comment mode. Check the tint around the paragraph, the selected draft pin at the paragraph pin position, the 320px composer hanging 8px under the pin with their right edges aligned, and its field focused.",
 	),
-	play: async ({
-		canvas,
-		canvasElement,
-	}: {
-		canvas: ReturnType<typeof within>
-		canvasElement: HTMLElement
-	}) => {
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		await expectTintAround(canvasElement, MARKET_BLOCK)
 		const pin = pinIn(canvasElement, DRAFT_PIN)
 		await expect(pin).toHaveAttribute("data-state", "selected")
@@ -2920,13 +2906,7 @@ const doc4 = {
 	parameters: describedAs(
 		"Artboard Doc 4: a passage selected in comment mode. Check the passage in its selected wash over a solid underline, the selected draft pin on the end of the passage, the 320px composer 8px right of the pin with its top on the pin top, and its field focused.",
 	),
-	play: async ({
-		canvas,
-		canvasElement,
-	}: {
-		canvas: ReturnType<typeof within>
-		canvasElement: HTMLElement
-	}) => {
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		const passage = shownPassageOf(canvasElement, DINNER_PASSAGE)
 		await expect(passage).toHaveAttribute("data-state", "selected")
 		await expect(getComputedStyle(passage).borderBottomColor).toBe(
@@ -2957,13 +2937,7 @@ const doc5 = {
 	parameters: describedAs(
 		"Artboard Doc 5: the comment shortcut pressed with the caret in a paragraph, out of comment mode. Check the tint around the paragraph, the composer 4px under the tint with their right edges aligned, the shortcut keycap at the right of its first line, and its field focused.",
 	),
-	play: async ({
-		canvas,
-		canvasElement,
-	}: {
-		canvas: ReturnType<typeof within>
-		canvasElement: HTMLElement
-	}) => {
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		const tint = await expectTintAround(canvasElement, MARKET_BLOCK)
 		const form = composerIn(canvasElement)
 		const composer = boxOf(form)
@@ -2989,17 +2963,7 @@ const threadOpen = (selectedWash: number) => ({
 		...commentedDocument(),
 		openThread: openThreadOf(SESSION_THREAD.id),
 	},
-	play: async ({
-		args,
-		canvas,
-		canvasElement,
-		userEvent,
-	}: {
-		args: LibraryDocumentEditorProps
-		canvas: ReturnType<typeof within>
-		canvasElement: HTMLElement
-		userEvent: { click: (element: Element) => Promise<void> }
-	}) => {
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
 		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
 		await expect(passage).toHaveAttribute("data-state", "selected")
 		await expect(getComputedStyle(passage).backgroundColor).toBe(
@@ -3050,13 +3014,7 @@ const edge1 = {
 	parameters: describedAs(
 		"Artboard Edge 1: the open thread sat on a passage since removed from the document. Check that the body draws no pin and no passage for it, that the two other threads keep their pins, and that the thread sits flush under the 56px bar, its right edge 202px in from the card, under the line naming the lost text.",
 	),
-	play: async ({
-		canvas,
-		canvasElement,
-	}: {
-		canvas: ReturnType<typeof within>
-		canvasElement: HTMLElement
-	}) => {
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(2)
 		await expect(
 			canvasElement.querySelector(
@@ -3156,13 +3114,7 @@ export const ShortcutStartsComment = meta.story({
 const letterTyped = (isCommentMode: boolean) => ({
 	tags: ["test-only"],
 	args: commentedDocument(isCommentMode),
-	play: async ({
-		args,
-		canvasElement,
-	}: {
-		args: LibraryDocumentEditorProps
-		canvasElement: HTMLElement
-	}) => {
+	play: async ({ args, canvasElement }: CommentPlay) => {
 		if (!isInBrowserRunner()) return
 		await caretAfter(canvasElement, "before the train.")
 		await keyboard("c")

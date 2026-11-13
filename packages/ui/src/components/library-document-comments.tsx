@@ -104,8 +104,6 @@ const DRAFT_RUN = "comment-draft"
 
 const PIN_GAP = 8
 
-const MODE_CURSOR_SIZE = 20
-
 const isCommentRun = (id: string) =>
 	id === DRAFT_RUN || id.startsWith(COMMENT_RUN)
 
@@ -338,7 +336,7 @@ const LibraryDocumentModeCursor = ({
 	<span
 		aria-hidden="true"
 		className={cn(
-			"pointer-events-none absolute top-0 left-0 z-20 size-5 rounded-full rounded-bl-[0.15625rem] bg-primary ring-2 ring-white",
+			"pointer-events-none absolute z-20 size-5 -translate-y-full rounded-full rounded-bl-[0.15625rem] bg-primary ring-2 ring-white",
 			!isShown && "hidden",
 		)}
 		data-slot="library-document-comment-cursor"
@@ -530,5 +528,4 @@ export {
 	type LibraryDocumentOpenThread,
 	type LibraryDocumentThread,
 	LibraryDocumentThreadCard,
-	MODE_CURSOR_SIZE,
 }

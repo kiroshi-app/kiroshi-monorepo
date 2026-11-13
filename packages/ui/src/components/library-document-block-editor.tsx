@@ -108,7 +108,6 @@ import {
 	type LibraryDocumentCommentProps,
 	LibraryDocumentCommentRun,
 	LibraryDocumentModeCursor,
-	MODE_CURSOR_SIZE,
 } from "@workspace/ui/components/library-document-comments"
 import {
 	type BlockTextType,
@@ -902,9 +901,11 @@ const LibraryDocumentBlockEditor = ({
 				? target.closest<HTMLElement>(BLOCK_SLOT)
 				: null
 		setHovered(block?.dataset.blockId)
+		const cursor = modeCursor.current
+		if (!cursor) return
 		const frame = currentTarget.getBoundingClientRect()
-		if (modeCursor.current)
-			modeCursor.current.style.translate = `${clientX - frame.left}px ${clientY - frame.top - MODE_CURSOR_SIZE}px`
+		cursor.style.left = `${clientX - frame.left}px`
+		cursor.style.top = `${clientY - frame.top}px`
 	}
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
