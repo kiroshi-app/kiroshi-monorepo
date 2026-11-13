@@ -9,6 +9,7 @@ import {
 	useSyncExternalStore,
 } from "react"
 
+import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import {
@@ -127,6 +128,7 @@ import {
 	quotedTargetsOf,
 	type ReplyTarget,
 	type RunPresentation,
+	repliesBeingWrittenIn,
 	runPresentationsOf,
 	type TranscriptRow,
 	toRuns,
@@ -262,25 +264,81 @@ type WorkLineSeat = {
 	onStop?: () => void
 }
 
+type WorkActivity =
+	| { kind: "thinking" | "writing" | "waiting" }
+	| { kind: "working"; label: string }
+
+const workActivityOf = (work: WorkingState, t: ChatCopy): WorkActivity => {
+	if (work.backgroundTasks !== undefined)
+		return {
+			kind: "working",
+			label: t("working.backgroundTasks", { count: work.backgroundTasks }),
+		}
+	if (work.kind === "waiting") return { kind: "waiting" }
+	if (
+		(work.kind === "thinking" || work.kind === "writing") &&
+		work.label === undefined
+	)
+		return { kind: work.kind }
+	return { kind: "working", label: work.label ?? "" }
+}
+
 const workLineAgentOf = (
 	{ face, work, onStop }: WorkLineSeat,
 	t: ChatCopy,
 ): ThreadWorkLineAgent => {
 	const agent = { ...face, startedAt: work.startedAt, onStop }
-	if (work.backgroundTasks !== undefined)
-		return {
-			...agent,
-			state: "tool",
-			label: t("working.backgroundTasks", { count: work.backgroundTasks }),
-		}
-	if (work.kind === "waiting") return { ...agent, state: "waiting" }
-	if (
-		(work.kind === "thinking" || work.kind === "writing") &&
-		work.label === undefined
-	)
-		return { ...agent, state: work.kind }
-	return { ...agent, state: "tool", label: work.label ?? "" }
+	const activity = workActivityOf(work, t)
+	return activity.kind === "working"
+		? { ...agent, state: "tool", label: activity.label }
+		: { ...agent, state: activity.kind }
 }
+
+const stopControlOf = (onStop?: () => void) =>
+	onStop ? { stoppable: true as const, onStop } : {}
+
+type ReplyWorkProps = {
+	seat: WorkLineSeat
+}
+
+const ReplyWork = ({ seat: { face, work, onStop } }: ReplyWorkProps) => {
+	const t = useChatCopy()
+
+	return (
+		<ActivityIndicator
+			{...workActivityOf(work, t)}
+			{...stopControlOf(onStop)}
+			blot={face.blot}
+			botId={face.id}
+			image={face.image}
+			name={face.name}
+			seed={face.id}
+			startedAt={work.startedAt}
+		/>
+	)
+}
+
+type ReplyWorks = ReadonlyMap<string, WorkLineSeat>
+
+type ThreadWork = {
+	inReplies: ReplyWorks
+	underTranscript: WorkLineSeat[]
+}
+
+const threadWorkOf = (
+	seats: WorkLineSeat[],
+	repliesBeingWritten: ReadonlyMap<string, string>,
+): ThreadWork => ({
+	inReplies: new Map(
+		seats.flatMap((seat): [string, WorkLineSeat][] => {
+			const replyId = repliesBeingWritten.get(seat.face.id)
+			return replyId ? [[replyId, seat]] : []
+		}),
+	),
+	underTranscript: seats.filter(
+		({ face }) => !repliesBeingWritten.has(face.id),
+	),
+})
 
 const upNextAgentOf = (face: ThreadFace): ThreadWorkLineAgent => ({
 	...face,
@@ -705,6 +763,7 @@ type ThreadRunProps = {
 	authors: ThreadAuthors
 	quotes: ThreadQuotes
 	pins: PinnedBubbles
+	replyWorks: ReplyWorks
 	now: number
 	readerName: string
 	toQuote: ThreadNaming["toQuote"]
@@ -722,6 +781,7 @@ const ThreadRun = ({
 	authors,
 	quotes,
 	pins,
+	replyWorks,
 	now,
 	readerName,
 	toQuote,
@@ -729,8 +789,9 @@ const ThreadRun = ({
 	onRetry,
 }: ThreadRunProps) => (
 	<TurnGroup carriesMark={presentation.isMarked}>
-		{run.map((row, index) => {
+		{run.map((row) => {
 			const card = answered.get(row.messageId)
+			const work = replyWorks.get(row.messageId)
 
 			return (
 				<ThreadTurn
@@ -741,11 +802,7 @@ const ThreadRun = ({
 						) : undefined
 					}
 					author={row.authorBotId ? authors.get(row.authorBotId) : undefined}
-					avatarFace={
-						presentation.faceIndexes.includes(index)
-							? (botFace ?? undefined)
-							: undefined
-					}
+					avatarFace={botFace ?? undefined}
 					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
 					botName={botFace?.name}
@@ -761,6 +818,7 @@ const ThreadRun = ({
 					row={row}
 					state={row.messageId === rejectedPromptId ? "failed" : row.completion}
 					toQuote={toQuote}
+					work={work ? <ReplyWork seat={work} /> : undefined}
 				/>
 			)
 		})}
@@ -1138,24 +1196,38 @@ const missionEventRowsAfter = ({
 		},
 	])
 
-type SoloThreadTailProps = {
+type SoloWorkSeatsInput = {
 	thread: LoadedBotThread
-	face: ThreadFace
 	botWork: WorkingState | null
-	signInStep: SignInStep | null
 	onStop: () => void
 }
 
-const SoloThreadTail = ({
+const soloWorkSeatsOf = ({
 	thread,
-	face,
 	botWork,
-	signInStep,
 	onStop,
-}: SoloThreadTailProps) => {
-	const t = useChatCopy()
+}: SoloWorkSeatsInput): WorkLineSeat[] => {
+	if (!botWork) return []
 	const isStoppable =
 		canStopTurn(thread.state.turn) || thread.state.foreignTurn !== null
+
+	return [
+		{
+			face: faceOfBot(thread.bot),
+			work: botWork,
+			onStop: isStoppable ? onStop : undefined,
+		},
+	]
+}
+
+type SoloThreadTailProps = {
+	thread: LoadedBotThread
+	work: ThreadWork
+	signInStep: SignInStep | null
+}
+
+const SoloThreadTail = ({ thread, work, signInStep }: SoloThreadTailProps) => {
+	const t = useChatCopy()
 	usePostedSignInStep({
 		controller: thread.controller,
 		botId: thread.bot.id,
@@ -1163,14 +1235,7 @@ const SoloThreadTail = ({
 		step: signInStep,
 	})
 
-	const agents = botWork
-		? [
-				workLineAgentOf(
-					{ face, work: botWork, onStop: isStoppable ? onStop : undefined },
-					t,
-				),
-			]
-		: []
+	const agents = work.underTranscript.map((seat) => workLineAgentOf(seat, t))
 
 	return <ThreadWork agents={agents} key={thread.bot.id} />
 }
@@ -1225,8 +1290,19 @@ const waitingRowsIn = (
 		bots,
 	)
 
+const conversationWorkSeatsOf = (
+	speakers: SpeakingBot[],
+	bots: RosterBot[],
+): WorkLineSeat[] =>
+	speakingRowsIn(speakers, bots).map(({ seated, speaking }) => ({
+		face: seated,
+		work: speaking.work,
+		onStop: stopOf(speaking),
+	}))
+
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
+	work: ThreadWork
 	bots: RosterBot[]
 	readerName: string
 	refusedQuotes?: QuotedMessage[]
@@ -1234,6 +1310,7 @@ type ConversationThreadTailProps = {
 
 const ConversationThreadTail = ({
 	thread,
+	work,
 	bots,
 	readerName,
 	refusedQuotes,
@@ -1241,14 +1318,10 @@ const ConversationThreadTail = ({
 	const t = useChatCopy()
 	const { refusedMessage, speakers, waitingBotIds, failedBotIds } = thread.state
 	const atWork = [
-		...speakingRowsIn(speakers, bots).map(({ seated, speaking }) =>
-			workLineAgentOf(
-				{ face: seated, work: speaking.work, onStop: stopOf(speaking) },
-				t,
-			),
-		),
+		...work.underTranscript.map((seat) => workLineAgentOf(seat, t)),
 		...waitingRowsIn(waitingBotIds, speakers, bots).map(upNextAgentOf),
 	]
+	const isAnyoneAtWork = work.inReplies.size > 0 || atWork.length > 0
 	const failed = seatedIn(failedBotIds, bots).map(
 		(seated): ThreadWorkLineAgent => ({
 			...seated,
@@ -1258,7 +1331,7 @@ const ConversationThreadTail = ({
 			},
 		}),
 	)
-	const agents = atWork.length > 0 ? [...failed, ...atWork] : []
+	const agents = isAnyoneAtWork ? [...failed, ...atWork] : []
 
 	return (
 		<>
@@ -1292,39 +1365,49 @@ const showsEmptyState = (
 	isFirstLoadPending: boolean,
 ) => rows.length === 0 && !signInStep && !isFirstLoadPending
 
-type ThreadTailProps = {
+type ThreadWorkSeatsInput = {
 	thread: LoadedThread
 	botWork: WorkingState | null
+	bots: RosterBot[]
+	onStop: () => void
+}
+
+const threadWorkSeatsOf = ({
+	thread,
+	botWork,
+	bots,
+	onStop,
+}: ThreadWorkSeatsInput): WorkLineSeat[] =>
+	thread.kind === "bot"
+		? soloWorkSeatsOf({ thread, botWork, onStop })
+		: conversationWorkSeatsOf(thread.state.speakers, bots)
+
+type ThreadTailProps = {
+	thread: LoadedThread
+	work: ThreadWork
 	bots: RosterBot[]
 	signInStep: SignInStep | null
 	readerName: string
 	refusedQuotes?: QuotedMessage[]
-	onStop: () => void
 }
 
 const ThreadTail = ({
 	thread,
-	botWork,
+	work,
 	bots,
 	signInStep,
 	readerName,
 	refusedQuotes,
-	onStop,
 }: ThreadTailProps) =>
 	thread.kind === "bot" ? (
-		<SoloThreadTail
-			botWork={botWork}
-			face={faceOfBot(thread.bot)}
-			onStop={onStop}
-			signInStep={signInStep}
-			thread={thread}
-		/>
+		<SoloThreadTail signInStep={signInStep} thread={thread} work={work} />
 	) : (
 		<ConversationThreadTail
 			bots={bots}
 			readerName={readerName}
 			refusedQuotes={refusedQuotes}
 			thread={thread}
+			work={work}
 		/>
 	)
 
@@ -1710,6 +1793,7 @@ const threadRowsOf = (
 	const {
 		authors,
 		botFace,
+		bots,
 		clock,
 		facts,
 		isSoloThread,
@@ -1738,6 +1822,7 @@ const threadRowsOf = (
 		holdReply,
 		isSentInMount,
 		retry,
+		stop,
 		threadRuns,
 	} = actions
 	const { runs, causes } = threadRuns
@@ -1747,6 +1832,10 @@ const threadRowsOf = (
 		hasSingleBot: isSoloThread,
 		isWorking: facts.botWork !== null,
 	})
+	const work = threadWorkOf(
+		threadWorkSeatsOf({ thread, botWork: facts.botWork, bots, onStop: stop }),
+		repliesBeingWrittenIn(runs, botFace?.id ?? null),
+	)
 	const runRows = toRunRows({
 		answered,
 		authors,
@@ -1762,6 +1851,7 @@ const threadRowsOf = (
 		quotes,
 		readerName: reader,
 		rejectedPromptId: facts.rejectedPromptId,
+		replyWorks: work.inReplies,
 		runs,
 		toQuote,
 	})
@@ -1828,7 +1918,7 @@ const threadRowsOf = (
 	const refusedTargets = quotedTargetsOf(refusalLinks, quotes)
 	const signInStep = signInStepFor(thread, signIn)
 
-	return { refusedTargets, signInStep, transcriptRows }
+	return { refusedTargets, signInStep, transcriptRows, work }
 }
 
 const useThreadView = (props: ThreadViewProps) => {
@@ -1955,13 +2045,12 @@ function ThreadView(props: ThreadViewProps) {
 
 	const tail = (
 		<ThreadTail
-			botWork={view.facts.botWork}
 			bots={view.bots}
-			onStop={view.stop}
 			readerName={view.reader}
 			refusedQuotes={view.refusedTargets?.map(view.toQuote)}
 			signInStep={view.signInStep}
 			thread={thread}
+			work={view.work}
 		/>
 	)
 
