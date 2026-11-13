@@ -76,7 +76,7 @@
 	--bot-badge-failed: oklch(0.62 0.22 27);
 	--warning: oklch(0.64 0.16 60);
 	--warning-foreground: #fffffc;
-	--needs-you: oklch(0.53 0.16 60);
+	--needs-you: oklch(0.47 0.16 60);
 	--mission-mark-cut-out: #0a0a0a;
 	--mission-glyph-waiting: oklch(0.56 0.16 60);
 	--mission-glyph-failed: oklch(0.58 0.22 27);
@@ -128,6 +128,9 @@
 	--sidebar-primary: var(--primary-strong);
 	--sidebar-accent: #f2f2f2;
 	--sidebar-accent-foreground: #0a0a0a;
+	--sidebar-hover: #e3e3e3;
+	--sidebar-selected: #d6d6d6;
+	--sidebar-muted-foreground: #5c5c5c;
 	--sidebar-border: #e5e5e5;
 	--sidebar-tree-line: var(--sidebar-border);
 	--sidebar-ring: var(--primary-strong);
@@ -366,6 +369,9 @@
 	--sidebar-primary: var(--primary-strong);
 	--sidebar-accent: #262626;
 	--sidebar-accent-foreground: #f5f5f5;
+	--sidebar-hover: #1a1a1a;
+	--sidebar-selected: #262626;
+	--sidebar-muted-foreground: var(--muted-foreground);
 	--sidebar-border: #212224;
 	--sidebar-tree-line: #2a2a2a;
 	--sidebar-ring: var(--primary-strong);

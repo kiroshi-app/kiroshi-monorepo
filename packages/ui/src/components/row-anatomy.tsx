@@ -146,7 +146,7 @@ const COMPACT_TITLE = "block truncate"
 const COMPACT_TITLE_NEEDING_YOU = "font-medium text-foreground"
 
 const COMPACT_META =
-	"flex min-w-16 shrink-0 items-center justify-end gap-1.5 text-[11px] text-muted-foreground leading-4 tabular-nums"
+	"flex min-w-16 shrink-0 items-center justify-end gap-1.5 text-[11px] text-sidebar-muted-foreground leading-4 tabular-nums"
 
 const COMPACT_TIME = "min-w-5.5 shrink-0 text-end"
 

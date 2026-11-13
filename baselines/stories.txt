@@ -1883,6 +1883,7 @@ navigation-expandedsidebar--compact-needs-you-light-expanded
 navigation-expandedsidebar--compact-needs-you-without-question-expanded
 navigation-expandedsidebar--compact-panel-padding-and-block-gap-expanded
 navigation-expandedsidebar--compact-rest-expanded
+navigation-expandedsidebar--compact-scrolled-expanded
 navigation-expandedsidebar--compact-selected-coloured-icon-expanded
 navigation-expandedsidebar--compact-selected-destination-expanded
 navigation-expandedsidebar--compact-selected-expanded

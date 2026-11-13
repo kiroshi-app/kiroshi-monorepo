@@ -1,6 +1,6 @@
 "use client"
 
-import { Children, type ReactNode } from "react"
+import { Children, createContext, type ReactNode, useContext } from "react"
 import { useTranslation } from "react-i18next"
 
 import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
@@ -69,12 +69,12 @@ const LIST_RETRY =
 	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-4.5 transition-none"
 
 const MISSION_COUNT =
-	"w-16 shrink-0 text-end text-[11px] text-muted-foreground leading-4 tabular-nums"
+	"w-16 shrink-0 text-end text-[11px] text-sidebar-muted-foreground leading-4 tabular-nums"
 
 const FOOTER_BLOCK = cn(COMPACT_ROW_STACK, "shrink-0")
 
 const FOOTER =
-	"group/person flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 aria-[current]:bg-sidebar-accent aria-[current]:hover:bg-sidebar-accent"
+	"group/person flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-sidebar-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 aria-[current]:bg-sidebar-selected aria-[current]:hover:bg-sidebar-selected"
 
 const FOOTER_GLYPH =
 	"grid size-4.5 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
@@ -317,13 +317,20 @@ const ExpandedSidebarListBody = ({
 	)
 }
 
-const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
-	<CompactRowsContext.Provider value>
-		<SidebarContent className={SECTIONS}>
-			<ExpandedSidebarListBody {...props} />
-		</SidebarContent>
-	</CompactRowsContext.Provider>
-)
+const ScrollingMenuContext = createContext<ReactNode>(null)
+
+const ExpandedSidebarList = (props: ExpandedSidebarListProps) => {
+	const menu = useContext(ScrollingMenuContext)
+
+	return (
+		<CompactRowsContext.Provider value>
+			<SidebarContent className={SECTIONS}>
+				{menu}
+				<ExpandedSidebarListBody {...props} />
+			</SidebarContent>
+		</CompactRowsContext.Provider>
+	)
+}
 
 const ExpandedSidebar = ({
 	destination,
@@ -347,6 +354,28 @@ const ExpandedSidebar = ({
 	...switcher
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation("bots")
+	const menu = (
+		<SidebarMenu className={COMPACT_ROW_GAP}>
+			{navigationDestinationsOf({
+				onNewConversation,
+				onSelectMissions,
+				onSelectLibrary,
+			}).map(({ id, label, Icon, FilledIcon, onSelect }) => (
+				<NavigationItem
+					icon={destination === id ? <FilledIcon /> : <Icon />}
+					isCurrent={destination === id}
+					key={id}
+					label={t(label)}
+					onSelect={onSelect}
+					trailing={
+						id === "missions" && missionCount !== undefined ? (
+							<span className={MISSION_COUNT}>{missionCount}</span>
+						) : null
+					}
+				/>
+			))}
+		</SidebarMenu>
+	)
 
 	return (
 		<nav
@@ -357,42 +386,24 @@ const ExpandedSidebar = ({
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
 			</div>
-			<SidebarMenu className={COMPACT_ROW_GAP}>
-				{navigationDestinationsOf({
-					onNewConversation,
-					onSelectMissions,
-					onSelectLibrary,
-				}).map(({ id, label, Icon, FilledIcon, onSelect }) => (
-					<NavigationItem
-						icon={destination === id ? <FilledIcon /> : <Icon />}
-						isCurrent={destination === id}
-						key={id}
-						label={t(label)}
-						onSelect={onSelect}
-						trailing={
-							id === "missions" && missionCount !== undefined ? (
-								<span className={MISSION_COUNT}>{missionCount}</span>
-							) : null
-						}
+			<ScrollingMenuContext.Provider value={menu}>
+				<CurrentSpaceCarousel
+					isSwitchingEnabled={isSpaceSwitchingEnabled}
+					onSelectSpace={switcher.onSelectSpace}
+					renderSpaceList={renderSpaceList}
+					selectedSpaceId={switcher.selectedSpaceId}
+					spaces={switcher.spaces}
+				>
+					<ExpandedSidebarList
+						conversations={conversations}
+						listEnd={listEnd}
+						listStatus={listStatus}
+						onRetryList={onRetryList}
+						pinned={pinned}
+						sections={sections}
 					/>
-				))}
-			</SidebarMenu>
-			<CurrentSpaceCarousel
-				isSwitchingEnabled={isSpaceSwitchingEnabled}
-				onSelectSpace={switcher.onSelectSpace}
-				renderSpaceList={renderSpaceList}
-				selectedSpaceId={switcher.selectedSpaceId}
-				spaces={switcher.spaces}
-			>
-				<ExpandedSidebarList
-					conversations={conversations}
-					listEnd={listEnd}
-					listStatus={listStatus}
-					onRetryList={onRetryList}
-					pinned={pinned}
-					sections={sections}
-				/>
-			</CurrentSpaceCarousel>
+				</CurrentSpaceCarousel>
+			</ScrollingMenuContext.Provider>
 			<div className={FOOTER_BLOCK} data-slot="expanded-sidebar-footer-block">
 				<SpaceDots
 					badgesBySpaceId={switcher.badgesBySpaceId}

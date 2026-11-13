@@ -321,13 +321,25 @@ const sectionHeadersIn = (canvasElement: HTMLElement) =>
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
+const navigationMenuIn = (sidebar: HTMLElement) =>
+	sidebar.querySelector(
+		'[data-slot="sidebar-content"] > [data-slot="sidebar-menu"]',
+	) as HTMLElement
+
+const rosterRowsIn = (sidebar: HTMLElement) =>
+	Array.from(
+		sidebar.querySelectorAll<HTMLElement>(
+			'[data-slot="fold-section"] [data-slot="sidebar-menu-button"]',
+		),
+	)
+
 export const ExpandedNewConversation = meta.story({
 	name: "1 Expanded New",
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 34px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 27px in. Check both section headers are 30px tall with their label 6px in, the first row starts 31px under the top of the list and Conversations sits 24px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, list, footer with nothing between the list and the footer, the menu leading the list it scrolls with, ahead of Pinned and Conversations, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 34px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 27px in. Check both section headers are 30px tall with their label 6px in, the first row starts 31px under the top of its header and Conversations sits 24px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -347,10 +359,12 @@ export const ExpandedNewConversation = meta.story({
 			),
 		).toEqual([
 			"expanded-sidebar-switcher-row",
-			"sidebar-menu",
 			"space-carousel",
 			"expanded-sidebar-footer-block",
 		])
+		await expect(
+			slotIn(canvasElement, "sidebar-content").firstElementChild,
+		).toBe(navigationMenuIn(sidebarIn(canvasElement)))
 		await expect(
 			canvasElement.querySelector('[data-slot="update-row"]'),
 		).toBeNull()
@@ -360,7 +374,6 @@ export const ExpandedNewConversation = meta.story({
 
 		await expect(
 			listRhythmOf({
-				content: slotIn(canvasElement, "sidebar-content"),
 				headers: slotsIn(canvasElement, "fold-section-trigger"),
 				firstSectionRows: slotsIn(
 					slotIn(canvasElement, "fold-section"),
@@ -479,9 +492,7 @@ const ROW_GAP = 1
 
 const MISSION_GLYPH = 14
 
-const MISSION_INDENT = 8
-
-const MISSION_LANE = 10
+const MISSION_INDENT = 26
 
 const PANEL_PADDING = 12
 
@@ -506,22 +517,17 @@ const SKELETON_RHYTHM = {
 }
 
 type ListRhythmParts = {
-	content: Element
 	headers: Element[]
 	firstSectionRows: Element[]
 }
 
-const listRhythmOf = ({
-	content,
-	headers,
-	firstSectionRows,
-}: ListRhythmParts) => ({
+const listRhythmOf = ({ headers, firstSectionRows }: ListRhythmParts) => ({
 	headerHeights: headers.map((header) => boxOf(header).height),
 	headerInsets: headers.map(
 		(header) =>
 			boxOf(header.firstElementChild as Element).left - boxOf(header).left,
 	),
-	firstRowTop: boxOf(firstSectionRows[0]).top - boxOf(content).top,
+	firstRowTop: boxOf(firstSectionRows[0]).top - boxOf(headers[0]).top,
 	sectionGap:
 		boxOf(headers[1]).top - boxOf(firstSectionRows.at(-1) as Element).bottom,
 })
@@ -596,10 +602,9 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		)
 	}
 
-	const leads = slotsIn(
-		slotIn(sidebar, "space-carousel"),
-		"sidebar-menu-button",
-	).map((row) => row.querySelector(":scope > span:first-child > *"))
+	const leads = rosterRowsIn(sidebar).map((row) =>
+		row.querySelector(":scope > span:first-child > *"),
+	)
 	await expect(
 		leads.map((lead) => [
 			lead?.getAttribute("data-slot"),
@@ -622,11 +627,12 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 		await expect(trunk.pointerEvents).toBe("none")
 		const title = slotIn(head, "roster-row-name")
 		for (const row of slotsIn(tree, "mission-capsule")) {
-			const lane = slotIn(row, "mission-capsule-lane")
 			const glyph = slotIn(row, "mission-capsule-glyph")
 			await expect(boxOf(row).height).toBe(ROW_HEIGHT)
 			await expect(paddingOf(row)).toEqual(ROW_PADDING)
-			await expect(boxOf(lane).width).toBe(MISSION_LANE)
+			await expect(
+				row.querySelector('[data-slot="mission-capsule-lane"]'),
+			).toBeNull()
 			await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
 			await expect(boxOf(glyph).width).toBe(MISSION_GLYPH)
 			await expect(boxOf(glyph).left).toBe(boxOf(title).left)
@@ -641,7 +647,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 30px line padded 6 on all four sides, each mission is a button of its own under the pointer that starts 8px in, 6px before the trunk under its conversation icon, keeps a 10px lane after the trunk and sits its 14px state mark on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
+	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 30px line padded 6 on all four sides, each mission is a button of its own under the pointer that starts 26px in, past the trunk under its conversation icon, and sits its 14px state mark 6px in, on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -1169,7 +1175,7 @@ export const L1LoadingExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area. Check both header bars sit in a 32px header 8px in, the first row starts 34px under the top of the list and the second header 12px under the second row. That is the rhythm of the list before OPE-2209: the compact list of `ExpandedNewConversation` holds 28px headers and rows, so the list moves when it arrives until the skeleton follows.",
+					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area. Check both header bars sit in a 32px header 8px in, the first row starts 34px under the top of its header bar and the second header 12px under the second row, the destinations menu staying above the skeleton. That is the rhythm of the list before OPE-2209: the compact list of `ExpandedNewConversation` holds 28px headers and rows, so the list moves when it arrives until the skeleton follows.",
 			},
 		},
 	},
@@ -1177,7 +1183,6 @@ export const L1LoadingExpanded = meta.story({
 		await expect(sectionHeadersIn(canvasElement)).toEqual([])
 		await expect(
 			listRhythmOf({
-				content: slotIn(canvasElement, "sidebar-content"),
 				headers: slotsIn(canvasElement, "sidebar-list-skeleton-header"),
 				firstSectionRows: slotsIn(
 					canvasElement,
@@ -1456,7 +1461,9 @@ export const A1SlotsComposedAsTheAppExpanded = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const content = slotIn(canvasElement, "sidebar-content")
-		const lists = Array.from(content.querySelectorAll("ul"))
+		const lists = Array.from(
+			content.querySelectorAll('[data-slot="fold-section"] ul'),
+		)
 		await expect(lists).toHaveLength(3)
 		for (const list of lists)
 			await expect(list.parentElement?.closest("ul")).toBeNull()
@@ -1702,7 +1709,7 @@ const activeRowHoverStory = (globals: typeof DARK) => ({
 		docs: {
 			description: {
 				story:
-					"The pointer rests on the current destination. Check the row keeps its selected fill, `--sidebar-accent`, under the pointer.",
+					"The pointer rests on the current destination. Check the row keeps its selected fill, `--sidebar-selected`, under the pointer.",
 			},
 		},
 	},
@@ -1712,7 +1719,7 @@ const activeRowHoverStory = (globals: typeof DARK) => ({
 		})
 		const selectedFill = tokenStyleIn(
 			row,
-			"bg-sidebar-accent",
+			"bg-sidebar-selected",
 			"backgroundColor",
 		)
 		await expect(getComputedStyle(row).backgroundColor).toBe(selectedFill)
@@ -1751,10 +1758,7 @@ const expectTopMenuAlignedOnConversations = async (
 	await expect(boxOf(item).height).toBe(ROW_HEIGHT)
 	await expect(boxOf(glyph).width).toBe(COMPACT_LEAD_SIDE)
 	await expect(paddingOf(item)).toEqual(ROW_PADDING)
-	const conversation = slotsIn(
-		slotIn(sidebar, "space-carousel"),
-		"sidebar-menu-button",
-	)[0] as HTMLElement
+	const conversation = rosterRowsIn(sidebar)[0]
 	const avatar = conversation.querySelector(
 		":scope > span:first-child > *",
 	) as Element
@@ -1786,12 +1790,12 @@ export const TopMenuHoveredExpanded = meta.story({
 	parameters: {
 		pseudo: {
 			hover:
-				'[data-slot="expanded-sidebar"] > [data-slot="sidebar-menu"] > li:last-child [data-slot="sidebar-menu-button"]',
+				'[data-slot="sidebar-content"] > [data-slot="sidebar-menu"] > li:last-child [data-slot="sidebar-menu-button"]',
 		},
 		docs: {
 			description: {
 				story:
-					"The pointer rests on Library in the destinations menu. Check it lights `--mission-list-hover` at once, with no colour transition, without moving its glyph or its label.",
+					"The pointer rests on Library in the destinations menu. Check it lights `--sidebar-hover` at once, with no colour transition, without moving its glyph or its label.",
 			},
 		},
 	},
@@ -1803,7 +1807,7 @@ export const TopMenuHoveredExpanded = meta.story({
 			try {
 				await pointer.hover(item)
 				await expect(getComputedStyle(item).backgroundColor).toBe(
-					tokenStyleIn(item, "bg-mission-list-hover", "backgroundColor"),
+					tokenStyleIn(item, "bg-sidebar-hover", "backgroundColor"),
 				)
 				await expect(colourTransitionsOf(item)).toEqual([])
 				await expectTopMenuAlignedOnConversations(canvasElement)
@@ -1882,10 +1886,7 @@ const expectRowsOnSharedColumns = async ({ canvasElement }: StoryCanvas) => {
 	const switcher = slotIn(sidebar, "space-switcher")
 	const menuItem = within(sidebar).getByRole("button", { name: /^Missions/ })
 	const header = slotIn(sidebar, "fold-section-trigger")
-	const listRows = slotsIn(
-		slotIn(sidebar, "space-carousel"),
-		"sidebar-menu-button",
-	)
+	const listRows = rosterRowsIn(sidebar)
 	const footer = slotIn(sidebar, "expanded-sidebar-footer")
 	await expect(
 		listRows.map((row) => slotIn(row, "roster-row-name").textContent),
@@ -1954,6 +1955,16 @@ const expectRowsOnSharedColumns = async ({ canvasElement }: StoryCanvas) => {
 			await pointer.hover(row)
 			await settled(row)
 			await expect(row.matches(":hover")).toBe(true)
+			await expect(getComputedStyle(row).backgroundColor).toBe(
+				tokenStyleIn(
+					row,
+					row.hasAttribute("aria-current")
+						? "bg-sidebar-selected"
+						: "bg-sidebar-hover",
+					"backgroundColor",
+				),
+			)
+			await expect(colourTransitionsOf(row)).toEqual([])
 			await expect(columns()).toEqual(resting)
 		} finally {
 			await pointer.unhover(row)
@@ -1967,7 +1978,7 @@ const ROW_COLUMNS_ARTBOARD = {
 }
 
 const ROW_COLUMNS_DESCRIPTION =
-	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 27px and the title 44px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 18px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 18px from the edges. Check every one of them is 30px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 20px from the edge, and that resting the pointer on any of them moves none of the columns."
+	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 27px and the title 44px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 18px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 18px from the edges. Check every one of them is 30px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 20px from the edge, and that resting the pointer on any of them, the Space header, a destination, a section header, a row or the person button, lights `--sidebar-hover` at once, a row that is the current page keeping `--sidebar-selected`, and moves none of the columns."
 
 export const RowColumnsExpanded = meta.story({
 	name: "Row columns",
@@ -2138,7 +2149,7 @@ const rowHolding = (canvasElement: HTMLElement, name: string) => {
 }
 
 const listRowsIn = (canvasElement: HTMLElement) =>
-	slotsIn(slotIn(canvasElement, "space-carousel"), "sidebar-menu-button")
+	rosterRowsIn(sidebarIn(canvasElement))
 
 const namesOf = (rows: HTMLElement[]) =>
 	rows.map((row) => slotIn(row, "roster-row-name").textContent)
@@ -2186,7 +2197,7 @@ const expectRestingRow = async (row: HTMLElement) => {
 		getComputedStyle(meta).fontVariantNumeric,
 	]).toEqual(["11px", "16px", "tabular-nums"])
 	await expect(colourOf(meta)).toBe(
-		tokenStyleIn(row, "text-muted-foreground", "color"),
+		tokenStyleIn(row, "text-sidebar-muted-foreground", "color"),
 	)
 	await expect(boxOf(meta).width).toBe(META_LANE_WIDTH)
 }
@@ -2203,7 +2214,7 @@ export const CompactRestExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 10px lane, a 14px mark, its identifier in 13/18 medium and its title, with no meta, and that the person button rests, unmarked, with its outline gear.`,
+				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 14px mark, its identifier in 13/18 medium and its title, with no lane and no meta, and that the person button rests, unmarked, with its outline gear.`,
 			},
 		},
 	},
@@ -2289,7 +2300,7 @@ export const CompactHoverExpanded = meta.story({
 		pseudo: { hover: ROADMAP_ROW_SELECTOR },
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The pointer rests on Q3 roadmap review. Check the row lights the list hover fill at once, with no colour transition, its title, icon and meta keeping their resting colours and columns.`,
+				story: `${COMPACT_DESCRIPTION} The pointer rests on Q3 roadmap review. Check the row lights the sidebar hover fill at once, with no colour transition, its title, icon and meta keeping their resting colours and columns.`,
 			},
 		},
 	},
@@ -2305,7 +2316,7 @@ export const CompactHoverExpanded = meta.story({
 				await pointer.hover(row)
 				await expect(row.matches(":hover")).toBe(true)
 				await expect(fillOf(row)).toBe(
-					tokenStyleIn(row, "bg-mission-list-hover", "backgroundColor"),
+					tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
 				)
 				await expect(colourTransitionsOf(row)).toEqual([])
 				await expect([colourOf(title), colourOf(meta)]).toEqual(resting)
@@ -2323,7 +2334,7 @@ export const CompactSelectedExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Q3 roadmap review is the open conversation. Check it alone reports itself as the current page, wears the sidebar accent fill and draws its title in foreground at regular weight, its meta unchanged. Check its subject icon is the filled drawing, in the muted foreground it has at rest, next to the three resting conversations that keep their outline icon.`,
+				story: `${COMPACT_DESCRIPTION} Q3 roadmap review is the open conversation. Check it alone reports itself as the current page, wears the sidebar selected fill and draws its title in foreground at regular weight, its meta unchanged. Check its subject icon is the filled drawing, in the muted foreground it has at rest, next to the three resting conversations that keep their outline icon.`,
 			},
 		},
 	},
@@ -2336,14 +2347,14 @@ export const CompactSelectedExpanded = meta.story({
 			),
 		).toEqual([row])
 		await expect(fillOf(row)).toBe(
-			tokenStyleIn(row, "bg-sidebar-accent", "backgroundColor"),
+			tokenStyleIn(row, "bg-sidebar-selected", "backgroundColor"),
 		)
 		await expect(colourOf(title)).toBe(
 			tokenStyleIn(row, "text-foreground", "color"),
 		)
 		await expect(getComputedStyle(title).fontWeight).toBe("400")
 		await expect(colourOf(slotIn(row, "roster-row-meta"))).toBe(
-			tokenStyleIn(row, "text-muted-foreground", "color"),
+			tokenStyleIn(row, "text-sidebar-muted-foreground", "color"),
 		)
 		await expect(boxOf(row).height).toBe(ROW_HEIGHT)
 
@@ -2365,13 +2376,24 @@ const OPEN_MISSION_ID = "OPE-418"
 
 const RESTING_MISSION_ID = "OPE-412"
 
+const edgeToIconOf = (row: Element, icon: Element) =>
+	boxOf(icon).left - boxOf(row).left
+
 const expectMissionFillHugsContent = async (row: HTMLElement) => {
 	const tree = row.parentElement as HTMLElement
-	const trunkStart =
+	const trunk = getComputedStyle(tree, "::before")
+	const trunkEnd =
 		boxOf(tree).left +
-		Number.parseFloat(getComputedStyle(tree, "::before").insetInlineStart)
+		Number.parseFloat(trunk.insetInlineStart) +
+		Number.parseFloat(trunk.width)
+	const destination = within(
+		row.closest('[data-slot="expanded-sidebar"]') as HTMLElement,
+	).getByRole("button", { name: "Library" })
+	await expect(edgeToIconOf(row, slotIn(row, "mission-capsule-glyph"))).toBe(
+		edgeToIconOf(destination, destination.querySelector("svg") as Element),
+	)
 	await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
-	await expect(trunkStart - boxOf(row).left).toBe(6)
+	await expect(boxOf(row).left).toBeGreaterThan(trunkEnd)
 	await expect(
 		boxOf(row).right - boxOf(slotIn(row, "mission-capsule-title")).right,
 	).toBeCloseTo(6, 1)
@@ -2397,7 +2419,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar accent fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Check the fill starts 8px in, 6px before the trunk, and stops 6px after the title, short of the row's end, leaving the indent on its left bare. Check the other mission takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
+				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar selected fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Check the fill starts 6px before the state mark, the distance a destination keeps between its fill and its icon, to the right of the trunk and of the bare indent, and stops 6px after the title, short of the row's end. Check the other mission takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
 			},
 		},
 	},
@@ -2405,8 +2427,8 @@ export const CompactSelectedMissionExpanded = meta.story({
 		const open = missionRowOf(canvasElement, OPEN_MISSION_ID)
 		const resting = missionRowOf(canvasElement, RESTING_MISSION_ID)
 		const parent = rowHolding(canvasElement, COMPACT_RELEASE_TRAIN.name)
-		const accent = tokenStyleIn(open, "bg-sidebar-accent", "backgroundColor")
-		const muted = tokenStyleIn(open, "text-muted-foreground", "color")
+		const accent = tokenStyleIn(open, "bg-sidebar-selected", "backgroundColor")
+		const muted = tokenStyleIn(open, "text-sidebar-muted-foreground", "color")
 		const titleOf = (row: HTMLElement) => slotIn(row, "mission-capsule-title")
 
 		await expect(currentControlsIn(sidebarIn(canvasElement))).toEqual([open])
@@ -2446,7 +2468,7 @@ export const CompactHoveredMissionExpanded = meta.story({
 		},
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The pointer rests on mission OPE-418. Check its row lights the list hover fill at once, with no colour transition, its title, identifier and state mark keeping their resting colours. Check the fill starts 8px in, 6px before the trunk, and stops 6px after the title, short of the row's end, leaving the indent on its left bare, and that no row reports itself as the current page.`,
+				story: `${COMPACT_DESCRIPTION} The pointer rests on mission OPE-418. Check its row lights the sidebar hover fill at once, with no colour transition, its title, identifier and state mark keeping their resting colours. Check the fill starts 6px before the state mark, the distance a destination keeps between its fill and its icon, to the right of the trunk and of the bare indent, and stops 6px after the title, short of the row's end, and that no row reports itself as the current page.`,
 			},
 		},
 	},
@@ -2464,7 +2486,7 @@ export const CompactHoveredMissionExpanded = meta.story({
 			await pointer.hover(row)
 			await expect(row.matches(":hover")).toBe(true)
 			await expect(fillOf(row)).toBe(
-				tokenStyleIn(row, "bg-mission-list-hover", "backgroundColor"),
+				tokenStyleIn(row, "bg-sidebar-hover", "backgroundColor"),
 			)
 			await expect([colourOf(title), colourOf(identifier)]).toEqual(resting)
 			await expectMissionFillHugsContent(row)
@@ -2480,7 +2502,7 @@ export const CompactSelectedPersonExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The person's settings are on screen. Check the person button alone reports itself as the current page among every button of the sidebar, wears the sidebar accent fill with no colour transition, draws the name in foreground and the filled gear, and keeps the avatar at the size of the Space logo, its initials disc taking the panel surface so it still reads on the fill.`,
+				story: `${COMPACT_DESCRIPTION} The person's settings are on screen. Check the person button alone reports itself as the current page among every button of the sidebar, wears the sidebar selected fill with no colour transition, draws the name in foreground and the filled gear, and keeps the avatar at the size of the Space logo, its initials disc taking the panel surface so it still reads on the fill.`,
 			},
 		},
 	},
@@ -2490,7 +2512,7 @@ export const CompactSelectedPersonExpanded = meta.story({
 		await expect(currentControlsIn(sidebar)).toEqual([person])
 		await expect(person).toHaveAttribute("aria-current", "page")
 		await expect(fillOf(person)).toBe(
-			tokenStyleIn(person, "bg-sidebar-accent", "backgroundColor"),
+			tokenStyleIn(person, "bg-sidebar-selected", "backgroundColor"),
 		)
 		await expect(colourOf(person.children[1])).toBe(
 			tokenStyleIn(person, "text-foreground", "color"),
@@ -2515,7 +2537,7 @@ export const CompactSelectedDestinationExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The Missions page is on screen. Check Missions alone reports itself as the current page, wears the sidebar accent fill and draws the filled flag at the size and colour of the outline one, while New and Library keep their outline glyph.`,
+				story: `${COMPACT_DESCRIPTION} The Missions page is on screen. Check Missions alone reports itself as the current page, wears the sidebar selected fill and draws the filled flag at the size and colour of the outline one, while New and Library keep their outline glyph.`,
 			},
 		},
 	},
@@ -2533,7 +2555,7 @@ export const CompactSelectedDestinationExpanded = meta.story({
 			destinations.map((row) => isDrawnFilled(glyphOf(row))),
 		).toEqual([false, true, false])
 		await expect(fillOf(missions)).toBe(
-			tokenStyleIn(missions, "bg-sidebar-accent", "backgroundColor"),
+			tokenStyleIn(missions, "bg-sidebar-selected", "backgroundColor"),
 		)
 		await expect(boxOf(glyphOf(missions)).width).toBe(COMPACT_LEAD_SIDE)
 		await expect(colourOf(glyphOf(missions))).toBe(colourOf(glyphOf(resting)))
@@ -2609,9 +2631,7 @@ export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
 		const sidebar = sidebarIn(canvasElement)
 		const carousel = slotIn(sidebar, "space-carousel")
 		const [pinned, clients, conversations] = slotsIn(sidebar, "fold-section")
-		const menu = sidebar.querySelector(
-			':scope > [data-slot="sidebar-menu"]',
-		) as HTMLElement
+		const menu = navigationMenuIn(sidebar)
 		const footer = slotIn(sidebar, "expanded-sidebar-footer")
 		await expect(paddingOf(sidebar)).toEqual(
 			Array(4).fill(`${PANEL_PADDING}px`),
@@ -2659,12 +2679,56 @@ export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
 		const selected = rowHolding(canvasElement, COMPACT_ROADMAP.name)
 		await expect(selected).toHaveAttribute("aria-current", "page")
 		await expect(fillOf(selected)).toBe(
-			tokenStyleIn(selected, "bg-sidebar-accent", "backgroundColor"),
+			tokenStyleIn(selected, "bg-sidebar-selected", "backgroundColor"),
 		)
 		await expect([
 			boxOf(selected).left - boxOf(sidebar).left,
 			boxOf(sidebar).right - boxOf(selected).right,
 		]).toEqual([PANEL_PADDING, PANEL_PADDING])
+	},
+})
+
+const SCROLLING_CONVERSATIONS = Array.from({ length: 40 }, (_, rank) =>
+	compactRow(`Thread ${rank + 1}`, "1h", 40 - rank),
+)
+
+export const CompactScrolledExpanded = meta.story({
+	name: "D Scrolled",
+	args: compactArtboardOf({ conversations: SCROLLING_CONVERSATIONS }),
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} Forty conversations overflow the list, which is then scrolled down. Check the destinations menu leaves the view with Pinned and Conversations, 24px above Pinned as before the scroll, while the Space header and the footer block stay where they were, fully in view.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const sidebar = sidebarIn(canvasElement)
+		const list = slotIn(sidebar, "sidebar-content")
+		const menu = navigationMenuIn(sidebar)
+		const [pinned] = slotsIn(sidebar, "fold-section")
+		const fixed = [
+			slotIn(sidebar, "expanded-sidebar-switcher-row"),
+			slotIn(sidebar, "expanded-sidebar-footer-block"),
+		]
+		const topsOf = (blocks: Element[]) =>
+			blocks.map((block) => boxOf(block).top)
+		const resting = topsOf(fixed)
+		await expect(boxOf(menu).top).toBe(boxOf(list).top)
+		await expect(boxOf(pinned).top - boxOf(menu).bottom).toBe(BLOCK_GAP)
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+
+		list.scrollTop = boxOf(pinned).bottom - boxOf(list).top
+		await new Promise(requestAnimationFrame)
+
+		await expect(list.scrollTop).toBeGreaterThan(0)
+		await expect(boxOf(menu).bottom).toBeLessThan(boxOf(list).top)
+		await expect(boxOf(pinned).bottom).toBeLessThanOrEqual(boxOf(list).top)
+		await expect(boxOf(pinned).top - boxOf(menu).bottom).toBe(BLOCK_GAP)
+		await expect(topsOf(fixed)).toEqual(resting)
+		await expect(boxOf(fixed[0]).bottom).toBeLessThanOrEqual(boxOf(list).top)
+		await expect(boxOf(fixed[1]).top).toBeGreaterThanOrEqual(boxOf(list).bottom)
+		for (const block of fixed) await expect(block).toBeVisible()
 	},
 })
 
@@ -2700,7 +2764,7 @@ export const CompactWorkingExpanded = meta.story({
 			const shimmer = slotIn(title, "text-shimmer")
 			await expect(title).toHaveTextContent(/working$/)
 			await expect(colourOf(slotIn(row, "roster-row-meta"))).toBe(
-				tokenStyleIn(row, "text-muted-foreground", "color"),
+				tokenStyleIn(row, "text-sidebar-muted-foreground", "color"),
 			)
 			await expect(boxOf(row).height).toBe(ROW_HEIGHT)
 
@@ -2875,7 +2939,7 @@ export const CompactNeedsYouLightExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan each wait on an answer, in the light theme. ${NEEDS_YOU_CHECKS} Check the label reads at 4.5:1 or more against the sidebar surface and against the selected fill, and the question mark as much against its disc.`,
+				story: `${COMPACT_DESCRIPTION} Nova and Lisbon offsite plan each wait on an answer, in the light theme. ${NEEDS_YOU_CHECKS} Check the label reads at 4.5:1 or more against the sidebar surface, the hover fill and the selected fill, and the question mark as much against its disc.`,
 			},
 		},
 	},
@@ -2885,7 +2949,11 @@ export const CompactNeedsYouLightExpanded = meta.story({
 			const row = rowHolding(canvasElement, name)
 			const label = colourOf(slotIn(row, "needs-you-label"))
 			const glyph = slotIn(row, "needs-you-glyph")
-			for (const surface of ["bg-sidebar", "bg-sidebar-accent"])
+			for (const surface of [
+				"bg-background",
+				"bg-sidebar-hover",
+				"bg-sidebar-selected",
+			])
 				await expect(
 					contrastOf(label, tokenStyleIn(row, surface, "backgroundColor")),
 				).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
