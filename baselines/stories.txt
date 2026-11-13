@@ -1998,6 +1998,7 @@ navigation-librarycommentthread--shape-gone
 navigation-librarycommentthread--shape-gone-dark
 navigation-librarycommentthread--target-gone
 navigation-librarycommentthread--target-gone-dark
+navigation-librarycommentthread--without-more
 navigation-librarydocumentblockeditor--agents-writing
 navigation-librarydocumentblockeditor--autolink-shows-its-text
 navigation-librarydocumentblockeditor--backspace-at-the-start-turns-into-text
