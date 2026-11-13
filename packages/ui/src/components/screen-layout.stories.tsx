@@ -332,3 +332,111 @@ export const FloatingHeaderInCard = meta.story({
 	},
 	play: ({ canvasElement }) => expectFloatingHeader(canvasElement, "bg-card"),
 })
+
+export const FloatingHeaderLateFadeStop = meta.story({
+	args: { ...FLOATING, headerFadeStop: 70 },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a screen whose content needs the fade to stay opaque longer, as the mission screen does. Check that the fade holds the frame surface down to 70% of its height instead of the default 50%, then clears at the bottom.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const surface = getComputedStyle(layoutIn(canvasElement)).backgroundColor
+
+		slotIn(canvasElement, "screen-layout-scroller").scrollTo({
+			top: SCROLLED_AWAY,
+		})
+		const fade = await waitFor(() =>
+			slotIn(canvasElement, "screen-layout-fade"),
+		)
+
+		await expect(getComputedStyle(fade).backgroundImage).toContain(
+			`${surface} 70%, rgba(0, 0, 0, 0) 100%`,
+		)
+	},
+})
+
+const TOPICS = [
+	"Releases",
+	"Design",
+	"Billing",
+	"Security",
+	"Onboarding",
+	"Integrations",
+]
+
+const twoFramesAfterScrolling = (scrolled: HTMLElement, to: ScrollToOptions) =>
+	new Promise<void>((resolve) => {
+		scrolled.addEventListener(
+			"scroll",
+			() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+			{ once: true },
+		)
+		scrolled.scrollTo(to)
+	})
+
+export const FloatingHeaderWithCustomScroller = meta.story({
+	args: {
+		...FLOATING,
+		scroller: (columnClassName) => (
+			<div className="min-h-0 flex-1" data-slot="story-scroller">
+				<div
+					className="h-full overflow-y-auto"
+					data-slot="story-scroller-viewport"
+				>
+					<div className={columnClassName}>
+						<div
+							className="flex max-w-80 shrink-0 gap-2 overflow-x-auto"
+							data-slot="story-topic-row"
+						>
+							{TOPICS.map((topic) => (
+								<Button
+									className="shrink-0"
+									key={topic}
+									onClick={fn()}
+									variant="outline"
+								>
+									{topic}
+								</Button>
+							))}
+						</div>
+						{FLOATING.children}
+					</div>
+				</div>
+			</div>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a screen that brings its own scroll container, as ThreadLayout does, under a floating header. Check that the fade follows that container, appearing once it leaves the top and going when it returns, and that scrolling the row of topics sideways inside the content leaves the fade as it is.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const viewport = slotIn(canvasElement, "story-scroller-viewport")
+		const topics = slotIn(canvasElement, "story-topic-row")
+
+		await expect(slotsIn(canvasElement, "screen-layout-scroller")).toEqual([])
+		await expect(topics.scrollWidth).toBeGreaterThan(topics.clientWidth)
+		await expect(fadesIn(canvasElement)).toHaveLength(0)
+
+		viewport.scrollTo({ top: SCROLLED_AWAY })
+		const fade = await waitFor(() =>
+			slotIn(canvasElement, "screen-layout-fade"),
+		)
+
+		await twoFramesAfterScrolling(topics, { left: 40 })
+		await expect(topics.scrollLeft).toBe(40)
+		await expect(fade.isConnected).toBe(true)
+
+		viewport.scrollTo({ top: 0 })
+		await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(0))
+		viewport.scrollTo({ top: SCROLLED_AWAY })
+		await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(1))
+	},
+})

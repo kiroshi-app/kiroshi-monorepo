@@ -1285,6 +1285,8 @@ layout-screenlayout--column-width-in-wide-card
 layout-screenlayout--floating-header
 layout-screenlayout--floating-header-dark
 layout-screenlayout--floating-header-in-card
+layout-screenlayout--floating-header-late-fade-stop
+layout-screenlayout--floating-header-with-custom-scroller
 layout-screenlayout--full-width-in-wide-card
 layout-screenlayout--header-and-content
 layout-screenlayout--header-content-and-footer

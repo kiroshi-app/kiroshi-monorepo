@@ -20,6 +20,19 @@ interface ScreenLayoutProps extends ComponentProps<"div"> {
 	footerClassName?: string
 }
 
+const SCROLL_CONTAINER = /auto|scroll/
+
+const isNestedScroller = (scrolled: Element, region: Element) => {
+	for (
+		let ancestor = scrolled.parentElement;
+		ancestor && ancestor !== region;
+		ancestor = ancestor.parentElement
+	)
+		if (SCROLL_CONTAINER.test(getComputedStyle(ancestor).overflowY)) return true
+
+	return false
+}
+
 const ScreenLayout = ({
 	header,
 	isHeaderFloating = false,
@@ -40,6 +53,19 @@ const ScreenLayout = ({
 		isHeaderFloating && "pt-20",
 		width === "column" && "mx-auto max-w-200",
 		contentClassName,
+	)
+
+	const scrollArea = scroller ? (
+		scroller(columnClassName)
+	) : (
+		<div
+			className="min-h-0 flex-1 overflow-y-auto"
+			data-slot="screen-layout-scroller"
+		>
+			<div className={columnClassName} data-slot="screen-layout-column">
+				{children}
+			</div>
+		</div>
 	)
 
 	return (
@@ -77,23 +103,20 @@ const ScreenLayout = ({
 				header
 			)}
 
-			{scroller ? (
-				scroller(columnClassName)
-			) : (
+			{isHeaderFloating ? (
 				<div
-					className="min-h-0 flex-1 overflow-y-auto"
-					data-slot="screen-layout-scroller"
-					onScroll={
-						isHeaderFloating
-							? (event) =>
-									setIsScrolledFromTop(event.currentTarget.scrollTop > 0)
-							: undefined
-					}
+					className="contents"
+					data-slot="screen-layout-scroll-region"
+					onScrollCapture={({ target, currentTarget }) => {
+						if (!(target instanceof Element)) return
+						if (isNestedScroller(target, currentTarget)) return
+						setIsScrolledFromTop(target.scrollTop > 0)
+					}}
 				>
-					<div className={columnClassName} data-slot="screen-layout-column">
-						{children}
-					</div>
+					{scrollArea}
 				</div>
+			) : (
+				scrollArea
 			)}
 
 			{footer ? (
