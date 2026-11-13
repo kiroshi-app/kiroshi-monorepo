@@ -2414,6 +2414,13 @@ overlays-imagemenu--image-actions-only
 overlays-imagemenu--in-viewer
 overlays-imagemenu--saving-to-library
 overlays-imagemenu--without-callbacks
+overlays-libraryimagecomments--at-rest
+overlays-libraryimagecomments--comment-mode
+overlays-libraryimagecomments--point-draft
+overlays-libraryimagecomments--zone-draft
+overlays-libraryimagecomments--zone-thread-open
+overlays-libraryimagecomments--zone-thread-open-light
+overlays-libraryimagecomments--zoomed
 overlays-librarylightbox--at-the-first-image
 overlays-librarylightbox--back-button
 overlays-librarylightbox--backdrop-click

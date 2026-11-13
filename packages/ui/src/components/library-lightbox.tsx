@@ -10,6 +10,11 @@ import {
 	type ImageMenuActions,
 	type ImageMenuProps,
 } from "@workspace/ui/components/image-menu"
+import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
+import {
+	LibraryImageComments,
+	type LibraryImageCommentsProps,
+} from "@workspace/ui/components/library-image-comments"
 import {
 	handlersFor,
 	LIBRARY_BAR,
@@ -49,7 +54,7 @@ const STEP = cn(
 	"size-10 bg-foreground/10 hover:bg-foreground/16",
 )
 
-const LIGHTBOX_SURFACE = "dark bg-[#080809]/93 text-foreground"
+const LIGHTBOX_SURFACE = "dark bg-lightbox-stage/93 text-foreground"
 
 const ZOOM_CONTROL = cn(LIBRARY_BAR_ROUND, "size-7 hover:bg-foreground/8")
 
@@ -89,14 +94,28 @@ const isOnScrollbar = (event: PointerEvent) => {
 	return x < 0 || y < 0 || x >= verticalBarStart || y >= horizontalBarStart
 }
 
+type LibraryLightboxImageComments = Omit<
+	LibraryImageCommentsProps,
+	"isCommentMode"
+>
+
 type ZoomStageProps = {
 	image: LibraryLightboxImage
 	position: number
 	count: number
 	menu: Omit<ImageMenuProps<LibraryLightboxImage>, "trigger">
+	isCommentMode: boolean
+	imageComments?: LibraryLightboxImageComments
 }
 
-const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
+const ZoomStage = ({
+	image,
+	position,
+	count,
+	menu,
+	isCommentMode,
+	imageComments,
+}: ZoomStageProps) => {
 	const { t } = useTranslation("common")
 	const imageRef = useRef<HTMLImageElement>(null)
 	const [zoom, setZoom] = useState<number | null>(null)
@@ -124,35 +143,49 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 	return (
 		<>
 			<div
-				className="flex min-h-0 flex-1 overflow-auto rounded-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+				className="flex min-h-0 flex-1 overflow-auto rounded-md [container-type:size] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
 				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
 			>
-				<ImageMenu
-					{...menu}
-					trigger={
-						<img
-							alt={image.name}
-							className={cn(
-								"m-auto rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
-								zoom === null && "max-h-full max-w-full object-contain",
-							)}
-							draggable={false}
-							onLoad={(event) =>
-								setNaturalWidth(event.currentTarget.naturalWidth)
-							}
-							ref={imageRef}
-							src={image.src}
-							style={
-								zoom === null
-									? undefined
-									: { width: naturalWidth * zoom, maxWidth: "none" }
-							}
+				<div className="relative m-auto">
+					<ImageMenu
+						{...menu}
+						trigger={
+							<img
+								alt={image.name}
+								className={cn(
+									"block rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
+									zoom === null &&
+										"max-h-[100cqh] max-w-[100cqw] object-contain",
+								)}
+								draggable={false}
+								onLoad={(event) =>
+									setNaturalWidth(event.currentTarget.naturalWidth)
+								}
+								ref={imageRef}
+								src={image.src}
+								style={
+									zoom === null
+										? undefined
+										: { width: naturalWidth * zoom, maxWidth: "none" }
+								}
+							/>
+						}
+					/>
+					{imageComments ? (
+						<LibraryImageComments
+							{...imageComments}
+							isCommentMode={isCommentMode}
 						/>
-					}
-				/>
+					) : null}
+				</div>
 			</div>
+			{isCommentMode ? (
+				<div className="pointer-events-none absolute inset-x-0 bottom-22 flex justify-center px-5">
+					<LibraryCommentModeHint surface="image" />
+				</div>
+			) : null}
 			<div
 				className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center"
 				data-lightbox-backdrop
@@ -224,6 +257,7 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		onNext: () => void
 		isSavingToLibrary?: boolean
 		comments?: LibraryBarComments
+		imageComments?: LibraryLightboxImageComments
 	}
 
 const LibraryLightbox = ({
@@ -237,6 +271,7 @@ const LibraryLightbox = ({
 	onCopyImage,
 	isSavingToLibrary,
 	comments,
+	imageComments,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -247,6 +282,7 @@ const LibraryLightbox = ({
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const isFirst = position <= 1
 	const isLast = position >= count
+	const isCommentMode = comments?.isCommentMode ?? false
 	const handlers = image ? handlersFor(actions, image) : {}
 	const recordMenuToggle = (_open: boolean, details: { event?: Event }) => {
 		lastMenuToggleRef.current = details.event
@@ -260,8 +296,11 @@ const LibraryLightbox = ({
 
 	return (
 		<Dialog
-			onOpenChange={(open) => {
-				if (!open) onClose()
+			onOpenChange={(open, details) => {
+				if (open) return
+				if (isCommentMode && details.reason === "escape-key")
+					comments?.onCommentModeChange(false)
+				else onClose()
 			}}
 			open={image !== null}
 		>
@@ -356,6 +395,8 @@ const LibraryLightbox = ({
 								<ZoomStage
 									count={count}
 									image={image}
+									imageComments={imageComments}
+									isCommentMode={isCommentMode}
 									key={image.id}
 									menu={{
 										...handlers,
@@ -396,5 +437,6 @@ export {
 	LIGHTBOX_SURFACE,
 	LibraryLightbox,
 	type LibraryLightboxImage,
+	type LibraryLightboxImageComments,
 	type LibraryLightboxProps,
 }
