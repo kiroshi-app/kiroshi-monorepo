@@ -11,7 +11,7 @@ import {
 } from "./library-comment-views"
 import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
-import { useLibraryComments } from "./use-library-comments"
+import { anchoredDraftOf, useLibraryComments } from "./use-library-comments"
 
 type LibraryBoardCommentsInput = {
 	spaceId: string
@@ -89,17 +89,7 @@ export const useLibraryBoardComments = ({
 				pinnedThreadOf(each, view),
 			),
 			openCommentThread: comments.openThread,
-			commentDraft: draft
-				? {
-						anchor: draft.target,
-						author: draft.author,
-						participants: draft.participants,
-						value: draft.value,
-						onValueChange: draft.onValueChange,
-						onSubmit: draft.onSubmit,
-						onClose: draft.onClose,
-					}
-				: undefined,
+			commentDraft: draft ? anchoredDraftOf(draft) : undefined,
 			isCommentMode: comments.isCommentMode,
 			onOpenCommentThread: comments.openThreadById,
 			onStartComment: comments.startComment,

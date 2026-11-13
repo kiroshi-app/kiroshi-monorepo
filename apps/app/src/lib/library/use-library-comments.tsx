@@ -55,6 +55,11 @@ const closedOn = <Target,>(
 
 const ignoreMore = () => {}
 
+export const anchoredDraftOf = <Target, Draft extends { target: Target }>({
+	target,
+	...written
+}: Draft) => ({ ...written, anchor: target })
+
 export const useLibraryComments = <Target,>({
 	spaceId,
 	name,

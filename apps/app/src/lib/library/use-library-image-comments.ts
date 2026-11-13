@@ -8,7 +8,7 @@ import {
 } from "./library-comment-views"
 import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
-import { useLibraryComments } from "./use-library-comments"
+import { anchoredDraftOf, useLibraryComments } from "./use-library-comments"
 
 type LibraryImageCommentsInput = {
 	spaceId: string
@@ -58,17 +58,7 @@ export const useLibraryImageComments = ({
 					: []
 			}),
 			openThread,
-			draft: draft
-				? {
-						author: draft.author,
-						anchor: draft.target,
-						participants: draft.participants,
-						value: draft.value,
-						onValueChange: draft.onValueChange,
-						onSubmit: draft.onSubmit,
-						onClose: draft.onClose,
-					}
-				: undefined,
+			draft: draft ? anchoredDraftOf(draft) : undefined,
 			onOpenThread: comments.openThreadById,
 			onStartComment: comments.startComment,
 		},
