@@ -570,9 +570,9 @@ const common = {
 			bar: {
 				comment: "Commenter",
 				shortcut: "C",
-				count_one: "{{count}} commentaire",
-				count_many: "{{count}} commentaires",
-				count_other: "{{count}} commentaires",
+				count_one: "{{count}} commentaire ouvert",
+				count_many: "{{count}} commentaires ouverts",
+				count_other: "{{count}} commentaires ouverts",
 			},
 			hint: {
 				document:

@@ -92,13 +92,13 @@ export const AtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The pair at rest, as artboard Doc 1 draws it. Check the counter reads 3 and is named 3 comments, the Comment button is not pressed and shows its C keycap without reading it in its name, both change colour instantly, and a press turns comment mode on.",
+					"The pair at rest, as artboard Doc 1 draws it. Check the counter reads 3 and is named 3 open comments, the Comment button is not pressed and shows its C keycap without reading it in its name, both change colour instantly, and a press turns comment mode on.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const counter = within(canvasElement).getByRole("button", {
-			name: "3 comments",
+			name: "3 open comments",
 		})
 		await expect(counter).toHaveTextContent("3")
 		await expect(getComputedStyle(counter).transitionProperty).toBe("none")
@@ -163,7 +163,7 @@ export const ListOpen = meta.story({
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const counter = within(canvasElement).getByRole("button", {
-			name: "3 comments",
+			name: "3 open comments",
 		})
 		await userEvent.click(counter)
 		await expect(counter).toHaveAttribute("aria-expanded", "true")
@@ -197,14 +197,16 @@ export const NoOpenThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every thread is resolved. Check the counter stays, reads 0, and still opens the list, so the resolved threads remain reachable.",
+					"Every thread is resolved. Check the counter stays, reads 0, is named 0 open comments so its number is not read as the size of the list, and still opens the list, so the resolved threads remain reachable.",
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const counter = within(canvasElement).getByRole("button", {
-			name: "0 comments",
+			name: "0 open comments",
 		})
+		await expect(counter).toHaveAccessibleName("0 open comments")
+		await expect(counter).toHaveTextContent("0")
 		await userEvent.click(counter)
 		await expect(
 			await screen.findByRole("tab", { name: "Resolved 4" }),
@@ -245,7 +247,7 @@ export const OnImageStage = meta.story({
 			"true",
 		)
 		await userEvent.click(
-			within(canvasElement).getByRole("button", { name: "3 comments" }),
+			within(canvasElement).getByRole("button", { name: "3 open comments" }),
 		)
 		const tabs = await screen.findByRole("tablist", { name: "Comments" })
 		await expect(tabs.closest(".dark")).not.toBe(null)

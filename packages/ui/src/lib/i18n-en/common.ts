@@ -543,8 +543,8 @@ const common = {
 			bar: {
 				comment: "Comment",
 				shortcut: "C",
-				count_one: "{{count}} comment",
-				count_other: "{{count}} comments",
+				count_one: "{{count}} open comment",
+				count_other: "{{count}} open comments",
 			},
 			hint: {
 				document: "Click a block to comment, select text for a passage",

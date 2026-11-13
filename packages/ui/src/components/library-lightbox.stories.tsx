@@ -1193,7 +1193,7 @@ const commentControlsIn = (popup: HTMLElement) => {
 
 	return {
 		controls,
-		counter: within(controls).getByRole("button", { name: "3 comments" }),
+		counter: within(controls).getByRole("button", { name: "3 open comments" }),
 		toggle: within(controls).getByRole("button", { name: "Comment" }),
 	}
 }

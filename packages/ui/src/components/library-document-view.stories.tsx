@@ -650,7 +650,9 @@ const expectCommentControls = async (
 ) => {
 	const canvas = within(canvasElement)
 	const controls = slotIn(canvasElement, "library-comment-bar-controls")
-	const counter = within(controls).getByRole("button", { name: "3 comments" })
+	const counter = within(controls).getByRole("button", {
+		name: "3 open comments",
+	})
 	const toggle = within(controls).getByRole("button", { name: "Comment" })
 
 	await expect(toggle).toHaveAttribute("aria-pressed", String(isCommentMode))
