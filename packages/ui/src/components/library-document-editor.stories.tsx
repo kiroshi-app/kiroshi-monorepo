@@ -3710,3 +3710,44 @@ export const CommentEscapeClosesInnermost = meta.story({
 		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
 	},
 })
+
+const toggleIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-comment-toggle")
+
+const blockHandleIn = (canvasElement: HTMLElement) =>
+	within(
+		slotIn(blockOf(canvasElement, MARKET_BLOCK), "library-block-handle"),
+	).getAllByRole("button")[0]
+
+const threadEscapeFrom = (
+	place: string,
+	controlIn: (canvasElement: HTMLElement) => HTMLElement,
+) => ({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		`Comment mode on with a thread card open and the focus on ${place}, then Esc. Check that Esc raises \`onClose\` of the thread card once, never \`onCommentModeChange\`, and that the hint of comment mode stays.`,
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const control = controlIn(canvasElement)
+		control.focus()
+		await expect(control).toHaveFocus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(
+			slotIn(canvasElement, "library-comment-mode-hint"),
+		).toBeVisible()
+	},
+})
+
+export const CommentEscapeFromToggleClosesThread = meta.story(
+	threadEscapeFrom("the Comment toggle of the bar", toggleIn),
+)
+
+export const CommentEscapeFromBlockClosesThread = meta.story(
+	threadEscapeFrom("the handle of a paragraph of the body", blockHandleIn),
+)
