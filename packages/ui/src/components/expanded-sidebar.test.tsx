@@ -133,7 +133,6 @@ describe("NavigationSidebar", () => {
 					listStatus="failed"
 					onRetryList={onRetryList}
 					pinned={ROW}
-					zones={[]}
 				/>
 			</SidebarProvider>,
 		)
@@ -150,7 +149,6 @@ describe("NavigationSidebar", () => {
 					listEnd={NEXT_PAGE}
 					pinned={ROW}
 					sections={[sectionOf("a", "Clients", ROW)]}
-					zones={[]}
 				/>
 			</SidebarProvider>,
 		)

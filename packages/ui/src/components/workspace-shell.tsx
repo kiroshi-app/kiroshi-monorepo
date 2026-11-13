@@ -6,6 +6,7 @@ import {
 } from "@workspace/ui/components/content-card"
 import { hueStyle } from "@workspace/ui/components/hue-palette"
 import { ShellSidebarProvider } from "@workspace/ui/components/shell-sidebar-provider"
+import { SidebarPeekProvider } from "@workspace/ui/components/sidebar-peek"
 import { SidebarResizeProvider } from "@workspace/ui/components/sidebar-resize"
 import { SkipLink } from "@workspace/ui/components/skip-link"
 import { cn } from "@workspace/ui/lib/utils"
@@ -78,7 +79,7 @@ const WorkspaceShellRoot = ({
 				>
 					<ContentCardLandmarkId value={isLandmark ? mainId : undefined}>
 						{isLandmark ? <SkipLink targetId={mainId} /> : null}
-						{children}
+						<SidebarPeekProvider>{children}</SidebarPeekProvider>
 					</ContentCardLandmarkId>
 				</ShellSidebarProvider>
 			)}

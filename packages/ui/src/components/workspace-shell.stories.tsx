@@ -762,6 +762,17 @@ export const TallHost = meta.story({
 	},
 })
 
+const expectNothingInTheLeftColumn = async (
+	canvas: ReturnType<typeof within>,
+	canvasElement: HTMLElement,
+) => {
+	await expect(slotsIn(canvasElement, "navigation-sidebar")).toHaveLength(0)
+	await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
+	await expect(canvas.getByRole("main").getBoundingClientRect().left).toBe(
+		shellInset(),
+	)
+}
+
 type NavigationShellProps = {
 	hasInsetControls?: boolean
 	isInitiallyOpen?: boolean
@@ -809,7 +820,6 @@ const NavigationShell = ({
 				]}
 				update={{ status: "available", onDownload: fn() }}
 				user={{ name: "Ada Martin" }}
-				zones={[{ id: "pinned", conversations: [DESK_ROOM] }]}
 			/>
 			<ContentCard />
 		</WorkspaceShellRoot>
@@ -823,7 +833,7 @@ export const SwitchesBetweenExpandedAndCollapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The caller holds the open state. Check the title bar toggle swaps the expanded sidebar for the 60px rail drawn from the same Space, destination, update and person, and the sidebar shortcut brings the expanded sidebar back through `onOpenChange`.",
+					"The caller holds the open state. Check the title bar toggle takes the expanded sidebar away and leaves nothing in the left column, the card starting on the shell inset, and the sidebar shortcut brings the expanded sidebar back through `onOpenChange`.",
 			},
 		},
 	},
@@ -836,23 +846,9 @@ export const SwitchesBetweenExpandedAndCollapsed = meta.story({
 			() => expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0),
 			FRAME_POLL,
 		)
-		const rail = slotIn(canvasElement, "collapsed-sidebar")
-		await expect(rail.getBoundingClientRect().width).toBe(60)
-		const inRail = within(rail)
-		await expect(inRail.getByRole("button", { name: "New" })).toHaveAttribute(
-			"aria-current",
-			"page",
-		)
-		await expect(
-			inRail.getByRole("button", { name: "Download update" }),
-		).toBeVisible()
-		await expect(
-			inRail.getByRole("button", { name: "Ada Martin" }),
-		).toBeVisible()
-		await expect(inRail.getByRole("button", { name: "Kiroshi" })).toBeVisible()
+		await expectNothingInTheLeftColumn(canvas, canvasElement)
 		await userEvent.keyboard("{Control>}b{/Control}")
 		await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
-		await expect(slotsIn(canvasElement, "collapsed-sidebar")).toHaveLength(0)
 	},
 })
 
@@ -872,6 +868,8 @@ const navigationSidebarIn = (canvasElement: HTMLElement) =>
 const leftOf = (element: Element) => element.getBoundingClientRect().left
 
 const firstTabIn = (canvas: ShellCanvas) => canvas.getAllByRole("tab")[0]
+
+const FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED = 209
 
 const expectFirstTabOnThePanelEdge = async (
 	canvas: ShellCanvas,
@@ -910,11 +908,10 @@ export const FirstTabOnThePanelEdgeWithoutInsetControls = meta.story(
 export const FirstTabAfterTheHistoryCollapsed = meta.story({
 	render: () => <NavigationShell isInitiallyOpen={false} tabs={[NOTES_TAB]} />,
 	play: async ({ canvas, canvasElement }) => {
-		const sidebar = navigationSidebarIn(canvasElement)
-		await expect(leftOf(firstTabIn(canvas))).toBe(205)
-		await expect(sidebar.getBoundingClientRect().width).toBe(60)
-		await expect(sidebar.getAnimations()).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
+		await expect(leftOf(firstTabIn(canvas))).toBe(
+			FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
+		)
+		await expectNothingInTheLeftColumn(canvas, canvasElement)
 	},
 })
 
@@ -955,8 +952,7 @@ export const ToggleDuringDragSwapsAtOnce = meta.story({
 			{ coords: to },
 		])
 		await userEvent.keyboard("{Control>}b{/Control}")
-		await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
-		await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
+		await expectNothingInTheLeftColumn(canvas, canvasElement)
 		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
 	},
 })
@@ -966,18 +962,19 @@ export const ToggleSwapsAtOnce = meta.story({
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		if (!isInBrowserRunner()) return
 		await withMotionAllowed(async () => {
-			const sidebar = navigationSidebarIn(canvasElement)
 			const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
 
 			await userEvent.click(toggle)
-			await expect(sidebar.getAnimations()).toHaveLength(0)
-			await expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0)
-			await expect(slotIn(canvasElement, "collapsed-sidebar")).toBeVisible()
-			await expect(sidebar.getBoundingClientRect().width).toBe(60)
-			await expect(leftOf(firstTabIn(canvas))).toBe(205)
+			await expectNothingInTheLeftColumn(canvas, canvasElement)
+			await expect(canvas.getByRole("main").getAnimations()).toHaveLength(0)
+			await expect(leftOf(firstTabIn(canvas))).toBe(
+				FIRST_TAB_AFTER_THE_HISTORY_COLLAPSED,
+			)
 
 			await userEvent.click(toggle)
-			await expect(sidebar.getAnimations()).toHaveLength(0)
+			await expect(
+				navigationSidebarIn(canvasElement).getAnimations(),
+			).toHaveLength(0)
 			await expect(slotIn(canvasElement, "expanded-sidebar")).toBeVisible()
 			await expectFirstTabOnThePanelEdge(canvas, SIDEBAR_DEFAULT_WIDTH)
 		})
@@ -1019,12 +1016,9 @@ export const ControlsFadeNoColour = meta.story({
 		])
 		await userEvent.click(toggle)
 		await waitFor(
-			() =>
-				expect(slotIn(canvasElement, "collapsed-sidebar")).toBeInTheDocument(),
+			() => expect(slotsIn(canvasElement, "expanded-sidebar")).toHaveLength(0),
 			FRAME_POLL,
 		)
-		await expectNoColourFadeOn(
-			slotsIn(canvasElement, "collapsed-sidebar-destination"),
-		)
+		await expectNoColourFadeOn([toggle])
 	},
 })

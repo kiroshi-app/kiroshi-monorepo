@@ -30,8 +30,8 @@
 	--drop-pill-shadow: 0 8px 20px rgb(0 0 0 / 0.18);
 	--lifted-tile-shadow:
 		0 2px 4px rgb(0 0 0 / 0.12), 0 20px 40px rgb(0 0 0 / 0.22);
-	--rail-tooltip-shadow:
-		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.12);
+	--sidebar-peek-shadow:
+		0 24px 48px -12px rgb(0 0 0 / 0.22), 0 8px 16px -8px rgb(0 0 0 / 0.12);
 	--selection-toolbar-border: oklch(0 0 0 / 8%);
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
@@ -55,8 +55,8 @@
 	--drop-pill-shadow: 0 8px 20px rgb(0 0 0 / 0.4);
 	--lifted-tile-shadow:
 		0 2px 4px rgb(0 0 0 / 0.4), 0 20px 40px rgb(0 0 0 / 0.6);
-	--rail-tooltip-shadow:
-		0 0 0 1px var(--title-bar-menu-border), 0 8px 24px rgb(0 0 0 / 0.5);
+	--sidebar-peek-shadow:
+		0 24px 48px -12px rgb(0 0 0 / 0.7), 0 8px 16px -8px rgb(0 0 0 / 0.6);
 	--selection-toolbar-border: oklch(1 0 0 / 10%);
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
@@ -78,7 +78,7 @@
 	--shadow-drop-pill: var(--drop-pill-shadow);
 	--shadow-lifted-tile: var(--lifted-tile-shadow);
 	--shadow-selection-toolbar: var(--selection-toolbar-shadow);
-	--shadow-rail-tooltip: var(--rail-tooltip-shadow);
+	--shadow-sidebar-peek: var(--sidebar-peek-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
 	--color-primary: var(--primary);
@@ -106,7 +106,6 @@
 	--color-shell-border: var(--shell-border);
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);
-	--color-rail-item-selected-hover: var(--rail-item-selected-hover);
 	--color-rail-avatar: var(--rail-avatar);
 	--color-sidebar-person-foreground: var(--sidebar-person-foreground);
 	--color-space-dot: var(--space-dot);
@@ -162,7 +161,6 @@
 	--color-mission-list-hover: var(--mission-list-hover);
 	--color-mission-chip-foreground: var(--mission-chip-foreground);
 	--color-mission-glyph-success: var(--mission-glyph-success);
-	--color-mission-glyph-failure: var(--mission-glyph-failure);
 	--color-prompt-surface: var(--prompt-surface);
 	--color-prompt-surface-inert: var(--prompt-surface-inert);
 	--color-prompt-menu: var(--prompt-menu);

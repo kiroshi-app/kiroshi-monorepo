@@ -10,7 +10,6 @@ Sidebars, rails, tabs and header controls that move a reader between places. Eac
 
 - **AppSidebar** — the space and conversation tree.
 - **AppTitleBar**: the 40px window strip the conversations and settings screens share: the tab strip, then the window controls.
-- **CollapsedSidebar**: the navigation shell's 60px icon rail: the Space avatar, the destinations, the conversations with their missions grouped under them, then the update button, the space dots and the person, each named in a tooltip.
 - **ExpandedSidebar**: the navigation shell's sidebar: the Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer.
 - **HeaderConversationButton** — opens the conversation's settings from the header.
 - **HeaderIdentityButton** — opens the bot's settings from the header.
@@ -23,7 +22,7 @@ Sidebars, rails, tabs and header controls that move a reader between places. Eac
 - **MissionCapsule**: the missions of a sidebar conversation, hung under its row as a tree, each with its state mark, ticket and title.
 - **MissionStateMark**: where a mission stands, as one decorative mark: a cut-out disc for the three states asking for a reader, a ring for the two that run on their own.
 - **MissionsPage**: the main-area Missions page of a space: its header, the missions grouped by state and by agent, each group folding, with its empty, loading and failed states.
-- **NavigationSidebar**: the expanded sidebar while the shell is open, the collapsed rail while it is not, drawn from the same Space, destination, update and person.
+- **NavigationSidebar**: the expanded sidebar docked while the shell is open, and nothing in the left column while it is not, the same sidebar then floating in the peek panel.
 - **NestedSidebarProvider** — a second sidebar provider inside an inset, deaf to the outer one's shortcut.
 - **SearchResultRow** — one hit of the search palette, in the six kinds a hit can take.
 - **ShellSidebarProvider** — the sidebar provider of every shell surface: Cmd+B or Ctrl+B toggles once per press, never on a held repeat, never inside a text field.
@@ -33,6 +32,7 @@ Sidebars, rails, tabs and header controls that move a reader between places. Eac
 - **Sidebar** — the registry sidebar: provider, panel, rail, inset and menu slots.
 - **SidebarListRow**: one roster row, companion or group, with its media, name line, preview, badge dot and strips.
 - **SidebarMenuRow** — one sidebar row: icon, label, and what hangs under them.
+- **SidebarPeek**: the collapsed sidebar's floating panel: the expanded sidebar over the content card, full height, opened by resting on the window's left edge or on the title bar collapse icon, closed by leaving, by Escape or by docking.
 - **SidebarResize** — the panel width, and the inner edge a reader drags to set it.
 - **SpaceSwitcher** — moves between spaces.
 - **TabDragThumbnail**: a tab dragged out of the title bar, drawn as a mini window, greyed where the drop is not allowed.

@@ -1,78 +1,42 @@
 "use client"
 
 import {
-	CollapsedSidebar,
-	type CollapsedSidebarProps,
-} from "@workspace/ui/components/collapsed-sidebar"
-import {
 	ExpandedSidebar,
 	type ExpandedSidebarProps,
 } from "@workspace/ui/components/expanded-sidebar"
+import { SidebarPeek } from "@workspace/ui/components/sidebar-peek"
 import { SidebarResizeHandle } from "@workspace/ui/components/sidebar-resize"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
-import { UpdateRow } from "@workspace/ui/components/update-badge"
-import { cn } from "@workspace/ui/lib/utils"
+import {
+	type UpdateBadgeProps,
+	UpdateRow,
+} from "@workspace/ui/components/update-badge"
 
-const SIDEBAR = "relative flex min-h-0 shrink-0"
-
-const SIDEBAR_OPEN = "w-(--sidebar-width)"
-
-const SIDEBAR_COLLAPSED = "w-15"
+const SIDEBAR = "relative flex min-h-0 w-(--sidebar-width) shrink-0"
 
 const CLIP = "flex min-h-0 min-w-0 flex-1 overflow-clip"
 
-type NavigationSidebarProps = CollapsedSidebarProps &
-	Pick<
-		ExpandedSidebarProps,
-		| "pinned"
-		| "conversations"
-		| "sections"
-		| "missionCount"
-		| "isSettingsShown"
-		| "onReorderSpaces"
-	>
+type NavigationSidebarProps = Omit<
+	ExpandedSidebarProps,
+	"update" | "trigger"
+> & {
+	update?: UpdateBadgeProps
+}
 
-const NavigationSidebar = ({
-	pinned,
-	conversations,
-	sections,
-	missionCount,
-	isSettingsShown,
-	onReorderSpaces,
-	...collapsed
-}: NavigationSidebarProps) => {
+const NavigationSidebar = ({ update, ...sidebar }: NavigationSidebarProps) => {
 	const { open } = useSidebar()
+	const expanded = (
+		<ExpandedSidebar
+			{...sidebar}
+			update={update ? <UpdateRow {...update} /> : null}
+		/>
+	)
 
-	const {
-		zones: _zones,
-		openConversationId: _openConversationId,
-		openMissionId: _openMissionId,
-		onOpenConversation: _onOpenConversation,
-		update,
-		...shared
-	} = collapsed
+	if (!open) return <SidebarPeek>{expanded}</SidebarPeek>
 
 	return (
-		<div
-			className={cn(SIDEBAR, open ? SIDEBAR_OPEN : SIDEBAR_COLLAPSED)}
-			data-slot="navigation-sidebar"
-		>
-			<div className={CLIP}>
-				{open ? (
-					<ExpandedSidebar
-						{...shared}
-						conversations={conversations}
-						isSettingsShown={isSettingsShown}
-						missionCount={missionCount}
-						onReorderSpaces={onReorderSpaces}
-						pinned={pinned}
-						sections={sections}
-						update={update ? <UpdateRow {...update} /> : null}
-					/>
-				) : (
-					<CollapsedSidebar {...collapsed} />
-				)}
-			</div>
+		<div className={SIDEBAR} data-slot="navigation-sidebar">
+			<div className={CLIP}>{expanded}</div>
 			<SidebarResizeHandle side="left" />
 		</div>
 	)
