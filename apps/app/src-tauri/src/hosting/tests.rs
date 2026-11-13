@@ -1782,6 +1782,31 @@ fn a_malformed_member_frame_is_answered_400_and_the_socket_stays_open() {
 	});
 }
 
+#[test]
+fn a_member_command_the_host_does_not_know_is_answered_404_and_the_socket_stays_open() {
+	run(async {
+		let mut harness = Harness::signed_in("unknown-command").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+
+		send(&mut member, r#"{"id": "m1", "command": "a_command_of_a_newer_build"}"#).await;
+		let refused = answer(&mut member).await;
+		send(&mut member, r#"{"id": "m2", "command": "agent_models"}"#).await;
+		let answered = answer(&mut member).await;
+
+		assert_eq!(
+			refused,
+			json!({
+				"id": "m1",
+				"status": 404,
+				"body": "this host knows no command named a_command_of_a_newer_build",
+			})
+		);
+		assert_eq!((answered["id"].clone(), answered["status"].clone()), (json!("m2"), json!(200)));
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
 async fn a_relay_guest_is_refused(command: &str) {
 	refused_on(&mut Harness::signed_in(command).await, command).await;
 }
@@ -4726,6 +4751,14 @@ fn a_relay_guest_pages_the_conversations_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_reads_the_day_of_an_agent_in_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"conversation_today_of_agent",
+		|space_id| json!({ "spaceId": space_id, "botId": "b-shared", "dayStart": 0, "dayEnd": 1 }),
+	));
+}
+
+#[test]
 fn a_relay_guest_reads_the_hosting_state_of_the_shared_space_only() {
 	run(kept_in_the_space_named("hosting_state", space_named));
 }
@@ -6457,6 +6490,37 @@ fn a_guest_and_the_host_each_page_their_own_main_conversation_beside_the_shared_
 		};
 		assert_eq!(solo_bots_of(&read_by_the_guest), expected(&main_of_the_guest));
 		assert_eq!(solo_bots_of(&read_by_the_host), expected(&main_of_the_host));
+	});
+}
+
+#[test]
+fn a_guest_reads_the_conversations_of_an_agent_in_the_shared_space_within_the_day() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let read_of = |space_id: &str, day_end: i64| {
+			json!({
+				"id": 1,
+				"command": "conversation_today_of_agent",
+				"args": { "spaceId": space_id, "botId": "default", "dayStart": 0, "dayEnd": day_end },
+			})
+		};
+
+		let read_within_the_day = host.relayed(read_of(PERSONAL, i64::MAX)).await;
+		let read_before_the_day = host.relayed(read_of(PERSONAL, 1)).await;
+		let read_in_another_space = host.answered(read_of(ELSEWHERE, i64::MAX)).await;
+
+		let ids: Vec<Value> = read_within_the_day
+			.as_array()
+			.expect("the day holds a list")
+			.iter()
+			.map(|row| row["id"].clone())
+			.collect();
+		assert_eq!(ids, vec![json!(host.conversation_id)]);
+		assert_eq!(read_before_the_day, json!([]));
+		assert_eq!(
+			read_in_another_space,
+			json!({ "id": 1, "status": 403, "body": OTHER_SPACE_REFUSAL })
+		);
 	});
 }
 
