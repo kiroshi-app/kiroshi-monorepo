@@ -2120,6 +2120,13 @@ navigation-librarypanel--empty-with-every-callback
 navigation-librarypanel--empty-with-every-callback-light
 navigation-librarypanel--empty-with-no-callbacks
 navigation-librarypanel--filter-with-no-match
+navigation-librarypanel--floating-header
+navigation-librarypanel--floating-header-at-320
+navigation-librarypanel--floating-header-control-states
+navigation-librarypanel--floating-header-control-states-dark
+navigation-librarypanel--floating-header-dark
+navigation-librarypanel--floating-header-narrow
+navigation-librarypanel--floating-header-scrolled
 navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-board-context-menu

@@ -10,11 +10,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryEmptyState,
 	type LibraryTemplate,
-	OUTLINED_PILL,
 } from "@workspace/ui/components/library-empty-state"
 import {
 	LibraryGrid,
@@ -23,6 +23,7 @@ import {
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
@@ -48,49 +49,49 @@ const LibraryOverlayContainer =
 
 const useLibraryOverlayContainer = () => useContext(LibraryOverlayContainer)
 
-const SKELETON_FILTER_WIDTHS = ["w-11", "w-21", "w-27", "w-19"]
+const SKELETON_FILTER_WIDTHS = ["w-11", "w-16", "w-21", "w-15.5"]
 
 const FiltersSkeleton = () => (
 	<div
 		aria-hidden="true"
-		className="flex animate-pulse gap-1.5 motion-reduce:animate-none"
+		className="flex animate-pulse gap-0.5 p-0.5 motion-reduce:animate-none"
 		data-slot="library-filters-skeleton"
 	>
 		{SKELETON_FILTER_WIDTHS.map((width) => (
 			<Skeleton
-				className={cn("h-7 animate-none rounded-full bg-border", width)}
+				className={cn("h-7 animate-none rounded-sm bg-border", width)}
 				key={width}
 			/>
 		))}
 	</div>
 )
 
-type FilterPillProps = {
+type FilterSegmentProps = {
 	value: LibraryFilter
 	label: string
-	count?: number
+	count: number
 }
 
-const FilterPill = ({ value, label, count }: FilterPillProps) => (
+const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
 	<ToggleGroupItem
-		className="gap-1.5 rounded-full px-3 text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-foreground text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
 		data-slot="library-filter"
 		size="sm"
 		value={value}
-		variant="outline"
 	>
 		{label}
-		{count === undefined ? null : (
-			<span className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground">
-				{count}
-			</span>
-		)}
+		<span
+			className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground"
+			data-slot="library-filter-count"
+		>
+			{count}
+		</span>
 	</ToggleGroupItem>
 )
 
 type LibraryFiltersProps = {
 	filter: LibraryFilter
-	counts: Record<Exclude<LibraryFilter, "all">, number>
+	counts: Record<LibraryFilter, number>
 	onFilterChange: (filter: LibraryFilter) => void
 }
 
@@ -104,26 +105,30 @@ const LibraryFilters = ({
 	return (
 		<ToggleGroup
 			aria-label={t("library.filters.label")}
-			className="flex-wrap"
+			className="rounded-md bg-muted p-0.5"
 			data-slot="library-filters"
 			onValueChange={([pressed]) =>
 				onFilterChange((pressed as LibraryFilter | undefined) ?? filter)
 			}
-			spacing={1.5}
+			spacing={0.5}
 			value={[filter]}
 		>
-			<FilterPill label={t("library.filters.all")} value="all" />
-			<FilterPill
+			<FilterSegment
+				count={counts.all}
+				label={t("library.filters.all")}
+				value="all"
+			/>
+			<FilterSegment
 				count={counts.images}
 				label={t("library.filters.images")}
 				value="images"
 			/>
-			<FilterPill
+			<FilterSegment
 				count={counts.documents}
 				label={t("library.filters.documents")}
 				value="documents"
 			/>
-			<FilterPill
+			<FilterSegment
 				count={counts.boards}
 				label={t("library.filters.boards")}
 				value="boards"
@@ -141,14 +146,17 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<div className="relative w-55" data-slot="library-search">
+		<div
+			className="group/search relative w-50 min-w-40 shrink @max-4xl:min-w-0"
+			data-slot="library-search"
+		>
 			<Icons.Search
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 start-3 my-auto size-3.75 text-muted-foreground"
+				className="pointer-events-none absolute inset-y-0 start-2 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-foreground"
 			/>
 			<Input
 				aria-label={t("library.search")}
-				className="rounded-full border-input bg-foreground/3 ps-8.75 pe-3 text-compact text-foreground leading-4.5 transition-none md:text-compact"
+				className="text-ellipsis rounded-md bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
@@ -168,24 +176,33 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 
 	return (
 		<header
-			className="flex flex-col gap-5 px-10 pt-8 pb-5"
+			className="flex w-full min-w-0 flex-col items-start gap-2"
 			data-slot="library-header"
 		>
-			<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-				<div className="flex min-w-0 flex-col gap-1">
-					<h1 className="font-heading font-semibold text-2xl text-foreground leading-7.5 tracking-[-0.02em]">
+			<div className="flex w-full justify-between gap-2">
+				<HeaderIsland className="gap-1">
+					<h1 className="flex h-8 items-center px-2 font-medium text-sm leading-4">
 						{t("library.title")}
 					</h1>
-					<p className="text-compact text-muted-foreground leading-4.5">
-						{t("library.subtitle")}
-					</p>
-				</div>
+					{filters ? (
+						<div className="contents @max-4xl:hidden">{filters}</div>
+					) : null}
+				</HeaderIsland>
 				{actions}
 			</div>
-			{filters}
+			{filters ? (
+				<HeaderIsland className="scrollbar-hide @4xl:hidden max-w-full overflow-x-auto">
+					{filters}
+				</HeaderIsland>
+			) : null}
 		</header>
 	)
 }
+
+const ISLAND_ACTION =
+	"rounded-md px-1.75 text-compact leading-4 transition-none focus-visible:ring-4 active:translate-y-px! active:scale-none!"
+
+const GHOST_ISLAND_ACTION = cn(ISLAND_ACTION, "dark:hover:bg-muted")
 
 type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 	LibraryImageActions & {
@@ -235,13 +252,18 @@ const LibraryPanel = ({
 			? items
 			: items.filter((item) => item.kind === KIND_OF_FILTER[filter])
 	const counts = {
+		all: items.length,
 		images: items.filter((item) => item.kind === "image").length,
 		documents: items.filter((item) => item.kind === "document").length,
 		boards: items.filter((item) => item.kind === "board").length,
 	}
 
-	const actions = (
-		<div className="flex items-center gap-2" data-slot="library-actions">
+	const hasActions = Boolean(
+		onSearchQueryChange || onImport || onNewBoard || onNewDocument,
+	)
+
+	const actions = hasActions ? (
+		<HeaderIsland className="min-w-0 shrink gap-1">
 			{onSearchQueryChange ? (
 				<LibrarySearch
 					onQueryChange={onSearchQueryChange}
@@ -250,35 +272,32 @@ const LibraryPanel = ({
 			) : null}
 			{onImport ? (
 				<Button
-					className={cn(OUTLINED_PILL, "gap-1.5 px-3")}
+					className={GHOST_ISLAND_ACTION}
 					onClick={onImport}
-					variant="outline"
+					variant="ghost"
 				>
-					<Icons.Import aria-hidden="true" />
-					{t("library.import")}
+					<Icons.Import aria-hidden="true" className="size-3.5" />
+					<span className="@max-lg:sr-only">{t("library.import")}</span>
 				</Button>
 			) : null}
 			{onNewBoard ? (
 				<Button
-					className={cn(OUTLINED_PILL, "gap-1.5 px-3")}
+					className={GHOST_ISLAND_ACTION}
 					onClick={onNewBoard}
-					variant="outline"
+					variant="ghost"
 				>
-					<Icons.Board aria-hidden="true" />
-					{t("library.newBoard")}
+					<Icons.Board aria-hidden="true" className="size-3.5" />
+					<span className="@max-lg:sr-only">{t("library.newBoard")}</span>
 				</Button>
 			) : null}
 			{onNewDocument ? (
-				<Button
-					className="h-8 gap-1.5 rounded-full px-3 font-medium text-compact leading-4 transition-none"
-					onClick={onNewDocument}
-				>
-					<Icons.Add aria-hidden="true" />
-					{t("library.newDocument")}
+				<Button className={ISLAND_ACTION} onClick={onNewDocument}>
+					<Icons.Add aria-hidden="true" className="size-3.5" />
+					<span className="@max-lg:sr-only">{t("library.newDocument")}</span>
 				</Button>
 			) : null}
-		</div>
-	)
+		</HeaderIsland>
+	) : null
 
 	const filters = isSkeletonShown ? (
 		<FiltersSkeleton />
@@ -297,11 +316,17 @@ const LibraryPanel = ({
 				data-slot="library-panel"
 				ref={setOverlayElement}
 			>
-				<div
+				<ScreenLayout
 					aria-busy={isAwaiting}
-					className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+					className="@container isolate min-h-0 flex-1"
+					contentClassName={cn(
+						"pt-14 pb-6",
+						filters && "@max-4xl:pt-26",
+						isSkeletonShown && "h-full pb-0",
+					)}
+					header={<LibraryHeader actions={actions} filters={filters} />}
+					isHeaderFloating
 				>
-					<LibraryHeader actions={actions} filters={filters} />
 					{isSkeletonShown ? (
 						<LibraryGridSkeleton />
 					) : isAwaiting ? null : isEmpty ? (
@@ -313,7 +338,7 @@ const LibraryPanel = ({
 						/>
 					) : shownItems.length === 0 ? (
 						<p
-							className="break-words px-10 pt-2 pb-10 text-compact text-muted-foreground leading-4.5"
+							className="break-words text-compact text-muted-foreground leading-4.5"
 							data-slot="library-no-result"
 							role="status"
 						>
@@ -332,7 +357,7 @@ const LibraryPanel = ({
 							onOpenItem={onOpenItem}
 						/>
 					)}
-				</div>
+				</ScreenLayout>
 				{overlay}
 			</div>
 		</LibraryOverlayContainer.Provider>
