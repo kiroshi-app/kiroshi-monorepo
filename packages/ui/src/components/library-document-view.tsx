@@ -13,6 +13,7 @@ import {
 import {
 	handlersFor,
 	LIBRARY_BAR,
+	type LibraryBarComments,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	type LibraryMenuSubject,
@@ -101,6 +102,7 @@ type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 		onBack: () => void
 		presence?: ReactNode
 		isReadOnly?: boolean
+		comments?: LibraryBarComments
 		menuFinalFocus?: () => HTMLElement | boolean
 	}
 
@@ -123,6 +125,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	onBack,
 	presence,
 	isReadOnly = false,
+	comments,
 	menuFinalFocus,
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
@@ -156,6 +159,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 			</nav>
 			<LibraryItemBarActions
 				actions={handlersFor(actions, item)}
+				comments={comments}
 				item={item}
 				leading={
 					<>
@@ -268,6 +272,7 @@ type LibraryDocumentViewProps = WriterActions &
 		writers?: LibraryDocumentWriter[]
 		onStopAll?: () => void
 		resolveImage?: ResolveImage
+		comments?: LibraryBarComments
 	}
 
 const LibraryDocumentView = ({

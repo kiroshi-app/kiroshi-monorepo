@@ -20,8 +20,16 @@ import {
 	LIBRARY_ITEMS,
 	LIBRARY_LIGHTBOX_IMAGES,
 } from "@workspace/ui/components/library.fixtures"
+import {
+	COMMENT_COUNTS,
+	OPEN_THREADS,
+} from "@workspace/ui/components/library-comments.fixtures"
+import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
 import type { LibraryItem } from "@workspace/ui/components/library-grid"
-import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
+import type {
+	LibraryBarComments,
+	LibraryItemActions,
+} from "@workspace/ui/components/library-item-menu"
 import {
 	LibraryLightbox,
 	type LibraryLightboxImage,
@@ -35,7 +43,7 @@ type LibraryWithLightboxProps = LibraryItemActions<
 > &
 	Pick<
 		LibraryLightboxProps,
-		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary"
+		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary" | "comments"
 	> & {
 		openedAt: number | null
 		onClose: () => void
@@ -51,6 +59,7 @@ const LibraryWithLightbox = ({
 	onSaveToLibrary,
 	onCopyImage,
 	isSavingToLibrary,
+	comments,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -76,6 +85,7 @@ const LibraryWithLightbox = ({
 					overlay={
 						<LibraryLightbox
 							{...actions}
+							comments={comments}
 							count={LIBRARY_LIGHTBOX_IMAGES.length}
 							isSavingToLibrary={isSavingToLibrary}
 							onCopyImage={onCopyImage}
@@ -1160,5 +1170,84 @@ export const ImageMenuSaving = meta.story({
 		await expect(
 			within(menu).getByRole("menuitem", { name: "Copy image" }),
 		).not.toHaveAttribute("aria-disabled")
+	},
+})
+
+const BAR_COMMENTS: LibraryBarComments = {
+	counts: COMMENT_COUNTS,
+	isCommentMode: false,
+	onCommentModeChange: fn(),
+	list: (
+		<LibraryCommentsList
+			counts={COMMENT_COUNTS}
+			onOpenThread={fn()}
+			onTabChange={fn()}
+			tab="open"
+			threads={OPEN_THREADS}
+		/>
+	),
+}
+
+const commentControlsIn = (popup: HTMLElement) => {
+	const controls = slotIn(popup, "library-comment-bar-controls")
+
+	return {
+		controls,
+		counter: within(controls).getByRole("button", { name: "3 comments" }),
+		toggle: within(controls).getByRole("button", { name: "Comment" }),
+	}
+}
+
+export const WithComments = meta.story({
+	args: { comments: BAR_COMMENTS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar of an image that has comment threads, as artboard Img 1 draws it. Check the counter then the Comment button come first among the actions, before Download, that a press asks for comment mode, and that the counter opens the comments list dark, over the viewer, without closing it.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const popup = await lightbox()
+		const { controls, counter, toggle } = commentControlsIn(popup)
+
+		await expect(toggle).toHaveAttribute("aria-pressed", "false")
+		await expect(
+			controls.compareDocumentPosition(
+				within(popup).getByRole("button", { name: "Download" }),
+			) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		await userEvent.click(toggle)
+		await expect(BAR_COMMENTS.onCommentModeChange).toHaveBeenCalledWith(true)
+
+		await userEvent.click(counter)
+		const tabs = await screen.findByRole("tablist", { name: "Comments" })
+		await expect(tabs.closest(".dark")).not.toBe(null)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(counter).toHaveAttribute("aria-expanded", "false"),
+		)
+		await expect(popup).toBeVisible()
+	},
+})
+
+export const CommentModeOn = meta.story({
+	args: { comments: { ...BAR_COMMENTS, isCommentMode: true } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bar while comment mode is on, as artboard Img 2 draws it. Check the Comment button is pressed.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expect(commentControlsIn(popup).toggle).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
 	},
 })

@@ -505,6 +505,58 @@ const common = {
 			stillImporting_one: "{{name}} is still importing.",
 			stillImporting_other: "{{count}} files are still importing.",
 		},
+		comments: {
+			pin: {
+				open: "Comment by {{name}}",
+				resolved: "Resolved comment by {{name}}",
+			},
+			composer: {
+				placeholder: "Comment, @ to mention",
+				reply: "Reply, @ to mention",
+				mention: "Mention someone",
+				send: "Send",
+			},
+			mentions: {
+				label: "Mention",
+				agents: "Agents",
+				people: "People",
+			},
+			thread: {
+				resolve: "Resolve",
+				more: "More",
+				close: "Close",
+				working: "is working on it",
+				replies_one: "{{count}} reply, {{names}}",
+				replies_other: "{{count}} replies, {{names}}",
+				resolvedBy: "Resolved by {{name}}",
+				reopen: "Reopen",
+			},
+			list: {
+				label: "Comments",
+				open: "Open",
+				resolved: "Resolved",
+				replies_one: "{{count}} reply",
+				replies_other: "{{count}} replies",
+				emptyOpen: "No open comments",
+				emptyResolved: "No resolved comments",
+			},
+			bar: {
+				comment: "Comment",
+				shortcut: "C",
+				count_one: "{{count}} comment",
+				count_other: "{{count}} comments",
+			},
+			hint: {
+				document: "Click a block to comment, select text for a passage",
+				board: "Click a shape or the board to comment",
+				image: "Click for a point, drag for a zone",
+				escape: "Esc",
+			},
+			anchor: {
+				goneText: "On text that’s no longer in the document",
+				goneShape: "On a shape that’s no longer on the board",
+			},
+		},
 		itemMenu: {
 			label: "Actions for {{name}}",
 			open: "Open",

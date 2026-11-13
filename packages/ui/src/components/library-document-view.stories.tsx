@@ -19,11 +19,17 @@ import {
 	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
 import {
+	COMMENT_COUNTS,
+	OPEN_THREADS,
+} from "@workspace/ui/components/library-comments.fixtures"
+import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
+import {
 	type LibraryDocument,
 	LibraryDocumentBar,
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
 } from "@workspace/ui/components/library-document-view"
+import type { LibraryBarComments } from "@workspace/ui/components/library-item-menu"
 
 const SPRING_BRIEF: LibraryDocument = {
 	id: "brief",
@@ -621,4 +627,85 @@ export const GalleryOfStoredImages = meta.story({
 		for (const { src } of STORED_IMAGES)
 			await expect(args.resolveImage).toHaveBeenCalledWith(src)
 	},
+})
+
+const BAR_COMMENTS: LibraryBarComments = {
+	counts: COMMENT_COUNTS,
+	isCommentMode: false,
+	onCommentModeChange: fn(),
+	list: (
+		<LibraryCommentsList
+			counts={COMMENT_COUNTS}
+			onOpenThread={fn()}
+			onTabChange={fn()}
+			tab="open"
+			threads={OPEN_THREADS}
+		/>
+	),
+}
+
+const expectCommentControls = async (
+	canvasElement: HTMLElement,
+	isCommentMode: boolean,
+) => {
+	const canvas = within(canvasElement)
+	const controls = slotIn(canvasElement, "library-comment-bar-controls")
+	const counter = within(controls).getByRole("button", { name: "3 comments" })
+	const toggle = within(controls).getByRole("button", { name: "Comment" })
+
+	await expect(toggle).toHaveAttribute("aria-pressed", String(isCommentMode))
+	await expect(
+		counter.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+	).toBeTruthy()
+	await expect(
+		controls.compareDocumentPosition(
+			canvas.getByRole("button", { name: "Download" }),
+		) & Node.DOCUMENT_POSITION_FOLLOWING,
+	).toBeTruthy()
+}
+
+export const WithComments = meta.story({
+	args: { comments: BAR_COMMENTS },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar of a document that has comment threads, as artboard Doc 1 draws it. Check the counter then the Comment button come first among the actions, before Download, that the button is not pressed, and that a press asks for comment mode.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		await expectCommentControls(canvasElement, false)
+		await userEvent.click(
+			within(canvasElement).getByRole("button", { name: "Comment" }),
+		)
+		await expect(BAR_COMMENTS.onCommentModeChange).toHaveBeenCalledWith(true)
+	},
+})
+
+export const WithCommentsDark = meta.story({
+	args: WithComments.input.args,
+	globals: { theme: "dark" },
+	play: ({ canvasElement }) => expectCommentControls(canvasElement, false),
+})
+
+export const CommentModeOn = meta.story({
+	args: { comments: { ...BAR_COMMENTS, isCommentMode: true } },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bar while comment mode is on, as artboard Doc 2 draws it. Check the Comment button is pressed and still sits before Download.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectCommentControls(canvasElement, true),
+})
+
+export const CommentModeOnDark = meta.story({
+	args: CommentModeOn.input.args,
+	globals: { theme: "dark" },
+	play: CommentModeOn.input.play,
 })

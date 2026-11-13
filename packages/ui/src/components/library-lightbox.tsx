@@ -16,6 +16,7 @@ import {
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	type LibraryBarComments,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
@@ -222,6 +223,7 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		onPrevious: () => void
 		onNext: () => void
 		isSavingToLibrary?: boolean
+		comments?: LibraryBarComments
 	}
 
 const LibraryLightbox = ({
@@ -234,6 +236,7 @@ const LibraryLightbox = ({
 	onSaveToLibrary,
 	onCopyImage,
 	isSavingToLibrary,
+	comments,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -321,6 +324,7 @@ const LibraryLightbox = ({
 							</div>
 							<LibraryItemBarActions
 								actions={handlers}
+								comments={comments}
 								item={image}
 								onClose={onClose}
 								onConfirmingDeleteChange={setConfirmingDelete}
