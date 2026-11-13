@@ -522,6 +522,7 @@ export const CompanionSelectOnGutterHovered = meta.story({
 	tags: ["test-only"],
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		pseudo: { hover: true },
 		docs: {
 			description: {

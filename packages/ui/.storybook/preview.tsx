@@ -7,7 +7,11 @@ import {
 	type Decorator,
 	definePreview,
 	type ReactRenderer,
+	type StoryContext,
 } from "@storybook/react-vite"
+import { STORY_RENDERED } from "storybook/internal/core-events"
+import { addons } from "storybook/preview-api"
+import addonPseudoStates from "storybook-addon-pseudo-states"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { TooltipHintProvider } from "@workspace/ui/components/tooltip-hint"
@@ -58,6 +62,22 @@ const parkPointerOffThePage = async () => {
 	})
 }
 
+const ROOT_THE_PSEUDO_STATES_ADDON_LOOKS_UP = "storybook-root"
+
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const renderPseudoStatesOnMount = (context: StoryContext) => {
+	if (!isInBrowserRunner() || !context.parameters.pseudo) return
+	context.canvasElement.id = ROOT_THE_PSEUDO_STATES_ADDON_LOOKS_UP
+	const mount = context.mount
+	context.mount = async (...ui) => {
+		const canvas = await mount(...ui)
+		addons.getChannel().emit(STORY_RENDERED, context.id)
+		await nextTask()
+		return canvas
+	}
+}
+
 const isClockDriven = (animation: Animation) =>
 	animation.timeline === document.timeline
 
@@ -78,9 +98,9 @@ const settleAnimations = () => {
 }
 
 export default definePreview({
-	addons: [addonDocs(), addonA11y(), addonThemes()],
+	addons: [addonDocs(), addonA11y(), addonThemes(), addonPseudoStates()],
 	tags: ["autodocs"],
-	beforeEach: parkPointerOffThePage,
+	beforeEach: [parkPointerOffThePage, renderPseudoStatesOnMount],
 	afterEach: settleAnimations,
 	decorators: [
 		withThemeByClassName<ReactRenderer>({
