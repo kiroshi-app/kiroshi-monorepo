@@ -2142,10 +2142,12 @@ const fillOf = (element: Element) => getComputedStyle(element).backgroundColor
 const pictogramOf = (row: Element) =>
 	slotIn(row as HTMLElement, "conversation-subject-icon-pictogram")
 
-const isDrawnFilled = (glyph: Element) =>
-	Array.from(glyph.querySelectorAll("*")).some(
+const filledShapesOf = (glyph: Element) =>
+	Array.from(glyph.querySelectorAll("*")).filter(
 		(shape) => getComputedStyle(shape).fill !== "none",
 	)
+
+const isDrawnFilled = (glyph: Element) => filledShapesOf(glyph).length > 0
 
 const expectRestingRow = async (row: HTMLElement) => {
 	const title = slotIn(row, "roster-row-name")
@@ -2862,10 +2864,7 @@ export const CompactSelectedColouredIconExpanded = meta.story({
 				muted,
 			]).size,
 		).toBe(4)
-		const filled = Array.from(pictogramOf(pink).querySelectorAll("*")).filter(
-			(shape) => getComputedStyle(shape).fill !== "none",
-		)
-		for (const shape of filled)
+		for (const shape of filledShapesOf(pictogramOf(pink)))
 			await expect(getComputedStyle(shape).fill).toBe(colourOf(iconOf(pink)))
 		await expect(iconOf(pink).children).toHaveLength(1)
 		await expect(fillOf(iconOf(pink))).toBe("rgba(0, 0, 0, 0)")
