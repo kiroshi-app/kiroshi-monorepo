@@ -214,10 +214,10 @@ const expectPilesOnRows = async (
 		true,
 	])
 	const first = itemsOf(piles[1])[0]
+	await expect(drawnBoxOf(first)).toEqual([14, 14, 0, 0])
 	for (const pile of piles) {
 		const items = itemsOf(pile)
 		for (const item of items) {
-			await expect(drawnBoxOf(item)).toEqual([14, 14, 0, 0])
 			await expect(drawnBoxOf(item)).toEqual(drawnBoxOf(first))
 			await expect(edgeOf(item, theme)).toEqual(edgeOf(first, theme))
 			await expect(

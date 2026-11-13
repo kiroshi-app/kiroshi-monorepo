@@ -2418,7 +2418,7 @@ const expectMissionFillsSpanTheRow = async (canvasElement: HTMLElement) => {
 			mark.left - fill.left,
 			mark.top - fill.top,
 			fill.bottom - mark.bottom,
-		]).toEqual([MISSION_MARK_GAP, MISSION_MARK_GAP, MISSION_MARK_GAP])
+		]).toEqual(Array(3).fill(MISSION_MARK_GAP))
 		await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
 		await expect(boxOf(row).left).toBeGreaterThan(trunkEnd)
 		await expect(boxOf(row).right).toBe(boxOf(conversation).right)
