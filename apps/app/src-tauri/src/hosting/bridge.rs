@@ -97,7 +97,7 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 	};
 	match (id, command, args) {
 		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
-			log::warn!("member {sender} called {command}, a command this host does not know");
+			log::warn!("a member called {command}, a command this host does not know");
 			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
 			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
 		}
@@ -609,20 +609,22 @@ mod tests {
 	}
 
 	#[test]
-	fn a_member_command_this_host_does_not_know_is_logged_once_with_its_sender_and_no_args() {
+	fn a_member_command_this_host_does_not_know_is_logged_once_by_its_name_only() {
 		capturing();
+		let sender = "an-account-kept-out-of-the-log";
 		let frame = json!({
 			"id": "m",
 			"command": "a_command_logged",
 			"args": { "spaceId": "an-argument-kept-out-of-the-log" },
 		});
 
-		member_call(&frame.to_string(), "a-logged-account").expect_err("an unknown command");
+		member_call(&frame.to_string(), sender).expect_err("an unknown command");
 
 		assert_eq!(
 			logged_naming("a_command_logged"),
-			["member a-logged-account called a_command_logged, a command this host does not know"]
+			["a member called a_command_logged, a command this host does not know"]
 		);
+		assert_eq!(logged_naming("kept-out-of-the-log"), Vec::<String>::new());
 	}
 
 	#[test]
