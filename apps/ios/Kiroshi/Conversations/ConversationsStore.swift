@@ -14,6 +14,7 @@ final class ConversationsStore {
         case idle
         case creating
         case failed
+        case refusedByOlderHost
     }
 
     enum PinChange: Equatable {
@@ -24,6 +25,7 @@ final class ConversationsStore {
     struct PinFailure: Equatable {
         let change: PinChange
         let title: String
+        var isRefusedByOlderHost = false
     }
 
     static let onlineDeadline = Duration.seconds(30)
@@ -252,7 +254,9 @@ final class ConversationsStore {
         } catch {
             guard !Task.isCancelled, self.spaceId == spaceId else { return }
             creating = nil
-            creation = .failed
+            creation =
+                error as? ConversationCallError == .unknownToTheHost
+                ? .refusedByOlderHost : .failed
         }
     }
 
@@ -287,7 +291,9 @@ final class ConversationsStore {
                 guard !Task.isCancelled else { return }
                 pinning = nil
                 guard self.spaceId == spaceId else { return }
-                pinFailure = PinFailure(change: change, title: title)
+                pinFailure = PinFailure(
+                    change: change, title: title,
+                    isRefusedByOlderHost: error as? ConversationCallError == .unknownToTheHost)
             }
         }
         pinning = task

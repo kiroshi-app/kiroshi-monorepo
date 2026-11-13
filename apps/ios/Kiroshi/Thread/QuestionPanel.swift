@@ -95,7 +95,9 @@ struct QuestionPanel: View {
                 }
             }
             otherField
-            if asking.hasFailed {
+            if asking.hasFailed, asking.isRefusedByOlderHost {
+                ProblemLabel(message: LocalizedStringKey(OlderHost.problem))
+            } else if asking.hasFailed {
                 ProblemLabel(message: "Couldn’t send your answer. Tap Send to try again.")
             }
         }

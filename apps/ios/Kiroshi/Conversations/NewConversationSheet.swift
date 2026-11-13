@@ -51,12 +51,16 @@ struct NewConversationSheet: View {
                 description: Text("Add one on your computer. It shows up here."))
         } else {
             List {
-                if creation == .failed {
+                if creation == .failed || creation == .refusedByOlderHost {
                     Section {
                         Label {
-                            Text(
-                                "Couldn’t create the conversation. Check that the computer where Kiroshi runs is on, then try again."
-                            )
+                            if creation == .refusedByOlderHost {
+                                Text(OlderHost.problem)
+                            } else {
+                                Text(
+                                    "Couldn’t create the conversation. Check that the computer where Kiroshi runs is on, then try again."
+                                )
+                            }
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.red)

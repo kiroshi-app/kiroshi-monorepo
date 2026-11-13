@@ -243,11 +243,7 @@ extension MissionThreadStore: ThreadModel {
         }
         return switch sendProblem {
         case .couldNotSend: String(localized: "Couldn’t send your answer. Send it again.")
-        case .olderHost:
-            String(
-                localized:
-                    "Couldn’t send that request. The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
-            )
+        case .olderHost: OlderHost.problem
         case .tooLarge:
             String(
                 localized:

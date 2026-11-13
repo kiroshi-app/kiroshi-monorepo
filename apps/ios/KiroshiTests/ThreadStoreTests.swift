@@ -903,6 +903,33 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named agent_cancel_turn""#),
+    ])
+    func aStopTheHostDoesNotKnowSaysItRunsAnOlderKiroshi(status: Int, refusal: String)
+        async throws
+    {
+        let host = TestHost { call in
+            call.command == "agent_cancel_turn"
+                ? TestHost.refused(call, status: status, refusal) : nil
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        host.pushAgent("chat-juniper", #"{"type":"turnChanged","state":"running"}"#)
+        await waitUntil { store.runningScope != nil }
+
+        await store.stop()?.value
+
+        #expect(store.stopFailed)
+        #expect(
+            store.problem
+                == "Couldn’t send that request. The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
+        )
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aRefusedStopSaysSo() async throws {
         let host = TestHost { call in
             call.command == "agent_cancel_turn"
@@ -916,6 +943,7 @@ struct ThreadStoreTests {
         await store.stop()?.value
 
         #expect(store.stopFailed)
+        #expect(store.problem?.hasPrefix("Couldn’t stop") == true)
         host.pushAgent(
             "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
         await waitUntil { !store.isWorking }

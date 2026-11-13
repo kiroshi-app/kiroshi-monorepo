@@ -225,7 +225,38 @@ struct QuestionThreadTests {
 
         let failed = try #require(store.asking, "the panel left after a refused answer")
         #expect(failed.hasFailed)
+        #expect(!failed.isRefusedByOlderHost)
         #expect(!failed.isSending)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named agent_answer_question""#),
+    ])
+    func anAnswerTheHostDoesNotKnowSaysItRunsAnOlderKiroshi(status: Int, refusal: String)
+        async throws
+    {
+        let refusing = TestHost(messages: ["chat-juniper": thread]) { call in
+            switch call.command {
+            case "agent_pending_questions": TestHost.ok(call, Self.pending)
+            case "agent_answer_question": TestHost.refused(call, status: status, refusal)
+            default: nil
+            }
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(refusing, store)
+        await waitUntil { isAsking(store) }
+        let asking = try #require(store.asking)
+        var draft = QuestionDraft(request: asking.question.request)
+        draft.pick(draft.asked.options[0])
+
+        await store.answer(draft)?.value
+
+        let failed = try #require(store.asking, "the panel left after a refused answer")
+        #expect(failed.hasFailed)
+        #expect(failed.isRefusedByOlderHost)
         following.cancel()
         await connection.stop()
     }
