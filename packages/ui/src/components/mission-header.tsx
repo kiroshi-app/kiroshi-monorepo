@@ -36,7 +36,13 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const MISSION_HEADER_AVATAR_SIZE = 24
 
-const MISSION_HEADER_ROWS = "flex w-full min-w-0 flex-col gap-2"
+const MISSION_HEADER_ROWS = "@container flex w-full min-w-0 flex-col gap-2"
+
+const MISSION_TICKET_ISLAND = "h-auto min-h-10 flex-wrap gap-0"
+
+const MISSION_TICKET_STACKED_CELL = "@max-2xl:basis-full"
+
+const MISSION_TICKET_SPACER = "flex-1 @max-2xl:hidden"
 
 type MissionHeaderProps = {
 	bot: MissionBot
@@ -55,10 +61,14 @@ type MissionHeaderProps = {
 	className?: string
 }
 
-const MissionTicketRule = () => (
+type MissionTicketRuleProps = {
+	className?: string
+}
+
+const MissionTicketRule = ({ className }: MissionTicketRuleProps) => (
 	<span
 		aria-hidden="true"
-		className="h-3 w-px shrink-0 bg-border"
+		className={cn("h-3 w-px shrink-0 bg-border", className)}
 		data-slot="mission-ticket-rule"
 	/>
 )
@@ -122,11 +132,14 @@ const MissionHeader = ({
 				}
 			/>
 			<HeaderIsland
-				className="h-auto min-h-10 flex-wrap"
+				className={MISSION_TICKET_ISLAND}
 				data-island="mission-ticket"
 			>
 				{hasTicket || hasTools ? (
-					<HeaderIslandCell data-slot="mission-ticket-cell">
+					<HeaderIslandCell
+						className={MISSION_TICKET_STACKED_CELL}
+						data-slot="mission-ticket-cell"
+					>
 						{hasTicket ? (
 							<MissionTicketLine layout="line" ticket={ticket} />
 						) : null}
@@ -146,20 +159,32 @@ const MissionHeader = ({
 					</HeaderIslandCell>
 				) : null}
 				{shownStatus ? (
-					<HeaderIslandCell data-slot="mission-status-cell">
-						{hasTicket || hasTools ? <MissionTicketRule /> : null}
+					<HeaderIslandCell
+						className={cn(
+							MISSION_TICKET_STACKED_CELL,
+							(hasTicket || hasTools) && "ps-0 @max-2xl:ps-2",
+						)}
+						data-slot="mission-status-cell"
+					>
+						{hasTicket || hasTools ? (
+							<MissionTicketRule className="@max-2xl:hidden" />
+						) : null}
 						<span
-							className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs leading-4"
+							className="flex min-w-0 items-center text-muted-foreground text-xs leading-4"
 							data-slot="mission-status"
 						>
 							<TooltipHint content={shownStatus.text}>
 								<span className="truncate">{shownStatus.text}</span>
 							</TooltipHint>
-							<MissionStatusTime className="shrink-0" status={shownStatus} />
+							<MissionStatusTime
+								className="shrink-0 before:mx-1 before:content-['·']"
+								isElapsed
+								status={shownStatus}
+							/>
 						</span>
 					</HeaderIslandCell>
 				) : null}
-				<span aria-hidden="true" className="flex-1" />
+				<span aria-hidden="true" className={MISSION_TICKET_SPACER} />
 				<HeaderIslandCell
 					className="shrink-0 gap-3 whitespace-nowrap text-xs leading-4"
 					data-slot="mission-opening-cell"
@@ -205,4 +230,11 @@ const MissionHeader = ({
 	)
 }
 
-export { MISSION_HEADER_ROWS, MissionHeader, type MissionHeaderProps }
+export {
+	MISSION_HEADER_ROWS,
+	MISSION_TICKET_ISLAND,
+	MISSION_TICKET_SPACER,
+	MISSION_TICKET_STACKED_CELL,
+	MissionHeader,
+	type MissionHeaderProps,
+}

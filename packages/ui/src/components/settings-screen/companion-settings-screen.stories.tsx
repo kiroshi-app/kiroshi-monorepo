@@ -262,7 +262,7 @@ const expectTitleIsland = async (surface: "bg-card" | "bg-card-raised") => {
 	])
 	await expect(
 		title.getBoundingClientRect().left - island.getBoundingClientRect().left,
-	).toBe(12)
+	).toBe(13)
 	await expect(getComputedStyle(island).backgroundColor).toBe(
 		tokenStyleIn(island, surface, "backgroundColor"),
 	)

@@ -61,7 +61,7 @@ const HeaderSubjectButton = ({
 			aria-expanded={isSettingsOpen}
 			className={cn(
 				HEADER_ISLAND_CONTROL,
-				"flex h-8 min-w-0 items-center gap-0.5 ps-0.75 text-foreground",
+				"flex h-8 min-w-0 items-center gap-0.5 ps-1 text-foreground",
 				className,
 			)}
 			onClick={onOpenSettings}
@@ -69,7 +69,7 @@ const HeaderSubjectButton = ({
 			{...props}
 		>
 			<span className="flex min-w-0 items-center gap-2 pe-1">{children}</span>
-			<span className="-me-px flex w-8 shrink-0 justify-center">
+			<span className="flex w-8 shrink-0 justify-center">
 				<Icons.Settings
 					aria-hidden="true"
 					className="size-4 text-muted-foreground"
@@ -129,7 +129,7 @@ const HeaderIdentityButton = ({
 			/>
 			<span className="min-w-0 truncate">{name}</span>
 			<BotTitleBadge
-				className="in-data-[slot=header-island]:@max-md:hidden"
+				className="in-data-[slot=header-island]:@max-md:hidden in-data-[slot=header-island]:bg-muted"
 				title={title}
 				variant="line"
 			/>

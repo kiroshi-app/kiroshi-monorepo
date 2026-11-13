@@ -666,7 +666,7 @@ const expectMissionsIsland = async (
 		"16px",
 		"500",
 	])
-	await expect(title.getBoundingClientRect().left - box.left).toBe(12)
+	await expect(title.getBoundingClientRect().left - box.left).toBe(13)
 	await expect(getComputedStyle(island).backgroundColor).toBe(
 		tokenStyleIn(island, surface, "backgroundColor"),
 	)

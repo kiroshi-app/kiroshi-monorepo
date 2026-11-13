@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -35,6 +35,7 @@ import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { UserTurn } from "@workspace/ui/components/turn"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const WORKING_HEADER: Omit<MissionHeaderProps, "onBack"> = {
 	bot: MISSION_BOT,
@@ -110,11 +111,12 @@ const ticketIslandIn = (root: Element) => {
 }
 
 export const Loading = meta.story({
+	args: { status: MISSION_STATUS },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The header of a mission thread while the mission is still on its way, drawn above the loaded header it stands in for, in the same width. Check that the two island rows keep the height and the edges of the loaded ones so nothing jumps when the mission lands, that the back control is already live, and that the avatar, the objective, the ticket line and the opening time are shapes with no text, no state, no tool mark and no activity. `apps/app/src/components/mission-thread-screen.tsx:146` renders the mission-loading branch of a thread.",
+					"The header of a mission thread while the mission is still on its way, drawn above the loaded header it stands in for, in the same width, narrow enough for the ticket island to stack its ticket, its status and its opening time. Check that the two island rows keep the height and the edges of the loaded ones so nothing jumps when the mission lands, that the back control is already live, and that the avatar, the objective, the ticket line and the opening time are shapes with no text, no state, no tool mark and no activity. `apps/app/src/components/mission-thread-screen.tsx:146` renders the mission-loading branch of a thread.",
 			},
 		},
 	},
@@ -333,7 +335,7 @@ export const WithStatus = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission whose companion wrote a last status. Check that it reads in the ticket island after the tool marks and before the opening time, behind the same rule the island draws between the ticket and the tools, in the muted foreground with its relative time in tabular figures, and that its tooltip hands the text over. Pick `Default` for the island with no status. Nothing on main feeds this prop yet.",
+					"A mission whose companion wrote a last status. Check that it reads in the ticket island after the tool marks and before the opening time, on a line of its own at this width, in the muted foreground, followed by a middle dot and the time since it was written in tabular figures, and that its tooltip hands the text over. Pick `Default` for the island with no status. Nothing on main feeds this prop yet.",
 			},
 		},
 	},
@@ -358,7 +360,8 @@ export const WithStatus = meta.story({
 			"datetime",
 			new Date(MISSION_STATUS.writtenAt).toISOString(),
 		)
-		await expect(time).toHaveTextContent("4 minutes ago")
+		await expect(time).toHaveTextContent("4m")
+		await expect(getComputedStyle(time, "::before").content).toBe('"·"')
 		await expect(getComputedStyle(time).fontVariantNumeric).toBe("tabular-nums")
 
 		await userEvent.hover(status.firstElementChild as HTMLElement)
@@ -493,19 +496,35 @@ const ISLAND_INSET = 8
 
 const ISLAND_HEIGHT = 40
 
+const ISLAND_EDGE = 5
+
 const TICKET_ISLAND_TOP = 56
 
 const MISSION_CONTENT_TOP = 104
 
 const NARROW_MISSION_WIDTH = 480
 
+const NARROW_CONTENT_TOP = 168
+
+const TICKET_LINE_HEIGHT = 32
+
 const ARTBOARD_MISSION = {
-	ticket: { ...MISSION_TICKET, title: "Float the mission header" },
+	objective: "Move the sidecar build into the release workflow",
+	ticket: {
+		...MISSION_TICKET,
+		externalId: "OPE-2140",
+		title: "Release builds ship without the sidecar binary",
+	},
+	tools: ["Superset", "Paper"],
 	state: "ready_to_merge",
 	isWorking: false,
-	status: MISSION_STATUS,
-	commitsAhead: 3,
-	pullRequest: MISSION_PULL_REQUEST,
+	status: {
+		text: "Checks green, waiting for the queue",
+		writtenAt: MISSION_NOW - 240_000,
+	},
+	commitsAhead: 2,
+	pullRequest: { ...MISSION_PULL_REQUEST, number: 2291 },
+	openedAt: MISSION_NOW - 7_200_000,
 } satisfies Partial<MissionHeaderProps>
 
 const turnsOf = (count: number): TranscriptItem[] =>
@@ -520,6 +539,7 @@ const SCROLLING_THREAD = turnsOf(24)
 
 type MissionThreadProps = {
 	header: ReactNode
+	notice?: ReactNode
 	rows?: TranscriptItem[]
 	skeleton?: ReactNode
 	width?: number
@@ -527,15 +547,17 @@ type MissionThreadProps = {
 
 const MissionThread = ({
 	header,
+	notice,
 	rows = SHORT_THREAD,
 	skeleton,
 	width,
 }: MissionThreadProps) => (
-	<div className="h-svh" style={{ width }}>
+	<div className="h-svh bg-card" data-content-card="" style={{ width }}>
 		<ThreadLayout
 			composer={<PromptInput onSubmit={fn()} />}
 			header={header}
 			isHeaderFloating
+			notice={notice}
 			rows={rows}
 			skeleton={skeleton}
 		>
@@ -543,6 +565,39 @@ const MissionThread = ({
 		</ThreadLayout>
 	</div>
 )
+
+const NarrowMissionOnItsWay = (args: MissionHeaderProps) => {
+	const [isLoaded, setIsLoaded] = useState(false)
+
+	return (
+		<MissionThread
+			header={
+				isLoaded ? (
+					<MissionHeader {...args} />
+				) : (
+					<MissionHeaderSkeleton onBack={args.onBack} />
+				)
+			}
+			notice={
+				isLoaded ? null : (
+					<Button onClick={() => setIsLoaded(true)}>Load the mission</Button>
+				)
+			}
+			skeleton={isLoaded ? undefined : <MissionDetailSkeleton />}
+			width={NARROW_MISSION_WIDTH}
+		/>
+	)
+}
+
+const contentTopOf = (layout: HTMLElement, slot: string) => {
+	const column = slotIn(layout, slot)
+
+	return (
+		boxOf(column).top -
+		boxOf(layout).top +
+		Number.parseFloat(getComputedStyle(column).paddingTop)
+	)
+}
 
 const inMissionThread = (args: MissionHeaderProps) => (
 	<MissionThread header={<MissionHeader {...args} />} />
@@ -595,7 +650,7 @@ const expectMissionIslands = async (canvasElement: HTMLElement) => {
 	await expect(state).toHaveTextContent("Ready to merge")
 	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
 	await expect(getComputedStyle(dot).backgroundColor).toBe(
-		tokenStyleIn(dot, "bg-mission-glyph-ready", "backgroundColor"),
+		tokenStyleIn(dot, "bg-success", "backgroundColor"),
 	)
 	await expect(getComputedStyle(state).fontSize).toBe("13px")
 	await expect(
@@ -641,18 +696,27 @@ export const Mission3a = meta.story({
 
 		await expectIslandSurface(canvasElement, "bg-card")
 		await expect(slotIn(opening, "mission-activity")).toHaveTextContent(
-			/^3 commits ahead#482$/,
+			/^2 commits ahead#2291$/,
 		)
 		await expect(opening.lastElementChild).toHaveTextContent(/^opened /)
-		await expect(ticket.right - boxOf(opening).right).toBe(4)
+		await expect(ticket.right - boxOf(opening).right).toBe(ISLAND_EDGE)
+		await expect(
+			boxOf(slotIn(island, "mission-status-cell")).left -
+				boxOf(slotIn(island, "mission-ticket-cell")).right,
+		).toBe(0)
+		await expect(
+			slotIn(island, "mission-ticket-line").querySelector("svg"),
+		).toBeNull()
 		for (const cell of slotsIn(island, "header-island-cell")) {
 			await expect(boxOf(cell).height).toBe(32)
 		}
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Back to the conversation" }),
-		)
+		const back = canvas.getByRole("button", {
+			name: "Back to the conversation",
+		})
+		await userEvent.click(back)
 		await expect(args.onBack).toHaveBeenCalledOnce()
+		back.blur()
 	},
 })
 
@@ -678,7 +742,7 @@ export const MissionWithoutActivity3b = meta.story({
 		await expect(slotsIn(island, "mission-activity")).toHaveLength(0)
 		await expect(opening.children).toHaveLength(1)
 		await expect(opening).toHaveTextContent(/^opened /)
-		await expect(ticket.right - boxOf(opening).right).toBe(4)
+		await expect(ticket.right - boxOf(opening).right).toBe(ISLAND_EDGE)
 	},
 })
 
@@ -728,7 +792,7 @@ export const MissionScrolled3d = meta.story({
 })
 
 export const MissionNarrow3e = meta.story({
-	args: { ...ARTBOARD_MISSION, objective: LONG_OBJECTIVE },
+	args: ARTBOARD_MISSION,
 	parameters: {
 		layout: "fullscreen",
 		docs: {
@@ -761,18 +825,22 @@ export const MissionNarrow3e = meta.story({
 		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
 		await expect(state.right).toBeLessThanOrEqual(frame.right - ISLAND_INSET)
 		await expect(rows.map((row) => boxOf(row).top - ticket.top)).toEqual([
-			4, 38, 72,
+			4,
+			4 + TICKET_LINE_HEIGHT,
+			4 + 2 * TICKET_LINE_HEIGHT,
 		])
+		await expect(boxOf(rows[0]).width).toBe(ticket.width - 2 * ISLAND_EDGE)
+		await expect(slotIn(island, "mission-ticket-rule")).toBeVisible()
+		await expect(slotsIn(rows[1], "mission-ticket-rule")[0]).not.toBeVisible()
 		for (const row of rows) {
-			await expect(boxOf(row).right).toBeLessThanOrEqual(ticket.right - 4)
+			await expect(boxOf(row).right).toBeLessThanOrEqual(
+				ticket.right - ISLAND_EDGE,
+			)
 			for (const text of row.querySelectorAll<HTMLElement>(".truncate")) {
 				await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth)
 			}
 		}
-		await expectContentBelowTheIslands(
-			layout,
-			TICKET_ISLAND_TOP + ticket.height + ISLAND_INSET,
-		)
+		await expectContentBelowTheIslands(layout, NARROW_CONTENT_TOP)
 	},
 })
 
@@ -811,9 +879,44 @@ export const MissionSkeleton = meta.story({
 			`${MISSION_CONTENT_TOP}px`,
 		)
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Back to the conversation" }),
-		)
+		const back = canvas.getByRole("button", {
+			name: "Back to the conversation",
+		})
+		await userEvent.click(back)
 		await expect(args.onBack).toHaveBeenCalledOnce()
+		back.blur()
+	},
+})
+
+export const MissionSkeletonThenLoadedNarrow = meta.story({
+	tags: ["test-only"],
+	args: ARTBOARD_MISSION,
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The mission thread 480px wide, first on its skeleton, then loaded once *Load the mission* is pressed. Check that the skeleton ticket island already holds the three lines the loaded island of `MissionNarrow3e` wraps to, so the transcript starts 168px from the top before and after and nothing moves when the mission lands.",
+			},
+		},
+	},
+	render: (args) => <NarrowMissionOnItsWay {...args} />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+
+		await expectContentBelowTheIslands(layout, NARROW_CONTENT_TOP)
+		await expect(contentTopOf(layout, "thread-skeleton-column")).toBe(
+			NARROW_CONTENT_TOP,
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Load the mission" }),
+		)
+		await waitFor(() => slotIn(layout, "mission-header"))
+
+		await expectContentBelowTheIslands(layout, NARROW_CONTENT_TOP)
+		await expect(contentTopOf(layout, "message-scroller-content")).toBe(
+			NARROW_CONTENT_TOP,
+		)
 	},
 })

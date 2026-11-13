@@ -5,7 +5,7 @@ import type {
 	MissionTicketLink,
 	ShownMissionStatus,
 } from "@workspace/ui/components/mission"
-import { toRelativeTime } from "@workspace/ui/lib/time-format"
+import { toElapsedTime, toRelativeTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 type MissionMark = ComponentType<IconProps>
@@ -97,7 +97,7 @@ type MissionTicketLayout = "wrap" | "line"
 
 type MissionTicketLineStyle = {
 	root: string
-	mark: string
+	mark?: string
 	identifier: string
 	title: string
 }
@@ -114,7 +114,6 @@ const MISSION_TICKET_LINE_STYLE: Record<
 	},
 	line: {
 		root: "flex min-w-0 items-center gap-2 text-xs leading-4",
-		mark: "size-[11px] text-muted-foreground",
 		identifier: "text-foreground",
 		title: "truncate text-soft-foreground",
 	},
@@ -133,7 +132,9 @@ const MissionTicketLine = ({
 	const style = MISSION_TICKET_LINE_STYLE[layout]
 	const line = (
 		<>
-			<Mark aria-hidden="true" className={cn("shrink-0", style.mark)} />
+			{style.mark ? (
+				<Mark aria-hidden="true" className={cn("shrink-0", style.mark)} />
+			) : null}
 			{ticket.externalId ? (
 				<span
 					className={cn("shrink-0 font-medium tabular-nums", style.identifier)}
@@ -173,16 +174,21 @@ const MissionTicketLine = ({
 
 type MissionStatusTimeProps = {
 	status: ShownMissionStatus
+	isElapsed?: boolean
 	className?: string
 }
 
-const MissionStatusTime = ({ status, className }: MissionStatusTimeProps) => (
+const MissionStatusTime = ({
+	status,
+	isElapsed = false,
+	className,
+}: MissionStatusTimeProps) => (
 	<time
 		className={cn("tabular-nums", className)}
 		data-slot="mission-status-time"
 		dateTime={new Date(status.writtenAt).toISOString()}
 	>
-		{toRelativeTime(status.writtenAt, status.now)}
+		{(isElapsed ? toElapsedTime : toRelativeTime)(status.writtenAt, status.now)}
 	</time>
 )
 

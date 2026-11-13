@@ -30,8 +30,8 @@ const controlsIn = (canvasElement: HTMLElement) => {
 
 	return {
 		island,
-		search: buttons.getByRole("button", { name: "Search" }),
-		history: buttons.getByRole("button", { name: "History" }),
+		pins: buttons.getByRole("button", { name: "Pinned messages" }),
+		routines: buttons.getByRole("button", { name: "Routines" }),
 	}
 }
 
@@ -46,15 +46,15 @@ const expectForegroundIcon = (control: HTMLElement) =>
 	)
 
 const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
-	const { island, search, history } = controlsIn(canvasElement)
+	const { island, pins, routines } = controlsIn(canvasElement)
 	const surface = getComputedStyle(island)
 	const isDark = island.closest(".dark") !== null
 	const islandBox = island.getBoundingClientRect()
-	const searchBox = search.getBoundingClientRect()
-	const historyBox = history.getBoundingClientRect()
-	const icon = search.querySelector("svg")?.getBoundingClientRect()
+	const pinsBox = pins.getBoundingClientRect()
+	const routinesBox = routines.getBoundingClientRect()
+	const icon = pins.querySelector("svg")?.getBoundingClientRect()
 
-	await expect(islandBox.height).toBe(40)
+	await expect([islandBox.width, islandBox.height]).toEqual([76, 40])
 	await expect(surface.borderTopLeftRadius).toBe("12px")
 	await expect(surface.borderTopWidth).toBe("1px")
 	await expect(surface.borderTopColor).toBe(
@@ -75,71 +75,77 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 		),
 	)
 
-	await expect(search.tagName).toBe("BUTTON")
-	await expect([searchBox.width, searchBox.height]).toEqual([32, 32])
-	await expect(getComputedStyle(search).borderTopLeftRadius).toBe("8px")
-	await expect(searchBox.left - islandBox.left).toBe(4)
-	await expect(searchBox.top - islandBox.top).toBe(4)
-	await expect(historyBox.left - searchBox.right).toBe(2)
+	await expect(pins.tagName).toBe("BUTTON")
+	await expect([pinsBox.width, pinsBox.height]).toEqual([32, 32])
+	await expect(getComputedStyle(pins).borderTopLeftRadius).toBe("8px")
+	await expect(pinsBox.left - islandBox.left).toBe(5)
+	await expect(pinsBox.top - islandBox.top).toBe(4)
+	await expect(routinesBox.left - pinsBox.right).toBe(2)
 	await expect([icon?.width, icon?.height]).toEqual([16, 16])
-	await expect(getComputedStyle(search).color).toBe(
-		tokenStyleIn(search, "text-soft-foreground", "color"),
+	await expect(getComputedStyle(pins).color).toBe(
+		tokenStyleIn(pins, "text-soft-foreground", "color"),
 	)
-	await expect(getComputedStyle(search).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(pins).backgroundColor).toBe(TRANSPARENT)
 }
 
 const expectHover = async ({ canvasElement }: StatePlayContext) => {
 	if (!isInBrowserRunner()) return
-	const { search } = controlsIn(canvasElement)
+	const { pins } = controlsIn(canvasElement)
 	const pointer = await realPointer()
 
-	await pointer.hover(search)
-	await expect(search.matches(":hover")).toBe(true)
-	await expectFill(search, "bg-header-island-control-hover")
-	await expectForegroundIcon(search)
-	await expect(getComputedStyle(search).translate).toBe("none")
-	await withMotionAllowed(() => expect(colourTransitionsOf(search)).toEqual([]))
-	await pointer.unhover(search)
+	await pointer.hover(pins)
+	await expect(pins.matches(":hover")).toBe(true)
+	await expectFill(pins, "bg-header-island-control-hover")
+	await expectForegroundIcon(pins)
+	await expect(getComputedStyle(pins).translate).toBe("none")
+	await withMotionAllowed(() => expect(colourTransitionsOf(pins)).toEqual([]))
+	await pointer.unhover(pins)
 }
 
 const expectPressed = async ({ canvasElement }: StatePlayContext) => {
 	if (!isInBrowserRunner()) return
-	const { search } = controlsIn(canvasElement)
+	const { pins } = controlsIn(canvasElement)
 	const pointer = await realPointer()
 
-	await pointer.hover(search)
-	search.focus()
+	await pointer.hover(pins)
+	pins.focus()
 	await pointer.keyboard("{Space>}")
-	await expect(search.matches(":hover:active")).toBe(true)
-	await expectFill(search, "bg-header-island-control-pressed")
-	await expectForegroundIcon(search)
-	await expect(getComputedStyle(search).translate).toBe("0px 1px")
+	await expect(pins.matches(":hover:active")).toBe(true)
+	await expectFill(pins, "bg-header-island-control-pressed")
+	await expectForegroundIcon(pins)
+	await expect(getComputedStyle(pins).translate).toBe("0px 1px")
 	await pointer.keyboard("{/Space}")
-	await pointer.unhover(search)
+	await pointer.unhover(pins)
 }
 
 const expectKeyboardFocus = async ({ canvasElement }: StatePlayContext) => {
-	const { search, history } = controlsIn(canvasElement)
+	const { pins, routines } = controlsIn(canvasElement)
 	if (!isInBrowserRunner()) {
 		await userEvent.tab()
 		return
 	}
 	const pointer = await realPointer()
 
-	await pointer.click(search)
-	await expect(search).toHaveFocus()
-	await expect(getComputedStyle(search).boxShadow).toBe("none")
-	await expect(getComputedStyle(search).borderTopColor).toBe(TRANSPARENT)
+	await pointer.click(pins)
+	await expect(pins).toHaveFocus()
+	await expect(getComputedStyle(pins).boxShadow).toBe("none")
+	await expect(getComputedStyle(pins).outlineStyle).toBe("none")
 
 	await pointer.tab()
-	await expect(history).toHaveFocus()
-	await expect(getComputedStyle(history).boxShadow).toBe(
-		tokenStyleIn(history, "ring-4 ring-ring/30", "boxShadow"),
+	await expect(routines).toHaveFocus()
+	await expect(getComputedStyle(routines).boxShadow).toBe(
+		tokenStyleIn(routines, "ring-4 ring-ring/30", "boxShadow"),
 	)
-	await expect(getComputedStyle(history).borderTopWidth).toBe("1px")
-	await expect(getComputedStyle(history).borderTopColor).toBe(
-		tokenStyleIn(history, "border border-ring", "borderTopColor"),
+	const line = getComputedStyle(routines)
+	await expect([
+		line.outlineStyle,
+		line.outlineWidth,
+		line.outlineOffset,
+	]).toEqual(["solid", "1px", "0px"])
+	await expect(line.outlineColor).toBe(
+		tokenStyleIn(routines, "border border-ring", "borderTopColor"),
 	)
+	await expect(routines.getBoundingClientRect().width).toBe(32)
 }
 
 const meta = preview.meta({
@@ -154,17 +160,16 @@ const meta = preview.meta({
 		},
 	},
 	render: () => (
-		<HeaderIsland>
-			<HeaderIslandButton aria-label="Search" id={STATE_CONTROL_ID}>
-				<Icons.Search />
-			</HeaderIslandButton>
-			<HeaderIslandButton aria-label="History">
-				<Icons.History />
-			</HeaderIslandButton>
-			<HeaderIslandButton aria-label="More">
-				<Icons.More />
-			</HeaderIslandButton>
-		</HeaderIsland>
+		<div className="flex">
+			<HeaderIsland>
+				<HeaderIslandButton aria-label="Pinned messages" id={STATE_CONTROL_ID}>
+					<Icons.Pin />
+				</HeaderIslandButton>
+				<HeaderIslandButton aria-label="Routines">
+					<Icons.SidePanel />
+				</HeaderIslandButton>
+			</HeaderIsland>
+		</div>
 	),
 })
 
@@ -173,7 +178,7 @@ export const AtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read the island geometry with no pointer and no focus on it. Check the 40px island, its 12px corners, the 32px controls 4px inside it and 2px apart, and the icons in the soft foreground on no fill.",
+					"Reach for this to read the island geometry with no pointer and no focus on it. Check the 40px island, its 12px corners, the 32px controls 5px from its sides, 4px from its top and 2px apart, and the icons in the soft foreground on no fill.",
 			},
 		},
 	},
@@ -191,7 +196,7 @@ export const Hover = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the pointer rests on a control. Check that Search wears the hover fill and a full foreground icon, that it stays in place, and that the fill arrives with no colour transition. The play drives the real pointer, in the Vitest browser runner only.",
+					"Reach for this when the pointer rests on a control. Check that the pins control wears the hover fill and a full foreground icon, that it stays in place, and that the fill arrives with no colour transition. The play drives the real pointer, in the Vitest browser runner only.",
 			},
 		},
 	},
@@ -209,7 +214,7 @@ export const Pressed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this while a control is held down under the pointer. Check that the pressed fill wins over the hover fill and that Search sits 1px lower than its neighbours. The play holds the real press, in the Vitest browser runner only.",
+					"Reach for this while a control is held down under the pointer. Check that the pressed fill wins over the hover fill and that the pins control sits 1px lower than its neighbour. The play holds the real press, in the Vitest browser runner only.",
 			},
 		},
 	},
@@ -226,7 +231,7 @@ export const KeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when a control is reached with Tab. In the Vitest browser runner the play clicks Search and checks it takes focus with no ring, then tabs to History and checks the 1px ring line and its 4px halo, both in the ring colour; here it only tabs to Search.",
+					"Reach for this when a control is reached with Tab. In the Vitest browser runner the play clicks the pins control and checks it takes focus with no ring, then tabs to Routines and checks the 1px ring line drawn around the 32px control and its 4px halo, both in the ring colour; here it only tabs to the pins control.",
 			},
 		},
 	},
