@@ -47,6 +47,7 @@ const meta = preview.meta({
 					tools={MISSION_TOOLS}
 				/>
 			}
+			isHeaderFloating
 			skeleton={<MissionDetailSkeleton />}
 		>
 			{null}

@@ -11,6 +11,8 @@ import {
 	LAPTOP_WINDOW,
 	opaque,
 	slotIn,
+	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
 import {
@@ -239,6 +241,93 @@ export const General = meta.story({
 			expect.objectContaining({ name: "Juniper!" }),
 		)
 		await expect(within(menu).getByText("Juniper!")).toBeVisible()
+	},
+})
+
+const expectTitleIsland = async (surface: "bg-card" | "bg-card-raised") => {
+	const page = slotIn(screen.getByRole("main"), "settings-screen-page")
+	const island = slotIn(page, "header-island")
+	const title = within(island).getByRole("heading", {
+		level: 2,
+		name: "General",
+	})
+	const style = getComputedStyle(title)
+
+	await expectPageShown("General")
+	await expect(within(island).queryAllByRole("button")).toHaveLength(0)
+	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+		"14px",
+		"16px",
+		"500",
+	])
+	await expect(
+		title.getBoundingClientRect().left - island.getBoundingClientRect().left,
+	).toBe(12)
+	await expect(getComputedStyle(island).backgroundColor).toBe(
+		tokenStyleIn(island, surface, "backgroundColor"),
+	)
+
+	return page
+}
+
+export const Settings8a = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 8a, a settings page under its floating header. Check that no bar and no rule cross the top of the page: one island sits 8px from the top and the side of the content card and holds the page label alone, General, as the level 2 heading in 14px medium on a 16px line, with no control beside it and no trailing island. Check the first row of the page starts 56px from the top.",
+			},
+		},
+	},
+	play: async () => {
+		const page = await expectTitleIsland("bg-card")
+		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
+	},
+})
+
+export const SettingsDark8b = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 8b, the settings page in the dark theme. Check that the title island wears the raised card surface and keeps the geometry of `Settings8a`.",
+			},
+		},
+	},
+	play: async () => {
+		await expectTitleIsland("bg-card-raised")
+	},
+})
+
+export const SettingsScrolled8c = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "light" },
+	decorators: [
+		(Story) => (
+			<div className="h-64">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 8c, the General page scrolled away from its start, in a window 256px high so the page is long enough to scroll. Check that the page passes under the title island and that the top fade of the layout covers it as it leaves. Pick `Settings8a` for the page at rest.",
+			},
+		},
+	},
+	play: async () => {
+		const page = slotIn(screen.getByRole("main"), "settings-screen-page")
+		const scroller = slotIn(page, "screen-layout-scroller")
+
+		await expectPageShown("General")
+		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+		scroller.scrollTo({ top: scroller.scrollHeight })
+		await waitFor(() => slotIn(page, "screen-layout-fade"))
+		await expect(slotIn(page, "header-island")).toBeVisible()
 	},
 })
 

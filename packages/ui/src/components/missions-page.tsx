@@ -9,9 +9,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AppHeader } from "@workspace/ui/components/app-header"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
+import { HeaderIslandCell } from "@workspace/ui/components/header-island"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -27,6 +29,7 @@ import type {
 } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { Notice } from "@workspace/ui/components/notice"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { toElapsedTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -491,7 +494,7 @@ const MissionsPageBody = ({
 
 	if (status === "loading") {
 		return (
-			<div className="min-h-0 flex-1" data-slot="missions-page-skeleton">
+			<div className="min-h-0 flex-1 pt-14" data-slot="missions-page-skeleton">
 				<ListSkeleton className="gap-0" row={MissionsPageSkeletonGroup} />
 			</div>
 		)
@@ -499,7 +502,7 @@ const MissionsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3" data-slot="missions-page-failure">
+			<div className="p-3 pt-17" data-slot="missions-page-failure">
 				<Notice
 					description={t("activity.failure.missions.description")}
 					retry={{ onRetry }}
@@ -509,7 +512,12 @@ const MissionsPageBody = ({
 		)
 	}
 
-	if (missions.length === 0) return <MissionsEmpty />
+	if (missions.length === 0)
+		return (
+			<div className="pt-14" data-slot="missions-page-empty">
+				<MissionsEmpty />
+			</div>
+		)
 
 	const toggle = (key: MissionsPageGroupKey) =>
 		setFoldedGroups((folded) => {
@@ -520,7 +528,7 @@ const MissionsPageBody = ({
 
 	return (
 		<div
-			className="min-h-0 flex-1 overflow-y-auto"
+			className="min-h-0 flex-1 overflow-y-auto pt-14"
 			data-slot="missions-page-groups"
 		>
 			{MISSIONS_PAGE_GROUPS.map((group) => {
@@ -553,18 +561,25 @@ const MissionsPage = (props: MissionsPageProps) => {
 	return (
 		<section
 			aria-labelledby={titleId}
-			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden"
+			className="size-full min-h-0 min-w-0 overflow-hidden"
 			data-slot="missions-page"
 		>
-			<header className="flex shrink-0 items-center border-shell-border border-b p-3">
-				<h1
-					className={cn("font-semibold text-bubble-foreground", LINE)}
-					id={titleId}
-				>
-					{t("missions.page.title")}
-				</h1>
-			</header>
-			<MissionsPageBody {...props} />
+			<ScreenLayout
+				header={
+					<AppHeader
+						isFloating
+						leading={
+							<HeaderIslandCell>
+								<h1 className="truncate font-medium leading-4" id={titleId}>
+									{t("missions.page.title")}
+								</h1>
+							</HeaderIslandCell>
+						}
+					/>
+				}
+				isHeaderFloating
+				scroller={() => <MissionsPageBody {...props} />}
+			/>
 		</section>
 	)
 }

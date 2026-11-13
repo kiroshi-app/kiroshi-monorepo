@@ -720,6 +720,12 @@ conversation-missions-missionheader--empty
 conversation-missions-missionheader--loading
 conversation-missions-missionheader--long-content
 conversation-missions-missionheader--long-status
+conversation-missions-missionheader--mission-3-a
+conversation-missions-missionheader--mission-dark-3-c
+conversation-missions-missionheader--mission-narrow-3-e
+conversation-missions-missionheader--mission-scrolled-3-d
+conversation-missions-missionheader--mission-skeleton
+conversation-missions-missionheader--mission-without-activity-3-b
 conversation-missions-missionheader--pull-request-only
 conversation-missions-missionheader--states
 conversation-missions-missionheader--ticket-link
@@ -1296,6 +1302,10 @@ layout-threadlayout--empty
 layout-threadlayout--empty-queue
 layout-threadlayout--error
 layout-threadlayout--forwarded-region
+layout-threadlayout--group-2-a
+layout-threadlayout--group-dark-2-b
+layout-threadlayout--group-narrow-2-d
+layout-threadlayout--group-scrolled-2-c
 layout-threadlayout--image-viewer-in-panel
 layout-threadlayout--loading-older-messages
 layout-threadlayout--long-agent-message-above-the-prompt
@@ -1305,6 +1315,10 @@ layout-threadlayout--outside-content-card
 layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
 layout-threadlayout--skeleton-in-the-transcript-column
+layout-threadlayout--solo-1-a
+layout-threadlayout--solo-dark-1-b
+layout-threadlayout--solo-narrow-1-d
+layout-threadlayout--solo-scrolled-1-c
 layout-threadlayout--start-of-older-messages
 layout-threadlayout--streaming-into-short-transcript
 layout-threadlayout--user-message-above-the-prompt
@@ -1920,6 +1934,7 @@ navigation-headerconversationbutton--themes-group-free-hue
 navigation-headerconversationbutton--themes-group-picked-icon
 navigation-headeridentitybutton--default
 navigation-headeridentitybutton--expanded
+navigation-headeridentitybutton--expanded-in-island
 navigation-headeridentitybutton--free-hue
 navigation-headeridentitybutton--in-layout
 navigation-headeridentitybutton--long-content
@@ -2150,6 +2165,9 @@ navigation-missionspage--in-main-card
 navigation-missionspage--loading
 navigation-missionspage--long-text
 navigation-missionspage--menu-on-a-row
+navigation-missionspage--missions-4-a
+navigation-missionspage--missions-dark-4-b
+navigation-missionspage--missions-scrolled-4-c
 navigation-missionspage--narrow
 navigation-missionspage--unfolded
 navigation-missionspage--unfolded-dark
@@ -2597,6 +2615,9 @@ settings-bot-companionsettingsscreen--maximum-width
 settings-bot-companionsettingsscreen--minimum-width
 settings-bot-companionsettingsscreen--runtime
 settings-bot-companionsettingsscreen--secrets
+settings-bot-companionsettingsscreen--settings-8-a
+settings-bot-companionsettingsscreen--settings-dark-8-b
+settings-bot-companionsettingsscreen--settings-scrolled-8-c
 settings-bot-companionsettingsscreen--skills
 settings-bot-dangerzone--cancelled
 settings-bot-dangerzone--confirming

@@ -1,22 +1,61 @@
 import type { ComponentProps, ReactNode } from "react"
 
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface AppHeaderProps extends Omit<ComponentProps<"header">, "children"> {
-	leading?: ReactNode
-	trailing?: ReactNode
-	insetWindowControls?: boolean
-	windowControls?: ReactNode
-}
+type AppHeaderForm =
+	| {
+			isFloating?: false
+			insetWindowControls?: boolean
+			windowControls?: ReactNode
+	  }
+	| {
+			isFloating: true
+			insetWindowControls?: never
+			windowControls?: never
+	  }
+
+type AppHeaderProps = Omit<ComponentProps<"header">, "children"> &
+	AppHeaderForm & {
+		leading?: ReactNode
+		trailing?: ReactNode
+	}
 
 function AppHeader({
 	leading,
 	trailing,
+	isFloating = false,
 	insetWindowControls = false,
 	windowControls,
 	className,
 	...props
 }: AppHeaderProps) {
+	if (isFloating)
+		return (
+			<header
+				data-slot="app-header"
+				className={cn(
+					"@container flex w-full min-w-0 items-start gap-2",
+					className,
+				)}
+				{...props}
+			>
+				{leading ? (
+					<HeaderIsland
+						className="min-w-0 shrink font-medium text-sm"
+						data-side="leading"
+					>
+						{leading}
+					</HeaderIsland>
+				) : null}
+				{trailing ? (
+					<HeaderIsland className="ms-auto" data-side="trailing">
+						{trailing}
+					</HeaderIsland>
+				) : null}
+			</header>
+		)
+
 	return (
 		<header
 			data-slot="app-header"

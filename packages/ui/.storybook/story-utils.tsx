@@ -539,9 +539,9 @@ export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 export const expectLaptopWindow = () =>
 	expect([window.innerWidth, window.innerHeight]).toEqual([1280, 800])
 
-const THREAD_HEADER_HEIGHT = 48
+const SETTINGS_TITLE_ISLAND = { inset: 8, height: 40 }
 
-const THREAD_FIRST_ROW = { top: 32, inline: 24 }
+const SETTINGS_FIRST_ROW = { top: 56, inline: 24 }
 
 export const COLUMN_WIDTH_CAP = 800
 
@@ -552,24 +552,36 @@ export const expectSettingsPage = async (
 ) => {
 	const page = slotIn(root, "settings-screen-page")
 	const header = slotIn(page, "app-header")
+	const island = slotIn(header, "header-island")
 	const scroller = slotIn(page, "screen-layout-scroller")
 	const column = slotIn(page, "screen-layout-column")
 	const firstRow = column.firstElementChild
 	if (!firstRow) throw new globalThis.Error("The settings page is empty")
-	const headerBox = header.getBoundingClientRect()
+	const pageBox = page.getBoundingClientRect()
+	const islandBox = island.getBoundingClientRect()
 	const columnBox = column.getBoundingClientRect()
 	const firstRowBox = firstRow.getBoundingClientRect()
 
-	await expect(headerBox.height).toBe(THREAD_HEADER_HEIGHT)
+	await expect(getComputedStyle(header).borderBottomWidth).toBe("0px")
+	await expect(slotsIn(header, "header-island")).toHaveLength(1)
+	await expect([
+		islandBox.left - pageBox.left,
+		islandBox.top - pageBox.top,
+		islandBox.height,
+	]).toEqual([
+		SETTINGS_TITLE_ISLAND.inset,
+		SETTINGS_TITLE_ISLAND.inset,
+		SETTINGS_TITLE_ISLAND.height,
+	])
 	await expect(
-		within(header).getByRole("heading", { level: 2, name: label }),
+		within(island).getByRole("heading", { level: 2, name: label }),
 	).toBeVisible()
 	await expect(hasOverlayScrollbars(scroller)).toBe(true)
-	await expect(Math.round(firstRowBox.top - headerBox.bottom)).toBe(
-		THREAD_FIRST_ROW.top,
-	)
+	await expect(
+		Math.round(firstRowBox.top - pageBox.top + scroller.scrollTop),
+	).toBe(SETTINGS_FIRST_ROW.top)
 	await expect(Math.round(firstRowBox.left - columnBox.left)).toBe(
-		THREAD_FIRST_ROW.inline,
+		SETTINGS_FIRST_ROW.inline,
 	)
 	await expect(Math.round(columnBox.width)).toBe(
 		width === "column"

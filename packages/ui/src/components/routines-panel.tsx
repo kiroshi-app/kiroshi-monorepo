@@ -22,6 +22,10 @@ import {
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
+import {
+	HeaderIslandButton,
+	useIsInHeaderIsland,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ListSkeleton,
@@ -692,8 +696,22 @@ type RoutinesPanelTriggerProps = ButtonHTMLAttributes<HTMLButtonElement>
 const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 	const { t } = useTranslation("chat")
 	const { isOpen, onOpenChange, triggerRef } = useRoutinesPanel()
+	const isInIsland = useIsInHeaderIsland()
 
 	if (isOpen) return null
+
+	if (isInIsland)
+		return (
+			<HeaderIslandButton
+				{...props}
+				aria-expanded={isOpen}
+				aria-label={t("activity.panel.toggle")}
+				onClick={() => onOpenChange(true)}
+				ref={triggerRef}
+			>
+				<Icons.SidePanel aria-hidden="true" />
+			</HeaderIslandButton>
+		)
 
 	return (
 		<Button

@@ -15,10 +15,12 @@ import {
 	A11Y_SUBMENU_PORTAL_GUARD,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
+	LAPTOP_WINDOW,
 	mergeA11y,
 	shown,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { MissionMenu } from "@workspace/ui/components/mission-menu"
@@ -480,7 +482,7 @@ export const InMainCard = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `Default inside the main card of the shell, artboard 2 Expanded, Missions. Check that the card draws the only border and the only radius around the page, that the page paints no background of its own, and that the line under the page header is the only line inside the card. ${WIRED_BY_NOBODY_YET}`,
+				story: `Default inside the main card of the shell, artboard 2 Expanded, Missions. Check that the card draws the only border and the only radius around the page, that the page paints no background of its own, and that the floating header draws no line across the card. ${WIRED_BY_NOBODY_YET}`,
 			},
 		},
 	},
@@ -505,10 +507,7 @@ export const InMainCard = meta.story({
 
 		const header = page.querySelector("header")
 		if (!header) throw new Error("The page draws no header")
-		await expect(
-			Number.parseFloat(getComputedStyle(header).borderBottomWidth),
-		).toBeGreaterThan(0)
-		await expect(getComputedStyle(header).borderTopWidth).toBe("0px")
+		await expect(drawsABorder(header)).toBe(false)
 	},
 })
 
@@ -631,5 +630,111 @@ export const MenuOnARow = meta.story({
 		await expect(args.onOpen).toHaveBeenLastCalledWith("mission-ope-2118")
 		rightClick(workingRow)
 		await expect(await openedMenuEntries()).toEqual(WORKING_ROW_ENTRIES)
+	},
+})
+
+const MISSIONS_CONTENT_TOP = 56
+
+const expectMissionsIsland = async (
+	canvasElement: HTMLElement,
+	surface: "bg-card" | "bg-card-raised",
+) => {
+	const page = slotIn(canvasElement, "missions-page")
+	const frame = page.getBoundingClientRect()
+	const bar = slotIn(page, "app-header")
+	const islands = slotsIn(bar, "header-island")
+	const [island] = islands
+	const box = island.getBoundingClientRect()
+	const title = within(island).getByRole("heading", {
+		level: 1,
+		name: "Missions",
+	})
+	const style = getComputedStyle(title)
+	const groups = slotIn(page, "missions-page-groups")
+
+	await expect(islands).toHaveLength(1)
+	await expect(drawsABorder(bar)).toBe(false)
+	await expect([
+		box.left - frame.left,
+		box.top - frame.top,
+		box.height,
+	]).toEqual([8, 8, 40])
+	await expect(page).toHaveAttribute("aria-labelledby", title.id)
+	await expect(within(island).queryAllByRole("button")).toHaveLength(0)
+	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+		"14px",
+		"16px",
+		"500",
+	])
+	await expect(title.getBoundingClientRect().left - box.left).toBe(12)
+	await expect(getComputedStyle(island).backgroundColor).toBe(
+		tokenStyleIn(island, surface, "backgroundColor"),
+	)
+	await expect(
+		slotsIn(groups, "missions-page-group-header")[0].getBoundingClientRect()
+			.top -
+			frame.top +
+			groups.scrollTop,
+	).toBe(MISSIONS_CONTENT_TOP)
+
+	return { page, groups }
+}
+
+export const Missions4a = meta.story({
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard 4a, Missions with no mission selected. Check that no bar and no rule cross the top of the page: one island sits 8px from the top and the side and holds Missions alone, the level 1 heading that names the page, in 14px medium on a 16px line, with no control beside it and no trailing island. Check the first group starts 56px from the top. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { page } = await expectMissionsIsland(canvasElement, "bg-card")
+		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
+	},
+})
+
+export const MissionsDark4b = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard 4b, Missions with no mission selected in the dark theme. Check that the title island wears the raised card surface and keeps the geometry of \`Missions4a\`. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectMissionsIsland(canvasElement, "bg-card-raised")
+	},
+})
+
+export const MissionsScrolled4c = meta.story({
+	args: { defaultFoldedGroups: [] },
+	globals: LAPTOP_WINDOW,
+	decorators: [
+		(Story) => (
+			<div className="h-100">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard 4c, Missions scrolled away from its start, every group open in a page 400px high. Check that the groups pass under the title island and that the top fade of the layout covers them as they leave. Pick \`Missions4a\` for the page at rest. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { page, groups } = await expectMissionsIsland(
+			canvasElement,
+			"bg-card",
+		)
+
+		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
+		groups.scrollTo({ top: groups.scrollHeight })
+		await waitFor(() => slotIn(page, "screen-layout-fade"))
+		await expect(slotIn(page, "header-island")).toBeVisible()
 	},
 })

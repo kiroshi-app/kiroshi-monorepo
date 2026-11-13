@@ -113,10 +113,10 @@ const MISSION_TICKET_LINE_STYLE: Record<
 		title: "wrap-break-word",
 	},
 	line: {
-		root: "flex min-w-0 items-center gap-1.5 text-xs leading-4",
+		root: "flex min-w-0 items-center gap-2 text-xs leading-4",
 		mark: "size-[11px] text-muted-foreground",
 		identifier: "text-foreground",
-		title: "truncate text-muted-foreground",
+		title: "truncate text-soft-foreground",
 	},
 }
 
