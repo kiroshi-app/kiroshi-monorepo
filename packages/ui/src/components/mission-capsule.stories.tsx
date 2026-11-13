@@ -72,27 +72,48 @@ const WORKING_MISSION: AppSidebarRowMission = {
 	},
 }
 
+const WORKING_ANNOUNCEMENT = /working/g
+
 export const LiveMission = meta.story({
-	args: { missions: [{ ...WORKING_MISSION, isLive: true }] },
+	args: {
+		missions: [
+			{ ...WORKING_MISSION, isLive: true },
+			{
+				...WORKING_MISSION,
+				id: "mission-waiting",
+				state: "waiting",
+				isLive: true,
+			},
+		],
+	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this when the mission's agent is speaking in its thread or its coding session was active moments ago. Check that the title plays the working shimmer of a conversation row, that the mark, the identifier and the spacing match `SilentMission`, and that a screen reader hears the mission is working. Pick `SilentMission` for a mission in the same state that has gone quiet.",
+					"Reach for this when the mission's agent is speaking in its thread or its coding session was active moments ago. Check that the title plays the working shimmer of a conversation row, that the mark, the identifier and the spacing match `SilentMission`, and that a screen reader hears working once on each row, whatever the state its mark shows. Pick `SilentMission` for a mission in the same state that has gone quiet.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const title = slotIn(canvasElement, "mission-capsule-title")
-		const shimmer = slotIn(title, "text-shimmer")
-		await expect(shimmer).toHaveTextContent(WORKING_MISSION.ticket.title)
-		await expect(
-			shimmer.style.getPropertyValue("--text-shimmer-duration"),
-		).toBe(`${WORKING_SHIMMER_DURATION}s`)
-		await expect(shimmer.dataset.held).toBe("true")
-		await expect(title.textContent).toBe(
-			`${WORKING_MISSION.ticket.title} working`,
-		)
+		const capsules = slotsIn(canvasElement, "mission-capsule")
+		await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
+			"working",
+			"waiting",
+		])
+		for (const capsule of capsules) {
+			const shimmer = slotIn(
+				slotIn(capsule, "mission-capsule-title"),
+				"text-shimmer",
+			)
+			await expect(shimmer.textContent).toBe(WORKING_MISSION.ticket.title)
+			await expect(
+				shimmer.style.getPropertyValue("--text-shimmer-duration"),
+			).toBe(`${WORKING_SHIMMER_DURATION}s`)
+			await expect(shimmer.dataset.held).toBe("true")
+			await expect(
+				capsule.textContent?.match(WORKING_ANNOUNCEMENT),
+			).toHaveLength(1)
+		}
 	},
 })
 
@@ -107,8 +128,9 @@ export const SilentMission = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const title = slotIn(canvasElement, "mission-capsule-title")
 		await expect(slotsIn(canvasElement, "text-shimmer")).toEqual([])
-		await expect(title.textContent).toBe(WORKING_MISSION.ticket.title)
+		await expect(
+			slotIn(canvasElement, "mission-capsule-title").textContent,
+		).toBe(WORKING_MISSION.ticket.title)
 	},
 })

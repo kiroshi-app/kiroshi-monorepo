@@ -84,19 +84,22 @@ const MissionTreeRow = ({
 			) : null}
 			<span className={drawn.title} data-slot="mission-capsule-title">
 				{isLive ? (
-					<>
-						<TextShimmer
-							className="inline"
-							duration={WORKING_SHIMMER_DURATION}
-							isHeldUnderReducedMotion
-						>
-							{title}
-						</TextShimmer>{" "}
-						<span className="sr-only">{t("roster.pose.working")}</span>
-					</>
+					<TextShimmer
+						className="inline"
+						duration={WORKING_SHIMMER_DURATION}
+						isHeldUnderReducedMotion
+					>
+						{title}
+					</TextShimmer>
 				) : (
 					title
 				)}
+				{isLive && state !== "working" ? (
+					<>
+						{" "}
+						<span className="sr-only">{t("roster.pose.working")}</span>
+					</>
+				) : null}
 			</span>
 		</>
 	)
