@@ -44,14 +44,9 @@ export type LibraryCommentPeople = {
 
 const NO_MEMBERS: Member[] = []
 
-const NO_SPACE: string[] = []
-
 const useHostedMembers = (spaceId: string, isHostedHere: boolean) => {
-	const watchedIds = useMemo(
-		() => (isHostedHere ? [spaceId] : NO_SPACE),
-		[isHostedHere, spaceId],
-	)
-	const isShared = useHostingStates(watchedIds)[spaceId]?.kind === "online"
+	const hosting = useHostingStates(isHostedHere ? [spaceId] : [])
+	const isShared = hosting[spaceId]?.kind === "online"
 	const { data: members = NO_MEMBERS } = useQuery({
 		queryKey: hostQueryKeys.membersOf(spaceId),
 		queryFn: isShared

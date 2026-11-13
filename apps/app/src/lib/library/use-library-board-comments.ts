@@ -51,10 +51,10 @@ const pinnedThreadOf = (
 	view: BoardView | null,
 ): PinnedThread[] => {
 	const anchor = boardAnchorOf(thread.anchor)
-	const pinned = { id: thread.id, author: comments[0].author }
 	if (anchor === null) {
 		return []
 	}
+	const pinned = { id: thread.id, author: comments[0].author }
 	if (typeof anchor !== "string") {
 		return [{ ...pinned, anchor }]
 	}
