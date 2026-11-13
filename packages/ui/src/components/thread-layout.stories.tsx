@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -958,4 +958,67 @@ export const At1728 = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => expectReferenceWidths(canvasElement),
+})
+
+const expectThreadWithComposer = async (canvasElement: HTMLElement) => {
+	const frame = slotIn(canvasElement, "window-frame")
+	const thread = slotIn(frame, "message-scroller-content")
+	const prompt = slotIn(frame, "prompt-input")
+	const lane = prompt.closest<HTMLElement>("[data-slot='chat-layout'] > div")
+	const turns = slotsIn(thread, "message-scroller-item")
+	const { paddingTop, paddingBottom } = getComputedStyle(thread)
+	await expectReferenceWidths(canvasElement)
+	await expect([paddingTop, paddingBottom]).toEqual(["32px", "24px"])
+	await expect(
+		turns[1].getBoundingClientRect().top -
+			turns[0].getBoundingClientRect().bottom,
+	).toBe(32)
+	await expect(lane).not.toBeNull()
+	const { paddingInlineStart, paddingInlineEnd } = getComputedStyle(
+		lane as HTMLElement,
+	)
+	await expect([paddingInlineStart, paddingInlineEnd]).toEqual(["8px", "8px"])
+
+	const field = within(prompt).getByRole("textbox")
+	const { fontSize, lineHeight } = getComputedStyle(field)
+	await expect([fontSize, lineHeight]).toEqual(["14px", "24px"])
+}
+
+const COMPOSER_KEPT_AS_IT_IS =
+	"The composer is shared with other surfaces and stays as it is: the artboards draw it with radius 16, padding 12, a gap of 12, a 28 round send button and 16 under it, where it renders radius 25, padding 8, a gap of 4, a 32 round send button and 8 under it."
+
+export const WithComposer = meta.story({
+	globals: { theme: "light" },
+	render: (args) => (
+		<div data-slot="window-frame" className="h-svh w-[1280px]">
+			<ThreadLayout {...args} label="Thread with its composer" />
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	parameters: {
+		docs: {
+			description: {
+				story: `Conversation feed, artboards 3, 4 and 7, light: the thread over its composer. Check that the thread starts 32 under the header and ends 24 above the composer, that its column is 680 wide with turns 32 apart, that the composer is 736 wide in a lane padded 8 on each side, and that its placeholder reads 14 on 24. ${COMPOSER_KEPT_AS_IT_IS} Pick \`WithComposerDark\` for the dark theme.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectThreadWithComposer(canvasElement),
+})
+
+export const WithComposerDark = meta.story({
+	globals: { theme: "dark" },
+	render: (args) => (
+		<div data-slot="window-frame" className="h-svh w-[1280px]">
+			<ThreadLayout {...args} label="Thread with its composer" />
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	parameters: {
+		docs: {
+			description: {
+				story: `Conversation feed, artboards 3, 4 and 7, dark. The same thread as \`WithComposer\` on the dark shell. Check that the thread and the composer keep the same places. ${COMPOSER_KEPT_AS_IT_IS}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectThreadWithComposer(canvasElement),
 })
