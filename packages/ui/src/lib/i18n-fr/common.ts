@@ -795,6 +795,12 @@ const common = {
 			loading: "Chargement du tableau…",
 			objects: "Éléments du tableau",
 		},
+		comments: {
+			anchor: {
+				node: "Sur « {{title}} »",
+				board: "Sur le tableau",
+			},
+		},
 		object: {
 			named: "{{kind}} : {{text}}",
 			editText: "Modifier le texte",
