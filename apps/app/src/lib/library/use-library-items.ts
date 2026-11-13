@@ -102,7 +102,7 @@ const useBoardSummaries = (spaceId: string, items: LibraryItem[]) => {
 		summaryOf: (item: LibraryItem) => summaryByName.get(item.name)?.data,
 		hasSummaryFailed: (item: LibraryItem) => {
 			const summary = summaryByName.get(item.name)
-			return Boolean(summary?.isError) && isReadErrorShown(summary?.error)
+			return summary?.isError === true && isReadErrorShown(summary.error)
 		},
 	}
 }
