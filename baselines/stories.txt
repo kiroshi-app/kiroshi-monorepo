@@ -1853,6 +1853,8 @@ navigation-conversationsubjecticon--red-shield-key
 navigation-conversationsubjecticon--red-shield-key-dark
 navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
+navigation-conversationtabicon--coloured
+navigation-conversationtabicon--monochrome
 navigation-documentpanel--after-a-drag
 navigation-documentpanel--asked-under-the-room-left
 navigation-documentpanel--board-and-document-share-one-header
