@@ -17,6 +17,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const PEEK_CLOSE_DELAY_MS = 150
 
+const OPEN_POPUP_MARK = "data-popup-open"
+
 const EDGE = "w-(--shell-inset) shrink-0 self-stretch"
 
 const FLOATS_OVER_THE_CARD =
@@ -47,6 +49,7 @@ type SidebarPeekState = {
 	isCollapsed: boolean
 	isOpen: boolean
 	hover: SidebarPeekHover
+	holdFor: (isHolding: boolean) => void
 	close: () => void
 }
 
@@ -60,6 +63,8 @@ const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
 	const { open: isDocked } = useSidebar()
 	const [isOpen, setIsOpen] = useState(false)
 	const pending = useRef<number | undefined>(undefined)
+	const isHovered = useRef(false)
+	const isHeld = useRef(false)
 
 	if (isDocked && isOpen) setIsOpen(false)
 
@@ -74,10 +79,23 @@ const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
 			isCollapsed: !isDocked,
 			isOpen,
 			hover: {
-				onPointerEnter: () => settleAfter(true, HOVER_INTENT_DELAY_MS),
-				onPointerLeave: () => settleAfter(false, PEEK_CLOSE_DELAY_MS),
+				onPointerEnter: () => {
+					isHovered.current = true
+					settleAfter(true, HOVER_INTENT_DELAY_MS)
+				},
+				onPointerLeave: () => {
+					isHovered.current = false
+					if (!isHeld.current) settleAfter(false, PEEK_CLOSE_DELAY_MS)
+				},
+			},
+			holdFor: (isHolding) => {
+				if (isHeld.current === isHolding) return
+				isHeld.current = isHolding
+				if (isHolding) window.clearTimeout(pending.current)
+				else if (!isHovered.current) settleAfter(false, PEEK_CLOSE_DELAY_MS)
 			},
 			close: () => {
+				if (isHeld.current) return
 				window.clearTimeout(pending.current)
 				setIsOpen(false)
 			},
@@ -105,6 +123,8 @@ const SidebarPeek = ({ children }: SidebarPeekProps) => {
 	const peek = useContext(SidebarPeekContext)
 	const isOpen = peek?.isOpen ?? false
 	const close = peek?.close
+	const holdFor = peek?.holdFor
+	const panelRef = useRef<HTMLDivElement>(null)
 	const [isMounted, setIsMounted] = useState(false)
 
 	if (isOpen && !isMounted) setIsMounted(true)
@@ -114,9 +134,26 @@ const SidebarPeek = ({ children }: SidebarPeekProps) => {
 		const closeOnEscape = (event: KeyboardEvent) => {
 			if (event.key === "Escape") close()
 		}
-		document.addEventListener("keydown", closeOnEscape)
-		return () => document.removeEventListener("keydown", closeOnEscape)
+		document.addEventListener("keydown", closeOnEscape, true)
+		return () => document.removeEventListener("keydown", closeOnEscape, true)
 	}, [isOpen, close])
+
+	useEffect(() => {
+		const panel = panelRef.current
+		if (!isOpen || !panel || !holdFor) return
+		const ownedPopups = new MutationObserver(() =>
+			holdFor(panel.querySelector(`[${OPEN_POPUP_MARK}]`) !== null),
+		)
+		ownedPopups.observe(panel, {
+			attributeFilter: [OPEN_POPUP_MARK],
+			childList: true,
+			subtree: true,
+		})
+		return () => {
+			ownedPopups.disconnect()
+			holdFor(false)
+		}
+	}, [isOpen, holdFor])
 
 	const unmountOnceGone = (event: TransitionEvent<HTMLDivElement>) => {
 		if (event.target === event.currentTarget && !isOpen) setIsMounted(false)
@@ -137,6 +174,7 @@ const SidebarPeek = ({ children }: SidebarPeekProps) => {
 					data-slot="sidebar-peek"
 					inert={!isOpen}
 					onTransitionEnd={unmountOnceGone}
+					ref={panelRef}
 					{...peek?.hover}
 				>
 					{children}

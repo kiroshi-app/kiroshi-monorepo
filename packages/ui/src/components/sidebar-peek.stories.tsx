@@ -418,6 +418,43 @@ export const EscapeCloses = meta.story({
 	},
 })
 
+const openSpacesMenu = () =>
+	within(document.body).queryByRole("menu", { name: "Spaces" })
+
+export const PopupOpenedFromThePeekKeepsItOpen = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Check the Space switcher menu opened from inside the panel keeps the panel open with the pointer over the menu, then outside the panel past the grace delay, that a first Escape closes the menu and leaves the panel open, and that a second Escape closes the panel.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		await userEvent.hover(edgeIn(canvasElement))
+		const panel = await openedPeekIn(canvasElement)
+		await userEvent.click(slotIn(panel, "space-switcher"))
+		const menu = await waitFor(() => {
+			const opened = openSpacesMenu()
+			if (!opened) throw new Error("The Spaces menu is not open")
+			return opened
+		}, FRAME_POLL)
+
+		await userEvent.hover(menu)
+		await userEvent.hover(slotIn(canvasElement, "sidebar-inset"))
+		await expectPeekKeptWhileInside(panel)
+		await expect(openSpacesMenu()).toBe(menu)
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(openSpacesMenu()).toBeNull(), FRAME_POLL)
+		await expect(panel).toHaveAttribute("data-open", "true")
+
+		await userEvent.keyboard("{Escape}")
+		await expectNoPeekIn(canvasElement)
+	},
+})
+
 export const ClickOnTheCollapseIconDocks = meta.story({
 	parameters: {
 		docs: {

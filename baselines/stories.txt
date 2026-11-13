@@ -2202,6 +2202,7 @@ navigation-sidebarpeek--leaving-before-the-hover-intent-opens-nothing
 navigation-sidebarpeek--peek-from-the-collapse-icon
 navigation-sidebarpeek--peek-from-the-left-edge
 navigation-sidebarpeek--peek-from-the-left-edge-light
+navigation-sidebarpeek--popup-opened-from-the-peek-keeps-it-open
 navigation-sidebarpeek--slides-and-fades
 navigation-sidebarresize--clamped
 navigation-sidebarresize--restored-below-the-minimum
