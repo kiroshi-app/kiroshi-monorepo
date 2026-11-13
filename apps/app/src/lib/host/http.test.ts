@@ -8,8 +8,10 @@ import {
 	type HostRefusal,
 	type HostSocket,
 	raiseRefusalNotice,
+	refusalKindOf,
 } from "./http"
 
+import bridgeSource from "../../../src-tauri/src/hosting/bridge.rs?raw"
 import { toTransportError } from "../chat/chat-state"
 
 vi.mock("@workspace/ui/components/notice-surface", () => ({
@@ -494,6 +496,20 @@ describe("a call the host refuses", () => {
 			expect(isHostRefused(reason) && reason.refusalKind).toBe(kind)
 		},
 	)
+})
+
+describe("the sentence of a host that knows no such command", () => {
+	const SENTENCE_THE_BRIDGE_ANSWERS =
+		/const UNKNOWN_COMMAND_REFUSAL: &str = "([^"]+)";/
+
+	it("is matched as the bridge answers it", () => {
+		const [, sentence] = bridgeSource.match(SENTENCE_THE_BRIDGE_ANSWERS) ?? []
+
+		expect(sentence).toBeDefined()
+		expect(
+			refusalKindOf({ message: `${sentence} agent_models`, status: 404 }),
+		).toBe("unknownCommand")
+	})
 })
 
 describe("listen over the event socket", () => {
