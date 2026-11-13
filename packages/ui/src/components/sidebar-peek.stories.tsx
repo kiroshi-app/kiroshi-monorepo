@@ -435,11 +435,9 @@ export const PopupOpenedFromThePeekKeepsItOpen = meta.story({
 		await userEvent.hover(edgeIn(canvasElement))
 		const panel = await openedPeekIn(canvasElement)
 		await userEvent.click(slotIn(panel, "space-switcher"))
-		const menu = await waitFor(() => {
-			const opened = openSpacesMenu()
-			if (!opened) throw new Error("The Spaces menu is not open")
-			return opened
-		}, FRAME_POLL)
+		const menu = await within(document.body).findByRole("menu", {
+			name: "Spaces",
+		})
 
 		await userEvent.hover(menu)
 		await userEvent.hover(slotIn(canvasElement, "sidebar-inset"))
