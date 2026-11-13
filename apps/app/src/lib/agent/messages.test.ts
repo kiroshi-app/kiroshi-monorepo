@@ -88,4 +88,13 @@ describe("describeTransportError", () => {
 			"Ada waited 10 minutes on its background work, so its reply ended. Send your message again.",
 		)
 	})
+
+	it("asks to update the host when it runs an older Kiroshi, named agent or not", () => {
+		const outdated: TransportError = { kind: "hostOutdated" }
+		const copy =
+			"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again."
+
+		expect(describeTransportError(t, outdated)).toBe(copy)
+		expect(describeTransportError(t, outdated, "Ada")).toBe(copy)
+	})
 })

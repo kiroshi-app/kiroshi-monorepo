@@ -24,6 +24,7 @@ import {
 	named,
 } from "../conversations/transcript-fixtures"
 import { hostOfflineOf } from "../host/host-offline"
+import { HostRefused } from "../host/host-refused"
 
 const AT = 1_000
 
@@ -778,6 +779,32 @@ describe("a request refused because the host of the space is offline", () => {
 		["toAnswerError", toAnswerError],
 	])("keeps the host-offline cause through %s", (_name, toError) => {
 		expect(toError(offline)).toBe(offline)
+	})
+})
+
+describe("a request refused because the host knows no such command", () => {
+	const refusal = new HostRefused(
+		"this host knows no command named conversation_append_text",
+		"404",
+		"unknownCommand",
+	)
+
+	it.each([
+		["toTransportError", toTransportError],
+		["toReadError", toReadError],
+		["toStoreError", toStoreError],
+		["toAnswerError", toAnswerError],
+	])(
+		"names the older host through %s, without the host sentence",
+		(_name, toError) => {
+			expect(toError(refusal)).toEqual({ kind: "hostOutdated" })
+		},
+	)
+
+	it("keeps the text of a refusal of another kind", () => {
+		expect(
+			toTransportError(new HostRefused("the host broke", "500", "other")),
+		).toEqual({ kind: "unknownFailure", detail: "the host broke" })
 	})
 })
 

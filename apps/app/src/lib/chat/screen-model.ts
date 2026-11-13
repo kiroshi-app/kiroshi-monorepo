@@ -67,6 +67,7 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	readFailed: false,
 	unknownFailure: false,
 	hostOffline: false,
+	hostOutdated: false,
 }
 
 const RUN_GAP_MS = 5 * 60_000

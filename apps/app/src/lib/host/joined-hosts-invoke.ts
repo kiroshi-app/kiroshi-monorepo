@@ -255,7 +255,7 @@ export const createJoinedHostsInvoke = ({
 	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
 		const refusal = hostOnlyRefusalOf(command)
 		reportFailure(refusal)
-		return Promise.reject(new HostRefused(refusal.message, refusal))
+		return Promise.reject(new HostRefused(refusal.message, refusal, "hostOnly"))
 	}
 
 	const invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {

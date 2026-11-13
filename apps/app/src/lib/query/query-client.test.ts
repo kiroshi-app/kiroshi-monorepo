@@ -31,9 +31,12 @@ const fetchFailing = (reason: unknown, meta: FailureMeta = reportedMeta) => {
 	return { queryFn, fetched }
 }
 
-const executeFailingMutation = (meta: FailureMeta = reportedMeta) => {
+const executeFailingMutation = (
+	meta: FailureMeta = reportedMeta,
+	reason: unknown = hostOfflineOf("gone"),
+) => {
 	const queryClient = createQueryClient()
-	const mutationFn = vi.fn().mockRejectedValue(hostOfflineOf("gone"))
+	const mutationFn = vi.fn().mockRejectedValue(reason)
 	const mutation = queryClient
 		.getMutationCache()
 		.build(queryClient, { mutationFn, meta, retryDelay: 0 })
@@ -193,3 +196,49 @@ it("builds the failure notice from the failure the read met", async () => {
 		),
 	)
 })
+
+const LATER_TITLE = "Couldn’t read the next one."
+
+const laterMeta: FailureMeta = {
+	failureNotice: () => ({ title: LATER_TITLE }),
+	raisedIn: "query-client-test",
+}
+
+const raisedTitles = () =>
+	vi.mocked(raiseFailureNotice).mock.calls.map(([notice]) => notice.title)
+
+const untilTheNextFailureIsRaised = async () => {
+	await fetchFailing(new Error("later"), laterMeta).fetched
+	await vi.waitFor(() => expect(raisedTitles()).toContain(LATER_TITLE))
+}
+
+const unknownCommandRefusal = () =>
+	new HostRefused(
+		"this host knows no command named bot_list",
+		"404",
+		"unknownCommand",
+	)
+
+it("raises nothing from the query cache for a command the host knows no more", async () => {
+	await fetchFailing(unknownCommandRefusal()).fetched
+	await untilTheNextFailureIsRaised()
+
+	expect(raisedTitles()).toEqual([LATER_TITLE])
+})
+
+it("raises nothing from the mutation cache for a command the host knows no more", async () => {
+	await executeFailingMutation(reportedMeta, unknownCommandRefusal()).executed
+	await untilTheNextFailureIsRaised()
+
+	expect(raisedTitles()).toEqual([LATER_TITLE])
+})
+
+it.each(["hostOnly", "other"] as const)(
+	"keeps raising the declared notice of a read the host refused as %s",
+	async (refusalKind) => {
+		await fetchFailing(new HostRefused("refused", "403", refusalKind)).fetched
+		await untilTheNextFailureIsRaised()
+
+		expect(raisedTitles()).toEqual(["Couldn’t read it.", LATER_TITLE])
+	},
+)

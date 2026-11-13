@@ -149,6 +149,8 @@ const describeUnnamedTransportError = (
 			return t("screen.transport.unknownFailure", { detail: error.detail })
 		case "hostOffline":
 			return t("screen.notice.hostOffline.description")
+		case "hostOutdated":
+			return t("screen.notice.hostOutdated")
 	}
 }
 

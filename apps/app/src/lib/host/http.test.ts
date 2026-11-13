@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
+import { isHostRefused, isUnknownCommandRefusal } from "./host-refused"
 import {
 	createHttpHost,
 	type HostRefusal,
@@ -426,6 +427,56 @@ describe("the refusal notice", () => {
 			report: refusalReport(undefined),
 		})
 	})
+})
+
+describe("a call the host refuses", () => {
+	const UNKNOWN_COMMAND = "this host knows no command named agent_models"
+
+	const refusedWith = (answer: Answer) => {
+		const { host, onRefused } = hostOf({ answer })
+		onRefused.mockImplementation(raiseRefusalNotice)
+		return host.invoke("agent_models").catch((reason: unknown) => reason)
+	}
+
+	beforeEach(() => failureNotice.mockClear())
+
+	it("raises the older-host notice alone, without the host sentence, when the host knows no such command", async () => {
+		const reason = await refusedWith({ status: 404, body: UNKNOWN_COMMAND })
+
+		await vi.waitFor(() => expect(failureNotice).toHaveBeenCalled())
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t send that request",
+			description:
+				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
+			report: expect.objectContaining({
+				context: expect.objectContaining({
+					raisedIn: "host-refusal",
+					command: "agent_models",
+					httpStatus: 404,
+				}),
+			}),
+		})
+		expect(isUnknownCommandRefusal(reason)).toBe(true)
+	})
+
+	it.each([
+		["a command it keeps", 403, "this command belongs to the host", "hostOnly"],
+		["a command it knows no more", 404, UNKNOWN_COMMAND, "unknownCommand"],
+		["a route it does not serve", 404, "Not Found", "other"],
+		[
+			"a command it knows no more, on another status",
+			403,
+			UNKNOWN_COMMAND,
+			"other",
+		],
+	])(
+		"names the refusal of %s by its kind",
+		async (_case, status, body, kind) => {
+			const reason = await refusedWith({ status, body })
+
+			expect(isHostRefused(reason) && reason.refusalKind).toBe(kind)
+		},
+	)
 })
 
 describe("listen over the event socket", () => {

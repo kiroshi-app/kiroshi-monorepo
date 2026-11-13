@@ -8,7 +8,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { hostOfflineOf } from "./host-offline"
-import { HostRefused } from "./host-refused"
+import { type HostRefusalKind, HostRefused } from "./host-refused"
 
 import { describeFailure, raiseReportedFailure } from "../failure-report"
 import { countInvoke } from "../perf/invoke-tally-devtools"
@@ -130,10 +130,40 @@ const hostOnlyNotice = (): NoticeMessage => ({
 	description: i18n.t("chat:screen.notice.hostOnly"),
 })
 
-const refusalNoticeOf = ({ message, status }: HostRefusal): NoticeMessage => {
+const UNKNOWN_COMMAND_STATUS = 404
+
+const UNKNOWN_COMMAND_REFUSAL = "this host knows no command named"
+
+const isHostOutdatedRefusal = (message: string, status?: number) =>
+	status === UNKNOWN_COMMAND_STATUS && message.includes(UNKNOWN_COMMAND_REFUSAL)
+
+const hostOutdatedNotice = (): NoticeMessage => ({
+	title: i18n.t("chat:screen.notice.failed"),
+	description: i18n.t("chat:screen.notice.hostOutdated"),
+})
+
+export const refusalKindOf = ({
+	message,
+	status,
+}: HostRefusal): HostRefusalKind => {
 	if (isHostOnlyRefusal(message, status)) {
+		return "hostOnly"
+	}
+	if (isHostOutdatedRefusal(message, status)) {
+		return "unknownCommand"
+	}
+	return "other"
+}
+
+const refusalNoticeOf = (refusal: HostRefusal): NoticeMessage => {
+	const kind = refusalKindOf(refusal)
+	if (kind === "hostOnly") {
 		return hostOnlyNotice()
 	}
+	if (kind === "unknownCommand") {
+		return hostOutdatedNotice()
+	}
+	const { message, status } = refusal
 	const dedicatedNotice = status ? DEDICATED_REFUSAL_NOTICES[status] : undefined
 	return (
 		dedicatedNotice?.() ?? {
@@ -217,9 +247,14 @@ export const createHttpHost = ({
 	let hasDropped = false
 
 	const refuse = (command: string, reason: unknown, status?: number): never => {
-		const message = describeFailure(reason)
-		onRefused({ message, command, status, side: "member" })
-		throw new HostRefused(message, reason)
+		const refusal: HostRefusal = {
+			message: describeFailure(reason),
+			command,
+			status,
+			side: "member",
+		}
+		onRefused(refusal)
+		throw new HostRefused(refusal.message, reason, refusalKindOf(refusal))
 	}
 
 	const rejectFailedPost = (
