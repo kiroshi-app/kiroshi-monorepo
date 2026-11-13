@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -6,6 +6,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	animatedTransitionsOf,
 	boxOf,
+	colourTransitionsOf,
 	expectClickModifiers,
 	expectPictureUnderBorder,
 	glyphIn,
@@ -25,6 +26,7 @@ import {
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
 import { Icons } from "@workspace/ui/components/icons"
+import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
@@ -33,6 +35,7 @@ import {
 	AssistantTurn,
 	PersonTurn,
 	type TurnCause,
+	TurnGroup,
 	UserTurn,
 } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -161,7 +164,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The transcript rows. Every message is one bubble, radius 16 and padding 18 on every side, with its author line at the foot, 6 below the words. An agent sits on the start side up to 580 wide; another person and you sit on the end side up to 480 wide, your bubble in the Space colour. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill from white 5 to 8 percent with no transition and shows Pin, Reply and Copy in the author line; a right click opens the same three in a menu. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws one card per replied message inside the bubble, in order, above the words: a passage inside curly quotes, a whole message bare. `cause` names the routine or mission that opened the answer above its bubble. Neither scrolls nor animates the list: that belongs to the transcript around them.",
+					"The transcript rows. An agent reply has no bubble: it spans the thread column with no fill, padding or radius, its words at 16 on 28, and its author line 8 below them with Pin, Reply and Copy always shown. Another person and you each sit in one bubble on the end side, radius 16 and padding 18 on every side, up to 480 wide, your bubble in the Space colour, the author line at the foot. The author line carries the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. Hovering a bubble or focusing it raises its fill with no transition and shows Pin, Reply and Copy in its author line; a right click on any message opens the same three in a menu. `isWriting` swaps the time and the actions of an agent reply for the word writing…. `state` ends an answer: `cancelled` appends Stopped, `failed` appends This response failed and a Retry when `onRetry` is given. `work` swaps the author line for the work line at the same height while the agent answers. A `UserTurn` that did not send draws a dimmed bubble with the reason and a Retry under it; a `queued` one swaps its author line for the Waiting to be sent chip. `repliedTo` draws one card per replied message inside the bubble, in order, above the words: a passage inside curly quotes, a whole message bare. `cause` names the routine or mission that opened the answer above its bubble. Neither scrolls nor animates the list: that belongs to the transcript around them.",
 			},
 		},
 	},
@@ -183,7 +186,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the nominal exchange: a prompt that landed and an answer that finished. Check that your prompt sits on the end side in the Space colour and the answer on the start side, each with its author line at the foot. " +
+					"Reach for this for the nominal exchange: a prompt that landed and an answer that finished. Check that your prompt sits in its bubble on the end side in the Space colour and the answer spans the column with no bubble, each with its author line at the foot. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -207,7 +210,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to check the two multi-line paths: a pasted prompt keeps its blank lines in one bubble, and an answer handed more than one paragraph still renders them verbatim. Check that the answer stops widening at 580 and the prompt at 480. " +
+					"Reach for this to check the two multi-line paths: a pasted prompt keeps its blank lines in one bubble, and an answer handed more than one paragraph still renders them verbatim. Check that the answer runs the full column and the prompt stops widening at 480. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -768,7 +771,7 @@ export const Speakers = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to check the anatomy every speaker shares. Check that each bubble has radius 16 and padding 18 on every side, its author line 20 high at the foot, the agent on the start side under 580 wide with its role badge, Tom and you on the end side under 480 wide with the author line aligned to the end.",
+					"Reach for this to check the anatomy of every speaker. Check that the agent reply spans the column with no padding and no radius, its words at 16, with its role badge in the author line, that Tom and you sit on the end side in a bubble under 480 wide with the author line aligned to the end, and that every author line is 20 high.",
 			},
 		},
 	},
@@ -788,11 +791,17 @@ export const Speakers = meta.story({
 			style.paddingTop,
 			style.paddingInlineStart,
 			style.paddingBottom,
-		]).toEqual(["18px", "18px", "18px"])
-		await expect(style.borderTopLeftRadius).toBe("16px")
-		await expect(agent.getBoundingClientRect().width).toBeLessThanOrEqual(580)
+		]).toEqual(["0px", "0px", "0px"])
+		await expect(style.borderTopLeftRadius).toBe("0px")
 
 		const own = bubbleOf(canvasElement, QUESTION)
+		const ownStyle = getComputedStyle(own)
+		await expect([
+			ownStyle.paddingTop,
+			ownStyle.paddingInlineStart,
+			ownStyle.paddingBottom,
+		]).toEqual(["18px", "18px", "18px"])
+		await expect(ownStyle.borderTopLeftRadius).toBe("16px")
 		const person = bubbleOf(canvasElement, PERSON_LINE)
 		await expect(own.getBoundingClientRect().right).toBe(
 			person.getBoundingClientRect().right,
@@ -806,7 +815,7 @@ export const Speakers = meta.story({
 				getComputedStyle(slotsIn(canvasElement, "message-bubble-text")[0])
 					.fontSize,
 			),
-		).toBe(14)
+		).toBe(16)
 	},
 })
 
@@ -864,23 +873,22 @@ export const PersonWithCustomImageDark = meta.story({
 export const HoverActions = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-170 flex-col gap-3">
-			<AssistantTurn
-				author={ROLE_BOT}
-				copyText={REPORT}
+			<UserTurn
+				copyText={QUESTION}
 				onPin={pin}
 				onReply={reply}
-				sentAt={sentOn(10, 9, 20)}
+				sentAt={sentOn(10, 9, 25)}
 				now={READ_ON}
 			>
-				{REPORT}
-			</AssistantTurn>
+				{QUESTION}
+			</UserTurn>
 		</div>
 	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this to check what a bubble offers once pointed at or focused. Check that the actions are absent at rest, that keyboard focus on the bubble draws a 2 px ring offset by 2 and shows Pin, Reply and Copy after a divider in the author line, and that the fill steps from white 5 to white 8 percent with no transition.",
+					"Reach for this to check what your bubble offers once pointed at or focused. Check that the actions are absent at rest, that keyboard focus on the bubble draws a 2 px ring offset by 2 and shows Copy, Reply and Pin before a divider in the author line, and that the fill steps up with no transition. An agent reply shows its actions at rest: pick `BubblelessReply` for that.",
 			},
 		},
 	},
@@ -889,7 +897,7 @@ export const HoverActions = meta.story({
 		reply.mockClear()
 		await expect(canvas.queryByRole("button", { name: "Reply" })).toBeNull()
 
-		const bubble = bubbleOf(canvasElement, REPORT)
+		const bubble = bubbleOf(canvasElement, QUESTION)
 		await userEvent.tab()
 		await expect(bubble).toHaveFocus()
 		await expect(getComputedStyle(bubble).outlineWidth).toBe("2px")
@@ -904,6 +912,308 @@ export const HoverActions = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Pin" }))
 		await expect(pin).toHaveBeenCalledTimes(1)
 		await expect(canvas.getByRole("button", { name: "Copy" })).toBeVisible()
+	},
+})
+
+const STRUCTURED_ANSWER = `The workspace has two packages, and nothing crosses the line between them in the other direction.
+
+## Where each thing lives
+
+The design system holds every visual, the Tauri shell only places them.
+
+### What the shell owns
+
+- Commands, drivers and state machines
+- Routing, providers and wiring
+- Mapping domain models to component props`
+
+const ACTION_NAMES = ["Pin", "Reply", "Copy"]
+
+const NO_PADDING = ["0px", "0px", "0px", "0px"]
+
+const typeOf = (element: Element) => {
+	const { fontSize, lineHeight, fontWeight } = getComputedStyle(element)
+	return [fontSize, lineHeight, fontWeight]
+}
+
+const spaceAbove = (element: Element) => getComputedStyle(element).marginTop
+
+const tagIn = (root: HTMLElement, tag: string) => {
+	const node = root.querySelector<HTMLElement>(tag)
+	if (!node) throw new globalThis.Error(`This answer holds no ${tag}`)
+	return node
+}
+
+const agentRepliesIn = (canvasElement: HTMLElement) =>
+	within(canvasElement)
+		.getAllByLabelText("assistant message")
+		.map((message) => slotIn(message, "message-bubble-content"))
+
+const paintedLayersOf = (reply: HTMLElement) =>
+	Array.from(
+		reply.querySelectorAll<HTMLElement>(":scope > span[aria-hidden='true']"),
+	).filter((layer) => layer.getBoundingClientRect().height > 0)
+
+const expectNoBubble = async (reply: HTMLElement, column: HTMLElement) => {
+	const style = getComputedStyle(reply)
+	await expect([
+		style.paddingTop,
+		style.paddingInlineEnd,
+		style.paddingBottom,
+		style.paddingInlineStart,
+	]).toEqual(NO_PADDING)
+	await expect(style.borderTopLeftRadius).toBe("0px")
+	await expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+	await expect(paintedLayersOf(reply)).toEqual([])
+	await expect(reply.getBoundingClientRect().width).toBe(
+		column.getBoundingClientRect().width,
+	)
+}
+
+const expectActionsAtRest = async (reply: HTMLElement) => {
+	const line = slotIn(reply, "author-line")
+	const words = slotIn(reply, "message-bubble-text")
+	await expect(
+		line.getBoundingClientRect().top - words.getBoundingClientRect().bottom,
+	).toBe(8)
+	await expect(line.getBoundingClientRect().height).toBe(20)
+
+	const buttons = within(slotIn(line, "author-line-actions")).getAllByRole(
+		"button",
+	)
+	await expect(
+		buttons.map((button) => button.getAttribute("aria-label")),
+	).toEqual(ACTION_NAMES)
+	for (const button of buttons) {
+		await expect(button).toBeVisible()
+		const { width, height } = boxOf(button)
+		await expect([width, height]).toEqual([24, 24])
+		await expect(getComputedStyle(button).borderTopLeftRadius).toBe("6px")
+		await expect(colourTransitionsOf(button)).toEqual([])
+	}
+}
+
+const expectBubblelessReply = async (canvasElement: HTMLElement) => {
+	const column = slotIn(canvasElement, "thread-column")
+	const [reply] = agentRepliesIn(canvasElement)
+	await expectNoBubble(reply, column)
+
+	const [opening, underHeading] = Array.from(reply.querySelectorAll("p"))
+	const [, secondItem] = Array.from(reply.querySelectorAll("li"))
+	const heading = tagIn(reply, "h2")
+	const subheading = tagIn(reply, "h3")
+	await expect(typeOf(opening)).toEqual(["16px", "28px", "400"])
+	await expect(typeOf(heading)).toEqual(["20px", "28px", "600"])
+	await expect(getComputedStyle(heading).letterSpacing).toBe("-0.2px")
+	await expect(spaceAbove(heading)).toBe("24px")
+	await expect(spaceAbove(underHeading)).toBe("16px")
+	await expect(typeOf(subheading)).toEqual(["17px", "28px", "600"])
+	await expect(spaceAbove(subheading)).toBe("20px")
+	await expect(typeOf(secondItem)).toEqual(["16px", "28px", "400"])
+	await expect(spaceAbove(secondItem)).toBe("8px")
+
+	await expectActionsAtRest(reply)
+}
+
+type ThreadColumnProps = {
+	children: ReactNode
+}
+
+const ThreadColumn = ({ children }: ThreadColumnProps) => (
+	<div
+		data-slot="thread-column"
+		className="mx-auto flex max-w-170 flex-col gap-8"
+	>
+		{children}
+	</div>
+)
+
+const BubblelessReplyTurns = () => (
+	<ThreadColumn>
+		<UserTurn
+			copyText="How is this workspace laid out?"
+			sentAt={sentOn(10, 9, 18)}
+			now={READ_ON}
+		>
+			How is this workspace laid out?
+		</UserTurn>
+		<AssistantTurn
+			author={ROLE_BOT}
+			copyText={STRUCTURED_ANSWER}
+			onPin={pin}
+			onReply={reply}
+			sentAt={sentOn(10, 9, 20)}
+			now={READ_ON}
+		>
+			<Markdown>{STRUCTURED_ANSWER}</Markdown>
+		</AssistantTurn>
+	</ThreadColumn>
+)
+
+export const BubblelessReply = meta.story({
+	globals: { theme: "light" },
+	render: () => <BubblelessReplyTurns />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, light. Reach for this for the agent reply as the thread draws it. Check that it spans the 680 column with no fill, padding or radius, that its words read 16 on 28 with 16 between blocks, the heading 20 on 28 with 24 above and the subheading 17 on 28 with 20 above, and that Pin, Reply and Copy sit in the author line 8 below the words, after the divider, with nothing pointed at or focused. Pick `BubblelessReplyDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectBubblelessReply(canvasElement),
+})
+
+export const BubblelessReplyDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <BubblelessReplyTurns />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, dark. The same reply as `BubblelessReply` on the dark thread. Check that no fill shows behind the answer and that the three actions stay readable in the author line at rest.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectBubblelessReply(canvasElement),
+})
+
+export const BubblelessReplySeveralAgents = meta.story({
+	render: () => (
+		<ThreadColumn>
+			<UserTurn copyText={QUESTION} sentAt={sentOn(10, 9, 18)} now={READ_ON}>
+				{QUESTION}
+			</UserTurn>
+			<AssistantTurn
+				author={ROLE_BOT}
+				copyText={REPORT}
+				onPin={pin}
+				onReply={reply}
+				sentAt={sentOn(10, 9, 20)}
+				now={READ_ON}
+			>
+				{REPORT}
+			</AssistantTurn>
+			<AssistantTurn
+				author={SECOND}
+				copyText={TESTS}
+				onPin={pin}
+				onReply={reply}
+				sentAt={sentOn(10, 9, 22)}
+				now={READ_ON}
+			>
+				{TESTS}
+			</AssistantTurn>
+		</ThreadColumn>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a Conversation several agents answer in. Check that every reply spans the column with no bubble, that each author line names its agent in that agent's colour, and that each carries its own Pin, Reply and Copy at rest.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const column = slotIn(canvasElement, "thread-column")
+		const replies = agentRepliesIn(canvasElement)
+		await expect(
+			replies.map((reply) => slotIn(reply, "author-line-name").textContent),
+		).toEqual([ROLE_BOT.name, SECOND.name])
+		for (const reply of replies) {
+			await expectNoBubble(reply, column)
+			await expectActionsAtRest(reply)
+		}
+	},
+})
+
+const REPLIES_APART = 32
+
+export const BubblelessRepliesInOneGroup = meta.story({
+	render: () => (
+		<ThreadColumn>
+			<TurnGroup>
+				<AssistantTurn
+					author={ROLE_BOT}
+					copyText={REPORT}
+					onPin={pin}
+					onReply={reply}
+					sentAt={sentOn(10, 9, 20)}
+					now={READ_ON}
+				>
+					{REPORT}
+				</AssistantTurn>
+				<AssistantTurn
+					author={ROLE_BOT}
+					copyText={TESTS}
+					onPin={pin}
+					onReply={reply}
+					sentAt={sentOn(10, 9, 21)}
+					now={READ_ON}
+				>
+					{TESTS}
+				</AssistantTurn>
+			</TurnGroup>
+		</ThreadColumn>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two replies of one agent in a row, held in one group the way the thread groups a run. Check that the second reply starts 32 under the author line of the first, the same distance as two replies in separate groups.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const [first, second] = canvas.getAllByLabelText("assistant message")
+		await expect(
+			second.getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+		).toBe(REPLIES_APART)
+	},
+})
+
+export const Writing = meta.story({
+	render: () => (
+		<ThreadColumn>
+			<AssistantTurn
+				author={ROLE_BOT}
+				state="streaming"
+				isWriting
+				copyText={PARTIAL}
+				onPin={pin}
+				onReply={reply}
+				sentAt={sentOn(10, 9, 20)}
+				now={READ_ON}
+			>
+				{PARTIAL}
+			</AssistantTurn>
+		</ThreadColumn>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 9 to 11. Reach for this while the agent writes its reply. Check that the author line keeps the avatar, the name and the role badge, and that the word writing… replaces the time, the divider and the three actions, in the muted 12 of the time. Pick `Working` for the work line that takes the whole foot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [reply] = agentRepliesIn(canvasElement)
+		const line = slotIn(reply, "author-line")
+		await expect(slotIn(line, "author-line-name")).toHaveTextContent(
+			ROLE_BOT.name,
+		)
+		await expect(slotIn(line, "bot-title-badge")).toHaveTextContent("Planner")
+
+		const writing = slotIn(line, "author-line-writing")
+		await expect(writing).toHaveTextContent("writing…")
+		await expect(getComputedStyle(writing).fontSize).toBe("12px")
+		await expect(timesIn(line)).toHaveLength(0)
+		await expect(line.querySelector("[data-slot='author-line-actions']")).toBe(
+			null,
+		)
+		await expect(within(line).queryByRole("button", { name: "Pin" })).toBe(null)
+		await expect(line.getBoundingClientRect().height).toBe(20)
 	},
 })
 

@@ -948,9 +948,13 @@ const expectEachMessageClearsTheNext = async (canvasElement: HTMLElement) => {
 		const bubble = message.querySelector<HTMLElement>(
 			'[data-slot="message-bubble-content"]',
 		)
+		const text = message.querySelector('[data-slot="message-bubble-text"]')
 		const authorLine = message.querySelector('[data-slot="author-line"]')
-		if (!bubble || !authorLine) throw new Error("No bubble drawn")
-		await expect(bubble.scrollHeight).toBe(bubble.clientHeight)
+		if (!bubble || !text || !authorLine) throw new Error("No bubble drawn")
+		await expect(text.scrollHeight).toBe(text.clientHeight)
+		await expect(text.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			bubble.getBoundingClientRect().bottom,
+		)
 		const line = authorLine.getBoundingClientRect()
 		await expect(line.top).toBeGreaterThanOrEqual(box.top)
 		await expect(line.bottom).toBeLessThanOrEqual(box.bottom)
@@ -984,7 +988,7 @@ export const ConsecutiveAnswersAtTheThreadFloor = meta.story({
 		docs: {
 			description: {
 				story:
-					"Eight long answers in a row from one agent, each signed by its author line with a title badge and a time, beside the document panel with the thread held at its 400px floor. Check that every bubble holds its whole text, that each author line stays inside its own message, and that every message ends above the next one.",
+					"Eight long answers in a row from one agent, each signed by its author line with a title badge and a time, beside the document panel with the thread held at its 400px floor. Check that every answer holds its whole text, that each author line stays inside its own message, and that every message ends above the next one.",
 			},
 		},
 	},
@@ -1010,7 +1014,7 @@ export const NarrowedToTheThreadFloorThenScrolled = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same answers in a wide thread, the panel's edge then dragged toward the thread until the thread stops at its 400px floor, then the thread scrolled up three half screens. Check that after every step each message still ends above the next one and every bubble still holds its whole text.",
+					"The same answers in a wide thread, the panel's edge then dragged toward the thread until the thread stops at its 400px floor, then the thread scrolled up three half screens. Check that after every step each message still ends above the next one and every answer still holds its whole text.",
 			},
 		},
 	},

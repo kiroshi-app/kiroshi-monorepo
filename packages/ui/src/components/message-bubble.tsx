@@ -114,7 +114,8 @@ function bubbleContentClass(
 	return cn(
 		"group/bubble-content relative z-0 flex min-w-9 flex-col gap-2 break-words rounded-bubble p-(--bubble-padding) text-bubble-foreground [--bubble-padding:--spacing(4.5)] text-sm leading-6 has-data-[stuck=true]:overflow-clip",
 		BUBBLE_FOCUS_RING,
-		"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-sm [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6",
+		variant !== "ghost" &&
+			"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-sm [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-6",
 		hasSurface(variant) && "max-w-full",
 		MARKDOWN_TYPESET_CLASS,
 		variant === "soft" &&
@@ -123,7 +124,8 @@ function bubbleContentClass(
 			"on-user-bubble text-user-bubble-foreground [--bubble-surface:var(--user-bubble)] hover:[--bubble-surface:var(--user-bubble-hover)] focus-visible:[--bubble-surface:var(--user-bubble-hover)]",
 			OWN_BUBBLE_FOCUS_RING,
 		],
-		variant === "ghost" && "w-full rounded-none px-0 py-0",
+		variant === "ghost" &&
+			"w-full max-w-full rounded-none px-0 py-0 [--bubble-surface:transparent] has-data-[stuck=true]:overflow-visible",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "on-destructive text-destructive",
 		interactive && MESSAGE_BUBBLE_INTERACTIVE,

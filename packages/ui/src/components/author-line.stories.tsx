@@ -132,7 +132,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The foot of every bubble, 20 high: the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. People and you lay it from the end side. `end` closes an answer with Stopped, or with This response failed and a Retry. `actions` appear after a divider while the bubble is hovered or focused. `AuthorLineQueued` takes its place on a message waiting to be sent.",
+					"The foot of every message, 20 high: the avatar, the name (in the agent colour for an agent), the role badge of an agent and the send time. People and you lay it from the end side. `end` closes an answer with Stopped, or with This response failed and a Retry. `actions` sit after a divider: always shown on an agent reply, shown while the bubble is hovered or focused on a person's or your bubble. `isWriting` swaps the time and the actions for the word writing…. `AuthorLineQueued` takes its place on a message waiting to be sent.",
 			},
 		},
 	},
@@ -170,6 +170,27 @@ export const Failed = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Writing = meta.story({
+	args: { isWriting: true, actions: <button type="button">Pin</button> },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the agent writes its reply. Check the avatar, the name and the badge stay, and that the word writing… takes the place of the time, the divider and the actions, in the muted 12 of the time.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const line = slotIn(canvasElement, "author-line")
+		await expect(slotIn(line, "author-line-writing")).toHaveTextContent(
+			"writing…",
+		)
+		await expect(canvas.queryByText("09:41")).toBeNull()
+		await expect(canvas.queryByRole("button")).toBeNull()
+		await expect(line.getBoundingClientRect().height).toBe(20)
 	},
 })
 

@@ -26,10 +26,10 @@ import {
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const THREAD_WIDTHS =
-	"[--prompt-overhang:calc(var(--spacing)*5)] [--thread-width:calc(var(--spacing)*184)]"
+	"[--prompt-overhang:calc(var(--spacing)*7)] [--thread-width:calc(var(--spacing)*184+var(--shell-inset)*2)]"
 
 const THREAD_COLUMN =
-	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
+	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] gap-8 ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))] pb-6"
 
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 

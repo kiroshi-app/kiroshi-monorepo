@@ -24,6 +24,7 @@ import { useCompanionSelect } from "@workspace/ui/components/companion-select"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
+import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import {
 	Message,
 	MessageAuthor,
@@ -133,6 +134,7 @@ type AssistantTurnProps = {
 	cause?: TurnCause
 	identity?: RosterBot
 	carriesMark?: boolean
+	isWriting?: boolean
 	work?: ReactNode
 	footer?: ReactNode
 	className?: string
@@ -171,6 +173,12 @@ const ROW_HIGHLIGHT =
 const TURN_ROW = "flex flex-col gap-1.5"
 
 const AGENT_BUBBLE_WIDTH = "max-w-145"
+
+const AGENT_REPLY_WIDTH = "w-full max-w-full items-stretch"
+
+const AGENT_ANSWER_TYPE = "text-base leading-7"
+
+const BUBBLELESS_REPLIES_APART = "[&>[data-bubbleless]+[data-bubbleless]]:mt-5"
 
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 
@@ -372,7 +380,12 @@ function TurnGroup({
 		<MessageBubbleGroup
 			data-slot="chat-turn-group"
 			{...anchor}
-			className={cn("gap-3", messageId && HIGHLIGHT, className)}
+			className={cn(
+				"gap-3",
+				BUBBLELESS_REPLIES_APART,
+				messageId && HIGHLIGHT,
+				className,
+			)}
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
@@ -559,6 +572,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		cause,
 		identity,
 		carriesMark = false,
+		isWriting = false,
 		work,
 		footer,
 		className,
@@ -578,6 +592,8 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const face = identity ?? author
 	const paintsOwnSurface = framed && fills
 	const unwrapped = bare || paintsOwnSurface
+	const isBubbleless = !unwrapped && !framed
+	const wrappedVariant = isBubbleless ? "ghost" : "soft"
 	const end = AUTHOR_LINE_END[state]
 	const mark = face ? (
 		<BotIdentityAvatar
@@ -617,6 +633,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			end={end}
 			onRetry={onRetry}
 			actions={turnActionsOf(actions.buttons)}
+			isWriting={isWriting}
 			isSticky
 			renderIdentity={renderIdentity}
 		/>
@@ -626,6 +643,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	return (
 		<Message
 			from="assistant"
+			data-bubbleless={isBubbleless || undefined}
 			{...anchor}
 			className={cn(
 				TURN_ROW,
@@ -637,10 +655,10 @@ function AssistantTurn(props: AssistantTurnProps) {
 		>
 			{cause ? <TurnRunHeader cause={cause} /> : null}
 			<MessageBubble
-				variant={unwrapped ? "bare" : "soft"}
+				variant={unwrapped ? "bare" : wrappedVariant}
 				className={cn(
 					"min-w-0",
-					fills ? "w-full max-w-full items-stretch" : AGENT_BUBBLE_WIDTH,
+					fills || isBubbleless ? AGENT_REPLY_WIDTH : AGENT_BUBBLE_WIDTH,
 				)}
 			>
 				<MessageActions menu={turnMenuOf(actions)}>
@@ -648,12 +666,15 @@ function AssistantTurn(props: AssistantTurnProps) {
 						repliedTo={repliedTo}
 						foot={work ?? authorLine}
 						className={cn(
+							isBubbleless && AGENT_ANSWER_TYPE,
 							paintsOwnSurface && "py-0",
 							framed && !fills && FRAMED_CARD_MIN_WIDTH,
 							fills && "w-full",
 						)}
 					>
-						{children}
+						<MarkdownSizeContext value={isBubbleless ? "answer" : "chat"}>
+							{children}
+						</MarkdownSizeContext>
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>

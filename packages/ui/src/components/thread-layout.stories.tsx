@@ -108,7 +108,7 @@ const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
 ))
 
 const TRANSCRIPT_TOP_PADDING = 32
-const TRANSCRIPT_BOTTOM_PADDING = 16
+const TRANSCRIPT_BOTTOM_PADDING = 24
 
 const scrollerOf = (transcript: HTMLElement) => {
 	const scroller = transcript.closest<HTMLElement>(
@@ -283,20 +283,24 @@ export const Default = meta.story({
 			canvasElement.querySelector('[data-slot="message-scroller-older"]'),
 		).toBeNull()
 		await expectRestingAtBottom(canvasElement)
-		const agentBubble = canvasElement.querySelector(
-			'[data-slot="message"][data-from="assistant"] [data-slot="message-bubble"]',
+		const agentReply = canvasElement.querySelector(
+			'[data-slot="message"][data-from="assistant"] [data-slot="message-bubble-content"]',
 		)
-		await expect(agentBubble).toHaveStyle({ maxWidth: "580px" })
-		for (const bubble of canvasElement.querySelectorAll(
-			'[data-slot="message-bubble-content"]',
-		)) {
-			await expect(bubble).toHaveStyle({
-				paddingTop: "18px",
-				paddingRight: "18px",
-				paddingBottom: "18px",
-				paddingLeft: "18px",
-			})
-		}
+		await expect(agentReply).toHaveStyle({
+			paddingTop: "0px",
+			paddingRight: "0px",
+			paddingBottom: "0px",
+			paddingLeft: "0px",
+		})
+		const userBubble = canvasElement.querySelector(
+			'[data-slot="message"][data-from="user"] [data-slot="message-bubble-content"]',
+		)
+		await expect(userBubble).toHaveStyle({
+			paddingTop: "18px",
+			paddingRight: "18px",
+			paddingBottom: "18px",
+			paddingLeft: "18px",
+		})
 	},
 })
 
@@ -646,7 +650,7 @@ export const ForwardedRegion = meta.story({
 	},
 })
 
-const PROMPT_OVERHANG = 20
+const PROMPT_OVERHANG = 28
 
 const overhangOf = (frame: HTMLElement) => {
 	const column = slotIn(frame, "message-scroller-content")
@@ -679,7 +683,7 @@ export const PromptOverhangsTheThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges.",
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the thread column is 680 wide and the prompt 736, so the prompt overhangs it by 28 on each side. Check the 28 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges.",
 			},
 		},
 	},
@@ -691,7 +695,7 @@ export const PromptOverhangsTheThread = meta.story({
 		})
 		await expect(
 			slotIn(widest, "prompt-input").getBoundingClientRect().width,
-		).toBe(720)
+		).toBe(736)
 		await expect(overhangOf(narrow)).toEqual({
 			start: PROMPT_OVERHANG,
 			end: PROMPT_OVERHANG,
@@ -772,7 +776,7 @@ export const LongAgentMessageAboveThePrompt = meta.story({
 		docs: {
 			description: {
 				story:
-					"Final page, artboard 1b: a long agent answer rests right above the prompt. Check that the bubble's start edge sits 20 inside the prompt's start edge, past its rounded corner, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
+					"Final page, artboard 1b: a long agent answer rests right above the prompt. Check that the answer's start edge sits 28 inside the prompt's start edge, past its rounded corner, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
 			},
 		},
 	},
@@ -803,7 +807,7 @@ export const UserMessageAboveThePrompt = meta.story({
 		docs: {
 			description: {
 				story:
-					"Final page, artboard 1b mirrored: your message rests right above the prompt. Check that the bubble's end edge sits 20 inside the prompt's end edge, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
+					"Final page, artboard 1b mirrored: your message rests right above the prompt. Check that the bubble's end edge sits 28 inside the prompt's end edge, in a scrolling thread at full width and at 480 wide, with and without the 16 wide scrollbar the app's webview reserves.",
 			},
 		},
 	},
@@ -901,4 +905,57 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 			}
 		}
 	},
+})
+
+const THREAD_COLUMN_WIDTH = 680
+
+const PROMPT_WIDTH = 736
+
+const expectReferenceWidths = async (canvasElement: HTMLElement) => {
+	const frame = slotIn(canvasElement, "window-frame")
+	const column = columnOf(slotIn(frame, "message-scroller-content"), frame)
+	await expect(column.width).toBe(THREAD_COLUMN_WIDTH)
+	await expect(
+		slotIn(frame, "prompt-input").getBoundingClientRect().width,
+	).toBe(PROMPT_WIDTH)
+	await expect(overhangOf(frame)).toEqual({
+		start: PROMPT_OVERHANG,
+		end: PROMPT_OVERHANG,
+	})
+}
+
+export const At1280 = meta.story({
+	render: (args) => (
+		<div data-slot="window-frame" className="h-svh w-[1280px]">
+			<ThreadLayout {...args} label="Thread at 1280" />
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, the thread in a 1280 wide window. Check that the thread column is 680 wide, the prompt 736, and that the prompt overhangs the column by 28 on each side.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectReferenceWidths(canvasElement),
+})
+
+export const At1728 = meta.story({
+	render: (args) => (
+		<div data-slot="window-frame" className="h-svh w-[1728px]">
+			<ThreadLayout {...args} label="Thread at 1728" />
+		</div>
+	),
+	args: { rows: CONVERSATION_ROWS, children: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, the thread in a 1728 wide window. Check that the thread column stays 680 wide and the prompt 736, both centred, however wide the window gets.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectReferenceWidths(canvasElement),
 })

@@ -137,6 +137,7 @@ const chat = {
 			cancelled: "Arrêté",
 			failed: "Cette réponse a échoué",
 			queued: "En attente d’envoi",
+			writing: "écrit…",
 		},
 		notSent: "Non envoyé.",
 		notSentBecause: "Non envoyé. {{reason}}",

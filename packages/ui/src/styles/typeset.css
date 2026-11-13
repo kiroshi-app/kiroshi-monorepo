@@ -42,6 +42,13 @@
     max-inline-size: none;
   }
 
+  .typeset-answer {
+    --typeset-size: 1rem;
+    --typeset-leading: 1.75;
+    --typeset-flow: 1rem;
+    font-size: var(--typeset-size);
+  }
+
   .typeset
     *:not(
       :where(
@@ -81,6 +88,15 @@
       font-size: 1.125em;
       line-height: 1.45;
       margin-block-start: var(--typeset-flow);
+    }
+    &:where(.typeset-answer h2) {
+      letter-spacing: -0.01em;
+      margin-block-start: 1.5rem;
+    }
+    &:where(.typeset-answer h3) {
+      font-size: 1.0625rem;
+      line-height: 1.75rem;
+      margin-block-start: 1.25rem;
     }
     &:where(h4) {
       font-size: 1em;

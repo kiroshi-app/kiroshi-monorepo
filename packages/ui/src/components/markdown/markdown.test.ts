@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
+import {
+	type MarkdownSize,
+	MarkdownSizeContext,
+} from "@workspace/ui/components/markdown/size"
 import { RosterProvider } from "@workspace/ui/components/roster"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
@@ -47,6 +51,30 @@ const referenceFragments = (html: string) =>
 
 const tokenColours = (html: string, theme: "light" | "dark") =>
 	capturedValues(html, new RegExp(`--code-token-${theme}:([^;"]+)`, "g"))
+
+const typesetOf = (size?: MarkdownSize) => {
+	const block = createElement(Markdown, null, "Body")
+	const html = renderToStaticMarkup(
+		createElement(
+			I18nProvider,
+			null,
+			size ? createElement(MarkdownSizeContext, { value: size }, block) : block,
+		),
+	)
+	const [, classes = ""] =
+		/data-slot="markdown" class="([^"]*)"/.exec(html) ?? []
+	return classes.split(" ").filter((name) => name.startsWith("typeset"))
+}
+
+describe("markdown sizes", () => {
+	it("wears the chat typeset unless a size is asked for", () => {
+		expect(typesetOf()).toEqual(["typeset", "typeset-chat"])
+	})
+
+	it("wears the answer typeset when the reply around it asks for it", () => {
+		expect(typesetOf("answer")).toEqual(["typeset", "typeset-answer"])
+	})
+})
 
 describe("markdown constructions", () => {
 	it("renders headings, emphasis and inline code", () => {

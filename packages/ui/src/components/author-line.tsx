@@ -29,6 +29,7 @@ type AuthorLineProps = {
 	end?: AuthorLineEnd
 	onRetry?: () => void
 	actions?: ReactNode
+	isWriting?: boolean
 	isSticky?: boolean
 	renderIdentity?: (identity: ReactElement) => ReactNode
 	className?: string
@@ -147,8 +148,8 @@ const AuthorLineActions = ({
 	<span
 		data-slot="author-line-actions"
 		className={cn(
-			"shrink-0 items-center gap-2",
-			REVEALS_WITH_BUBBLE,
+			"shrink-0 items-center gap-2 [&_button]:transition-none",
+			isEndSide ? REVEALS_WITH_BUBBLE : "flex",
 			isOnOwnBubble && "[&_button]:text-user-bubble-muted-foreground",
 		)}
 	>
@@ -199,6 +200,19 @@ const AuthorLineStopped = () => {
 	)
 }
 
+const AuthorLineWriting = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<span
+			data-slot="author-line-writing"
+			className="shrink-0 text-muted-foreground text-xs leading-5"
+		>
+			{t("turn.footer.writing")}
+		</span>
+	)
+}
+
 const AuthorLine = ({
 	tone,
 	name,
@@ -209,6 +223,7 @@ const AuthorLine = ({
 	end,
 	onRetry,
 	actions,
+	isWriting = false,
 	isSticky = false,
 	renderIdentity,
 	className,
@@ -216,7 +231,7 @@ const AuthorLine = ({
 	const isEndSide = tone === "person" || tone === "you"
 	const isOnOwnBubble = tone === "you"
 	const shownTime =
-		time && end !== "failed" ? (
+		time && end !== "failed" && !isWriting ? (
 			<span
 				className={cn(
 					"shrink-0 text-xs leading-5",
@@ -228,13 +243,14 @@ const AuthorLine = ({
 				{time}
 			</span>
 		) : null
-	const actionRow = actions ? (
-		<AuthorLineActions
-			actions={actions}
-			isEndSide={isEndSide}
-			isOnOwnBubble={isOnOwnBubble}
-		/>
-	) : null
+	const actionRow =
+		actions && !isWriting ? (
+			<AuthorLineActions
+				actions={actions}
+				isEndSide={isEndSide}
+				isOnOwnBubble={isOnOwnBubble}
+			/>
+		) : null
 	const { lineRef, markerRef, isStuck } = useStuckToBottom(isSticky)
 	const identity = (
 		<span className="flex min-w-0 items-center gap-2">
@@ -265,6 +281,7 @@ const AuthorLine = ({
 					<BotTitleBadge title={badge} variant="line" />
 				) : null}
 				{shownTime}
+				{isWriting ? <AuthorLineWriting /> : null}
 				{end === "stopped" ? <AuthorLineStopped /> : null}
 				{end === "failed" ? <AuthorLineFailed onRetry={onRetry} /> : null}
 				{isEndSide ? null : actionRow}

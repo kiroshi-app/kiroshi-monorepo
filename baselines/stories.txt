@@ -281,6 +281,7 @@ conversation-markdown-mapcard--in-narrow-column
 conversation-markdown-mapcard--one-place-without-link
 conversation-markdown-mapcard--with-route
 conversation-markdown-markdown--adjacent-blocks
+conversation-markdown-markdown--answer-size
 conversation-markdown-markdown--appended-block
 conversation-markdown-markdown--attachment-file-among-code-paths
 conversation-markdown-markdown--attachment-file-mid-answer
@@ -421,6 +422,7 @@ conversation-message-authorline--name-click-selects-the-agent
 conversation-message-authorline--name-right-click-opens-the-agent-menu
 conversation-message-authorline--queued
 conversation-message-authorline--sticky-outside-a-bubble
+conversation-message-authorline--writing
 conversation-message-chatemptystate--centred-in-its-frame
 conversation-message-chatemptystate--free-hue
 conversation-message-chatemptystate--not-connected
@@ -551,7 +553,6 @@ conversation-message-thread--agent-author-line-in-place
 conversation-message-thread--agent-author-line-in-place-at-the-narrowest-width
 conversation-message-thread--agent-author-line-pinned
 conversation-message-thread--agent-author-line-pinned-at-the-narrowest-width
-conversation-message-thread--agent-author-line-stuck-on-a-hovered-answer
 conversation-message-thread--agent-author-line-stuck-on-a-long-answer
 conversation-message-thread--agent-author-line-stuck-on-an-unwrapped-answer
 conversation-message-thread--agent-author-line-stuck-with-jump-to-latest-floating
@@ -625,6 +626,10 @@ conversation-message-transcriptscrollprobe--long-thread
 conversation-message-transcriptscrollprobe--long-thread-streaming
 conversation-message-transcriptscrollprobe--whole-thread
 conversation-message-turn--author-with-custom-image
+conversation-message-turn--bubbleless-replies-in-one-group
+conversation-message-turn--bubbleless-reply
+conversation-message-turn--bubbleless-reply-dark
+conversation-message-turn--bubbleless-reply-several-agents
 conversation-message-turn--companion-select-from-gutter
 conversation-message-turn--companion-select-on-gutter-hovered
 conversation-message-turn--companion-select-with-click-modifiers
@@ -649,6 +654,7 @@ conversation-message-turn--summoned-by-mission
 conversation-message-turn--thread-crossing-a-day
 conversation-message-turn--time-follows-now
 conversation-message-turn--working
+conversation-message-turn--writing
 conversation-message-websources--controlled
 conversation-message-websources--favicon-and-fallbacks
 conversation-message-websources--folded
@@ -1286,6 +1292,8 @@ layout-screenlayout--full-width-in-wide-card
 layout-screenlayout--header-and-content
 layout-screenlayout--header-content-and-footer
 layout-screenlayout--header-only
+layout-threadlayout--at-1280
+layout-threadlayout--at-1728
 layout-threadlayout--default
 layout-threadlayout--empty
 layout-threadlayout--empty-queue
