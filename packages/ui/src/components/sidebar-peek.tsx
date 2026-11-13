@@ -72,7 +72,7 @@ const SidebarPeekProvider = ({ children }: SidebarPeekProviderProps) => {
 		}
 		return {
 			isCollapsed: !isDocked,
-			isOpen: isOpen && !isDocked,
+			isOpen,
 			hover: {
 				onPointerEnter: () => settleAfter(true, HOVER_INTENT_DELAY_MS),
 				onPointerLeave: () => settleAfter(false, PEEK_CLOSE_DELAY_MS),
