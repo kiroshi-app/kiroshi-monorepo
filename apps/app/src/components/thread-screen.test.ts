@@ -5,6 +5,7 @@ import {
 	act,
 	cleanup,
 	fireEvent,
+	type MatcherFunction,
 	type RenderOptions,
 	render as renderWithoutQueries,
 	screen,
@@ -1261,8 +1262,15 @@ const runRoomOf = () =>
 		spoken: [ADA_OPENS, ADA_CLOSES, NYX_ANSWERS],
 	})
 
+const byTextAcrossSpans =
+	(text: string): MatcherFunction =>
+	(ownText, element) =>
+		ownText === text ||
+		(element?.textContent === text &&
+			[...element.children].every((child) => child.textContent !== text))
+
 const turnOf = (text: string) =>
-	screen.getByText(text).closest('[data-slot="message"]')
+	screen.getByText(byTextAcrossSpans(text)).closest('[data-slot="message"]')
 
 const authorNameOf = (text: string) =>
 	turnOf(text)?.querySelector('[data-slot="author-line-name"]')?.textContent ??
@@ -2548,7 +2556,7 @@ describe("ThreadScreen", () => {
 		await solo.push([...FIRST_TOKEN, ...ASKED])
 		rerender(screenOf(solo.thread()))
 
-		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.getByText(byTextAcrossSpans("the walls hold"))).toBeTruthy()
 		expect(rowIndexOf("Which wall holds?")).toBe(-1)
 		expect(askedForm()).toBeTruthy()
 
@@ -2839,7 +2847,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.getByText(byTextAcrossSpans("the walls hold"))).toBeTruthy()
 		expect(stopsFor("Ada")).toHaveLength(1)
 		fireEvent.click(stopsFor("Ada")[0])
 		await settle()
@@ -2858,7 +2866,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.queryByText("the walls hold")).toBeNull()
+		expect(screen.queryByText(byTextAcrossSpans("the walls hold"))).toBeNull()
 		expect(workLines()).toContain("Ada is thinking…")
 		expect(stopFor("Ada")).toBeTruthy()
 	})
@@ -2875,7 +2883,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.getByText(byTextAcrossSpans("the walls hold"))).toBeTruthy()
 		expect(workLines()).toContain("Ada is writing…")
 
 		expect(stopsFor("Ada")).toHaveLength(1)
@@ -2897,7 +2905,7 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.getByText(byTextAcrossSpans("the walls hold"))).toBeTruthy()
 		expect(rowIndexOf("Which wall holds?")).toBe(-1)
 		expect(askedForm()).toBeTruthy()
 
@@ -3477,7 +3485,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("hold the line")).toBeTruthy()
-		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.getByText(byTextAcrossSpans("the walls hold"))).toBeTruthy()
 	})
 	it("gives up on a landing the window it read does not hold", async () => {
 		const room = await longRoomOf()
