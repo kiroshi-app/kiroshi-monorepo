@@ -241,6 +241,9 @@
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
 	--text-reading--line-height: 1.375rem;
+	--container-library-header-row: 56.25rem;
+	--container-library-import-header-row: 62rem;
+	--container-library-import-header-labels: 43.5rem;
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);

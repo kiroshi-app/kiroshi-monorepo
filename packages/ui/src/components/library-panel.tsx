@@ -81,7 +81,7 @@ const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
 	>
 		{label}
 		<span
-			className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground"
+			className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground dark:group-aria-pressed/toggle:text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]"
 			data-slot="library-filter-count"
 		>
 			{count}
@@ -137,26 +137,56 @@ const LibraryFilters = ({
 	)
 }
 
+const HEADER_LAYOUTS = {
+	withoutImport: {
+		search: "@max-library-header-row:w-40 @max-library-header-row:min-w-0",
+		actionLabel: "@max-lg:sr-only",
+		filtersBesideTitle: "@max-library-header-row:hidden",
+		filtersRow: "@library-header-row:hidden",
+		content: "@max-library-header-row:pt-26",
+		fade: "@max-library-header-row:h-28 @max-library-header-row:from-[percentage:calc(100%-2rem)]",
+	},
+	withImport: {
+		search:
+			"@max-library-import-header-row:w-40 @max-library-import-header-row:min-w-0",
+		actionLabel: "@max-library-import-header-labels:sr-only",
+		filtersBesideTitle: "@max-library-import-header-row:hidden",
+		filtersRow: "@library-import-header-row:hidden",
+		content: "@max-library-import-header-row:pt-26",
+		fade: "@max-library-import-header-row:h-28 @max-library-import-header-row:from-[percentage:calc(100%-2rem)]",
+	},
+} as const
+
+type HeaderLayout = (typeof HEADER_LAYOUTS)[keyof typeof HEADER_LAYOUTS]
+
 type LibrarySearchProps = {
 	query: string
 	onQueryChange: (query: string) => void
+	layout: HeaderLayout
 }
 
-const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
+const LibrarySearch = ({
+	query,
+	onQueryChange,
+	layout,
+}: LibrarySearchProps) => {
 	const { t } = useTranslation("common")
 
 	return (
 		<div
-			className="group/search relative w-50 min-w-40 shrink @max-4xl:min-w-0"
+			className={cn(
+				"group/search relative w-50 min-w-40 shrink",
+				layout.search,
+			)}
 			data-slot="library-search"
 		>
 			<Icons.Search
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 start-2 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-foreground"
+				className="pointer-events-none absolute inset-y-0 start-2 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-soft-foreground"
 			/>
 			<Input
 				aria-label={t("library.search")}
-				className="text-ellipsis rounded-md bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact"
+				className="text-ellipsis rounded-md bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact dark:placeholder:text-placeholder-foreground"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
@@ -169,9 +199,10 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 type LibraryHeaderProps = {
 	actions?: ReactNode
 	filters?: ReactNode
+	layout: HeaderLayout
 }
 
-const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
+const LibraryHeader = ({ actions, filters, layout }: LibraryHeaderProps) => {
 	const { t } = useTranslation("common")
 
 	return (
@@ -185,13 +216,20 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 						{t("library.title")}
 					</h1>
 					{filters ? (
-						<div className="contents @max-4xl:hidden">{filters}</div>
+						<div className={cn("contents", layout.filtersBesideTitle)}>
+							{filters}
+						</div>
 					) : null}
 				</HeaderIsland>
 				{actions}
 			</div>
 			{filters ? (
-				<HeaderIsland className="scrollbar-hide @4xl:hidden max-w-full self-start overflow-x-auto">
+				<HeaderIsland
+					className={cn(
+						"scrollbar-hide max-w-full self-start overflow-x-auto",
+						layout.filtersRow,
+					)}
+				>
 					{filters}
 				</HeaderIsland>
 			) : null}
@@ -202,7 +240,15 @@ const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
 const ISLAND_ACTION =
 	"rounded-md px-1.75 text-compact leading-4 transition-none focus-visible:ring-4 active:translate-y-px! active:scale-none!"
 
-const GHOST_ISLAND_ACTION = cn(ISLAND_ACTION, "dark:hover:bg-muted")
+const GHOST_ISLAND_ACTION = cn(
+	ISLAND_ACTION,
+	"dark:hover:bg-muted [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground",
+)
+
+const PRIMARY_ISLAND_ACTION = cn(
+	ISLAND_ACTION,
+	"active:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_40%)]",
+)
 
 type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 	LibraryImageActions & {
@@ -258,6 +304,10 @@ const LibraryPanel = ({
 		boards: items.filter((item) => item.kind === "board").length,
 	}
 
+	const layout = onImport
+		? HEADER_LAYOUTS.withImport
+		: HEADER_LAYOUTS.withoutImport
+
 	const hasActions = Boolean(
 		onSearchQueryChange || onImport || onNewBoard || onNewDocument,
 	)
@@ -266,6 +316,7 @@ const LibraryPanel = ({
 		<HeaderIsland className="min-w-0 shrink gap-1">
 			{onSearchQueryChange ? (
 				<LibrarySearch
+					layout={layout}
 					onQueryChange={onSearchQueryChange}
 					query={searchQuery}
 				/>
@@ -277,7 +328,7 @@ const LibraryPanel = ({
 					variant="ghost"
 				>
 					<Icons.Import aria-hidden="true" className="size-3.5" />
-					<span className="@max-lg:sr-only">{t("library.import")}</span>
+					<span className={layout.actionLabel}>{t("library.import")}</span>
 				</Button>
 			) : null}
 			{onNewBoard ? (
@@ -287,13 +338,13 @@ const LibraryPanel = ({
 					variant="ghost"
 				>
 					<Icons.Board aria-hidden="true" className="size-3.5" />
-					<span className="@max-lg:sr-only">{t("library.newBoard")}</span>
+					<span className={layout.actionLabel}>{t("library.newBoard")}</span>
 				</Button>
 			) : null}
 			{onNewDocument ? (
-				<Button className={ISLAND_ACTION} onClick={onNewDocument}>
+				<Button className={PRIMARY_ISLAND_ACTION} onClick={onNewDocument}>
 					<Icons.Add aria-hidden="true" className="size-3.5" />
-					<span className="@max-lg:sr-only">{t("library.newDocument")}</span>
+					<span className={layout.actionLabel}>{t("library.newDocument")}</span>
 				</Button>
 			) : null}
 		</HeaderIsland>
@@ -321,15 +372,17 @@ const LibraryPanel = ({
 					className="@container isolate min-h-0 flex-1"
 					contentClassName={cn(
 						"pt-14 pb-6",
-						filters && "@max-4xl:pt-26",
+						filters && layout.content,
 						isSkeletonShown && "h-full pb-0",
 					)}
-					header={<LibraryHeader actions={actions} filters={filters} />}
-					headerFadeClassName={
-						filters
-							? "@max-4xl:h-28 @max-4xl:from-[percentage:calc(100%-2rem)]"
-							: undefined
+					header={
+						<LibraryHeader
+							actions={actions}
+							filters={filters}
+							layout={layout}
+						/>
 					}
+					headerFadeClassName={filters ? layout.fade : undefined}
 					isHeaderFloating
 				>
 					{isSkeletonShown ? (

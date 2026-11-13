@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { expect, fn, mocked, spyOn, waitFor, within } from "storybook/test"
+import { decorators as pseudoStateDecorators } from "storybook-addon-pseudo-states/preview"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -51,7 +52,7 @@ import {
 import { RosterProvider } from "@workspace/ui/components/roster"
 import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
-import { i18n } from "@workspace/ui/lib/i18n"
+import { DEFAULT_LANGUAGE, i18n } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryStoryFrameProps = {
@@ -86,6 +87,7 @@ const ARTBOARD_FRAMES = {
 	wide: "w-[960px]",
 	narrow: "w-[560px]",
 	reflow: "w-[320px]",
+	tight: "w-[920px]",
 }
 
 type LibraryArtboardFrameProps = {
@@ -99,6 +101,7 @@ const LibraryArtboardFrame = ({
 }: LibraryArtboardFrameProps) => (
 	<div
 		className={cn("flex h-[640px]", ARTBOARD_FRAMES[width])}
+		data-slot="library-artboard-frame"
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>{children}</ContentCard>
@@ -235,6 +238,7 @@ const meta = preview.meta({
 		},
 	},
 	globals: { theme: "dark" },
+	decorators: pseudoStateDecorators,
 	args: PANEL_STORY_ARGS,
 	render: (args) => (
 		<LibraryStoryFrame hue="blue">
@@ -1501,8 +1505,10 @@ const expectFill = (control: HTMLElement, fill: string, host = control) =>
 		tokenStyleIn(host, fill, "backgroundColor"),
 	)
 
-const expectSpaceColourRing = async (control: HTMLElement, host = control) => {
-	await expect(control.matches(":focus-visible")).toBe(true)
+const expectSpaceColourRingDrawn = async (
+	control: HTMLElement,
+	host = control,
+) => {
 	await expect(getComputedStyle(control).boxShadow).toBe(
 		tokenStyleIn(host, "ring-4 ring-primary/30", "boxShadow"),
 	)
@@ -1511,6 +1517,24 @@ const expectSpaceColourRing = async (control: HTMLElement, host = control) => {
 		tokenStyleIn(host, "border border-primary", "borderTopColor"),
 	)
 }
+
+const expectSpaceColourRing = async (control: HTMLElement, host = control) => {
+	await expect(control.matches(":focus-visible")).toBe(true)
+	await expectSpaceColourRingDrawn(control, host)
+}
+
+const isDarkAround = (element: Element) => element.closest(".dark") !== null
+
+const SELECTED_COUNT_INK = {
+	light: "text-primary-foreground",
+	dark: "text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]",
+}
+
+const PRIMARY_HOVER_FILL =
+	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_20%)]"
+
+const PRIMARY_PRESSED_FILL =
+	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_40%)]"
 
 const headerIn = (canvasElement: HTMLElement) => {
 	const { title, actions, filters } = islandsIn(canvasElement)
@@ -1533,6 +1557,24 @@ const headerIn = (canvasElement: HTMLElement) => {
 		newBoard,
 		newDocument,
 	}
+}
+
+const headerControlsIn = (canvasElement: HTMLElement) => {
+	const header = headerIn(canvasElement)
+	const [all, images] = within(header.title).getAllByRole("button")
+	const searchGlyph = header.searchField.querySelector("svg")
+	const boardGlyph = header.newBoard.querySelector("svg")
+	if (!(all && images && searchGlyph && boardGlyph))
+		throw new Error("The header lost a control")
+	return { ...header, all, images, searchGlyph, boardGlyph }
+}
+
+type RealPointer = Awaited<ReturnType<typeof realPointer>>
+
+const tabTo = async (pointer: RealPointer, control: HTMLElement) => {
+	for (let press = 0; press < 8 && document.activeElement !== control; press++)
+		await pointer.tab()
+	await expect(control).toHaveFocus()
 }
 
 const expectIslandsAtTheEdges = async (canvasElement: HTMLElement) => {
@@ -1566,12 +1608,38 @@ const expectHeaderOnOneRow = async (
 		buttons,
 		newBoard,
 		newDocument,
-	} = headerIn(canvasElement)
+		searchGlyph,
+		boardGlyph,
+	} = headerControlsIn(canvasElement)
 	const frame = boxOf(panel)
 
 	await expectIslandsAtTheEdges(canvasElement)
 	await expect(filters).not.toBeVisible()
 	await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
+
+	const isDark = isDarkAround(panel)
+	for (const island of [title, actions]) {
+		const style = getComputedStyle(island)
+		await expect([
+			Number.parseFloat(style.paddingTop) +
+				Number.parseFloat(style.borderTopWidth),
+			style.columnGap,
+			style.borderTopLeftRadius,
+			style.borderTopColor,
+			style.boxShadow,
+		]).toEqual([
+			4,
+			"4px",
+			"12px",
+			tokenStyleIn(
+				island,
+				"border border-selection-toolbar-border",
+				"borderTopColor",
+			),
+			tokenStyleIn(island, "shadow-selection-toolbar", "boxShadow"),
+		])
+		await expectFill(island, isDark ? "bg-card-raised" : "bg-card")
+	}
 
 	await expect([
 		boxOf(heading).height,
@@ -1606,9 +1674,14 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(all).fontWeight,
 	]).toEqual([28, "6px", "12px", "16px", "500"])
 	await expectFill(all, "bg-primary")
+	await expect(getComputedStyle(all).color).toBe(
+		tokenStyleIn(all, "text-primary-foreground", "color"),
+	)
 	await expect(
 		getComputedStyle(slotIn(all, "library-filter-count")).color,
-	).toBe(tokenStyleIn(all, "text-primary-foreground", "color"))
+	).toBe(
+		tokenStyleIn(all, SELECTED_COUNT_INK[isDark ? "dark" : "light"], "color"),
+	)
 	await expect(getComputedStyle(images).fontWeight).toBe("400")
 	await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
 	await expect(
@@ -1622,12 +1695,24 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(search).borderTopLeftRadius,
 	]).toEqual([200, 32, "8px"])
 	await expectFill(search, "bg-muted", searchField)
-	const icon = searchField.querySelector("svg")
-	if (!icon) throw new Error("The search lost its icon")
 	await expect([
-		boxOf(icon).width,
-		boxOf(icon).left - boxOf(search).left,
+		boxOf(searchGlyph).width,
+		boxOf(searchGlyph).left - boxOf(search).left,
 	]).toEqual([14, 8])
+	await expect(getComputedStyle(searchGlyph).color).toBe(
+		tokenStyleIn(searchField, "text-muted-foreground", "color"),
+	)
+	await expect([
+		getComputedStyle(search, "::placeholder").fontSize,
+		getComputedStyle(search, "::placeholder").color,
+	]).toEqual([
+		"13px",
+		tokenStyleIn(
+			searchField,
+			isDark ? "text-placeholder-foreground" : "text-muted-foreground",
+			"color",
+		),
+	])
 
 	await expect(buttons.map((button) => button.textContent)).toEqual([
 		"New board",
@@ -1640,17 +1725,27 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(newBoard).fontSize,
 		getComputedStyle(newBoard).lineHeight,
 		getComputedStyle(newBoard).fontWeight,
-		newBoard.querySelector("svg")?.getBoundingClientRect().width,
+		boxOf(boardGlyph).width,
 	]).toEqual([32, "8px", "13px", "16px", "500", 14])
 	await expect(getComputedStyle(newBoard).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(boardGlyph).color).toBe(
+		tokenStyleIn(newBoard, "text-soft-foreground", "color"),
+	)
 	await expect(boxOf(newDocument).height).toBe(32)
 	await expectFill(newDocument, "bg-primary")
+	await expect(getComputedStyle(newDocument).color).toBe(
+		tokenStyleIn(newDocument, "text-primary-foreground", "color"),
+	)
 
 	for (const control of [all, images, search, newBoard, newDocument])
 		await expect(getComputedStyle(control).transitionProperty).toBe("none")
 
-	const grid = boxOf(slotIn(canvasElement, "library-grid"))
-	await expect([grid.left - frame.left, grid.top - frame.top]).toEqual([24, 56])
+	const grid = slotIn(canvasElement, "library-grid")
+	await expect([
+		boxOf(grid).left - frame.left,
+		boxOf(grid).top - frame.top,
+		getComputedStyle(grid).columnGap,
+	]).toEqual([24, 56, "16px"])
 }
 
 const ARTBOARD_ARGS = {
@@ -1748,7 +1843,7 @@ export const FloatingHeaderNarrow = FloatingHeader.extend({
 		docs: {
 			description: {
 				story:
-					"The Library header as artboard 5d draws it, 560 wide: too narrow for one row. Check that the left island holds the title alone, that the right island keeps its 200 px search and its labelled buttons, that the filters sit in an island of their own 56 px from the top and 8 px from the side, read once by assistive technology, and that the grid starts below that second row.",
+					"The Library header as artboard 5d draws it, 560 wide: too narrow for one row. Check that the left island holds the title alone, that the right island holds a 160 px search and its labelled buttons, that the filters sit in an island of their own 56 px from the top and 8 px from the side, read once by assistive technology, and that the grid starts below that second row.",
 			},
 		},
 	},
@@ -1758,7 +1853,7 @@ export const FloatingHeaderNarrow = FloatingHeader.extend({
 
 		await expectIslandsAtTheEdges(canvasElement)
 		await expect(within(title).queryByRole("group")).toBe(null)
-		await expect(boxOf(search).width).toBe(200)
+		await expect(boxOf(search).width).toBe(160)
 		for (const button of buttons)
 			await expect(boxOf(button).width).toBeGreaterThan(32)
 
@@ -1863,9 +1958,20 @@ const CONTROL_STATE_ROWS = [
 
 type ControlStateRow = (typeof CONTROL_STATE_ROWS)[number]["row"]
 
-const controlStateRowId = (row: ControlStateRow) => `library-header-${row}`
+type HeaderControlState =
+	| "filter-hover"
+	| "filter-focus"
+	| "search-focus-typing"
+	| "primary-rest"
+	| "primary-hover"
+	| "primary-pressed"
+	| "primary-focus"
+	| "ghost-hover"
 
-const inRow = (row: ControlStateRow, selector: string) =>
+const controlStateRowId = (row: ControlStateRow | HeaderControlState) =>
+	`library-header-${row}`
+
+const inRow = (row: ControlStateRow | HeaderControlState, selector: string) =>
 	`#${controlStateRowId(row)} ${selector}`
 
 const IMAGES_SEGMENT = "[data-slot=library-filter]:nth-child(2)"
@@ -1910,7 +2016,7 @@ export const FloatingHeaderControlStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"The header controls as artboard 5e draws them, four headers one under the other: at rest, hovered, focused from the keyboard, pressed. Check on the header at rest that a hovered filter takes the pressed island control fill and a hovered ghost button the muted fill, that a hovered New document leaves the Space colour and moves 1 px down while pressed, and that a filter, the search and New document each wear a 1 px ring plus a 4 px ring at 30 percent in the Space colour, the focused search dropping its muted fill and darkening its icon.",
+					"The header controls as artboard 5e draws them, four headers one under the other: at rest, hovered, focused from the keyboard, pressed. Check on the header at rest that a hovered filter takes the pressed island control fill and a hovered ghost button the muted fill, that a hovered ghost button draws its glyph in full ink, that a hovered New document goes one step darker than the Space colour, then two steps darker and 1 px down while pressed, and that a filter, the search and New document each wear a 1 px ring plus a 4 px ring at 30 percent in the Space colour, the focused search dropping its muted fill and darkening its icon one step.",
 			},
 		},
 	},
@@ -1920,18 +2026,23 @@ export const FloatingHeaderControlStates = meta.story({
 			`#${controlStateRowId("rest")}`,
 		)
 		if (!atRest) throw new Error("The header at rest is missing")
-		const { title, heading, searchField, search, newBoard, newDocument } =
-			headerIn(atRest)
-		const [all, images] = within(title).getAllByRole("button")
-		const icon = searchField.querySelector("svg")
-		if (!(all && images && icon)) throw new Error("The header lost a control")
+		const {
+			heading,
+			all,
+			images,
+			searchField,
+			search,
+			searchGlyph,
+			newBoard,
+			boardGlyph,
+			newDocument,
+		} = headerControlsIn(atRest)
 		const pointer = await realPointer()
 
-		const isDark = images.closest(".dark") !== null
 		await pointer.hover(images)
 		await expectFill(
 			images,
-			isDark
+			isDarkAround(images)
 				? "bg-header-island-control-hover"
 				: "bg-header-island-control-pressed",
 		)
@@ -1941,26 +2052,23 @@ export const FloatingHeaderControlStates = meta.story({
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
 		await expectFill(all, "bg-primary")
+		await expect(getComputedStyle(boardGlyph).color).toBe(
+			tokenStyleIn(newBoard, "text-soft-foreground", "color"),
+		)
 		await pointer.hover(newBoard)
 		await expectFill(newBoard, "bg-muted")
+		await expect(getComputedStyle(boardGlyph).color).toBe(
+			tokenStyleIn(newBoard, "text-foreground", "color"),
+		)
 		await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
 
 		await pointer.hover(newDocument)
-		const spaceColour = tokenStyleIn(
-			newDocument,
-			"bg-primary",
-			"backgroundColor",
-		)
-		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-			spaceColour,
-		)
+		await expectFill(newDocument, PRIMARY_HOVER_FILL)
 		await expect(getComputedStyle(newDocument).translate).toBe("none")
 		newDocument.focus()
 		await pointer.keyboard("{Space>}")
 		await expect(newDocument.matches(":hover:active")).toBe(true)
-		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-			spaceColour,
-		)
+		await expectFill(newDocument, PRIMARY_PRESSED_FILL)
 		await expect(getComputedStyle(newDocument).translate).toBe("0px 1px")
 		await pointer.keyboard("{/Space}")
 		await pointer.unhover(newDocument)
@@ -1970,25 +2078,17 @@ export const FloatingHeaderControlStates = meta.story({
 		await expect(all).toHaveFocus()
 		await expectSpaceColourRing(all)
 
-		await expect(getComputedStyle(icon).color).toBe(
+		await expect(getComputedStyle(searchGlyph).color).toBe(
 			tokenStyleIn(searchField, "text-muted-foreground", "color"),
 		)
-		for (let press = 0; press < 4 && document.activeElement !== search; press++)
-			await pointer.tab()
-		await expect(search).toHaveFocus()
+		await tabTo(pointer, search)
 		await expectSpaceColourRing(search, searchField)
 		await expect(getComputedStyle(search).backgroundColor).toBe(TRANSPARENT)
-		await expect(getComputedStyle(icon).color).toBe(
-			tokenStyleIn(searchField, "text-foreground", "color"),
+		await expect(getComputedStyle(searchGlyph).color).toBe(
+			tokenStyleIn(searchField, "text-soft-foreground", "color"),
 		)
 
-		for (
-			let press = 0;
-			press < 4 && document.activeElement !== newDocument;
-			press++
-		)
-			await pointer.tab()
-		await expect(newDocument).toHaveFocus()
+		await tabTo(pointer, newDocument)
 		await expectSpaceColourRing(newDocument)
 	},
 })
@@ -2005,3 +2105,407 @@ export const FloatingHeaderControlStatesDark =
 			},
 		},
 	})
+
+const headerStateStory = (state: HeaderControlState) => ({
+	args: ARTBOARD_ARGS,
+	globals: { theme: "light" },
+	render: (args: LibraryPanelProps) => (
+		<div
+			className="flex h-28 w-[960px]"
+			id={controlStateRowId(state)}
+			{...hueScopeOf("blue")}
+		>
+			<ContentCard isLandmark={false}>
+				<LibraryPanel {...args} />
+			</ContentCard>
+		</div>
+	),
+})
+
+export const FloatingHeaderFilterHover = meta.story({
+	...headerStateStory("filter-hover"),
+	parameters: {
+		pseudo: { hover: [inRow("filter-hover", IMAGES_SEGMENT)] },
+		docs: {
+			description: {
+				story:
+					"The filter hover of artboard 5e: the pointer rests on Images, a filter that is not the selected one. Check that Images takes the pressed island control fill, one step darker than the muted track, that All keeps the Space colour under the pointer, and that the fill lands with no colour transition.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { all, images } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.hover(images)
+		await expectFill(
+			images,
+			isDarkAround(images)
+				? "bg-header-island-control-hover"
+				: "bg-header-island-control-pressed",
+		)
+		await expect(getComputedStyle(images).backgroundColor).not.toBe(
+			tokenStyleIn(images, "bg-muted", "backgroundColor"),
+		)
+		await expect(getComputedStyle(images).transitionProperty).toBe("none")
+		await pointer.hover(all)
+		await expectFill(all, "bg-primary")
+		await pointer.unhover(all)
+	},
+})
+
+export const FloatingHeaderFilterHoverDark = FloatingHeaderFilterHover.extend({
+	globals: { theme: "dark" },
+})
+
+export const FloatingHeaderFilterFocus = meta.story({
+	...headerStateStory("filter-focus"),
+	parameters: {
+		pseudo: { focusVisible: [inRow("filter-focus", IMAGES_SEGMENT)] },
+		docs: {
+			description: {
+				story:
+					"The filter keyboard focus of artboard 5e: Images reached from the keyboard, Tab into the filters then the right arrow. Check that it wears a 1 px ring plus a 4 px ring at 30 percent, both in the Space colour, and that it takes no fill.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { heading, all, images } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.click(heading)
+		await tabTo(pointer, all)
+		await pointer.keyboard("{ArrowRight}")
+		await expect(images).toHaveFocus()
+		await expectSpaceColourRing(images)
+		await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
+	},
+})
+
+export const FloatingHeaderFilterFocusDark = FloatingHeaderFilterFocus.extend({
+	globals: { theme: "dark" },
+})
+
+export const FloatingHeaderSearchFocusTyping = meta.story({
+	...headerStateStory("search-focus-typing"),
+	args: {
+		items: LIBRARY_ITEMS_WITH_BOARDS.filter((item) =>
+			item.name.includes("dashboard"),
+		),
+		onImport: undefined,
+		searchQuery: "dashboard",
+	},
+	parameters: {
+		pseudo: {
+			focusVisible: [inRow("search-focus-typing", "[data-slot=input]")],
+			focusWithin: [inRow("search-focus-typing", "[data-slot=library-search]")],
+		},
+		docs: {
+			description: {
+				story:
+					"The search of artboard 5e, focused with a query typed in. Check that the field drops its muted fill for the island surface, that it wears the 1 px ring plus the 4 px ring at 30 percent in the Space colour, that its icon darkens one step, and that the typed text is in full ink.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { heading, searchField, search, searchGlyph } =
+			headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await expect(search).toHaveValue("dashboard")
+		await pointer.click(heading)
+		await tabTo(pointer, search)
+		await expectSpaceColourRing(search, searchField)
+		await expect(getComputedStyle(search).backgroundColor).toBe(TRANSPARENT)
+		await expect(getComputedStyle(search).color).toBe(
+			tokenStyleIn(searchField, "text-foreground", "color"),
+		)
+		await expect(getComputedStyle(searchGlyph).color).toBe(
+			tokenStyleIn(searchField, "text-soft-foreground", "color"),
+		)
+	},
+})
+
+export const FloatingHeaderSearchFocusTypingDark =
+	FloatingHeaderSearchFocusTyping.extend({
+		globals: { theme: "dark" },
+	})
+
+export const FloatingHeaderPrimaryRest = meta.story({
+	...headerStateStory("primary-rest"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"New document at rest, as artboard 5e draws the primary button. Check that it sits on the Space colour with the ink that colour carries, 32 px high, with no ring, and that it has not moved.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { newDocument } = headerControlsIn(canvasElement)
+
+		await expectFill(newDocument, "bg-primary")
+		await expect(getComputedStyle(newDocument).color).toBe(
+			tokenStyleIn(newDocument, "text-primary-foreground", "color"),
+		)
+		await expect([
+			boxOf(newDocument).height,
+			getComputedStyle(newDocument).translate,
+			getComputedStyle(newDocument).boxShadow,
+		]).toEqual([32, "none", "none"])
+	},
+})
+
+export const FloatingHeaderPrimaryRestDark = FloatingHeaderPrimaryRest.extend({
+	globals: { theme: "dark" },
+})
+
+export const FloatingHeaderPrimaryHover = meta.story({
+	...headerStateStory("primary-hover"),
+	parameters: {
+		pseudo: { hover: [inRow("primary-hover", NEW_DOCUMENT_ACTION)] },
+		docs: {
+			description: {
+				story:
+					"New document under the pointer, as artboard 5e draws the primary hover. Check that its fill is the Space colour mixed one step towards the ink, that it has not moved, and that the fill lands with no colour transition.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { newDocument } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.hover(newDocument)
+		await expectFill(newDocument, PRIMARY_HOVER_FILL)
+		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
+			tokenStyleIn(newDocument, "bg-primary", "backgroundColor"),
+		)
+		await expect(getComputedStyle(newDocument).translate).toBe("none")
+		await expect(getComputedStyle(newDocument).transitionProperty).toBe("none")
+		await pointer.unhover(newDocument)
+	},
+})
+
+export const FloatingHeaderPrimaryHoverDark = FloatingHeaderPrimaryHover.extend(
+	{ globals: { theme: "dark" } },
+)
+
+export const FloatingHeaderPrimaryPressed = meta.story({
+	...headerStateStory("primary-pressed"),
+	parameters: {
+		pseudo: {
+			hover: [inRow("primary-pressed", NEW_DOCUMENT_ACTION)],
+			active: [inRow("primary-pressed", NEW_DOCUMENT_ACTION)],
+		},
+		docs: {
+			description: {
+				story:
+					"New document held down, as artboard 5e draws the primary pressed. Check that its fill is the Space colour mixed two steps towards the ink, one more than the hover, and that the button sits 1 px lower.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { newDocument } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.hover(newDocument)
+		newDocument.focus()
+		await pointer.keyboard("{Space>}")
+		await expect(newDocument.matches(":hover:active")).toBe(true)
+		await expectFill(newDocument, PRIMARY_PRESSED_FILL)
+		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
+			tokenStyleIn(newDocument, PRIMARY_HOVER_FILL, "backgroundColor"),
+		)
+		await expect(getComputedStyle(newDocument).translate).toBe("0px 1px")
+		await pointer.keyboard("{/Space}")
+		await pointer.unhover(newDocument)
+	},
+})
+
+export const FloatingHeaderPrimaryPressedDark =
+	FloatingHeaderPrimaryPressed.extend({
+		globals: { theme: "dark" },
+	})
+
+export const FloatingHeaderPrimaryFocus = meta.story({
+	...headerStateStory("primary-focus"),
+	parameters: {
+		pseudo: { focusVisible: [inRow("primary-focus", NEW_DOCUMENT_ACTION)] },
+		docs: {
+			description: {
+				story:
+					"New document reached with Tab, as artboard 5e draws the primary focus. Check that it keeps the Space colour and wears the same 1 px ring plus 4 px ring at 30 percent as the filters and the search.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { heading, newDocument } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.click(heading)
+		await tabTo(pointer, newDocument)
+		await expectSpaceColourRing(newDocument)
+		await expectFill(newDocument, "bg-primary")
+	},
+})
+
+export const FloatingHeaderPrimaryFocusDark = FloatingHeaderPrimaryFocus.extend(
+	{ globals: { theme: "dark" } },
+)
+
+export const FloatingHeaderGhostHover = meta.story({
+	...headerStateStory("ghost-hover"),
+	parameters: {
+		pseudo: { hover: [inRow("ghost-hover", NEW_BOARD_ACTION)] },
+		docs: {
+			description: {
+				story:
+					"New board under the pointer, as artboard 5e draws the ghost hover, which Import wears too. Check that it takes the muted fill, that its glyph goes from the soft ink to the full ink, and that the fill lands with no colour transition.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { newBoard, boardGlyph } = headerControlsIn(canvasElement)
+		const pointer = await realPointer()
+
+		await pointer.hover(newBoard)
+		await expectFill(newBoard, "bg-muted")
+		await expect(getComputedStyle(boardGlyph).color).toBe(
+			tokenStyleIn(newBoard, "text-foreground", "color"),
+		)
+		await expect(getComputedStyle(newBoard).transitionProperty).toBe("none")
+		await pointer.unhover(newBoard)
+	},
+})
+
+export const FloatingHeaderGhostHoverDark = FloatingHeaderGhostHover.extend({
+	globals: { theme: "dark" },
+})
+
+const inFrench = async () => {
+	await i18n.changeLanguage("fr")
+	return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
+}
+
+const expectIslandsFit = async (canvasElement: HTMLElement) => {
+	const header = boxOf(slotIn(canvasElement, "library-header"))
+	const { title, actions, filters } = islandsIn(canvasElement)
+	if (!(actions && filters)) throw new Error("The header lost an island")
+
+	for (const island of [title, actions, filters]) {
+		if (island.getClientRects().length === 0) continue
+		await expect(boxOf(island).left).toBeGreaterThanOrEqual(header.left)
+		await expect(boxOf(island).right).toBeLessThanOrEqual(header.right)
+	}
+	for (const island of [title, actions])
+		await expect(island.scrollWidth).toBeLessThanOrEqual(island.clientWidth)
+	await expect(boxOf(actions).left - boxOf(title).right).toBeGreaterThanOrEqual(
+		8,
+	)
+}
+
+const FRENCH_ONE_ROW_PANEL_WIDTH = { withoutImport: 900, withImport: 992 }
+
+const expectFrenchHeaderFits = async (
+	canvasElement: HTMLElement,
+	oneRowPanelWidth: number,
+) => {
+	const frame = slotIn(canvasElement, "library-artboard-frame")
+	const { title, actions, filters } = islandsIn(canvasElement)
+	if (!(actions && filters)) throw new Error("The header lost an island")
+	const search = slotIn(actions, "library-search")
+	const frameEdges =
+		boxOf(frame).width - boxOf(slotIn(canvasElement, "library-panel")).width
+	const setPanelWidth = (width: number) => {
+		frame.style.width = `${width + frameEdges}px`
+	}
+
+	await expect(
+		within(title).getByRole("heading", { level: 1, name: "Bibliothèque" }),
+	).toBeVisible()
+	await expectIslandsFit(canvasElement)
+
+	try {
+		setPanelWidth(oneRowPanelWidth)
+		await expect(
+			within(title).getByRole("group", { name: "Afficher" }),
+		).toBeVisible()
+		await expect(filters).not.toBeVisible()
+		await expect(boxOf(search).width).toBeGreaterThanOrEqual(160)
+		await expectIslandsFit(canvasElement)
+
+		setPanelWidth(oneRowPanelWidth - 1)
+		await expect(within(title).queryByRole("group")).toBe(null)
+		await expect(
+			within(filters).getByRole("group", { name: "Afficher" }),
+		).toBeVisible()
+		await expectIslandsFit(canvasElement)
+
+		for (let width = oneRowPanelWidth + 64; width >= 320; width -= 8) {
+			setPanelWidth(width)
+			await expectIslandsFit(canvasElement)
+		}
+	} finally {
+		frame.style.width = ""
+	}
+}
+
+export const FloatingHeaderFrenchImport = meta.story({
+	args: { items: LIBRARY_ITEMS_WITH_BOARDS },
+	globals: { theme: "light" },
+	beforeEach: inFrench,
+	render: (args) => (
+		<LibraryArtboardFrame width="tight">
+			<LibraryPanel {...args} />
+		</LibraryArtboardFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The widest header the Library draws: French, with Import beside the search, New board and New document, in a 920 px panel, where the filters already sit on their second row. Reach for this when a label, a locale or an action changes. Check that no island crosses the header edge or spills its content and that the two first-row islands stay at least 8 px apart, here, at the 992 px that are the narrowest panel keeping the filters beside the title, 1 px under it where they move to their own island, and at every width down to 320 px.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			actionsIn(canvasElement)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Importer", "Nouveau tableau", "Nouveau document"])
+		await expectFrenchHeaderFits(
+			canvasElement,
+			FRENCH_ONE_ROW_PANEL_WIDTH.withImport,
+		)
+	},
+})
+
+export const FloatingHeaderFrench = FloatingHeaderFrenchImport.extend({
+	args: { onImport: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The French header as the app draws it today, without Import, in a 920 px panel, where the filters still sit beside the title. Check that no island crosses the header edge or spills its content and that the two first-row islands stay at least 8 px apart, here, at the 900 px that are the narrowest panel keeping the filters beside the title, 1 px under it where they move to their own island, and at every width down to 320 px. `FloatingHeaderFrenchImport` covers the wider header Import makes.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(
+			actionsIn(canvasElement)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Nouveau tableau", "Nouveau document"])
+		await expectFrenchHeaderFits(
+			canvasElement,
+			FRENCH_ONE_ROW_PANEL_WIDTH.withoutImport,
+		)
+	},
+})
