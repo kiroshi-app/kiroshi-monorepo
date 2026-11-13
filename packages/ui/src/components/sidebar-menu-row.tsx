@@ -6,15 +6,9 @@ import {
 	type HTMLAttributes,
 	type MouseEvent,
 	type ReactNode,
-	useId,
 	useRef,
 } from "react"
 
-import {
-	describeSidebarRowTooltip,
-	SidebarRowTooltip,
-	type SidebarRowTooltipFields,
-} from "@workspace/ui/components/sidebar-row-tooltip"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	SidebarMenuButton,
@@ -116,7 +110,7 @@ interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	isIconDecorative?: boolean
 	isActive?: boolean
 	isMiddleClickSelectable?: boolean
-	tooltip?: SidebarRowTooltipFields
+	hasRowTooltip?: boolean
 	isTooltipHidden?: boolean
 	onSelect?: (modifiers: SidebarClickModifiers) => void
 	className?: string
@@ -133,7 +127,7 @@ const SidebarMenuRow = ({
 	isIconDecorative = true,
 	isActive = false,
 	isMiddleClickSelectable = false,
-	tooltip,
+	hasRowTooltip = false,
 	isTooltipHidden = false,
 	onSelect,
 	className,
@@ -142,7 +136,6 @@ const SidebarMenuRow = ({
 }: SidebarMenuRowProps) => {
 	const { isMobile, setOpenMobile, state } = useSidebar()
 	const rowRef = useRef<HTMLButtonElement>(null)
-	const descriptionId = useId()
 	const isCollapsed = !isMobile && state === "collapsed"
 	const classes = VARIANT[variant]
 
@@ -172,9 +165,6 @@ const SidebarMenuRow = ({
 		<SidebarMenuButton
 			{...elementProps}
 			aria-current={isActive ? "page" : elementProps["aria-current"]}
-			aria-describedby={
-				tooltip ? descriptionId : elementProps["aria-describedby"]
-			}
 			aria-label={isCollapsed ? label : undefined}
 			className={cn(
 				ROW,
@@ -203,7 +193,7 @@ const SidebarMenuRow = ({
 		</SidebarMenuButton>
 	)
 
-	if (!tooltip)
+	if (!hasRowTooltip)
 		return (
 			<TooltipHint content={isCollapsed ? label : null} side="right">
 				{row}
@@ -211,24 +201,20 @@ const SidebarMenuRow = ({
 		)
 
 	return (
-		<>
-			<TooltipHint
-				content={isTooltipHidden ? null : <SidebarRowTooltip {...tooltip} />}
-				side="right"
-				sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
-				variant="card"
-			>
-				{row}
-			</TooltipHint>
-			<span hidden id={descriptionId}>
-				{describeSidebarRowTooltip(tooltip)}
-			</span>
-		</>
+		<TooltipHint
+			content={isTooltipHidden ? null : label}
+			side="right"
+			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
+			variant="line"
+		>
+			{row}
+		</TooltipHint>
 	)
 }
 
 export {
 	NO_CLICK_MODIFIERS,
+	offsetPastSidebarEdge,
 	SIDEBAR_AVATAR_SIDE,
 	SIDEBAR_COLUMN,
 	SIDEBAR_GLYPH_BOX,

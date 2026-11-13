@@ -203,10 +203,16 @@ export const expectAnswerInsideFrame = async (root: HTMLElement) => {
 type SidebarFrameProps = {
 	children: ReactNode
 	width?: number
+	isCollapsed?: boolean
 }
 
-export const SidebarFrame = ({ children, width }: SidebarFrameProps) => (
+export const SidebarFrame = ({
+	children,
+	width,
+	isCollapsed = false,
+}: SidebarFrameProps) => (
 	<SidebarProvider
+		defaultOpen={!isCollapsed}
 		style={
 			width === undefined
 				? undefined
@@ -1245,7 +1251,7 @@ const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
 
 const GAP_PAST_SIDEBAR_EDGE = 4
 
-export const expectTooltipBesideTheSidebar = async (
+const expectTooltipBesideTheSidebar = async (
 	row: HTMLElement,
 	tooltip: HTMLElement,
 ) => {
@@ -1276,29 +1282,12 @@ export const expectTooltipPastTheSidebarEdge = async (
 	}, FRAME_POLL)
 }
 
-export const expectTooltipCard = async (tooltip: HTMLElement) => {
+export const expectTooltipOnOneLine = async (tooltip: HTMLElement) => {
 	const style = getComputedStyle(tooltip)
-	await expect(style.backgroundColor).toBe(
-		tokenStyleIn(tooltip, "bg-foreground", "backgroundColor"),
-	)
-	await expect(style.borderTopLeftRadius).toBe(
-		tokenStyleIn(tooltip, "rounded-xl", "borderTopLeftRadius"),
-	)
-	await expect([
-		style.paddingTop,
-		style.paddingBottom,
-		style.paddingRight,
-	]).toEqual([style.paddingLeft, style.paddingLeft, style.paddingLeft])
-	await expect(tooltip.getBoundingClientRect().width).toBeLessThanOrEqual(
-		Number.parseFloat(style.maxWidth),
-	)
-}
-
-export const expectClampedTo = async (text: HTMLElement, lines: number) => {
-	const lineHeight = Number.parseFloat(getComputedStyle(text).lineHeight)
-	await expect(text.scrollHeight).toBeGreaterThan(text.clientHeight)
-	await expect(text.getBoundingClientRect().height).toBeCloseTo(
-		lines * lineHeight,
+	await expect(tooltip.getBoundingClientRect().height).toBeCloseTo(
+		Number.parseFloat(style.lineHeight) +
+			Number.parseFloat(style.paddingTop) +
+			Number.parseFloat(style.paddingBottom),
 		0,
 	)
 }

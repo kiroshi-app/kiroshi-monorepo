@@ -5,7 +5,6 @@ import {
 	type AppSidebarBot,
 	type AppSidebarSection,
 	botPreviewOf,
-	botTooltipOf,
 	isBusy,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
@@ -139,6 +138,7 @@ const BotRosterRow = ({
 						isLiftable
 						badge={bot.badge}
 						geometry={isCompact ? "compact" : "agent"}
+						hasRowTooltip
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isTooltipHidden={isLifted || isMenuOpen}
@@ -158,7 +158,6 @@ const BotRosterRow = ({
 						preview={botPreviewOf(t, bot)}
 						strips={missionStripsOf(bot.missions)}
 						timestamp={bot.timestamp ?? ""}
-						tooltip={botTooltipOf(t, bot)}
 						trailing={
 							<BotTitleBadge
 								className={TITLE_BADGE}
@@ -169,6 +168,7 @@ const BotRosterRow = ({
 					/>
 					{isCompact ? (
 						<MissionCapsuleList
+							isTooltipHidden={isLifted || isMenuOpen}
 							missions={bot.missions}
 							onOpenMission={onOpenMission}
 							openMissionId={openMissionId}
