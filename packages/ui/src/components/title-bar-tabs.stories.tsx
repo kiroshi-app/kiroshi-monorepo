@@ -329,8 +329,6 @@ export const SearchAfterForward = meta.story({
 		await expect(boxOf(glyph).width).toBe(GLYPH_ICON)
 		await expect(glyphOf(glyph)).toEqual(glyphDrawnBy(Icons.Search))
 
-		await userEvent.click(search)
-		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
 		await userEvent.hover(search)
 		await waitFor(
 			() =>
@@ -339,6 +337,8 @@ export const SearchAfterForward = meta.story({
 				),
 			FRAME_POLL,
 		)
+		await userEvent.click(search)
+		await expect(args.onOpenSearch).toHaveBeenCalledOnce()
 	},
 })
 
