@@ -871,33 +871,28 @@ async fn host_effect_applied(
 		}
 		"library_comment_create" => {
 			let (app, library) = (effects.app(), effects.library());
-			let said = match said_by_the_caller(&effects, &headers, &args) {
-				Ok(said) => said,
-				refused => return answered_by_the_library(refused.map(|_| ())),
-			};
 			let (space_id, name, anchor) = (text("spaceId"), text("name"), typed(&args, "anchor"));
-			return answered_by_the_library(
-				library::open_comment_thread(
-					app, &database, &library, &space_id, &name, anchor, said,
-				)
-				.await,
-			);
+			let opened = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					library::open_comment_thread(
+						app, &database, &library, &space_id, &name, anchor, said,
+					)
+					.await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(opened);
 		}
 		"library_comment_reply" => {
-			let said = match said_by_the_caller(&effects, &headers, &args) {
-				Ok(said) => said,
-				refused => return answered_by_the_library(refused.map(|_| ())),
+			let (app, library) = (effects.app(), effects.library());
+			let replied = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					let thread = thread_named(&args);
+					library::reply_to_comment_thread(app, &database, &library, thread, said).await
+				}
+				Err(refused) => Err(refused),
 			};
-			return answered_by_the_library(
-				library::reply_to_comment_thread(
-					effects.app(),
-					&database,
-					&effects.library(),
-					thread_named(&args),
-					said,
-				)
-				.await,
-			);
+			return answered_by_the_library(replied);
 		}
 		"library_comment_resolve" | "library_comment_reopen" => {
 			let state = match command.as_str() {

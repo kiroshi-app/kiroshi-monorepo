@@ -76,25 +76,21 @@ impl Commented {
 
 	fn accepts(&self, name: &str, anchor: &Anchor) -> Result<(), LibraryError> {
 		let name = name.to_owned();
-		let is_placed = match (anchor, self) {
-			(Anchor::Block { .. }, Commented::Document { .. }) => true,
-			(Anchor::Passage { start, end, .. }, Commented::Document { .. }) => start <= end,
+		match (anchor, self) {
+			(Anchor::Block { .. } | Anchor::Passage { .. }, Commented::Document { .. })
+			| (Anchor::ImagePoint { .. } | Anchor::ImageZone { .. }, Commented::Image)
+			| (Anchor::BoardNode { .. } | Anchor::BoardPoint { .. }, Commented::Board(_)) => {}
 			(Anchor::Block { .. } | Anchor::Passage { .. }, _) => {
 				return Err(LibraryError::NotADocument { name });
-			}
-			(Anchor::ImagePoint { x, y }, Commented::Image) => [x, y].into_iter().all(is_a_ratio),
-			(Anchor::ImageZone { x, y, width, height }, Commented::Image) => {
-				[x, y, width, height].into_iter().all(is_a_ratio)
 			}
 			(Anchor::ImagePoint { .. } | Anchor::ImageZone { .. }, _) => {
 				return Err(LibraryError::NotAnImage { name });
 			}
-			(Anchor::BoardNode { .. } | Anchor::BoardPoint { .. }, Commented::Board(_)) => true,
 			(Anchor::BoardNode { .. } | Anchor::BoardPoint { .. }, _) => {
 				return Err(LibraryError::NotABoard { name });
 			}
-		};
-		if !is_placed {
+		}
+		if !is_well_formed(anchor) {
 			return Err(LibraryError::InvalidAnchor { name });
 		}
 		Ok(())
@@ -124,6 +120,17 @@ impl Commented {
 			state: thread.state,
 			comments: thread.comments,
 		}
+	}
+}
+
+fn is_well_formed(anchor: &Anchor) -> bool {
+	match anchor {
+		Anchor::Passage { start, end, .. } => start <= end,
+		Anchor::ImagePoint { x, y } => [x, y].into_iter().all(is_a_ratio),
+		Anchor::ImageZone { x, y, width, height } => {
+			[x, y, width, height].into_iter().all(is_a_ratio)
+		}
+		Anchor::Block { .. } | Anchor::BoardNode { .. } | Anchor::BoardPoint { .. } => true,
 	}
 }
 
