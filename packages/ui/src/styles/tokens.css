@@ -97,8 +97,6 @@
 	--title-bar-menu-border: oklch(0 0 0 / 6%);
 	--card: #ffffff;
 	--card-raised: #fafafa;
-	--header-island-control-hover: var(--muted);
-	--header-island-control-pressed: #e6e6e6;
 	--popover: #ffffff;
 	--popover-foreground: #0a0a0a;
 	--primary: var(--hue-light-accent, var(--hue-blue-accent));
@@ -337,8 +335,6 @@
 	--title-bar-menu-border: oklch(1 0 0 / 8%);
 	--card: #121213;
 	--card-raised: #18181a;
-	--header-island-control-hover: #1f1f21;
-	--header-island-control-pressed: var(--muted);
 	--popover: #121213;
 	--popover-foreground: #f5f5f5;
 	--primary: var(--hue-dark-accent, var(--hue-blue-accent));
