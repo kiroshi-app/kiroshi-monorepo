@@ -60,7 +60,7 @@ const AUTHOR_LINE = "flex h-5 min-w-0 max-w-full items-center gap-2"
 const GIVES_WAY_TO_THE_NAME = "min-w-0 max-w-max grow basis-0 truncate"
 
 const AGENT_TITLE_BADGE =
-	"rounded-[5px] bg-muted px-1.5 py-[3px] font-medium text-[11px] text-muted-foreground leading-3"
+	"rounded-[5px] bg-author-line-badge px-1.5 py-[3px] font-medium text-[11px] text-muted-foreground leading-3"
 
 const TRANSCRIPT_VIEWPORT = '[data-slot="message-scroller-viewport"]'
 

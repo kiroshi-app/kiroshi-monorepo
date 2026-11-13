@@ -1005,13 +1005,13 @@ const REPLY_COLOURS = {
 		text: "rgb(10, 10, 10)",
 		muted: "rgb(107, 107, 107)",
 		marker: "rgb(143, 143, 143)",
-		badgeFill: "rgb(242, 242, 242)",
+		badgeFill: "oklch(0 0 0 / 0.05)",
 	},
 	dark: {
 		text: "rgb(245, 245, 245)",
 		muted: "rgb(163, 163, 163)",
 		marker: "rgb(115, 115, 115)",
-		badgeFill: "rgb(38, 38, 38)",
+		badgeFill: "oklch(1 0 0 / 0.08)",
 	},
 } as const satisfies Record<string, ReplyColours>
 
