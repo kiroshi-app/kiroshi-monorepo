@@ -1711,9 +1711,7 @@ const PRESENCE_ARGS = {
 }
 
 const barIn = (canvasElement: HTMLElement) =>
-	within(
-		breadcrumbIn(canvasElement).closest("nav")?.parentElement as HTMLElement,
-	)
+	within(slotIn(canvasElement, "library-document-bar"))
 
 const WRITING_COUNT = /agents? writing/
 
@@ -1726,6 +1724,8 @@ const expectPeopleInBar = async (
 	await expect(names.map((name) => bar.getByRole("img", { name }))).toEqual(
 		avatars,
 	)
+	for (const avatar of avatars)
+		await expect(avatar.getBoundingClientRect().width).toBe(22)
 }
 
 export const PresencePeopleOnly = meta.story({

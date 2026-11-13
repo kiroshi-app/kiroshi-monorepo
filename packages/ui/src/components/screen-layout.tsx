@@ -22,6 +22,9 @@ interface ScreenLayoutProps extends ComponentProps<"div"> {
 	footerClassName?: string
 }
 
+const FLOATING_HEADER =
+	"pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-between gap-2 p-2"
+
 const SCROLL_CONTAINER = /auto|scroll/
 
 const publishHeaderHeight = (header: HTMLDivElement) => {
@@ -111,7 +114,7 @@ const ScreenLayout = ({
 						/>
 					) : null}
 					<div
-						className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-between p-2"
+						className={FLOATING_HEADER}
 						data-slot="screen-layout-floating-header"
 						ref={publishHeaderHeight}
 					>
@@ -152,4 +155,4 @@ const ScreenLayout = ({
 	)
 }
 
-export { ScreenLayout, type ScreenLayoutWidth }
+export { FLOATING_HEADER, ScreenLayout, type ScreenLayoutWidth }

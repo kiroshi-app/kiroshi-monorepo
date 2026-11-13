@@ -30,6 +30,7 @@ import {
 } from "@workspace/ui/components/library-document-block-editor"
 import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
 import {
+	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	GrowingField,
 	LibraryDocumentBar,
@@ -40,6 +41,7 @@ import type {
 	LibraryMenuSubject,
 } from "@workspace/ui/components/library-item-menu"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 type TemplateLine = {
 	text: string
@@ -331,72 +333,76 @@ const LibraryDocumentEditor = ({
 	const barItem = useMemo(() => ({ name: title }), [title])
 
 	return (
-		<div
-			className="relative flex size-full min-h-0 flex-col"
+		<ScreenLayout
+			className={DOCUMENT_PAGE}
 			data-slot="library-document-editor"
-		>
-			<LibraryDocumentBar
-				{...actions}
-				item={barItem}
-				menuFinalFocus={menuFinalFocus}
-				onBack={onBack}
-				presence={
-					writers.length > 0 || (people?.length ?? 0) > 0 ? (
-						<LibraryDocumentPresence
-							onStopAll={onStopAll}
-							people={people}
-							writers={writers}
-						/>
-					) : null
-				}
-			/>
-			<LibraryDocumentColumn
-				detail={detail}
-				onColumnMouseDown={writeFromColumn}
-				heading={
-					<GrowingField
-						aria-label={t("library.editor.title")}
-						className={DOCUMENT_TITLE}
-						fieldRef={titleField}
-						onBlur={(event) => confirmTitle(event.currentTarget.value)}
-						onChange={(event) => changeTitle(event.target.value)}
-						onFocus={() => {
-							titleAtEditStart.current = title
-						}}
-						onKeyDown={(event) => {
-							if (event.nativeEvent.isComposing) return
-							if (event.key === "Enter") {
-								event.preventDefault()
-								confirmTitle(event.currentTarget.value)
-								blocks.current?.focusStart()
-							} else if (event.key === "Escape") {
-								event.preventDefault()
-								cancelTitleEdit(event.currentTarget)
-							}
-						}}
-						placeholder={t("library.editor.untitled")}
-						fieldClassName="placeholder:text-title-placeholder-foreground"
-						value={title}
-					/>
-				}
-			>
-				<LibraryDocumentBlockEditor
-					body={body}
-					format={format}
-					onAddImages={onAddImages}
-					onBodyChange={onBodyChange}
-					onCaretChange={onCaretChange}
-					onLinkPreview={onLinkPreview}
-					onOpenConversation={onOpenConversation}
-					onStop={onStop}
-					people={people}
-					placeholders={placeholders}
-					ref={blocks}
-					resolveImage={resolveImage}
-					writers={writers}
+			header={
+				<LibraryDocumentBar
+					{...actions}
+					item={barItem}
+					menuFinalFocus={menuFinalFocus}
+					onBack={onBack}
+					presence={
+						writers.length > 0 || (people?.length ?? 0) > 0 ? (
+							<LibraryDocumentPresence
+								onStopAll={onStopAll}
+								people={people}
+								writers={writers}
+							/>
+						) : null
+					}
 				/>
-			</LibraryDocumentColumn>
-		</div>
+			}
+			isHeaderFloating
+			scroller={() => (
+				<LibraryDocumentColumn
+					detail={detail}
+					onColumnMouseDown={writeFromColumn}
+					heading={
+						<GrowingField
+							aria-label={t("library.editor.title")}
+							className={DOCUMENT_TITLE}
+							fieldRef={titleField}
+							onBlur={(event) => confirmTitle(event.currentTarget.value)}
+							onChange={(event) => changeTitle(event.target.value)}
+							onFocus={() => {
+								titleAtEditStart.current = title
+							}}
+							onKeyDown={(event) => {
+								if (event.nativeEvent.isComposing) return
+								if (event.key === "Enter") {
+									event.preventDefault()
+									confirmTitle(event.currentTarget.value)
+									blocks.current?.focusStart()
+								} else if (event.key === "Escape") {
+									event.preventDefault()
+									cancelTitleEdit(event.currentTarget)
+								}
+							}}
+							placeholder={t("library.editor.untitled")}
+							fieldClassName="placeholder:text-title-placeholder-foreground"
+							value={title}
+						/>
+					}
+				>
+					<LibraryDocumentBlockEditor
+						body={body}
+						format={format}
+						onAddImages={onAddImages}
+						onBodyChange={onBodyChange}
+						onCaretChange={onCaretChange}
+						onLinkPreview={onLinkPreview}
+						onOpenConversation={onOpenConversation}
+						onStop={onStop}
+						people={people}
+						placeholders={placeholders}
+						ref={blocks}
+						resolveImage={resolveImage}
+						writers={writers}
+					/>
+				</LibraryDocumentColumn>
+			)}
+		/>
 	)
 }
 
