@@ -97,7 +97,8 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 	};
 	match (id, command, args) {
 		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
-			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown_to_this_host(command))))
+			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
+			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
 		}
 		(Some(id), Some(command), Some(args)) if belongs_to_the_host(command, &args) => {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
@@ -196,10 +197,6 @@ pub(super) fn shared_space_answer(text: &str, shared_space_id: &str) -> Option<S
 pub(super) fn belongs_to_the_host(command: &str, args: &Value) -> bool {
 	reach::reach_of(command) == Some(Reach::HostOnly)
 		|| (command.starts_with("plugin_") && args["scope"]["kind"] == "user")
-}
-
-fn unknown_to_this_host(command: &str) -> String {
-	format!("{UNKNOWN_COMMAND_REFUSAL} {command}")
 }
 
 pub(super) fn refused(id: Option<Value>) -> String {
