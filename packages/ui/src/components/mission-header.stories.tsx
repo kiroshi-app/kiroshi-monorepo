@@ -926,7 +926,7 @@ const expectContentHeldAt =
 		await expectContentBelowTheIslands(layout, top)
 		await expect(contentTopOf(layout, "message-scroller-content")).toBe(top)
 		await expect(boxOf(ticketIslandIn(layout)).bottom - boxOf(layout).top).toBe(
-			top - ISLAND_INSET + 2,
+			top - ISLAND_INSET + TICKET_ISLAND_HEIGHT - ISLAND_HEIGHT,
 		)
 	}
 
