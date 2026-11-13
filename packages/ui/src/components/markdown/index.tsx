@@ -49,6 +49,7 @@ import {
 	type MarkdownSize,
 	MarkdownSizeContext,
 } from "@workspace/ui/components/markdown/size"
+import { rehypeStreamingTail } from "@workspace/ui/components/markdown/streaming-tail"
 import { MarkdownTaskToggleContext } from "@workspace/ui/components/markdown/task-list"
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { cn } from "@workspace/ui/lib/utils"
@@ -150,6 +151,7 @@ export const Markdown = ({
 												[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 												[rehypeScopeIds, { scope }],
 												[rehypeAnswerMarks, { isWriting }],
+												...(isWriting ? [rehypeStreamingTail] : []),
 											]}
 											remarkPlugins={remarkPlugins}
 											urlTransform={keepDrivePaths}

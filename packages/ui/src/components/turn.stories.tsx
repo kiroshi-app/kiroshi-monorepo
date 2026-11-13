@@ -16,6 +16,7 @@ import {
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -1299,6 +1300,204 @@ export const Writing = meta.story({
 		)
 		await expect(within(line).queryByRole("button", { name: "Pin" })).toBe(null)
 		await expect(line.getBoundingClientRect().height).toBe(20)
+	},
+})
+
+const STREAMED_SO_FAR =
+	"The design system holds every visual, and the Tauri shell only places them where the screen needs"
+
+const STREAMED_FURTHER = `${STREAMED_SO_FAR} them, nothing`
+
+const SHARP = { filter: "none", opacity: "1" }
+
+const TAIL_STEPS = [
+	{ filter: "blur(1px)", opacity: "0.75" },
+	{ filter: "blur(2.5px)", opacity: "0.55" },
+	{ filter: "blur(4px)", opacity: "0.3" },
+]
+
+const paintOf = (word: Element) => {
+	const { filter, opacity } = getComputedStyle(word)
+	return { filter, opacity }
+}
+
+const streamingWordsIn = (reply: HTMLElement) =>
+	slotsIn(reply, "markdown-streaming-word")
+
+const softenedIn = (reply: HTMLElement) =>
+	Array.from(reply.querySelectorAll("*")).filter(
+		(element) =>
+			paintOf(element).filter !== SHARP.filter ||
+			paintOf(element).opacity !== SHARP.opacity,
+	)
+
+type StreamingReplyProps = {
+	children: string
+	isWriting?: boolean
+}
+
+const StreamingReply = ({
+	children,
+	isWriting = true,
+}: StreamingReplyProps) => (
+	<AssistantTurn
+		author={ROLE_BOT}
+		state={isWriting ? "streaming" : "complete"}
+		isWriting={isWriting}
+		copyText={children}
+		onPin={pin}
+		onReply={reply}
+		sentAt={sentOn(10, 9, 20)}
+		now={READ_ON}
+	>
+		<Markdown isWriting={isWriting}>{children}</Markdown>
+	</AssistantTurn>
+)
+
+const expectStreamingTail = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const line = tagIn(reply, "p")
+	const words = streamingWordsIn(reply)
+	await expect(line.textContent).toBe(STREAMED_SO_FAR)
+	await expect(typeOf(line)).toEqual(["16px", "28px", "400"])
+	await expect(getComputedStyle(line).color).toBe(colours.text)
+	const [settling, ...tail] = words
+	await expect(words.map((word) => word.textContent)).toEqual([
+		"where",
+		"the",
+		"screen",
+		"needs",
+	])
+	await expect(paintOf(settling)).toEqual(SHARP)
+	await expect(tail.map(paintOf)).toEqual(TAIL_STEPS)
+	await expect(softenedIn(reply)).toEqual(tail)
+	for (const word of words) {
+		await expect(word.getAttributeNames().sort()).toEqual([
+			"class",
+			"data-slot",
+			"data-step",
+		])
+		await expect(getComputedStyle(word).color).toBe(colours.text)
+		await expect(getComputedStyle(word).transitionProperty).toBe("none")
+	}
+	await withMotionAllowed(async () => {
+		await waitFor(() =>
+			expect([
+				getComputedStyle(settling).transitionProperty,
+				getComputedStyle(settling).transitionDuration,
+			]).toEqual(["filter, opacity", "0.2s"]),
+		)
+	})
+
+	const writing = slotIn(reply, "author-line-writing")
+	await expect(writing).toHaveTextContent("writing…")
+	await expect(getComputedStyle(writing).color).toBe(colours.muted)
+}
+
+export const StreamingTail = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<ThreadColumn>
+			<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
+		</ThreadColumn>
+	),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 11, light. Reach for this for the reply while its words arrive. Check that the last three words of the line it is writing soften one step each, the last one the softest, that every word before them is sharp, that the line reads as one plain sentence to a screen reader, and that the author line reads writing… under it. The softening eases from one step to the next, and switches at once under `prefers-reduced-motion`. Pick `StreamingTailDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectStreamingTail(canvasElement, REPLY_COLOURS.light),
+})
+
+export const StreamingTailDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => (
+		<ThreadColumn>
+			<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
+		</ThreadColumn>
+	),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 11, dark. The same streaming line as `StreamingTail` on the dark thread. Check that the three softened words keep their steps and stay in the foreground colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectStreamingTail(canvasElement, REPLY_COLOURS.dark),
+})
+
+type StreamingStage = "started" | "further" | "complete"
+
+const StreamingTailStages = () => {
+	const [stage, setStage] = useState<StreamingStage>("started")
+
+	return (
+		<ThreadColumn>
+			<StreamingReply isWriting={stage !== "complete"}>
+				{stage === "started" ? STREAMED_SO_FAR : STREAMED_FURTHER}
+			</StreamingReply>
+			<div className="flex gap-2">
+				<Button onClick={() => setStage("further")} size="sm" variant="outline">
+					Write two more words
+				</Button>
+				<Button
+					onClick={() => setStage("complete")}
+					size="sm"
+					variant="outline"
+				>
+					Complete the reply
+				</Button>
+			</div>
+		</ThreadColumn>
+	)
+}
+
+export const StreamingTailSettles = meta.story({
+	tags: ["test-only"],
+	render: () => <StreamingTailStages />,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The streaming line as more words arrive, then as the reply completes. Check that the softened steps move to the three newest words, that every word they left is sharp, and that the completed reply holds no softened word at all.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [reply] = agentRepliesIn(canvasElement)
+
+		await fireEvent.click(
+			canvas.getByRole("button", { name: "Write two more words" }),
+		)
+		await expect(tagIn(reply, "p").textContent).toBe(STREAMED_FURTHER)
+		await expect(
+			streamingWordsIn(reply).map((word) => [word.textContent, paintOf(word)]),
+		).toEqual([
+			["screen", SHARP],
+			["needs", TAIL_STEPS[0]],
+			["them,", TAIL_STEPS[1]],
+			["nothing", TAIL_STEPS[2]],
+		])
+		await expect(softenedIn(reply)).toHaveLength(TAIL_STEPS.length)
+
+		await fireEvent.click(
+			canvas.getByRole("button", { name: "Complete the reply" }),
+		)
+		await expect(tagIn(reply, "p").textContent).toBe(STREAMED_FURTHER)
+		await expect(streamingWordsIn(reply)).toEqual([])
+		await expect(softenedIn(reply)).toEqual([])
 	},
 })
 
