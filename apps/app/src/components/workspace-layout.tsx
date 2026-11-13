@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { NewDeviceScreen } from "@workspace/ui/components/new-device-screen"
@@ -17,6 +19,7 @@ import { onboardingStepOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { onboardingScreenStepOf } from "@/lib/onboarding/onboarding-screen"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
+import { haveLaunchReadsSettled } from "@/lib/workspace/launch-reads"
 import { useWorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
 
@@ -41,16 +44,31 @@ export const WorkspaceLayout = () => {
 		whatsNew,
 	} = workspace
 	const { roster, spaces, user } = core
-	const isShellReady = rosterView.hasLoaded && user.state.hasLoaded
+	const [hasLeftLaunchLoader, setHasLeftLaunchLoader] = useState(false)
 	const isOpenSpaceRostered =
 		rosterView.rosteredSpaceId === scopes.openRowId &&
 		!roster.state.isRosterPending
 
-	useInvokePhaseEnd("boot", isShellReady ? "startup screen gone" : null)
+	useInvokePhaseEnd("boot", hasLeftLaunchLoader ? "startup screen gone" : null)
 	useInvokePhaseEnd(
 		"space switch",
 		isOpenSpaceRostered ? scopes.openRowId : null,
 	)
+
+	if (!hasLeftLaunchLoader) {
+		return (
+			<StartupScreen
+				agents={rosterView.bots}
+				hasFailed={spaces.state.hasFailedToLoad}
+				isExiting={haveLaunchReadsSettled({
+					hasLoadedPreferences: user.state.hasLoaded,
+					roster: roster.state,
+				})}
+				onExitComplete={() => setHasLeftLaunchLoader(true)}
+				onRetry={loadSpaces}
+			/>
+		)
+	}
 
 	if (newDevice) {
 		return (
@@ -58,15 +76,6 @@ export const WorkspaceLayout = () => {
 				<NewDeviceScreen {...newDevice} />
 				<NoticeSurface />
 			</>
-		)
-	}
-
-	if (!isShellReady) {
-		return (
-			<StartupScreen
-				hasFailed={spaces.state.hasFailedToLoad}
-				onRetry={loadSpaces}
-			/>
 		)
 	}
 
