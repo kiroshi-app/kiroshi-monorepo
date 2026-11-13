@@ -30,7 +30,6 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	onRetryList: "the scene roster never fails to load",
 	update: "the scene shows an app that is up to date",
 	missionCount: "the scene rail draws no dot, so it counts no mission",
-	openMissionId: "no mission thread opens in the scene",
 	isSettingsShown: "no settings screen opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
@@ -42,14 +41,11 @@ const SCENE_PROP_OF_SIDEBAR_PROP: Record<string, string> = {
 	listEnd: "rosterListEnd",
 	onNewConversation: "onCreateConversation",
 	onOpenChange: "onSpaceSwitcherOpenChange",
-	onOpenConversation: "onSelectConversation",
 	onOpenSettings: "onOpenUserSettings",
 	onSelectMissions: "onOpenPanelChange",
-	openConversationId: "selectedConversationId",
 	pinned: "conversations",
 	renderSpaceList: "conversationsBySpaceId",
 	sections: "sectionsBySpaceId",
-	zones: "conversations",
 }
 
 const SCENE_PROPS_THE_SECTIONS_SLOT_READS = ["collapsedSectionIds"]
