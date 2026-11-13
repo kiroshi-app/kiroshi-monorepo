@@ -279,7 +279,7 @@ const expectFloatingHeader = async (
 		64,
 	])
 	await expect(getComputedStyle(fade).backgroundImage).toContain(
-		`${surface} 50%, rgba(0, 0, 0, 0) 100%`,
+		`${surface} max(50%, 100% - 40px), rgba(0, 0, 0, 0) 100%`,
 	)
 	await expect(fade).toHaveAttribute("aria-hidden", "true")
 	await expect(
@@ -339,7 +339,7 @@ export const FloatingHeaderLateFadeStop = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a screen whose content needs the fade to stay opaque longer, as the mission screen does. Check that the fade holds the frame surface down to 70% of its height instead of the default 50%, then clears at the bottom.",
+					"Reach for this for a screen whose content needs the fade to stay opaque longer, as the mission screen does. Check that the fade holds the frame surface down to 70% of its height instead of the default 50%, then clears at the bottom. A header taller than one island row needs no stop of its own: the fade grows with the header and never clears over more than its last 40px.",
 			},
 		},
 	},
@@ -354,7 +354,7 @@ export const FloatingHeaderLateFadeStop = meta.story({
 		)
 
 		await expect(getComputedStyle(fade).backgroundImage).toContain(
-			`${surface} 70%, rgba(0, 0, 0, 0) 100%`,
+			`${surface} max(70%, 100% - 40px), rgba(0, 0, 0, 0) 100%`,
 		)
 	},
 })

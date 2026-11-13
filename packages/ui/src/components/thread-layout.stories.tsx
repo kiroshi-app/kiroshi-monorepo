@@ -970,6 +970,7 @@ const groupIslands = (name: string) => (
 		leading={
 			<HeaderConversationButton
 				color={BLOT_HUES.blue}
+				icon="FileText"
 				name={name}
 				onOpenSettings={openSubjectSettings}
 			/>

@@ -72,7 +72,7 @@ const HeaderSubjectButton = ({
 			<span className="flex w-8 shrink-0 justify-center">
 				<Icons.Settings
 					aria-hidden="true"
-					className="size-4 text-muted-foreground"
+					className="size-4 text-soft-foreground"
 				/>
 			</span>
 		</button>

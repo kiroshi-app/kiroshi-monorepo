@@ -166,7 +166,7 @@ const meta = preview.meta({
 					<Icons.Pin />
 				</HeaderIslandButton>
 				<HeaderIslandButton aria-label="Routines">
-					<Icons.SidePanel />
+					<Icons.Switch />
 				</HeaderIslandButton>
 			</HeaderIsland>
 		</div>

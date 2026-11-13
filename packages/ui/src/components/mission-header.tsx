@@ -38,7 +38,8 @@ const MISSION_HEADER_AVATAR_SIZE = 24
 
 const MISSION_HEADER_ROWS = "@container flex w-full min-w-0 flex-col gap-2"
 
-const MISSION_TICKET_ISLAND = "h-auto min-h-10 flex-wrap gap-0"
+const MISSION_TICKET_ISLAND =
+	"-mb-0.5 h-auto gap-0 py-1 @max-2xl:min-h-26.5 @max-2xl:flex-wrap @max-2xl:content-start"
 
 const MISSION_TICKET_STACKED_CELL = "@max-2xl:basis-full"
 
@@ -111,7 +112,7 @@ const MissionHeader = ({
 						>
 							<Icons.Previous aria-hidden="true" />
 						</HeaderIslandButton>
-						<HeaderIslandCell className="p-1">
+						<HeaderIslandCell className="p-1 pe-2">
 							<BotIdentityAvatar
 								badge={missionBadgeFor(state)}
 								hue={bot.blot}
@@ -144,7 +145,9 @@ const MissionHeader = ({
 						{hasTicket ? (
 							<MissionTicketLine layout="line" ticket={ticket} />
 						) : null}
-						{hasTicket && hasTools ? <MissionTicketRule /> : null}
+						{hasTicket && hasTools ? (
+							<MissionTicketRule className="ms-1" />
+						) : null}
 						{hasTools ? (
 							<ul
 								aria-label={t("missions.header.tools")}
@@ -162,6 +165,7 @@ const MissionHeader = ({
 				{shownStatus ? (
 					<HeaderIslandCell
 						className={cn(
+							"shrink-[100]",
 							MISSION_TICKET_STACKED_CELL,
 							hasTicketCell && "ps-0 @max-2xl:ps-2",
 						)}
@@ -192,7 +196,7 @@ const MissionHeader = ({
 				>
 					{hasActivityLine({ commitsAhead, pullRequest }) ? (
 						<span
-							className="flex items-center gap-3"
+							className="flex items-center gap-3 text-soft-foreground"
 							data-slot="mission-activity"
 						>
 							{commitsAhead > 0 ? (
@@ -210,6 +214,7 @@ const MissionHeader = ({
 										className="size-3.5 shrink-0"
 									/>
 									<MissionLink
+										className="font-normal text-soft-foreground"
 										pullRequest={pullRequest.number}
 										url={pullRequest.url}
 									/>
@@ -222,7 +227,7 @@ const MissionHeader = ({
 						dateTime={new Date(openedAt).toISOString()}
 					>
 						{t("missions.header.openedAt", {
-							time: toRelativeTime(openedAt, now),
+							time: toRelativeTime(openedAt, now, "short"),
 						})}
 					</time>
 				</HeaderIslandCell>

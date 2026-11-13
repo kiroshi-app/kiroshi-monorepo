@@ -35,7 +35,7 @@ type MissionStateWithPill = keyof typeof MISSION_STATE_MARK
 
 const MISSION_STATE_DOT = {
 	waiting_human: "bg-mission-glyph-waiting",
-	ready_to_merge: "bg-success",
+	ready_to_merge: "bg-mission-glyph-ready",
 	failed: "bg-mission-glyph-failed",
 	done: "bg-bot-badge-done",
 	closed: "bg-muted-foreground",

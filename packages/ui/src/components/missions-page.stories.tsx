@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
 	expect,
 	fireEvent,
@@ -680,7 +681,14 @@ const expectMissionsIsland = async (
 	return { page, groups }
 }
 
+const onTheContentCard = (Story: () => ReactNode) => (
+	<div className="fixed inset-0 bg-card" data-content-card="">
+		<Story />
+	</div>
+)
+
 export const Missions4a = meta.story({
+	decorators: [onTheContentCard],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
@@ -696,6 +704,7 @@ export const Missions4a = meta.story({
 })
 
 export const MissionsDark4b = meta.story({
+	decorators: [onTheContentCard],
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
 	parameters: {
 		docs: {
@@ -718,6 +727,7 @@ export const MissionsScrolled4c = meta.story({
 				<Story />
 			</div>
 		),
+		onTheContentCard,
 	],
 	parameters: {
 		docs: {

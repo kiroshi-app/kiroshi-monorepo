@@ -188,7 +188,9 @@ const MissionStatusTime = ({
 		data-slot="mission-status-time"
 		dateTime={new Date(status.writtenAt).toISOString()}
 	>
-		{(isElapsed ? toElapsedTime : toRelativeTime)(status.writtenAt, status.now)}
+		{isElapsed
+			? toElapsedTime(status.writtenAt, status.now, "short")
+			: toRelativeTime(status.writtenAt, status.now)}
 	</time>
 )
 

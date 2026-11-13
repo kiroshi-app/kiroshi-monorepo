@@ -726,6 +726,9 @@ conversation-missions-missionheader--mission-narrow-3-e
 conversation-missions-missionheader--mission-scrolled-3-d
 conversation-missions-missionheader--mission-skeleton
 conversation-missions-missionheader--mission-skeleton-then-loaded-narrow
+conversation-missions-missionheader--mission-skeleton-then-loaded-narrow-without-status
+conversation-missions-missionheader--mission-skeleton-then-loaded-wide
+conversation-missions-missionheader--mission-skeleton-then-loaded-wide-long-ticket
 conversation-missions-missionheader--mission-without-activity-3-b
 conversation-missions-missionheader--pull-request-only
 conversation-missions-missionheader--states

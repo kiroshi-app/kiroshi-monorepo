@@ -45,13 +45,13 @@ const dateTimeFormatterFor = (options: Intl.DateTimeFormatOptions) => {
 	)
 }
 
-const relativeTimeFormatter = () => {
+const relativeTimeFormatter = (style: Intl.RelativeTimeFormatStyle) => {
 	const language = i18n.language
 
 	return keptOrMade(
 		relativeTimeFormatters,
-		language,
-		() => new Intl.RelativeTimeFormat(language, { numeric: "auto" }),
+		`${language}|${style}`,
+		() => new Intl.RelativeTimeFormat(language, { numeric: "auto", style }),
 	)
 }
 
@@ -68,8 +68,12 @@ const SHORT_MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
 const formatShortMonthAndDay = (at: number) =>
 	formatDateTime(at, SHORT_MONTH_AND_DAY)
 
-const toRelativeTime = (at: number, now: number) => {
-	const format = relativeTimeFormatter()
+const toRelativeTime = (
+	at: number,
+	now: number,
+	style: Intl.RelativeTimeFormatStyle = "long",
+) => {
+	const format = relativeTimeFormatter(style)
 	const elapsed = at - now
 
 	for (const [unit, span] of UNITS) {
@@ -81,7 +85,13 @@ const toRelativeTime = (at: number, now: number) => {
 	return format.format(0, "second")
 }
 
-const toElapsedTime = (at: number, now: number) => {
+type ElapsedUnitDisplay = "narrow" | "short"
+
+const toElapsedTime = (
+	at: number,
+	now: number,
+	unitDisplay: ElapsedUnitDisplay = "narrow",
+) => {
 	const elapsed = Math.max(now - at, 0)
 	const [unit, span] =
 		ELAPSED_UNITS.find(([, unitSpan]) => elapsed >= unitSpan) ??
@@ -89,12 +99,12 @@ const toElapsedTime = (at: number, now: number) => {
 	const language = i18n.language
 	const format = keptOrMade(
 		elapsedFormatters,
-		`${language}|${unit}`,
+		`${language}|${unit}|${unitDisplay}`,
 		() =>
 			new Intl.NumberFormat(language, {
 				style: "unit",
 				unit,
-				unitDisplay: "narrow",
+				unitDisplay,
 			}),
 	)
 
