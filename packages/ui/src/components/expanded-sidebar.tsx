@@ -54,9 +54,11 @@ import {
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width) gap-3")
+const BLOCK_GAP = "gap-6"
 
-const SECTIONS = "gap-3"
+const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width) p-3", BLOCK_GAP)
+
+const SECTIONS = BLOCK_GAP
 
 const LIST_EMPTY = "p-3 text-start text-compact text-faint-foreground leading-5"
 

@@ -327,7 +327,7 @@ export const ExpandedNewConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 30px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 24px in. Check both section headers are 32px tall with their label 6px in, the first row starts 33px under the top of the list and Conversations sits 12px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 34px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 28px in. Check both section headers are 32px tall with their label 6px in, the first row starts 33px under the top of the list and Conversations sits 24px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -479,15 +479,19 @@ const ROW_GAP = 1
 
 const MISSION_GLYPH = 14
 
-const SWITCHER_ICON_CENTRE = 30
+const PANEL_PADDING = 12
 
-const ROW_X_OFFSETS = { iconCentre: 24, labelStart: 42 }
+const BLOCK_GAP = 24
+
+const SWITCHER_ICON_CENTRE = 34
+
+const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 46 }
 
 const LIST_RHYTHM = {
 	headerHeights: [ROW_HEIGHT, ROW_HEIGHT],
 	headerInsets: [6, 6],
 	firstRowTop: ROW_HEIGHT + ROW_GAP,
-	sectionGap: 12,
+	sectionGap: BLOCK_GAP,
 }
 
 const SKELETON_RHYTHM = {
@@ -1760,7 +1764,7 @@ export const TopMenuAtRestExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The destinations menu at rest. Check each button is 32px tall with a 20px glyph and pads 6 on all four sides, and that its icon centre and label start sit 24px and 42px from the sidebar edge, the same as a conversation row's.",
+					"The destinations menu at rest. Check each button is 32px tall with a 20px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 46px from the sidebar edge, the same as a conversation row's.",
 			},
 		},
 	},
@@ -1805,13 +1809,13 @@ export const TopMenuHoveredExpanded = meta.story({
 	},
 })
 
-const ROW_COLUMNS = { ...ROW_X_OFFSETS, trailingEnd: 14 }
+const ROW_COLUMNS = { ...ROW_X_OFFSETS, trailingEnd: 18 }
 
-const SWITCHER_COLUMNS = { iconCentre: SWITCHER_ICON_CENTRE, labelStart: 54 }
+const SWITCHER_COLUMNS = { iconCentre: SWITCHER_ICON_CENTRE, labelStart: 58 }
 
-const HEADER_COLUMNS = { labelStart: 14, trailingEnd: 14 }
+const HEADER_COLUMNS = { labelStart: 18, trailingEnd: 18 }
 
-const FOOTER_COLUMNS = { ...SWITCHER_COLUMNS, trailingEnd: 16 }
+const FOOTER_COLUMNS = { ...SWITCHER_COLUMNS, trailingEnd: 20 }
 
 const META_LANE_WIDTH = 64
 
@@ -1958,7 +1962,7 @@ const ROW_COLUMNS_ARTBOARD = {
 }
 
 const ROW_COLUMNS_DESCRIPTION =
-	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 24px and the title 42px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 14px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 14px from the edges. Check every one of them is 32px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 16px from the edge, and that resting the pointer on any of them moves none of the columns."
+	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 28px and the title 46px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 18px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 18px from the edges. Check every one of them is 32px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 20px from the edge, and that resting the pointer on any of them moves none of the columns."
 
 export const RowColumnsExpanded = meta.story({
 	name: "Row columns",
@@ -2181,7 +2185,7 @@ export const CompactRestExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 32px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 12px apart. Check the 20px lead, the 14/20 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 20px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, and that each mission holds a 20px lane, a 14px mark, its identifier in 13/20 medium and its title, with no meta.`,
+				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 32px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 20px lead, the 14/20 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 20px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, and that each mission holds a 20px lane, a 14px mark, its identifier in 13/20 medium and its title, with no meta.`,
 			},
 		},
 	},
@@ -2201,7 +2205,9 @@ export const CompactRestExpanded = meta.story({
 		await expect(boxOf(rows[1]).top - boxOf(rows[0]).bottom).toBe(ROW_GAP)
 
 		const [pinned, conversations] = slotsIn(canvasElement, "fold-section")
-		await expect(boxOf(conversations).top - boxOf(pinned).bottom).toBe(12)
+		await expect(boxOf(conversations).top - boxOf(pinned).bottom).toBe(
+			BLOCK_GAP,
+		)
 
 		const releaseTrain = rowHolding(canvasElement, COMPACT_RELEASE_TRAIN.name)
 		const icon = slotIn(releaseTrain, "conversation-subject-icon")
@@ -2469,6 +2475,90 @@ export const CompactFocusExpanded = meta.story({
 		await expect(row.matches(":focus-visible")).toBe(true)
 		await expect(getComputedStyle(row).boxShadow).toContain("inset")
 		await expect(getComputedStyle(row).boxShadow).not.toBe(resting)
+	},
+})
+
+const BLOCK_SECTIONS = [
+	sectionOf(
+		"clients",
+		"Clients",
+		rosterMenuOf([conversationEntry(COMPACT_OFFSITE)], true, STILL_ROWS),
+	),
+]
+
+const edgeWidthsOf = (element: Element) => {
+	const style = getComputedStyle(element)
+	return [style.borderTopWidth, style.borderBottomWidth]
+}
+
+export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
+	name: "D Panel padding and block gap",
+	args: {
+		...compactArtboardOf({
+			conversations: [
+				COMPACT_RELEASE_TRAIN,
+				COMPACT_ROADMAP,
+				COMPACT_ONBOARDING,
+			],
+			selectedConversationId: COMPACT_ROADMAP.id,
+		}),
+		sections: BLOCK_SECTIONS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} A named section, Clients, sits between Pinned and Conversations, and Q3 roadmap review is open. Check the panel pads 12px on all four sides, that the Space header, the menu, Pinned, Clients, Conversations and the footer are each 24px from the next with no line drawn between them, that rows inside a block stay 1px apart, and that the selected row stops 12px short of both panel edges.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const sidebar = sidebarIn(canvasElement)
+		const carousel = slotIn(sidebar, "space-carousel")
+		const [pinned, clients, conversations] = slotsIn(sidebar, "fold-section")
+		const menu = sidebar.querySelector(
+			':scope > [data-slot="sidebar-menu"]',
+		) as HTMLElement
+		const footer = slotIn(sidebar, "expanded-sidebar-footer")
+		await expect(paddingOf(sidebar)).toEqual(
+			Array(4).fill(`${PANEL_PADDING}px`),
+		)
+
+		const blocks = [
+			slotIn(sidebar, "expanded-sidebar-switcher-row"),
+			menu,
+			pinned,
+			clients,
+			conversations,
+		]
+		await expect(
+			blocks
+				.slice(1)
+				.map((block, rank) => boxOf(block).top - boxOf(blocks[rank]).bottom),
+		).toEqual(blocks.slice(1).map(() => BLOCK_GAP))
+		await expect(boxOf(footer).top - boxOf(carousel).bottom).toBe(BLOCK_GAP)
+		await expect(boxOf(sidebar).bottom - boxOf(footer).bottom).toBe(
+			PANEL_PADDING,
+		)
+
+		await expect(
+			sidebar.querySelector('hr, [role="separator"], [data-slot*="separator"]'),
+		).toBeNull()
+		await expect([...blocks, carousel, footer].map(edgeWidthsOf)).toEqual(
+			[...blocks, carousel, footer].map(() => ["0px", "0px"]),
+		)
+
+		const [first, second] = slotsIn(pinned, "sidebar-menu-button")
+		await expect(boxOf(second).top - boxOf(first).bottom).toBe(ROW_GAP)
+
+		const selected = rowHolding(canvasElement, COMPACT_ROADMAP.name)
+		await expect(selected).toHaveAttribute("aria-current", "page")
+		await expect(fillOf(selected)).toBe(
+			tokenStyleIn(selected, "bg-sidebar-accent", "backgroundColor"),
+		)
+		await expect([
+			boxOf(selected).left - boxOf(sidebar).left,
+			boxOf(sidebar).right - boxOf(selected).right,
+		]).toEqual([PANEL_PADDING, PANEL_PADDING])
 	},
 })
 
