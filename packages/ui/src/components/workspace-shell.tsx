@@ -29,7 +29,9 @@ const SHELL_TITLE_BAR_HEIGHT = 40
 
 const SHELL_GUTTER = 4
 
-const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL} data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none`
+const SHELL = `surface-shell relative h-svh ${TITLE_BAR_AND_GUTTER} ${CARD_ON_SHELL_INSET} ${SIDEBAR_WIDTH_STOPS_AT_THE_CARD} ${SETTINGS_MENU_ON_SHELL_INSET} min-h-full max-h-full min-w-0 overflow-hidden ${SIDEBAR_INSIDE_SHELL}`
+
+const HELD_HANDLE_OVERLAY = "fixed inset-0 z-50 cursor-col-resize"
 
 type ShellStyle = CSSProperties & { "--sidebar-width": string }
 
@@ -73,7 +75,6 @@ const WorkspaceShellRoot = ({
 			{(resize) => (
 				<ShellSidebarProvider
 					className={cn(SHELL, className)}
-					data-resizing={resize.isResizing}
 					data-sidebar-open={open}
 					data-hue={spaceHue}
 					onOpenChange={onOpenChange}
@@ -84,6 +85,16 @@ const WorkspaceShellRoot = ({
 						{isLandmark ? <SkipLink targetId={mainId} /> : null}
 						<SidebarPeekProvider>{children}</SidebarPeekProvider>
 					</ContentCardLandmarkId>
+					{resize.isResizable ? (
+						<div
+							aria-hidden="true"
+							className={cn(
+								HELD_HANDLE_OVERLAY,
+								!resize.isResizing && "hidden",
+							)}
+							data-slot="sidebar-resize-overlay"
+						/>
+					) : null}
 				</ShellSidebarProvider>
 			)}
 		</SidebarResizeProvider>

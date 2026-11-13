@@ -1325,6 +1325,7 @@ layout-workspaceshell--first-tab-on-the-panel-edge-without-inset-controls
 layout-workspaceshell--four-companions-in-cold-space-dark
 layout-workspaceshell--four-companions-in-warm-space-dark
 layout-workspaceshell--free-hue
+layout-workspaceshell--handle-held
 layout-workspaceshell--long-content
 layout-workspaceshell--not-a-landmark
 layout-workspaceshell--not-resizable

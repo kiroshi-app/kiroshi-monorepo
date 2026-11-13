@@ -974,20 +974,27 @@ const LONG_CONVERSATION_TABS: TitleBarTab[] = [
 	icon: <Icons.Library />,
 }))
 
+type LongConversationShellProps = {
+	onWidthChange?: (width: number) => void
+}
+
+const LongConversationShell = ({
+	onWidthChange,
+}: LongConversationShellProps) => (
+	<NavigationShell onWidthChange={onWidthChange} tabs={LONG_CONVERSATION_TABS}>
+		<ThreadLayout
+			composer={<PromptInput onSubmit={fn()} />}
+			rows={LONG_CONVERSATION_ROWS}
+		>
+			{null}
+		</ThreadLayout>
+	</NavigationShell>
+)
+
 export const LongContent = meta.story({
 	args: { onWidthChange: fn() },
 	render: ({ onWidthChange }) => (
-		<NavigationShell
-			onWidthChange={onWidthChange}
-			tabs={LONG_CONVERSATION_TABS}
-		>
-			<ThreadLayout
-				composer={<PromptInput onSubmit={fn()} />}
-				rows={LONG_CONVERSATION_ROWS}
-			>
-				{null}
-			</ThreadLayout>
-		</NavigationShell>
+		<LongConversationShell onWidthChange={onWidthChange} />
 	),
 	parameters: {
 		docs: {
@@ -1032,6 +1039,100 @@ export const LongContent = meta.story({
 		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
 			SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
 		)
+	},
+})
+
+type ScreenPoint = { clientX: number; clientY: number }
+
+type RealMouseStep = ScreenPoint & {
+	type: "mousePressed" | "mouseMoved" | "mouseReleased"
+}
+
+const realMouse = async ({ type, clientX, clientY }: RealMouseStep) => {
+	const { cdp } = await import("vitest/browser")
+	const frame = window.frameElement?.getBoundingClientRect()
+	await cdp().send("Input.dispatchMouseEvent", {
+		type,
+		x: clientX + (frame?.left ?? 0),
+		y: clientY + (frame?.top ?? 0),
+		button: "left",
+		buttons: type === "mouseReleased" ? 0 : 1,
+		clickCount: 1,
+	})
+}
+
+const middleOf = (element: HTMLElement): ScreenPoint => {
+	const { left, top, width, height } = element.getBoundingClientRect()
+	return { clientX: left + width / 2, clientY: top + height / 2 }
+}
+
+const selectedText = () => document.getSelection()?.toString() ?? ""
+
+export const HandleHeld = meta.story({
+	render: () => <LongConversationShell />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The sidebar handle held while the pointer runs over the title bar, the panel and the conversation. Check that the column resize cursor shows over the whole window, that no text in the transcript gets selected as the pointer crosses it, and that the cursor and text selection come back on release. Pick `LongContent` for what the transcript does while the handle is held.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const shell = shellSurface(canvas)
+		const card = canvas.getByRole("main")
+		const overlay = slotIn(canvasElement, "sidebar-resize-overlay")
+		const handle = handleIn(canvas)
+		const { from, to } = grabHandle(handle, WIDER_BY)
+		const restingCursor = getComputedStyle(shell).cursor
+		const restingSelection = getComputedStyle(shell).userSelect
+		await expect(overlay).not.toBeVisible()
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: to },
+		])
+		await waitFor(() => expect(overlay).toBeVisible(), FRAME_POLL)
+		await expect(getComputedStyle(overlay).cursor).toBe("col-resize")
+		for (const covered of [
+			slotIn(canvasElement, "app-title-bar"),
+			navigationSidebarIn(canvasElement),
+			card,
+		]) {
+			const { clientX, clientY } = middleOf(covered)
+			await expect(document.elementFromPoint(clientX, clientY)).toBe(overlay)
+		}
+		await expect(getComputedStyle(shell).cursor).toBe(restingCursor)
+		await expect(getComputedStyle(shell).userSelect).toBe(restingSelection)
+		await expect(shell.className).not.toContain("cursor-col-resize")
+		await expect(shell).not.toHaveAttribute("data-resizing")
+
+		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
+		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
+		await expect(
+			document.elementFromPoint(middleOf(card).clientX, middleOf(card).clientY),
+		).not.toBe(overlay)
+
+		if (!isInBrowserRunner()) return
+		const grip = middleOf(handle)
+		const acrossTranscript = middleOf(slotIn(canvasElement, "message-scroller"))
+		await realMouse({ type: "mousePressed", ...grip })
+		await realMouse({ type: "mouseMoved", ...acrossTranscript })
+		await realMouse({
+			type: "mouseMoved",
+			clientX: acrossTranscript.clientX + 120,
+			clientY: acrossTranscript.clientY + 120,
+		})
+		await waitFor(() => expect(overlay).toBeVisible(), FRAME_POLL)
+		await expect(selectedText()).toBe("")
+		await realMouse({
+			type: "mouseReleased",
+			clientX: acrossTranscript.clientX + 120,
+			clientY: acrossTranscript.clientY + 120,
+		})
+		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
+		await expect(selectedText()).toBe("")
+		await expect(handle).toHaveFocus()
 	},
 })
 
