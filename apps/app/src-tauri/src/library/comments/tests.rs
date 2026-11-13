@@ -171,6 +171,38 @@ impl Shelf {
 			.expect("the node is removed");
 	}
 
+	async fn created_by(&self, caller: Caller) -> Result<LibraryCommentThread, LibraryError> {
+		library_comment_create(
+			self.app.handle().clone(),
+			caller,
+			self.app.state(),
+			self.space_id.clone(),
+			NOTES.to_owned(),
+			block("head01"),
+			"Tighten this".to_owned(),
+			Vec::new(),
+		)
+		.await
+	}
+
+	async fn replied_by(
+		&self,
+		caller: Caller,
+		thread_id: &str,
+	) -> Result<LibraryCommentThread, LibraryError> {
+		library_comment_reply(
+			self.app.handle().clone(),
+			caller,
+			self.app.state(),
+			self.space_id.clone(),
+			NOTES.to_owned(),
+			thread_id.to_owned(),
+			"Done".to_owned(),
+			Vec::new(),
+		)
+		.await
+	}
+
 	async fn stored_rows(&self, table: &'static str) -> i64 {
 		self.database()
 			.call(move |connection| {
@@ -468,40 +500,6 @@ async fn a_thread_on_a_passage_whose_quote_is_not_in_its_block_is_refused() {
 #[tokio::test]
 async fn a_thread_on_a_node_the_board_does_not_hold_is_refused_and_stores_nothing() {
 	refused_for_its_missing_target(PLAN, node("absent"), "absent").await;
-}
-
-impl Shelf {
-	async fn created_by(&self, caller: Caller) -> Result<LibraryCommentThread, LibraryError> {
-		library_comment_create(
-			self.app.handle().clone(),
-			caller,
-			self.app.state(),
-			self.space_id.clone(),
-			NOTES.to_owned(),
-			block("head01"),
-			"Tighten this".to_owned(),
-			Vec::new(),
-		)
-		.await
-	}
-
-	async fn replied_by(
-		&self,
-		caller: Caller,
-		thread_id: &str,
-	) -> Result<LibraryCommentThread, LibraryError> {
-		library_comment_reply(
-			self.app.handle().clone(),
-			caller,
-			self.app.state(),
-			self.space_id.clone(),
-			NOTES.to_owned(),
-			thread_id.to_owned(),
-			"Done".to_owned(),
-			Vec::new(),
-		)
-		.await
-	}
 }
 
 #[tokio::test]
