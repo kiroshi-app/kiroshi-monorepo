@@ -153,9 +153,14 @@ export const useLibraryComments = <Target,>({
 		bar,
 		isCommentMode: state.isCommentMode,
 		participants: people.participants,
-		threads: commented.filter(
-			({ thread }) => thread.state === "open" || thread === opened?.thread,
-		),
+		threads: commented
+			.filter(
+				({ thread }) => thread.state === "open" || thread === opened?.thread,
+			)
+			.map((each) => ({
+				...each,
+				resolution: resolutionOf(each.thread, unnamed),
+			})),
 		openThread: opened && {
 			id: opened.thread.id,
 			anchor: anchorLineOf(opened.thread),
