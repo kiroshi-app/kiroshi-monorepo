@@ -830,6 +830,17 @@ const cellsOf = (line: string) =>
 
 const tableRowsOf = (source: string) => source.split("\n").map(cellsOf)
 
+const tableCellRangesOf = (source: string) => {
+	let at = 0
+	return tableRowsOf(source).map((cells) =>
+		cells.map((cell) => {
+			const from = source.indexOf(cell, at)
+			at = from + cell.length
+			return { from, to: at }
+		}),
+	)
+}
+
 const tableSourceOf = (rows: string[][]) =>
 	rows.map((cells) => `| ${cells.join(" | ")} |`).join("\n")
 
@@ -893,6 +904,7 @@ export {
 	serializeBlocks,
 	shiftedAcross,
 	shiftedOffset,
+	tableCellRangesOf,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,

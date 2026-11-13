@@ -18,17 +18,27 @@ import {
 } from "@workspace/ui/components/library-block-text"
 import {
 	type SourceEdit,
+	tableCellRangesOf,
 	tableRowsOf,
 	tableSourceOf,
 	withCell,
 	withColumn,
 	withRow,
 } from "@workspace/ui/components/library-document-blocks"
+import type { MarkdownRunRenderer } from "@workspace/ui/components/markdown/run"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { MarkdownTable } from "@workspace/ui/components/markdown/table"
 
 type LibraryTableEditorProps = {
 	source: string
 	onEdit: SourceEdit
+	runs?: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
+}
+
+type CellRange = {
+	from: number
+	to: number
 }
 
 type CellFocus = {
@@ -47,6 +57,20 @@ const CELL_SLOT = "library-table-cell"
 const FIELD_SLOT = "library-document-block-field"
 
 const DELIMITER_ROWS = 1
+
+const NO_RUNS: MarkdownRun[] = []
+
+const runsWithin = (runs: MarkdownRun[], cell: CellRange | undefined) =>
+	cell
+		? runs.flatMap(({ id, start, end }) => {
+				const run = {
+					id,
+					start: Math.max(start, cell.from) - cell.from,
+					end: Math.min(end, cell.to) - cell.from,
+				}
+				return run.start < run.end ? [run] : []
+			})
+		: NO_RUNS
 
 const tableNodeOf = (rows: string[][]): TableNode => ({
 	type: "element",
@@ -69,7 +93,12 @@ const editTable =
 	(change: (rows: string[][]) => string[][]) => (source: string) =>
 		tableSourceOf(change(tableRowsOf(source)))
 
-const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
+const LibraryTableEditor = ({
+	source,
+	onEdit,
+	runs = NO_RUNS,
+	renderRun,
+}: LibraryTableEditorProps) => {
 	const { t } = useTranslation("common")
 	const frame = useRef<HTMLDivElement>(null)
 	const [cellFocus, setCellFocus] = useState<CellFocus>()
@@ -79,6 +108,8 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 	const shown = [header, ...body].map((cells) =>
 		Array.from({ length: columns }, (_, column) => cells[column] ?? ""),
 	)
+	const [headerRanges = [], , ...bodyRanges] = tableCellRangesOf(source)
+	const ranges = [headerRanges, ...bodyRanges]
 
 	useLayoutEffect(() => {
 		if (!cellFocus) return
@@ -172,6 +203,8 @@ const LibraryTableEditor = ({ source, onEdit }: LibraryTableEditorProps) => {
 					hint={t("library.editor.blocks.table.empty")}
 					onEdit={(text) => write(row, column, text)}
 					onKeyDown={keyInCell(index)}
+					renderRun={renderRun}
+					runs={runsWithin(runs, ranges[row]?.[column])}
 					source={value}
 					type="line"
 				/>

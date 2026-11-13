@@ -2152,6 +2152,8 @@ navigation-librarydocumenteditor--overlapping-passages-dark
 navigation-librarydocumenteditor--passage-across-formatting
 navigation-librarydocumenteditor--passage-across-formatting-dark
 navigation-librarydocumenteditor--passage-card-kept-inside-editor
+navigation-librarydocumenteditor--passage-draft-on-block-being-written
+navigation-librarydocumenteditor--passage-kept-while-block-editor-focused
 navigation-librarydocumenteditor--passage-kept-while-block-focused
 navigation-librarydocumenteditor--person-caret-beside-agent
 navigation-librarydocumenteditor--presence-agents-and-people
@@ -2160,6 +2162,8 @@ navigation-librarydocumenteditor--presence-people-only
 navigation-librarydocumenteditor--rename-focuses-title-from-handle
 navigation-librarydocumenteditor--resolved-2-thread-in-place
 navigation-librarydocumenteditor--resolved-2-thread-in-place-dark
+navigation-librarydocumenteditor--resolved-pin-kept-while-block-focused
+navigation-librarydocumenteditor--resolved-thread-in-place-card-closed
 navigation-librarydocumenteditor--round-trip-fixture
 navigation-librarydocumenteditor--save-failure
 navigation-librarydocumenteditor--shortcut-keycap-off-mac
