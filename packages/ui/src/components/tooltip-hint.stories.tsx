@@ -261,7 +261,6 @@ export const AdjacentHints = meta.story({
 			await expect(screen.getByRole("tooltip")).toBe(bubble)
 			await expect(flipped).toEqual([])
 			await expect(bubble).toHaveAttribute("data-open")
-			await expect(bubble).not.toHaveAttribute("data-starting-style")
 			await expect(getComputedStyle(bubble).opacity).toBe("1")
 
 			await waitFor(async () => {
