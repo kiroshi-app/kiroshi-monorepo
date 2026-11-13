@@ -267,8 +267,7 @@ const expectThreadPinsOn = async (popup: HTMLElement, image: HTMLElement) => {
 		await expectPinOn(pins[at], image, thread.anchor)
 }
 
-const spaceColourOf = (pin: HTMLElement) =>
-	getComputedStyle(pin).backgroundColor
+const groundOf = (pin: HTMLElement) => getComputedStyle(pin).backgroundColor
 
 const meta = preview.meta({
 	title: "Overlays/LibraryImageComments",
@@ -451,7 +450,7 @@ export const ZoneDraft = meta.story({
 		await expectFrameOn(frame, image, DRAFT_ZONE)
 		const drawn = getComputedStyle(frame)
 		await expect(drawn.borderTopWidth).toBe("2px")
-		await expect(drawn.borderTopColor).toBe(spaceColourOf(draft))
+		await expect(drawn.borderTopColor).toBe(groundOf(draft))
 	},
 })
 
@@ -510,7 +509,7 @@ export const ZoneThreadOpenLight = meta.story({
 	play: async () => {
 		const { popup } = await viewer()
 		const [, terrace] = pinsIn(popup)
-		await expect(spaceColourOf(terrace)).toBe("rgb(255, 255, 255)")
+		await expect(groundOf(terrace)).toBe("rgb(255, 255, 255)")
 		await expect(
 			getComputedStyle(slotIn(popup, "library-comment-thread")).backgroundColor,
 		).toBe("rgb(31, 31, 31)")
