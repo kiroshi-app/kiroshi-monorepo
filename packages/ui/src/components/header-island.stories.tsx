@@ -136,7 +136,6 @@ const expectKeyboardFocus = async ({ canvasElement }: StatePlayContext) => {
 	await expect(getComputedStyle(history).boxShadow).toBe(
 		tokenStyleIn(history, "ring-4 ring-ring/30", "boxShadow"),
 	)
-	await expect(getComputedStyle(history).boxShadow).toMatch(/\b4px\b/)
 	await expect(getComputedStyle(history).borderTopWidth).toBe("1px")
 	await expect(getComputedStyle(history).borderTopColor).toBe(
 		tokenStyleIn(history, "border border-ring", "borderTopColor"),

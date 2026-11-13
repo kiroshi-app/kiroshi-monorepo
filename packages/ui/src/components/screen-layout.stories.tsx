@@ -237,11 +237,12 @@ const SCROLLED_AWAY = 240
 const fadesIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "screen-layout-fade")
 
-type FloatingPlayContext = {
-	canvasElement: HTMLElement
-}
+type FrameSurface = "bg-background" | "bg-card"
 
-const expectFloatingHeader = async ({ canvasElement }: FloatingPlayContext) => {
+const expectFloatingHeader = async (
+	canvasElement: HTMLElement,
+	frameSurface: FrameSurface,
+) => {
 	const layout = layoutIn(canvasElement)
 	const scroller = slotIn(canvasElement, "screen-layout-scroller")
 	const frame = layout.getBoundingClientRect()
@@ -267,8 +268,9 @@ const expectFloatingHeader = async ({ canvasElement }: FloatingPlayContext) => {
 	scroller.scrollTo({ top: SCROLLED_AWAY })
 	const fade = await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
 	const fadeBox = fade.getBoundingClientRect()
-	const surface = getComputedStyle(layout).backgroundColor
+	const surface = probedStyleOf(frameSurface, "backgroundColor", layout)
 
+	await expect(getComputedStyle(layout).backgroundColor).toBe(surface)
 	await expect(scroller.scrollTop).toBe(SCROLLED_AWAY)
 	await expect(firstLine.getBoundingClientRect().top).toBeLessThan(left.top)
 	await expect([fadeBox.top, fadeBox.width, fadeBox.height]).toEqual([
@@ -296,8 +298,6 @@ const expectFloatingHeader = async ({ canvasElement }: FloatingPlayContext) => {
 	await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(0))
 	scroller.scrollTo({ top: SCROLLED_AWAY })
 	await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(1))
-
-	return surface
 }
 
 export const FloatingHeader = meta.story({
@@ -310,11 +310,8 @@ export const FloatingHeader = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		await expect(await expectFloatingHeader({ canvasElement })).toBe(
-			probedStyleOf("bg-background", "backgroundColor", canvasElement),
-		)
-	},
+	play: ({ canvasElement }) =>
+		expectFloatingHeader(canvasElement, "bg-background"),
 })
 
 export const FloatingHeaderDark = meta.story({
@@ -333,9 +330,5 @@ export const FloatingHeaderInCard = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		await expect(await expectFloatingHeader({ canvasElement })).toBe(
-			probedStyleOf("bg-card", "backgroundColor", canvasElement),
-		)
-	},
+	play: ({ canvasElement }) => expectFloatingHeader(canvasElement, "bg-card"),
 })

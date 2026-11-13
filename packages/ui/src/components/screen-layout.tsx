@@ -67,7 +67,7 @@ const ScreenLayout = ({
 						/>
 					) : null}
 					<div
-						className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-2"
+						className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-between p-2"
 						data-slot="screen-layout-floating-header"
 					>
 						{header}
