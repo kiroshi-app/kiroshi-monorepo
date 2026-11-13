@@ -335,6 +335,10 @@ pub fn find(board: &Board, sought: &Sought) -> Vec<String> {
 	found.into_iter().map(|(id, _)| id.clone()).collect()
 }
 
+pub fn holds_node(board: &Board, id: &str) -> bool {
+	board.nodes.contains_key(id)
+}
+
 pub fn node_file(board: &Board, id: &str) -> Option<NodeFile> {
 	let node = board.nodes.get(id)?;
 	Some(NodeFile {

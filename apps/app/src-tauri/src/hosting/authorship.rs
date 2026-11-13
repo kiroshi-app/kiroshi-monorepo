@@ -44,7 +44,7 @@ impl RelayedMembers {
 		Vouched { members: self, nonce }
 	}
 
-	fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
+	pub(super) fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
 		self.held().get(nonce).cloned()
 	}
 

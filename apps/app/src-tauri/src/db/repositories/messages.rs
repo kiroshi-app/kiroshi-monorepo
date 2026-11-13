@@ -57,6 +57,20 @@ impl From<rusqlite::Error> for TranscriptError {
 	}
 }
 
+pub(in crate::db) fn rename_document_links(
+	connection: &Connection,
+	space_id: &str,
+	former_name: &str,
+	name: &str,
+) -> rusqlite::Result<()> {
+	connection.prepare_cached(RENAME_DOCUMENT_LINKS)?.execute(params![
+		space_id,
+		former_name,
+		name
+	])?;
+	Ok(())
+}
+
 pub struct NewTurn {
 	pub id: String,
 	pub conversation_id: String,
@@ -693,24 +707,6 @@ impl MessagesRepository {
 		self.call_mut(move |connection| Ok(posted_in_a_closed_turn(connection, message)))
 			.await?
 			.at("post_message", "messages")
-	}
-
-	pub async fn rename_document_links(
-		&self,
-		space_id: String,
-		former_name: String,
-		name: String,
-	) -> Result<(), DatabaseError> {
-		self.call(move |connection| {
-			connection.prepare_cached(RENAME_DOCUMENT_LINKS)?.execute(params![
-				space_id,
-				former_name,
-				name
-			])?;
-			Ok(())
-		})
-		.await
-		.at("rename_document_links", "message_documents")
 	}
 
 	pub async fn open_turns_without_reply(

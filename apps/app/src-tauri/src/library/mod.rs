@@ -1,6 +1,7 @@
 mod blocks;
 mod canvas;
 pub mod commands;
+mod comments;
 pub mod contract;
 mod documents;
 pub mod host;
@@ -30,6 +31,9 @@ use contract::{
 use documents::Documents;
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
+pub(crate) use comments::{
+	comment_threads, open_comment_thread, reply_to_comment_thread, set_comment_thread_state, Said,
+};
 
 use crate::attachments::{self, attached_content, Attachments};
 use crate::db;
@@ -491,8 +495,8 @@ pub(crate) async fn rename_linked_document<R: Runtime>(
 	let renamed = rename_document(app, root, space_id, name, new_name)?;
 	if renamed.name != name {
 		database
-			.messages()
-			.rename_document_links(space_id.to_owned(), name.to_owned(), renamed.name.clone())
+			.library()
+			.item_renamed(space_id.to_owned(), name.to_owned(), renamed.name.clone())
 			.await?;
 	}
 	Ok(renamed)
@@ -659,14 +663,16 @@ fn name_safe(title: &str) -> String {
 	cut.trim_end().trim_end_matches('.').to_owned()
 }
 
-pub(crate) fn delete_item<R: Runtime>(
+pub(crate) async fn delete_item<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &db::Database,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
 	documents(app).delete(root, space_id, name)?;
 	announce_change(app, space_id);
+	database.library().item_deleted(space_id.to_owned(), name.to_owned()).await?;
 	Ok(())
 }
 

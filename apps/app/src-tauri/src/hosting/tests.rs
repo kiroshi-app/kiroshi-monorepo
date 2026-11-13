@@ -79,6 +79,7 @@ use crate::db::connection::temp_dir;
 use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
+use crate::db::repositories::library::ThreadOfItem;
 use crate::db::repositories::messages::{
 	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
 };
@@ -89,12 +90,17 @@ use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope,
 use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
+use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
-use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
+use crate::library::contract::{
+	LibraryCommentThreadState, LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_THREAD_CHANGED_EVENT,
+	DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
+};
 use crate::library::tests::YjsClient;
+use crate::library::Said;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -649,6 +655,35 @@ fn typed<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> T {
 	serde_json::from_value(args[key].clone()).expect("a typed argument")
 }
 
+fn caller_vouched_in(effects: &HostEffects, headers: &HeaderMap) -> Caller {
+	let Some(nonce) = headers.get(&RELAYED_MEMBER_HEADER) else {
+		return Caller::Host;
+	};
+	let nonce = nonce.to_str().expect("a nonce");
+	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched(nonce))
+}
+
+fn said_by_the_caller(
+	effects: &HostEffects,
+	headers: &HeaderMap,
+	args: &Value,
+) -> Result<Said, LibraryError> {
+	Said::by_the_person_calling(
+		&caller_vouched_in(effects, headers),
+		effects.app(),
+		typed(args, "text"),
+		typed(args, "mentions"),
+	)
+}
+
+fn thread_named(args: &Value) -> ThreadOfItem {
+	ThreadOfItem {
+		space_id: typed(args, "spaceId"),
+		item_name: typed(args, "name"),
+		id: typed(args, "threadId"),
+	}
+}
+
 async fn host_effect_applied(
 	Path(command): Path<String>,
 	Served(effects): Served<HostEffects>,
@@ -787,13 +822,17 @@ async fn host_effect_applied(
 			));
 		}
 		"library_rename_board" => {
-			return answered_by_the_library(library::rename_board(
-				effects.app(),
-				&effects.library(),
-				&text("spaceId"),
-				&text("name"),
-				&text("newName"),
-			));
+			return answered_by_the_library(
+				library::rename_board(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+					&text("newName"),
+				)
+				.await,
+			);
 		}
 		"library_board_summary" => {
 			return answered_by_the_library(library::summarise_board(
@@ -803,12 +842,73 @@ async fn host_effect_applied(
 			));
 		}
 		"library_delete" => {
-			return answered_by_the_library(library::delete_item(
-				effects.app(),
-				&effects.library(),
-				&text("spaceId"),
-				&text("name"),
-			));
+			return answered_by_the_library(
+				library::delete_item(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+				)
+				.await,
+			);
+		}
+		"library_comment_threads" => {
+			return answered_by_the_library(
+				library::comment_threads(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+				)
+				.await,
+			);
+		}
+		"library_comment_counts" => {
+			let counted = database.library().open_thread_counts(text("spaceId")).await;
+			return answered_by_the_library(counted.map_err(LibraryError::from));
+		}
+		"library_comment_create" => {
+			let (app, library) = (effects.app(), effects.library());
+			let (space_id, name, anchor) = (text("spaceId"), text("name"), typed(&args, "anchor"));
+			let opened = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					library::open_comment_thread(
+						app, &database, &library, &space_id, &name, anchor, said,
+					)
+					.await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(opened);
+		}
+		"library_comment_reply" => {
+			let (app, library) = (effects.app(), effects.library());
+			let replied = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					let thread = thread_named(&args);
+					library::reply_to_comment_thread(app, &database, &library, thread, said).await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(replied);
+		}
+		"library_comment_resolve" | "library_comment_reopen" => {
+			let state = match command.as_str() {
+				"library_comment_resolve" => LibraryCommentThreadState::Resolved,
+				_ => LibraryCommentThreadState::Open,
+			};
+			return answered_by_the_library(
+				library::set_comment_thread_state(
+					effects.app(),
+					&database,
+					&effects.library(),
+					thread_named(&args),
+					state,
+				)
+				.await,
+			);
 		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
@@ -3832,6 +3932,124 @@ fn a_member_deletes_a_library_item_of_the_shared_space_only() {
 		assert!(!shelf(PERSONAL).exists());
 		assert_eq!(again["body"], json!({ "kind": "missing", "name": "notes.md" }), "{again}");
 		assert_eq!(guest.effects.reached(), ["library_delete", "library_delete"]);
+	});
+}
+
+fn a_library_comment_on_the_cover(space_id: &str) -> Value {
+	json!({
+		"spaceId": space_id,
+		"name": "cover.png",
+		"anchor": { "kind": "imagePoint", "x": 0.25, "y": 0.5 },
+		"text": "Crop here",
+		"mentions": [{ "kind": "agent", "id": "b-mine" }]
+	})
+}
+
+fn is_a_comment_change_outside(thread_id: &str) -> impl Fn(&Value) -> bool + '_ {
+	move |frame| {
+		frame["event"]["event"] == COMMENT_THREAD_CHANGED_EVENT
+			&& frame["event"]["payload"]["thread"]["id"] != thread_id
+	}
+}
+
+#[test]
+fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_host_comment() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-comments").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let by_the_member = json!({ "kind": "person", "id": A_JOINER });
+
+		guest.refused("library_comment_create", a_library_comment_on_the_cover(ELSEWHERE)).await;
+		let created =
+			guest.called("library_comment_create", a_library_comment_on_the_cover(PERSONAL)).await;
+		let thread_id = created["body"]["id"].as_str().expect("a thread id").to_owned();
+		let on_the_thread = |space_id: &str| json!({ "spaceId": space_id, "name": "cover.png", "threadId": thread_id });
+		let a_reply = |space_id: &str| {
+			let mut reply = on_the_thread(space_id);
+			reply["text"] = json!("And here");
+			reply["mentions"] = json!([]);
+			reply
+		};
+		guest.refused("library_comment_reply", a_reply(ELSEWHERE)).await;
+		let replied = guest.called("library_comment_reply", a_reply(PERSONAL)).await;
+		guest.refused("library_comment_resolve", on_the_thread(ELSEWHERE)).await;
+		let resolved = guest.called("library_comment_resolve", on_the_thread(PERSONAL)).await;
+		guest.refused("library_comment_reopen", on_the_thread(ELSEWHERE)).await;
+		let reopened = guest.called("library_comment_reopen", on_the_thread(PERSONAL)).await;
+		guest.refused("library_comment_threads", a_library_entry_of("cover.png")(ELSEWHERE)).await;
+		let read = guest
+			.called("library_comment_threads", a_library_entry_of("cover.png")(PERSONAL))
+			.await;
+		guest.refused("library_comment_counts", space_named(ELSEWHERE)).await;
+		let counted = guest.called("library_comment_counts", space_named(PERSONAL)).await;
+
+		let database = db::open(&guest.effects.database);
+		restore(app.clone()).await;
+		let mut by_the_host = Vec::new();
+		for space_id in [ELSEWHERE, PERSONAL] {
+			let said = Said::by_the_person_calling(
+				&Caller::Host,
+				&app,
+				"From the host".to_owned(),
+				Vec::new(),
+			)
+			.expect("the host is named");
+			let anchor = typed(&a_library_comment_on_the_cover(space_id), "anchor");
+			let opened = library::open_comment_thread(
+				&app,
+				&database,
+				&library,
+				space_id,
+				"cover.png",
+				anchor,
+				said,
+			)
+			.await
+			.expect("the host comments");
+			by_the_host.push(opened);
+		}
+		let heard = next_text(&mut guest.member, is_a_comment_change_outside(&thread_id)).await;
+		let read_after_the_host = guest
+			.called("library_comment_threads", a_library_entry_of("cover.png")(PERSONAL))
+			.await;
+		let by_the_host_person = json!({ "kind": "person", "id": COMMENT_HOST_AUTHOR_ID });
+		let is_signed_in =
+			matches!(app.state::<AccountSession>().current(), AccountState::SignedIn(_));
+
+		assert_eq!(created["status"], json!(200), "{created}");
+		assert_eq!(created["body"]["comments"][0]["author"], by_the_member, "{created}");
+		assert_eq!(
+			created["body"]["comments"][0]["mentions"],
+			json!([{ "kind": "agent", "id": "b-mine" }])
+		);
+		assert_eq!(replied["body"]["comments"][1]["author"], by_the_member, "{replied}");
+		assert_eq!(replied["body"]["comments"][1]["text"], json!("And here"), "{replied}");
+		assert_eq!(resolved["body"]["state"], json!("resolved"), "{resolved}");
+		assert_eq!(reopened["body"]["state"], json!("open"), "{reopened}");
+		assert_eq!(read["body"], json!([reopened["body"]]), "{read}");
+		assert_eq!(counted["body"], json!([{ "itemName": "cover.png", "openThreads": 1 }]));
+		assert!(is_signed_in);
+		assert_ne!(by_the_host_person, by_the_member);
+		assert_eq!(
+			read_after_the_host["body"][1]["comments"][0]["author"], by_the_host_person,
+			"{read_after_the_host}"
+		);
+		assert_eq!(
+			heard["event"]["payload"],
+			json!({ "spaceId": PERSONAL, "itemName": "cover.png", "thread": by_the_host[1] })
+		);
+		assert_eq!(
+			guest.effects.reached(),
+			[
+				"library_comment_create",
+				"library_comment_reply",
+				"library_comment_resolve",
+				"library_comment_reopen",
+				"library_comment_threads",
+				"library_comment_counts",
+				"library_comment_threads"
+			]
+		);
 	});
 }
 
@@ -7081,7 +7299,7 @@ impl Guest {
 		let database = db::open(&self.effects.database);
 		let mut preferences = database.user().preferences().await.expect("the preferences read");
 		preferences.display_name = display_name.to_owned();
-		database.user().set_preferences(preferences).await.expect("the host is named");
+		database.user().set_preferences(preferences).await.expect("the author is named");
 	}
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
