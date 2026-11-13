@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+
 import { revealWindow } from "./index"
 
 const LATE_REVEAL_MS = 3000
@@ -17,7 +19,7 @@ const showWindow = () => {
 let hasShownWindow = false
 let disarmSafetyNet = () => {}
 
-export const showLaunchedWindowOnce = () => {
+const showLaunchedWindowOnce = () => {
 	if (hasShownWindow) {
 		return
 	}
@@ -31,6 +33,10 @@ const showWindowLate = () => {
 		`the startup screen did not show the window within ${LATE_REVEAL_MS} ms of the launch, showing it anyway`,
 	)
 	showLaunchedWindowOnce()
+}
+
+export const useWindowRevealOnMount = () => {
+	useEffect(showLaunchedWindowOnce, [])
 }
 
 export const armLaunchRevealSafetyNet = () => {

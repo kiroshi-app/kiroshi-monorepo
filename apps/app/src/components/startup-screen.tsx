@@ -6,7 +6,7 @@ import {
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import type { Bot } from "@/lib/bindings"
-import { useWindowRevealOnMount } from "@/lib/host/use-window-reveal-on-mount"
+import { useWindowRevealOnMount } from "@/lib/host/launch-reveal"
 
 type StartupScreenProps = {
 	agents: Bot[]
