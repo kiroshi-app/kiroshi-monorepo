@@ -69,9 +69,10 @@ async fn an_invalid_name_never_opens_the_picker() {
 
 #[tokio::test]
 async fn a_text_that_cannot_be_written_carries_the_os_detail() {
-	let missing_folder = temp_folder().join("absent").join("people.csv");
+	let folder = temp_folder();
+	let in_a_missing_folder = folder.join("absent").join("people.csv");
 
-	let saved = save_csv("people.csv", TEXT.to_owned(), chosen(Some(missing_folder))).await;
+	let saved = save_csv("people.csv", TEXT.to_owned(), chosen(Some(in_a_missing_folder))).await;
 
 	assert!(
 		matches!(&saved, Err(SaveCsvError::Unwritable { detail }) if detail.contains("os error")),
@@ -80,7 +81,7 @@ async fn a_text_that_cannot_be_written_carries_the_os_detail() {
 }
 
 #[tokio::test]
-async fn a_picker_failure_is_answered_and_writes_nothing() {
+async fn a_failure_of_the_picker_is_the_answer() {
 	let refused = SaveCsvError::Unwritable { detail: "refused".to_owned() };
 
 	let saved = save_csv("people.csv", TEXT.to_owned(), |_| ready(Err(refused.clone()))).await;
