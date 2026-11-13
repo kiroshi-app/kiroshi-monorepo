@@ -1,13 +1,20 @@
 "use client"
 
-import type {
-	AriaAttributes,
-	ComponentProps,
-	HTMLAttributes,
-	MouseEvent,
-	ReactNode,
+import {
+	type AriaAttributes,
+	type ComponentProps,
+	type HTMLAttributes,
+	type MouseEvent,
+	type ReactNode,
+	useId,
+	useRef,
 } from "react"
 
+import {
+	describeSidebarRowTooltip,
+	SidebarRowTooltip,
+	type SidebarRowTooltipFields,
+} from "@workspace/ui/components/sidebar-row-tooltip"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	SidebarMenuButton,
@@ -58,6 +65,21 @@ const COMPACT_ROW = cn(
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
 
+const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
+
+const GAP_PAST_SIDEBAR_EDGE = 4
+
+const offsetPastSidebarEdge = (row: HTMLElement | null) => {
+	const sidebar = row?.closest(SIDEBAR_BOX)
+	if (!row || !sidebar) return GAP_PAST_SIDEBAR_EDGE
+
+	return (
+		sidebar.getBoundingClientRect().right -
+		row.getBoundingClientRect().right +
+		GAP_PAST_SIDEBAR_EDGE
+	)
+}
+
 type SidebarClickModifiers = ClickModifiers
 
 type SidebarMenuRowElementProps = AriaAttributes &
@@ -94,6 +116,8 @@ interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	isIconDecorative?: boolean
 	isActive?: boolean
 	isMiddleClickSelectable?: boolean
+	tooltip?: SidebarRowTooltipFields
+	isTooltipHidden?: boolean
 	onSelect?: (modifiers: SidebarClickModifiers) => void
 	className?: string
 	render?: ComponentProps<typeof SidebarMenuButton>["render"]
@@ -109,12 +133,16 @@ const SidebarMenuRow = ({
 	isIconDecorative = true,
 	isActive = false,
 	isMiddleClickSelectable = false,
+	tooltip,
+	isTooltipHidden = false,
 	onSelect,
 	className,
 	render,
 	...elementProps
 }: SidebarMenuRowProps) => {
 	const { isMobile, setOpenMobile, state } = useSidebar()
+	const rowRef = useRef<HTMLButtonElement>(null)
+	const descriptionId = useId()
 	const isCollapsed = !isMobile && state === "collapsed"
 	const classes = VARIANT[variant]
 
@@ -144,6 +172,9 @@ const SidebarMenuRow = ({
 		<SidebarMenuButton
 			{...elementProps}
 			aria-current={isActive ? "page" : elementProps["aria-current"]}
+			aria-describedby={
+				tooltip ? descriptionId : elementProps["aria-describedby"]
+			}
 			aria-label={isCollapsed ? label : undefined}
 			className={cn(
 				ROW,
@@ -156,6 +187,7 @@ const SidebarMenuRow = ({
 			{...(isMiddleClickSelectable ? middleClickHandlers(select) : {})}
 			isActive={isActive}
 			onClick={select}
+			ref={rowRef}
 			render={render}
 		>
 			{below ? (
@@ -171,10 +203,27 @@ const SidebarMenuRow = ({
 		</SidebarMenuButton>
 	)
 
+	if (!tooltip)
+		return (
+			<TooltipHint content={isCollapsed ? label : null} side="right">
+				{row}
+			</TooltipHint>
+		)
+
 	return (
-		<TooltipHint content={isCollapsed ? label : null} side="right">
-			{row}
-		</TooltipHint>
+		<>
+			<TooltipHint
+				content={isTooltipHidden ? null : <SidebarRowTooltip {...tooltip} />}
+				side="right"
+				sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
+				variant="card"
+			>
+				{row}
+			</TooltipHint>
+			<span hidden id={descriptionId}>
+				{describeSidebarRowTooltip(tooltip)}
+			</span>
+		</>
 	)
 }
 
