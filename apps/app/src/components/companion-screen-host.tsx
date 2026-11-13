@@ -58,10 +58,10 @@ export const CompanionScreenHost = ({
 		return null
 	}
 
-	const refuseDeletion = () => {
+	const refuseDeletion = (reason: unknown) => {
 		void reportFailure(
 			{ title: i18n.t("bots:danger.failed") },
-			{ botId: settingsBot.id },
+			{ botId: settingsBot.id, reason },
 		)
 	}
 

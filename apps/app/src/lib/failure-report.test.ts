@@ -20,6 +20,7 @@ import {
 	reportLocalWhen,
 } from "./failure-report"
 
+import { HostRefused } from "./host/host-refused"
 import { createHostedSpaces } from "./host/hosted-spaces"
 import { createHttpHost, raiseRefusalNotice } from "./host/http"
 
@@ -423,6 +424,44 @@ describe("raiseReportedFailure", () => {
 		await vi.advanceTimersByTimeAsync(0)
 
 		expect(failureNotice).toHaveBeenCalled()
+	})
+})
+
+describe("a reporter handed the rejection its caller caught", () => {
+	const reportUnsent = failureReporterIn("use-home-send")
+
+	const UNSENT = { title: "Couldn’t send your message" }
+
+	it("raises nothing when the joined host knows no such command", async () => {
+		const reason = new HostRefused(
+			"this host knows no command named conversation_send",
+			null,
+			"unknownCommand",
+		)
+
+		await expect(reportUnsent(UNSENT, { reason })).resolves.toBeUndefined()
+
+		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		["a command the host keeps", new HostRefused("kept", null, "hostOnly")],
+		["a host that broke", new HostRefused("the host broke", null)],
+		["a failure of this Mac", new Error("disk full")],
+	])("raises its notice on %s", async (_case, reason) => {
+		await expect(reportUnsent(UNSENT, { reason })).resolves.toBe("notice-1")
+
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining(UNSENT),
+		)
+	})
+
+	it("keeps the rejection out of the copied report", async () => {
+		await reportUnsent(UNSENT, { reason: new Error("disk full") })
+
+		expect(
+			failureNotice.mock.lastCall?.[0]?.report?.context,
+		).not.toHaveProperty("reason")
 	})
 })
 

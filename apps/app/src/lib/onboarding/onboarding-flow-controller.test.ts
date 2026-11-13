@@ -167,10 +167,13 @@ describe("leaving the intro", () => {
 		await controller.leaveIntro()
 
 		expect(port.calls).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn’t send that request",
-			description: "disk full",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Couldn’t send that request",
+				description: "disk full",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 })
 
@@ -328,10 +331,13 @@ describe("a Shoto run that doesn't complete", () => {
 
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: i18n.t("chat:screen.notice.failed"),
-			description: "the host is unreachable",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: i18n.t("chat:screen.notice.failed"),
+				description: "the host is unreachable",
+			},
+			{ reason: expect.anything() },
+		)
 
 		world.refusesOpen = false
 		relaunch()
@@ -626,6 +632,7 @@ describe("returning from the browser sign-in", () => {
 
 		expect(reportFailure).toHaveBeenCalledWith(
 			expect.objectContaining({ title: "Couldn’t read ~/.claude" }),
+			{ reason: expect.anything() },
 		)
 		expect(screens).toEqual(["connect", "account", null])
 		expect(world.opened).toEqual([SHOTO])
@@ -722,10 +729,13 @@ describe("connecting without a ~/.claude folder", () => {
 		await controller.acceptAccount()
 		await flushed()
 
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn’t send that request",
-			description: "disk full",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Couldn’t send that request",
+				description: "disk full",
+			},
+			{ reason: expect.anything() },
+		)
 		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
 			"connect",
 		)
@@ -773,10 +783,13 @@ describe("leaving Account with nothing imported", () => {
 
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
-			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+				description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("greets once when Shoto already greeted", async () => {
@@ -884,10 +897,13 @@ describe("finishing on Account", () => {
 
 		await controller.finish()
 
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn’t send that request",
-			description: "disk full",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Couldn’t send that request",
+				description: "disk full",
+			},
+			{ reason: expect.anything() },
+		)
 		expect(world.step).toBe("account")
 		expect(onboardingScreenStepOf(world.step, controller.getState())).toBe(
 			"account",
@@ -921,10 +937,13 @@ describe("finishing on Account", () => {
 
 		await controller.finish()
 
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Scout couldn’t say hello",
-			description: "socket closed",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Scout couldn’t say hello",
+				description: "socket closed",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("lands once on the stored first companion when the app relaunched on Account", async () => {
@@ -1057,10 +1076,13 @@ describe("landing after an import", () => {
 
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
-			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+				description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("names Shoto when he couldn't say hello", async () => {
@@ -1069,10 +1091,13 @@ describe("landing after an import", () => {
 
 		await finishedAfter({ ...NOTHING_IMPORTED, companions: ["Atlas"] })
 
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Shoto couldn’t say hello",
-			description: "socket closed",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Shoto couldn’t say hello",
+				description: "socket closed",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("still lands on the stored first companion when the import was skipped", async () => {
@@ -1157,10 +1182,13 @@ describe("holding the Shoto run in a window", () => {
 		await flushed()
 
 		expect(world.opened).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: i18n.t("chat:screen.notice.failed"),
-			description: "the lock was refused",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: i18n.t("chat:screen.notice.failed"),
+				description: "the lock was refused",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 })
 

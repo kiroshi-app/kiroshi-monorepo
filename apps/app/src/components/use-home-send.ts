@@ -38,11 +38,14 @@ type HomeSendOptions = HomeConversationStart & {
 
 const reportUnsent = failureReporterIn("use-home-send")
 
-const raiseUnsent = () => {
-	void reportUnsent({
-		title: i18n.t("chat:home.failure.send.title"),
-		description: i18n.t("chat:home.failure.send.description"),
-	})
+const raiseUnsent = (reason?: unknown) => {
+	void reportUnsent(
+		{
+			title: i18n.t("chat:home.failure.send.title"),
+			description: i18n.t("chat:home.failure.send.description"),
+		},
+		{ reason },
+	)
 }
 
 const raiseRefused = (refusal: AttachmentStoreError) => {
@@ -119,13 +122,13 @@ export const useHomeSend = ({
 		return refusal
 	}
 
-	const raiseFailure = () => {
+	const raiseFailure = (reason?: unknown) => {
 		const refusal = takeRefusal()
 		if (refusal) {
 			raiseRefused(refusal)
 			return
 		}
-		raiseUnsent()
+		raiseUnsent(reason)
 	}
 
 	const clearDraftIfUnchanged = (sentDraft: string) => {
@@ -152,7 +155,7 @@ export const useHomeSend = ({
 			await openSent(text)
 		} catch (reason) {
 			console.error("home send:", reason)
-			raiseFailure()
+			raiseFailure(reason)
 		} finally {
 			isSendRunning.current = false
 			setIsSending(false)

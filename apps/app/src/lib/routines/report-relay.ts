@@ -1,6 +1,7 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { ReporterFacts } from "../failure-report"
 import type {
 	AgentEvent,
 	ChatMessage,
@@ -15,7 +16,7 @@ export type ReportRelayOptions = {
 	driver: Pick<ChatDriver, "subscribe">
 	store: Pick<TranscriptStore, "mainChat">
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
-	reportFailure: (notice: NoticeMessage) => void
+	reportFailure: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const SEPARATOR = "\u0000"
@@ -51,9 +52,12 @@ export const startReportRelay = ({
 
 	const raiseFailure = (thrown: unknown) => {
 		console.error("report relay:", thrown)
-		reportFailure({
-			title: i18n.t("chat:transcript.mention.unresolved.title", { count: 1 }),
-		})
+		reportFailure(
+			{
+				title: i18n.t("chat:transcript.mention.unresolved.title", { count: 1 }),
+			},
+			{ reason: thrown },
+		)
 	}
 
 	const isMainChat = async ({ conversationId, botId }: RuntimeScope) =>

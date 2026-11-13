@@ -105,7 +105,7 @@ const createCaretShareBurst = (spaceId: string) => {
 			hasRaisedNotice = true
 			void reportFailure(
 				{ title: i18n.t("common:library.failure.document.caret") },
-				{ space: spaceId },
+				{ space: spaceId, reason },
 			)
 		},
 	}

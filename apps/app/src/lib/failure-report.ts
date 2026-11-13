@@ -9,6 +9,8 @@ import { readFailureLog } from "./failure-log"
 import { readFailureSpecs } from "./failure-specs"
 import { scrubFailureText } from "./failure-text-scrubber"
 
+import { isUnknownCommandRefusal } from "./host/host-refused"
+
 export type FailureCorrelation = Pick<
 	FailureContext,
 	| "space"
@@ -163,12 +165,16 @@ export const raiseReportedFailure = async (
 		report: await buildFailureReport(facts),
 	})
 
-export type ReporterFacts = Omit<FailureFacts, "raisedIn">
+export type ReporterFacts = Omit<FailureFacts, "raisedIn"> & {
+	reason?: unknown
+}
 
 export const failureReporterIn =
 	(raisedIn: string) =>
-	(
+	async (
 		notice: UnreportedFailureNotice,
-		facts: ReporterFacts = {},
-	): Promise<string> =>
-		raiseReportedFailure(notice, { ...facts, raisedIn })
+		{ reason, ...facts }: ReporterFacts = {},
+	): Promise<string | undefined> =>
+		isUnknownCommandRefusal(reason)
+			? undefined
+			: raiseReportedFailure(notice, { ...facts, raisedIn })

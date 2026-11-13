@@ -16,7 +16,7 @@ import {
 	type SignInActions,
 } from "./sign-in-flow"
 
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { createStore } from "../store"
 import type { OnboardingStep } from "@/lib/bindings"
 import type { RosterController } from "../bots/roster-controller"
@@ -69,7 +69,7 @@ export type OnboardingFlowController = SignInActions & {
 }
 
 export type OnboardingFlowOptions = {
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 export type OnboardingCreation = {
@@ -126,7 +126,7 @@ export const createOnboardingFlowController = (
 		stateStore.setState({ ...current(), ...fields })
 
 	const report = (title: string, reason: unknown) => {
-		reportFailure({ title, description: exitDetailOf(reason) })
+		reportFailure({ title, description: exitDetailOf(reason) }, { reason })
 	}
 
 	const reportUnsent = (reason: unknown) =>

@@ -1019,6 +1019,7 @@ describe("a write of a spoken word that fails", () => {
 			botId: ada,
 			command: "conversation_open_assistant_message",
 			turn: expect.any(String),
+			reason: expect.anything(),
 		})
 	})
 

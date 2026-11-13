@@ -1800,7 +1800,11 @@ describe("startMissionRunDriver raising a failure", () => {
 
 		expect(await failuresRaisedBy(harness)).toHaveBeenCalledWith(
 			expect.objectContaining({ cause: expect.any(String) }),
-			{ side: "local", mission: harness.mission.id, count: 1 },
+			expect.objectContaining({
+				side: "local",
+				mission: harness.mission.id,
+				count: 1,
+			}),
 		)
 	})
 
@@ -1817,6 +1821,7 @@ describe("startMissionRunDriver raising a failure", () => {
 			side: "local",
 			mission: harness.mission.id,
 			count: 3,
+			reason: LOCKED_STORAGE,
 		})
 		expect(linesNaming("the mission could not be read")).toEqual([
 			expect.stringContaining("| count: 3"),
@@ -1872,12 +1877,15 @@ describe("startMissionRunDriver raising a failure", () => {
 				`| mission: ${harness.mission.id} | space: s1 | side: local |`,
 			),
 		])
-		expect(raised).toHaveBeenCalledWith(expect.anything(), {
-			side: "local",
-			mission: harness.mission.id,
-			space: "s1",
-			count: 1,
-		})
+		expect(raised).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				side: "local",
+				mission: harness.mission.id,
+				space: "s1",
+				count: 1,
+			}),
+		)
 	})
 
 	it("leaves the Space out of the line and the card of a mission whose Space it never heard", async () => {
@@ -1911,7 +1919,12 @@ describe("startMissionRunDriver raising a failure", () => {
 
 		expect(await failuresRaisedBy(harness)).toHaveBeenCalledWith(
 			expect.anything(),
-			{ side: "local", mission: harness.mission.id, space: "s1", count: 1 },
+			expect.objectContaining({
+				side: "local",
+				mission: harness.mission.id,
+				space: "s1",
+				count: 1,
+			}),
 		)
 	})
 })

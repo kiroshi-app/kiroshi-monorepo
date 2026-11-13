@@ -12,7 +12,7 @@ const holdsRows = (held: ApplicationDirectory | undefined) =>
 export const readDirectory = async (
 	port: ApplicationPort,
 	held: ApplicationDirectory | undefined,
-	reportUnrefreshed: () => void,
+	reportUnrefreshed: (reason?: unknown) => void,
 ): Promise<ApplicationDirectory> => {
 	try {
 		const found = await port.search("")
@@ -28,7 +28,7 @@ export const readDirectory = async (
 		}
 	} catch (reason) {
 		if (!held || !holdsRows(held)) throw reason
-		reportUnrefreshed()
+		reportUnrefreshed(reason)
 		return held
 	}
 }

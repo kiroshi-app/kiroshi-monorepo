@@ -830,11 +830,14 @@ describe("startNotificationSource when a subscription breaks", () => {
 
 		const harness = await start({ notifications })
 
-		expect(harness.reportFailure).toHaveBeenCalledWith({
-			title:
-				"Notifications won’t open their conversation. Restart Kiroshi to fix it.",
-			description: "no listener",
-		})
+		expect(harness.reportFailure).toHaveBeenCalledWith(
+			{
+				title:
+					"Notifications won’t open their conversation. Restart Kiroshi to fix it.",
+				description: "no listener",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("raises a notice when the focus watch is refused", async () => {
@@ -842,11 +845,14 @@ describe("startNotificationSource when a subscription breaks", () => {
 			watchFocus: () => Promise.reject(new Error("no window")),
 		})
 
-		expect(harness.reportFailure).toHaveBeenCalledWith({
-			title:
-				"Notifications may show while you’re in Kiroshi. Restart Kiroshi to fix it.",
-			description: "no window",
-		})
+		expect(harness.reportFailure).toHaveBeenCalledWith(
+			{
+				title:
+					"Notifications may show while you’re in Kiroshi. Restart Kiroshi to fix it.",
+				description: "no window",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("raises a notice when the host refuses to show a notification", async () => {
@@ -856,11 +862,14 @@ describe("startNotificationSource when a subscription breaks", () => {
 		harness.chat.publish("bot-one", { question: question("q-1") })
 		await Promise.resolve()
 
-		expect(harness.reportFailure).toHaveBeenCalledWith({
-			title:
-				"Couldn’t show a notification. Check Kiroshi’s notification permission.",
-			description: REFUSAL,
-		})
+		expect(harness.reportFailure).toHaveBeenCalledWith(
+			{
+				title:
+					"Couldn’t show a notification. Check Kiroshi’s notification permission.",
+				description: REFUSAL,
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("raises one notice however many notifications the host refuses", async () => {

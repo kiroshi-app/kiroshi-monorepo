@@ -122,7 +122,7 @@ export const startCompanionSpokeDriver = ({
 					detail: describeFailure(thrown),
 				}),
 			},
-			facts,
+			{ ...facts, reason: thrown },
 		)
 	}
 

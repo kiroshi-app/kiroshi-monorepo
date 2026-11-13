@@ -29,7 +29,7 @@ import type { Application, ApplicationPort } from "./application-port"
 import { applicationQueryKeys } from "./application-query-keys"
 import { useReadBound } from "./use-read-bound"
 
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import type { TranscriptStore } from "../conversations/store-port"
 
 export type ApplicationsState = {
@@ -65,7 +65,7 @@ export type Applications = {
 
 type ApplicationsOptions = {
 	isCatalogueOpen: boolean
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 type CatalogueStatus = {
@@ -176,7 +176,7 @@ const useCatalogueRead = (port: ApplicationPort) => {
 
 type DirectoryReadOptions = {
 	isEnabled: boolean
-	reportFailure: (notice: NoticeMessage) => void
+	reportFailure: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const useDirectoryRead = (
@@ -193,8 +193,8 @@ const useDirectoryRead = (
 			readDirectory(
 				port,
 				queryClient.getQueryData<ApplicationDirectory>(queryKey),
-				() => {
-					if (!signal.aborted) reportFailure(unrefreshedNotice())
+				(reason) => {
+					if (!signal.aborted) reportFailure(unrefreshedNotice(), { reason })
 				},
 			),
 		enabled: isBrowsing && isEnabled,

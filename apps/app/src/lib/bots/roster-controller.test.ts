@@ -1111,9 +1111,12 @@ describe("createRosterController on memberships", () => {
 		expect(controller.getState().rosters.personal.map((bot) => bot.id)).toEqual(
 			["default"],
 		)
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "An agent needs at least one space.",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "An agent needs at least one space.",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 
 	it("says nothing changed when a removal fails for another reason", async () => {
@@ -1133,9 +1136,12 @@ describe("createRosterController on memberships", () => {
 		expect(
 			refusing.getState().rosters[elsewhere.id].map((bot) => bot.id),
 		).toEqual(["default"])
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: "Couldn’t remove this agent from the space. Retry.",
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: "Couldn’t remove this agent from the space. Retry.",
+			},
+			{ reason: expect.anything() },
+		)
 	})
 })
 
@@ -1809,9 +1815,12 @@ describe("createRosterController on conversations", () => {
 		)
 
 		expect(seated).toBeNull()
-		expect(reportFailure).toHaveBeenCalledWith({
-			title: `Couldn’t bring ${refusing.getState().bots[0].name} into this conversation. Retry.`,
-		})
+		expect(reportFailure).toHaveBeenCalledWith(
+			{
+				title: `Couldn’t bring ${refusing.getState().bots[0].name} into this conversation. Retry.`,
+			},
+			{ reason: expect.anything() },
+		)
 		expect(seatedIn(refusing.getState().conversations[0])).toEqual([])
 	})
 
