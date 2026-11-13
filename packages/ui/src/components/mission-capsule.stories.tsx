@@ -80,8 +80,8 @@ export const LiveMission = meta.story({
 			{ ...WORKING_MISSION, isLive: true },
 			{
 				...WORKING_MISSION,
-				id: "mission-waiting",
-				state: "waiting",
+				id: "mission-ready",
+				state: "ready",
 				isLive: true,
 			},
 		],
@@ -98,7 +98,7 @@ export const LiveMission = meta.story({
 		const capsules = slotsIn(canvasElement, "mission-capsule")
 		await expect(capsules.map((capsule) => capsule.dataset.state)).toEqual([
 			"working",
-			"waiting",
+			"ready",
 		])
 		for (const capsule of capsules) {
 			const shimmer = slotIn(
