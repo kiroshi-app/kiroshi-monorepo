@@ -1250,6 +1250,48 @@ export const DescribeRefusedDark = meta.story({
 	},
 })
 
+const HostOutdatedNotice = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<NoticeDemo
+			label="Call the host"
+			raise={() =>
+				raiseFailureNotice({
+					title: t("screen.notice.failed"),
+					description: t("screen.notice.hostOutdated"),
+				})
+			}
+		/>
+	)
+}
+
+export const HostOutdated = meta.story({
+	render: () => <HostOutdatedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A member of a joined Space called a command the host does not know, because the computer hosting the Space runs an older Kiroshi. Check that the title is the generic failed title and that the body names the hosting computer and the update to make there, in place of the host’s raw sentence. Pick `Error` for a failure that carries its own sentence, `DescribeRefused` for a refusal the host does know. The app raises it with the key `chat:screen.notice.hostOutdated` under the title `chat:screen.notice.failed`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Call the host" }))
+
+		const notice = await failureNotice()
+		await expect(getComputedStyle(markOf(notice)).color).toBe(destructiveRole())
+		await expect(
+			within(notice).getByText("Couldn’t send that request"),
+		).toBeVisible()
+		await expect(
+			within(notice).getByText(
+				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
+			),
+		).toBeVisible()
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		docs: {
