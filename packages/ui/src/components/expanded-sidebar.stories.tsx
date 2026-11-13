@@ -290,7 +290,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, the destinations menu, Pinned and Conversations, then the space dots, the update row and the person footer when they apply. A two finger horizontal swipe over the list changes Space. Every agent, conversation and mission row is one 28px line, compact direction D of OPE-2209: the D stories hold one state each, Rest, Hover, Selected, Focus, Working, Needs you and Coloured icons.",
+					"The expanded sidebar of the navigation shell, top to bottom: Space switcher, then the list, which scrolls the destinations menu with Pinned and Conversations, then the footer block holding the space dots, the update row and the person button when they apply. A two finger horizontal swipe over the list changes Space. Every agent, conversation and mission row is one 30px line, compact direction D of OPE-2209: the D stories hold one state each.",
 			},
 		},
 	},
@@ -1192,7 +1192,7 @@ export const L1LoadingExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area. Check both header bars sit in a 32px header 8px in, the first row starts 34px under the top of its header bar and the second header 12px under the second row, the destinations menu staying above the skeleton. That is the rhythm of the list before OPE-2209: the compact list of `ExpandedNewConversation` holds 28px headers and rows, so the list moves when it arrives until the skeleton follows.",
+					"The list is loading. Check the skeleton replaces every section, runs flat with its second header bar after two rows, and reaches the bottom of the list area. Check both header bars sit in a 32px header 8px in, the first row starts 34px under the top of its header bar and the second header 12px under the second row, the destinations menu staying above the skeleton. That is the rhythm of the list before OPE-2209: the compact list of `ExpandedNewConversation` holds 30px headers and rows, so the list moves when it arrives until the skeleton follows.",
 			},
 		},
 	},
