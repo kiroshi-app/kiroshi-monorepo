@@ -16,7 +16,7 @@ const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-rail-section-placeholder"
 
 const COMPACT_TREE = cn(
 	COMPACT_ROW_STACK,
-	"relative before:pointer-events-none before:absolute before:inset-y-0 before:start-3.75 before:w-[1.5px] before:bg-sidebar-tree-line",
+	"relative ps-2 before:pointer-events-none before:absolute before:inset-y-0 before:start-3.5 before:w-[1.5px] before:bg-sidebar-tree-line",
 )
 
 const STACKED_ROW = {
@@ -28,11 +28,11 @@ const STACKED_ROW = {
 } as const
 
 const COMPACT_ROW = {
-	row: "group/mission flex h-8 w-full min-w-0 items-center gap-2 rounded-sm p-1.5 text-start text-compact text-muted-foreground leading-5 outline-hidden ring-sidebar-ring hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover aria-[current]:bg-sidebar-accent",
-	lead: "size-5 shrink-0",
+	row: "group/mission flex h-7.5 w-fit min-w-0 max-w-full items-center gap-2 self-start rounded-sm p-1.5 text-start text-compact text-muted-foreground leading-4.5 outline-hidden ring-sidebar-ring hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover aria-[current]:bg-sidebar-accent aria-[current]:active:bg-sidebar-accent aria-[current]:hover:bg-sidebar-accent",
+	lead: "w-2.5 shrink-0",
 	glyphSide: 14,
 	identifier: "shrink-0 font-medium tabular-nums",
-	title: "min-w-0 grow truncate group-aria-[current]/mission:text-foreground",
+	title: "min-w-0 truncate group-aria-[current]/mission:text-foreground",
 } as const
 
 type MissionOpening = {

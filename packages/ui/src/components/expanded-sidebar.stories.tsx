@@ -327,7 +327,7 @@ export const ExpandedNewConversation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 34px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 28px in. Check both section headers are 32px tall with their label 6px in, the first row starts 33px under the top of the list and Conversations sits 24px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
+					"Artboard 1: one space, no pending update, New open. Check the blocks run switcher, menu, Pinned, Conversations, footer with nothing between the list and the footer, that New alone wears the selected fill and reports itself as the current page, that a section header folds its rows and says so, and that the title bar and footer buttons carry a name and a focus ring, the footer being one button with no button nested in it and its gear hidden from assistive technology. Check the New row draws the same Add glyph as the New tab button, the switcher sits alone in its row reaching its right edge, and the footer avatar measures the same width and height as the Space logo and sits on its vertical line, centred 34px from the sidebar edge, 8px from its row's start edge and from its top, in a 44px row like the switcher's, while the navigation icons are centred 27px in. Check both section headers are 30px tall with their label 6px in, the first row starts 31px under the top of the list and Conversations sits 24px under the last pinned row. With a single Space, check the carousel refuses a sideways scroll and no selection is reported. Pick `ExpandedMissions` for the other destination.",
 			},
 		},
 	},
@@ -349,7 +349,7 @@ export const ExpandedNewConversation = meta.story({
 			"expanded-sidebar-switcher-row",
 			"sidebar-menu",
 			"space-carousel",
-			"expanded-sidebar-footer",
+			"expanded-sidebar-footer-block",
 		])
 		await expect(
 			canvasElement.querySelector('[data-slot="update-row"]'),
@@ -473,11 +473,15 @@ const SWITCHER_PADDING = Array(4).fill("8px")
 
 const SWITCHER_HEIGHT = 44
 
-const ROW_HEIGHT = 32
+const ROW_HEIGHT = 30
 
 const ROW_GAP = 1
 
 const MISSION_GLYPH = 14
+
+const MISSION_INDENT = 8
+
+const MISSION_LANE = 10
 
 const PANEL_PADDING = 12
 
@@ -485,7 +489,7 @@ const BLOCK_GAP = 24
 
 const SWITCHER_ICON_CENTRE = 34
 
-const ROW_X_OFFSETS = { iconCentre: 28, labelStart: 46 }
+const ROW_X_OFFSETS = { iconCentre: 27, labelStart: 44 }
 
 const LIST_RHYTHM = {
 	headerHeights: [ROW_HEIGHT, ROW_HEIGHT],
@@ -614,7 +618,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 			trunk.width,
 			trunk.top,
 			trunk.bottom,
-		]).toEqual(["15px", "1.5px", "0px", "0px"])
+		]).toEqual(["14px", "1.5px", "0px", "0px"])
 		await expect(trunk.pointerEvents).toBe("none")
 		const title = slotIn(head, "roster-row-name")
 		for (const row of slotsIn(tree, "mission-capsule")) {
@@ -622,7 +626,8 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 			const glyph = slotIn(row, "mission-capsule-glyph")
 			await expect(boxOf(row).height).toBe(ROW_HEIGHT)
 			await expect(paddingOf(row)).toEqual(ROW_PADDING)
-			await expect(boxOf(lane).width).toBe(COMPACT_LEAD_SIDE)
+			await expect(boxOf(lane).width).toBe(MISSION_LANE)
+			await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
 			await expect(boxOf(glyph).width).toBe(MISSION_GLYPH)
 			await expect(boxOf(glyph).left).toBe(boxOf(title).left)
 			await expect(row.tagName).toBe("BUTTON")
@@ -636,7 +641,7 @@ const expectTreeArtboard = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const TREE_DESCRIPTION =
-	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 32px line padded 6 on all four sides, each mission is a button of its own under the pointer, keeps a 20px lane holding the trunk under its conversation icon and sits its 14px state mark on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
+	"Compact direction D: four conversations, two of them carrying missions under their row, and one agent row. Check every row is one 30px line padded 6 on all four sides, each mission is a button of its own under the pointer that starts 8px in, 6px before the trunk under its conversation icon, keeps a 10px lane after the trunk and sits its 14px state mark on the title column, and the destinations show their glyph alone. The Space switcher keeps the 8px inset it has on main, and the person footer takes the same 44px row, 8px inset and avatar size."
 
 export const Missions1TreeExpanded = meta.story({
 	name: "Missions 1 Tree",
@@ -665,7 +670,7 @@ export const Missions1TreeLongTitlesExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation title and a mission title longer than the column. Check both stay on one 20px line and end in an ellipsis, the row height untouched.",
+					"A conversation title and a mission title longer than the column. Check both stay on one 18px line and end in an ellipsis, the row height untouched.",
 			},
 		},
 	},
@@ -677,8 +682,8 @@ export const Missions1TreeLongTitlesExpanded = meta.story({
 			await expect(line.scrollWidth).toBeGreaterThan(line.clientWidth)
 			await expect(getComputedStyle(line).textOverflow).toBe("ellipsis")
 		}
-		await expect(boxOf(name).height).toBe(20)
-		await expect(boxOf(title).height).toBe(20)
+		await expect(boxOf(name).height).toBe(18)
+		await expect(boxOf(title).height).toBe(18)
 		await expect(boxOf(slotIn(canvasElement, "mission-capsule")).height).toBe(
 			ROW_HEIGHT,
 		)
@@ -1349,7 +1354,7 @@ export const N1NamedSectionExpanded = meta.story({
 		await expect(style.columnGap).toBe("4px")
 		await expect(style.justifyContent).toBe("space-between")
 		await expect(style.fontSize).toBe("13px")
-		await expect(style.lineHeight).toBe("20px")
+		await expect(style.lineHeight).toBe("18px")
 		await expect(style.fontWeight).toBe("500")
 		await expect(style.color).toBe(getComputedStyle(pinned).color)
 		await expect(boxOf(clients).height).toBe(boxOf(pinned).height)
@@ -1764,7 +1769,7 @@ export const TopMenuAtRestExpanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The destinations menu at rest. Check each button is 32px tall with a 20px glyph and pads 6 on all four sides, and that its icon centre and label start sit 28px and 46px from the sidebar edge, the same as a conversation row's.",
+					"The destinations menu at rest. Check each button is 30px tall with an 18px glyph and pads 6 on all four sides, and that its icon centre and label start sit 27px and 44px from the sidebar edge, the same as a conversation row's.",
 			},
 		},
 	},
@@ -1962,7 +1967,7 @@ const ROW_COLUMNS_ARTBOARD = {
 }
 
 const ROW_COLUMNS_DESCRIPTION =
-	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 28px and the title 46px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 18px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 18px from the edges. Check every one of them is 32px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 20px from the edge, and that resting the pointer on any of them moves none of the columns."
+	"The Space switcher and the destinations menu above a conversation carrying missions, a conversation carrying none and an agent row, then the person footer. Check the lead centre sits 27px and the title 44px from the sidebar's start edge in the Missions item and the three rows alike, that their trailing lane ends 18px from its end edge and is 64px wide, and that the section header starts its label and ends its chevron 18px from the edges. Check every one of them is 30px tall and pads 6 on all four sides, that the switcher keeps main's 44px row, 8px inset and columns, that the footer takes the switcher's row, inset and columns with its gear ending 20px from the edge, and that resting the pointer on any of them moves none of the columns."
 
 export const RowColumnsExpanded = meta.story({
 	name: "Row columns",
@@ -2059,7 +2064,10 @@ const COMPACT_RELEASE_TRAIN: AppSidebarConversation = {
 	...compactRow("Release train", "5m", 7),
 	icon: "Rocket",
 	participants: [ATLAS, NOVA],
-	missions: RELEASE_TRAIN.missions,
+	missions: [
+		treeMission("failed", "OPE-412", "Fix the flaky upload test"),
+		treeMission("waiting", "OPE-418", "Review the plan"),
+	],
 }
 
 const COMPACT_ROADMAP = compactRow("Q3 roadmap review", "1h", 6)
@@ -2149,6 +2157,9 @@ const filledShapesOf = (glyph: Element) =>
 
 const isDrawnFilled = (glyph: Element) => filledShapesOf(glyph).length > 0
 
+const gearOf = (person: Element) =>
+	person.lastElementChild?.querySelector("svg") as Element
+
 const expectRestingRow = async (row: HTMLElement) => {
 	const title = slotIn(row, "roster-row-name")
 	const meta = slotIn(row, "roster-row-meta")
@@ -2160,7 +2171,7 @@ const expectRestingRow = async (row: HTMLElement) => {
 		getComputedStyle(title).fontSize,
 		getComputedStyle(title).lineHeight,
 		getComputedStyle(title).fontWeight,
-	]).toEqual(["14px", "20px", "400"])
+	]).toEqual(["14px", "18px", "400"])
 	await expect(colourOf(title)).toBe(
 		tokenStyleIn(row, "text-soft-foreground", "color"),
 	)
@@ -2187,7 +2198,7 @@ export const CompactRestExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 32px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 20px lead, the 14/20 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 20px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, and that each mission holds a 20px lane, a 14px mark, its identifier in 13/20 medium and its title, with no meta.`,
+				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 10px lane, a 14px mark, its identifier in 13/18 medium and its title, with no meta, and that the person button rests, unmarked, with its outline gear.`,
 			},
 		},
 	},
@@ -2245,7 +2256,7 @@ export const CompactRestExpanded = meta.story({
 				getComputedStyle(identifier).fontSize,
 				getComputedStyle(identifier).lineHeight,
 				getComputedStyle(identifier).fontWeight,
-			]).toEqual(["13px", "20px", "500"])
+			]).toEqual(["13px", "18px", "500"])
 			await expect(
 				mission.querySelector('[data-slot="roster-row-meta"]'),
 			).toBeNull()
@@ -2258,6 +2269,11 @@ export const CompactRestExpanded = meta.story({
 		).toBe(
 			tokenStyleIn(releaseTrain, "bg-sidebar-tree-line", "backgroundColor"),
 		)
+
+		const person = slotIn(canvasElement, "expanded-sidebar-footer")
+		await expect(person).not.toHaveAttribute("aria-current")
+		await expect(fillOf(person)).toBe("rgba(0, 0, 0, 0)")
+		await expect(isDrawnFilled(gearOf(person))).toBe(false)
 	},
 })
 
@@ -2344,6 +2360,19 @@ const OPEN_MISSION_ID = "OPE-418"
 
 const RESTING_MISSION_ID = "OPE-412"
 
+const expectMissionFillHugsContent = async (row: HTMLElement) => {
+	const tree = row.parentElement as HTMLElement
+	const trunkStart =
+		boxOf(tree).left +
+		Number.parseFloat(getComputedStyle(tree, "::before").insetInlineStart)
+	await expect(boxOf(row).left - boxOf(tree).left).toBe(MISSION_INDENT)
+	await expect(trunkStart - boxOf(row).left).toBe(6)
+	await expect(
+		boxOf(row).right - boxOf(slotIn(row, "mission-capsule-title")).right,
+	).toBeCloseTo(6, 1)
+	await expect(boxOf(row).right).toBeLessThan(boxOf(tree).right)
+}
+
 const missionRowOf = (canvasElement: HTMLElement, identifier: string) => {
 	const row = slotsIn(canvasElement, "mission-capsule").find(
 		(candidate) =>
@@ -2363,7 +2392,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar accent fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Check the other mission lights the list hover fill under the pointer, takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
+				story: `${COMPACT_DESCRIPTION} Mission OPE-418 of Release train is on screen. Check its row alone reports itself as the current page among every row of the list, wears the sidebar accent fill with no colour transition and draws its title in foreground, its identifier and state mark unchanged, while Release train above it goes back to its resting look and outline icon. Check the fill starts 8px in, 6px before the trunk, and stops 6px after the title, short of the row's end, leaving the indent on its left bare. Check the other mission takes a 2px ring inside its own box from the keyboard, and that pressing it asks for that mission.`,
 			},
 		},
 	},
@@ -2390,6 +2419,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 		)
 		await expect(boxOf(open).height).toBe(ROW_HEIGHT)
 		await expect(colourTransitionsOf(open)).toEqual([])
+		await expectMissionFillHugsContent(open)
 
 		await expect(fillOf(resting)).toBe("rgba(0, 0, 0, 0)")
 		await expect(colourOf(titleOf(resting))).toBe(muted)
@@ -2403,19 +2433,82 @@ export const CompactSelectedMissionExpanded = meta.story({
 		await expect(resting).toHaveFocus()
 		await expect(resting.matches(":focus-visible")).toBe(true)
 		await expect(getComputedStyle(resting).boxShadow).toContain("inset")
+	},
+})
 
+export const CompactHoveredMissionExpanded = meta.story({
+	name: "D Hovered mission",
+	args: compactArtboardOf(),
+	parameters: {
+		pseudo: {
+			hover: '[data-slot="mission-capsule"][data-state="waiting"]',
+		},
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} The pointer rests on mission OPE-418. Check its row lights the list hover fill at once, with no colour transition, its title, identifier and state mark keeping their resting colours. Check the fill starts 8px in, 6px before the trunk, and stops 6px after the title, short of the row's end, leaving the indent on its left bare, and that no row reports itself as the current page.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = missionRowOf(canvasElement, OPEN_MISSION_ID)
+		await expect(row).not.toHaveAttribute("aria-current")
+		await expectMissionFillHugsContent(row)
+		await expect(colourTransitionsOf(row)).toEqual([])
 		if (!isInBrowserRunner()) return
+		const title = slotIn(row, "mission-capsule-title")
+		const identifier = slotIn(row, "mission-capsule-identifier")
+		const resting = [colourOf(title), colourOf(identifier)]
 		const pointer = await realPointer()
 		try {
-			await pointer.hover(resting)
-			await expect(resting.matches(":hover")).toBe(true)
-			await expect(fillOf(resting)).toBe(
-				tokenStyleIn(resting, "bg-mission-list-hover", "backgroundColor"),
+			await pointer.hover(row)
+			await expect(row.matches(":hover")).toBe(true)
+			await expect(fillOf(row)).toBe(
+				tokenStyleIn(row, "bg-mission-list-hover", "backgroundColor"),
 			)
-			await expect(colourOf(titleOf(resting))).toBe(muted)
+			await expect([colourOf(title), colourOf(identifier)]).toEqual(resting)
+			await expectMissionFillHugsContent(row)
 		} finally {
-			await pointer.unhover(resting)
+			await pointer.unhover(row)
 		}
+	},
+})
+
+export const CompactSelectedPersonExpanded = meta.story({
+	name: "D Selected person",
+	args: { ...compactArtboardOf(), isSettingsShown: true },
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPACT_DESCRIPTION} The person's settings are on screen. Check the person button alone reports itself as the current page among every button of the sidebar, wears the sidebar accent fill with no colour transition, draws the name in foreground and the filled gear, and keeps the avatar at the size of the Space logo, its initials disc taking the panel surface so it still reads on the fill.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const sidebar = sidebarIn(canvasElement)
+		const person = slotIn(sidebar, "expanded-sidebar-footer")
+		await expect(
+			within(sidebar)
+				.getAllByRole("button")
+				.filter((control) => control.hasAttribute("aria-current")),
+		).toEqual([person])
+		await expect(person).toHaveAttribute("aria-current", "page")
+		await expect(fillOf(person)).toBe(
+			tokenStyleIn(person, "bg-sidebar-accent", "backgroundColor"),
+		)
+		await expect(colourOf(person.children[1])).toBe(
+			tokenStyleIn(person, "text-foreground", "color"),
+		)
+		await expect(isDrawnFilled(gearOf(person))).toBe(true)
+		await expect(boxOf(gearOf(person)).width).toBe(COMPACT_LEAD_SIDE)
+		await expect(
+			fillOf(
+				slotIn(person, "expanded-sidebar-avatar").querySelector(
+					"span[aria-hidden]",
+				) as Element,
+			),
+		).toBe(tokenStyleIn(person, "bg-background", "backgroundColor"))
+		await expect(colourTransitionsOf(person)).toEqual([])
+		await expectAvatarFollowsSpaceLogo(sidebar)
 	},
 })
 
@@ -2505,11 +2598,13 @@ export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
 			selectedConversationId: COMPACT_ROADMAP.id,
 		}),
 		sections: BLOCK_SECTIONS,
+		spaces: [STUDIO, ...SEVERAL_SPACES],
+		update: <UpdateRow onDownload={DOWNLOAD} status="available" />,
 	},
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} A named section, Clients, sits between Pinned and Conversations, and Q3 roadmap review is open. Check the panel pads 12px on all four sides, that the Space header, the menu, Pinned, Clients, Conversations and the footer are each 24px from the next with no line drawn between them, that rows inside a block stay 1px apart, and that the selected row stops 12px short of both panel edges.`,
+				story: `${COMPACT_DESCRIPTION} A named section, Clients, sits between Pinned and Conversations, Q3 roadmap review is open, the person belongs to several Spaces and an update is available. Check the panel pads 12px on all four sides, that the Space header, the menu, Pinned, Clients, Conversations and the footer are each 24px from the next with no line drawn between them, and that rows inside a block stay 1px apart. Check the space dots, the update row and the person button form the footer as one block, 1px apart like rows, and that the selected row stops 12px short of both panel edges.`,
 			},
 		},
 	},
@@ -2537,7 +2632,19 @@ export const CompactPanelPaddingAndBlockGapExpanded = meta.story({
 				.slice(1)
 				.map((block, rank) => boxOf(block).top - boxOf(blocks[rank]).bottom),
 		).toEqual(blocks.slice(1).map(() => BLOCK_GAP))
-		await expect(boxOf(footer).top - boxOf(carousel).bottom).toBe(BLOCK_GAP)
+		const footerBlock = slotIn(sidebar, "expanded-sidebar-footer-block")
+		const footerParts = Array.from(footerBlock.children)
+		await expect(
+			footerParts.map((part) => part.getAttribute("data-slot")),
+		).toEqual(["space-dots", "update-row", "expanded-sidebar-footer"])
+		await expect(boxOf(footerBlock).top - boxOf(carousel).bottom).toBe(
+			BLOCK_GAP,
+		)
+		await expect(
+			footerParts
+				.slice(1)
+				.map((part, rank) => boxOf(part).top - boxOf(footerParts[rank]).bottom),
+		).toEqual([ROW_GAP, ROW_GAP])
 		await expect(boxOf(sidebar).bottom - boxOf(footer).bottom).toBe(
 			PANEL_PADDING,
 		)
@@ -2730,7 +2837,7 @@ const expectMeasuredOrange = async ({ canvasElement }: StoryCanvas) => {
 }
 
 const NEEDS_YOU_CHECKS =
-	"Check Lisbon offsite plan, the oldest conversation, now leads Conversations, and that both rows draw their title in medium foreground and swap pile and time for a 12px disc holding a question mark, 4px before Needs you in 11/16 semibold, the label part of the row's accessible name and the row still 32px tall."
+	"Check Lisbon offsite plan, the oldest conversation, now leads Conversations, and that both rows draw their title in medium foreground and swap pile and time for a 12px disc holding a question mark, 4px before Needs you in 11/16 semibold, the label part of the row's accessible name and the row still 30px tall."
 
 export const CompactNeedsYouExpanded = meta.story({
 	name: "D Needs you",

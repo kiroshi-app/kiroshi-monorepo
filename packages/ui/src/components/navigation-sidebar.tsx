@@ -24,7 +24,12 @@ const CLIP = "flex min-h-0 min-w-0 flex-1 overflow-clip"
 type NavigationSidebarProps = CollapsedSidebarProps &
 	Pick<
 		ExpandedSidebarProps,
-		"pinned" | "conversations" | "sections" | "missionCount" | "onReorderSpaces"
+		| "pinned"
+		| "conversations"
+		| "sections"
+		| "missionCount"
+		| "isSettingsShown"
+		| "onReorderSpaces"
 	>
 
 const NavigationSidebar = ({
@@ -32,6 +37,7 @@ const NavigationSidebar = ({
 	conversations,
 	sections,
 	missionCount,
+	isSettingsShown,
 	onReorderSpaces,
 	...collapsed
 }: NavigationSidebarProps) => {
@@ -56,6 +62,7 @@ const NavigationSidebar = ({
 					<ExpandedSidebar
 						{...shared}
 						conversations={conversations}
+						isSettingsShown={isSettingsShown}
 						missionCount={missionCount}
 						onReorderSpaces={onReorderSpaces}
 						pinned={pinned}

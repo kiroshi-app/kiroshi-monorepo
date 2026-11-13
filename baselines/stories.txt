@@ -1877,6 +1877,7 @@ navigation-expandedsidebar--active-row-hovered-light-expanded
 navigation-expandedsidebar--compact-coloured-icons-expanded
 navigation-expandedsidebar--compact-focus-expanded
 navigation-expandedsidebar--compact-hover-expanded
+navigation-expandedsidebar--compact-hovered-mission-expanded
 navigation-expandedsidebar--compact-needs-you-expanded
 navigation-expandedsidebar--compact-needs-you-light-expanded
 navigation-expandedsidebar--compact-needs-you-without-question-expanded
@@ -1886,6 +1887,7 @@ navigation-expandedsidebar--compact-selected-coloured-icon-expanded
 navigation-expandedsidebar--compact-selected-destination-expanded
 navigation-expandedsidebar--compact-selected-expanded
 navigation-expandedsidebar--compact-selected-mission-expanded
+navigation-expandedsidebar--compact-selected-person-expanded
 navigation-expandedsidebar--compact-working-expanded
 navigation-expandedsidebar--d-1-row-carried-to-conversations-expanded
 navigation-expandedsidebar--d-2-closed-section-hidden-during-lift-expanded

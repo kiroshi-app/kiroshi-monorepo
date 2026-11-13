@@ -42,10 +42,10 @@ const SIDEBAR_GLYPH_BOX = "h-5 w-7"
 const SIDEBAR_AVATAR_SIDE = 28
 
 const NAVIGATION_ROW =
-	"h-8 min-h-8 gap-2 rounded-sm p-1.5 font-normal text-sm leading-5 hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover data-active:bg-sidebar-accent data-active:font-normal data-active:active:bg-sidebar-accent data-active:hover:bg-sidebar-accent"
+	"h-7.5 min-h-7.5 gap-2 rounded-sm p-1.5 font-normal text-sm leading-4.5 hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover data-active:bg-sidebar-accent data-active:font-normal data-active:active:bg-sidebar-accent data-active:hover:bg-sidebar-accent"
 
 const NAVIGATION_ICON_SLOT =
-	"grid size-5 shrink-0 place-items-center text-muted-foreground [&>svg]:stroke-[1.75]! [&_svg]:size-full!"
+	"grid size-4.5 shrink-0 place-items-center text-muted-foreground [&>svg]:stroke-[1.75]! [&_svg]:size-full!"
 
 const NAVIGATION_LABEL =
 	"text-soft-foreground group-data-active/menu-button:text-foreground"

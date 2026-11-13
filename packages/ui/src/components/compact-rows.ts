@@ -4,7 +4,7 @@ const COMPACT_ROW_GAP = "gap-px"
 
 const COMPACT_ROW_STACK = `flex flex-col ${COMPACT_ROW_GAP}`
 
-const COMPACT_LEAD_SIDE = 20
+const COMPACT_LEAD_SIDE = 18
 
 const CompactRowsContext = createContext(false)
 

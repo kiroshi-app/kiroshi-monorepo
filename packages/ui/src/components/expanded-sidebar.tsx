@@ -66,22 +66,24 @@ const LIST_FAILED =
 	"flex flex-col items-start gap-2 p-3 text-start text-compact text-muted-foreground leading-5"
 
 const LIST_RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-5 transition-none"
+	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-4.5 transition-none"
 
 const MISSION_COUNT =
 	"w-16 shrink-0 text-end text-[11px] text-muted-foreground leading-4 tabular-nums"
 
+const FOOTER_BLOCK = cn(COMPACT_ROW_STACK, "shrink-0")
+
 const FOOTER =
-	"flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"group/person flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 aria-[current]:bg-sidebar-accent aria-[current]:hover:bg-sidebar-accent"
 
 const FOOTER_GLYPH =
-	"grid size-5 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
+	"grid size-4.5 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
-	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase leading-none"
+	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase leading-none group-aria-[current]/person:bg-background"
 
 const FOOTER_NAME =
-	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-5"
+	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5 group-aria-[current]/person:text-foreground"
 
 const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
@@ -138,6 +140,7 @@ type ExpandedSidebarSection = SectionHeadActions & {
 
 type ExpandedSidebarProps = SpaceSwitcherProps & {
 	destination?: ExpandedSidebarDestination
+	isSettingsShown?: boolean
 	missionCount?: number
 	pinned: ReactNode
 	conversations: ReactNode
@@ -187,15 +190,22 @@ const NavigationItem = ({
 
 type PersonFooterProps = {
 	user?: UserChipIdentity
+	isCurrent?: boolean
 	onOpenSettings?: () => void
 }
 
-const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
+const PersonFooter = ({
+	user,
+	isCurrent = false,
+	onOpenSettings,
+}: PersonFooterProps) => {
 	const { t } = useTranslation("bots")
 	const name = displayNameOf(user?.name)
+	const SettingsIcon = (isCurrent ? FillIcons : Icons).Settings
 
 	return (
 		<button
+			aria-current={isCurrent ? "page" : undefined}
 			aria-label={t("rail.personSettings", { name })}
 			className={FOOTER}
 			data-slot="expanded-sidebar-footer"
@@ -214,7 +224,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			</AvatarFrame>
 			<span className={FOOTER_NAME}>{name}</span>
 			<span aria-hidden="true" className={FOOTER_GLYPH}>
-				<Icons.Settings />
+				<SettingsIcon />
 			</span>
 		</button>
 	)
@@ -317,6 +327,7 @@ const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
 
 const ExpandedSidebar = ({
 	destination,
+	isSettingsShown,
 	missionCount,
 	pinned,
 	conversations,
@@ -382,15 +393,21 @@ const ExpandedSidebar = ({
 					sections={sections}
 				/>
 			</CurrentSpaceCarousel>
-			<SpaceDots
-				badgesBySpaceId={switcher.badgesBySpaceId}
-				onReorderSpaces={onReorderSpaces}
-				onSelectSpace={switcher.onSelectSpace}
-				selectedSpaceId={switcher.selectedSpaceId}
-				spaces={switcher.spaces}
-			/>
-			{update}
-			<PersonFooter onOpenSettings={onOpenSettings} user={user} />
+			<div className={FOOTER_BLOCK} data-slot="expanded-sidebar-footer-block">
+				<SpaceDots
+					badgesBySpaceId={switcher.badgesBySpaceId}
+					onReorderSpaces={onReorderSpaces}
+					onSelectSpace={switcher.onSelectSpace}
+					selectedSpaceId={switcher.selectedSpaceId}
+					spaces={switcher.spaces}
+				/>
+				{update}
+				<PersonFooter
+					isCurrent={isSettingsShown}
+					onOpenSettings={onOpenSettings}
+					user={user}
+				/>
+			</div>
 		</nav>
 	)
 }

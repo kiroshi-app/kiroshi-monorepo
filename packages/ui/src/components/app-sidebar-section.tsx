@@ -66,7 +66,7 @@ const SECTION_BODY_INNER_OPEN =
 const FOLD_SECTION = cn(COMPACT_ROW_STACK, "p-0")
 
 const FOLD_TRIGGER =
-	"flex h-8 w-full min-w-0 items-center justify-between gap-1 rounded-sm p-1.5 text-start font-medium text-compact text-faint-foreground leading-5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"flex h-7.5 w-full min-w-0 items-center justify-between gap-1 rounded-sm p-1.5 text-start font-medium text-compact text-faint-foreground leading-4.5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 
@@ -76,7 +76,7 @@ const FOLD_CHEVRON =
 const SECTION_FIELD =
 	"w-full min-w-0 border-none bg-transparent p-1.5 text-sidebar-foreground text-xs leading-4 outline-none"
 
-const COMPACT_SECTION_FIELD = "text-compact leading-5"
+const COMPACT_SECTION_FIELD = "text-compact leading-4.5"
 
 const ZONE = "flex flex-col gap-0.5"
 

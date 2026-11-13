@@ -665,6 +665,22 @@ describe("the rows of the expanded sidebar", () => {
 		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBeNull()
 	})
 
+	it("marks the person button current while the person's settings are on screen, and at rest once they are left", async () => {
+		const { router } = await mountApp(seedPinned)
+		const personButton = () => slotOf("expanded-sidebar-footer") as HTMLElement
+		expect(personButton().getAttribute("aria-current")).toBeNull()
+
+		await press(personButton())
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/settings/user")
+		expect(personButton().getAttribute("aria-current")).toBe("page")
+
+		await navigateTo(router, "/missions")
+
+		expect(personButton().getAttribute("aria-current")).toBeNull()
+	})
+
 	it("opens a row from any page", async () => {
 		const { router } = await mountApp(seedPinned)
 		await navigateTo(router, "/missions")
