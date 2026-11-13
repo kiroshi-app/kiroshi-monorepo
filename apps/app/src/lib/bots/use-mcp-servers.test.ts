@@ -45,6 +45,12 @@ const A_MARK = {
 	logoUrl: "https://ledger.internal/logo.png",
 }
 
+const OLDER_HOST_REFUSAL = new HostRefused(
+	"this host knows no command named plugin_mcp_servers",
+	null,
+	"unknownCommand",
+)
+
 const rendered = (store: TranscriptStore, owner: EnvOwner | null = BOT) => {
 	const { wrapper } = createQueryTestWrapper()
 	return renderHook(() => useMcpServers(store, owner), { wrapper })
@@ -118,13 +124,7 @@ describe("useMcpServers", () => {
 
 	it("opens on an empty panel when the joined host knows no such listing", async () => {
 		const store = createFakeTranscriptStore()
-		vi.spyOn(store, "pluginMcpServers").mockRejectedValue(
-			new HostRefused(
-				"this host knows no command named plugin_mcp_servers",
-				null,
-				"unknownCommand",
-			),
-		)
+		vi.spyOn(store, "pluginMcpServers").mockRejectedValue(OLDER_HOST_REFUSAL)
 
 		const { result } = await opened(store)
 
@@ -139,22 +139,15 @@ describe("useMcpServers", () => {
 		const store = createFakeTranscriptStore()
 		const listing = vi
 			.spyOn(store, "pluginMcpServers")
-			.mockRejectedValueOnce(
-				new HostRefused(
-					"this host knows no command named plugin_mcp_servers",
-					null,
-					"unknownCommand",
-				),
-			)
+			.mockRejectedValueOnce(OLDER_HOST_REFUSAL)
 		const { queryClient, wrapper } = createQueryTestWrapper()
 		const { result } = renderHook(() => useMcpServers(store, BOT), { wrapper })
 		await waitFor(() => expect(result.current.isPending).toBe(false))
-		const readsBeforeRereading = listing.mock.calls.length
 		listing.mockReturnValue(new Promise(() => undefined))
 
 		await readEveryQueryAgain(queryClient)
 
-		expect(listing.mock.calls.length).toBeGreaterThan(readsBeforeRereading)
+		expect(listing).toHaveBeenCalledTimes(2)
 		expect(result.current).toMatchObject({
 			servers: [],
 			isPending: false,
