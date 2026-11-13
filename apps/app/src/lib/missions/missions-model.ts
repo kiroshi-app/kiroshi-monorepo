@@ -509,7 +509,7 @@ const toRowMission = (
 		externalId: mission.ticket.externalId,
 		title: mission.ticket.title,
 	},
-	isLive: liveMissionIds.has(mission.id),
+	isLive: state !== "waiting" && liveMissionIds.has(mission.id),
 })
 
 const NO_LIVE_MISSIONS: LiveMissionIds = new Set()

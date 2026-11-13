@@ -839,6 +839,22 @@ describe("missionsByRow", () => {
 		])
 	})
 
+	it("keeps a mission waiting for an answer still while its coding session is active", () => {
+		expect(stripReadAfter(60_000, "waiting_human")).toEqual([
+			shownMission("m-1", "waiting"),
+		])
+	})
+
+	it("keeps a live mission the host reads needs_you still", () => {
+		expect(
+			missionsByRow(
+				[onBoard({ id: "m-1", state: "working", liveness: "needs_you" })],
+				NO_LISTED_CONVERSATIONS,
+				new Set(["m-1"]),
+			)["b-1"],
+		).toEqual([shownMission("m-1", "waiting")])
+	})
+
 	it("shows a mission the host reads needs_you as waiting", () => {
 		expect(livenessStripsFor("needs_you")).toEqual([
 			shownMission("m-1", "waiting"),
