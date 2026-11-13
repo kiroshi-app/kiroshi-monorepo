@@ -97,6 +97,7 @@ export const useLibraryBoardComments = ({
 						value: draft.value,
 						onValueChange: draft.onValueChange,
 						onSubmit: draft.onSubmit,
+						onClose: draft.onClose,
 					}
 				: undefined,
 			isCommentMode: comments.isCommentMode,

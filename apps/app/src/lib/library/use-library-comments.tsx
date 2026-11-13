@@ -177,6 +177,7 @@ export const useLibraryComments = <Target,>({
 						: current,
 				),
 			onSubmit: sendDraft,
+			onClose: () => change({ draft: null }),
 		},
 		openThreadById,
 		startComment: (target: Target) =>

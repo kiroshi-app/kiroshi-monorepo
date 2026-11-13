@@ -1,5 +1,3 @@
-import { LibraryCommentComposer } from "@workspace/ui/components/library-comment-composer"
-import { LibraryCommentThread } from "@workspace/ui/components/library-comment-thread"
 import type { LibraryImageAnchor } from "@workspace/ui/components/library-image-comments"
 import type { LibraryLightboxProps } from "@workspace/ui/components/library-lightbox"
 
@@ -49,26 +47,26 @@ export const useLibraryImageComments = ({
 			threads: comments.threads.flatMap(({ thread, comments: shown }) => {
 				const anchor = imageAnchorOf(thread.anchor)
 				return anchor
-					? [{ id: thread.id, author: shown[0].author, anchor }]
+					? [
+							{
+								id: thread.id,
+								author: shown[0].author,
+								anchor,
+								isResolved: thread.state === "resolved",
+							},
+						]
 					: []
 			}),
-			openThread: openThread && {
-				id: openThread.id,
-				card: <LibraryCommentThread {...openThread} />,
-			},
+			openThread,
 			draft: draft
 				? {
 						author: draft.author,
 						anchor: draft.target,
-						composer: (
-							<LibraryCommentComposer
-								anchor={imageAnchorLineOf(commentAnchorOfImage(draft.target))}
-								onSubmit={draft.onSubmit}
-								onValueChange={draft.onValueChange}
-								participants={draft.participants}
-								value={draft.value}
-							/>
-						),
+						participants: draft.participants,
+						value: draft.value,
+						onValueChange: draft.onValueChange,
+						onSubmit: draft.onSubmit,
+						onClose: draft.onClose,
 					}
 				: undefined,
 			onOpenThread: comments.openThreadById,
