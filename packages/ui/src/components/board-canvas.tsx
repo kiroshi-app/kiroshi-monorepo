@@ -1978,7 +1978,7 @@ const ReadyBoardCanvas = ({
 		if (event.metaKey || event.ctrlKey || stopArrowGesture.current) return
 		const isAnsweredByComments =
 			event.key === "Escape" &&
-			(isCommentMode || Boolean(commentDraft) || Boolean(openCommentThread))
+			Boolean(isCommentMode || commentDraft || openCommentThread)
 		if (isAnsweredByComments) return
 		const focusedObjectId =
 			target.dataset.slot === "board-object" ? target.dataset.objectId : null

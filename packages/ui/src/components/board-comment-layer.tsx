@@ -261,9 +261,11 @@ const BoardCommentLayer = ({
 	const { t } = useTranslation("common")
 
 	useEffect(() => {
+		if (!isCommentMode && !draft && !openThread) return
+
 		const answerEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || event.defaultPrevented) return
-			if (event.isComposing) return
+			const isAnsweredAlready = event.defaultPrevented || event.isComposing
+			if (event.key !== "Escape" || isAnsweredAlready) return
 			if (!isFromBoardOrCommentToggle(event.target as Element, board.current))
 				return
 			closeInnermostCommentLayer({
