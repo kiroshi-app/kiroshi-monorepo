@@ -686,6 +686,76 @@ describe("a joined space that is not on screen", () => {
 	})
 })
 
+describe("a joined space whose host runs an older Kiroshi", () => {
+	const UNKNOWN_COMMAND = "this host knows no command named bot_list"
+
+	const outdated = () => new Response(UNKNOWN_COMMAND, { status: 404 })
+
+	const hostOnly = () =>
+		new Response("this command belongs to the host", { status: 403 })
+
+	const onGarageBesideAttic = async (answer: () => Response) => {
+		const joined = joinedHostsOf({ answer })
+		await joined.hosts.activate("garage")
+		await joined.hosts.connect("attic")
+		return joined
+	}
+
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined)
+	})
+	afterEach(() => vi.restoreAllMocks())
+
+	it("reports the refusal of the space on screen once", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(outdated)
+
+		await expect(hosts.invoke("bot_list")).rejects.toMatchObject({
+			refusalKind: "unknownCommand",
+		})
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
+			message: UNKNOWN_COMMAND,
+			command: "bot_list",
+			status: 404,
+			side: "member",
+		})
+		expect(console.warn).not.toHaveBeenCalled()
+	})
+
+	it("reports nothing for a space off screen, and logs its refusal", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(outdated)
+
+		await expect(hosts.invokeOn("attic")("bot_list")).rejects.toMatchObject({
+			refusalKind: "unknownCommand",
+		})
+
+		expect(reportFailure).not.toHaveBeenCalled()
+		expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+			[
+				"joined-hosts: a joined space off screen runs an older host",
+				"space: attic",
+				"command: bot_list",
+				`reason: ${UNKNOWN_COMMAND}`,
+			].join(" | "),
+		)
+	})
+
+	it("keeps reporting a command a host off screen keeps to itself", async () => {
+		const { hosts, reportFailure } = await onGarageBesideAttic(hostOnly)
+
+		await expect(hosts.invokeOn("attic")("bot_list")).rejects.toMatchObject({
+			refusalKind: "hostOnly",
+		})
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
+			message: "this command belongs to the host",
+			command: "bot_list",
+			status: 403,
+			side: "member",
+		})
+	})
+})
+
 describe("a joined space on screen", () => {
 	beforeEach(() => {
 		vi.spyOn(console, "warn").mockImplementation(() => undefined)

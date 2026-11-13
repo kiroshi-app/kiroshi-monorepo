@@ -39,6 +39,7 @@ import type {
 } from "@/lib/conversations/store-contract"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
 import { localDayAt, type TodayRoster } from "@/lib/home/today-conversations"
+import { createHttpHost, raiseRefusalNotice } from "@/lib/host/http"
 import { startOfLocalDay } from "@/lib/missions/missions-model"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
@@ -651,5 +652,51 @@ it("raises the failed read of today and keeps the composer usable", async () => 
 	fireEvent.change(fieldOf("Atlas"), { target: { value: "Still here" } })
 
 	expect(onDraftChange).toHaveBeenCalledWith("Still here")
+	expect(screen.queryByRole("list")).toBeNull()
+})
+
+const TODAY_COMMAND = "conversation_today_of_agent"
+
+const hostKnowingNoTodayRead = () =>
+	createHttpHost({
+		host: "http://192.168.1.20:45367",
+		token: "joined",
+		fetch: async () =>
+			new Response(`this host knows no command named ${TODAY_COMMAND}`, {
+				status: 404,
+			}),
+		openSocket: () => ({
+			onopen: null,
+			onmessage: null,
+			onclose: null,
+			close: () => undefined,
+		}),
+		onDown: vi.fn(),
+		onUp: vi.fn(),
+		onReopened: vi.fn(),
+		onRefused: raiseRefusalNotice,
+	})
+
+it("draws no Today list and raises the older-host notice alone when the host knows no read of today", async () => {
+	const host = hostKnowingNoTodayRead()
+	const todayRead = vi
+		.spyOn(fixture.store, "conversationTodayOfAgent")
+		.mockImplementation(() => host.invoke(TODAY_COMMAND))
+	mountTodayOf()
+
+	await waitFor(() => expect(todayRead).toHaveBeenCalled())
+	await act(async () => {
+		await expect(todayRead.mock.results[0].value).rejects.toMatchObject({
+			refusalKind: "unknownCommand",
+		})
+	})
+	await waitFor(() => expect(vi.mocked(raiseFailureNotice)).toHaveBeenCalled())
+
+	expect(vi.mocked(raiseFailureNotice)).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({
+			title: i18n.t("chat:screen.notice.failed"),
+			description: i18n.t("chat:screen.notice.hostOutdated"),
+		}),
+	)
 	expect(screen.queryByRole("list")).toBeNull()
 })

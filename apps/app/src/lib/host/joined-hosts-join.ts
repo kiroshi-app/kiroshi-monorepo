@@ -3,7 +3,13 @@ import type { InvokeArgs } from "@tauri-apps/api/core"
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
 import { hostOfflineOf, isHostOffline } from "./host-offline"
-import { createHttpHost, type HttpHost, isTimeout } from "./http"
+import {
+	createHttpHost,
+	type HostRefusal,
+	type HttpHost,
+	isTimeout,
+	refusalKindOf,
+} from "./http"
 import {
 	isJoinedSpaceError,
 	type JoinedSpaceNaming,
@@ -60,6 +66,17 @@ const logJoinFailure = (id: string, reason: unknown) => {
 			"joined-hosts: couldn't connect a joined space",
 			`space: ${id}`,
 			`reason: ${describeFailure(reason)}`,
+		].join(" | "),
+	)
+}
+
+const logOutdatedHost = (id: string, { command, message }: HostRefusal) => {
+	console.warn(
+		[
+			"joined-hosts: a joined space off screen runs an older host",
+			`space: ${id}`,
+			`command: ${command}`,
+			`reason: ${message}`,
 		].join(" | "),
 	)
 }
@@ -148,6 +165,18 @@ export const createJoinedHostsJoin = ({
 		return refuse(id, { failure: describeFailure(reason) })
 	}
 
+	const isOutdatedOffScreen = (id: string, refusal: HostRefusal) =>
+		refusalKindOf(refusal) === "unknownCommand" &&
+		store.getState().active !== id
+
+	const reportRefusal = (id: string, refusal: HostRefusal) => {
+		if (isOutdatedOffScreen(id, refusal)) {
+			logOutdatedHost(id, refusal)
+			return
+		}
+		reportFailure(refusal)
+	}
+
 	const openHost = (
 		id: string,
 		{ hostUrl, token, remoteSpaceId }: JoinedSpaceConnection,
@@ -160,7 +189,7 @@ export const createJoinedHostsJoin = ({
 			onUp: () => markUp(id),
 			onDown: () => down.markDown(id),
 			onReopened: () => down.markReopened(id),
-			onRefused: reportFailure,
+			onRefused: (refusal) => reportRefusal(id, refusal),
 		})
 		hosts.set(id, host)
 		sharedSpaceIds.set(id, remoteSpaceId ?? id)
