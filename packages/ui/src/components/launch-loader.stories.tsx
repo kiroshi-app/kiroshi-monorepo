@@ -271,10 +271,10 @@ const provesGone = async ({ canvasElement }: PlayContext) => {
 			).toBe(true),
 		)
 		await Promise.all(
-			loader.getAnimations({ subtree: true }).map((animation) => {
-				if (animation instanceof CSSTransition) return animation.finished
-				return undefined
-			}),
+			loader
+				.getAnimations({ subtree: true })
+				.filter((animation) => animation instanceof CSSTransition)
+				.map(({ finished }) => finished),
 		)
 		await expectHexagonsKept(loader)
 	})
