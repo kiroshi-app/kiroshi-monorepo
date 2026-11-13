@@ -36,6 +36,8 @@ import {
 	selectInField,
 } from "@workspace/ui/components/library-block-text"
 import {
+	ATLAS,
+	BUDGET_THREAD,
 	COMMENT_COUNTS,
 	COMMENT_PARTICIPANTS,
 	DINNER_PASSAGE,
@@ -45,7 +47,10 @@ import {
 	MARKET_THREAD,
 	OFFSITE_DOCUMENT,
 	OPEN_THREADS,
+	OVERLAP_PASSAGE,
+	OVERLAP_THREAD,
 	passageIn,
+	RESOLVED_SESSION_THREAD,
 	SESSION_BLOCK,
 	SESSION_PARAGRAPH,
 	SESSION_PASSAGE,
@@ -64,6 +69,7 @@ import {
 	NoticeSurface,
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
+import { RosterProvider } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 const t = i18n.getFixedT("en", "common")
@@ -237,11 +243,12 @@ const leaveBlock = () => keyboard("{Escape}")
 
 type EditorFrameProps = {
 	children?: ReactNode
+	isNarrow?: boolean
 }
 
-const EditorFrame = ({ children }: EditorFrameProps) => (
+const EditorFrame = ({ children, isNarrow = false }: EditorFrameProps) => (
 	<div
-		className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
+		className={`flex h-[832px] bg-background ps-15 pe-1.5 pt-2 pb-2 ${isNarrow ? "w-[640px]" : "w-[1280px]"}`}
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>{children}</ContentCard>
@@ -2746,13 +2753,31 @@ const lastLineOf = (element: Element) => {
 
 const middleOf = ({ top, bottom }: DOMRect) => (top + bottom) / 2
 
-const washOf = (host: Element, percent: number) => {
+const washOf = (host: Element, percent: number, token = "primary") => {
 	const probe = document.createElement("span")
-	probe.style.backgroundColor = `color-mix(in oklab, var(--primary) ${percent}%, transparent)`
+	probe.style.backgroundColor = `color-mix(in oklab, var(--${token}) ${percent}%, transparent)`
 	host.append(probe)
 	const colour = getComputedStyle(probe).backgroundColor
 	probe.remove()
 	return colour
+}
+
+const colourOf = (host: Element, token: string) => {
+	const probe = document.createElement("span")
+	probe.style.color = `var(--${token})`
+	host.append(probe)
+	const colour = getComputedStyle(probe).color
+	probe.remove()
+	return colour
+}
+
+const shadowOf = (host: Element, token: string) => {
+	const probe = document.createElement("span")
+	probe.style.boxShadow = `var(--${token})`
+	host.append(probe)
+	const shadow = getComputedStyle(probe).boxShadow
+	probe.remove()
+	return shadow
 }
 
 const expectCalledOnceWith = async (mock: unknown, ...sent: unknown[]) => {
@@ -2793,7 +2818,7 @@ const expectPassagePin = async (pin: HTMLElement, passage: HTMLElement) => {
 const doc1 = {
 	args: commentedDocument(),
 	parameters: describedAs(
-		"Artboard Doc 1: a document carrying three open threads, two on a passage and one on a paragraph. Check one pin per thread, the paragraph pin 16px right of the column and centred on the first line of its block, each passage pin starting on the end of its passage and centred on its last line, the passages washed at 8 percent over a 2px underline, and that pressing a pin raises `onOpenThread` with its thread.",
+		"Artboard Doc 1: a document carrying three open threads, two on a passage and one on a paragraph. Check one pin per thread, the paragraph pin 16px right of the column and centred on the first line of its block, the pin of an agent under its own ringless shadow and the pin of a person under the pin shadow, each passage pin starting on the end of its passage and centred on its last line, the passages washed at 8 percent over a 2px underline, and that pressing a pin raises `onOpenThread` with its thread.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(3)
@@ -2806,11 +2831,15 @@ const doc1 = {
 			middleOf(boxOf(marketPin)),
 			boxOf(blockOf(canvasElement, MARKET_BLOCK)).top + 12,
 		)
+		await expect(getComputedStyle(marketPin).boxShadow).toContain(
+			shadowOf(marketPin, "comment-pin-agent-shadow"),
+		)
 
 		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
-		await expectPassagePin(
-			threadPinIn(canvasElement, SESSION_THREAD.id),
-			passage,
+		const sessionPin = threadPinIn(canvasElement, SESSION_THREAD.id)
+		await expectPassagePin(sessionPin, passage)
+		await expect(getComputedStyle(sessionPin).boxShadow).toContain(
+			shadowOf(sessionPin, "comment-pin-shadow"),
 		)
 		await expect(passage).toHaveAttribute("data-state", "rest")
 		const look = getComputedStyle(passage)
@@ -2832,7 +2861,7 @@ export const Doc1PinsAtRestDark = meta.story({ ...doc1, globals: DARK })
 const doc2 = {
 	args: commentedDocument(true),
 	parameters: describedAs(
-		"Artboard Doc 2: comment mode on, the pointer over a paragraph. Check the hint centred on the card 24px above its bottom, that Escape raises `onCommentModeChange` with false, and that the block under the pointer wears the tint 8px outside itself while the 20px pin cursor sets its tip on the pointer.",
+		"Artboard Doc 2: comment mode on, the pointer over a paragraph. Check the hint centred on the card 24px above its bottom, that Escape raises `onCommentModeChange` with false, and that the block under the pointer wears the tint 8px outside itself while the 20px pin cursor sets its tip on the pointer, its bottom left corner at 2px, under a 2px white ring and its own shadow.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		const card = boxOf(slotIn(canvasElement, "library-document-editor"))
@@ -2861,6 +2890,13 @@ const doc2 = {
 		await expectClose(boxOf(cursor).left, at.clientX)
 		await expectClose(boxOf(cursor).bottom, at.clientY)
 		await expect(boxOf(cursor).width).toBe(20)
+		await expect(boxOf(cursor).height).toBe(20)
+		const look = getComputedStyle(cursor)
+		await expect(look.borderBottomLeftRadius).toBe("2px")
+		await expect(look.boxShadow).toContain("rgb(255, 255, 255) 0px 0px 0px 2px")
+		await expect(look.boxShadow).toContain(
+			shadowOf(cursor, "comment-cursor-shadow"),
+		)
 		await expect(getComputedStyle(body).cursor).toBe("none")
 	},
 }
@@ -3046,7 +3082,7 @@ const edge1 = {
 		openThread: openThreadOf(SESSION_THREAD.id),
 	},
 	parameters: describedAs(
-		"Artboard Edge 1: the open thread sat on a passage since removed from the document. Check that the body draws no pin and no passage for it, that the two other threads keep their pins, and that the thread sits flush under the 56px bar, its right edge 202px in from the card, under the line naming the lost text.",
+		"Artboard Edge 1: the open thread sat on a passage since removed from the document. Check that the body draws no pin and no passage for it, that the two other threads keep their pins, and that the thread sits 48px under the top of the card, 4px under the comments counter, its right edge 202px in from the card, under the line naming the lost text.",
 	),
 	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(2)
@@ -3061,7 +3097,11 @@ const edge1 = {
 
 		const card = boxOf(slotIn(canvasElement, "library-document-editor"))
 		const thread = boxOf(canvas.getByRole("region", { name: GONE_LINE }))
-		await expectClose(thread.top, card.top + 56)
+		await expectClose(thread.top, card.top + 48)
+		await expectClose(
+			thread.top,
+			boxOf(slotIn(canvasElement, "library-comment-counter")).bottom + 4,
+		)
 		await expectClose(card.right - thread.right, 202)
 		await expect(thread.width).toBe(360)
 	},
@@ -3200,3 +3240,384 @@ const letterTyped = (isCommentMode: boolean) => ({
 export const LetterTypedOutOfCommentMode = meta.story(letterTyped(false))
 
 export const LetterTypedInCommentMode = meta.story(letterTyped(true))
+
+const sourcePassageOf = (source: string, first: string, last: string) => {
+	const start = source.indexOf(first)
+	const end = source.indexOf(last, start) + last.length
+	return { start, end, text: source.slice(start, end) }
+}
+
+const piecesIn = (canvasElement: HTMLElement, id: string) =>
+	slotsIn(blockOf(canvasElement, id), "library-document-passage")
+
+const wordsOf = (pieces: HTMLElement[]) =>
+	pieces.map((piece) => piece.textContent).join("")
+
+const lastOf = (pieces: HTMLElement[]) => {
+	const last = pieces.at(-1)
+	if (!last) throw new Error("No passage drawn")
+	return last
+}
+
+const cardFrameOf = (card: HTMLElement) =>
+	card.closest<HTMLElement>(
+		'[data-slot="library-document-comment-card"]',
+	) as HTMLElement
+
+const FORMATTED_QUOTE = "boat leaves from the dock"
+
+const FORMATTED_THREAD = {
+	...BUDGET_THREAD,
+	id: "thread-formatted",
+	anchor: {
+		blockId: FORMATTED_BLOCK,
+		passage: sourcePassageOf(FORMATTED_PARAGRAPH, "boat", "the dock"),
+	},
+}
+
+const passageAcrossFormatting = {
+	args: {
+		...commentedDocument(),
+		body: `${FORMATTED_PARAGRAPH} ^${FORMATTED_BLOCK}`,
+		threads: [FORMATTED_THREAD],
+		openThread: openThreadOf(FORMATTED_THREAD.id),
+	},
+	parameters: describedAs(
+		"A commented passage that starts in bold text and ends in a link, its thread open. Check one highlight per run of text with the bold and the link kept, one pin on the end of the last one, a press on that pin opening the thread without following the link, and the thread line quoting the words as the document shows them, with no markdown character.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
+		const pieces = piecesIn(canvasElement, FORMATTED_BLOCK)
+		await expect(wordsOf(pieces)).toBe(FORMATTED_QUOTE)
+		await expect(pieces[0].closest("strong")).not.toBe(null)
+		await expect(lastOf(pieces).closest("a")).not.toBe(null)
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(1)
+		const pin = threadPinIn(canvasElement, FORMATTED_THREAD.id)
+		await expectPassagePin(pin, lastOf(pieces))
+
+		const line = `On “${FORMATTED_QUOTE}”`
+		const thread = canvas.getByRole("region", { name: line })
+		await expect(slotIn(thread, "library-comment-anchor")).toHaveTextContent(
+			line,
+		)
+
+		const followed = fn((event: Event) => event.defaultPrevented)
+		canvasElement.addEventListener("click", followed, { once: true })
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, FORMATTED_THREAD.id)
+		await expect(followed).toHaveReturnedWith(true)
+	},
+}
+
+export const PassageAcrossFormatting = meta.story({
+	...passageAcrossFormatting,
+	globals: LIGHT,
+})
+
+export const PassageAcrossFormattingDark = meta.story({
+	...passageAcrossFormatting,
+	globals: DARK,
+})
+
+const overlappingPassages = {
+	args: {
+		...commentedDocument(),
+		threads: [SESSION_THREAD, OVERLAP_THREAD],
+	},
+	parameters: describedAs(
+		"Two commented passages that share words. Check a highlight for each, the shared words washed twice, and a pin on the end of each passage.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const pieces = piecesIn(canvasElement, SESSION_BLOCK)
+		const shared = "stops at 16:30."
+		await expect(pieces.map((piece) => piece.textContent)).toEqual([
+			SESSION_PASSAGE.slice(0, -shared.length),
+			shared,
+			shared,
+			OVERLAP_PASSAGE.slice(shared.length),
+		])
+		await expect(pieces[1].contains(pieces[2])).toBe(true)
+
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(2)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			pieces[1],
+		)
+		await expectPassagePin(
+			threadPinIn(canvasElement, OVERLAP_THREAD.id),
+			lastOf(pieces),
+		)
+	},
+}
+
+export const OverlappingPassages = meta.story({
+	...overlappingPassages,
+	globals: LIGHT,
+})
+
+export const OverlappingPassagesDark = meta.story({
+	...overlappingPassages,
+	globals: DARK,
+})
+
+const resolved2 = {
+	args: {
+		...commentedDocument(),
+		threads: [RESOLVED_SESSION_THREAD, MARKET_THREAD, BUDGET_THREAD],
+		openThread: openThreadOf(RESOLVED_SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		"Artboard Resolved 2: a resolved thread drawn in place, open. Check its passage under the neutral wash and a 2px dashed underline, its pin in the resolved state where an open passage pin sits, under the resolved pin shadow, the 360px thread in its resolved state 8px right of the pin with its top on the pin top, and Reopen raising `onReopen`.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
+		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "resolved")
+		const look = getComputedStyle(passage)
+		await expect(look.backgroundColor).toBe(washOf(passage, 5, "foreground"))
+		await expect(look.borderBottomWidth).toBe("2px")
+		await expect(look.borderBottomStyle).toBe("dashed")
+		await expect(look.borderBottomColor).toBe(colourOf(passage, "sketch-mark"))
+
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toHaveAttribute("aria-expanded", "true")
+		await expectPassagePin(pin, passage)
+		await expect(getComputedStyle(pin).boxShadow).toContain(
+			shadowOf(pin, "comment-pin-resolved-shadow"),
+		)
+		await expect(boxOf(slotIn(pin, "library-comment-pin-check")).width).toBe(24)
+
+		const thread = canvas.getByRole("region", {
+			name: `On “${SESSION_PASSAGE}”`,
+		})
+		await expect(thread).toHaveAttribute("data-resolved", "true")
+		await waitFor(async () => {
+			await expect(boxOf(thread).width).toBe(360)
+			await expectClose(boxOf(thread).left, boxOf(pin).right + 8)
+			await expectClose(boxOf(thread).top, boxOf(pin).top)
+		})
+		await expect(
+			slotIn(thread, "library-comment-resolution"),
+		).toHaveTextContent("Resolved by Steve")
+
+		await userEvent.click(
+			within(thread).getByRole("button", { name: "Reopen" }),
+		)
+		await expect(args.openThread?.onReopen).toHaveBeenCalledOnce()
+	},
+}
+
+export const Resolved2ThreadInPlace = meta.story({
+	...resolved2,
+	globals: LIGHT,
+})
+
+export const Resolved2ThreadInPlaceDark = meta.story({
+	...resolved2,
+	globals: DARK,
+})
+
+export const BlockThreadOpensUnderPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		openThread: openThreadOf(MARKET_THREAD.id),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const pin = threadPinIn(canvasElement, MARKET_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		const thread = boxOf(
+			canvas.getByRole("region", { name: "On this paragraph" }),
+		)
+		await expect(thread.width).toBe(360)
+		await expectClose(thread.right, boxOf(pin).right)
+		await expectClose(thread.top, boxOf(pin).bottom + 8)
+	},
+})
+
+export const PassageKeptWhileBlockFocused = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const field = await openBlockWith(canvasElement, SESSION_PASSAGE)
+		const passage = shownPassageOf(field, SESSION_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		const pin = threadPinIn(canvasElement, SESSION_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, SESSION_THREAD.id)
+		await expect(field).toHaveFocus()
+
+		if (!isInBrowserRunner()) return
+		const end =
+			SESSION_PARAGRAPH.indexOf(SESSION_PASSAGE) + SESSION_PASSAGE.length
+		selectInField(field, end - 1)
+		await keyboard("{ArrowRight}")
+		await expect(fieldSelectionOf(field)?.start).toBe(end)
+		await keyboard("{ArrowRight}")
+		await expect(fieldSelectionOf(field)?.start).toBe(end + 1)
+		await keyboard("x")
+		await expect(lastBodyOf(args)).toContain(`${SESSION_PASSAGE} xThe boat`)
+	},
+})
+
+const START_PASSAGE = "We open with the roadmap review at 14:00"
+
+const START_THREAD = {
+	...BUDGET_THREAD,
+	id: "thread-start",
+	anchor: {
+		blockId: SESSION_BLOCK,
+		passage: passageIn(SESSION_PARAGRAPH, START_PASSAGE),
+	},
+}
+
+export const PassageCardKeptInsideEditor = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		threads: [START_THREAD],
+		openThread: openThreadOf(START_THREAD.id),
+	},
+	render: (args) => (
+		<EditorFrame isNarrow>
+			<LibraryDocumentEditor {...args} />
+		</EditorFrame>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const pin = threadPinIn(canvasElement, START_THREAD.id)
+		const thread = canvas.getByRole("region", {
+			name: `On “${START_PASSAGE}”`,
+		})
+		const editor = boxOf(slotIn(canvasElement, "library-document-editor"))
+		await waitFor(() =>
+			expect(getComputedStyle(cardFrameOf(thread)).opacity).toBe("1"),
+		)
+		await expect(boxOf(pin).right + 8 + 360).toBeGreaterThan(editor.right)
+		await expect(boxOf(thread).width).toBe(360)
+		await expect(boxOf(thread).right).toBeLessThanOrEqual(editor.right)
+		await expect(boxOf(thread).left).toBeGreaterThanOrEqual(editor.left)
+		await expectClose(boxOf(thread).right, boxOf(pin).right)
+		await expectClose(boxOf(thread).top, boxOf(pin).bottom + 8)
+	},
+})
+
+const MENTION_PARAGRAPH =
+	"Ask <@atlas> for the **notes** from [the dock](https://example.com/dock)."
+
+const MENTION_BLOCK = "mentio"
+
+const mentionDocument = {
+	...commentedDocument(true),
+	threads: [],
+	body: `${MENTION_PARAGRAPH} ^${MENTION_BLOCK}`,
+}
+
+const withRoster = [
+	(Story: ComponentType) => (
+		<RosterProvider bots={[ATLAS]}>
+			<Story />
+		</RosterProvider>
+	),
+]
+
+const textNodeWith = (root: Element, text: string) => {
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+	for (let node = walker.nextNode(); node; node = walker.nextNode())
+		if (node.textContent?.includes(text)) return node
+	throw new Error(`No text ${text}`)
+}
+
+export const CommentModeSelectionOverMention = meta.story({
+	tags: ["test-only"],
+	decorators: withRoster,
+	args: mentionDocument,
+	play: async ({ args, canvasElement }) => {
+		const body = bodyOf(canvasElement, MENTION_BLOCK)
+		const name = slotIn(body, "bot-mention-name")
+		await expect(name).toHaveTextContent("Atlas")
+		const ask = textNodeWith(body, "Ask")
+
+		document
+			.getSelection()
+			?.setBaseAndExtent(ask, 0, textNodeWith(body, " for the"), 4)
+		await fireEvent.click(body)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "for"),
+			origin: "pointer",
+		})
+
+		document
+			.getSelection()
+			?.setBaseAndExtent(ask, 0, name.firstChild as Text, 2)
+		await fireEvent.click(body)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "<@atlas>"),
+			origin: "pointer",
+		})
+		await expect(args.onStartComment).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const DraftQuoteAcrossMention = meta.story({
+	tags: ["test-only"],
+	decorators: withRoster,
+	args: {
+		...mentionDocument,
+		commentDraft: draftOn({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "the dock"),
+			origin: "pointer",
+		}),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const composer = composerIn(canvasElement)
+		await expect(composer).toHaveTextContent(
+			"On “Ask Atlas for the notes from the dock”",
+		)
+		await waitFor(() =>
+			expect(getComputedStyle(cardFrameOf(composer)).opacity).toBe("1"),
+		)
+		const pieces = piecesIn(canvasElement, MENTION_BLOCK)
+		await expect(wordsOf(pieces)).toBe("Ask  for the notes from the dock")
+		await expectPassagePin(pinIn(canvasElement, DRAFT_PIN), lastOf(pieces))
+		await expectDraftFieldFocused(canvas)
+	},
+})
+
+const CARET_IN_PASSAGE = {
+	id: "lea",
+	name: "Léa Martin",
+	caret: OFFSITE_DOCUMENT.body.indexOf("session stops"),
+}
+
+export const CaretInsideCommentedPassage = meta.story({
+	tags: ["test-only"],
+	args: { ...commentedDocument(), people: [CARET_IN_PASSAGE] },
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SESSION_BLOCK)
+		const caret = await within(block).findByRole("img", { name: "Léa Martin" })
+		const pieces = piecesIn(canvasElement, SESSION_BLOCK)
+		await expect(pieces.map((piece) => piece.textContent)).toEqual([
+			"so the second ",
+			"session stops at 16:30.",
+		])
+		await expect(
+			pieces[0].compareDocumentPosition(caret) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			caret.compareDocumentPosition(pieces[1]) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expectClose(boxOf(caret).left, boxOf(pieces[1]).left)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			pieces[1],
+		)
+	},
+})

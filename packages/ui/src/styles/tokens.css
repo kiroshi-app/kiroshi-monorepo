@@ -251,6 +251,8 @@
 	--comment-pin-shadow: 0 2px 8px #00000029, 0 0 0 1px #0000000f;
 	--comment-pin-selected-shadow: 0 2px 8px #00000029;
 	--comment-pin-stage-shadow: 0 2px 8px #0000004d;
+	--comment-pin-agent-shadow: 0 2px 8px #0000004d;
+	--comment-pin-resolved-shadow: 0 2px 8px #0000001f, 0 0 0 1px #0000000f;
 	--comment-cursor-stage-shadow: 0 2px 6px #00000066;
 	--comment-cursor-shadow: 0 2px 6px #00000033;
 	--comment-card-shadow: 0 8px 24px #0000001a, 0 0 0 1px #0000000f;
@@ -499,6 +501,8 @@
 		drop-shadow(0 16px 32px #00000066);
 	--comment-pin-shadow: 0 2px 8px #00000066, 0 0 0 1px #ffffff1f;
 	--comment-pin-selected-shadow: 0 2px 8px #00000066;
+	--comment-pin-agent-shadow: var(--comment-pin-shadow);
+	--comment-pin-resolved-shadow: var(--comment-pin-shadow);
 	--comment-cursor-shadow: 0 2px 6px #00000066;
 	--comment-card-shadow: 0 8px 24px #00000080, 0 0 0 1px #ffffff1a;
 	--comment-list-shadow: 0 12px 32px #00000080, 0 0 0 1px #ffffff1a;

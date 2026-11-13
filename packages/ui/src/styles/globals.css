@@ -211,6 +211,8 @@
 	--shadow-comment-pin: var(--comment-pin-shadow);
 	--shadow-comment-pin-selected: var(--comment-pin-selected-shadow);
 	--shadow-comment-pin-stage: var(--comment-pin-stage-shadow);
+	--shadow-comment-pin-agent: var(--comment-pin-agent-shadow);
+	--shadow-comment-pin-resolved: var(--comment-pin-resolved-shadow);
 	--shadow-comment-cursor: var(--comment-cursor-shadow);
 	--shadow-comment-cursor-stage: var(--comment-cursor-stage-shadow);
 	--shadow-comment-card: var(--comment-card-shadow);

@@ -1,6 +1,5 @@
 "use client"
 
-import type { TFunction } from "i18next"
 import {
 	type ReactNode,
 	type Ref,
@@ -8,7 +7,6 @@ import {
 	useEffectEvent,
 	useLayoutEffect,
 	useRef,
-	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -19,9 +17,13 @@ import type {
 } from "@workspace/ui/components/library-comment-author"
 import { LibraryCommentComposer } from "@workspace/ui/components/library-comment-composer"
 import type { LibraryCommentDraftOptions } from "@workspace/ui/components/library-comment-field"
-import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
+import {
+	LibraryCommentPin,
+	type LibraryCommentPinState,
+} from "@workspace/ui/components/library-comment-pin"
 import {
 	type LibraryComment,
+	type LibraryCommentResolution,
 	LibraryCommentThread,
 	type LibraryCommentThreadProps,
 } from "@workspace/ui/components/library-comment-thread"
@@ -29,8 +31,10 @@ import {
 	foundAnchorIn,
 	type LibraryBlock,
 	type LibraryBlockAnchor,
+	passageQuoteOf,
 } from "@workspace/ui/components/library-document-blocks"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
+import { useRosterBots } from "@workspace/ui/components/roster"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -39,6 +43,7 @@ type LibraryDocumentThread = {
 	anchor: LibraryBlockAnchor
 	comments: [LibraryComment, ...LibraryComment[]]
 	workingAgent?: LibraryCommentAgent
+	resolution?: LibraryCommentResolution
 }
 
 type LibraryDocumentOpenThread = Pick<
@@ -167,13 +172,13 @@ const hasBlockDraft = (
 	blockId: string,
 ) => draft?.anchor.blockId === blockId && !draft.anchor.passage
 
-const anchorLineOf = (
-	{ passage }: LibraryBlockAnchor,
-	t: TFunction<"common">,
-) =>
-	passage
-		? t("library.comments.anchor.passage", { text: passage.text })
-		: t("library.comments.anchor.block")
+const useMentionNameOf = () => {
+	const { t } = useTranslation("chat")
+	const bots = useRosterBots()
+
+	return (id: string) =>
+		bots.find((bot) => bot.id === id)?.name ?? t("transcript.mention.unknown")
+}
 
 const focusFieldIn = (card: HTMLElement | null) => {
 	card?.querySelector("textarea")?.focus()
@@ -185,15 +190,35 @@ type ThreadPinProps = {
 	className?: string
 }
 
-const ThreadPin = ({ layer, thread, className }: ThreadPinProps) => (
-	<LibraryCommentPin
-		author={thread.comments[0].author}
-		className={className}
-		data-comment-pin={runIdOf(thread)}
-		onClick={() => layer.onOpenThread?.(thread.id)}
-		state={layer.openThread?.id === thread.id ? "selected" : "rest"}
-	/>
-)
+const pinStateOf = (
+	{ openThread }: LibraryDocumentCommentLayer,
+	{ id, resolution }: LibraryDocumentThread,
+) => {
+	if (resolution) return "resolved"
+	return openThread?.id === id ? "selected" : "rest"
+}
+
+const ThreadPin = ({ layer, thread, className }: ThreadPinProps) => {
+	const [{ author }] = thread.comments
+	const state = pinStateOf(layer, thread)
+
+	return (
+		<LibraryCommentPin
+			aria-expanded={layer.openThread?.id === thread.id}
+			author={author}
+			className={cn(
+				state === "rest" &&
+					author.kind === "agent" &&
+					"shadow-comment-pin-agent",
+				state === "resolved" && "shadow-comment-pin-resolved",
+				className,
+			)}
+			data-comment-pin={runIdOf(thread)}
+			onClick={() => layer.onOpenThread?.(thread.id)}
+			state={state}
+		/>
+	)
+}
 
 type LibraryDocumentThreadCardProps = {
 	thread: LibraryDocumentThread
@@ -216,25 +241,24 @@ const LibraryDocumentThreadCard = ({
 		className={className}
 		comments={thread.comments}
 		participants={participants}
+		resolution={thread.resolution}
 		workingAgent={thread.workingAgent}
 	/>
 )
 
 type DraftCardProps = {
-	placed: PlacedDraft
+	draft: LibraryDocumentCommentDraft
+	anchor: string
 	participants: LibraryCommentAuthor[]
 }
 
-const DraftCard = ({
-	placed: { draft, anchor },
-	participants,
-}: DraftCardProps) => {
+const DraftCard = ({ draft, anchor, participants }: DraftCardProps) => {
 	const { t } = useTranslation("common")
 
 	return (
 		<div className="contents" ref={focusFieldIn}>
 			<LibraryCommentComposer
-				anchor={anchorLineOf(anchor, t)}
+				anchor={anchor}
 				className="w-80"
 				onSubmit={draft.onSubmit}
 				onValueChange={draft.onValueChange}
@@ -255,19 +279,16 @@ const DraftCard = ({
 type CardFrameProps = {
 	children: ReactNode
 	className?: string
-	left?: number
-	top?: number
 	ref?: Ref<HTMLDivElement>
 }
 
-const CardFrame = ({ children, className, left, top, ref }: CardFrameProps) => (
+const CardFrame = ({ children, className, ref }: CardFrameProps) => (
 	// biome-ignore lint/a11y/noStaticElementInteractions: keys typed in a comment card stay out of the shortcuts of the block under it
 	<div
 		className={cn("absolute z-10 w-max cursor-auto", className)}
 		data-slot={COMMENT_CARD_SLOT}
 		onKeyDown={(event) => event.stopPropagation()}
 		ref={ref}
-		style={{ left, top }}
 	>
 		{children}
 	</div>
@@ -278,51 +299,100 @@ type Place = {
 	top: number
 }
 
-type CardBesidePinProps = {
-	pin: string
-	children: ReactNode
+type PlaceIn = (block: HTMLElement, placed: HTMLElement) => Place | undefined
+
+const clippingBoxOf = (element: Element): Element => {
+	const parent = element.parentElement
+	if (!parent) return element
+	return getComputedStyle(parent).overflowX === "visible"
+		? clippingBoxOf(parent)
+		: parent
 }
 
-const CardBesidePin = ({ pin, children }: CardBesidePinProps) => {
-	const frame = useRef<HTMLDivElement>(null)
-	const [place, setPlace] = useState<Place>()
+const innerRightOf = (box: Element) =>
+	box.getBoundingClientRect().left + box.clientLeft + box.clientWidth
 
-	const measure = useEffectEvent(() => {
-		const block = frame.current?.parentElement
-		const anchor = block?.querySelector(`[data-comment-pin="${pin}"]`)
-		if (!block || !anchor) return
-		const from = block.getBoundingClientRect()
-		const box = anchor.getBoundingClientRect()
-		const next = {
-			left: box.right - from.left + PIN_GAP,
-			top: box.top - from.top,
-		}
-		setPlace((shown) =>
-			shown?.left === next.left && shown.top === next.top ? shown : next,
-		)
+const usePlaceInBlock = (placeIn: PlaceIn) => {
+	const frame = useRef<HTMLDivElement>(null)
+
+	const place = useEffectEvent(() => {
+		const placed = frame.current
+		const block = placed?.parentElement
+		const next = placed && block ? placeIn(block, placed) : undefined
+		if (!placed || !next) return
+		placed.style.left = `${next.left}px`
+		placed.style.top = `${next.top}px`
+		placed.dataset.placed = ""
 	})
 
-	useLayoutEffect(() => measure())
+	useLayoutEffect(() => place())
 
 	useEffect(() => {
 		const block = frame.current?.parentElement
 		if (!block) return
-		const observer = new ResizeObserver(() => measure())
+		const observer = new ResizeObserver(() => place())
 		observer.observe(block)
+		observer.observe(clippingBoxOf(block))
 		return () => observer.disconnect()
 	}, [])
 
-	return (
-		<CardFrame
-			className={cn(!place && "opacity-0")}
-			left={place?.left}
-			ref={frame}
-			top={place?.top}
-		>
-			{children}
-		</CardFrame>
-	)
+	return frame
 }
+
+const besidePin =
+	(pin: string): PlaceIn =>
+	(block, card) => {
+		const anchor = block.querySelector(`[data-comment-pin="${pin}"]`)
+		if (!anchor) return undefined
+		const from = block.getBoundingClientRect()
+		const box = anchor.getBoundingClientRect()
+		const { width } = card.getBoundingClientRect()
+		const edge = innerRightOf(clippingBoxOf(block))
+		return box.right + PIN_GAP + width <= edge
+			? { left: box.right - from.left + PIN_GAP, top: box.top - from.top }
+			: {
+					left: Math.min(box.right, edge) - width - from.left,
+					top: box.bottom - from.top + PIN_GAP,
+				}
+	}
+
+const onPassageEnd =
+	(run: string): PlaceIn =>
+	(block) => {
+		const end = block.querySelector(`[data-passage-end="${run}"]`)
+		const line = [...(end?.getClientRects() ?? [])].at(-1)
+		if (!line) return undefined
+		const from = block.getBoundingClientRect()
+		return {
+			left: line.right - from.left,
+			top: (line.top + line.bottom) / 2 - from.top,
+		}
+	}
+
+type PlacedOnPinProps = {
+	pin: string
+	children: ReactNode
+}
+
+const CardBesidePin = ({ pin, children }: PlacedOnPinProps) => (
+	<CardFrame
+		className="opacity-0 data-placed:opacity-100"
+		ref={usePlaceInBlock(besidePin(pin))}
+	>
+		{children}
+	</CardFrame>
+)
+
+const PinOnPassageEnd = ({ pin, children }: PlacedOnPinProps) => (
+	// biome-ignore lint/a11y/noStaticElementInteractions: a press on a pin beside the field being written leaves the caret and the focus in that field
+	<div
+		className="invisible absolute z-10 flex -translate-y-1/2 data-placed:visible"
+		onMouseDown={(event) => event.preventDefault()}
+		ref={usePlaceInBlock(onPassageEnd(pin))}
+	>
+		{children}
+	</div>
+)
 
 const LibraryDocumentBlockTint = () => (
 	<span
@@ -344,7 +414,7 @@ const LibraryDocumentModeCursor = ({
 	<span
 		aria-hidden="true"
 		className={cn(
-			"pointer-events-none absolute z-20 size-5 -translate-y-full rounded-full rounded-bl-[0.15625rem] bg-primary ring-2 ring-white",
+			"pointer-events-none absolute z-20 size-5 -translate-y-full rounded-full rounded-bl-[0.125rem] bg-primary shadow-comment-cursor ring-2 ring-white",
 			!isShown && "hidden",
 		)}
 		data-slot="library-document-comment-cursor"
@@ -354,34 +424,62 @@ const LibraryDocumentModeCursor = ({
 
 const PASSAGE_PIN = "absolute start-0 top-1/2 -translate-y-1/2"
 
+type PassageState = LibraryCommentPinState
+
+const PASSAGE_LOOK: Record<PassageState, string> = {
+	rest: "border-primary/50 bg-primary/8",
+	selected: "border-primary bg-primary/16 dark:bg-primary/20",
+	resolved: "border-sketch-mark border-dashed bg-foreground/5",
+}
+
 type PassageProps = {
-	isSelected: boolean
+	state: PassageState
 	pin: ReactNode
+	endOf?: string
 	children: ReactNode
 }
 
-const Passage = ({ isSelected, pin, children }: PassageProps) => (
+const Passage = ({ state, pin, endOf, children }: PassageProps) => (
 	<>
 		<span
-			className={cn(
-				"box-decoration-clone border-b-2",
-				isSelected
-					? "border-primary bg-primary/16 dark:bg-primary/20"
-					: "border-primary/50 bg-primary/8",
-			)}
+			className={cn("box-decoration-clone border-b-2", PASSAGE_LOOK[state])}
+			data-passage-end={endOf}
 			data-slot="library-document-passage"
-			data-state={isSelected ? "selected" : "rest"}
+			data-state={state}
 		>
 			{children}
 		</span>
-		{pin ? <span className="relative select-none">{pin}</span> : null}
+		{pin ? (
+			// biome-ignore lint/a11y/noStaticElementInteractions: a press on the pin never follows the link its passage ends in
+			<span
+				className="relative select-none"
+				onClick={(event) => event.preventDefault()}
+			>
+				{pin}
+			</span>
+		) : null}
 	</>
+)
+
+type DraftPinProps = {
+	draft: LibraryDocumentCommentDraft
+	className?: string
+}
+
+const DraftPin = ({ draft, className }: DraftPinProps) => (
+	<LibraryCommentPin
+		author={draft.author}
+		className={className}
+		data-comment-pin={DRAFT_RUN}
+		state="selected"
+	/>
 )
 
 type LibraryDocumentCommentRunProps = {
 	layer: LibraryDocumentCommentLayer
 	id: string
 	isEnd: boolean
+	isInField?: boolean
 	children: ReactNode
 }
 
@@ -389,40 +487,23 @@ const LibraryDocumentCommentRun = ({
 	layer,
 	id,
 	isEnd,
+	isInField = false,
 	children,
 }: LibraryDocumentCommentRunProps) => {
-	if (id === DRAFT_RUN)
-		return (
-			<Passage
-				isSelected
-				pin={
-					isEnd && layer.draft ? (
-						<LibraryCommentPin
-							author={layer.draft.draft.author}
-							className={PASSAGE_PIN}
-							data-comment-pin={DRAFT_RUN}
-							state="selected"
-						/>
-					) : null
-				}
-			>
-				{children}
-			</Passage>
-		)
 	const placed = layer.threads.find(({ thread }) => runIdOf(thread) === id)
-	if (!placed) return children
+	const draft = id === DRAFT_RUN ? layer.draft?.draft : undefined
+	if (!placed && !draft) return children
+	const pin = placed ? (
+		<ThreadPin className={PASSAGE_PIN} layer={layer} thread={placed.thread} />
+	) : (
+		draft && <DraftPin className={PASSAGE_PIN} draft={draft} />
+	)
+
 	return (
 		<Passage
-			isSelected={layer.openThread?.id === placed.thread.id}
-			pin={
-				isEnd ? (
-					<ThreadPin
-						className={PASSAGE_PIN}
-						layer={layer}
-						thread={placed.thread}
-					/>
-				) : null
-			}
+			endOf={isEnd && isInField ? id : undefined}
+			pin={isEnd && !isInField ? pin : null}
+			state={placed ? pinStateOf(layer, placed.thread) : "selected"}
 		>
 			{children}
 		</Passage>
@@ -434,13 +515,18 @@ const UNDER_PIN = "end-0 top-full mt-2"
 type LibraryDocumentBlockCommentsProps = {
 	layer: LibraryDocumentCommentLayer
 	blockId: string
+	source: string
+	isWriting: boolean
 }
 
 const LibraryDocumentBlockComments = ({
 	layer,
 	blockId,
+	source,
+	isWriting,
 }: LibraryDocumentBlockCommentsProps) => {
 	const { t } = useTranslation("common")
+	const mentionNameOf = useMentionNameOf()
 	const { openThread, participants } = layer
 	const threads = layer.threads.filter(
 		({ anchor }) => anchor.blockId === blockId,
@@ -454,14 +540,41 @@ const LibraryDocumentBlockComments = ({
 		({ thread, anchor }) => anchor.passage && thread.id === openThread?.id,
 	)
 	const isBlockDraft = draft !== undefined && !draft.anchor.passage
+	const fieldPins = isWriting
+		? [
+				...threads.flatMap(({ thread, anchor }) =>
+					anchor.passage
+						? [
+								{
+									run: runIdOf(thread),
+									pin: <ThreadPin layer={layer} thread={thread} />,
+								},
+							]
+						: [],
+				),
+				...(draft?.anchor.passage
+					? [{ run: DRAFT_RUN, pin: <DraftPin draft={draft.draft} /> }]
+					: []),
+			]
+		: []
 	const isFromShortcut = draft?.draft.target.origin === "shortcut"
+	const lineOf = ({ passage }: LibraryBlockAnchor) =>
+		passage
+			? t("library.comments.anchor.passage", {
+					text: passageQuoteOf(source, passage, mentionNameOf),
+				})
+			: t("library.comments.anchor.block")
 	const draftCard = draft ? (
-		<DraftCard participants={participants} placed={draft} />
+		<DraftCard
+			anchor={lineOf(draft.anchor)}
+			draft={draft.draft}
+			participants={participants}
+		/>
 	) : null
 	const threadCardOf = ({ thread, anchor }: PlacedThread) =>
 		openThread ? (
 			<LibraryDocumentThreadCard
-				anchor={anchorLineOf(anchor, t)}
+				anchor={lineOf(anchor)}
 				open={openThread}
 				participants={participants}
 				thread={thread}
@@ -487,11 +600,7 @@ const LibraryDocumentBlockComments = ({
 					))}
 					{isBlockDraft ? (
 						<span className="relative flex">
-							<LibraryCommentPin
-								author={draft.draft.author}
-								data-comment-pin={DRAFT_RUN}
-								state="selected"
-							/>
+							<DraftPin draft={draft.draft} />
 							{isFromShortcut ? null : (
 								<CardFrame className={UNDER_PIN}>{draftCard}</CardFrame>
 							)}
@@ -502,6 +611,11 @@ const LibraryDocumentBlockComments = ({
 			{isBlockDraft && isFromShortcut ? (
 				<CardFrame className="-end-2 top-full mt-3">{draftCard}</CardFrame>
 			) : null}
+			{fieldPins.map(({ run, pin }) => (
+				<PinOnPassageEnd key={run} pin={run}>
+					{pin}
+				</PinOnPassageEnd>
+			))}
 			{draft?.anchor.passage ? (
 				<CardBesidePin key={draft.anchor.passage.start} pin={DRAFT_RUN}>
 					{draftCard}

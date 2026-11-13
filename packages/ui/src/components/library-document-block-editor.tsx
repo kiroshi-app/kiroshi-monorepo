@@ -192,6 +192,10 @@ const BODY_SLOT = "library-document-block-body"
 const UNWRITTEN_TEXT =
 	'button, [aria-hidden="true"], [data-slot="markdown-link-host"]'
 
+const MENTION_CHIP = '[data-slot="bot-mention"]'
+
+const MENTION_INK = "<>"
+
 const COMMENT_MODE_PASS = `button, a, input, textarea, [data-slot="${COMMENT_CARD_SLOT}"]`
 
 type CommandFormat = Exclude<SelectionToolbarFormat, "link">
@@ -367,16 +371,24 @@ const shownSelectionIn = (body: Element): ShownSelection | undefined => {
 	const range = selection.getRangeAt(0)
 	const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
 	const found = { shown: "", start: 0, end: 0 }
+	let chip: Element | null = null
+	let chipStart = 0
 	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-		if (node.parentElement?.closest(UNWRITTEN_TEXT)) continue
-		const text = node.textContent ?? ""
+		const within = node.parentElement?.closest(MENTION_CHIP) ?? null
+		if (!within && node.parentElement?.closest(UNWRITTEN_TEXT)) continue
+		const at = found.shown.length
+		const isChipRead = within !== null && within === chip
+		if (!isChipRead) chipStart = at
+		chip = within
+		const inked = isChipRead ? "" : MENTION_INK
+		const text = within ? inked : (node.textContent ?? "")
 		const side = range.comparePoint(node, 0)
 		if (node === range.startContainer)
-			found.start = found.shown.length + range.startOffset
-		else if (side < 0) found.start = found.shown.length + text.length
+			found.start = within ? chipStart : at + range.startOffset
+		else if (side < 0) found.start = at + text.length
 		if (node === range.endContainer)
-			found.end = found.shown.length + range.endOffset
-		else if (side <= 0) found.end = found.shown.length + text.length
+			found.end = within ? chipStart + MENTION_INK.length : at + range.endOffset
+		else if (side <= 0) found.end = at + text.length
 		found.shown += text
 	}
 	return found
@@ -1486,6 +1498,14 @@ const LibraryDocumentBlockEditor = ({
 											)
 									}}
 									onKeyDown={keyInField(block, textType)}
+									renderRun={(run) => (
+										<LibraryDocumentCommentRun
+											{...run}
+											isInField
+											layer={commentLayer}
+										/>
+									)}
+									runs={commentRunsIn(commentLayer, block.id)}
 									source={block.source}
 									type={textType}
 								/>
@@ -1558,7 +1578,9 @@ const LibraryDocumentBlockEditor = ({
 						) : null}
 						<LibraryDocumentBlockComments
 							blockId={block.id}
+							isWriting={isEditing && !hasBlockEditor}
 							layer={commentLayer}
+							source={block.source}
 						/>
 						{isDropBefore || isDropAfter ? (
 							<span
