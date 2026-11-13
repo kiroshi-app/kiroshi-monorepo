@@ -676,7 +676,6 @@
 	--tt-in-dur: 150ms;
 	--tt-out-dur: 50ms;
 	--tt-scale: 0.98;
-	--tt-delay: 80ms;
 	--tt-in-ease: ease-out;
 	--tt-out-ease: ease-out;
 	--tt-move-dur: 160ms;
@@ -691,7 +690,6 @@
 	&[data-open] {
 		transition-duration: var(--tt-in-dur);
 		transition-timing-function: var(--tt-in-ease);
-		transition-delay: var(--tt-delay);
 	}
 
 	&:is([data-starting-style], [data-ending-style]) {

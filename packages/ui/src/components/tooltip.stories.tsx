@@ -67,7 +67,7 @@ const sideStory = (side: Side) => ({
 	parameters: {
 		docs: {
 			description: {
-				story: `The bubble opening on the ${side} of its trigger, then closing. Check that it waits a beat, fades in while growing from 98% towards the trigger without sliding, and that it is gone at once when the pointer leaves.`,
+				story: `The bubble opening on the ${side} of its trigger, then closing. Check that it fades in while growing from 98% towards the trigger without sliding, and that it is gone at once when the pointer leaves.`,
 			},
 		},
 	},
@@ -101,7 +101,7 @@ const sideStory = (side: Side) => ({
 			await expect(entering.animationName).toBe("none")
 			await expect(entering.transitionProperty).toBe("opacity, scale")
 			await expect(entering.transitionDuration).toBe("0.15s")
-			await expect(entering.transitionDelay).toBe("0.08s")
+			await expect(entering.transitionDelay).toBe("0s")
 			await expect(entering.transitionTimingFunction).toBe("ease-out")
 
 			await waitFor(async () => {
