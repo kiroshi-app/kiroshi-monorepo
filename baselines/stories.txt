@@ -2439,7 +2439,10 @@ overlays-sheet--drawer
 overlays-tooltip--default
 overlays-tooltip--long-content
 overlays-tooltip--on-dark-surface
-overlays-tooltip--with-side
+overlays-tooltip--side-bottom
+overlays-tooltip--side-left
+overlays-tooltip--side-right
+overlays-tooltip--side-top
 overlays-tooltiphint--adjacent-hints
 overlays-tooltiphint--default
 overlays-tooltiphint--in-row

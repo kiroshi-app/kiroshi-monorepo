@@ -1,7 +1,12 @@
 import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { FRAME_POLL, Row } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	isInBrowserRunner,
+	Row,
+	withMotionAllowed,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	TooltipHint,
@@ -18,15 +23,25 @@ const COPY_BUTTON = (
 const LONG_HINT =
 	"Reads every file the run touched, then writes the summary back to the conversation"
 
+const withMotion = (run: () => Promise<void>) =>
+	isInBrowserRunner() ? withMotionAllowed(run) : run()
+
 const meta = preview.meta({
 	title: "Overlays/TooltipHint",
 	component: TooltipHint,
+	decorators: [
+		(Story) => (
+			<TooltipHintProvider>
+				<Story />
+			</TooltipHintProvider>
+		),
+	],
 	parameters: {
 		layout: "centered",
 		docs: {
 			description: {
 				component:
-					'The registry tooltip closed down to what a call site needs: a piece of content, one element to hang it on, a side. It renders no wrapper of its own — the child stays the element the layout around it sees — and the bubble carries `role="tooltip"`. A `content` of nothing draws no bubble while keeping the child mounted, so a caller that only sometimes has a name to give never swaps the control it wraps. Nothing links the bubble to its child: the registry writes no `aria-describedby` on the trigger, so a screen reader never reads the bubble and its text has to live in the child\'s accessible name as well.',
+					'The registry tooltip closed down to what a call site needs: a piece of content, one element to hang it on, a side. It renders no wrapper of its own — the child stays the element the layout around it sees — and the bubble carries `role="tooltip"`. A `content` of nothing draws no bubble while keeping the child mounted, so a caller that only sometimes has a name to give never swaps the control it wraps. Under `TooltipHintProvider`, which the app mounts at its root, every hint feeds one shared bubble, and that is what lets the bubble travel from a control to its neighbour. Nothing links the bubble to its child: the registry writes no `aria-describedby` on the trigger, so a screen reader never reads the bubble and its text has to live in the child\'s accessible name as well.',
 			},
 		},
 	},
@@ -199,27 +214,62 @@ export const AdjacentHints = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two hinted controls side by side under one `TooltipHintProvider`, the way the app mounts it at its root. Check that the pointer leaving the first control for its neighbour swaps one hint for the other, with a single bubble on screen and the second label in it. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
+					"Two hinted controls side by side under one `TooltipHintProvider`, the way the app mounts it at its root. Check that the pointer leaving the first control for its neighbour keeps the one bubble on screen: it glides over to the second control with the second label in it, and does not fade in again. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
 			},
 		},
 	},
 	render: (args) => (
-		<TooltipHintProvider>
-			<Row>
-				<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
-				<TooltipHint {...args} />
-			</Row>
-		</TooltipHintProvider>
+		<Row>
+			<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
+			<TooltipHint {...args} />
+		</Row>
 	),
-	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+	play: ({ canvas, userEvent }) =>
+		withMotion(async () => {
+			await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
+			const bubble = await screen.findByRole("tooltip")
+			const positioner = bubble.parentElement as HTMLElement
 
-		await userEvent.hover(canvas.getByRole("button", { name: "Delete" }))
-		await waitFor(async () => {
-			await expect(screen.getByRole("tooltip")).toHaveTextContent("Delete")
-		}, FRAME_POLL)
-	},
+			await waitFor(async () => {
+				await expect(getComputedStyle(bubble).opacity).toBe("1")
+			}, FRAME_POLL)
+			const travel = getComputedStyle(positioner)
+			await expect(travel.transitionProperty).toBe("transform")
+			await expect(travel.transitionDuration).toBe("0.16s")
+			await expect(travel.transitionTimingFunction).toBe(
+				"cubic-bezier(0.22, 1, 0.36, 1)",
+			)
+
+			let hasTravelled = false
+			positioner.addEventListener("transitionrun", (event) => {
+				hasTravelled ||=
+					event.target === positioner && event.propertyName === "transform"
+			})
+
+			const remove = canvas.getByRole("button", { name: "Delete" })
+			await userEvent.hover(remove)
+
+			await waitFor(async () => {
+				await expect(bubble).toHaveTextContent("Delete")
+				await expect(bubble).toHaveAttribute("data-instant", "delay")
+			}, FRAME_POLL)
+			await expect(screen.getByRole("tooltip")).toBe(bubble)
+			await expect(getComputedStyle(bubble).transitionProperty).toBe("none")
+			await expect(getComputedStyle(bubble).opacity).toBe("1")
+			await waitFor(async () => {
+				await expect(hasTravelled).toBe(true)
+			}, FRAME_POLL)
+
+			await waitFor(async () => {
+				const over = bubble.getBoundingClientRect()
+				const under = remove.getBoundingClientRect()
+
+				await expect(over.left + over.width / 2).toBeCloseTo(
+					under.left + under.width / 2,
+					0,
+				)
+			}, FRAME_POLL)
+		}),
 })
 
 export const ReducedMotion = meta.story({
@@ -228,7 +278,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same hint for a reader who asked the system to stop moving things. The registry bubble zooms and fades in and out; the composed one drops the animation under `prefers-reduced-motion`, so the bubble is simply there and then simply gone. Check that the open bubble reports no animation at all, and that it still leaves the document when the pointer does - nothing here waits on an animation end, so dropping it outright costs the hint nothing. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"The same hint for a reader who asked the system to stop moving things. The bubble keeps its fade and drops everything that moves: it does not grow in and it does not glide to a neighbour. Check that the open bubble transitions its opacity alone, sits at full size from its first frame, and that the layer placing it carries no transition; then that it still leaves the document when the pointer does. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -237,8 +287,14 @@ export const ReducedMotion = meta.story({
 
 		await userEvent.hover(trigger)
 		const hint = await screen.findByRole("tooltip")
+		const positioner = hint.parentElement as HTMLElement
 
 		await expect(getComputedStyle(hint).animationName).toBe("none")
+		await expect(getComputedStyle(hint).scale).toBe("none")
+		await waitFor(async () => {
+			await expect(getComputedStyle(hint).transitionProperty).toBe("opacity")
+		}, FRAME_POLL)
+		await expect(getComputedStyle(positioner).transitionDuration).toBe("0s")
 
 		await userEvent.unhover(trigger)
 		await waitFor(async () => {

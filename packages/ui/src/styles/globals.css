@@ -671,8 +671,51 @@
 	animation: none;
 }
 
+/* Tooltip open/close, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/skills/transitions-dev/17-tooltip.md */
+:root {
+	--tt-in-dur: 150ms;
+	--tt-out-dur: 50ms;
+	--tt-scale: 0.98;
+	--tt-delay: 80ms;
+	--tt-in-ease: ease-out;
+	--tt-out-ease: ease-out;
+	--tt-move-dur: 160ms;
+	--tt-move-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 [data-slot="tooltip-content"] {
 	animation: none;
+	transition: var(--tt-out-dur) var(--tt-out-ease);
+	transition-property: opacity, scale;
+
+	&[data-open] {
+		transition-duration: var(--tt-in-dur);
+		transition-timing-function: var(--tt-in-ease);
+		transition-delay: var(--tt-delay);
+	}
+
+	&:is([data-starting-style], [data-ending-style]) {
+		opacity: 0;
+		scale: var(--tt-scale);
+	}
+
+	&[data-instant="delay"] {
+		transition-property: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition-property: opacity;
+
+		&:is([data-starting-style], [data-ending-style]) {
+			scale: none;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	:has(> [data-slot="tooltip-content"][data-open]:not([data-starting-style])) {
+		transition: transform var(--tt-move-dur) var(--tt-move-ease);
+	}
 }
 
 :is(

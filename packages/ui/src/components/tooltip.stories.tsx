@@ -1,8 +1,12 @@
 import type { ComponentType, ReactNode } from "react"
-import { expect, screen, waitFor } from "storybook/test"
+import { expect, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { FRAME_POLL } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	isInBrowserRunner,
+	withMotionAllowed,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
@@ -22,6 +26,110 @@ const TypedTooltip = Tooltip as ComponentType<TooltipArgs>
 
 const LONG_LABEL =
 	"Sends the prompt to the bot holding the conversation, then waits for its first token"
+
+type Side = "top" | "right" | "bottom" | "left"
+
+const SITS_ON: Record<Side, (bubble: DOMRect, trigger: DOMRect) => boolean> = {
+	top: (bubble, trigger) => bubble.bottom <= trigger.top,
+	right: (bubble, trigger) => bubble.left >= trigger.right,
+	bottom: (bubble, trigger) => bubble.top >= trigger.bottom,
+	left: (bubble, trigger) => bubble.right <= trigger.left,
+}
+
+const withMotion = (run: () => Promise<void>) =>
+	isInBrowserRunner() ? withMotionAllowed(run) : run()
+
+type HoverPlayContext = {
+	canvasElement: HTMLElement
+	userEvent: {
+		hover: (element: Element) => Promise<void>
+		unhover: (element: Element) => Promise<void>
+	}
+}
+
+type Pace = {
+	transitionDuration: string
+	transitionDelay: string
+}
+
+const paceOfLeaving = (bubble: HTMLElement) =>
+	new Promise<Pace>((resolve) => {
+		const observer = new MutationObserver(() => {
+			if (!bubble.hasAttribute("data-ending-style")) return
+			const { transitionDuration, transitionDelay } = getComputedStyle(bubble)
+			observer.disconnect()
+			resolve({ transitionDuration, transitionDelay })
+		})
+		observer.observe(bubble, { attributes: true })
+	})
+
+const sideStory = (side: Side) => ({
+	parameters: {
+		docs: {
+			description: {
+				story: `The bubble opening on the ${side} of its trigger, then closing. Check that it waits a beat, fades in while growing from 98% towards the trigger without sliding, and that it is gone at once when the pointer leaves.`,
+			},
+		},
+	},
+	render: () => (
+		<div className="p-24">
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<Button aria-label="New bot" size="icon-sm" variant="ghost">
+							<Icons.Add />
+						</Button>
+					}
+				/>
+				<TooltipContent side={side}>New bot</TooltipContent>
+			</Tooltip>
+		</div>
+	),
+	play: ({ canvasElement, userEvent }: HoverPlayContext) =>
+		withMotion(async () => {
+			const trigger = within(canvasElement).getByRole("button", {
+				name: "New bot",
+			})
+
+			await userEvent.hover(trigger)
+			const bubble = await screen.findByText("New bot")
+
+			await waitFor(async () => {
+				await expect(bubble).not.toHaveAttribute("data-starting-style")
+			}, FRAME_POLL)
+			const entering = getComputedStyle(bubble)
+			await expect(entering.animationName).toBe("none")
+			await expect(entering.transitionProperty).toBe("opacity, scale")
+			await expect(entering.transitionDuration).toBe("0.15s")
+			await expect(entering.transitionDelay).toBe("0.08s")
+			await expect(entering.transitionTimingFunction).toBe("ease-out")
+
+			await waitFor(async () => {
+				const resting = getComputedStyle(bubble)
+
+				await expect(resting.opacity).toBe("1")
+				await expect(resting.scale).toBe("none")
+				await expect(resting.translate).toBe("none")
+				await expect(
+					SITS_ON[side](
+						bubble.getBoundingClientRect(),
+						trigger.getBoundingClientRect(),
+					),
+				).toBe(true)
+			}, FRAME_POLL)
+
+			const leaving = paceOfLeaving(bubble)
+			await userEvent.unhover(trigger)
+
+			await expect(await leaving).toEqual({
+				transitionDuration: "0.05s",
+				transitionDelay: "0s",
+			})
+			await waitFor(async () => {
+				await expect(bubble).not.toBeInTheDocument()
+			}, FRAME_POLL)
+		}),
+})
 
 const meta = preview.meta({
 	title: "Overlays/Tooltip",
@@ -70,40 +178,15 @@ export const Default = meta.story({
 	},
 })
 
-export const WithSide = meta.story({
+export const SideTop = meta.story(sideStory("top"))
+
+export const SideRight = meta.story(sideStory("right"))
+
+export const SideBottom = meta.story(sideStory("bottom"))
+
+export const SideLeft = meta.story({
+	...sideStory("left"),
 	tags: ["test-only"],
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"`side` for the controls that have nothing above them: a button pinned to the top of a window opens its bubble downwards or off the screen. Check that the bubble and its arrow both sit under the trigger.",
-			},
-		},
-	},
-	render: () => (
-		<Tooltip>
-			<TooltipTrigger
-				render={
-					<Button aria-label="New bot" size="icon-sm" variant="ghost">
-						<Icons.Add />
-					</Button>
-				}
-			/>
-			<TooltipContent side="bottom">New bot</TooltipContent>
-		</Tooltip>
-	),
-	play: async ({ canvas, userEvent }) => {
-		const trigger = canvas.getByRole("button", { name: "New bot" })
-
-		await userEvent.hover(trigger)
-		const bubble = await screen.findByText("New bot")
-
-		await waitFor(async () => {
-			await expect(bubble.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-				trigger.getBoundingClientRect().bottom,
-			)
-		}, FRAME_POLL)
-	},
 })
 
 export const LongContent = meta.story({
