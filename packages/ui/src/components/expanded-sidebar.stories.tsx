@@ -2157,6 +2157,11 @@ const filledShapesOf = (glyph: Element) =>
 
 const isDrawnFilled = (glyph: Element) => filledShapesOf(glyph).length > 0
 
+const currentControlsIn = (sidebar: HTMLElement) =>
+	within(sidebar)
+		.getAllByRole("button")
+		.filter((control) => control.hasAttribute("aria-current"))
+
 const gearOf = (person: Element) =>
 	person.lastElementChild?.querySelector("svg") as Element
 
@@ -2404,11 +2409,7 @@ export const CompactSelectedMissionExpanded = meta.story({
 		const muted = tokenStyleIn(open, "text-muted-foreground", "color")
 		const titleOf = (row: HTMLElement) => slotIn(row, "mission-capsule-title")
 
-		await expect(
-			within(slotIn(canvasElement, "space-carousel"))
-				.getAllByRole("button")
-				.filter((control) => control.hasAttribute("aria-current")),
-		).toEqual([open])
+		await expect(currentControlsIn(sidebarIn(canvasElement))).toEqual([open])
 		await expect(open).toHaveAttribute("aria-current", "page")
 		await expect(fillOf(open)).toBe(accent)
 		await expect(colourOf(titleOf(open))).toBe(
@@ -2486,11 +2487,7 @@ export const CompactSelectedPersonExpanded = meta.story({
 	play: async ({ canvasElement }) => {
 		const sidebar = sidebarIn(canvasElement)
 		const person = slotIn(sidebar, "expanded-sidebar-footer")
-		await expect(
-			within(sidebar)
-				.getAllByRole("button")
-				.filter((control) => control.hasAttribute("aria-current")),
-		).toEqual([person])
+		await expect(currentControlsIn(sidebar)).toEqual([person])
 		await expect(person).toHaveAttribute("aria-current", "page")
 		await expect(fillOf(person)).toBe(
 			tokenStyleIn(person, "bg-sidebar-accent", "backgroundColor"),
