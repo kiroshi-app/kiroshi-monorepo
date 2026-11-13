@@ -23,6 +23,7 @@ import type {
 import type { ForeignSpeaker } from "../conversations/foreign-turns"
 import type { TranscriptMessage } from "../conversations/transcript-contract"
 import { isHostOffline } from "../host/host-offline"
+import { isUnknownCommandRefusal } from "../host/host-refused"
 import {
 	NO_REPORTED_RUNS,
 	type ReportedRunsByTurnId,
@@ -153,6 +154,7 @@ const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
 	readFailed: true,
 	unknownFailure: true,
 	hostOffline: true,
+	hostOutdated: true,
 }
 
 const fieldIn = (reason: unknown, field: string): unknown =>
@@ -173,10 +175,23 @@ const isTransportError = (reason: unknown): reason is TransportError => {
 const detailOf = (reason: unknown): string =>
 	kindIn(reason) ?? describeFailure(reason)
 
-export const toTransportError = (reason: unknown): TransportError =>
+const hostFaultOf = (reason: unknown): TransportError | null => {
+	if (isHostOffline(reason)) {
+		return reason
+	}
+	return isUnknownCommandRefusal(reason) ? { kind: "hostOutdated" } : null
+}
+
+const unlessHostFault =
+	(toError: (reason: unknown) => TransportError) =>
+	(reason: unknown): TransportError =>
+		hostFaultOf(reason) ?? toError(reason)
+
+export const toTransportError = unlessHostFault((reason) =>
 	isTransportError(reason)
 		? reason
-		: { kind: "unknownFailure", detail: detailOf(reason) }
+		: { kind: "unknownFailure", detail: detailOf(reason) },
+)
 
 const failureOf = (reason: unknown): string | null => {
 	const failure = fieldIn(reason, "failure")
@@ -194,12 +209,7 @@ const refusalOf = (reason: unknown): string => {
 	return failure === null ? outer : `${outer}, ${failure}`
 }
 
-const unlessHostOffline =
-	(toError: (reason: unknown) => TransportError) =>
-	(reason: unknown): TransportError =>
-		isHostOffline(reason) ? reason : toError(reason)
-
-export const toStoreError = unlessHostOffline((reason) => ({
+export const toStoreError = unlessHostFault((reason) => ({
 	kind: "writeFailed",
 	detail: `the transcript store refused it (${refusalOf(reason)})`,
 }))
@@ -207,12 +217,12 @@ export const toStoreError = unlessHostOffline((reason) => ({
 export const toCancelError = ({ reason }: CancelFailure): TransportError =>
 	reason.source === "session" ? reason.error : toStoreError(reason.error)
 
-export const toAnswerError = unlessHostOffline((reason) => ({
+export const toAnswerError = unlessHostFault((reason) => ({
 	kind: "unknownFailure",
 	detail: refusalOf(reason),
 }))
 
-export const toReadError = unlessHostOffline((reason) => ({
+export const toReadError = unlessHostFault((reason) => ({
 	kind: "readFailed",
 	detail: detailOf(reason),
 }))

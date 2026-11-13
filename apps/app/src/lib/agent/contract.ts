@@ -30,6 +30,7 @@ export type {
 type FrontTransportError =
 	| { kind: "readFailed"; detail: string }
 	| { kind: "unknownFailure"; detail: string }
+	| { kind: "hostOutdated" }
 	| HostOffline
 
 export type TransportError = HostTransportError | FrontTransportError
