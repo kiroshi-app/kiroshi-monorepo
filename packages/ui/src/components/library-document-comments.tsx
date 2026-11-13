@@ -1,6 +1,5 @@
 "use client"
 
-import type { TFunction } from "i18next"
 import {
 	type ReactNode,
 	type Ref,
@@ -173,34 +172,13 @@ const hasBlockDraft = (
 	blockId: string,
 ) => draft?.anchor.blockId === blockId && !draft.anchor.passage
 
-type MentionNameOf = (id: string) => string
-
-const useMentionNameOf = (): MentionNameOf => {
+const useMentionNameOf = () => {
 	const { t } = useTranslation("chat")
 	const bots = useRosterBots()
 
-	return (id) =>
+	return (id: string) =>
 		bots.find((bot) => bot.id === id)?.name ?? t("transcript.mention.unknown")
 }
-
-type AnchorLine = {
-	anchor: LibraryBlockAnchor
-	source: string
-	mentionNameOf: MentionNameOf
-	t: TFunction<"common">
-}
-
-const anchorLineOf = ({
-	anchor: { passage },
-	source,
-	mentionNameOf,
-	t,
-}: AnchorLine) =>
-	passage
-		? t("library.comments.anchor.passage", {
-				text: passageQuoteOf(source, passage, mentionNameOf),
-			})
-		: t("library.comments.anchor.block")
 
 const focusFieldIn = (card: HTMLElement | null) => {
 	card?.querySelector("textarea")?.focus()
@@ -323,8 +301,6 @@ type Place = {
 
 type PlaceIn = (block: HTMLElement, placed: HTMLElement) => Place | undefined
 
-const PLACED = "data-placed:opacity-100"
-
 const clippingBoxOf = (element: Element): Element => {
 	const parent = element.parentElement
 	if (!parent) return element
@@ -400,7 +376,7 @@ type PlacedOnPinProps = {
 
 const CardBesidePin = ({ pin, children }: PlacedOnPinProps) => (
 	<CardFrame
-		className={cn("opacity-0", PLACED)}
+		className="opacity-0 data-placed:opacity-100"
 		ref={usePlaceInBlock(besidePin(pin))}
 	>
 		{children}
@@ -582,8 +558,12 @@ const LibraryDocumentBlockComments = ({
 			]
 		: []
 	const isFromShortcut = draft?.draft.target.origin === "shortcut"
-	const lineOf = (anchor: LibraryBlockAnchor) =>
-		anchorLineOf({ anchor, source, mentionNameOf, t })
+	const lineOf = ({ passage }: LibraryBlockAnchor) =>
+		passage
+			? t("library.comments.anchor.passage", {
+					text: passageQuoteOf(source, passage, mentionNameOf),
+				})
+			: t("library.comments.anchor.block")
 	const draftCard = draft ? (
 		<DraftCard
 			anchor={lineOf(draft.anchor)}
