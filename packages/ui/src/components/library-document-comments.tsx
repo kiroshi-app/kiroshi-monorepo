@@ -69,6 +69,7 @@ type LibraryDocumentCommentDraft = Pick<
 > & {
 	target: LibraryDocumentCommentTarget
 	author: LibraryCommentAuthor
+	onClose: () => void
 }
 
 type LibraryDocumentCommentProps = {
@@ -277,11 +278,13 @@ type CardFrameProps = {
 }
 
 const CardFrame = ({ children, className, ref }: CardFrameProps) => (
-	// biome-ignore lint/a11y/noStaticElementInteractions: keys typed in a comment card stay out of the shortcuts of the block under it
+	// biome-ignore lint/a11y/noStaticElementInteractions: keys typed in a comment card stay out of the shortcuts of the block under it, Escape alone travels on to the editor
 	<div
 		className={cn("absolute z-10 w-max cursor-auto", className)}
 		data-slot={COMMENT_CARD_SLOT}
-		onKeyDown={(event) => event.stopPropagation()}
+		onKeyDown={(event) => {
+			if (event.key !== "Escape") event.stopPropagation()
+		}}
 		ref={ref}
 	>
 		{children}

@@ -2101,6 +2101,7 @@ navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
+navigation-librarydocumenteditor--comment-escape-closes-innermost
 navigation-librarydocumenteditor--comment-mode-click-starts-block-comment
 navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-over-mention

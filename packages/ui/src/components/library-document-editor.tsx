@@ -3,9 +3,9 @@
 import type { TFunction } from "i18next"
 import {
 	type ComponentProps,
-	type KeyboardEvent,
 	type MouseEvent,
 	type Ref,
+	useEffect,
 	useEffectEvent,
 	useImperativeHandle,
 	useLayoutEffect,
@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next"
 
 import type { LibraryGalleryImage } from "@workspace/ui/components/library-block-gallery"
 import type { LibraryLinkPreview } from "@workspace/ui/components/library-block-web-page"
+import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
 import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
 import {
 	type LibraryDocumentPerson,
@@ -260,6 +261,7 @@ const LibraryDocumentEditor = ({
 	const titleField = useRef<HTMLTextAreaElement>(null)
 	const titleAtEditStart = useRef<string>(undefined)
 	const blocks = useRef<LibraryDocumentBlockEditorHandle>(null)
+	const editor = useRef<HTMLDivElement>(null)
 	const [placeholders] = useState(() => placeholdersOf(template, body, t))
 
 	const focusTitleAtEnd = () => {
@@ -364,23 +366,37 @@ const LibraryDocumentEditor = ({
 		[body, openedThread],
 	)
 
-	const leaveCommentMode = (event: KeyboardEvent<HTMLDivElement>) => {
-		if (
-			event.key !== "Escape" ||
-			event.defaultPrevented ||
-			commentDraft ||
-			!event.currentTarget.contains(event.target as Node)
-		)
-			return
-		comments?.onCommentModeChange(false)
-	}
+	const closeCommentLayer = useEffectEvent(() =>
+		closeInnermostCommentLayer({
+			draft: commentDraft,
+			openThread,
+			leaveCommentMode: isCommentMode
+				? () => comments?.onCommentModeChange(false)
+				: undefined,
+		}),
+	)
+	const hasCommentLayer =
+		isCommentMode || commentDraft !== undefined || openThread !== undefined
+
+	useEffect(() => {
+		if (!hasCommentLayer) return
+
+		const answerEscape = (event: KeyboardEvent) => {
+			const isAnsweredAlready = event.defaultPrevented || event.isComposing
+			if (event.key !== "Escape" || isAnsweredAlready) return
+			const focused = event.target as Node
+			if (focused === document.body || editor.current?.contains(focused))
+				closeCommentLayer()
+		}
+		window.addEventListener("keydown", answerEscape)
+		return () => window.removeEventListener("keydown", answerEscape)
+	}, [hasCommentLayer])
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: Escape leaves comment mode from whichever control of the document holds focus
 		<div
 			className="relative flex size-full min-h-0 flex-col"
 			data-slot="library-document-editor"
-			onKeyDown={isCommentMode ? leaveCommentMode : undefined}
+			ref={editor}
 		>
 			<LibraryDocumentBar
 				{...actions}
