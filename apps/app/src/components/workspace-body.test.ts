@@ -1609,6 +1609,14 @@ describe("WorkspaceBody library", () => {
 		return item
 	}
 
+	const filterNamed = (name: RegExp) => {
+		const filters = document.querySelector<HTMLElement>(
+			'[data-slot="library-filters"]',
+		)
+		if (!filters) throw new Error("no Library filters")
+		return within(filters).getByRole("button", { name })
+	}
+
 	const isBusy = () =>
 		document.querySelector('[data-slot="library-panel"] [aria-busy="true"]') !==
 		null
@@ -1719,18 +1727,14 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toEqual(["hero-dunes.png"])
 
 		await search("")
-		fireEvent.click(screen.getByRole("button", { name: /^Images/ }))
+		fireEvent.click(filterNamed(/^Images/))
 		await settle()
 
 		expect(shownNames()).toEqual(
 			["hero-dunes.png", "fern-study.jpg", "dusk.png"].sort(),
 		)
-		expect(screen.getByRole("button", { name: /^Images/ }).textContent).toBe(
-			"Images3",
-		)
-		expect(screen.getByRole("button", { name: /^Documents/ }).textContent).toBe(
-			"Documents2",
-		)
+		expect(filterNamed(/^Images/).textContent).toBe("Images3")
+		expect(filterNamed(/^Documents/).textContent).toBe("Documents2")
 	})
 
 	it("lists the folder again when the window regains focus or the panel opens again", async () => {
@@ -1788,7 +1792,7 @@ describe("WorkspaceBody library", () => {
 	it("edits an opened document and returns to the grid with its filter and query kept", async () => {
 		await openLibrary()
 		await search("brief")
-		fireEvent.click(screen.getByRole("button", { name: /^Documents/ }))
+		fireEvent.click(filterNamed(/^Documents/))
 		await settle()
 
 		await open("Spring launch brief")
@@ -1813,11 +1817,7 @@ describe("WorkspaceBody library", () => {
 		await press("Library")
 
 		expect(screen.getByRole("searchbox")).toHaveProperty("value", "brief")
-		expect(
-			screen
-				.getByRole("button", { name: /^Documents/ })
-				.getAttribute("aria-pressed"),
-		).toBe("true")
+		expect(filterNamed(/^Documents/).getAttribute("aria-pressed")).toBe("true")
 		expect(shownNames()).toEqual(["Spring launch brief"])
 	})
 

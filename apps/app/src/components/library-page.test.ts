@@ -1414,7 +1414,7 @@ const stickyAt = (id: string, x: number): LibraryBoardNode => ({
 const ROADMAP_NODES = [stickyAt("a", 0), stickyAt("b", 200), stickyAt("c", 240)]
 
 const filterNamed = (label: string) =>
-	within(screen.getByRole("group", { name: common("library.filters.label") }))
+	within(document.querySelector('[data-slot="library-filters"]') as HTMLElement)
 		.getAllByRole("button")
 		.find((button) => button.textContent?.startsWith(label)) as HTMLElement
 
