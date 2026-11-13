@@ -134,7 +134,7 @@ const UNKNOWN_COMMAND_STATUS = 404
 
 const UNKNOWN_COMMAND_REFUSAL = "this host knows no command named"
 
-const isUnknownCommandRefusal = (message: string, status?: number) =>
+const isHostOutdatedRefusal = (message: string, status?: number) =>
 	status === UNKNOWN_COMMAND_STATUS && message.includes(UNKNOWN_COMMAND_REFUSAL)
 
 const hostOutdatedNotice = (): NoticeMessage => ({
@@ -149,13 +149,21 @@ export const refusalKindOf = ({
 	if (isHostOnlyRefusal(message, status)) {
 		return "hostOnly"
 	}
-	if (isUnknownCommandRefusal(message, status)) {
+	if (isHostOutdatedRefusal(message, status)) {
 		return "unknownCommand"
 	}
 	return "other"
 }
 
-const statusNoticeOf = ({ message, status }: HostRefusal): NoticeMessage => {
+const refusalNoticeOf = (refusal: HostRefusal): NoticeMessage => {
+	const kind = refusalKindOf(refusal)
+	if (kind === "hostOnly") {
+		return hostOnlyNotice()
+	}
+	if (kind === "unknownCommand") {
+		return hostOutdatedNotice()
+	}
+	const { message, status } = refusal
 	const dedicatedNotice = status ? DEDICATED_REFUSAL_NOTICES[status] : undefined
 	return (
 		dedicatedNotice?.() ?? {
@@ -164,18 +172,6 @@ const statusNoticeOf = ({ message, status }: HostRefusal): NoticeMessage => {
 		}
 	)
 }
-
-const KIND_NOTICES: Record<
-	HostRefusalKind,
-	(refusal: HostRefusal) => NoticeMessage
-> = {
-	hostOnly: hostOnlyNotice,
-	unknownCommand: hostOutdatedNotice,
-	other: statusNoticeOf,
-}
-
-const refusalNoticeOf = (refusal: HostRefusal): NoticeMessage =>
-	KIND_NOTICES[refusalKindOf(refusal)](refusal)
 
 export const raiseRefusalNotice = (refusal: HostRefusal) =>
 	raiseReportedFailure(refusalNoticeOf(refusal), {
