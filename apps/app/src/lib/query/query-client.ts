@@ -10,6 +10,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
+import { isUnknownCommandRefusal } from "@/lib/host/host-refused"
 
 type InlineFailure = { rendersErrorInline: true }
 
@@ -48,6 +49,9 @@ const noticedFailureOf = (
 	meta: FailureMeta | undefined,
 	cacheName: string,
 ): NoticedFailure | null => {
+	if (isUnknownCommandRefusal(error)) {
+		return null
+	}
 	if (meta && "rendersErrorInline" in meta) {
 		return null
 	}

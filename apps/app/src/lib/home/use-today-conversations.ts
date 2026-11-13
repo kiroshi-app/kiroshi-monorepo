@@ -7,7 +7,6 @@ import { localDayAt } from "./today-conversations"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import type { ConversationInPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { isUnknownCommandRefusal } from "../host/host-refused"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 type TodayStore = Pick<TranscriptStore, "conversationTodayOfAgent">
@@ -34,7 +33,6 @@ const NOTICED_FAILURE = {
 		description: i18n.t("chat:home.failure.rooms.description"),
 	}),
 	raisedIn: "use-today-conversations",
-	isSilentOn: isUnknownCommandRefusal,
 }
 
 export const useTodayConversations = (
