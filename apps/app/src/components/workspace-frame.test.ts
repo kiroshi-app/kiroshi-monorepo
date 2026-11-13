@@ -400,7 +400,7 @@ describe("the sidebar toggle", () => {
 		)
 	})
 
-	it("toggles once per Cmd+B press, inside a text field too", async () => {
+	it("toggles once per Cmd+B press, never from inside a text field", async () => {
 		const { router } = await mountApp()
 		await navigateTo(router, "/home")
 
@@ -410,6 +410,12 @@ describe("the sidebar toggle", () => {
 		expect(savedLayouts).toHaveBeenCalledExactlyOnceWith({ isCollapsed: true })
 
 		await pressCommand("b", screen.getByRole("textbox"))
+
+		expect(slotOf("expanded-sidebar")).toBeNull()
+		expect(slotOf("sidebar-peek-edge")).not.toBeNull()
+		expect(savedLayouts).toHaveBeenCalledTimes(1)
+
+		await pressCommand("b")
 
 		expect(slotOf("expanded-sidebar")).not.toBeNull()
 		expect(savedLayouts).toHaveBeenCalledTimes(2)
