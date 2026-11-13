@@ -422,6 +422,8 @@ conversation-message-authorline--name-click-selects-the-agent
 conversation-message-authorline--name-right-click-opens-the-agent-menu
 conversation-message-authorline--queued
 conversation-message-authorline--sticky-outside-a-bubble
+conversation-message-authorline--title-badge
+conversation-message-authorline--title-badge-dark
 conversation-message-authorline--writing
 conversation-message-chatemptystate--centred-in-its-frame
 conversation-message-chatemptystate--free-hue
@@ -641,7 +643,11 @@ conversation-message-turn--hover-actions
 conversation-message-turn--long-content
 conversation-message-turn--menu
 conversation-message-turn--menu-with-save-as-document
+conversation-message-turn--nested-bullet-list
+conversation-message-turn--nested-bullet-list-dark
 conversation-message-turn--not-sent
+conversation-message-turn--numbered-list
+conversation-message-turn--numbered-list-dark
 conversation-message-turn--person-with-custom-image
 conversation-message-turn--person-with-custom-image-dark
 conversation-message-turn--queued
@@ -649,7 +655,12 @@ conversation-message-turn--quoted
 conversation-message-turn--replies-to-two
 conversation-message-turn--reported-by-routine
 conversation-message-turn--reported-by-unnamed-trigger
+conversation-message-turn--rich-reply
+conversation-message-turn--rich-reply-dark
 conversation-message-turn--speakers
+conversation-message-turn--streaming-tail
+conversation-message-turn--streaming-tail-dark
+conversation-message-turn--streaming-tail-settles
 conversation-message-turn--summoned-by-mission
 conversation-message-turn--thread-crossing-a-day
 conversation-message-turn--time-follows-now
@@ -1311,6 +1322,8 @@ layout-threadlayout--skeleton-in-the-transcript-column
 layout-threadlayout--start-of-older-messages
 layout-threadlayout--streaming-into-short-transcript
 layout-threadlayout--user-message-above-the-prompt
+layout-threadlayout--with-composer
+layout-threadlayout--with-composer-dark
 layout-windowcontrols--close-hovered
 layout-windowcontrols--close-hovered-dark
 layout-windowcontrols--maximize-forced-hover
@@ -2523,8 +2536,8 @@ primitives-sharedmark--default
 primitives-sharedmark--plain
 primitives-sharedmark--stable-box
 primitives-shimmertext--default
-primitives-shimmertext--reduced-motion
 primitives-shimmertext--long-content
+primitives-shimmertext--reduced-motion
 primitives-tooltipbutton--default
 primitives-tooltipbutton--long-content
 primitives-tooltipbutton--states
