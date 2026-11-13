@@ -7,6 +7,7 @@ import {
 	type LibraryCommentAuthor,
 	LibraryCommentAvatar,
 } from "@workspace/ui/components/library-comment-author"
+import { useMentionMenuEscape } from "@workspace/ui/components/library-comment-escape"
 import {
 	PromptMenuRow,
 	PromptMenuSurface,
@@ -61,6 +62,8 @@ const LibraryCommentMentionMenu = ({
 		onChoose: (index) => onSelect(matches[index]),
 		onDismiss,
 	})
+
+	useMentionMenuEscape(isOpen, onDismiss)
 
 	const renderRow = (participant: LibraryCommentAuthor, index: number) => (
 		<PromptMenuRow

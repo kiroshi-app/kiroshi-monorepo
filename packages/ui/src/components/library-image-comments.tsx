@@ -1,9 +1,23 @@
 "use client"
 
-import { type PointerEvent, type ReactNode, useRef, useState } from "react"
+import {
+	type PointerEvent,
+	type ReactNode,
+	useCallback,
+	useRef,
+	useState,
+} from "react"
+import { useTranslation } from "react-i18next"
 
 import type { LibraryCommentAuthor } from "@workspace/ui/components/library-comment-author"
+import { LibraryCommentComposer } from "@workspace/ui/components/library-comment-composer"
+import type { LibraryCommentDraftOptions } from "@workspace/ui/components/library-comment-field"
 import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
+import {
+	LibraryCommentThread,
+	type LibraryCommentThreadProps,
+} from "@workspace/ui/components/library-comment-thread"
+import { imageCardCornerOf } from "@workspace/ui/components/library-image-comment-placement"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryImagePoint = { x: number; y: number }
@@ -16,14 +30,20 @@ type LibraryImageThread = {
 	id: string
 	author: LibraryCommentAuthor
 	anchor: LibraryImageAnchor
+	isResolved?: boolean
 }
 
-type LibraryImageOpenThread = { id: string; card: ReactNode }
+type LibraryImageOpenThread = Omit<
+	LibraryCommentThreadProps,
+	"anchor" | "className"
+> & {
+	id: string
+}
 
-type LibraryImageDraft = {
+type LibraryImageDraft = LibraryCommentDraftOptions & {
 	author: LibraryCommentAuthor
 	anchor: LibraryImageAnchor
-	composer: ReactNode
+	onClose: () => void
 }
 
 type LibraryImageCommentsProps = {
@@ -31,6 +51,7 @@ type LibraryImageCommentsProps = {
 	openThread?: LibraryImageOpenThread
 	draft?: LibraryImageDraft
 	isCommentMode: boolean
+	stage: HTMLElement | null
 	onOpenThread: (threadId: string) => void
 	onStartComment: (anchor: LibraryImageAnchor) => void
 }
@@ -95,29 +116,74 @@ const ZoneFrame = ({ zone, state }: ZoneFrameProps) => (
 	/>
 )
 
-type MarkerProps = {
+const keepCardInsideStage = (card: HTMLElement, stage: HTMLElement) => {
+	const marker = card.parentElement
+	const image = marker?.parentElement
+	if (!marker || !image) return undefined
+
+	const place = () => {
+		const pinTail = marker.getBoundingClientRect()
+		const frame = stage.getBoundingClientRect()
+		const left = frame.left + stage.clientLeft
+		const top = frame.top + stage.clientTop
+		const corner = imageCardCornerOf(
+			{ x: pinTail.left, y: pinTail.top },
+			{ width: card.offsetWidth, height: card.offsetHeight },
+			{
+				left,
+				top,
+				right: left + stage.clientWidth,
+				bottom: top + stage.clientHeight,
+			},
+		)
+		card.style.left = `${corner.x - pinTail.left}px`
+		card.style.top = `${corner.y - pinTail.top}px`
+	}
+
+	const resized = new ResizeObserver(place)
+	for (const measured of [card, image, stage]) resized.observe(measured)
+	stage.addEventListener("scroll", place, { passive: true })
+
+	return () => {
+		resized.disconnect()
+		stage.removeEventListener("scroll", place)
+	}
+}
+
+type MarkerProps = Pick<LibraryImageCommentsProps, "stage"> & {
 	anchor: LibraryImageAnchor
 	beside?: ReactNode
 	children: ReactNode
 }
 
-const Marker = ({ anchor, beside, children }: MarkerProps) => (
-	<div
-		className={cn("absolute size-0", beside !== undefined && "z-10")}
-		data-slot="library-image-marker"
-		style={{
-			left: percentOf(isZone(anchor) ? anchor.x + anchor.width : anchor.x),
-			top: percentOf(anchor.y),
-		}}
-	>
-		{children}
-		{beside === undefined ? null : (
-			<div className="pointer-events-auto absolute -top-8 left-10 w-max">
-				{beside}
-			</div>
-		)}
-	</div>
-)
+const Marker = ({ anchor, beside, stage, children }: MarkerProps) => {
+	const left = percentOf(isZone(anchor) ? anchor.x + anchor.width : anchor.x)
+	const top = percentOf(anchor.y)
+	const followPin = useCallback(
+		(card: HTMLDivElement | null) =>
+			card && stage ? keepCardInsideStage(card, stage) : undefined,
+		[stage],
+	)
+
+	return (
+		<div
+			className={cn("absolute size-0", beside !== undefined && "z-10")}
+			data-slot="library-image-marker"
+			style={{ left, top }}
+		>
+			{children}
+			{beside === undefined ? null : (
+				<div
+					className="pointer-events-auto absolute -top-8 left-10 w-max"
+					key={`${left} ${top}`}
+					ref={followPin}
+				>
+					{beside}
+				</div>
+			)}
+		</div>
+	)
+}
 
 const zoneDraggedTo = (
 	from: LibraryImagePoint,
@@ -171,7 +237,7 @@ const CommentSurface = ({ onStartComment }: CommentSurfaceProps) => {
 			{pointer ? (
 				<span
 					aria-hidden="true"
-					className="pointer-events-none absolute size-5 -translate-y-full rounded-full rounded-bl-xs bg-primary ring-2 ring-lightbox-stage"
+					className="pointer-events-none absolute size-5 -translate-y-full rounded-full rounded-bl-xs bg-primary shadow-comment-cursor-stage ring-2 ring-comment-cursor-stage-ring"
 					data-slot="library-image-comment-cursor"
 					style={{ left: percentOf(pointer.x), top: percentOf(pointer.y) }}
 				/>
@@ -185,10 +251,19 @@ const LibraryImageComments = ({
 	openThread,
 	draft,
 	isCommentMode,
+	stage,
 	onOpenThread,
 	onStartComment,
 }: LibraryImageCommentsProps) => {
+	const { t } = useTranslation("common")
 	const opened = threads.find((thread) => thread.id === openThread?.id)
+
+	const anchorLineOf = (anchor: LibraryImageAnchor) =>
+		t(
+			isZone(anchor)
+				? "library.comments.anchor.imageZone"
+				: "library.comments.anchor.imagePoint",
+		)
 
 	return (
 		<div
@@ -210,21 +285,44 @@ const LibraryImageComments = ({
 				return (
 					<Marker
 						anchor={thread.anchor}
-						beside={isOpen ? openThread?.card : undefined}
+						beside={
+							isOpen && openThread ? (
+								<LibraryCommentThread
+									{...openThread}
+									anchor={anchorLineOf(thread.anchor)}
+								/>
+							) : undefined
+						}
 						key={thread.id}
+						stage={stage}
 					>
 						<LibraryCommentPin
+							aria-expanded={isOpen}
 							author={thread.author}
 							className={cn(PIN_ON_SPOT, "pointer-events-auto")}
 							onClick={() => onOpenThread(thread.id)}
-							state={isOpen ? "selected" : "rest"}
+							state={
+								thread.isResolved ? "resolved" : isOpen ? "selected" : "rest"
+							}
 							surface="stage"
 						/>
 					</Marker>
 				)
 			})}
 			{draft ? (
-				<Marker anchor={draft.anchor} beside={draft.composer}>
+				<Marker
+					anchor={draft.anchor}
+					beside={
+						<LibraryCommentComposer
+							anchor={anchorLineOf(draft.anchor)}
+							onSubmit={draft.onSubmit}
+							onValueChange={draft.onValueChange}
+							participants={draft.participants}
+							value={draft.value}
+						/>
+					}
+					stage={stage}
+				>
 					<LibraryCommentPin
 						aria-hidden="true"
 						author={draft.author}

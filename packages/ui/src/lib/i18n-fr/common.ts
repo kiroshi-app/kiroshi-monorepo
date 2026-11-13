@@ -590,6 +590,8 @@ const common = {
 				passage: "Sur « {{text}} »",
 				goneText: "Sur un texte qui n’est plus dans le document",
 				goneShape: "Sur une forme qui n’est plus sur le tableau",
+				imagePoint: "Sur un point de l’image",
+				imageZone: "Sur une zone de l’image",
 			},
 		},
 		itemMenu: {

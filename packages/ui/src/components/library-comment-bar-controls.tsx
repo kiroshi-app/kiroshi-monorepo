@@ -20,6 +20,8 @@ type LibraryCommentBarControlsProps = {
 	isOnDarkStage?: boolean
 }
 
+const COMMENT_TOGGLE_SLOT = "library-comment-toggle"
+
 const BAR_PILL =
 	"h-8 gap-1.5 rounded-full p-2 font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8"
 
@@ -93,7 +95,7 @@ const LibraryCommentBarControls = ({
 					BAR_PILL,
 					"aria-pressed:bg-primary-soft aria-pressed:text-primary aria-pressed:hover:bg-primary-soft",
 				)}
-				data-slot="library-comment-toggle"
+				data-slot={COMMENT_TOGGLE_SLOT}
 				onClick={() => onCommentModeChange(!isCommentMode)}
 				variant="ghost"
 			>
@@ -107,4 +109,8 @@ const LibraryCommentBarControls = ({
 	)
 }
 
-export { LibraryCommentBarControls, type LibraryCommentBarControlsProps }
+export {
+	COMMENT_TOGGLE_SLOT,
+	LibraryCommentBarControls,
+	type LibraryCommentBarControlsProps,
+}
