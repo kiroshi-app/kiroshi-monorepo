@@ -460,6 +460,8 @@ const chat = {
 			},
 			hostOnly:
 				"Only the host of this space can do that. Ask them to do it from their Kiroshi.",
+			hostOutdated:
+				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
 			hostOffline: {
 				title: "Couldn’t reach the host of this space",
 				description:

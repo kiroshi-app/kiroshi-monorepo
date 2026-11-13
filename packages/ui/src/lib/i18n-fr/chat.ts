@@ -496,6 +496,8 @@ const chat = {
 			},
 			hostOnly:
 				"Seul l’hôte de cet espace peut faire cela. Demandez-lui de le faire depuis son Kiroshi.",
+			hostOutdated:
+				"L’ordinateur qui héberge cet espace utilise une version plus ancienne de Kiroshi. Mettez-y Kiroshi à jour, puis réessayez.",
 			hostOffline: {
 				title: "Impossible de joindre l’hôte de cet espace",
 				description:
