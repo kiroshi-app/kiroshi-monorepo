@@ -273,6 +273,9 @@ pub struct LibraryCommentThread {
 	pub state: LibraryCommentThreadState,
 	pub comments: Vec<LibraryComment>,
 	pub target_missing: bool,
+	pub resolved_by: Option<LibraryCommentParty>,
+	pub resolved_at: Option<i64>,
+	pub last_board_point: Option<LibraryBoardPoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

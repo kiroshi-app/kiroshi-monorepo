@@ -80,6 +80,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 71, statements: MAIN_CONVERSATION_OWNER },
 	Migration { version: 72, statements: LIBRARY_COMMENTS },
 	Migration { version: 73, statements: COMMENT_AGENT_TURNS },
+	Migration { version: 74, statements: LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1536,6 +1537,20 @@ BEGIN
 END;
 ";
 
+const LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT: &str = "
+ALTER TABLE library_comment_threads ADD COLUMN resolved_by_kind TEXT
+	CHECK (resolved_by_kind IN ('person', 'agent'));
+ALTER TABLE library_comment_threads ADD COLUMN resolved_by_id TEXT CHECK (resolved_by_id <> '');
+ALTER TABLE library_comment_threads ADD COLUMN resolved_at INTEGER CHECK (
+	(resolved_at IS NULL) = (resolved_by_kind IS NULL)
+	AND (resolved_at IS NULL) = (resolved_by_id IS NULL)
+	AND (resolved_at IS NULL OR state = 'resolved')
+);
+ALTER TABLE library_comment_threads ADD COLUMN last_board_x INTEGER;
+ALTER TABLE library_comment_threads ADD COLUMN last_board_y INTEGER
+	CHECK ((last_board_y IS NULL) = (last_board_x IS NULL));
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1588,6 +1603,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::{open, temp_dir, FILE_NAME};
 	use crate::db::repositories::messages::ReplyLink;
+	use crate::library::contract::LibraryCommentThreadState;
 
 	const BOTS_HOLDING_A_MEMBERSHIP: &str = "
 		INSERT INTO bots (id, name, model, created_at)
@@ -1665,6 +1681,7 @@ mod tests {
 	const MESSAGE_DOCUMENTS_STEP: u32 = 69;
 	const MAIN_CONVERSATION_OWNER_STEP: u32 = 71;
 	const COMMENT_AGENT_TURNS_STEP: u32 = 73;
+	const LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT_STEP: u32 = 74;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5387,6 +5404,55 @@ mod tests {
 		);
 
 		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_comment_thread_stored_before_the_resolver_step_loads_with_no_resolver_and_no_point()
+	{
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(
+				r#"INSERT INTO library_comment_threads
+						(id, space_id, item_name, anchor, state, created_at)
+					VALUES ('on-a-node', 'personal', 'plan.canvas',
+							'{"kind":"boardNode","nodeId":"a"}', 'open', 1),
+						('settled', 'personal', 'plan.canvas',
+							'{"kind":"boardPoint","point":{"x":5,"y":5}}', 'resolved', 2);
+				INSERT INTO library_comments
+						(thread_id, position, author_kind, author_id, created_at, text)
+					VALUES ('on-a-node', 0, 'person', 'host', 1, 'Tighten this'),
+						('settled', 0, 'person', 'host', 2, 'Done');"#,
+			)
+			.expect("the threads this build upgrades from");
+		drop(connection);
+
+		let database = crate::db::open(&dir);
+		let threads = database
+			.library()
+			.threads("personal".to_owned(), "plan.canvas".to_owned())
+			.await
+			.expect("the threads load");
+
+		let loaded: Vec<_> = threads
+			.iter()
+			.map(|thread| {
+				(thread.id.as_str(), thread.state, &thread.resolution, thread.last_board_point)
+			})
+			.collect();
+		assert_eq!(
+			loaded,
+			[
+				("on-a-node", LibraryCommentThreadState::Open, &None, None),
+				("settled", LibraryCommentThreadState::Resolved, &None, None),
+			]
+		);
+		assert_eq!(threads[0].comments.len(), 1);
+
+		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 

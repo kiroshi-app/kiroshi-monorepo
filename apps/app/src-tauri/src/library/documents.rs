@@ -37,11 +37,15 @@ const BOARD_WRITE_LONGEST_WAIT: Duration = Duration::from_secs(2);
 
 type Key = (String, String);
 
-type BoardFileReplaced = Arc<dyn Fn(&str, &str) + Send + Sync>;
+#[derive(Clone)]
+struct BoardWriteHooks {
+	on_file_replaced: Arc<dyn Fn(&str, &str) + Send + Sync>,
+	on_written: Arc<dyn Fn(&str, &str, &Board) + Send + Sync>,
+}
 
 pub(crate) struct Documents {
 	held: Arc<Mutex<Held>>,
-	on_board_file_replaced: BoardFileReplaced,
+	board_write_hooks: BoardWriteHooks,
 }
 
 #[derive(Default)]
@@ -159,13 +163,20 @@ struct LoadedBoard {
 #[cfg(test)]
 impl Default for Documents {
 	fn default() -> Self {
-		Self::new(|_, _| {})
+		Self::new(|_, _| {}, |_, _, _| {})
 	}
 }
 
 impl Documents {
-	pub(crate) fn new(on_board_file_replaced: impl Fn(&str, &str) + Send + Sync + 'static) -> Self {
-		Self { held: Arc::default(), on_board_file_replaced: Arc::new(on_board_file_replaced) }
+	pub(crate) fn new(
+		on_board_file_replaced: impl Fn(&str, &str) + Send + Sync + 'static,
+		on_board_written: impl Fn(&str, &str, &Board) + Send + Sync + 'static,
+	) -> Self {
+		let board_write_hooks = BoardWriteHooks {
+			on_file_replaced: Arc::new(on_board_file_replaced),
+			on_written: Arc::new(on_board_written),
+		};
+		Self { held: Arc::default(), board_write_hooks }
 	}
 
 	pub(crate) fn open(
@@ -178,7 +189,7 @@ impl Documents {
 		let file = document_file(root, space_id, name)?;
 		match file.kind {
 			DocumentKind::Board => {
-				held.board_synced(root, space_id, &file, &self.on_board_file_replaced)
+				held.board_synced(root, space_id, &file, &self.board_write_hooks)
 			}
 			DocumentKind::Markdown => held.synced(root, space_id, name, file.kind, &file.text),
 		}
@@ -271,7 +282,7 @@ impl Documents {
 	) -> Result<Board, LibraryError> {
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
-		let doc = held.board_doc(root, space_id, &file, &self.on_board_file_replaced)?;
+		let doc = held.board_doc(root, space_id, &file, &self.board_write_hooks)?;
 		board::read(doc, &file.name)
 	}
 
@@ -284,7 +295,7 @@ impl Documents {
 		let BoardTarget { root, space_id, name, writer } = *target;
 		let mut held = self.held();
 		let file = held.located(root, space_id, name)?;
-		let doc = held.board_doc(root, space_id, &file, &self.on_board_file_replaced)?;
+		let doc = held.board_doc(root, space_id, &file, &self.board_write_hooks)?;
 		let (board_edit, made) = edit(&board::read(doc, &file.name)?)?;
 		let update = board::update_of(doc, writer, &file.name, &board_edit)?;
 		let change = board_change(doc, &file, &update)?;
@@ -299,7 +310,7 @@ impl Documents {
 			tokio::spawn(written_when_due(
 				Arc::clone(&self.held),
 				generation,
-				Arc::clone(&self.on_board_file_replaced),
+				self.board_write_hooks.clone(),
 			));
 		}
 	}
@@ -312,7 +323,7 @@ impl Documents {
 			.map(|(key, pending)| (key.clone(), pending.root.clone()))
 			.collect();
 		for (key, root) in pending {
-			held.board_written_or_kept_pending(&root, &key, &self.on_board_file_replaced);
+			held.board_written_or_kept_pending(&root, &key, &self.board_write_hooks);
 		}
 	}
 
@@ -470,11 +481,7 @@ fn locked(held: &Mutex<Held>) -> MutexGuard<'_, Held> {
 	held.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-async fn written_when_due(
-	shared: Arc<Mutex<Held>>,
-	generation: u64,
-	on_board_file_replaced: BoardFileReplaced,
-) {
+async fn written_when_due(shared: Arc<Mutex<Held>>, generation: u64, hooks: BoardWriteHooks) {
 	loop {
 		let Some(due) = locked(&shared).armed(generation).map(|(_, pending)| pending.due()) else {
 			return;
@@ -488,7 +495,7 @@ async fn written_when_due(
 			continue;
 		}
 		let (key, root) = (key.clone(), pending.root.clone());
-		held.board_written_or_kept_pending(&root, &key, &on_board_file_replaced);
+		held.board_written_or_kept_pending(&root, &key, &hooks);
 		return;
 	}
 }
@@ -546,12 +553,12 @@ impl Held {
 		root: &Path,
 		space_id: &str,
 		file: &DocumentFile,
-		on_board_file_replaced: &BoardFileReplaced,
+		hooks: &BoardWriteHooks,
 	) -> Result<&Doc, LibraryError> {
 		if !matches!(file.kind, DocumentKind::Board) {
 			return Err(LibraryError::NotABoard { name: file.name.clone() });
 		}
-		self.board_synced(root, space_id, file, on_board_file_replaced)?;
+		self.board_synced(root, space_id, file, hooks)?;
 		self.docs
 			.get(&key(space_id, &file.name))
 			.ok_or_else(|| LibraryError::Missing { name: file.name.clone() })
@@ -562,7 +569,7 @@ impl Held {
 		root: &Path,
 		space_id: &str,
 		file: &DocumentFile,
-		on_board_file_replaced: &BoardFileReplaced,
+		hooks: &BoardWriteHooks,
 	) -> Result<Opened, LibraryError> {
 		let key = key(space_id, &file.name);
 		let doc = match self.docs.entry(key.clone()) {
@@ -582,7 +589,7 @@ impl Held {
 			.get(&key)
 			.is_some_and(|written| board::is_diverged(file.text.as_bytes(), written));
 		if is_diverged {
-			self.board_written(root, &key, on_board_file_replaced)?;
+			self.board_written(root, &key, hooks)?;
 		}
 		Ok(Opened { state, host_edit: None })
 	}
@@ -608,13 +615,8 @@ impl Held {
 		self.pending_boards.iter().find(|(_, pending)| pending.armed == Some(generation))
 	}
 
-	fn board_written_or_kept_pending(
-		&mut self,
-		root: &Path,
-		key: &Key,
-		on_board_file_replaced: &BoardFileReplaced,
-	) {
-		let Err(error) = self.board_written(root, key, on_board_file_replaced) else {
+	fn board_written_or_kept_pending(&mut self, root: &Path, key: &Key, hooks: &BoardWriteHooks) {
+		let Err(error) = self.board_written(root, key, hooks) else {
 			return;
 		};
 		let (space_id, name) = key;
@@ -630,7 +632,7 @@ impl Held {
 		&mut self,
 		root: &Path,
 		key: &Key,
-		on_board_file_replaced: &BoardFileReplaced,
+		hooks: &BoardWriteHooks,
 	) -> Result<(), LibraryError> {
 		let (space_id, name) = key;
 		let (Some(doc), Some(written)) = (self.docs.get(key), self.written_boards.get(key)) else {
@@ -653,8 +655,9 @@ impl Held {
 			log::warn!(
 				"the board {name} of space {space_id} changed on disk and was rewritten from its live state"
 			);
-			on_board_file_replaced(space_id, name);
+			(hooks.on_file_replaced)(space_id, name);
 		}
+		(hooks.on_written)(space_id, name, &current);
 		self.written_boards.insert(key.clone(), current);
 		self.pending_boards.remove(key);
 		Ok(())

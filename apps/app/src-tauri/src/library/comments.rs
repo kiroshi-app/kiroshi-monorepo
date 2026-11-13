@@ -1,21 +1,23 @@
+use std::collections::VecDeque;
 use std::path::Path;
+use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime, State};
 use uuid::Uuid;
 
 use super::blocks::{blocks_of, preview, Block, BlockKind};
 use super::contract::{
-	LibraryComment, LibraryCommentAnchor as Anchor, LibraryCommentParty, LibraryCommentPartyKind,
-	LibraryCommentThread, LibraryCommentThreadChanged, LibraryCommentThreadState, LibraryError,
-	LibraryItemKind, COMMENT_HOST_AUTHOR_ID,
+	LibraryBoardPoint, LibraryComment, LibraryCommentAnchor as Anchor, LibraryCommentParty,
+	LibraryCommentPartyKind, LibraryCommentThread, LibraryCommentThreadChanged,
+	LibraryCommentThreadState, LibraryError, LibraryItemKind, COMMENT_HOST_AUTHOR_ID,
 };
 use super::{document_text, documents, resolve, AcceptedType};
 use crate::agent::translate::now_ms;
-use crate::board::{holds_node, Board};
+use crate::board::{holds_node, node_position, Board};
 use crate::db::repositories::conversations::ChatOwner;
-use crate::db::repositories::library::{NewThread, StoredThread, ThreadOfItem};
-use crate::db::Database;
+use crate::db::repositories::library::{NewThread, Resolution, StoredThread, ThreadOfItem};
+use crate::db::{Database, DatabaseState};
 use crate::events;
 use crate::hosting::authorship::Caller;
 
@@ -38,12 +40,7 @@ impl Said {
 		text: String,
 		mentions: Vec<LibraryCommentParty>,
 	) -> Result<Self, LibraryError> {
-		let id = match caller.chat_owner(app).ok_or(LibraryError::UnknownAuthor)? {
-			ChatOwner::Host => COMMENT_HOST_AUTHOR_ID.to_owned(),
-			ChatOwner::Member(account_id) => account_id,
-		};
-		let author = LibraryCommentParty { kind: LibraryCommentPartyKind::Person, id };
-		Ok(Said { author, text, mentions })
+		Ok(Said { author: person_calling(caller, app)?, text, mentions })
 	}
 
 	pub(crate) fn by_the_agent(id: String, text: String) -> Self {
@@ -101,6 +98,17 @@ impl ListedThread {
 			opening: opening.unwrap_or_default(),
 		}
 	}
+}
+
+pub(crate) fn person_calling<R: Runtime>(
+	caller: &Caller,
+	app: &AppHandle<R>,
+) -> Result<LibraryCommentParty, LibraryError> {
+	let id = match caller.chat_owner(app).ok_or(LibraryError::UnknownAuthor)? {
+		ChatOwner::Host => COMMENT_HOST_AUTHOR_ID.to_owned(),
+		ChatOwner::Member(account_id) => account_id,
+	};
+	Ok(LibraryCommentParty { kind: LibraryCommentPartyKind::Person, id })
 }
 
 enum Commented {
@@ -204,7 +212,16 @@ impl Commented {
 		}
 	}
 
+	fn board_point(&self, anchor: &Anchor) -> Option<LibraryBoardPoint> {
+		let (Commented::Board(board), Anchor::BoardNode { node_id }) = (self, anchor) else {
+			return None;
+		};
+		node_point(board, node_id)
+	}
+
 	fn as_it_stands(&self, thread: StoredThread) -> LibraryCommentThread {
+		let (resolved_by, resolved_at) =
+			thread.resolution.map(|resolution| (resolution.by, resolution.at)).unzip();
 		LibraryCommentThread {
 			target_missing: self.missing_target(&thread.anchor).is_some(),
 			id: thread.id,
@@ -213,8 +230,15 @@ impl Commented {
 			anchor: thread.anchor,
 			state: thread.state,
 			comments: thread.comments,
+			resolved_by,
+			resolved_at,
+			last_board_point: thread.last_board_point,
 		}
 	}
+}
+
+fn node_point(board: &Board, node_id: &str) -> Option<LibraryBoardPoint> {
+	node_position(board, node_id).map(|(x, y)| LibraryBoardPoint { x, y })
 }
 
 fn is_well_formed(anchor: &Anchor) -> bool {
@@ -288,6 +312,7 @@ pub(crate) async fn open_comment_thread<R: Runtime>(
 		id: Uuid::new_v4().to_string(),
 		space_id: space_id.to_owned(),
 		item_name: name.to_owned(),
+		last_board_point: commented.board_point(&anchor),
 		anchor,
 		opening: said.comment()?,
 	};
@@ -313,17 +338,104 @@ pub(crate) async fn reply_to_comment_thread<R: Runtime>(
 	Ok(replied)
 }
 
-pub(crate) async fn set_comment_thread_state<R: Runtime>(
+pub(crate) async fn resolve_comment_thread<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &Database,
 	root: &Path,
 	thread: ThreadOfItem,
-	state: LibraryCommentThreadState,
+	by: LibraryCommentParty,
 ) -> Result<LibraryCommentThread, LibraryError> {
 	let commented = Commented::read(app, root, &thread.space_id, &thread.item_name)?;
 	let unknown = LibraryError::UnknownThread { id: thread.id.clone() };
-	let settled = database.library().set_state(thread, state).await?.ok_or(unknown)?;
-	Ok(announced(app, commented.as_it_stands(settled)))
+	let resolution = Resolution { by, at: now_ms() };
+	let resolved = database.library().resolve(thread, resolution).await?.ok_or(unknown)?;
+	Ok(announced(app, commented.as_it_stands(resolved)))
+}
+
+pub(crate) async fn reopen_comment_thread<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	root: &Path,
+	thread: ThreadOfItem,
+) -> Result<LibraryCommentThread, LibraryError> {
+	let commented = Commented::read(app, root, &thread.space_id, &thread.item_name)?;
+	let unknown = LibraryError::UnknownThread { id: thread.id.clone() };
+	let reopened = database.library().reopen(thread).await?.ok_or(unknown)?;
+	Ok(announced(app, commented.as_it_stands(reopened)))
+}
+
+struct WrittenBoard {
+	space_id: String,
+	name: String,
+	board: Board,
+}
+
+#[derive(Default)]
+pub(crate) struct WrittenBoards {
+	unfollowed: Mutex<VecDeque<WrittenBoard>>,
+	turn: tokio::sync::Mutex<()>,
+}
+
+impl WrittenBoards {
+	fn unfollowed(&self) -> std::sync::MutexGuard<'_, VecDeque<WrittenBoard>> {
+		self.unfollowed.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+}
+
+fn written_boards<R: Runtime>(app: &AppHandle<R>) -> State<'_, WrittenBoards> {
+	if app.try_state::<WrittenBoards>().is_none() {
+		app.manage(WrittenBoards::default());
+	}
+	app.state::<WrittenBoards>()
+}
+
+pub(crate) fn board_written<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	board: &Board,
+) {
+	written_boards(app).unfollowed().push_back(WrittenBoard {
+		space_id: space_id.to_owned(),
+		name: name.to_owned(),
+		board: board.clone(),
+	});
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move { written_boards_followed(&app).await });
+}
+
+pub(crate) async fn written_boards_followed<R: Runtime>(app: &AppHandle<R>) {
+	let written = written_boards(app);
+	let _turn = written.turn.lock().await;
+	loop {
+		let next = written.unfollowed().pop_front();
+		let Some(WrittenBoard { space_id, name, board }) = next else {
+			return;
+		};
+		if let Err(error) = board_nodes_followed(app, &space_id, &name, board).await {
+			log::warn!(
+				"the comment threads of board {name} of space {space_id} did not follow its write: {error:?}"
+			);
+		}
+	}
+}
+
+async fn board_nodes_followed<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	name: &str,
+	board: Board,
+) -> Result<(), LibraryError> {
+	let Some(state) = app.try_state::<DatabaseState>() else {
+		return Ok(());
+	};
+	let database =
+		state.as_ref().map_err(|failure| LibraryError::Unavailable { failure: failure.into() })?;
+	let point_of = move |node_id: &str| node_point(&board, node_id);
+	Ok(database
+		.library()
+		.follow_board_nodes(space_id.to_owned(), name.to_owned(), point_of)
+		.await?)
 }
 
 fn announced<R: Runtime>(app: &AppHandle<R>, thread: LibraryCommentThread) -> LibraryCommentThread {

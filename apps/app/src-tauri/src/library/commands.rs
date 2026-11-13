@@ -12,9 +12,9 @@ use futures_util::future::join_all;
 
 use super::contract::{
 	LibraryBoardSummary, LibraryCommentAgentTurn, LibraryCommentAnchor, LibraryCommentCount,
-	LibraryCommentParty, LibraryCommentThread, LibraryCommentThreadState, LibraryDocument,
-	LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
-	LibraryImportUrlError, LibraryItem, LibraryPresenceAt, LibraryTemplate,
+	LibraryCommentParty, LibraryCommentThread, LibraryDocument, LibraryDocumentState,
+	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem,
+	LibraryPresenceAt, LibraryTemplate,
 };
 use super::host::stop_writers;
 use super::presence::{seated_identity, share_presence, unseat_writer, Identity, Seat};
@@ -22,9 +22,10 @@ use super::url_import::{admission_for, import_url};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_agent_turns,
 	comment_threads, create_board, create_document, delete_item, import, import_paths, list,
-	open_comment_thread, open_document, read_document, read_file, read_image, read_picked_image,
-	read_thumbnail, rename_board, rename_linked_document, reply_to_comment_thread, resolve, root,
-	save, save_bytes, save_message, set_comment_thread_state, summarise_board, templates,
+	open_comment_thread, open_document, person_calling, read_document, read_file, read_image,
+	read_picked_image, read_thumbnail, rename_board, rename_linked_document,
+	reopen_comment_thread, reply_to_comment_thread, resolve, resolve_comment_thread, root, save,
+	save_bytes, save_message, summarise_board, templates,
 	ClipboardPayload, Said,
 };
 use crate::agent::commands::cancel_session_turn;
@@ -292,15 +293,16 @@ pub async fn library_comment_reply<R: Runtime>(
 #[specta::specta]
 pub async fn library_comment_resolve<R: Runtime>(
 	app: AppHandle<R>,
+	caller: Caller,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
 	name: String,
 	thread_id: String,
 ) -> Result<LibraryCommentThread, LibraryError> {
 	let database = known_space(&state, &space_id).await?;
+	let by = person_calling(&caller, &app)?;
 	let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
-	let resolved = LibraryCommentThreadState::Resolved;
-	set_comment_thread_state(&app, database, &root(&app)?, thread, resolved).await
+	resolve_comment_thread(&app, database, &root(&app)?, thread, by).await
 }
 
 #[tauri::command]
@@ -314,8 +316,7 @@ pub async fn library_comment_reopen<R: Runtime>(
 ) -> Result<LibraryCommentThread, LibraryError> {
 	let database = known_space(&state, &space_id).await?;
 	let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
-	let open = LibraryCommentThreadState::Open;
-	set_comment_thread_state(&app, database, &root(&app)?, thread, open).await
+	reopen_comment_thread(&app, database, &root(&app)?, thread).await
 }
 
 #[tauri::command]

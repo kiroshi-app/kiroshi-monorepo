@@ -4111,6 +4111,36 @@
         "itemName": {
           "type": "string"
         },
+        "lastBoardPoint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryBoardPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolvedAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolvedBy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "spaceId": {
           "type": "string"
         },
@@ -4128,7 +4158,10 @@
         "anchor",
         "state",
         "comments",
-        "targetMissing"
+        "targetMissing",
+        "resolvedBy",
+        "resolvedAt",
+        "lastBoardPoint"
       ],
       "type": "object"
     },

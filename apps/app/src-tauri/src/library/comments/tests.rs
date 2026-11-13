@@ -9,7 +9,7 @@ use tauri::{Listener, Manager};
 use super::*;
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::Host;
-use crate::board::BoardEdit;
+use crate::board::{BoardEdit, ElementChange};
 use crate::conversations::context::{UNTRUSTED_CLOSE, UNTRUSTED_OPEN};
 use crate::db;
 use crate::db::repositories::conversations::{BotIdentity, ChatOwner, DEFAULT_BOT_MODEL};
@@ -21,8 +21,8 @@ use crate::library::commands::{
 	library_comment_threads, library_delete, library_rename_board, library_rename_document,
 };
 use crate::library::contract::{
-	LibraryBoardPoint, LibraryCommentAgentTurn, LibraryCommentAgentTurnState,
-	LibraryCommentAgentTurnsChanged, LibraryCommentCount, LibraryCommentTurnFailure,
+	LibraryCommentAgentTurn, LibraryCommentAgentTurnState, LibraryCommentAgentTurnsChanged,
+	LibraryCommentCount, LibraryCommentThreadState, LibraryCommentTurnFailure,
 	COMMENT_AGENT_TURNS_CHANGED_EVENT, COMMENT_THREAD_CHANGED_EVENT,
 };
 use crate::library::documents::BoardTarget;
@@ -65,6 +65,15 @@ fn passage(block_id: &str, quote: &str) -> Anchor {
 
 fn node(id: &str) -> Anchor {
 	Anchor::BoardNode { node_id: id.to_owned() }
+}
+
+fn resolved_by_the_host(thread: &LibraryCommentThread, at: Option<i64>) -> LibraryCommentThread {
+	LibraryCommentThread {
+		state: LibraryCommentThreadState::Resolved,
+		resolved_by: Some(person(COMMENT_HOST_AUTHOR_ID)),
+		resolved_at: at,
+		..thread.clone()
+	}
 }
 
 fn the_six_anchors() -> [(&'static str, Anchor); 6] {
@@ -245,8 +254,18 @@ impl Shelf {
 	}
 
 	async fn resolved(&self, name: &str, id: &str) -> Result<LibraryCommentThread, LibraryError> {
+		self.resolved_by(Caller::Host, name, id).await
+	}
+
+	async fn resolved_by(
+		&self,
+		caller: Caller,
+		name: &str,
+		id: &str,
+	) -> Result<LibraryCommentThread, LibraryError> {
 		library_comment_resolve(
 			self.app.handle().clone(),
+			caller,
 			self.app.state(),
 			self.space_id.clone(),
 			name.to_owned(),
@@ -286,12 +305,27 @@ impl Shelf {
 	}
 
 	fn node_removed(&self, id: &str) {
+		self.board_edited(BoardEdit { removed_nodes: vec![id.to_owned()], ..BoardEdit::default() });
+	}
+
+	fn node_moved(&self, id: &str, to: LibraryBoardPoint) {
+		let element = json!({ "x": to.x, "y": to.y }).as_object().cloned().expect("an object");
+		let fields = vec!["x".to_owned(), "y".to_owned()];
+		let moved = ElementChange { id: id.to_owned(), element, fields };
+		self.board_edited(BoardEdit { changed_nodes: vec![moved], ..BoardEdit::default() });
+	}
+
+	fn board_edited(&self, edit: BoardEdit) {
 		let target =
 			BoardTarget { root: &self.root, space_id: &self.space_id, name: PLAN, writer: 1 };
-		let removal = BoardEdit { removed_nodes: vec![id.to_owned()], ..BoardEdit::default() };
 		documents(self.app.handle())
-			.edit_board(&target, |_| Ok::<_, LibraryError>((removal, ())), |_| {})
-			.expect("the node is removed");
+			.edit_board(&target, |_| Ok::<_, LibraryError>((edit, ())), |_| {})
+			.expect("the board is edited");
+	}
+
+	async fn board_written(&self) {
+		documents(self.app.handle()).write_pending_boards();
+		written_boards_followed(self.app.handle()).await;
 	}
 
 	async fn created_by(&self, caller: Caller) -> Result<LibraryCommentThread, LibraryError> {
@@ -367,10 +401,12 @@ async fn each_of_the_six_anchors_is_commented_replied_to_resolved_reopened_and_r
 			"{anchor:?}"
 		);
 		assert!(replied.comments[0].created_at <= replied.comments[1].created_at);
-		assert_eq!(
-			resolved,
-			LibraryCommentThread { state: LibraryCommentThreadState::Resolved, ..replied.clone() }
-		);
+		let on_the_node = matches!(anchor, Anchor::BoardNode { .. });
+		let where_the_node_stands = on_the_node.then_some(LibraryBoardPoint { x: -40, y: 10 });
+		assert_eq!(opened.last_board_point, where_the_node_stands, "{anchor:?}");
+		assert_eq!((&opened.resolved_by, opened.resolved_at), (&None, None), "{anchor:?}");
+		assert!(resolved.resolved_at >= Some(replied.comments[1].created_at), "{anchor:?}");
+		assert_eq!(resolved, resolved_by_the_host(&replied, resolved.resolved_at), "{anchor:?}");
 		assert_eq!(reopened, replied, "{anchor:?}");
 		assert_eq!(read.last(), Some(&reopened), "{anchor:?}");
 	}
@@ -508,14 +544,34 @@ async fn a_thread_whose_block_passage_or_node_is_gone_reads_with_its_target_miss
 		])
 	);
 	assert_eq!(shelf.threads(PLAN).await, Ok(vec![missing(on_a_removed_node), on_a_kept_node]));
-	assert_eq!(
-		shelf.resolved(NOTES, &on_a_removed_block.id).await,
-		Ok(LibraryCommentThread {
-			state: LibraryCommentThreadState::Resolved,
-			..missing(on_a_removed_block)
-		})
-	);
+	let resolved =
+		shelf.resolved(NOTES, &on_a_removed_block.id).await.expect("the thread resolves");
+	assert_eq!(resolved, resolved_by_the_host(&missing(on_a_removed_block), resolved.resolved_at));
 	assert_eq!(shelf.stored_rows("library_comment_threads").await, 5);
+}
+
+#[tokio::test]
+async fn a_thread_on_a_node_follows_it_at_each_board_write_and_keeps_its_last_point_once_removed() {
+	let shelf = Shelf::of("board-point").await;
+	let on_the_node = shelf.opened(PLAN, node("a")).await;
+	let beside = Anchor::BoardPoint { point: LibraryBoardPoint { x: 5, y: 5 } };
+	let on_a_point = shelf.opened(PLAN, beside).await;
+	let moved_to = LibraryBoardPoint { x: 300, y: -75 };
+
+	shelf.node_moved("a", moved_to);
+	shelf.board_written().await;
+	let after_the_move = shelf.threads(PLAN).await;
+	shelf.node_removed("a");
+	shelf.board_written().await;
+	let after_the_removal = shelf.threads(PLAN).await;
+
+	let followed = LibraryCommentThread { last_board_point: Some(moved_to), ..on_the_node.clone() };
+	assert_eq!(on_the_node.last_board_point, Some(LibraryBoardPoint { x: -40, y: 10 }));
+	assert_eq!(after_the_move, Ok(vec![followed.clone(), on_a_point.clone()]));
+	assert_eq!(
+		after_the_removal,
+		Ok(vec![LibraryCommentThread { target_missing: true, ..followed }, on_a_point])
+	);
 }
 
 #[tokio::test]
@@ -644,9 +700,11 @@ async fn a_relayed_caller_nobody_vouches_for_is_refused_and_stores_nothing() {
 
 	let created = shelf.created_by(Caller::Relayed(None)).await;
 	let replied = shelf.replied_by(Caller::Relayed(None), &by_the_host.id).await;
+	let resolved = shelf.resolved_by(Caller::Relayed(None), NOTES, &by_the_host.id).await;
 
 	assert_eq!(created, Err(LibraryError::UnknownAuthor));
 	assert_eq!(replied, Err(LibraryError::UnknownAuthor));
+	assert_eq!(resolved, Err(LibraryError::UnknownAuthor));
 	assert_eq!(shelf.threads(NOTES).await, Ok(vec![by_the_host]));
 	assert_eq!(shelf.stored_rows("library_comments").await, 1);
 }

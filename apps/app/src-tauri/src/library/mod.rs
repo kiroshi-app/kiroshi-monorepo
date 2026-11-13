@@ -31,10 +31,11 @@ use contract::{
 use documents::Documents;
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
+use comments::{board_written, written_boards_followed};
 pub(crate) use comments::{
 	briefed_comment_thread, comment_agent_turns, comment_threads, fail_comment_turns_cut_by_a_quit,
-	listed_comment_threads, open_comment_thread, reply_to_comment_thread, set_comment_thread_state,
-	Said,
+	listed_comment_threads, open_comment_thread, person_calling, reopen_comment_thread,
+	reply_to_comment_thread, resolve_comment_thread, Said,
 };
 #[cfg(test)]
 pub(crate) use comments::{CommentTurn, CommentTurns};
@@ -733,10 +734,11 @@ fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, 
 
 fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 	if app.try_state::<Documents>().is_none() {
-		let announcing = app.clone();
-		app.manage(Documents::new(move |space_id, name| {
-			announce_board_file_replaced(&announcing, space_id, name);
-		}));
+		let (announcing, commented) = (app.clone(), app.clone());
+		app.manage(Documents::new(
+			move |space_id, name| announce_board_file_replaced(&announcing, space_id, name),
+			move |space_id, name, board| board_written(&commented, space_id, name, board),
+		));
 	}
 	app.state::<Documents>()
 }
@@ -744,6 +746,7 @@ fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
 	if let Some(documents) = app.try_state::<Documents>() {
 		documents.write_pending_boards();
+		tauri::async_runtime::block_on(written_boards_followed(app));
 	}
 }
 
