@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { expect, fn, mocked, waitFor } from "storybook/test"
+import { expect, fn, mocked, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -170,12 +170,6 @@ const expectAvatarHexagon = async (hexagon: HTMLElement, ground: string) => {
 	await expect(slotsIn(hexagon, "outlined-hexagon-edge")).toHaveLength(2)
 }
 
-const statusOf = (screen: HTMLElement) => {
-	const status = screen.querySelector<HTMLElement>('[role="status"]')
-	if (!status) throw new Error("This screen announces no status")
-	return status
-}
-
 const shownHexagonsOf = (screen: HTMLElement) =>
 	slotsIn(screen, "app-boot-hexagon").filter((hexagon) =>
 		hexagon.checkVisibility({ opacityProperty: true }),
@@ -196,8 +190,10 @@ const expectStillImage = async (canvasElement: HTMLElement) => {
 	await expect(content.children).toHaveLength(2)
 	await expectCentredInWindow(canvasElement)
 	await expect(stage).toHaveAttribute("aria-hidden", "true")
-	await expect(statusOf(screen)).toBeVisible()
-	await expect(statusOf(screen)).toHaveTextContent("Starting Kiroshi")
+	await expect(within(screen).getByRole("status")).toBeVisible()
+	await expect(within(screen).getByRole("status")).toHaveTextContent(
+		"Starting Kiroshi",
+	)
 
 	await expect(screen).toHaveAttribute("data-still")
 	await expect(slotsIn(screen, "app-boot-hexagon")).toHaveLength(CLUSTER_CELLS)
@@ -226,8 +222,10 @@ const provesRunning =
 		await withMotionAllowed(async () => {
 			await waitFor(() => expect(screen).not.toHaveAttribute("data-still"))
 			await expect(screen.dataset.phase).toBe("running")
-			await expect(statusOf(screen)).toHaveTextContent("Starting Kiroshi")
-			await expect(statusOf(screen)).toHaveClass("sr-only")
+			await expect(within(screen).getByRole("status")).toHaveTextContent(
+				"Starting Kiroshi",
+			)
+			await expect(within(screen).getByRole("status")).toHaveClass("sr-only")
 
 			const colourLayers = slotsIn(screen, "app-boot-colour")
 			await expect(colourLayers).toHaveLength(coloured)
@@ -304,7 +302,9 @@ const provesExitAtMount = async ({ args, canvasElement }: ExitContext) => {
 	await waitFor(() => expect(args.onExitComplete).toHaveBeenCalledOnce())
 	await expect(screen.dataset.phase).toBe("leaving")
 	await expect(shownHexagonsOf(screen)).toHaveLength(0)
-	await expect(statusOf(screen)).toHaveTextContent("Starting Kiroshi")
+	await expect(within(screen).getByRole("status")).toHaveTextContent(
+		"Starting Kiroshi",
+	)
 }
 
 const describedAs = (story: string) => ({ docs: { description: { story } } })
