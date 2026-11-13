@@ -417,9 +417,7 @@ describe("the sidebar toggle", () => {
 	})
 
 	it("opens collapsed with no expanded sidebar ever drawn when the sidebar was left collapsed", async () => {
-		writeMirror({ ...readMirror(), sidebarCollapsed: true })
-
-		await mountApp()
+		await mountCollapsed()
 
 		expect(slotOf("sidebar-peek-edge")).not.toBeNull()
 		expect(harness.mounts.expandedSidebar).toBe(0)

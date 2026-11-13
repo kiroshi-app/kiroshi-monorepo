@@ -202,11 +202,11 @@ export const useRosterLists = ({
 	)
 
 	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
-	const isSkeletonShown = rosterSkeletonPhase === "skeleton"
 	const expandedListStatus = rosterListStatusOf({
 		hasFailedToLoad: roster.state.hasFailedToLoad,
 		isEmpty: rosterConversations.length === 0,
-		isSkeletonShown: isSkeletonShown || roster.state.isRosterPending,
+		isSkeletonShown:
+			rosterSkeletonPhase === "skeleton" || roster.state.isRosterPending,
 	})
 
 	return {
