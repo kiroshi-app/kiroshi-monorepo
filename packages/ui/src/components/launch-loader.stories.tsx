@@ -295,7 +295,7 @@ export const Cluster = meta.story({
 export const Ring = meta.story({
 	args: { direction: "ring", agents: 8 },
 	parameters: describedAs(
-		"One hexagon per agent on a circle, nothing in the centre. Entrance: the cells burst from the centre to their place, clockwise, while the ring swirls a quarter turn. Loop: a comet runs around the ring every 1.6s, its head at full ink, its tail fading. Once per lap one cell is lit in its agent colour as the head passes it. Exit: the ring collapses into its centre with a quarter turn and fades in 300ms.",
+		"One hexagon per agent on a circle, nothing in the centre, completed with ink cells under six agents so the ring stays a ring. Entrance: the cells burst from the centre to their place, clockwise, while the ring swirls a quarter turn. Loop: a comet runs around the ring every 1.6s, its head at full ink, its tail fading. Once per lap one cell is lit in its agent colour as the head passes it. Exit: the ring collapses into its centre with a quarter turn and fades in 300ms.",
 	),
 	play: proves(RING_PROOF),
 })
@@ -303,7 +303,7 @@ export const Ring = meta.story({
 export const Hive = meta.story({
 	args: { direction: "hive", agents: 7 },
 	parameters: describedAs(
-		"A honeycomb, one cell per agent, filled in a spiral from the centre. Entrance: the cells grow out of the centre one after the other. Loop: a ripple leaves the centre every 2.4s and dips each ring in turn. After each ripple one cell comes back in its agent colour, and the next ripple washes it out. Exit: the comb bursts apart and fades in 300ms.",
+		"A honeycomb, one cell per agent, filled in a spiral from the centre and completed with ink cells under seven agents so the flower is always whole. Entrance: the cells grow out of the centre one after the other. Loop: a ripple leaves the centre every 2.4s and dips each ring in turn. After each ripple one cell comes back in its agent colour, and the next ripple washes it out. Exit: the comb bursts apart and fades in 300ms.",
 	),
 	play: proves(HIVE_PROOF),
 })
@@ -311,7 +311,7 @@ export const Hive = meta.story({
 export const Orbit = meta.story({
 	args: { direction: "orbit", agents: 5 },
 	parameters: describedAs(
-		"The Kiroshi hexagon in the centre, one small satellite per agent on three lanes, the outer lanes slower. Entrance: the core settles in, then the satellites spiral out of it. Loop: every lane turns at its own steady pace, so the picture never repeats on the eye. One satellite at a time takes its agent colour for 2s. Exit: the satellites fall back into the core, which opens and fades, 400ms in all.",
+		"The Kiroshi hexagon in the centre, one small satellite per agent on three lanes, the outer lanes slower, never fewer than three satellites. Entrance: the core settles in, then the satellites spiral out of it. Loop: every lane turns at its own steady pace, so the picture never repeats on the eye. One satellite at a time takes its agent colour for 2s. Exit: the satellites fall back into the core, which opens and fades, 400ms in all.",
 	),
 	play: proves(ORBIT_PROOF),
 })
