@@ -42,6 +42,10 @@ import {
 	type BoardCanvasProps,
 } from "@workspace/ui/components/board-canvas"
 import type {
+	BoardCommentThread,
+	BoardOpenCommentThread,
+} from "@workspace/ui/components/board-comment-layer"
+import type {
 	BoardConnector,
 	BoardIntent,
 	BoardItem,
@@ -53,6 +57,23 @@ import type {
 	BoardView,
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
+import {
+	AGENT_REPLY,
+	COMMENT_COUNTS,
+	COMMENT_PARTICIPANTS,
+	FIRST_COMMENT,
+	JUNIPER,
+	LENA,
+	MEMBER_REPLY,
+	OPEN_THREADS,
+	RESOLVED_THREADS,
+	STEVE,
+} from "@workspace/ui/components/library-comments.fixtures"
+import {
+	LibraryCommentsList,
+	type LibraryCommentsTab,
+} from "@workspace/ui/components/library-comments-list"
+import { LibraryDocumentBar } from "@workspace/ui/components/library-document-view"
 
 const COLUMNS = 24
 const ROWS = 20
@@ -317,7 +338,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes.",
+					"The board of a Space in its own tab: a dot grid the board slides over, the objects it mounts through `renderObject`, and the zoom control at the bottom end corner. The viewport is controlled: two-finger scroll, the mouse wheel and the arrow keys with nothing selected pan, a pinch zooms around the pointer, the buttons step the zoom around the centre, and every move goes out through `onViewportChange`. Only the objects inside the visible area plus a margin are mounted. A press or Tab selects an object and draws its frame and corner handles in the Space colour, a selected shape gets its style bar above it, and every move, resize, text edit, style pick or delete goes out through `onIntent` as a `BoardIntent`: the canvas never changes the board itself. Connectors are drawn by the canvas from the live rects of their ends, Straight or Elbow: with `isConnecting` on, a hovered object shows its outline and four anchors, a drag from one anchor to another object's anchor sends a connect intent, and the flyout picks the kind of the next connector, Elbow until changed, or of the selected one. The tool dock sits centred at the bottom with the Library picker above it, a Library tile dragged onto the board emits `onLibraryItemDrop` with the board point, a link, an image or files pasted on the focused board emit `onPaste` with the centre of the view and the object whose id it returns gets selected, and files dragged in from the desktop show the drop target and emit `onDropFiles` where they land, and a link dragged in shows it too and emits `onDropUrl` with the first link of the list and the board point whatever its scheme, the app deciding what it becomes. Comments come in through props: `commentThreads` draws one pin per open thread, on its node or on its board point, a click on a pin sends `onOpenCommentThread`, `openCommentThread` opens the thread card, `commentDraft` the composer, and `isCommentMode` shows the hint and the pin cursor, rings the hovered object and turns a click into `onStartComment` with a node id or a board point, Esc from the board or the page sending `onLeaveCommentMode`. A composer takes the keyboard focus when it opens and each time its anchor changes.",
 			},
 		},
 	},
@@ -4525,5 +4546,747 @@ export const ToolPickedWhileSelected = meta.story({
 		await pickTool(canvasElement, "Select")
 		await pressBoard(canvasElement, EMPTY_AFTER_PAN)
 		await expect(selectedOptions(canvasElement)).toEqual([])
+	},
+})
+
+const SESSION: BoardItem = {
+	id: "session",
+	kind: "sticky",
+	position: { x: 80, y: 40 },
+	size: { width: 160, height: 160 },
+	zOrder: 1,
+	text: "Second session ends 16:30",
+}
+
+const BOAT: BoardItem = {
+	id: "boat",
+	kind: "shape",
+	position: { x: 400, y: 40 },
+	size: { width: 200, height: 96 },
+	zOrder: 2,
+	text: "Boat to the island",
+	style: { shape: "rounded-rectangle", fill: "surface" },
+}
+
+const DINNER: BoardItem = {
+	id: "dinner",
+	kind: "sticky",
+	position: { x: 640, y: 220 },
+	size: { width: 160, height: 160 },
+	zOrder: 3,
+	text: "Dinner on the terrace at 20:00",
+}
+
+const OFFSITE_BOARD = { objects: [SESSION, BOAT, DINNER] }
+const OFFSITE_BOARD_ITEM = { name: "Lisbon offsite" }
+const MARKET_POINT = { x: 100, y: 330 }
+const EMPTY_POINT = { x: 860, y: 60 }
+const BOAT_PIN_POINT = { x: 590, y: 50 }
+const BOAT_ANCHOR_LINE = "On “Boat to the island”"
+const PIN_SIZE = 32
+const PIN_INSET = 10
+const RING_OUTSET = 6
+const BOAT_RING_RADIUS = "18px"
+
+const DINNER_THREAD: BoardCommentThread = {
+	id: "thread-dinner",
+	author: LENA,
+	anchor: DINNER.id,
+	lastPoint: { x: 790, y: 230 },
+}
+
+const MARKET_THREAD: BoardCommentThread = {
+	id: "thread-market",
+	author: JUNIPER,
+	anchor: MARKET_POINT,
+}
+
+const BOAT_THREAD: BoardCommentThread = {
+	id: "thread-budget",
+	author: STEVE,
+	anchor: BOAT.id,
+	lastPoint: BOAT_PIN_POINT,
+}
+
+const OFFSITE_THREADS = [DINNER_THREAD, MARKET_THREAD, BOAT_THREAD]
+const LISTED_THREADS = { open: OPEN_THREADS, resolved: RESOLVED_THREADS }
+
+const OPEN_BOAT_THREAD: BoardOpenCommentThread = {
+	id: BOAT_THREAD.id,
+	comments: [FIRST_COMMENT, MEMBER_REPLY, AGENT_REPLY],
+	participants: COMMENT_PARTICIPANTS,
+	reply: "",
+	onReplyChange: fn(),
+	onReply: fn(),
+	onResolve: fn(),
+	onReopen: fn(),
+	onMore: fn(),
+	onClose: fn(),
+}
+
+const COMMENT_DRAFT = {
+	author: STEVE,
+	value: "",
+	onValueChange: fn(),
+	onSubmit: fn(),
+	participants: COMMENT_PARTICIPANTS,
+}
+
+const CommentedBoard = ({
+	isCommentMode: isInitiallyOn = false,
+	onLeaveCommentMode,
+	...props
+}: BoardCanvasProps) => {
+	const [isCommentMode, setCommentMode] = useState(isInitiallyOn)
+	const [tab, setTab] = useState<LibraryCommentsTab>("open")
+
+	return (
+		<>
+			<LibraryDocumentBar
+				comments={{
+					counts: COMMENT_COUNTS,
+					isCommentMode,
+					onCommentModeChange: setCommentMode,
+					list: (
+						<LibraryCommentsList
+							counts={COMMENT_COUNTS}
+							onOpenThread={(id) => props.onOpenCommentThread?.(id)}
+							onTabChange={setTab}
+							tab={tab}
+							threads={LISTED_THREADS[tab]}
+						/>
+					),
+				}}
+				item={OFFSITE_BOARD_ITEM}
+				onBack={() => undefined}
+			/>
+			<ControlledBoard
+				{...props}
+				isCommentMode={isCommentMode}
+				onLeaveCommentMode={() => {
+					setCommentMode(false)
+					onLeaveCommentMode?.()
+				}}
+			/>
+		</>
+	)
+}
+
+const COMMENT_ARGS = {
+	view: OFFSITE_BOARD,
+	renderObject: (object: BoardItem) => <BoardObjectView object={object} />,
+	commentThreads: OFFSITE_THREADS,
+	onOpenCommentThread: fn(),
+	onStartComment: fn(),
+	onLeaveCommentMode: fn(),
+}
+
+const commentDocs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+const renderCommentedBoard = (args: BoardCanvasProps) => (
+	<CommentedBoard {...args} />
+)
+
+const commentMarkOf = (root: HTMLElement, threadId: string) => {
+	const mark = slotsIn(root, "board-comment-mark").find(
+		(candidate) => candidate.dataset.threadId === threadId,
+	)
+	if (!mark) throw new Error(`No pin is drawn for ${threadId}`)
+	return mark
+}
+
+const pinIn = (mark: HTMLElement) => slotIn(mark, "library-comment-pin")
+
+const zoomOf = (root: HTMLElement) =>
+	Number.parseInt(slotIn(root, "board-zoom-level").textContent ?? "", 10) / 100
+
+const expectPinTailAt = async (mark: HTMLElement, at: BoardClientPoint) => {
+	const box = mark.getBoundingClientRect()
+	await expect([box.width, box.height]).toEqual([PIN_SIZE, PIN_SIZE])
+	await expect(box.left).toBeCloseTo(at.clientX, 1)
+	await expect(box.bottom).toBeCloseTo(at.clientY, 1)
+}
+
+const expectPinOnNode = async (
+	root: HTMLElement,
+	mark: HTMLElement,
+	id: string,
+) => {
+	const node = (objectNode(root, id) as HTMLElement).getBoundingClientRect()
+	const inset = PIN_INSET * zoomOf(root)
+	await expectPinTailAt(mark, {
+		clientX: node.right - inset,
+		clientY: node.top + inset,
+	})
+}
+
+const boardPointOnScreen = (root: HTMLElement, point: BoardPoint) =>
+	boardAt(root, AT_ORIGIN.offset.x + point.x, AT_ORIGIN.offset.y + point.y)
+
+const expectRingAround = async (
+	root: HTMLElement,
+	id: string,
+	radius: string,
+) => {
+	const rings = slotsIn(root, "board-comment-ring")
+	await expect(rings).toHaveLength(1)
+	const [ring] = rings as [HTMLElement]
+	const box = ring.getBoundingClientRect()
+	const node = (objectNode(root, id) as HTMLElement).getBoundingClientRect()
+	await expect(box.left).toBeCloseTo(node.left - RING_OUTSET, 1)
+	await expect(box.top).toBeCloseTo(node.top - RING_OUTSET, 1)
+	await expect(box.right).toBeCloseTo(node.right + RING_OUTSET, 1)
+	await expect(box.bottom).toBeCloseTo(node.bottom + RING_OUTSET, 1)
+	const style = getComputedStyle(ring)
+	await expect(style.borderTopWidth).toBe("2px")
+	await expect(style.borderTopColor).toBe(resolvedRootColor("--primary"))
+	await waitFor(() => expect(style.borderTopLeftRadius).toBe(radius))
+	return box
+}
+
+const expectTabLandsIn = async (from: HTMLElement, card: HTMLElement) => {
+	from.focus()
+	await userEvent.tab()
+	const focused = document.activeElement as HTMLElement
+	await expect(card).toContainElement(focused)
+	return focused
+}
+
+const expectComposerFieldFocused = async (root: HTMLElement) => {
+	const field = slotIn(
+		slotIn(root, "library-comment-composer"),
+		"library-comment-field",
+	).querySelector("textarea")
+	await expect(field).toHaveFocus()
+}
+
+const expectComposerBesidePin = async (
+	root: HTMLElement,
+	anchorLine: string,
+) => {
+	const mark = slotIn(root, "board-comment-draft-mark")
+	const pin = pinIn(mark)
+	await expect(pin).toHaveAttribute("data-state", "selected")
+	const composer = slotIn(root, "library-comment-composer")
+	const box = composer.getBoundingClientRect()
+	const pinBox = mark.getBoundingClientRect()
+	await expect(box.width).toBe(320)
+	await expect(box.left).toBeCloseTo(pinBox.right + 8, 1)
+	await expect(box.top).toBeCloseTo(pinBox.top, 1)
+	await expect(within(composer).getByText(anchorLine)).toBeVisible()
+	const field = await expectTabLandsIn(pin, composer)
+	await expect(field).toHaveAttribute("placeholder", "Comment, @ to mention")
+	return mark
+}
+
+const expectHintAboveDock = async (root: HTMLElement) => {
+	const hint = slotIn(root, "library-comment-mode-hint").getBoundingClientRect()
+	const dock = slotIn(root, "board-dock").getBoundingClientRect()
+	const board = slotIn(root, "board-canvas").getBoundingClientRect()
+	await expect(dock.top - hint.bottom).toBeCloseTo(64, 1)
+	await expect(hint.left + hint.width / 2).toBeCloseTo(
+		board.left + board.width / 2,
+		0,
+	)
+}
+
+export const CommentPins = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: COMMENT_ARGS,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Board 1: three open threads, one on the Dinner sticky, one on the Boat shape and one on a free point of the board, under the Library bar with its counter and its Comment button. Check each pin at 32px with its tail 10 inside the top right corner of its object, or on its board point, staying 32px and on its anchor at 75% and after a pan, a click or Enter on a pin sending its thread id and selecting nothing, the focus ring from the keyboard, and no colour transition.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const board = slotIn(canvasElement, "board-canvas")
+		const dinner = commentMarkOf(canvasElement, DINNER_THREAD.id)
+		const market = commentMarkOf(canvasElement, MARKET_THREAD.id)
+		const boat = commentMarkOf(canvasElement, BOAT_THREAD.id)
+
+		await expect(slotsIn(canvasElement, "board-comment-mark")).toHaveLength(3)
+		await expect(slotsIn(canvasElement, "board-comment-ring")).toEqual([])
+		await expect(pinIn(dinner)).toHaveAttribute("data-state", "rest")
+		await expectPinOnNode(canvasElement, dinner, DINNER.id)
+		await expectPinOnNode(canvasElement, boat, BOAT.id)
+		await expectPinTailAt(
+			market,
+			boardPointOnScreen(canvasElement, MARKET_POINT),
+		)
+
+		await userEvent.click(
+			within(canvasElement).getByRole("button", { name: "Zoom out" }),
+		)
+		await waitFor(() => expect(zoomOf(canvasElement)).toBe(0.75))
+		await expectPinOnNode(canvasElement, dinner, DINNER.id)
+		await expectPinOnNode(canvasElement, boat, BOAT.id)
+
+		const boatBefore = boat.getBoundingClientRect()
+		wheel(board, { deltaX: 40, deltaY: 30 })
+		await waitFor(() =>
+			expect(boat.getBoundingClientRect().left).toBeCloseTo(
+				boatBefore.left - 40,
+				1,
+			),
+		)
+		await expectPinOnNode(canvasElement, dinner, DINNER.id)
+		await expectPinOnNode(canvasElement, boat, BOAT.id)
+
+		await userEvent.click(pinIn(dinner))
+		await expect(args.onOpenCommentThread).toHaveBeenLastCalledWith(
+			DINNER_THREAD.id,
+		)
+		await expect(selectedOptions(canvasElement)).toEqual([])
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		const lastObject = objectNode(canvasElement, DINNER.id) as HTMLElement
+		lastObject.focus()
+		await userEvent.tab()
+		const firstPin = pinIn(dinner)
+		await expect(firstPin).toHaveFocus()
+		await expect(firstPin.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(firstPin).outlineStyle).toBe("solid")
+		await expect(getComputedStyle(firstPin).outlineWidth).toBe("2px")
+		await userEvent.tab()
+		await expect(pinIn(market)).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onOpenCommentThread).toHaveBeenLastCalledWith(
+			MARKET_THREAD.id,
+		)
+
+		await expect(colourTransitionsOf(firstPin)).toEqual([])
+	},
+})
+
+export const CommentPinsDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentPins.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentPins in the dark theme: the same three pins on the dark pin ground, the same geometry at 75% and after a pan.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentPins.input.play?.(context)
+	},
+})
+
+export const CommentMode = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...COMMENT_ARGS, isCommentMode: true },
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Board 2: comment mode on, the Comment button of the bar pressed. Check the hint pill centred 64 above the dock, the dock unchanged and without a Comment tool, the 20px pin cursor in the Space colour with its tail on the pointer in place of the system cursor, the ring 6 outside a hovered object, 2 wide, in the Space colour and concentric with the object, a press and a drag on an object selecting and moving nothing, a click on an object sending its id, a click on the empty board sending the board point, Enter on a focused object sending its id, a creation tool creating nothing, and Esc leaving the mode from the board or the page, not from the bar.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		const board = slotIn(canvasElement, "board-canvas")
+		const surface = slotIn(canvasElement, "board-comment-surface")
+		const dock = slotIn(canvasElement, "board-dock")
+		const boat = objectNode(canvasElement, BOAT.id) as HTMLElement
+		const overBoat = centreOf(boat)
+		const commentButton = canvas.getByRole("button", { name: "Comment" })
+
+		await expect(commentButton).toHaveAttribute("aria-pressed", "true")
+		await expectHintAboveDock(canvasElement)
+		await expect(sizeOf(dock)).toEqual(LOADED_DOCK_SIZE)
+		await expect(dock).not.toContainElement(commentButton)
+		const dockInCommentMode = dock.outerHTML
+		await expect(getComputedStyle(surface).cursor).toBe("none")
+		await expect(slotsIn(canvasElement, "board-comment-ring")).toEqual([])
+
+		await expect(
+			document.elementFromPoint(overBoat.clientX, overBoat.clientY),
+		).toBe(surface)
+		pointerAt("pointermove", surface, overBoat)
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "board-comment-ring")).toHaveLength(1),
+		)
+		await expectRingAround(canvasElement, BOAT.id, BOAT_RING_RADIUS)
+		const cursor = slotIn(canvasElement, "board-comment-cursor")
+		const cursorBox = cursor.getBoundingClientRect()
+		await expect([cursorBox.width, cursorBox.height]).toEqual([20, 20])
+		await expect(cursorBox.left).toBeCloseTo(overBoat.clientX, 1)
+		await expect(cursorBox.bottom).toBeCloseTo(overBoat.clientY, 1)
+		await expect(getComputedStyle(cursor).backgroundColor).toBe(
+			resolvedRootColor("--primary"),
+		)
+		await expect(getComputedStyle(cursor).borderBottomLeftRadius).toBe("2px")
+
+		const boatBefore = boat.getBoundingClientRect()
+		const dragged = shifted(overBoat, { x: 80, y: 40 })
+		pointerAt("pointerdown", surface, overBoat)
+		pointerAt("pointermove", document, dragged)
+		pointerAt("pointerup", document, dragged)
+		await expect(boat.getBoundingClientRect()).toEqual(boatBefore)
+		await expect(selectedOptions(canvasElement)).toEqual([])
+
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: overBoat,
+		})
+		await expect(args.onStartComment).toHaveBeenLastCalledWith(BOAT.id)
+
+		const onEmptyBoard = boardPointOnScreen(canvasElement, EMPTY_POINT)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: onEmptyBoard,
+		})
+		await expect(args.onStartComment).toHaveBeenLastCalledWith(EMPTY_POINT)
+		await expect(args.onStartComment).toHaveBeenCalledTimes(2)
+		await expect(selectedOptions(canvasElement)).toEqual([])
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		board.focus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "library-comment-mode-hint")).toEqual([]),
+		)
+		await expect(slotsIn(canvasElement, "board-comment-surface")).toEqual([])
+		await expect(commentButton).toHaveAttribute("aria-pressed", "false")
+		await expect(dock.outerHTML).toBe(dockInCommentMode)
+
+		await userEvent.click(commentButton)
+		await expectHintAboveDock(canvasElement)
+		await pickTool(canvasElement, "Sticky note")
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: slotIn(canvasElement, "board-comment-surface"),
+			coords: onEmptyBoard,
+		})
+		await expect(args.onStartComment).toHaveBeenCalledTimes(3)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		boat.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onStartComment).toHaveBeenLastCalledWith(BOAT.id)
+		await expect(slotsIn(canvasElement, "board-text-editor")).toEqual([])
+		commentButton.focus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+		commentButton.blur()
+		await expect(document.body).toHaveFocus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const CommentModeDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentMode.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentMode in the dark theme: the hint pill, the pin cursor and the hover ring in the dark Space colour, the same intents.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentMode.input.play?.(context)
+	},
+})
+
+export const CommentDraftOnNode = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		isCommentMode: true,
+		commentDraft: { ...COMMENT_DRAFT, anchor: BOAT.id },
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Board 3: a comment being written on the Boat shape. Check the ring kept around the shape, the new pin in its selected state on the corner of the shape, the composer 320 wide, 8 right of the pin with its top on the pin top, its line naming the shape in curly quotes, the field holding the focus as soon as the composer opens so typing writes into it, Tab going from the pin into the field, and Esc from the field leaving comment mode.",
+	),
+	play: async ({ canvasElement, args }) => {
+		await expectComposerFieldFocused(canvasElement)
+		await userEvent.keyboard("a")
+		await expect(args.commentDraft?.onValueChange).toHaveBeenLastCalledWith("a")
+		await expectRingAround(canvasElement, BOAT.id, BOAT_RING_RADIUS)
+		const mark = await expectComposerBesidePin(canvasElement, BOAT_ANCHOR_LINE)
+		await expectPinOnNode(canvasElement, mark, BOAT.id)
+		await expect(slotsIn(canvasElement, "board-comment-mark")).toHaveLength(3)
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const CommentDraftOnNodeDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentDraftOnNode.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentDraftOnNode in the dark theme: the ring in the dark Space colour and the composer on the dark card ground, at the same placement.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentDraftOnNode.input.play?.(context)
+	},
+})
+
+export const CommentDraftOnBoard = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		isCommentMode: true,
+		commentDraft: { ...COMMENT_DRAFT, anchor: EMPTY_POINT },
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Board 4: a comment being written on a free point. Check that nothing is ringed, the new pin in its selected state with its tail on the point, the composer 320 wide, 8 right of the pin with its top on the pin top, its line reading On the board, and the field holding the focus as soon as the composer opens.",
+	),
+	play: async ({ canvasElement }) => {
+		await expectComposerFieldFocused(canvasElement)
+		await expect(slotsIn(canvasElement, "board-comment-ring")).toEqual([])
+		const mark = await expectComposerBesidePin(canvasElement, "On the board")
+		await expectPinTailAt(mark, boardPointOnScreen(canvasElement, EMPTY_POINT))
+	},
+})
+
+export const CommentDraftOnBoardDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentDraftOnBoard.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentDraftOnBoard in the dark theme: the same pin and composer on the dark grounds.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentDraftOnBoard.input.play?.(context)
+	},
+})
+
+const DraftFollowingClicks = ({
+	commentDraft,
+	onStartComment,
+	...props
+}: BoardCanvasProps) => {
+	const [anchor, setAnchor] = useState(commentDraft?.anchor)
+
+	return (
+		<CommentedBoard
+			{...props}
+			commentDraft={
+				commentDraft && anchor ? { ...commentDraft, anchor } : undefined
+			}
+			onStartComment={(next) => {
+				setAnchor(next)
+				onStartComment?.(next)
+			}}
+		/>
+	)
+}
+
+const expectComposerOn = async (root: HTMLElement, anchorLine: string) => {
+	await waitFor(() =>
+		expect(
+			within(slotIn(root, "library-comment-composer")).getByText(anchorLine),
+		).toBeVisible(),
+	)
+	await expectComposerFieldFocused(root)
+}
+
+export const CommentDraftMovesWithAnchor = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: CommentDraftOnNode.input.args,
+	render: (args) => <DraftFollowingClicks {...args} />,
+	parameters: commentDocs(
+		"A comment being written on the Boat shape, then a click on the Dinner sticky and a click on the empty board, each moving the draft. Check the composer following to the new anchor with its line renamed, and its field holding the focus again each time, so typing writes into it without a click or a Tab.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const surface = slotIn(canvasElement, "board-comment-surface")
+		const dinner = objectNode(canvasElement, DINNER.id) as HTMLElement
+
+		await expectComposerOn(canvasElement, BOAT_ANCHOR_LINE)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: centreOf(dinner),
+		})
+		await expectComposerOn(canvasElement, "On “Dinner on the terrace at 20:00”")
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: boardPointOnScreen(canvasElement, EMPTY_POINT),
+		})
+		await expectComposerOn(canvasElement, "On the board")
+		await userEvent.keyboard("a")
+		await expect(args.commentDraft?.onValueChange).toHaveBeenLastCalledWith("a")
+	},
+})
+
+export const CommentModeSurvivesListEscape = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		isCommentMode: true,
+		openCommentThread: OPEN_BOAT_THREAD,
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Comment mode on, the comments list opened from the counter of the bar, then Esc. Check the list closing while the hint stays and the Comment button stays pressed, the focus back on the counter, outside the board, and a second Esc there doing nothing, then Esc from the reply field of the open thread card leaving the mode.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const canvas = within(canvasElement)
+		const counter = canvas.getByRole("button", { name: "3 open comments" })
+		const commentButton = canvas.getByRole("button", { name: "Comment" })
+
+		await userEvent.click(counter)
+		await screen.findByRole("tablist", { name: "Comments" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(screen.queryByRole("tablist", { name: "Comments" })).toBeNull(),
+		)
+		await expect(counter).toHaveAttribute("aria-expanded", "false")
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).not.toHaveBeenCalled()
+		await expect(commentButton).toHaveAttribute("aria-pressed", "true")
+		await expect(
+			slotIn(canvasElement, "library-comment-mode-hint"),
+		).toBeVisible()
+
+		const card = slotIn(canvasElement, "library-comment-thread")
+		within(card).getByPlaceholderText("Reply, @ to mention").focus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onLeaveCommentMode).toHaveBeenCalledTimes(1)
+		await expect(commentButton).toHaveAttribute("aria-pressed", "false")
+	},
+})
+
+const expectThreadCardNamed = async (root: HTMLElement, anchorLine: string) => {
+	const boat = commentMarkOf(root, BOAT_THREAD.id)
+	await expect(pinIn(boat)).toHaveAttribute("data-state", "selected")
+	await expect(pinIn(commentMarkOf(root, DINNER_THREAD.id))).toHaveAttribute(
+		"data-state",
+		"rest",
+	)
+	const card = slotIn(root, "library-comment-thread")
+	await expect(card).toHaveAccessibleName(anchorLine)
+	await expect(card.getBoundingClientRect().width).toBe(360)
+	const resolve = await expectTabLandsIn(pinIn(boat), card)
+	await expect(resolve).toHaveAccessibleName("Resolve")
+	await expect(resolve.matches(":focus-visible")).toBe(true)
+	await userEvent.click(within(card).getByRole("button", { name: "Close" }))
+	return { card: card.getBoundingClientRect(), pin: boat }
+}
+
+export const CommentThreadOpen = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: { ...COMMENT_ARGS, openCommentThread: OPEN_BOAT_THREAD },
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Board 5: the thread on the Boat shape open. Check its pin in the selected state and the two others at rest, the ring around the shape, the thread card 20 under the ring with its right edge on the ring right edge, named after the shape in curly quotes, Tab going from the pin into the card, and Close calling its callback.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const ring = await expectRingAround(
+			canvasElement,
+			BOAT.id,
+			BOAT_RING_RADIUS,
+		)
+		const { card, pin } = await expectThreadCardNamed(
+			canvasElement,
+			BOAT_ANCHOR_LINE,
+		)
+		await expectPinOnNode(canvasElement, pin, BOAT.id)
+		await expect(card.top).toBeCloseTo(ring.bottom + 20, 1)
+		await expect(card.right).toBeCloseTo(ring.right, 1)
+		await expect(args.openCommentThread?.onClose).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const CommentThreadOpenDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentThreadOpen.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentThreadOpen in the dark theme: the selected pin, the ring in the dark Space colour and the thread card on the dark card ground, at the same placement.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentThreadOpen.input.play?.(context)
+	},
+})
+
+export const CommentOnGoneShape = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		commentThreads: [
+			DINNER_THREAD,
+			MARKET_THREAD,
+			{ ...BOAT_THREAD, anchor: "boat-first-draft" },
+		],
+		openCommentThread: OPEN_BOAT_THREAD,
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"Artboard Edge 2: the thread is on a shape that left the board. Check its pin staying on the last board point it had, here over the Boat shape drawn since, nothing ringed, the thread card left of the pin with its top on the pin top, and its line saying the shape is no longer on the board.",
+	),
+	play: async ({ canvasElement }) => {
+		await expect(slotsIn(canvasElement, "board-comment-ring")).toEqual([])
+		const { card, pin } = await expectThreadCardNamed(
+			canvasElement,
+			"On a shape that’s no longer on the board",
+		)
+		await expectPinTailAt(
+			pin,
+			boardPointOnScreen(canvasElement, BOAT_PIN_POINT),
+		)
+		const pinBox = pin.getBoundingClientRect()
+		await expect(card.right).toBeCloseTo(pinBox.left - 8, 1)
+		await expect(card.top).toBeCloseTo(pinBox.top, 1)
+	},
+})
+
+export const CommentOnGoneShapeDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: CommentOnGoneShape.input.args,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"CommentOnGoneShape in the dark theme: the pin on its last point and the thread card left of it, on the dark grounds.",
+	),
+	play: async (context) => {
+		await expectDarkSurface(context.canvasElement)
+		await CommentOnGoneShape.input.play?.(context)
+	},
+})
+
+export const CommentPinFollowsMovedNode = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: COMMENT_ARGS,
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"The Dinner sticky dragged with its thread on it. Check the pin riding the corner of the sticky while the pointer is still down, before any move intent, and sitting on the same corner once the move is sent.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const dinner = objectNode(canvasElement, DINNER.id) as HTMLElement
+		const mark = commentMarkOf(canvasElement, DINNER_THREAD.id)
+		const before = dinner.getBoundingClientRect()
+		const from = centreOf(dinner)
+		const to = shifted(from, { x: -120, y: 60 })
+
+		await expectPinOnNode(canvasElement, mark, DINNER.id)
+		pointerAt("pointerdown", dinner, from)
+		pointerAt("pointermove", document, to)
+		await waitFor(() =>
+			expect(dinner.getBoundingClientRect().x).toBeCloseTo(before.x - 120, 0),
+		)
+		await expectPinOnNode(canvasElement, mark, DINNER.id)
+		await expect(args.onIntent).not.toHaveBeenCalled()
+
+		pointerAt("pointerup", document, to)
+		await waitFor(() =>
+			expect(args.onIntent).toHaveBeenCalledWith({
+				type: "move",
+				id: DINNER.id,
+				position: { x: DINNER.position.x - 120, y: DINNER.position.y + 60 },
+			}),
+		)
+		await expectPinOnNode(canvasElement, mark, DINNER.id)
+		await expect(dinner.getBoundingClientRect().x).toBeCloseTo(
+			before.x - 120,
+			0,
+		)
 	},
 })

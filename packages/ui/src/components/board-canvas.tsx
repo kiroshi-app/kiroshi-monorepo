@@ -36,6 +36,13 @@ import {
 } from "@workspace/ui/components/board/board-presence"
 import { BoardSelectionBar } from "@workspace/ui/components/board/board-selection-bar"
 import {
+	type BoardCommentDraft,
+	BoardCommentLayer,
+	type BoardCommentThread,
+	type BoardOpenCommentThread,
+} from "@workspace/ui/components/board-comment-layer"
+import type { BoardCommentAnchor } from "@workspace/ui/components/board-comments"
+import {
 	anchorOf,
 	arrowheadPathData,
 	BOARD_SIDES,
@@ -122,6 +129,13 @@ type BoardCanvasProps = {
 	onPointerMove?: (point: BoardPoint | null) => void
 	onSelectionChange?: (ids: readonly string[]) => void
 	isConnecting?: boolean
+	commentThreads?: readonly BoardCommentThread[]
+	openCommentThread?: BoardOpenCommentThread
+	commentDraft?: BoardCommentDraft
+	isCommentMode?: boolean
+	onOpenCommentThread?: (id: string) => void
+	onStartComment?: (anchor: BoardCommentAnchor) => void
+	onLeaveCommentMode?: () => void
 	className?: string
 }
 
@@ -1214,6 +1228,13 @@ const ReadyBoardCanvas = ({
 	onPointerMove,
 	onSelectionChange,
 	isConnecting: isConnectingByApp = false,
+	commentThreads = [],
+	openCommentThread,
+	commentDraft,
+	isCommentMode = false,
+	onOpenCommentThread,
+	onStartComment,
+	onLeaveCommentMode,
 	className,
 }: ReadyBoardCanvasProps) => {
 	const { t } = useTranslation("common")
@@ -1873,6 +1894,14 @@ const ReadyBoardCanvas = ({
 	const pickLibraryItem = (id: string) =>
 		onLibraryItemPick(id, boardPointAt(centreOf(size)))
 
+	const startCommentAt = (pointer: PointerPosition) => {
+		const board = canvas.current
+		if (!board) return
+		onStartComment?.(
+			objectIdUnder(pointer) ?? boardPointAt(pointerIn(board, pointer)),
+		)
+	}
+
 	const dragOver = (event: DragEvent<HTMLDivElement>) => {
 		const transfer = event.dataTransfer
 		if (!isBoardDrop(transfer)) return
@@ -1947,6 +1976,15 @@ const ReadyBoardCanvas = ({
 			target.closest('[data-slot="board-connector-flyout"]'),
 		)
 		if (event.metaKey || event.ctrlKey || stopArrowGesture.current) return
+		const isLeavingCommentMode = isCommentMode && event.key === "Escape"
+		if (isLeavingCommentMode) return
+		const focusedObjectId =
+			target.dataset.slot === "board-object" ? target.dataset.objectId : null
+		if (isCommentMode && event.key === "Enter" && focusedObjectId) {
+			event.preventDefault()
+			onStartComment?.(focusedObjectId)
+			return
+		}
 		if (selectedConnector && (isOnBoard || isInFlyout)) {
 			if (actOnConnector(event, selectedConnector)) event.preventDefault()
 			return
@@ -2337,6 +2375,21 @@ const ReadyBoardCanvas = ({
 					))}
 				</div>
 			) : null}
+			<BoardCommentLayer
+				board={canvas}
+				boundsOf={liveBounds}
+				draft={commentDraft}
+				isCommentMode={isCommentMode}
+				items={itemsById}
+				nodeIdUnder={objectIdUnder}
+				objectNodeOf={objectNodeOf}
+				onLeaveCommentMode={onLeaveCommentMode}
+				onOpenThread={onOpenCommentThread}
+				onStartCommentAt={startCommentAt}
+				openThread={openCommentThread}
+				threads={commentThreads}
+				viewport={viewport}
+			/>
 			{view.objects.length === 0 ? <BoardEmptyHint /> : null}
 			{fileDrag ? <BoardFileDropState {...fileDrag} /> : null}
 			<input

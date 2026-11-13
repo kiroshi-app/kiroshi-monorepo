@@ -758,6 +758,12 @@ const common = {
 			loading: "Loading the board…",
 			objects: "Board objects",
 		},
+		comments: {
+			anchor: {
+				node: "On “{{title}}”",
+				board: "On the board",
+			},
+		},
 		object: {
 			named: "{{kind}}: {{text}}",
 			editText: "Edit text",
