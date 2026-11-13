@@ -159,7 +159,7 @@ const LibraryImageSkeleton = () => {
 			</SkeletonIslands>
 			<div
 				aria-hidden="true"
-				className={cn("relative flex min-h-0 flex-1 flex-col", PULSE)}
+				className={cn("flex min-h-0 flex-1 flex-col", PULSE)}
 			>
 				<div className="flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
 					<SkeletonCircle className="mt-14 size-10" />
