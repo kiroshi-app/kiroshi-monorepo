@@ -81,6 +81,8 @@
 	--shadow-sidebar-peek: var(--sidebar-peek-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
+	--color-header-island-control-hover: var(--header-island-control-hover);
+	--color-header-island-control-pressed: var(--header-island-control-pressed);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);

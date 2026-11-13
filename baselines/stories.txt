@@ -1282,6 +1282,9 @@ layout-rowanatomy--in-roster
 layout-rowanatomy--with-blank-identifier
 layout-rowanatomy--with-identifier
 layout-screenlayout--column-width-in-wide-card
+layout-screenlayout--floating-header
+layout-screenlayout--floating-header-dark
+layout-screenlayout--floating-header-in-card
 layout-screenlayout--full-width-in-wide-card
 layout-screenlayout--header-and-content
 layout-screenlayout--header-content-and-footer
@@ -1921,6 +1924,14 @@ navigation-headeridentitybutton--long-content
 navigation-headeridentitybutton--preset-hue
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
+navigation-headerisland--at-rest
+navigation-headerisland--at-rest-dark
+navigation-headerisland--hover
+navigation-headerisland--hover-dark
+navigation-headerisland--keyboard-focus
+navigation-headerisland--keyboard-focus-dark
+navigation-headerisland--pressed
+navigation-headerisland--pressed-dark
 navigation-librarydocumentblockeditor--agents-writing
 navigation-librarydocumentblockeditor--autolink-shows-its-text
 navigation-librarydocumentblockeditor--backspace-at-the-start-turns-into-text

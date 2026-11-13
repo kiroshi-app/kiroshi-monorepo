@@ -1,15 +1,21 @@
 import type { ComponentProps } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	COLUMN_WIDTH_CAP,
 	probedStyleOf,
 	slotIn,
+	slotsIn,
 	tokenLengthOf,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ContentCard } from "@workspace/ui/components/content-card"
+import {
+	HeaderIsland,
+	HeaderIslandButton,
+} from "@workspace/ui/components/header-island"
+import { Icons } from "@workspace/ui/components/icons"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { Button } from "@workspace/ui/components/ui/button"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
@@ -183,5 +189,153 @@ export const FullWidthInWideCard = meta.story({
 
 		await expect(Math.round(column.width)).toBe(scroller.clientWidth)
 		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH_CAP)
+	},
+})
+
+const RELEASE_NOTES = Array.from(
+	{ length: 80 },
+	(_, row) =>
+		`Release note ${row + 1}: the column scrolls under the two islands.`,
+)
+
+const FLOATING = {
+	isHeaderFloating: true,
+	header: (
+		<>
+			<HeaderIsland>
+				<HeaderIslandButton aria-label="Sidebar">
+					<Icons.Sidebar />
+				</HeaderIslandButton>
+				<HeaderIslandButton aria-label="Search">
+					<Icons.Search />
+				</HeaderIslandButton>
+			</HeaderIsland>
+			<HeaderIsland>
+				<HeaderIslandButton aria-label="History">
+					<Icons.History />
+				</HeaderIslandButton>
+				<HeaderIslandButton aria-label="More">
+					<Icons.More />
+				</HeaderIslandButton>
+			</HeaderIsland>
+		</>
+	),
+	children: (
+		<>
+			{RELEASE_NOTES.map((note) => (
+				<p key={note}>{note}</p>
+			))}
+			<Button className="self-start" onClick={fn()} variant="outline">
+				Load older notes
+			</Button>
+		</>
+	),
+} satisfies ComponentProps<typeof ScreenLayout>
+
+const SCROLLED_AWAY = 240
+
+const fadesIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "screen-layout-fade")
+
+type FloatingPlayContext = {
+	canvasElement: HTMLElement
+}
+
+const expectFloatingHeader = async ({ canvasElement }: FloatingPlayContext) => {
+	const layout = layoutIn(canvasElement)
+	const scroller = slotIn(canvasElement, "screen-layout-scroller")
+	const frame = layout.getBoundingClientRect()
+	const [left, right] = slotsIn(canvasElement, "header-island").map((island) =>
+		island.getBoundingClientRect(),
+	)
+	const firstLine = within(canvasElement).getByText(RELEASE_NOTES[0])
+	const search = within(canvasElement).getByRole("button", { name: "Search" })
+	const searchBox = search.getBoundingClientRect()
+
+	await expect(scroller.scrollTop).toBe(0)
+	await expect(fadesIn(canvasElement)).toHaveLength(0)
+	await expect(scroller.getBoundingClientRect().top).toBe(frame.top)
+	await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+	await expect([left.top - frame.top, left.left - frame.left]).toEqual([8, 8])
+	await expect([right.top - frame.top, frame.right - right.right]).toEqual([
+		8, 8,
+	])
+	await expect(firstLine.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+		left.bottom,
+	)
+
+	scroller.scrollTo({ top: SCROLLED_AWAY })
+	const fade = await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
+	const fadeBox = fade.getBoundingClientRect()
+	const surface = getComputedStyle(layout).backgroundColor
+
+	await expect(scroller.scrollTop).toBe(SCROLLED_AWAY)
+	await expect(firstLine.getBoundingClientRect().top).toBeLessThan(left.top)
+	await expect([fadeBox.top, fadeBox.width, fadeBox.height]).toEqual([
+		frame.top,
+		frame.width,
+		64,
+	])
+	await expect(getComputedStyle(fade).backgroundImage).toContain(
+		`${surface} 50%, rgba(0, 0, 0, 0) 100%`,
+	)
+	await expect(fade).toHaveAttribute("aria-hidden", "true")
+	await expect(
+		scroller.contains(
+			document.elementFromPoint(frame.left + frame.width / 2, frame.top + 28),
+		),
+	).toBe(true)
+	await expect(
+		document.elementFromPoint(
+			searchBox.left + searchBox.width / 2,
+			searchBox.top + searchBox.height / 2,
+		),
+	).toBe(search)
+
+	scroller.scrollTo({ top: 0 })
+	await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(0))
+	scroller.scrollTo({ top: SCROLLED_AWAY })
+	await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(1))
+
+	return surface
+}
+
+export const FloatingHeader = meta.story({
+	args: FLOATING,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a screen whose header floats as two islands over its content. Check that the first line starts below the islands at scroll top with no fade, and that once scrolled the lines pass under the islands behind a 64px fade in the frame's own surface, which lets the pointer through to the content.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(await expectFloatingHeader({ canvasElement })).toBe(
+			probedStyleOf("bg-background", "backgroundColor", canvasElement),
+		)
+	},
+})
+
+export const FloatingHeaderDark = meta.story({
+	...FloatingHeader.input,
+	globals: { theme: "dark" },
+})
+
+export const FloatingHeaderInCard = meta.story({
+	args: FLOATING,
+	render: inWideCard,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a floating header on a screen that sits in the content card. Check that the fade wears the card surface instead of the window background, so no band shows over the card.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(await expectFloatingHeader({ canvasElement })).toBe(
+			probedStyleOf("bg-card", "backgroundColor", canvasElement),
+		)
 	},
 })
