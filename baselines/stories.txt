@@ -2081,6 +2081,7 @@ navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
 navigation-librarydocumenteditor--comment-mode-click-starts-block-comment
+navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-starts-passage-comment
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--doc-1-pins-at-rest
@@ -2127,6 +2128,7 @@ navigation-librarydocumenteditor--presence-people-only
 navigation-librarydocumenteditor--rename-focuses-title-from-handle
 navigation-librarydocumenteditor--round-trip-fixture
 navigation-librarydocumenteditor--save-failure
+navigation-librarydocumenteditor--shortcut-keycap-off-mac
 navigation-librarydocumenteditor--shortcut-starts-comment
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--task-toggle

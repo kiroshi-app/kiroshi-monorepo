@@ -31,6 +31,7 @@ import {
 	type LibraryBlockAnchor,
 } from "@workspace/ui/components/library-document-blocks"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
+import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryDocumentThread = {
@@ -161,6 +162,11 @@ const commentRunsIn = (
 		: []),
 ]
 
+const hasBlockDraft = (
+	{ draft }: LibraryDocumentCommentLayer,
+	blockId: string,
+) => draft?.anchor.blockId === blockId && !draft.anchor.passage
+
 const anchorLineOf = (
 	{ passage }: LibraryBlockAnchor,
 	t: TFunction<"common">,
@@ -235,7 +241,9 @@ const DraftCard = ({
 				participants={participants}
 				shortcut={
 					draft.target.origin === "shortcut"
-						? t("library.comments.composer.shortcut")
+						? t(
+								`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
+							)
 						: undefined
 				}
 				value={draft.value}
@@ -462,7 +470,6 @@ const LibraryDocumentBlockComments = ({
 
 	return (
 		<>
-			{isBlockDraft ? <LibraryDocumentBlockTint /> : null}
 			{blockThreads.length > 0 || isBlockDraft ? (
 				<div
 					className="absolute start-full -top-1 ms-4 flex gap-1"
@@ -516,6 +523,7 @@ export {
 	COMMENT_CARD_SLOT,
 	commentLayerOf,
 	commentRunsIn,
+	hasBlockDraft,
 	isCommentRun,
 	LibraryDocumentBlockComments,
 	LibraryDocumentBlockTint,

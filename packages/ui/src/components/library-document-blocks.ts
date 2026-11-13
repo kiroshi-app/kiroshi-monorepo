@@ -256,26 +256,55 @@ const foundAnchorIn = (
 	return at === -1 ? undefined : { blockId, passage: passageAt(text, at) }
 }
 
-const indexesOf = (text: string, part: string) => {
-	const found: number[] = []
-	for (let at = text.indexOf(part); at !== -1; at = text.indexOf(part, at + 1))
-		found.push(at)
-	return found
+const UNSHOWN_NODE =
+	/Mark$|^(?:TableDelimiter|LinkTitle|TaskMarker|Image|CodeInfo)$/
+
+const inkOffsetsOf = (text: string) => {
+	const offsets: number[] = []
+	for (let at = 0; at < text.length; at++)
+		if (/\S/.test(text[at])) offsets.push(at)
+	return offsets
+}
+
+const shownInkOffsetsOf = (source: string) => {
+	const isUnshown = new Array<boolean>(source.length).fill(false)
+	markdownLanguage.parser.parse(source).iterate({
+		enter: ({ name, from, to, node }) => {
+			const isWhole =
+				UNSHOWN_NODE.test(name) ||
+				(name === "URL" && node.parent?.name === "Link")
+			if (isWhole || name === "Escape")
+				isUnshown.fill(true, from, isWhole ? to : from + 1)
+			return !isWhole
+		},
+	})
+	return inkOffsetsOf(source).filter((at) => !isUnshown[at])
 }
 
 type ShownSelection = {
 	shown: string
 	start: number
-	text: string
+	end: number
 }
 
 const passageOfShown = (
 	source: string,
-	{ shown, start, text }: ShownSelection,
+	{ shown, start, end }: ShownSelection,
 ): LibraryBlockPassage | undefined => {
-	if (text.trim() === "") return undefined
-	const at = indexesOf(source, text)[indexesOf(shown, text).indexOf(start)]
-	return at === undefined ? undefined : passageAt(text, at)
+	const written = shownInkOffsetsOf(source)
+	const drawn = inkOffsetsOf(shown)
+	if (
+		drawn.length !== written.length ||
+		drawn.some((at, index) => shown[at] !== source[written[index]])
+	)
+		return undefined
+	const first = drawn.findIndex((at) => at >= start)
+	const last = drawn.findLastIndex((at) => at < end)
+	if (first === -1 || last < first) return undefined
+	return passageAt(
+		source.slice(written[first], written[last] + 1),
+		written[first],
+	)
 }
 
 const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
@@ -827,6 +856,7 @@ export {
 	passageOfShown,
 	relaid,
 	rowAfter,
+	type ShownSelection,
 	type SourceEdit,
 	serializeBlocks,
 	shiftedAcross,

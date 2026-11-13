@@ -540,7 +540,10 @@ const common = {
 				reply: "Répondre, @ pour mentionner",
 				mention: "Mentionner quelqu’un",
 				send: "Envoyer",
-				shortcut: "⌘⌥M",
+				shortcut: {
+					mac: "⌘⌥M",
+					other: "Ctrl+Alt+M",
+				},
 			},
 			mentions: {
 				label: "Mentionner",

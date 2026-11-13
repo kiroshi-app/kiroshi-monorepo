@@ -76,6 +76,7 @@ import {
 	parseBlocks,
 	passageOfShown,
 	relaid,
+	type ShownSelection,
 	type SourceEdit,
 	serializeBlocks,
 	shiftedAcross,
@@ -101,6 +102,7 @@ import {
 	COMMENT_CARD_SLOT,
 	commentLayerOf,
 	commentRunsIn,
+	hasBlockDraft,
 	isCommentRun,
 	LibraryDocumentBlockComments,
 	LibraryDocumentBlockTint,
@@ -186,6 +188,9 @@ const BLOCK_SLOT = '[data-slot="library-document-block"]'
 const COLUMN = '[data-slot="library-document-column"]'
 
 const BODY_SLOT = "library-document-block-body"
+
+const UNWRITTEN_TEXT =
+	'button, [aria-hidden="true"], [data-slot="markdown-link-host"]'
 
 const COMMENT_MODE_PASS = `button, a, input, textarea, [data-slot="${COMMENT_CARD_SLOT}"]`
 
@@ -349,24 +354,32 @@ const anchorOf = (frame: HTMLElement): SelectionToolbarAnchor => {
 	}
 }
 
-const shownPassageIn = (body: Element, source: string) => {
+const shownSelectionIn = (body: Element): ShownSelection | undefined => {
 	const selection = document.getSelection()
 	if (
 		!selection ||
 		selection.rangeCount === 0 ||
+		selection.isCollapsed ||
 		!body.contains(selection.anchorNode) ||
 		!body.contains(selection.focusNode)
 	)
 		return undefined
 	const range = selection.getRangeAt(0)
-	const lead = document.createRange()
-	lead.selectNodeContents(body)
-	lead.setEnd(range.startContainer, range.startOffset)
-	return passageOfShown(source, {
-		shown: body.textContent ?? "",
-		start: lead.toString().length,
-		text: range.toString(),
-	})
+	const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+	const found = { shown: "", start: 0, end: 0 }
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		if (node.parentElement?.closest(UNWRITTEN_TEXT)) continue
+		const text = node.textContent ?? ""
+		const side = range.comparePoint(node, 0)
+		if (node === range.startContainer)
+			found.start = found.shown.length + range.startOffset
+		else if (side < 0) found.start = found.shown.length + text.length
+		if (node === range.endContainer)
+			found.end = found.shown.length + range.endOffset
+		else if (side <= 0) found.end = found.shown.length + text.length
+		found.shown += text
+	}
+	return found
 }
 
 const isSameSelected = (first?: SelectedText, second?: SelectedText) =>
@@ -886,12 +899,17 @@ const LibraryDocumentBlockEditor = ({
 		const block = latest.current.blocks.find((each) => each.id === id)
 		if (!block) return
 		const body = target.closest(`[data-slot="${BODY_SLOT}"]`)
-		startComment(
-			block.id,
-			"pointer",
-			fieldPassageOf(block.id) ??
-				(body ? shownPassageIn(body, block.source) : undefined),
-		)
+		const selection = body ? shownSelectionIn(body) : undefined
+		const passage = selection
+			? passageOfShown(block.source, selection)
+			: fieldPassageOf(block.id)
+		const selected = document.getSelection()
+		const isSelecting =
+			selected !== null &&
+			!selected.isCollapsed &&
+			list.current?.contains(selected.anchorNode) === true
+		if (isSelecting && !passage) return
+		startComment(block.id, "pointer", passage)
 	}
 
 	const followPointer = (event: PointerEvent<HTMLDivElement>) => {
@@ -1534,7 +1552,8 @@ const LibraryDocumentBlockEditor = ({
 								)}
 							</div>
 						)}
-						{isCommentMode && hovered === block.id ? (
+						{hasBlockDraft(commentLayer, block.id) ||
+						(isCommentMode && hovered === block.id) ? (
 							<LibraryDocumentBlockTint />
 						) : null}
 						<LibraryDocumentBlockComments

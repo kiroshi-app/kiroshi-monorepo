@@ -835,32 +835,82 @@ describe("foundAnchorIn", () => {
 })
 
 describe("passageOfShown", () => {
-	const source = "The **boat** leaves, then the boat waits."
-	const shown = "The boat leaves, then the boat waits."
+	const source =
+		"The **boat** leaves from [the dock](https://example.com/dock), then the boat waits."
+	const shown = "The boat leaves from the dock, then the boat waits."
+
+	const selected = (text: string, from = 0) => {
+		const start = shown.indexOf(text, from)
+		return { shown, start, end: start + text.length }
+	}
 
 	it("maps selected words to their place in the markdown", () => {
-		expect(passageOfShown(source, { shown, start: 9, text: "leaves" })).toEqual(
-			{ start: 13, end: 19, text: "leaves" },
-		)
+		expect(passageOfShown(source, selected("leaves"))).toEqual({
+			start: 13,
+			end: 19,
+			text: "leaves",
+		})
 	})
 
 	it("keeps the occurrence that was selected", () => {
-		expect(passageOfShown(source, { shown, start: 26, text: "boat" })).toEqual({
-			start: 30,
-			end: 34,
+		const start = source.lastIndexOf("boat")
+
+		expect(passageOfShown(source, selected("boat", 10))).toEqual({
+			start,
+			end: start + 4,
 			text: "boat",
 		})
 	})
 
-	it("gives up on words the markdown writes differently", () => {
+	it("maps a selection that spans bold text to the markdown it covers", () => {
+		expect(passageOfShown(source, selected("The boat leaves"))).toEqual({
+			start: 0,
+			end: 19,
+			text: "The **boat** leaves",
+		})
+	})
+
+	it("maps a selection that ends inside a link to the markdown it covers", () => {
+		const text = "boat** leaves from [the dock"
+
 		expect(
-			passageOfShown(source, { shown, start: 0, text: "The boat" }),
+			passageOfShown(source, selected("boat leaves from the dock")),
+		).toEqual({ start: 6, end: 6 + text.length, text })
+	})
+
+	it("leaves the blanks around the selected words out", () => {
+		const { start, end } = selected("leaves")
+
+		expect(
+			passageOfShown(source, { shown, start: start - 1, end: end + 1 }),
+		).toEqual({ start: 13, end: 19, text: "leaves" })
+	})
+
+	it("maps a list item past its marker and across its lines", () => {
+		expect(
+			passageOfShown("- one *two*\n- three", {
+				shown: "one two\nthree",
+				start: 4,
+				end: 13,
+			}),
+		).toEqual({ start: 7, end: 19, text: "two*\n- three" })
+	})
+
+	it("gives up when the block draws text its markdown does not write", () => {
+		expect(
+			passageOfShown("> [!NOTE]\n> Bring a coat.", {
+				shown: "Note Bring a coat.",
+				start: 5,
+				end: 10,
+			}),
 		).toBeUndefined()
 	})
 
 	it("gives up on a selection of blanks", () => {
+		const start = shown.indexOf(" boat")
+
 		expect(
-			passageOfShown(source, { shown, start: 3, text: " " }),
+			passageOfShown(source, { shown, start, end: start + 1 }),
 		).toBeUndefined()
 	})
 })

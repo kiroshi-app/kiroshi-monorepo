@@ -2876,10 +2876,21 @@ const doc3 = {
 		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
 	},
 	parameters: describedAs(
-		"Artboard Doc 3: a paragraph clicked in comment mode. Check the tint around the paragraph, the selected draft pin at the paragraph pin position, the 320px composer hanging 8px under the pin with their right edges aligned, and its field focused.",
+		"Artboard Doc 3: a paragraph clicked in comment mode, the pointer still over it. Check one tint around the paragraph, never a second one from the pointer, the selected draft pin at the paragraph pin position, the 320px composer hanging 8px under the pin with their right edges aligned, and its field focused.",
 	),
 	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		const body = bodyOf(canvasElement, MARKET_BLOCK)
+		await fireEvent.pointerMove(body, {
+			clientX: boxOf(body).left + 240,
+			clientY: boxOf(body).top + 12,
+		})
+		await expect(
+			slotIn(canvasElement, "library-document-comment-cursor"),
+		).toBeVisible()
 		await expectTintAround(canvasElement, MARKET_BLOCK)
+		await expect(
+			slotsIn(canvasElement, "library-document-comment-tint"),
+		).toHaveLength(1)
 		const pin = pinIn(canvasElement, DRAFT_PIN)
 		await expect(pin).toHaveAttribute("data-state", "selected")
 		const composer = boxOf(composerIn(canvasElement))
@@ -2928,14 +2939,26 @@ export const Doc4PassageDraft = meta.story({ ...doc4, globals: LIGHT })
 
 export const Doc4PassageDraftDark = meta.story({ ...doc4, globals: DARK })
 
+const MAC_AGENT =
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+const WINDOWS_AGENT =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+
+const onPlatform = (agent: string) => () => {
+	const spy = spyOn(navigator, "userAgent", "get").mockReturnValue(agent)
+	return () => spy.mockRestore()
+}
+
 const doc5 = {
+	beforeEach: onPlatform(MAC_AGENT),
 	args: {
 		...commentedDocument(),
 		threads: [SESSION_THREAD],
 		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "shortcut" }),
 	},
 	parameters: describedAs(
-		"Artboard Doc 5: the comment shortcut pressed with the caret in a paragraph, out of comment mode. Check the tint around the paragraph, the composer 4px under the tint with their right edges aligned, the shortcut keycap at the right of its first line, and its field focused.",
+		"Artboard Doc 5: the comment shortcut pressed with the caret in a paragraph, out of comment mode, on macOS. Check the tint around the paragraph, the composer 4px under the tint with their right edges aligned, the keycap at the right of its first line reading the Mac symbols, and its field focused.",
 	),
 	play: async ({ canvas, canvasElement }: CommentPlay) => {
 		const tint = await expectTintAround(canvasElement, MARKET_BLOCK)
@@ -2957,6 +2980,17 @@ const doc5 = {
 export const Doc5ShortcutDraft = meta.story({ ...doc5, globals: LIGHT })
 
 export const Doc5ShortcutDraftDark = meta.story({ ...doc5, globals: DARK })
+
+export const ShortcutKeycapOffMac = meta.story({
+	tags: ["test-only"],
+	beforeEach: onPlatform(WINDOWS_AGENT),
+	args: doc5.args,
+	play: async ({ canvasElement }) => {
+		await expect(
+			slotIn(canvasElement, "library-comment-composer-shortcut"),
+		).toHaveTextContent("Ctrl+Alt+M")
+	},
+})
 
 const threadOpen = (selectedWash: number) => ({
 	args: {
@@ -3084,6 +3118,55 @@ export const CommentModeSelectionStartsPassageComment = meta.story({
 		)
 		await expect(dragged.passage.text.length).toBeGreaterThan(5)
 		await expect(canvasElement.querySelector(FIELD)).toBe(null)
+	},
+})
+
+const FORMATTED_PARAGRAPH =
+	"The **boat** leaves from [the dock](https://example.com/dock) at 17:30."
+
+const FORMATTED_BLOCK = "format"
+
+export const CommentModeSelectionAcrossFormatting = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		threads: [],
+		body: `${FORMATTED_PARAGRAPH} ^${FORMATTED_BLOCK}\n\n> [!NOTE]\n> Bring a coat.`,
+	},
+	play: async ({ args, canvasElement }) => {
+		const body = bodyOf(canvasElement, FORMATTED_BLOCK)
+		const shown = body.textContent ?? ""
+		const selected = "boat leaves from the dock"
+		const start = shownPointAt(body, shown.indexOf(selected))
+		const end = shownPointAt(body, shown.indexOf(selected) + selected.length)
+		document
+			.getSelection()
+			?.setBaseAndExtent(start.node, start.offset, end.node, end.offset)
+		await fireEvent.click(body)
+		const from = FORMATTED_PARAGRAPH.indexOf("boat")
+		const to = FORMATTED_PARAGRAPH.indexOf("dock]") + "dock".length
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: FORMATTED_BLOCK,
+			passage: {
+				start: from,
+				end: to,
+				text: FORMATTED_PARAGRAPH.slice(from, to),
+			},
+			origin: "pointer",
+		})
+
+		const callout = slotIn(
+			blockWith(canvasElement, "Bring a coat."),
+			"library-document-block-body",
+		)
+		const coat = within(callout).getByText("Bring a coat.").firstChild as Text
+		document.getSelection()?.setBaseAndExtent(coat, 0, coat, 5)
+		await fireEvent.click(callout)
+		await expect(args.onStartComment).toHaveBeenCalledOnce()
+
+		document.getSelection()?.setBaseAndExtent(start.node, start.offset, coat, 5)
+		await fireEvent.click(callout)
+		await expect(args.onStartComment).toHaveBeenCalledOnce()
 	},
 })
 
