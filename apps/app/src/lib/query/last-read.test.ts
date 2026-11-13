@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
 
-import type { QueryClient } from "@tanstack/react-query"
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
+import { cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { hasLastReadFailed, isReadErrorShown, useLastRead } from "./last-read"
-import { createQueryTestWrapper } from "./query-test-wrapper"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "./query-test-wrapper"
 
 import { HostRefused } from "@/lib/host/host-refused"
 
@@ -84,13 +86,6 @@ describe("a read that is read again", () => {
 		return mounted
 	}
 
-	const readAgain = async (queryClient: QueryClient) => {
-		act(() => {
-			void queryClient.invalidateQueries()
-		})
-		await act(() => new Promise((settle) => setTimeout(settle, 0)))
-	}
-
 	beforeEach(() => {
 		readMissions.mockReset()
 	})
@@ -101,7 +96,7 @@ describe("a read that is read again", () => {
 		const { queryClient, result } = await mountAnsweredWith(OLDER_HOST_REFUSAL)
 		readMissions.mockReturnValueOnce(NEVER_ANSWERED)
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 
 		expect(readMissions).toHaveBeenCalledTimes(2)
 		expect(result.current).toMatchObject({
@@ -128,7 +123,7 @@ describe("a read that is read again", () => {
 		const { queryClient, result } = await mountAnsweredWith(OLDER_HOST_REFUSAL)
 		readMissions.mockResolvedValueOnce(["m-1"])
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 
 		await waitFor(() => expect(result.current.data).toEqual(["m-1"]))
 	})
@@ -136,11 +131,11 @@ describe("a read that is read again", () => {
 	it("counts as failed again once a read refused earlier fails otherwise", async () => {
 		const { queryClient, result } = await mountAnsweredWith(OLDER_HOST_REFUSAL)
 		readMissions.mockRejectedValueOnce(new Error("disk full"))
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 		await waitFor(() => expect(hasLastReadFailed(result.current)).toBe(true))
 		readMissions.mockReturnValueOnce(NEVER_ANSWERED)
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 
 		expect(readMissions).toHaveBeenCalledTimes(3)
 		expect(hasLastReadFailed(result.current)).toBe(true)
@@ -152,7 +147,7 @@ describe("a read that is read again", () => {
 		)
 		readMissions.mockReturnValueOnce(NEVER_ANSWERED)
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 
 		expect(result.current.isPending).toBe(true)
 		expect(hasLastReadFailed(result.current)).toBe(true)

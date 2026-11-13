@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 
-import type { QueryClient } from "@tanstack/react-query"
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -13,7 +12,10 @@ import { DEFAULT_RUN_PAGE, routinesTransport } from "./routines-transport"
 import { useRoutineDetail } from "./use-routine-detail"
 
 import { HostRefused } from "@/lib/host/host-refused"
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "@/lib/query/query-test-wrapper"
 
 vi.mock("./routines-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./routines-transport")>()),
@@ -388,19 +390,12 @@ describe("when an older host refused the runs", () => {
 		return { queryClient, result, framesSinceRefusal: frames }
 	}
 
-	const readAgain = async (queryClient: QueryClient) => {
-		act(() => {
-			void queryClient.invalidateQueries()
-		})
-		await act(() => new Promise((settle) => setTimeout(settle, 0)))
-	}
-
 	it("stays on its empty state while they are read again and refused again", async () => {
 		const { queryClient, result, framesSinceRefusal } = await openRefused()
 		const reread = Promise.withResolvers<RoutineRun[]>()
 		readRuns.mockReturnValueOnce(reread.promise)
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 
 		expect(readRuns).toHaveBeenCalledTimes(2)
 		expect(isEmptyState(result.current)).toBe(true)
@@ -417,7 +412,7 @@ describe("when an older host refused the runs", () => {
 		const reread = Promise.withResolvers<RoutineRun[]>()
 		readRuns.mockReturnValueOnce(reread.promise)
 
-		await readAgain(queryClient)
+		await readEveryQueryAgain(queryClient)
 		reread.resolve([RUN])
 
 		await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))

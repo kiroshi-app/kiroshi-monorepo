@@ -29,25 +29,22 @@ export const recordLastAnswer = (read: AnsweredRead, error: unknown) => {
 	lastRefusalByRead.delete(read)
 }
 
+type PendingRead<TData> = Extract<UseQueryResult<TData>, { isPending: true }>
+
 const stillRefused = <TData>(
-	read: UseQueryResult<TData>,
+	read: PendingRead<TData>,
 	refusal: HostRefused,
 ): UseQueryResult<TData> => ({
 	...read,
-	data: undefined,
 	error: refusal,
 	status: "error",
 	fetchStatus: "idle",
 	isError: true,
 	isLoadingError: true,
-	isRefetchError: false,
-	isSuccess: false,
-	isPlaceholderData: false,
 	isPending: false,
 	isLoading: false,
 	isInitialLoading: false,
 	isFetching: false,
-	isRefetching: false,
 })
 
 export const useLastRead = <
