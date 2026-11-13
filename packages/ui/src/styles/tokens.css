@@ -143,7 +143,6 @@
 	--shell-border: oklch(0 0 0 / 6%);
 	--shell-divider: oklch(0 0 0 / 8%);
 	--rail-item-selected: oklch(0 0 0 / 10%);
-	--rail-item-selected-hover: oklch(0 0 0 / 16%);
 	--rail-avatar: #e5e5e5;
 	--sidebar-person-foreground: #515151;
 	--space-dot: oklch(0 0 0 / 20%);
@@ -184,11 +183,9 @@
 	--mission-list-hover: oklch(0 0 0 / 5%);
 	--mission-chip-foreground: #404044;
 	--mission-glyph-success: #2f7d32;
-	--mission-glyph-failure: #c93b3b;
 	--prompt-surface: #ffffff;
 	--prompt-surface-inert: #f0f0f0;
 	--prompt-menu: #ffffff;
-	--author-line-sticky: #f5f5f5;
 	--board-sticky-yellow: #ffe58f;
 	--board-sticky-green: #c2ebb4;
 	--board-sticky-pink: #ffc9de;
@@ -384,7 +381,6 @@
 	--shell-border: oklch(1 0 0 / 6%);
 	--shell-divider: oklch(1 0 0 / 8%);
 	--rail-item-selected: oklch(1 0 0 / 12%);
-	--rail-item-selected-hover: oklch(1 0 0 / 18%);
 	--rail-avatar: #3a3a3a;
 	--sidebar-person-foreground: #acacac;
 	--space-dot: oklch(1 0 0 / 25%);
@@ -425,11 +421,9 @@
 	--mission-list-hover: oklch(1 0 0 / 5%);
 	--mission-chip-foreground: #c8c8cc;
 	--mission-glyph-success: #9ad39a;
-	--mission-glyph-failure: #f07a7a;
 	--prompt-surface: #1c1c1e;
 	--prompt-surface-inert: #161618;
 	--prompt-menu: #1f1f22;
-	--author-line-sticky: #1e1e1f;
 	--board-sticky-yellow: #ffe58f;
 	--board-sticky-green: #c2ebb4;
 	--board-sticky-pink: #ffc9de;
