@@ -60,8 +60,6 @@ const meta = preview.meta({
 			},
 		},
 	},
-	args: { children: CHAT_LABEL },
-	argTypes: { children: { control: "text" } },
 })
 
 export const Default = meta.story({
