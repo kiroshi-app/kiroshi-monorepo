@@ -92,6 +92,7 @@ const MissionHeader = ({
 	const { t } = useTranslation("chat")
 	const hasTicket = Boolean(ticket.externalId || ticket.title)
 	const hasTools = tools.length > 0
+	const hasTicketCell = hasTicket || hasTools
 	const shownStatus = shownMissionStatus(status, now)
 
 	return (
@@ -135,7 +136,7 @@ const MissionHeader = ({
 				className={MISSION_TICKET_ISLAND}
 				data-island="mission-ticket"
 			>
-				{hasTicket || hasTools ? (
+				{hasTicketCell ? (
 					<HeaderIslandCell
 						className={MISSION_TICKET_STACKED_CELL}
 						data-slot="mission-ticket-cell"
@@ -162,11 +163,11 @@ const MissionHeader = ({
 					<HeaderIslandCell
 						className={cn(
 							MISSION_TICKET_STACKED_CELL,
-							(hasTicket || hasTools) && "ps-0 @max-2xl:ps-2",
+							hasTicketCell && "ps-0 @max-2xl:ps-2",
 						)}
 						data-slot="mission-status-cell"
 					>
-						{hasTicket || hasTools ? (
+						{hasTicketCell ? (
 							<MissionTicketRule className="@max-2xl:hidden" />
 						) : null}
 						<span
