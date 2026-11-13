@@ -11,6 +11,7 @@ import { createRosterController } from "@/lib/bots/roster-controller"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { HostSocket } from "@/lib/host/http"
+import { createFakeThreadRuntimes } from "@/lib/missions/fake-thread-runtimes"
 import { useMissions } from "@/lib/missions/use-missions"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
@@ -189,6 +190,7 @@ const localConversationOpen = async () => {
 		}),
 		setLastSpace: vi.fn(async () => undefined),
 	}
+	const { runtimes: conversationRuntimes } = createFakeThreadRuntimes()
 	const view = renderHook(
 		() => {
 			const spacesState = useControllerState(spaces)
@@ -198,6 +200,7 @@ const localConversationOpen = async () => {
 			const { selectedSpaceId } = spacesState
 			const openRowId = openRowIdOf(joinedState, selectedSpaceId)
 			const core = {
+				conversationRuntimes,
 				joinedSpaces: {
 					state: joinedState,
 					controller: joined,

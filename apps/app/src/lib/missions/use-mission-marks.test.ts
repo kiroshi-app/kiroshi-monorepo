@@ -324,6 +324,7 @@ describe("the rail rings of local Spaces", () => {
 			entries,
 			conversationRosters: {},
 			soloThreads: SOLO_THREADS,
+			liveMissionIds: new Set(),
 		})
 		const botsBySpace = useRosterBotsBySpace({
 			badges: {},

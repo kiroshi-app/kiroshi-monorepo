@@ -498,10 +498,10 @@ const mostUrgentFirst = (one: ShownMission, other: ShownMission): number =>
 	other.mission.openedAt - one.mission.openedAt ||
 	(one.mission.id < other.mission.id ? -1 : 1)
 
-const toRowMission = ({
-	state,
-	mission,
-}: ShownMission): AppSidebarRowMission => ({
+const toRowMission = (
+	{ state, mission }: ShownMission,
+	liveMissionIds: LiveMissionIds,
+): AppSidebarRowMission => ({
 	id: mission.id,
 	state,
 	ticket: {
@@ -509,7 +509,10 @@ const toRowMission = ({
 		externalId: mission.ticket.externalId,
 		title: mission.ticket.title,
 	},
+	isLive: liveMissionIds.has(mission.id),
 })
+
+const NO_LIVE_MISSIONS: LiveMissionIds = new Set()
 
 export const missionRowIdOf = (
 	conversationId: string,
@@ -521,6 +524,7 @@ export const missionRowIdOf = (
 export const missionsByRow = (
 	entries: MissionEntry[],
 	listedConversations: { id: string }[],
+	liveMissionIds: LiveMissionIds = NO_LIVE_MISSIONS,
 ): MissionsByRow => {
 	const listedConversationIds = new Set(
 		listedConversations.map((conversation) => conversation.id),
@@ -543,7 +547,9 @@ export const missionsByRow = (
 	return Object.fromEntries(
 		Object.entries(open).map(([rowId, held]) => [
 			rowId,
-			[...held].sort(mostUrgentFirst).map(toRowMission),
+			[...held]
+				.sort(mostUrgentFirst)
+				.map((shown) => toRowMission(shown, liveMissionIds)),
 		]),
 	)
 }
@@ -570,12 +576,14 @@ export type MissionSpaces = {
 	entries: MissionEntry[]
 	conversationRosters: Record<string, { id: string }[]>
 	soloThreads: SoloThreads
+	liveMissionIds: LiveMissionIds
 }
 
 export const missionsBySpaceId = ({
 	entries,
 	conversationRosters,
 	soloThreads,
+	liveMissionIds,
 }: MissionSpaces): Record<string, MissionsByRow> => {
 	const spaces = conversationSpaces(conversationRosters, soloThreads)
 	const listed: Record<string, MissionEntry[]> = {}
@@ -588,7 +596,7 @@ export const missionsBySpaceId = ({
 	return Object.fromEntries(
 		Object.entries(listed).map(([spaceId, held]) => [
 			spaceId,
-			missionsByRow(held, conversationRosters[spaceId] ?? []),
+			missionsByRow(held, conversationRosters[spaceId] ?? [], liveMissionIds),
 		]),
 	)
 }

@@ -774,6 +774,7 @@ const shownMission = (id: string, state: BotMissionState, ticket = TICKET) => ({
 	id,
 	state,
 	ticket,
+	isLive: false,
 })
 
 const stripsFor = (...states: MissionState[]) =>
@@ -783,6 +784,24 @@ const stripsFor = (...states: MissionState[]) =>
 		),
 		NO_LISTED_CONVERSATIONS,
 	)["b-1"]
+
+const stripReadAfter = (silenceMs: number, state: MissionState) => {
+	const entry = onBoard({
+		id: "m-1",
+		state,
+		lastActivityAt: READ_AT - silenceMs,
+	})
+
+	return missionsByRow(
+		[entry],
+		NO_LISTED_CONVERSATIONS,
+		liveMissionsIn({
+			missions: [entry.mission],
+			speakingBotIds: {},
+			now: READ_AT,
+		}),
+	)["b-1"]
+}
 
 const livenessStripsFor = (...livenesses: MissionLiveness[]) =>
 	missionsByRow(
@@ -800,6 +819,24 @@ const livenessStripsFor = (...livenesses: MissionLiveness[]) =>
 describe("missionsByRow", () => {
 	it("gives a row with one mission its id, its state and its ticket", () => {
 		expect(stripsFor("working")).toEqual([shownMission("m-1", "working")])
+	})
+
+	it("reads a mission whose coding session acted within the silence window as live", () => {
+		expect(stripReadAfter(60_000, "working")).toEqual([
+			{ ...shownMission("m-1", "working"), isLive: true },
+		])
+	})
+
+	it("keeps a working mission whose coding session went silent still", () => {
+		expect(stripReadAfter(AGENT_SILENCE_MS, "working")).toEqual([
+			shownMission("m-1", "working"),
+		])
+	})
+
+	it("keeps a silent mission waiting for an answer still", () => {
+		expect(stripReadAfter(AGENT_SILENCE_MS, "waiting_human")).toEqual([
+			shownMission("m-1", "waiting"),
+		])
 	})
 
 	it("shows a mission the host reads needs_you as waiting", () => {
@@ -940,15 +977,11 @@ describe("missionsByRow", () => {
 				NO_LISTED_CONVERSATIONS,
 			)["b-1"],
 		).toEqual([
-			{
-				id: "m-1",
-				state: "working",
-				ticket: {
-					platform: "  GitHub  ",
-					externalId: "#4172",
-					title: "  Resume the second turn  ",
-				},
-			},
+			shownMission("m-1", "working", {
+				platform: "  GitHub  ",
+				externalId: "#4172",
+				title: "  Resume the second turn  ",
+			}),
 		])
 	})
 
@@ -1024,6 +1057,7 @@ describe("missionsBySpaceId", () => {
 			entries: [onBoard({ id: "m-1", originConversationId: "chat-away" })],
 			conversationRosters: { [HOME]: [], [AWAY]: [] },
 			soloThreads: SOLO_THREADS,
+			liveMissionIds: new Set(),
 		})
 
 		expect(missionsIn(missions, AWAY)["b-1"]).toEqual([
@@ -1037,6 +1071,7 @@ describe("missionsBySpaceId", () => {
 			entries: [onBoard({ id: "m-1", originConversationId: "room-1" })],
 			conversationRosters: { [HOME]: [], [AWAY]: [{ id: "room-1" }] },
 			soloThreads: SOLO_THREADS,
+			liveMissionIds: new Set(),
 		})
 
 		expect(missionsIn(missions, AWAY)["room-1"]).toEqual([
@@ -1045,11 +1080,25 @@ describe("missionsBySpaceId", () => {
 		expect(missionsIn(missions, AWAY)["b-1"]).toBeUndefined()
 	})
 
+	it("carries a live mission to the row of its space", () => {
+		const missions = missionsBySpaceId({
+			entries: [onBoard({ id: "m-1", originConversationId: "chat-away" })],
+			conversationRosters: { [HOME]: [], [AWAY]: [] },
+			soloThreads: SOLO_THREADS,
+			liveMissionIds: new Set(["m-1"]),
+		})
+
+		expect(missionsIn(missions, AWAY)["b-1"]).toEqual([
+			{ ...shownMission("m-1", "working"), isLive: true },
+		])
+	})
+
 	it("strips nothing when no space holds the origin conversation", () => {
 		const missions = missionsBySpaceId({
 			entries: [onBoard({ id: "m-1", originConversationId: "gone" })],
 			conversationRosters: { [HOME]: [] },
 			soloThreads: SOLO_THREADS,
+			liveMissionIds: new Set(),
 		})
 
 		expect(missionsIn(missions, HOME)).toEqual({})
