@@ -180,6 +180,8 @@ const AGENT_ANSWER_TYPE = "text-base leading-7"
 
 const BUBBLELESS_REPLIES_APART = "[&>[data-bubbleless]+[data-bubbleless]]:mt-5"
 
+const WRITING_LINE_APART = "[&>[data-slot=author-line]]:mt-2"
+
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 
 const PEOPLE_BUBBLE_WIDTH = "max-w-120"
@@ -194,7 +196,7 @@ const sentTimeOf = (sentAt?: number, now?: number) => {
 	return now === undefined ? (
 		<MessageClock at={sentAt} />
 	) : (
-		<MessageTime at={sentAt} now={now} className="leading-5" />
+		<MessageTime at={sentAt} now={now} />
 	)
 }
 
@@ -667,6 +669,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 						foot={work ?? authorLine}
 						className={cn(
 							isBubbleless && AGENT_ANSWER_TYPE,
+							isBubbleless && isWriting && WRITING_LINE_APART,
 							paintsOwnSurface && "py-0",
 							framed && !fills && FRAMED_CARD_MIN_WIDTH,
 							fills && "w-full",

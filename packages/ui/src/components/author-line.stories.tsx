@@ -179,14 +179,18 @@ export const Writing = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this while the agent writes its reply. Check the avatar, the name and the badge stay, and that the word writing… takes the place of the time, the divider and the actions, in the muted 12 of the time.",
+					"Reach for this while the agent writes its reply. Check the avatar, the name and the badge stay, and that the word writing… comes right after the badge and takes the place of the time, the divider and the actions, in the muted 12 on 16 of the time.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const line = slotIn(canvasElement, "author-line")
-		await expect(slotIn(line, "author-line-writing")).toHaveTextContent(
-			"writing…",
+		const writing = slotIn(line, "author-line-writing")
+		const { fontSize, lineHeight } = getComputedStyle(writing)
+		await expect(writing).toHaveTextContent("writing…")
+		await expect([fontSize, lineHeight]).toEqual(["12px", "16px"])
+		await expect(slotIn(line, "bot-title-badge").nextElementSibling).toBe(
+			writing,
 		)
 		await expect(canvas.queryByText("09:41")).toBeNull()
 		await expect(canvas.queryByRole("button")).toBeNull()
