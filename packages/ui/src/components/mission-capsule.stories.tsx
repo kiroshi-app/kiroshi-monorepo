@@ -1,10 +1,11 @@
 import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotsIn } from "@workspace/storybook/story-utils"
+import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
 import { BOT_MISSION_STATES } from "@workspace/ui/components/bot-badge"
 import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
+import { WORKING_SHIMMER_DURATION } from "@workspace/ui/components/motion/text-shimmer"
 
 const MISSIONS: AppSidebarRowMission[] = BOT_MISSION_STATES.map(
 	(state, index) => ({
@@ -59,4 +60,55 @@ export const EveryState = meta.story({})
 
 export const EveryStateDark = meta.story({
 	globals: { theme: "dark", theme_layout: "single" },
+})
+
+const WORKING_MISSION: AppSidebarRowMission = {
+	id: "mission-working",
+	state: "working",
+	ticket: {
+		platform: "linear",
+		externalId: "OPE-513",
+		title: "Rebuild the bundle",
+	},
+}
+
+export const LiveMission = meta.story({
+	args: { missions: [{ ...WORKING_MISSION, isLive: true }] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the mission's agent is speaking in its thread or its coding session was active moments ago. Check that the title plays the working shimmer of a conversation row, that the mark, the identifier and the spacing match `SilentMission`, and that a screen reader hears the mission is working. Pick `SilentMission` for a mission in the same state that has gone quiet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const title = slotIn(canvasElement, "mission-capsule-title")
+		const shimmer = slotIn(title, "text-shimmer")
+		await expect(shimmer).toHaveTextContent(WORKING_MISSION.ticket.title)
+		await expect(
+			shimmer.style.getPropertyValue("--text-shimmer-duration"),
+		).toBe(`${WORKING_SHIMMER_DURATION}s`)
+		await expect(shimmer.dataset.held).toBe("true")
+		await expect(title.textContent).toBe(
+			`${WORKING_MISSION.ticket.title} working`,
+		)
+	},
+})
+
+export const SilentMission = meta.story({
+	args: { missions: [WORKING_MISSION] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when a mission is still in the working state but its agent has gone quiet, or is waiting for an answer. Check that the title stays static, with no shimmer and no working announcement after it. Pick `LiveMission` for the same row while its agent is active.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const title = slotIn(canvasElement, "mission-capsule-title")
+		await expect(slotsIn(canvasElement, "text-shimmer")).toEqual([])
+		await expect(title.textContent).toBe(WORKING_MISSION.ticket.title)
+	},
 })
