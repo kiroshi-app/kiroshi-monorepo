@@ -175,17 +175,16 @@ const isTransportError = (reason: unknown): reason is TransportError => {
 const detailOf = (reason: unknown): string =>
 	kindIn(reason) ?? describeFailure(reason)
 
-const hostFaultOf = (reason: unknown): TransportError | null => {
-	if (isHostOffline(reason)) {
-		return reason
-	}
-	return isUnknownCommandRefusal(reason) ? { kind: "hostOutdated" } : null
-}
-
 const unlessHostFault =
 	(toError: (reason: unknown) => TransportError) =>
-	(reason: unknown): TransportError =>
-		hostFaultOf(reason) ?? toError(reason)
+	(reason: unknown): TransportError => {
+		if (isHostOffline(reason)) {
+			return reason
+		}
+		return isUnknownCommandRefusal(reason)
+			? { kind: "hostOutdated" }
+			: toError(reason)
+	}
 
 export const toTransportError = unlessHostFault((reason) =>
 	isTransportError(reason)
