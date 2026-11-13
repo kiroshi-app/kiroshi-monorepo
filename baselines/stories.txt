@@ -2177,6 +2177,7 @@ navigation-settingsrail--scrolling-panel-handle-with-motion
 navigation-settingsrail--selected-beside-idle
 navigation-settingsrail--with-back
 navigation-shellsidebarprovider--held-shortcut
+navigation-shellsidebarprovider--one-of-two-providers-unmounted
 navigation-shellsidebarprovider--shortcut-in-a-text-field
 navigation-shellsidebarprovider--single-press
 navigation-sidebar--expanded

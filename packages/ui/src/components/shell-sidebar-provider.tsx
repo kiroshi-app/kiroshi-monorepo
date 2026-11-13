@@ -18,6 +18,8 @@ const isEditable = (target: EventTarget | null) =>
 const ShellSidebarProvider = (
 	props: ComponentProps<typeof SidebarProvider>,
 ) => {
+	"use no memo"
+
 	useEffect(() => {
 		const keepShortcutFromSidebar = (event: KeyboardEvent) => {
 			if (!isToggleShortcut(event)) return
