@@ -120,6 +120,7 @@ export default definePreview({
 					"Conversation",
 					"Board",
 					"Settings",
+					"Explorations",
 				]
 				const SUB_LEVELS = [
 					"Foundations/Introduction",
