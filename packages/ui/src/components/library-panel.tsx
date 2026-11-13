@@ -325,10 +325,11 @@ const LibraryPanel = ({
 						isSkeletonShown && "h-full pb-0",
 					)}
 					header={<LibraryHeader actions={actions} filters={filters} />}
-					headerFadeClassName={cn(
-						filters &&
-							"@max-4xl:h-28 @max-4xl:from-[percentage:calc(100%-2rem)]",
-					)}
+					headerFadeClassName={
+						filters
+							? "@max-4xl:h-28 @max-4xl:from-[percentage:calc(100%-2rem)]"
+							: undefined
+					}
 					isHeaderFloating
 				>
 					{isSkeletonShown ? (
