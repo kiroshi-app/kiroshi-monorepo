@@ -3090,12 +3090,7 @@ export const CommentModeSelectionStartsPassageComment = meta.story({
 	args: commentedDocument(true),
 	play: async ({ args, canvasElement }) => {
 		const body = bodyOf(canvasElement, MARKET_BLOCK)
-		const from = MARKET_PARAGRAPH.indexOf(MARKET_PASSAGE)
-		const start = shownPointAt(body, from)
-		const end = shownPointAt(body, from + MARKET_PASSAGE.length)
-		document
-			.getSelection()
-			?.setBaseAndExtent(start.node, start.offset, end.node, end.offset)
+		selectIn(body, MARKET_PASSAGE)
 		await fireEvent.click(body)
 		await expectCalledOnceWith(args.onStartComment, {
 			blockId: MARKET_BLOCK,
@@ -3135,13 +3130,7 @@ export const CommentModeSelectionAcrossFormatting = meta.story({
 	},
 	play: async ({ args, canvasElement }) => {
 		const body = bodyOf(canvasElement, FORMATTED_BLOCK)
-		const shown = body.textContent ?? ""
-		const selected = "boat leaves from the dock"
-		const start = shownPointAt(body, shown.indexOf(selected))
-		const end = shownPointAt(body, shown.indexOf(selected) + selected.length)
-		document
-			.getSelection()
-			?.setBaseAndExtent(start.node, start.offset, end.node, end.offset)
+		selectIn(body, "boat leaves from the dock")
 		await fireEvent.click(body)
 		const from = FORMATTED_PARAGRAPH.indexOf("boat")
 		const to = FORMATTED_PARAGRAPH.indexOf("dock]") + "dock".length
@@ -3164,7 +3153,8 @@ export const CommentModeSelectionAcrossFormatting = meta.story({
 		await fireEvent.click(callout)
 		await expect(args.onStartComment).toHaveBeenCalledOnce()
 
-		document.getSelection()?.setBaseAndExtent(start.node, start.offset, coat, 5)
+		const boat = within(body).getByText("boat").firstChild as Text
+		document.getSelection()?.setBaseAndExtent(boat, 0, coat, 5)
 		await fireEvent.click(callout)
 		await expect(args.onStartComment).toHaveBeenCalledOnce()
 	},
