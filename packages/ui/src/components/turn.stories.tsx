@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -1014,11 +1014,21 @@ const expectBubblelessReply = async (canvasElement: HTMLElement) => {
 	await expectActionsAtRest(reply)
 }
 
-const BubblelessReplyTurns = () => (
+type ThreadColumnProps = {
+	children: ReactNode
+}
+
+const ThreadColumn = ({ children }: ThreadColumnProps) => (
 	<div
 		data-slot="thread-column"
 		className="mx-auto flex max-w-170 flex-col gap-8"
 	>
+		{children}
+	</div>
+)
+
+const BubblelessReplyTurns = () => (
+	<ThreadColumn>
 		<UserTurn
 			copyText="How is this workspace laid out?"
 			sentAt={sentOn(10, 9, 18)}
@@ -1036,7 +1046,7 @@ const BubblelessReplyTurns = () => (
 		>
 			<Markdown>{STRUCTURED_ANSWER}</Markdown>
 		</AssistantTurn>
-	</div>
+	</ThreadColumn>
 )
 
 export const BubblelessReply = meta.story({
@@ -1069,10 +1079,7 @@ export const BubblelessReplyDark = meta.story({
 
 export const BubblelessReplySeveralAgents = meta.story({
 	render: () => (
-		<div
-			data-slot="thread-column"
-			className="mx-auto flex max-w-170 flex-col gap-8"
-		>
+		<ThreadColumn>
 			<UserTurn copyText={QUESTION} sentAt={sentOn(10, 9, 18)} now={READ_ON}>
 				{QUESTION}
 			</UserTurn>
@@ -1096,7 +1103,7 @@ export const BubblelessReplySeveralAgents = meta.story({
 			>
 				{TESTS}
 			</AssistantTurn>
-		</div>
+		</ThreadColumn>
 	),
 	parameters: {
 		docs: {
@@ -1121,10 +1128,7 @@ export const BubblelessReplySeveralAgents = meta.story({
 
 export const Writing = meta.story({
 	render: () => (
-		<div
-			data-slot="thread-column"
-			className="mx-auto flex max-w-170 flex-col gap-8"
-		>
+		<ThreadColumn>
 			<AssistantTurn
 				author={ROLE_BOT}
 				state="streaming"
@@ -1137,7 +1141,7 @@ export const Writing = meta.story({
 			>
 				{PARTIAL}
 			</AssistantTurn>
-		</div>
+		</ThreadColumn>
 	),
 	parameters: {
 		docs: {
