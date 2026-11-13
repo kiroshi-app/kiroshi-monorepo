@@ -6,31 +6,29 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import "@workspace/ui/lib/i18n"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 
-const GET_ANIMATIONS = "getAnimations"
-
-const nativeGetAnimations = Object.getOwnPropertyDescriptor(
-	Element.prototype,
-	GET_ANIMATIONS,
-)
+const nativeGetAnimations = Element.prototype.getAnimations
 
 const RUNNING_ANIMATION = {
 	finished: Promise.resolve(),
 } as unknown as Animation
 
+const setGetAnimations = (value: unknown) =>
+	Object.defineProperty(Element.prototype, "getAnimations", {
+		configurable: true,
+		value,
+	})
+
 const DOMS_WITHOUT_WEB_ANIMATIONS = [
 	{
 		lacks: "Element.getAnimations",
 		strip: () => {
-			Reflect.deleteProperty(Element.prototype, GET_ANIMATIONS)
+			setGetAnimations(undefined)
 		},
 	},
 	{
 		lacks: "the CSSTransition global",
 		strip: () => {
-			Object.defineProperty(Element.prototype, GET_ANIMATIONS, {
-				configurable: true,
-				value: () => [RUNNING_ANIMATION],
-			})
+			setGetAnimations(() => [RUNNING_ANIMATION])
 			vi.stubGlobal("CSSTransition", undefined)
 		},
 	},
@@ -42,13 +40,7 @@ const pendingWorkDone = () =>
 afterEach(() => {
 	cleanup()
 	vi.unstubAllGlobals()
-	Reflect.deleteProperty(Element.prototype, GET_ANIMATIONS)
-	if (nativeGetAnimations)
-		Object.defineProperty(
-			Element.prototype,
-			GET_ANIMATIONS,
-			nativeGetAnimations,
-		)
+	setGetAnimations(nativeGetAnimations)
 })
 
 describe("the exit signal in a DOM without the Web Animations API", () => {
