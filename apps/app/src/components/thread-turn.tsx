@@ -42,6 +42,7 @@ type ThreadTurnProps = {
 	cause?: TurnCause
 	avatarFace?: ThreadFace
 	card?: ReactNode
+	work?: ReactNode
 	quoted?: ReplyTarget[]
 	pinned: boolean
 	now: number
@@ -65,6 +66,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	cause,
 	avatarFace,
 	card,
+	work,
 	quoted,
 	pinned,
 	now,
@@ -206,6 +208,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			run={run}
 			sentAt={row.timestamp}
 			state={state}
+			work={work}
 		>
 			{answer}
 		</AssistantTurn>

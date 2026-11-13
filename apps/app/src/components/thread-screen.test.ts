@@ -1281,17 +1281,18 @@ const authorSelectOf = (text: string) =>
 const stateOf = ({ thread }: Room) =>
 	thread.runtimes.runtimeFor(thread.conversation.id).getState()
 
+const workLineIn = (row: Element) =>
+	[
+		'[data-slot="author-line-name"]',
+		'[data-slot="bot-working-separator"]',
+		'[data-slot="bot-working-label"]',
+	]
+		.map((slot) => row.querySelector(slot)?.textContent)
+		.filter(Boolean)
+		.join(" ")
+
 const workLines = () =>
-	[...document.querySelectorAll('[data-slot="bot-working"]')].map((row) =>
-		[
-			'[data-slot="author-line-name"]',
-			'[data-slot="bot-working-separator"]',
-			'[data-slot="bot-working-label"]',
-		]
-			.map((slot) => row.querySelector(slot)?.textContent)
-			.filter(Boolean)
-			.join(" "),
-	)
+	[...document.querySelectorAll('[data-slot="bot-working"]')].map(workLineIn)
 
 const NO_COMPANION_ACTIONS = {
 	onAddBotToSpace: () => undefined,
@@ -2957,6 +2958,223 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText("the walls hold")).toBeTruthy()
 		expect(workLines()).not.toContain("Ada is writing…")
 		expect(stopFor("Ada")).toBeNull()
+	})
+
+	describe("the foot of an agent reply", () => {
+		const SOLO_RUN: SpokenTurn[] = [
+			{ turnId: "t-run-1", text: "the walls hold", createdAt: 0 },
+			{ turnId: "t-run-2", text: "and the gate too", createdAt: A_MINUTE },
+			{ turnId: "t-run-3", text: "the roof is next", createdAt: 2 * A_MINUTE },
+		]
+		const FIRST_REPLY_LANDED: AgentEvent[] = [
+			...FIRST_TOKEN,
+			{
+				type: "messageCompleted",
+				message: {
+					id: "msg-writing",
+					role: "assistant",
+					text: "the walls hold",
+					completion: "complete",
+					timestamp: 1,
+				},
+			},
+		]
+		const SECOND_REPLY_STARTED: AgentEvent[] = [
+			{
+				type: "messageStarted",
+				message: {
+					id: "msg-second",
+					role: "assistant",
+					text: "",
+					completion: "streaming",
+					timestamp: 2,
+				},
+			},
+			{
+				type: "messageDelta",
+				id: "msg-second",
+				seq: 1,
+				text: "and the gate too",
+			},
+		]
+		const SECOND_REPLY_LANDED: AgentEvent[] = [
+			{
+				type: "messageCompleted",
+				message: {
+					id: "msg-second",
+					role: "assistant",
+					text: "and the gate too",
+					completion: "complete",
+					timestamp: 2,
+				},
+			},
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+		]
+		const AUTHOR_ACTIONS = ["Pin", "Reply", "Copy"]
+
+		const authorActionsOf = (text: string) =>
+			AUTHOR_ACTIONS.filter((name) =>
+				turnOf(text)?.querySelector(
+					`[data-slot="author-line"] button[aria-label="${name}"]`,
+				),
+			)
+
+		const workInReplyOf = (text: string) => {
+			const work = turnOf(text)?.querySelector('[data-slot="bot-working"]')
+			return work ? workLineIn(work) : null
+		}
+
+		const workUnderTranscript = () =>
+			[
+				...document.querySelectorAll(
+					'[data-slot="thread-work-line"] [data-slot="author-line-name"]',
+				),
+			].map((name) => name.textContent)
+
+		it("names the agent with Pin, Reply and Copy under every reply of a solo run", async () => {
+			const solo = await soloOf({ spoken: SOLO_RUN })
+			render(screenOf(solo.thread()), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			expect(
+				document.querySelectorAll('[data-slot="chat-turn-group"]'),
+			).toHaveLength(1)
+			for (const { text } of SOLO_RUN) {
+				expect(authorNameOf(text)).toContain("Ada")
+				expect(authorAvatarOf(text)).not.toBeNull()
+				expect(authorActionsOf(text)).toEqual(AUTHOR_ACTIONS)
+			}
+		})
+
+		it("keeps the author line of the newest solo run while the agent works, and seats is writing in the reply being written", async () => {
+			const solo = await soloOf({})
+			const { rerender } = render(screenOf(solo.thread()), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			await solo.send("hold the wall")
+			await solo.push(FIRST_REPLY_LANDED)
+			await solo.push(SECOND_REPLY_STARTED)
+			rerender(screenOf(solo.thread()))
+			await settle()
+
+			expect(authorNameOf("the walls hold")).toContain("Ada")
+			expect(authorActionsOf("the walls hold")).toEqual(AUTHOR_ACTIONS)
+			expect(workInReplyOf("and the gate too")).toBe("Ada is writing…")
+			expect(authorActionsOf("and the gate too")).toEqual([])
+			expect(workLines()).toEqual(["Ada is writing…"])
+			expect(workLineCount()).toBe(0)
+
+			await solo.push(SECOND_REPLY_LANDED)
+			rerender(screenOf(solo.thread()))
+			await settle()
+
+			expect(workLines()).toEqual([])
+			expect(authorNameOf("and the gate too")).toContain("Ada")
+			expect(authorActionsOf("and the gate too")).toEqual(AUTHOR_ACTIONS)
+		})
+
+		it("keeps a solo agent that has written nothing yet under the transcript", async () => {
+			const solo = await soloOf({ spoken: [SAID_BEFORE] })
+			const { rerender } = render(screenOf(solo.thread()), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			await solo.send("hold the wall")
+			await solo.push(SEARCHING)
+			rerender(screenOf(solo.thread()))
+			await settle()
+
+			expect(workLineCount()).toBe(1)
+			expect(workUnderTranscript()).toEqual(["Ada"])
+			expect(workLines()).toEqual(["Ada · Grep · walls"])
+			expect(workInReplyOf(SAID_BEFORE.text)).toBeNull()
+			expect(authorActionsOf(SAID_BEFORE.text)).toEqual(AUTHOR_ACTIONS)
+		})
+
+		it("moves a seated agent from under the transcript into its reply at the first word, tool activity included", async () => {
+			const room = await roomOf({ names: ["Ada"] })
+			render(screenOf(room.thread), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			await room.send("@Ada now")
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), [WRITING_STARTED])
+			})
+			await settle()
+
+			expect(workUnderTranscript()).toEqual(["Ada"])
+
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			})
+			await settle()
+
+			expect(workLineCount()).toBe(0)
+			expect(workInReplyOf("the walls hold")).toBe("Ada is writing…")
+
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), SEARCHING)
+			})
+			await settle()
+
+			expect(workLineCount()).toBe(0)
+			expect(workInReplyOf("the walls hold")).toBe("Ada · Grep · walls")
+
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), WRITING_LANDED)
+			})
+			await settle()
+
+			expect(workLines()).toEqual([])
+			expect(authorNameOf("the walls hold")).toContain("Ada")
+			expect(authorActionsOf("the walls hold")).toEqual(AUTHOR_ACTIONS)
+		})
+
+		it("leaves under the transcript only the agents that have written nothing yet", async () => {
+			const room = await roomOf({ names: ["Ada", "Nyx"] })
+			render(screenOf(room.thread), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			await room.send("@Ada @Nyx now")
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			})
+			await settle()
+
+			expect(workInReplyOf("the walls hold")).toBe("Ada is writing…")
+			expect(workUnderTranscript()).toEqual(["Nyx"])
+			expect(stopsFor("Ada")).toHaveLength(1)
+		})
+
+		it("seats is writing in the reply of a mission thread", async () => {
+			const room = await missionRoomOf({
+				events: [MISSION_OPENED],
+				spoken: [MISSION_SAID],
+			})
+			render(screenOf(room.thread, room.bots), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await settle()
+
+			await room.send("@Ada now")
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			})
+			await settle()
+
+			expect(workInReplyOf("the walls hold")).toBe("Ada is writing…")
+			expect(workLineCount()).toBe(0)
+			expect(workInReplyOf(MISSION_SAID.text)).toBeNull()
+		})
 	})
 
 	it("places the events of a mission thread among its messages by date", async () => {

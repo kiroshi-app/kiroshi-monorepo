@@ -471,7 +471,6 @@ export function markedRunsOf(
 
 export type RunPresentation = {
 	isMarked: boolean
-	faceIndexes: number[]
 	hasBareTables: boolean
 }
 
@@ -481,11 +480,6 @@ export type RunPresentationInput = {
 	hasSingleBot: boolean
 	isWorking: boolean
 }
-
-const NO_FACE: number[] = []
-
-const opensAndClosesRun = (run: TranscriptRow[]) =>
-	run.length > 1 ? [0, run.length - 1] : [0]
 
 export function runPresentationsOf({
 	runs,
@@ -497,18 +491,30 @@ export function runPresentationsOf({
 		const marked = markedRunsOf(runs, workingBotIds)
 		return runs.map((_, index) => ({
 			isMarked: marked.has(index),
-			faceIndexes: NO_FACE,
 			hasBareTables: false,
 		}))
 	}
 
 	const newestIndex = runs.length - 1
-	return runs.map((run, index) => {
-		const isNewest = index === newestIndex
-		return {
-			isMarked: isNewest,
-			faceIndexes: isWorking && isNewest ? NO_FACE : opensAndClosesRun(run),
-			hasBareTables: true,
-		}
-	})
+	return runs.map((_, index) => ({
+		isMarked: !isWorking && index === newestIndex,
+		hasBareTables: true,
+	}))
 }
+
+const isBeingWritten = (row: TranscriptRow) =>
+	row.role === "assistant" && row.completion === "streaming"
+
+export const repliesBeingWrittenIn = (
+	runs: TranscriptRow[][],
+	soloBotId: string | null,
+): ReadonlyMap<string, string> =>
+	new Map(
+		runs
+			.flat()
+			.filter(isBeingWritten)
+			.flatMap((row): [string, string][] => {
+				const writerId = row.authorBotId ?? soloBotId
+				return writerId ? [[writerId, row.messageId]] : []
+			}),
+	)

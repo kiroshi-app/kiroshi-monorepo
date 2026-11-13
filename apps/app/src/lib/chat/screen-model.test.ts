@@ -14,6 +14,7 @@ import {
 	opensNewDay,
 	quotedMessageIdsIn,
 	quotedTargetsIn,
+	repliesBeingWrittenIn,
 	replyTargetOfReference,
 	runPresentationsOf,
 	sidebarActivityFor,
@@ -340,20 +341,9 @@ describe("day changes in Tokyo", () => {
 				prompt({ id: "local-3", createdAt: TOKYO_MIDNIGHT + A_MINUTE }),
 			]),
 		)
-		const presentations = runPresentationsOf({
-			runs,
-			workingBotIds: [],
-			hasSingleBot: true,
-			isWorking: false,
-		})
 
 		expect(daySeparatorsIn(runs)).toBe(1)
-		expect(
-			runs.map(
-				(run, runIndex) =>
-					run[presentations[runIndex].faceIndexes[0]].messageId,
-			),
-		).toEqual(["local-1", "local-3"])
+		expect(runs.map((run) => run[0].messageId)).toEqual(["local-1", "local-3"])
 	})
 
 	it("opens no new day between two messages of the same local day across UTC midnight", () => {
@@ -765,37 +755,8 @@ describe("runPresentationsOf", () => {
 		expect(solo(false).map((run) => run.isMarked)).toEqual([false, false, true])
 	})
 
-	it("hands the face to the first and the last row of a settled run", () => {
-		expect(solo(false).map((run) => run.faceIndexes)).toEqual([
-			[0, 1],
-			[0],
-			[0],
-		])
-	})
-
-	it("hands the face to the first and the last row of a run of three, not the middle one", () => {
-		const runs = toRuns(
-			toTranscriptRows([
-				message({ id: "a", content: "One.", completion: "complete" }),
-				message({ id: "b", content: "Two.", completion: "complete" }),
-				message({ id: "c", content: "Three.", completion: "complete" }),
-			]),
-		)
-		const [presentation] = runPresentationsOf({
-			runs,
-			workingBotIds: [],
-			hasSingleBot: true,
-			isWorking: false,
-		})
-
-		expect(runs[0]).toHaveLength(3)
-		expect(
-			runs[0].map((_, index) => presentation.faceIndexes.includes(index)),
-		).toEqual([true, false, true])
-	})
-
-	it("drops the face of the newest run while the companion works", () => {
-		expect(solo(true).map((run) => run.faceIndexes)).toEqual([[0, 1], [0], []])
+	it("marks no run of a single companion thread while the companion works", () => {
+		expect(solo(true).map((run) => run.isMarked)).toEqual([false, false, false])
 	})
 
 	it("renders tables bare in a single companion thread", () => {
@@ -817,7 +778,6 @@ describe("runPresentationsOf", () => {
 		})
 
 		expect(presentations.map((run) => run.isMarked)).toEqual([true, false])
-		expect(presentations.map((run) => run.faceIndexes)).toEqual([[], []])
 		expect(presentations.some((run) => run.hasBareTables)).toBe(false)
 	})
 
@@ -862,13 +822,8 @@ describe("runPresentationsOf", () => {
 			expect(headRowsIn(rows)).toEqual([[true, false]])
 		})
 
-		it("keeps the head row of the newest run while the companion works, its face alone dropped", () => {
+		it("opens one head row on each run of a single companion thread", () => {
 			expect(headRowsOf(soloRuns)).toEqual([[true, false], [true], [true]])
-			expect(solo(true).map((run) => run.faceIndexes)).toEqual([
-				[0, 1],
-				[0],
-				[],
-			])
 		})
 	})
 
@@ -881,6 +836,55 @@ describe("runPresentationsOf", () => {
 				isWorking: false,
 			}),
 		).toEqual([])
+	})
+})
+
+describe("repliesBeingWrittenIn", () => {
+	const written = (id: string, authorBotId: string | null, minute: number) =>
+		message({
+			id,
+			authorBotId,
+			content: "Writing",
+			completion: "streaming",
+			createdAt: minute * 60_000,
+		})
+	const repliesOf = (messages: TranscriptMessage[], soloBotId: string | null) =>
+		Object.fromEntries(
+			repliesBeingWrittenIn(toRuns(toTranscriptRows(messages)), soloBotId),
+		)
+
+	it("names the reply each companion of a conversation is writing", () => {
+		expect(
+			repliesOf([written("a", "bot-1", 0), written("b", "bot-2", 1)], null),
+		).toEqual({ "bot-1": "a", "bot-2": "b" })
+	})
+
+	it("hands a reply with no author to the companion of a single companion thread", () => {
+		expect(repliesOf([written("a", null, 0)], "bot-1")).toEqual({
+			"bot-1": "a",
+		})
+	})
+
+	it("leaves out a reply that ended and a prompt still being sent", () => {
+		expect(
+			repliesOf(
+				[
+					message({ id: "a", content: "Done.", completion: "complete" }),
+					prompt({ id: "local-1", completion: "pending", createdAt: 60_000 }),
+				],
+				"bot-1",
+			),
+		).toEqual({})
+	})
+
+	it("keeps the newest reply of a companion writing two", () => {
+		expect(
+			repliesOf([written("a", "bot-1", 0), written("b", "bot-1", 1)], null),
+		).toEqual({ "bot-1": "b" })
+	})
+
+	it("leaves out a reply no companion claims", () => {
+		expect(repliesOf([written("a", null, 0)], null)).toEqual({})
 	})
 })
 
