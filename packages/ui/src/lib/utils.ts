@@ -9,7 +9,7 @@ const twMerge = extendTailwindMerge({
 			h: ["left-column-header"],
 			px: ["left-column-inset"],
 			rounded: [{ rounded: ["control"] }],
-			shadow: [{ shadow: ["popover"] }],
+			shadow: [{ shadow: ["popover", "comment-card"] }],
 		},
 	},
 })

@@ -102,6 +102,7 @@
 	--primary: var(--hue-light-accent, var(--hue-blue-accent));
 	--primary-foreground: #ffffff;
 	--primary-strong: var(--primary);
+	--primary-soft: var(--hue-light-avatar-ground, var(--hue-blue-avatar-ground));
 	--secondary: #f2f2f2;
 	--secondary-foreground: #0a0a0a;
 	--muted: #f2f2f2;
@@ -165,6 +166,7 @@
 	);
 	--document-ground: var(--hue-blue-avatar-ground);
 	--on-foreground: #ffffff;
+	--on-foreground-muted: #a3a3a3;
 	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 92%, #000000);
 	--user-bubble-muted-foreground: color-mix(
 		in oklab,
@@ -223,6 +225,9 @@
 	--board-card-inset: #f2f2f2;
 	--board-card-foreground: #0a0a0a;
 	--board-card-soft-foreground: #404040;
+	--comment-card: #ffffff;
+	--comment-pin: #ffffff;
+	--comment-pin-stage: #ffffff;
 	--user-bubble-muted-strength: 70%;
 	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
 	--board-control-shadow: 0 0 0 1px #0000000f, 0 2px 6px #0000000f;
@@ -240,6 +245,12 @@
 	--board-arrow-marker: var(--primary);
 	--board-lifted-filter: drop-shadow(0 2px 4px #0000001a)
 		drop-shadow(0 16px 32px #00000026);
+	--comment-pin-shadow: 0 2px 8px #00000029, 0 0 0 1px #0000000f;
+	--comment-pin-selected-shadow: 0 2px 8px #00000029;
+	--comment-pin-stage-shadow: 0 2px 8px #0000004d;
+	--comment-card-shadow: 0 8px 24px #0000001a, 0 0 0 1px #0000000f;
+	--comment-list-shadow: 0 12px 32px #00000024, 0 0 0 1px #0000000f;
+	--comment-hint-shadow: 0 8px 24px #0000001f;
 }
 
 .dark,
@@ -340,6 +351,7 @@
 	--primary: var(--hue-dark-accent, var(--hue-blue-accent));
 	--primary-foreground: var(--bot-blot-ink);
 	--primary-strong: var(--primary);
+	--primary-soft: var(--hue-dark-avatar-ground, var(--hue-blue-avatar-ground));
 	--secondary: #262626;
 	--secondary-foreground: #f5f5f5;
 	--muted: #262626;
@@ -403,6 +415,7 @@
 	);
 	--document-ground: var(--hue-blue-avatar-ground);
 	--on-foreground: #0e0e10;
+	--on-foreground-muted: #6b6b6b;
 	--user-bubble-hover: color-mix(in oklab, var(--user-bubble) 88%, #ffffff);
 	--user-bubble-muted-foreground: color-mix(
 		in oklab,
@@ -457,6 +470,8 @@
 	--board-card-inset: #2b2b2e;
 	--board-card-foreground: #ededed;
 	--board-card-soft-foreground: #c4c4c4;
+	--comment-card: #1f1f1f;
+	--comment-pin: #2a2a2a;
 	--user-bubble-muted-strength: 70%;
 	--board-sticky-shadow: 0 1px 2px #00000014, 0 6px 14px #0000000f;
 	--board-control-shadow:
@@ -476,4 +491,9 @@
 	);
 	--board-lifted-filter: drop-shadow(0 2px 4px #00000040)
 		drop-shadow(0 16px 32px #00000066);
+	--comment-pin-shadow: 0 2px 8px #00000066, 0 0 0 1px #ffffff1f;
+	--comment-pin-selected-shadow: 0 2px 8px #00000066;
+	--comment-card-shadow: 0 8px 24px #00000080, 0 0 0 1px #ffffff1a;
+	--comment-list-shadow: 0 12px 32px #00000080, 0 0 0 1px #ffffff1a;
+	--comment-hint-shadow: 0 8px 24px #00000066;
 }

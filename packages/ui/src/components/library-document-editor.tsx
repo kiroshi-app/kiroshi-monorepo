@@ -36,6 +36,7 @@ import {
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
 import type {
+	LibraryBarComments,
 	LibraryItemActions,
 	LibraryMenuSubject,
 } from "@workspace/ui/components/library-item-menu"
@@ -198,6 +199,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		>["resolveImage"]
 		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 		menuFinalFocus?: () => HTMLElement | boolean
+		comments?: LibraryBarComments
 		ref?: Ref<LibraryDocumentEditorHandle>
 	}
 

@@ -530,6 +530,62 @@ const common = {
 			stillImporting_other:
 				"{{count}} fichiers sont encore en cours d’importation.",
 		},
+		comments: {
+			pin: {
+				open: "Commentaire de {{name}}",
+				resolved: "Commentaire résolu de {{name}}",
+			},
+			composer: {
+				placeholder: "Commenter, @ pour mentionner",
+				reply: "Répondre, @ pour mentionner",
+				mention: "Mentionner quelqu’un",
+				send: "Envoyer",
+			},
+			mentions: {
+				label: "Mentionner",
+				agents: "Agents",
+				people: "Personnes",
+			},
+			thread: {
+				resolve: "Résoudre",
+				more: "Plus",
+				close: "Fermer",
+				working: "y travaille",
+				replies_one: "{{count}} réponse, {{names}}",
+				replies_many: "{{count}} réponses, {{names}}",
+				replies_other: "{{count}} réponses, {{names}}",
+				resolvedBy: "Résolu par {{name}}",
+				reopen: "Rouvrir",
+			},
+			list: {
+				label: "Commentaires",
+				open: "Ouverts",
+				resolved: "Résolus",
+				replies_one: "{{count}} réponse",
+				replies_many: "{{count}} réponses",
+				replies_other: "{{count}} réponses",
+				emptyOpen: "Aucun commentaire ouvert",
+				emptyResolved: "Aucun commentaire résolu",
+			},
+			bar: {
+				comment: "Commenter",
+				shortcut: "C",
+				count_one: "{{count}} commentaire ouvert",
+				count_many: "{{count}} commentaires ouverts",
+				count_other: "{{count}} commentaires ouverts",
+			},
+			hint: {
+				document:
+					"Cliquez sur un bloc pour commenter, sélectionnez du texte pour un passage",
+				board: "Cliquez sur une forme ou sur le tableau pour commenter",
+				image: "Cliquez pour un point, faites glisser pour une zone",
+				escape: "Échap",
+			},
+			anchor: {
+				goneText: "Sur un texte qui n’est plus dans le document",
+				goneShape: "Sur une forme qui n’est plus sur le tableau",
+			},
+		},
 		itemMenu: {
 			label: "Actions pour {{name}}",
 			open: "Ouvrir",

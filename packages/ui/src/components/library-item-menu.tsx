@@ -14,6 +14,10 @@ import { useTranslation } from "react-i18next"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	LibraryCommentBarControls,
+	type LibraryCommentBarControlsProps,
+} from "@workspace/ui/components/library-comment-bar-controls"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
 	ContextMenu,
@@ -354,11 +358,14 @@ const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
 
 type LibraryItemBarSurface = "lightbox" | "document"
 
+type LibraryBarComments = Omit<LibraryCommentBarControlsProps, "isOnDarkStage">
+
 type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	item: Item
 	actions: LibraryItemHandlers<Item>
 	surface: LibraryItemBarSurface
 	leading?: ReactNode
+	comments?: LibraryBarComments
 	onClose: () => void
 	onMenuOpenChange?: ComponentProps<typeof DropdownMenu>["onOpenChange"]
 	menuFinalFocus?: () => HTMLElement | boolean
@@ -370,6 +377,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	actions,
 	surface,
 	leading,
+	comments,
 	onClose,
 	onMenuOpenChange,
 	menuFinalFocus,
@@ -405,6 +413,12 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	return (
 		<div className="flex shrink-0 items-center gap-2">
 			{leading}
+			{comments ? (
+				<LibraryCommentBarControls
+					{...comments}
+					isOnDarkStage={surface === "lightbox"}
+				/>
+			) : null}
 			{onDownload ? (
 				<TooltipButton
 					aria-label={t(`library.${surface}.download`)}
@@ -513,6 +527,7 @@ export {
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	type LibraryBarComments,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	LibraryItemContextMenu,
