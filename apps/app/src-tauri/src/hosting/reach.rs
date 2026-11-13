@@ -153,6 +153,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("library_save_bytes", Reach::HostOnly),
 	("library_copy_bytes", Reach::HostOnly),
 	("library_read_link_preview", Reach::HostOnly),
+	("save_csv_file", Reach::HostOnly),
 	(
 		"agent_check",
 		Reach::Scoped(&[

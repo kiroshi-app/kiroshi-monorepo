@@ -916,6 +916,15 @@ async fn received_bytes_save_where_the_person_chose_under_the_item_name() {
 }
 
 #[tokio::test]
+async fn a_csv_name_stays_refused_and_left_to_save_csv() {
+	let never_opened = |_: &str| -> std::future::Ready<_> { panic!("the dialog opened") };
+
+	let refused = save_bytes("people.csv", &base64_of(b"name,city"), never_opened).await;
+
+	assert_eq!(refused, Err(LibraryError::InvalidName { name: "people.csv".to_owned() }));
+}
+
+#[tokio::test]
 async fn a_cancelled_save_of_received_bytes_writes_nothing() {
 	assert_eq!(save_bytes("notes.md", &base64_of(b"notes"), chosen(None)).await, Ok(None));
 }

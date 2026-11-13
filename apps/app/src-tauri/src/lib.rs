@@ -38,6 +38,7 @@ pub mod remote_image;
 #[cfg(test)]
 mod removed_on_drop;
 pub mod routines;
+pub mod save_csv;
 pub mod search;
 pub mod sections;
 pub mod spaces;
