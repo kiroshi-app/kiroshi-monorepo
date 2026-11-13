@@ -2296,6 +2296,8 @@ navigation-titlebartabchip--not-allowed
 navigation-titlebartabchip--not-allowed-dark
 navigation-titlebartabchip--short-title
 navigation-titlebartabchip--short-title-dark
+navigation-titlebartabs--coloured-conversation-tabs
+navigation-titlebartabs--coloured-conversation-tabs-dark
 navigation-titlebartabs--library-document-tab
 navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated

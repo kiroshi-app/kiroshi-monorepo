@@ -33,6 +33,9 @@ import {
 	TITLE_BAR,
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
+import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import { ConversationTabIcon } from "@workspace/ui/components/conversation-tab-icon"
+import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	type TitleBarTabDescriptor,
@@ -340,4 +343,107 @@ export const NoSearchWithoutHandler = meta.story({
 		await expect(history.getAllByRole("button")).toHaveLength(3)
 		await expect(history.queryByRole("button", { name: "Search" })).toBeNull()
 	},
+})
+
+const COLOURED_ACTIVE = {
+	...DESIGN_REVIEW,
+	icon: <ConversationTabIcon hue={BLOT_HUES.pink} icon="Rocket" />,
+}
+
+const COLOURED_INACTIVE = {
+	...BUG_BASH,
+	icon: <ConversationTabIcon hue={BLOT_HUES.pink} icon="Bug" />,
+}
+
+const MONOCHROME = {
+	...HIRING_PLAN,
+	icon: <ConversationTabIcon hue={null} icon="Users" />,
+}
+
+const COLOURED_TABS = {
+	tabs: [COLOURED_ACTIVE, MONOCHROME, COLOURED_INACTIVE],
+	activeTabId: COLOURED_ACTIVE.id,
+} satisfies Partial<AppTitleBarProps>
+
+const iconSlotOf = (tab: HTMLElement) =>
+	tab.querySelector('span[aria-hidden="true"]') as HTMLElement
+
+const rgbOf = (hex: string) =>
+	`rgb(${[1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16)).join(", ")})`
+
+const expectColouredConversationTabs = async (
+	canvasElement: HTMLElement,
+	theme: GlazeTheme,
+) => {
+	const [active, monochrome, inactive] = [
+		COLOURED_ACTIVE,
+		MONOCHROME,
+		COLOURED_INACTIVE,
+	].map(({ title }) => tabNamed(canvasElement, title))
+	await expect(
+		[active, monochrome, inactive].map((tab) =>
+			tab.getAttribute("aria-selected"),
+		),
+	).toEqual(["true", "false", "false"])
+
+	for (const tab of [active, inactive]) {
+		const slot = iconSlotOf(tab)
+		const icon = slotIn(slot, "conversation-subject-icon")
+		const glyph = icon.querySelector("svg") as SVGElement
+		const ink = getComputedStyle(icon)
+			.getPropertyValue(`--hue-${theme}-avatar-ink`)
+			.trim()
+		await expect(icon.dataset.hue).toBe(String(BLOT_HUES.pink))
+		await expect(getComputedStyle(icon).color).toBe(rgbOf(ink))
+		await expect(getComputedStyle(glyph).color).toBe(rgbOf(ink))
+		await expect(icon.children).toHaveLength(1)
+		await expect(getComputedStyle(icon).backgroundColor).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect([boxOf(slot).width, boxOf(slot).height]).toEqual([
+			ICON_SLOT,
+			ICON_SLOT,
+		])
+		await expect([boxOf(glyph).width, boxOf(glyph).height]).toEqual([
+			GLYPH_ICON,
+			GLYPH_ICON,
+		])
+	}
+
+	const plain = iconSlotOf(monochrome).firstElementChild as SVGElement
+	await expect(plain.tagName.toLowerCase()).toBe("svg")
+	await expect(getComputedStyle(plain).color).toBe(
+		getComputedStyle(monochrome).color,
+	)
+	await expect(getComputedStyle(plain).color).not.toBe(
+		getComputedStyle(slotIn(active, "conversation-subject-icon")).color,
+	)
+	await expect([boxOf(plain).width, boxOf(plain).height]).toEqual([
+		GLYPH_ICON,
+		GLYPH_ICON,
+	])
+}
+
+const COLOURED_TABS_DESCRIPTION =
+	"Two conversations with a colour, one in the active tab and one in an inactive tab, either side of a conversation with none. Check both coloured tabs draw their filled glyph in the avatar ink of their hue, the colour their compact sidebar row shows, with no tile behind it, 15px in the 16px icon slot, and that the tab without a colour keeps the bare glyph in the tab's own text colour."
+
+export const ColouredConversationTabs = meta.story({
+	args: COLOURED_TABS,
+	parameters: {
+		docs: { description: { story: COLOURED_TABS_DESCRIPTION } },
+	},
+	play: ({ canvasElement }) =>
+		expectColouredConversationTabs(canvasElement, "light"),
+})
+
+export const ColouredConversationTabsDark = meta.story({
+	globals: { theme: "dark" },
+	args: COLOURED_TABS,
+	parameters: {
+		docs: {
+			description: { story: `${COLOURED_TABS_DESCRIPTION} Dark theme.` },
+		},
+	},
+	play: ({ canvasElement }) =>
+		expectColouredConversationTabs(canvasElement, "dark"),
 })
