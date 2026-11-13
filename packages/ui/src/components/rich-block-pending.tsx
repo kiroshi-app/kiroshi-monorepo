@@ -3,10 +3,7 @@
 import { useTranslation } from "react-i18next"
 
 import { ConversationIcons } from "@workspace/ui/components/icons"
-import {
-	TextShimmer,
-	WORKING_SHIMMER_DURATION,
-} from "@workspace/ui/components/motion/text-shimmer"
+import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RichBlockPendingProps = {
@@ -36,12 +33,9 @@ const RichBlockPending = ({ title, className }: RichBlockPendingProps) => {
 				<span className="truncate font-semibold text-foreground text-sm">
 					{title}
 				</span>
-				<TextShimmer
-					className="truncate text-compact"
-					duration={WORKING_SHIMMER_DURATION}
-				>
+				<ShimmerText className="truncate text-compact">
 					{t("richBlock.building")}
-				</TextShimmer>
+				</ShimmerText>
 			</header>
 			<div
 				aria-hidden="true"

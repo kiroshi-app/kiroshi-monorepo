@@ -66,7 +66,6 @@ import {
 	type ExpandedSidebarSection,
 } from "@workspace/ui/components/expanded-sidebar"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
-import { WORKING_SHIMMER_DURATION } from "@workspace/ui/components/motion/text-shimmer"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceAvatarState } from "@workspace/ui/components/space-avatar"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
@@ -2790,7 +2789,7 @@ export const CompactWorkingExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Atlas and Q3 roadmap review are working. Check a highlight crosses their title alone, a 110 degree gradient from faint foreground through foreground sliding over ${WORKING_SHIMMER_DURATION}s, linear, without end, their icon and meta unchanged and the state also said in words to assistive technology. Under reduced motion, check the highlight stays painted, held still at the centre of the title.`,
+				story: `${COMPACT_DESCRIPTION} Atlas and Q3 roadmap review are working. Check a highlight band crosses their title alone, plain foreground over muted foreground, as wide and as fast on the short title as on the long one, linear, without end, their icon and meta unchanged and the state also said in words to assistive technology. Under reduced motion, check the highlight stays painted, held still over the start of the title, where a title cut by its row still shows it.`,
 			},
 		},
 	},
@@ -2798,12 +2797,12 @@ export const CompactWorkingExpanded = meta.story({
 		const working = [ATLAS_LINE.name, COMPACT_ROADMAP.name].map((name) =>
 			rowHolding(canvasElement, name),
 		)
-		await expect(slotsIn(canvasElement, "text-shimmer")).toHaveLength(
+		await expect(slotsIn(canvasElement, "shimmer-text")).toHaveLength(
 			working.length,
 		)
 		for (const row of working) {
 			const title = slotIn(row, "roster-row-name")
-			const shimmer = slotIn(title, "text-shimmer")
+			const shimmer = slotIn(title, "shimmer-text")
 			await expect(title).toHaveTextContent(/working$/)
 			await expect(colourOf(slotIn(row, "roster-row-meta"))).toBe(
 				tokenStyleIn(row, "text-sidebar-muted-foreground", "color"),
@@ -2812,16 +2811,15 @@ export const CompactWorkingExpanded = meta.story({
 
 			const held = getComputedStyle(shimmer)
 			await expect(held.animationName).toBe("none")
-			await expect(held.backgroundImage).toContain("linear-gradient(110deg")
-			await expect(held.backgroundPositionX).toBe("50%")
+			await expect(held.backgroundImage).toContain("linear-gradient(90deg")
+			await expect(Number.parseFloat(held.backgroundPositionX)).toBeCloseTo(
+				-0.4 * Number.parseFloat(held.backgroundSize),
+			)
 
 			if (!isInBrowserRunner()) continue
 			await withMotionAllowed(async () => {
 				const moving = getComputedStyle(shimmer)
-				await expect(moving.animationName).toBe("ui-text-shimmer")
-				await expect(moving.animationDuration).toBe(
-					`${WORKING_SHIMMER_DURATION}s`,
-				)
+				await expect(moving.animationName).toBe("ui-shimmer-text")
 				await expect(moving.animationIterationCount).toBe("infinite")
 			})
 		}

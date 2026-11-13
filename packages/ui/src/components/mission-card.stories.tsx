@@ -700,7 +700,7 @@ export const RowWorking = meta.story({
 		const identifier = canvas.getByText("OPE-42")
 		await expect(line.firstElementChild).toHaveAttribute(
 			"data-slot",
-			"text-shimmer",
+			"shimmer-text",
 		)
 		await expect(figuresOf(identifier)).toBe("tabular-nums")
 		await expect(weightOf(identifier)).toBe(MEDIUM_WEIGHT)

@@ -1397,10 +1397,10 @@ export const Working = meta.story({
 		).toBeNull()
 		await expect(companionGlyphsIn(resting, "idle")[0]).toBeVisible()
 		await expect(tintsIn(resting)).toEqual([BLOT_HUES.purple])
-		await expect(resting.querySelector('[data-slot="text-shimmer"]')).toBeNull()
+		await expect(resting.querySelector('[data-slot="shimmer-text"]')).toBeNull()
 		await expect(colorOf(resting, "roster-row-preview")).toBe(muted)
 
-		const shimmer = slotIn(running, "text-shimmer")
+		const shimmer = slotIn(running, "shimmer-text")
 		await expect(rowButton(running)).toHaveAttribute("aria-current", "page")
 		await expect(getComputedStyle(shimmer).color).toBe(muted)
 
@@ -2267,7 +2267,7 @@ export const ReducedMotion = meta.story({
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
 
-		const shimmer = slotIn(row, "text-shimmer")
+		const shimmer = slotIn(row, "shimmer-text")
 		await expect(getComputedStyle(shimmer).animationName).toBe("none")
 		await expect(getComputedStyle(shimmer).color).toBe(
 			tokenColor(canvasElement, "--muted-foreground"),
@@ -5549,7 +5549,7 @@ export const WorkingLongSummary = meta.story({
 			"roster-row-preview",
 		)
 
-		const shimmer = slotIn(row, "text-shimmer")
+		const shimmer = slotIn(row, "shimmer-text")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(preview).toHaveTextContent(`${LONG_SPEAKER}: searching…`)
 		await expect(isClipped(preview)).toBe(true)

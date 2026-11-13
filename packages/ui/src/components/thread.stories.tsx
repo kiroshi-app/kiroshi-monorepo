@@ -2759,12 +2759,12 @@ export const MotionBeforeAndAfter = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Motion before and after. A live arrival fades in and lifts 8 over 200 ms (proved in `Conversation/Message/Transcript`), the work label sweeps left to right every 1.8 s, the avatar field moves only while the agent works, hover is instant. Under reduced motion, which the test browser emulates, every one of these is still: the play reads that back.",
+					"Artboard Motion before and after. A live arrival fades in and lifts 8 over 200 ms (proved in `Conversation/Message/Transcript`), a highlight band crosses the work label left to right every 2 s, the avatar field moves only while the agent works, hover is instant. Under reduced motion, which the test browser emulates, every one of these is still: the play reads that back.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const shimmer = slotIn(canvasElement, "text-shimmer")
+		const shimmer = slotIn(canvasElement, "shimmer-text")
 		await expect(getComputedStyle(shimmer).animationName).toBe("none")
 		const surface = slotIn(canvasElement, "message-bubble-content")
 		await expect(getComputedStyle(surface).transitionDuration).toBe("0s")

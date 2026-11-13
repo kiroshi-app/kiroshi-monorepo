@@ -1121,7 +1121,7 @@ export const WorkingConversationKeepsItsTimestamp = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expect(
-			slotIn(slotIn(row, "roster-row-preview"), "text-shimmer"),
+			slotIn(slotIn(row, "roster-row-preview"), "shimmer-text"),
 		).toBeVisible()
 		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
 			DESK_ROOM.timestamp ?? "",
@@ -1142,7 +1142,7 @@ const expectWorkingPreview = async (
 ) => {
 	const row = rowIn(canvasElement)
 	const preview = slotIn(row, "roster-row-preview")
-	await expect(slotIn(preview, "text-shimmer")).toBeVisible()
+	await expect(slotIn(preview, "shimmer-text")).toBeVisible()
 	await expect(preview.textContent).toBe(text)
 	await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
 		DESK_ROOM.timestamp ?? "",

@@ -234,7 +234,7 @@ export const Final7 = meta.story({
 		for (const line of slotsIn(canvasElement, "thread-work-line-line")) {
 			await expect(getComputedStyle(line).cursor).not.toBe("pointer")
 		}
-		for (const shimmer of slotsIn(canvasElement, "text-shimmer"))
+		for (const shimmer of slotsIn(canvasElement, "shimmer-text"))
 			await expect(getComputedStyle(shimmer).animationName).toBe("none")
 	},
 })

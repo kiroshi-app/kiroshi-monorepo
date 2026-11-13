@@ -965,7 +965,7 @@ export const OneConversationToday = meta.story({
 
 		const row = canvas.getByRole("button", { name: "Lisbon offsite" })
 		await expect(row).toHaveAttribute("data-state", "working")
-		await expect(slotIn(row, "text-shimmer")).toHaveTextContent(
+		await expect(slotIn(row, "shimmer-text")).toHaveTextContent(
 			"Atlas: working…",
 		)
 		await expect(colourTransitionsOf(row)).toEqual([])
@@ -1030,7 +1030,7 @@ export const ThreeTodayMixedStates = meta.story({
 		await expect(muted).not.toBe(attention)
 		await expect(colourOf(done, "home-today-row-preview")).toBe(muted)
 		await expect(colourOf(waiting, "home-today-row-preview")).toBe(muted)
-		await expect(done.querySelector('[data-slot="text-shimmer"]')).toBeNull()
+		await expect(done.querySelector('[data-slot="shimmer-text"]')).toBeNull()
 	},
 })
 
@@ -1151,7 +1151,7 @@ export const TodayLongContent = meta.story({
 
 		const [working, waiting, done] = todayRowsIn(canvasElement)
 		await expectCutOnOneLine(slotIn(working, "home-today-row-title"))
-		await expectCutOnOneLine(slotIn(working, "text-shimmer"))
+		await expectCutOnOneLine(slotIn(working, "shimmer-text"))
 		await expectCutOnOneLine(slotIn(waiting, "home-today-row-title"))
 		await expectCutOnOneLine(slotIn(waiting, "home-today-row-preview"))
 		await expectCutOnOneLine(
