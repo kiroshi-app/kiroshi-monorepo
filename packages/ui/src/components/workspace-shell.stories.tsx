@@ -1109,27 +1109,24 @@ export const HandleHeld = meta.story({
 
 		await userEvent.pointer([{ keys: "[/MouseLeft]", coords: to }])
 		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
+		const overCard = middleOf(card)
 		await expect(
-			document.elementFromPoint(middleOf(card).clientX, middleOf(card).clientY),
+			document.elementFromPoint(overCard.clientX, overCard.clientY),
 		).not.toBe(overlay)
 
 		if (!isInBrowserRunner()) return
 		const grip = middleOf(handle)
 		const acrossTranscript = middleOf(slotIn(canvasElement, "message-scroller"))
+		const furtherAcross = {
+			clientX: acrossTranscript.clientX + 120,
+			clientY: acrossTranscript.clientY + 120,
+		}
 		await realMouse({ type: "mousePressed", ...grip })
 		await realMouse({ type: "mouseMoved", ...acrossTranscript })
-		await realMouse({
-			type: "mouseMoved",
-			clientX: acrossTranscript.clientX + 120,
-			clientY: acrossTranscript.clientY + 120,
-		})
+		await realMouse({ type: "mouseMoved", ...furtherAcross })
 		await waitFor(() => expect(overlay).toBeVisible(), FRAME_POLL)
 		await expect(selectedText()).toBe("")
-		await realMouse({
-			type: "mouseReleased",
-			clientX: acrossTranscript.clientX + 120,
-			clientY: acrossTranscript.clientY + 120,
-		})
+		await realMouse({ type: "mouseReleased", ...furtherAcross })
 		await waitFor(() => expect(overlay).not.toBeVisible(), FRAME_POLL)
 		await expect(selectedText()).toBe("")
 		await expect(handle).toHaveFocus()
