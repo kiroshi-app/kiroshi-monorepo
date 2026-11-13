@@ -5,7 +5,6 @@ import {
 	type AppSidebarConversation,
 	type AppSidebarSection,
 	badgeOf,
-	conversationTooltipOf,
 	heldBotsOf,
 	previewOf,
 	workingBotOf,
@@ -126,6 +125,7 @@ const ConversationRosterRow = ({
 						isLiftable
 						badge={badgeOf(conversation)}
 						geometry={isCompact ? "compact" : stackedGeometryOf(hasSurface)}
+						hasRowTooltip
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isTooltipHidden={isLifted || isMenuOpen}
@@ -164,9 +164,9 @@ const ConversationRosterRow = ({
 								? t("roster.conversation.notSent")
 								: (conversation.timestamp ?? "")
 						}
-						tooltip={conversationTooltipOf(t, conversation)}
 					/>
 					<MissionCapsuleList
+						isTooltipHidden={isLifted || isMenuOpen}
 						missions={conversation.missions}
 						onOpenMission={onOpenMission}
 						openMissionId={openMissionId}

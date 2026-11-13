@@ -8,7 +8,7 @@ import {
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
-	expectTooltipCard,
+	expectTooltipOnOneLine,
 	expectTooltipPastTheSidebarEdge,
 	openTooltipOf,
 	SidebarFrame,
@@ -24,12 +24,10 @@ import {
 	PENDING_QUESTION,
 	SIDEBAR_SECTION,
 	SIDEBAR_SPACES,
-	SPOKEN_AT,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
-import { formatSentDate } from "@workspace/ui/components/message"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -38,8 +36,8 @@ const meta = preview.meta({
 	component: BotRosterRow,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story) => (
-			<SidebarFrame>
+		(Story, { parameters }) => (
+			<SidebarFrame isCollapsed={parameters.isSidebarCollapsed}>
 				<SidebarMenu>
 					<Story />
 				</SidebarMenu>
@@ -267,45 +265,53 @@ export const CompactRowAtRestHoveredAndActiveDark = meta.story(
 	compactRowStatesStory({ theme: "dark" }),
 )
 
-const SPOKEN_ATLAS: AppSidebarBot = { ...ATLAS, lastActivityAt: SPOKEN_AT }
-
-export const TooltipCarriesTheAgentNameAndTitle = meta.story({
-	args: { bot: SPOKEN_ATLAS, isSelected: false },
-	decorators: [
-		(Story) => (
-			<>
-				<li aria-hidden="true" className="h-40" />
-				<Story />
-			</>
-		),
-	],
+export const TooltipCarriesTheAgentNameAlone = meta.story({
+	args: { isSelected: false },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The pointer resting on an agent row. Check the tooltip names the agent with its title on one line, then its last message and the full date of that message, with no line for seated agents, that it sits just past the sidebar edge and centred on the row, and that the row gains it as its description.",
+					"The pointer resting on an agent row of the expanded sidebar, whose name the row shows whole. Check the tooltip holds the agent name on one line and nothing else, without the title the row wears as a badge, that it sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const row = slotIn(canvasElement, "sidebar-menu-button")
 		const tooltip = await openTooltipOf(row)
-		const sentDate = formatSentDate(SPOKEN_AT)
 
-		await expect(
-			slotIn(tooltip, "sidebar-row-tooltip-heading"),
-		).toHaveTextContent("Atlas · Research")
-		await expect(slotsIn(tooltip, "sidebar-row-tooltip-agents")).toEqual([])
-		await expect(
-			slotIn(tooltip, "sidebar-row-tooltip-message"),
-		).toHaveTextContent(ATLAS.lastMessage ?? "")
-		await expect(slotIn(tooltip, "sidebar-row-tooltip-time")).toHaveTextContent(
-			sentDate,
-		)
-		await expectTooltipCard(tooltip)
+		await expect(slotIn(row, "roster-row-badge")).toHaveTextContent("Research")
+		await expect(tooltip.textContent).toBe(ATLAS.name)
+		await expectTooltipOnOneLine(tooltip)
 		await expectTooltipPastTheSidebarEdge(row, tooltip)
-		await expect(row).toHaveAccessibleDescription(
-			["Atlas · Research", ATLAS.lastMessage, sentDate].join("\n"),
-		)
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const TooltipOnTheCollapsedSidebar = meta.story({
+	args: { isSelected: false },
+	parameters: {
+		isSidebarCollapsed: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on an agent row while the sidebar is collapsed and its rows are drawn compact, as the sidebar peeking over the page lists them. Check the tooltip is the one the expanded sidebar shows, the agent name alone on one line, and that the row keeps the agent name as its accessible name with no description.",
+			},
+		},
+	},
+	render: (args) => (
+		<CompactRowsContext.Provider value>
+			<li aria-hidden="true" className="h-40" />
+			<BotRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(tooltip.textContent).toBe(ATLAS.name)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(ATLAS.name)
+		await expect(row).not.toHaveAttribute("aria-describedby")
 	},
 })

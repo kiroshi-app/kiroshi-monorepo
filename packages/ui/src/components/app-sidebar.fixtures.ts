@@ -100,8 +100,6 @@ export const STILL_LIFT: Lifter = {
 	hasJustDropped: () => false,
 }
 
-export const SPOKEN_AT = new Date(2026, 10, 12, 9, 24).getTime()
-
 export const PENDING_QUESTION = "Ship the release notes as drafted?"
 
 export const LONG_PENDING_QUESTION =

@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
@@ -8,6 +9,8 @@ import {
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
+import { offsetPastSidebarEdge } from "@workspace/ui/components/sidebar-menu-row"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TREE =
@@ -41,17 +44,24 @@ type MissionOpening = {
 	onOpenMission?: (missionId: string) => void
 }
 
-type MissionTreeRowProps = MissionOpening & {
-	mission: AppSidebarRowMission
+type MissionTooltip = {
+	isTooltipHidden?: boolean
 }
+
+type MissionTreeRowProps = MissionOpening &
+	MissionTooltip & {
+		mission: AppSidebarRowMission
+	}
 
 const MissionTreeRow = ({
 	mission,
 	openMissionId,
+	isTooltipHidden = false,
 	onOpenMission,
 }: MissionTreeRowProps) => {
 	const { t } = useTranslation("bots")
 	const isCompact = useIsCompactRows()
+	const rowRef = useRef<HTMLButtonElement>(null)
 	const drawn = isCompact ? COMPACT_ROW : STACKED_ROW
 	const { id, state, ticket, objective, isLive } = mission
 	const title = ticket.title || objective
@@ -98,16 +108,24 @@ const MissionTreeRow = ({
 	)
 
 	return isCompact ? (
-		<button
-			aria-current={id === openMissionId ? "page" : undefined}
-			className={drawn.row}
-			data-slot="mission-capsule"
-			data-state={state}
-			onClick={() => onOpenMission?.(id)}
-			type="button"
+		<TooltipHint
+			content={isTooltipHidden ? null : title}
+			side="right"
+			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
+			variant="line"
 		>
-			{anatomy}
-		</button>
+			<button
+				aria-current={id === openMissionId ? "page" : undefined}
+				className={drawn.row}
+				data-slot="mission-capsule"
+				data-state={state}
+				onClick={() => onOpenMission?.(id)}
+				ref={rowRef}
+				type="button"
+			>
+				{anatomy}
+			</button>
+		</TooltipHint>
 	) : (
 		<div className={drawn.row} data-slot="mission-capsule" data-state={state}>
 			{anatomy}
@@ -115,13 +133,15 @@ const MissionTreeRow = ({
 	)
 }
 
-type MissionCapsuleListProps = MissionOpening & {
-	missions: AppSidebarRowMission[] | undefined
-}
+type MissionCapsuleListProps = MissionOpening &
+	MissionTooltip & {
+		missions: AppSidebarRowMission[] | undefined
+	}
 
 const MissionCapsuleList = ({
 	missions,
 	openMissionId,
+	isTooltipHidden,
 	onOpenMission,
 }: MissionCapsuleListProps) => {
 	const isCompact = useIsCompactRows()
@@ -133,6 +153,7 @@ const MissionCapsuleList = ({
 		>
 			{missions.map((mission) => (
 				<MissionTreeRow
+					isTooltipHidden={isTooltipHidden}
 					key={mission.id}
 					mission={mission}
 					onOpenMission={onOpenMission}

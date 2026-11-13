@@ -24,13 +24,13 @@ const HINT_CLOSE_GRACE_MS = 80
 
 const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
-type TooltipHintVariant = "hint" | "card"
+type TooltipHintVariant = "hint" | "line"
 
 const HINT = cn("break-words", STILL_UNDER_REDUCED_MOTION)
 
 const BUBBLE: Record<TooltipHintVariant, string> = {
 	hint: HINT,
-	card: cn(HINT, "py-3"),
+	line: cn("block truncate", STILL_UNDER_REDUCED_MOTION),
 }
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"

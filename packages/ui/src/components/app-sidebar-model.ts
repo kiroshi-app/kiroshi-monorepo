@@ -15,7 +15,6 @@ import type { ConversationParticipant } from "@workspace/ui/components/conversat
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
-import type { SidebarRowTooltipFields } from "@workspace/ui/components/sidebar-row-tooltip"
 import type { Space } from "@workspace/ui/components/space"
 import type {
 	SpaceInvitation,
@@ -143,51 +142,6 @@ const previewOf = (
 	if (!speaker) return text
 	return t("roster.conversation.preview", { name: speaker, text })
 }
-
-const headingOf = (t: TFunction<"bots">, bot: AppSidebarBot) =>
-	bot.title
-		? t("roster.titled", { name: bot.name, title: bot.title })
-		: bot.name
-
-type LastWordCarrier = {
-	lastMessage?: string
-	lastActivityAt?: number
-}
-
-const lastWordOf = ({ lastMessage, lastActivityAt }: LastWordCarrier) => {
-	const message = lastMessage ? toPlainText(lastMessage) : ""
-	return message ? { message, spokenAt: lastActivityAt } : {}
-}
-
-const seatedAgentsOf = (
-	t: TFunction<"bots">,
-	{ participants }: AppSidebarConversation,
-) =>
-	participants.length > 0
-		? t("roster.conversation.agents", {
-				count: participants.length,
-				names: participants.map((participant) => participant.name).join(", "),
-			})
-		: undefined
-
-const botTooltipOf = (
-	t: TFunction<"bots">,
-	bot: AppSidebarBot,
-): SidebarRowTooltipFields => ({
-	heading: headingOf(t, bot),
-	...lastWordOf(bot),
-})
-
-const conversationTooltipOf = (
-	t: TFunction<"bots">,
-	conversation: AppSidebarConversation,
-): SidebarRowTooltipFields => ({
-	heading: conversation.agent
-		? headingOf(t, conversation.agent)
-		: conversation.name,
-	agents: conversation.agent ? undefined : seatedAgentsOf(t, conversation),
-	...lastWordOf(conversation),
-})
 
 const announcementFor = (
 	t: TFunction<"bots">,
@@ -337,9 +291,7 @@ export {
 	type BotRosterActions,
 	badgeOf,
 	botPreviewOf,
-	botTooltipOf,
 	type ConversationRosterActions,
-	conversationTooltipOf,
 	heldBotsOf,
 	isBusy,
 	isNeedingYou,
