@@ -520,7 +520,13 @@ struct ConversationPagingTests {
         await connection.stop()
     }
 
-    @Test func aMacThatDoesNotKnowPagesGetsTheWholeListForTheSession() async throws {
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named conversation_page""#),
+    ])
+    func aMacThatDoesNotKnowPagesGetsTheWholeListForTheSession(status: Int, refusal: String)
+        async throws
+    {
         let groups = topics(3)
         let host = TestHost(
             groups: groups,
@@ -532,7 +538,7 @@ struct ConversationPagingTests {
             ]
         ) { call in
             guard call.command == "conversation_page" else { return nil }
-            return TestHost.refused(call, status: 403, #""this command belongs to the host""#)
+            return TestHost.refused(call, status: status, refusal)
         }
         let (store, connection, following) = await follow(host)
 
