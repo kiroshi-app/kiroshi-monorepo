@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ImageMenu,
@@ -12,14 +13,17 @@ import {
 } from "@workspace/ui/components/image-menu"
 import {
 	handlersFor,
-	LIBRARY_BAR,
-	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	LIBRARY_ISLAND_CONTEXT,
+	LIBRARY_ISLAND_TITLE,
+	LIBRARY_OVERLAY_ISLAND,
+	LibraryIslandButton,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
 import { useLibraryOverlayContainer } from "@workspace/ui/components/library-panel"
+import { FLOATING_HEADER } from "@workspace/ui/components/screen-layout"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
 	Dialog,
@@ -48,7 +52,9 @@ const STEP = cn(
 	"size-10 bg-foreground/10 hover:bg-foreground/16",
 )
 
-const LIGHTBOX_SURFACE = "dark bg-[#080809]/93 text-foreground"
+const STEP_BELOW_ISLANDS = "mt-14 flex"
+
+const LIGHTBOX_SURFACE = "dark bg-lightbox-surface text-foreground"
 
 const ZOOM_CONTROL = cn(LIBRARY_BAR_ROUND, "size-7 hover:bg-foreground/8")
 
@@ -123,7 +129,7 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 	return (
 		<>
 			<div
-				className="flex min-h-0 flex-1 overflow-auto rounded-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+				className="flex min-h-0 flex-1 overflow-auto rounded-md pt-14 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
 				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
@@ -134,7 +140,7 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 						<img
 							alt={image.name}
 							className={cn(
-								"m-auto rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
+								"m-auto rounded-[4px] shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
 								zoom === null && "max-h-full max-w-full object-contain",
 							)}
 							draggable={false}
@@ -291,34 +297,37 @@ const LibraryLightbox = ({
 						}}
 						ref={surfaceRef}
 					>
-						<div className={LIBRARY_BAR}>
-							<div className="flex min-w-0 items-center gap-2">
+						<div
+							className={FLOATING_HEADER}
+							data-slot="library-lightbox-header"
+						>
+							<HeaderIsland
+								className={cn(LIBRARY_OVERLAY_ISLAND, LIBRARY_ISLAND_CONTEXT)}
+							>
 								<DialogClose
 									render={
-										<TooltipButton
+										<LibraryIslandButton
 											aria-label={t("library.lightbox.back")}
-											className={cn(LIBRARY_BAR_BARE, "shrink-0")}
-											size="icon"
-											tooltip={t("library.lightbox.back")}
-											tooltipSide="bottom"
-											variant="ghost"
 										/>
 									}
 								>
 									<Icons.Previous aria-hidden="true" />
 								</DialogClose>
-								<div className="flex min-w-0 items-baseline gap-2.5">
+								<div className="flex h-8 min-w-0 flex-wrap content-start overflow-hidden">
 									<DialogTitle
-										className="truncate font-medium text-foreground text-sm leading-4.5"
+										className={LIBRARY_ISLAND_TITLE}
 										title={image.name}
 									>
 										{image.name}
 									</DialogTitle>
-									<p className="shrink-0 text-compact text-muted-foreground leading-4.5 tabular-nums">
+									<p
+										className="whitespace-nowrap py-2 pe-2 text-muted-foreground text-sm leading-4 tabular-nums"
+										data-slot="library-lightbox-meta"
+									>
 										{image.detail}
 									</p>
 								</div>
-							</div>
+							</HeaderIsland>
 							<LibraryItemBarActions
 								actions={handlers}
 								item={image}
@@ -332,7 +341,7 @@ const LibraryLightbox = ({
 							className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18"
 							data-lightbox-backdrop
 						>
-							<span className="flex">
+							<span className={STEP_BELOW_ISLANDS}>
 								<TooltipButton
 									aria-label={t("library.lightbox.previous")}
 									className={STEP}
@@ -367,7 +376,7 @@ const LibraryLightbox = ({
 									position={position}
 								/>
 							</div>
-							<span className="flex">
+							<span className={STEP_BELOW_ISLANDS}>
 								<TooltipButton
 									aria-label={t("library.lightbox.next")}
 									className={STEP}

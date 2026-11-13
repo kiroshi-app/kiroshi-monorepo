@@ -1711,9 +1711,7 @@ const PRESENCE_ARGS = {
 }
 
 const barIn = (canvasElement: HTMLElement) =>
-	within(
-		breadcrumbIn(canvasElement).closest("nav")?.parentElement as HTMLElement,
-	)
+	within(slotIn(canvasElement, "library-document-bar"))
 
 const WRITING_COUNT = /agents? writing/
 

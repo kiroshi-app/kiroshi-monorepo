@@ -15,6 +15,7 @@ import {
 	LibraryFailedImage,
 } from "@workspace/ui/components/library-document-states"
 import {
+	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	type LibraryDocument,
 	LibraryDocumentBar,
@@ -22,6 +23,7 @@ import {
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
 import { LibraryDragGhost } from "@workspace/ui/components/library-import"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { i18n } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -38,9 +40,9 @@ const DROPPED_NAMES = [
 	"rooftop-dusk.png",
 ]
 
-const DROP_LINE_TOP = 236
+const DROP_LINE_TOP = 252
 
-const GHOST_POSITION = { x: 620, y: 300 }
+const GHOST_POSITION = { x: 620, y: 260 }
 
 const FAILED_NAME = "rooftop.heic"
 
@@ -68,23 +70,29 @@ const DocumentPage = ({
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>
-			<div className="flex size-full min-h-0 flex-col">
-				<LibraryDocumentBar
-					isReadOnly={isReadOnly}
-					item={item}
-					onBack={fn()}
-					onCopy={fn()}
-					onDelete={fn()}
-					onDownload={fn()}
-					onRename={fn()}
-				/>
-				<LibraryDocumentColumn
-					detail={item.detail}
-					heading={heading ?? <h1 className={DOCUMENT_TITLE}>{item.name}</h1>}
-				>
-					{children}
-				</LibraryDocumentColumn>
-			</div>
+			<ScreenLayout
+				className={DOCUMENT_PAGE}
+				header={
+					<LibraryDocumentBar
+						isReadOnly={isReadOnly}
+						item={item}
+						onBack={fn()}
+						onCopy={fn()}
+						onDelete={fn()}
+						onDownload={fn()}
+						onRename={fn()}
+					/>
+				}
+				isHeaderFloating
+				scroller={() => (
+					<LibraryDocumentColumn
+						detail={item.detail}
+						heading={heading ?? <h1 className={DOCUMENT_TITLE}>{item.name}</h1>}
+					>
+						{children}
+					</LibraryDocumentColumn>
+				)}
+			/>
 		</ContentCard>
 	</div>
 )
@@ -97,7 +105,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The four states a Library document page takes beyond reading: an empty document offering what to start with, files dragged over it, an image that failed to import in its gallery cell, and the read-only bar of a member offline. Each piece is drawn here on the page the app assembles from LibraryDocumentBar and LibraryDocumentColumn.",
+					"The four states a Library document page takes beyond reading: an empty document offering what to start with, files dragged over it, an image that failed to import in its gallery cell, and the read-only islands of a member offline. Each piece is drawn here on the page the app assembles from LibraryDocumentBar, floating over LibraryDocumentColumn.",
 			},
 		},
 	},
@@ -246,7 +254,7 @@ export const ReadOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document while the member is offline, as artboard 5d draws it. Check the Read-only chip sits in the bar actions before More, and that no offline banner shows above the document.",
+					"A document while the member is offline, as artboard 5d draws it. Check the Read-only chip sits in the actions island before More, and that no offline banner shows above the document.",
 			},
 		},
 	},

@@ -12,9 +12,13 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import {
+	HeaderIsland,
+	HeaderIslandButton,
+} from "@workspace/ui/components/header-island"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
-import { TooltipButton } from "@workspace/ui/components/tooltip-button"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -333,9 +337,21 @@ const LIBRARY_BAR_BARE = cn(LIBRARY_BAR_ROUND, "size-8 hover:bg-foreground/8")
 
 const LIBRARY_BAR_DIVIDER = "bg-foreground/12 data-vertical:self-center"
 
-const BAR_ACTION = cn(
-	LIBRARY_BAR_ROUND,
-	"size-8 bg-foreground/8 hover:bg-foreground/14",
+const LIBRARY_ISLAND_CONTEXT = "min-w-0 shrink"
+
+const LIBRARY_ISLAND_TITLE =
+	"min-w-0 truncate p-2 font-medium text-foreground text-sm leading-4"
+
+const LIBRARY_OVERLAY_ISLAND =
+	"bg-header-island-overlay backdrop-blur-lg dark:bg-header-island-overlay"
+
+const LibraryIslandButton = ({
+	"aria-label": label,
+	...props
+}: ComponentProps<typeof HeaderIslandButton>) => (
+	<TooltipHint content={label} side="bottom">
+		<HeaderIslandButton aria-label={label} {...props} />
+	</TooltipHint>
 )
 
 const barMenuActionsOf = <Item,>(
@@ -381,6 +397,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const isCopied = copiedItem === item
 	const { onCopy, onDownload, onDelete } = actions
 	const menuActions = barMenuActionsOf(actions)
+	const hasMenu = hasLibraryItemActions(menuActions)
 
 	useEffect(() => {
 		if (copiedItem === null) return
@@ -403,92 +420,75 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	}
 
 	return (
-		<div className="flex shrink-0 items-center gap-2">
+		<HeaderIsland
+			className={cn(surface === "lightbox" && LIBRARY_OVERLAY_ISLAND)}
+		>
 			{leading}
 			{onDownload ? (
-				<TooltipButton
+				<LibraryIslandButton
 					aria-label={t(`library.${surface}.download`)}
-					className={BAR_ACTION}
 					onClick={() => onDownload(item)}
-					size="icon"
-					tooltip={t(`library.${surface}.download`)}
-					tooltipSide="bottom"
-					variant="ghost"
 				>
 					<Icons.Download aria-hidden="true" />
-				</TooltipButton>
+				</LibraryIslandButton>
 			) : null}
 			{onCopy ? (
-				<TooltipButton
+				<LibraryIslandButton
 					aria-label={t(`library.${surface}.copy`)}
-					className={BAR_ACTION}
 					onClick={copy}
-					size="icon"
-					tooltip={t(`library.${surface}.copy`)}
-					tooltipSide="bottom"
-					variant="ghost"
 				>
 					<IconSwap
 						icon={<Icons.Copy aria-hidden="true" />}
 						isSwapped={isCopied}
 						swappedIcon={<Icons.Check aria-hidden="true" />}
 					/>
-				</TooltipButton>
+				</LibraryIslandButton>
 			) : null}
-			{hasLibraryItemActions(menuActions) ? (
-				<>
-					<DropdownMenu onOpenChange={onMenuOpenChange}>
-						<DropdownMenuTrigger
-							render={
-								<TooltipButton
-									aria-label={t(`library.${surface}.more`)}
-									className={BAR_ACTION}
-									size="icon"
-									tooltip={t(`library.${surface}.more`)}
-									tooltipSide="bottom"
-									variant="ghost"
-								/>
-							}
-						>
-							<Icons.More aria-hidden="true" />
-						</DropdownMenuTrigger>
-						<DropdownMenuContent
-							align="end"
-							aria-label={t("library.itemMenu.label", {
-								name: libraryDisplayName(item.name, t),
-							})}
-							className={cn(
-								"w-auto",
-								surface === "lightbox" && "dark",
-								STILL_UNDER_REDUCED_MOTION,
-							)}
-							finalFocus={menuFinalFocus}
-						>
-							<LibraryItemMenuItems
-								actions={menuActions}
-								item={item}
-								onPickDelete={() => confirmDelete(true)}
-								parts={DROPDOWN_MENU_PARTS}
+			{hasMenu ? (
+				<DropdownMenu onOpenChange={onMenuOpenChange}>
+					<DropdownMenuTrigger
+						render={
+							<LibraryIslandButton
+								aria-label={t(`library.${surface}.more`)}
+								className="aria-expanded:bg-header-island-control-hover aria-expanded:text-foreground"
 							/>
-						</DropdownMenuContent>
-					</DropdownMenu>
-					<Separator
-						className={cn(LIBRARY_BAR_DIVIDER, "h-5")}
-						orientation="vertical"
-					/>
-				</>
+						}
+					>
+						<Icons.More aria-hidden="true" />
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						align="end"
+						aria-label={t("library.itemMenu.label", {
+							name: libraryDisplayName(item.name, t),
+						})}
+						className={cn(
+							"w-auto",
+							surface === "lightbox" && "dark",
+							STILL_UNDER_REDUCED_MOTION,
+						)}
+						finalFocus={menuFinalFocus}
+					>
+						<LibraryItemMenuItems
+							actions={menuActions}
+							item={item}
+							onPickDelete={() => confirmDelete(true)}
+							parts={DROPDOWN_MENU_PARTS}
+						/>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			) : null}
-			<TooltipButton
+			{onDownload || onCopy || hasMenu ? (
+				<Separator
+					className="mx-1 h-4 bg-header-island-rule data-vertical:self-center"
+					orientation="vertical"
+				/>
+			) : null}
+			<LibraryIslandButton
 				aria-label={t(`library.${surface}.close`)}
-				className={LIBRARY_BAR_BARE}
 				onClick={onClose}
-				size="icon"
-				tooltip={t(`library.${surface}.close`)}
-				tooltipSide="bottom"
-				variant="ghost"
 			>
 				<Icons.Close aria-hidden="true" />
-			</TooltipButton>
+			</LibraryIslandButton>
 			<span aria-live="polite" className="sr-only">
 				{isCopied ? t(`library.${surface}.copied`) : ""}
 			</span>
@@ -498,7 +498,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 				onOpenChange={confirmDelete}
 				open={isConfirmingDelete}
 			/>
-		</div>
+		</HeaderIsland>
 	)
 }
 
@@ -513,6 +513,10 @@ export {
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	LIBRARY_ISLAND_CONTEXT,
+	LIBRARY_ISLAND_TITLE,
+	LIBRARY_OVERLAY_ISLAND,
+	LibraryIslandButton,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	LibraryItemContextMenu,

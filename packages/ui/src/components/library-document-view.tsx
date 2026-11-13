@@ -3,6 +3,7 @@
 import type { MouseEvent, ReactNode, Ref, TextareaHTMLAttributes } from "react"
 import { useTranslation } from "react-i18next"
 
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryDocumentPresence,
@@ -12,14 +13,16 @@ import {
 } from "@workspace/ui/components/library-document-agents"
 import {
 	handlersFor,
-	LIBRARY_BAR,
+	LIBRARY_ISLAND_CONTEXT,
+	LIBRARY_ISLAND_TITLE,
+	LibraryIslandButton,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	type LibraryMenuSubject,
 } from "@workspace/ui/components/library-item-menu"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
-import { Button } from "@workspace/ui/components/ui/button"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
@@ -118,6 +121,9 @@ const LibraryDocumentReadOnly = () => {
 	)
 }
 
+const BAR_ROW =
+	"flex shrink-0 justify-between gap-2 p-2 in-data-[slot=screen-layout-floating-header]:contents"
+
 const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	item,
 	onBack,
@@ -130,30 +136,24 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	const shownName = libraryDisplayName(item.name, t)
 
 	return (
-		<div className={LIBRARY_BAR}>
-			<nav className="flex min-w-0 items-center gap-1.5">
-				<Button
-					className="h-7 shrink-0 gap-1 rounded-full ps-1.5 pe-2.5 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6"
-					onClick={onBack}
-					variant="ghost"
-				>
-					<Icons.Previous aria-hidden="true" />
-					{t("library.document.back")}
-				</Button>
-				<span
-					aria-hidden="true"
-					className="text-compact text-muted-foreground leading-4"
-				>
-					/
-				</span>
-				<span
-					aria-current="page"
-					className="truncate ps-1 font-medium text-compact text-foreground leading-4"
-					title={shownName}
-				>
-					{shownName}
-				</span>
-			</nav>
+		<div className={BAR_ROW} data-slot="library-document-bar">
+			<HeaderIsland className={LIBRARY_ISLAND_CONTEXT}>
+				<nav className="flex min-w-0 items-center gap-0.5">
+					<LibraryIslandButton
+						aria-label={t("library.document.back")}
+						onClick={onBack}
+					>
+						<Icons.Previous aria-hidden="true" />
+					</LibraryIslandButton>
+					<span
+						aria-current="page"
+						className={LIBRARY_ISLAND_TITLE}
+						title={shownName}
+					>
+						{shownName}
+					</span>
+				</nav>
+			</HeaderIsland>
 			<LibraryItemBarActions
 				actions={handlersFor(actions, item)}
 				item={item}
@@ -170,6 +170,8 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 		</div>
 	)
 }
+
+const DOCUMENT_PAGE = "size-full min-h-0"
 
 const DOCUMENT_COLUMN_MEASURE =
 	"[--document-column-width:794px] max-w-(--document-column-width)"
@@ -191,7 +193,7 @@ const LibraryDocumentColumn = ({
 		{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
 		<div
 			className={cn(
-				"@container min-h-0 flex-1 overflow-y-auto px-10 pt-10 pb-10",
+				"@container min-h-0 flex-1 overflow-y-auto px-10 pt-14 pb-10",
 				onColumnMouseDown && "cursor-text",
 			)}
 			data-slot="library-document-column"
@@ -284,42 +286,50 @@ const LibraryDocumentView = ({
 	const isWriting = writers.length > 0
 
 	return (
-		<div
-			className="flex size-full min-h-0 flex-col"
+		<ScreenLayout
+			className={DOCUMENT_PAGE}
 			data-slot="library-document-view"
-		>
-			<LibraryDocumentBar
-				{...actions}
-				item={document}
-				onBack={onBack}
-				presence={
-					isWriting ? (
-						<LibraryDocumentPresence onStopAll={onStopAll} writers={writers} />
-					) : null
-				}
-			/>
-			<LibraryDocumentColumn
-				detail={document.detail}
-				heading={
-					<h1 className={DOCUMENT_TITLE}>
-						{libraryDisplayName(document.name, t)}
-					</h1>
-				}
-			>
-				<LibraryDocumentBody
-					body={document.body}
-					onOpenConversation={onOpenConversation}
-					onStop={onStop}
-					resolveImage={resolveImage}
-					writers={writers}
+			header={
+				<LibraryDocumentBar
+					{...actions}
+					item={document}
+					onBack={onBack}
+					presence={
+						isWriting ? (
+							<LibraryDocumentPresence
+								onStopAll={onStopAll}
+								writers={writers}
+							/>
+						) : null
+					}
 				/>
-			</LibraryDocumentColumn>
-		</div>
+			}
+			isHeaderFloating
+			scroller={() => (
+				<LibraryDocumentColumn
+					detail={document.detail}
+					heading={
+						<h1 className={DOCUMENT_TITLE}>
+							{libraryDisplayName(document.name, t)}
+						</h1>
+					}
+				>
+					<LibraryDocumentBody
+						body={document.body}
+						onOpenConversation={onOpenConversation}
+						onStop={onStop}
+						resolveImage={resolveImage}
+						writers={writers}
+					/>
+				</LibraryDocumentColumn>
+			)}
+		/>
 	)
 }
 
 export {
 	DOCUMENT_COLUMN_MEASURE,
+	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	DOCUMENT_TYPE,
 	GrowingField,
