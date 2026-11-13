@@ -15,6 +15,7 @@ import {
 	codeLanguageOf,
 	conversionsOf,
 	convertSource,
+	foundAnchorIn,
 	galleryItemsOf,
 	keepIds,
 	type LibraryBlock,
@@ -22,6 +23,7 @@ import {
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
 	relaid,
 	rowAfter,
 	serializeBlocks,
@@ -783,5 +785,82 @@ describe("unmarked", () => {
 
 		expect(gapsOf(unmarked(document))).toEqual(gapsOf(marked(document, ids)))
 		expect(plainOf(text)).toBe("```\ncode\n```\n\nAfter.")
+	})
+})
+
+describe("foundAnchorIn", () => {
+	const { blocks } = parseBlocks(
+		"# Plan ^aaaaaa\n\nThe boat leaves at 17:30, the boat is late. ^bbbbbb",
+		blockIdsOf(),
+	)
+
+	it("finds a block by its id", () => {
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb" })).toEqual({
+			blockId: "bbbbbb",
+		})
+	})
+
+	it("finds nothing for a block that left the document", () => {
+		expect(foundAnchorIn(blocks, { blockId: "cccccc" })).toBeUndefined()
+	})
+
+	it("keeps a passage whose text still sits at its range", () => {
+		const passage = { start: 26, end: 34, text: "the boat" }
+
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb", passage })).toEqual({
+			blockId: "bbbbbb",
+			passage,
+		})
+	})
+
+	it("follows a passage whose text moved inside its block", () => {
+		const passage = { start: 9, end: 15, text: "leaves" }
+
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { ...passage, start: 2, end: 8 },
+			}),
+		).toEqual({ blockId: "bbbbbb", passage })
+	})
+
+	it("finds nothing for a passage whose text left its block", () => {
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { start: 4, end: 9, text: "ferry" },
+			}),
+		).toBeUndefined()
+	})
+})
+
+describe("passageOfShown", () => {
+	const source = "The **boat** leaves, then the boat waits."
+	const shown = "The boat leaves, then the boat waits."
+
+	it("maps selected words to their place in the markdown", () => {
+		expect(passageOfShown(source, { shown, start: 9, text: "leaves" })).toEqual(
+			{ start: 13, end: 19, text: "leaves" },
+		)
+	})
+
+	it("keeps the occurrence that was selected", () => {
+		expect(passageOfShown(source, { shown, start: 26, text: "boat" })).toEqual({
+			start: 30,
+			end: 34,
+			text: "boat",
+		})
+	})
+
+	it("gives up on words the markdown writes differently", () => {
+		expect(
+			passageOfShown(source, { shown, start: 0, text: "The boat" }),
+		).toBeUndefined()
+	})
+
+	it("gives up on a selection of blanks", () => {
+		expect(
+			passageOfShown(source, { shown, start: 3, text: " " }),
+		).toBeUndefined()
 	})
 })

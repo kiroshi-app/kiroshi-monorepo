@@ -225,6 +225,59 @@ const markdownOf = ({ source, written }: LibraryBlock) => written ?? source
 const serializeBlocks = ({ lead, blocks }: LibraryBlockDocument) =>
 	lead + blocks.map((block) => markdownOf(block) + block.gap).join("")
 
+type LibraryBlockPassage = {
+	start: number
+	end: number
+	text: string
+}
+
+type LibraryBlockAnchor = {
+	blockId: string
+	passage?: LibraryBlockPassage
+}
+
+const passageAt = (text: string, start: number): LibraryBlockPassage => ({
+	start,
+	end: start + text.length,
+	text,
+})
+
+const foundAnchorIn = (
+	blocks: LibraryBlock[],
+	{ blockId, passage }: LibraryBlockAnchor,
+): LibraryBlockAnchor | undefined => {
+	const block = blocks.find(({ id }) => id === blockId)
+	if (!block) return undefined
+	if (!passage) return { blockId }
+	const { text, start } = passage
+	const at = block.source.startsWith(text, start)
+		? start
+		: block.source.indexOf(text)
+	return at === -1 ? undefined : { blockId, passage: passageAt(text, at) }
+}
+
+const indexesOf = (text: string, part: string) => {
+	const found: number[] = []
+	for (let at = text.indexOf(part); at !== -1; at = text.indexOf(part, at + 1))
+		found.push(at)
+	return found
+}
+
+type ShownSelection = {
+	shown: string
+	start: number
+	text: string
+}
+
+const passageOfShown = (
+	source: string,
+	{ shown, start, text }: ShownSelection,
+): LibraryBlockPassage | undefined => {
+	if (text.trim() === "") return undefined
+	const at = indexesOf(source, text)[indexesOf(shown, text).indexOf(start)]
+	return at === undefined ? undefined : passageAt(text, at)
+}
+
 const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	let at = lead.length
 	return blocks.map((block) => {
@@ -757,17 +810,21 @@ export {
 	conversionsOf,
 	convertSource,
 	fenceOf,
+	foundAnchorIn,
 	galleryItemsOf,
 	isTextBlockType,
 	keepIds,
 	type LibraryBlock,
+	type LibraryBlockAnchor,
 	type LibraryBlockDocument,
+	type LibraryBlockPassage,
 	type LibraryBlockType,
 	MARKERS,
 	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
 	relaid,
 	rowAfter,
 	type SourceEdit,
