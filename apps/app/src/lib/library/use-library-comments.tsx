@@ -83,7 +83,9 @@ export const useLibraryComments = <Target,>({
 	) => setHeld((current) => (current.name === name ? after(current) : current))
 
 	const now = Date.now()
-	const commented = commentedThreadsOf(threads, people.authorOf, now)
+	const commented = commentedThreadsOf(threads, people.authorOf, now).map(
+		(each) => ({ ...each, resolution: resolutionOf(each.thread, unnamed) }),
+	)
 	const opened = commented.find(
 		({ thread }) => thread.id === state.openThreadId,
 	)
@@ -153,20 +155,15 @@ export const useLibraryComments = <Target,>({
 		bar,
 		isCommentMode: state.isCommentMode,
 		participants: people.participants,
-		threads: commented
-			.filter(
-				({ thread }) => thread.state === "open" || thread === opened?.thread,
-			)
-			.map((each) => ({
-				...each,
-				resolution: resolutionOf(each.thread, unnamed),
-			})),
+		threads: commented.filter(
+			({ thread }) => thread.state === "open" || thread === opened?.thread,
+		),
 		openThread: opened && {
 			id: opened.thread.id,
 			anchor: anchorLineOf(opened.thread),
 			comments: opened.comments,
 			participants: people.participants,
-			resolution: resolutionOf(opened.thread, unnamed),
+			resolution: opened.resolution,
 			reply: state.reply,
 			onReplyChange: (text: string) => change({ reply: text }),
 			onReply: sendReply,
