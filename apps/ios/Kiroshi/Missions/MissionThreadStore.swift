@@ -3,6 +3,7 @@ import Observation
 
 enum MissionSendProblem: Equatable {
     case couldNotSend
+    case olderHost
     case tooLarge
     case tooMany
     case offline
@@ -159,6 +160,8 @@ final class MissionThreadStore {
             return
         } catch MissionsCallError.refused(status: 413) {
             sendProblem = .tooLarge
+        } catch MissionsCallError.unknownToTheHost {
+            sendProblem = .olderHost
         } catch RelayCallError.hostOffline {
             sendProblem = .offline
         } catch {
@@ -240,6 +243,7 @@ extension MissionThreadStore: ThreadModel {
         }
         return switch sendProblem {
         case .couldNotSend: String(localized: "Couldn’t send your answer. Send it again.")
+        case .olderHost: OlderHost.problem
         case .tooLarge:
             String(
                 localized:

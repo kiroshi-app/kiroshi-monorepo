@@ -46,15 +46,19 @@ struct ConversationsView: View {
                 ) { _ in
                     Button("OK") {}
                 } message: { failure in
-                    switch failure.change {
-                    case .pin:
-                        Text(
-                            "Check that the computer where Kiroshi runs is on, then swipe the row again."
-                        )
-                    case .unpin:
-                        Text(
-                            "Check that the computer where Kiroshi runs is on, then touch and hold \(failure.title) again."
-                        )
+                    if failure.isRefusedByOlderHost {
+                        Text(OlderHost.problem)
+                    } else {
+                        switch failure.change {
+                        case .pin:
+                            Text(
+                                "Check that the computer where Kiroshi runs is on, then swipe the row again."
+                            )
+                        case .unpin:
+                            Text(
+                                "Check that the computer where Kiroshi runs is on, then touch and hold \(failure.title) again."
+                            )
+                        }
                     }
                 }
                 .sheet(isPresented: $store.isPickingCompanions, onDismiss: store.stopPicking) {

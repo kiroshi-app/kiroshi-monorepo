@@ -23,6 +23,7 @@ struct QuestionAsking: Equatable {
     let question: WaitingQuestion
     var isSending = false
     var hasFailed = false
+    var isRefusedByOlderHost = false
 }
 
 struct QuestionDraft: Equatable {

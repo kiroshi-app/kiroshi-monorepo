@@ -255,12 +255,18 @@ struct MissionPagingTests {
         await connection.stop()
     }
 
-    @Test func aMacThatDoesNotKnowPagesGetsTheWholeFeedForTheSession() async throws {
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named mission_space_page""#),
+    ])
+    func aMacThatDoesNotKnowPagesGetsTheWholeFeedForTheSession(status: Int, refusal: String)
+        async throws
+    {
         let feed = "[" + (1...45).map(Self.entry).joined(separator: ",") + "]"
         let host = host(45) { call in
             switch call.command {
             case "mission_space_page":
-                TestHost.refused(call, status: 403, #""this command belongs to the host""#)
+                TestHost.refused(call, status: status, refusal)
             case "mission_space_feed": TestHost.ok(call, feed)
             default: nil
             }

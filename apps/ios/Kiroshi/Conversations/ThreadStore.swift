@@ -24,8 +24,10 @@ final class ThreadStore {
     private(set) var hasOlder = false
     private(set) var olderFailed = false
     private var stopRefused = false
+    private var isStopRefusedByOlderHost = false
     private(set) var answering: WaitingQuestion?
     private(set) var failedAnswerId: String?
+    private var isAnswerRefusedByOlderHost = false
     private var answeredHere: [String: QuestionAnswered] = [:]
     private var answeredElsewhereIds: Set<String> = []
     private var answerRows: [String: ThreadMessage] = [:]
@@ -124,7 +126,8 @@ final class ThreadStore {
         }
         guard let waitingQuestion else { return nil }
         return QuestionAsking(
-            question: waitingQuestion, hasFailed: failedAnswerId == waitingQuestion.request.id)
+            question: waitingQuestion, hasFailed: failedAnswerId == waitingQuestion.request.id,
+            isRefusedByOlderHost: isAnswerRefusedByOlderHost)
     }
 
     func answeredQuestion(_ id: String) -> QuestionAnswered? {
@@ -169,6 +172,7 @@ final class ThreadStore {
         } catch {
             answering = nil
             failedAnswerId = id
+            isAnswerRefusedByOlderHost = error as? ConversationCallError == .unknownToTheHost
             return
         }
         answering = nil
@@ -278,6 +282,7 @@ final class ThreadStore {
         guard let relay, isWorking else { return nil }
         let scopes = workers.map(\.scope)
         stopRefused = false
+        isStopRefusedByOlderHost = false
         let task = Task {
             for scope in scopes {
                 do {
@@ -286,6 +291,8 @@ final class ThreadStore {
                     return
                 } catch {
                     stopRefused = true
+                    isStopRefusedByOlderHost =
+                        error as? ConversationCallError == .unknownToTheHost
                 }
             }
         }
@@ -526,7 +533,9 @@ extension ThreadStore: ThreadModel {
 
     var problem: String? {
         if stopFailed {
-            return String(localized: "Couldn’t stop \(workingName). Tap Stop to try again.")
+            return isStopRefusedByOlderHost
+                ? OlderHost.problem
+                : String(localized: "Couldn’t stop \(workingName). Tap Stop to try again.")
         }
         return switch sendFailure {
         case .hostOffline:
@@ -570,6 +579,7 @@ extension ThreadStore: ThreadModel {
                 localized:
                     "Couldn’t send, something went wrong on the computer hosting this Space. Tap Send to try again."
             )
+        case .olderHost: OlderHost.problem
         case .refused: String(localized: "Couldn’t send. Tap Send to try again.")
         case nil: nil
         }

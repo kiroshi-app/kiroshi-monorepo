@@ -172,6 +172,33 @@ struct PinnedConversationsTests {
         await connection.stop()
     }
 
+    @Test(arguments: [
+        (ConversationsStore.PinChange.pin, "topic-3", "Topic 3"),
+        (ConversationsStore.PinChange.unpin, "topic-1", "Topic 1"),
+    ])
+    func aPinTheHostDoesNotKnowSaysItRunsAnOlderKiroshi(
+        change: ConversationsStore.PinChange, id: String, title: String
+    ) async {
+        let board = PinBoard(Self.othersPinned, sections: ["s-1"])
+        let companions = [juniper, pico]
+        let topics = topics
+        let host = TestHost(companions: companions, groups: topics) { call in
+            call.command == "roster_pin"
+                ? TestHost.refused(
+                    call, status: 404, #""this host knows no command named roster_pin""#)
+                : board.answer(call, companions: companions, groups: topics)
+        }
+        let (store, connection, following) = await follow(host)
+
+        await (change == .pin ? store.pin(id) : store.unpin(id))?.value
+
+        #expect(
+            store.pinFailure == .init(change: change, title: title, isRefusedByOlderHost: true))
+        #expect(store.pinned.map(\.id) == ["topic-1", "pico", "juniper"])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aPinnedGroupRepaintsItsChipWhenItsIconOrColourChangesOnTheMac() async {
         let board = PinBoard(Self.othersPinned, sections: ["s-1"])
         let host = pinningHost(board)

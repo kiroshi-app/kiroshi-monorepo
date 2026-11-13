@@ -803,6 +803,29 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    @Test(arguments: [
+        (403, #""this command belongs to the host""#),
+        (404, #""this host knows no command named conversation_create""#),
+    ])
+    func aCreationTheHostDoesNotKnowSaysItRunsAnOlderKiroshi(status: Int, refusal: String)
+        async throws
+    {
+        let host = TestHost(companions: [juniper, atlas]) { call in
+            call.command == "conversation_create"
+                ? TestHost.refused(call, status: status, refusal) : nil
+        }
+        let (store, connection, following) = await follow(host)
+        store.pickCompanions()
+
+        await store.createGroup(with: ["atlas"])?.value
+
+        #expect(store.creation == .refusedByOlderHost)
+        #expect(store.isPickingCompanions)
+        #expect(store.opened == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func cancellingWhileCreatingIsNotAFailureAndOpensNothing() async throws {
         let host = TestHost(companions: [juniper, atlas, pico], holding: ["conversation_create"])
         let (store, connection, following) = await follow(host)

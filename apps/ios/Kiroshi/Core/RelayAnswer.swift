@@ -5,7 +5,11 @@ struct RelayAnswer: Sendable {
     let frame: Data
 
     var isUnknownToTheHost: Bool {
-        status == 403 && (try? body(as: String.self)) == "this command belongs to the host"
+        switch (status, try? body(as: String.self)) {
+        case (403, "this command belongs to the host"): true
+        case (404, let refusal?): refusal.hasPrefix("this host knows no command named ")
+        default: false
+        }
     }
 
     func body<Body: Decodable>(as type: Body.Type) throws -> Body {
