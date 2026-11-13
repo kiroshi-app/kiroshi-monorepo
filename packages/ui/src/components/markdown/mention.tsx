@@ -10,6 +10,11 @@ import {
 	MARKDOWN_RUN_ATTRIBUTE,
 	MARKDOWN_RUN_END_ATTRIBUTE,
 } from "@workspace/ui/components/markdown/runs"
+import {
+	MarkdownStreamingTail,
+	STREAMING_TAIL_FIRST_WORD_PROPERTY,
+	STREAMING_TAIL_LAST_STEP_PROPERTY,
+} from "@workspace/ui/components/markdown/streaming-tail"
 import { Mention } from "@workspace/ui/components/mention"
 
 export type MarkdownSpanProps = ComponentPropsWithoutRef<"span"> &
@@ -50,6 +55,20 @@ const MarkdownSpanFork = ({
 			>
 				{children}
 			</MarkdownRunSpan>
+		)
+
+	const tailFirstWord = node?.properties[STREAMING_TAIL_FIRST_WORD_PROPERTY]
+
+	if (typeof tailFirstWord === "number" && typeof children === "string")
+		return (
+			<MarkdownStreamingTail
+				firstWordAt={tailFirstWord}
+				lastWordStep={Number(
+					node?.properties[STREAMING_TAIL_LAST_STEP_PROPERTY],
+				)}
+			>
+				{children}
+			</MarkdownStreamingTail>
 		)
 
 	return <span {...props}>{children}</span>

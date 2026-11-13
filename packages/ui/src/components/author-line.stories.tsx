@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
 	expectClickModifiers,
+	resolvedRootColor,
 	rightClick,
 	shown,
 	slotIn,
@@ -144,17 +145,84 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a finished agent answer. Check the line is 20 high, the name in the agent colour and the badge in a 6 radius fill.",
+					"Reach for this for a finished agent answer. Check the line is 20 high, the name in the agent colour and the badge in the muted fill it wears wherever the line is not under a bubbleless reply.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const line = slotIn(canvasElement, "author-line")
 		await expect(line.getBoundingClientRect().height).toBe(20)
-		await expect(
-			slotIn(slotIn(canvasElement, "author-line"), "bot-title-badge"),
-		).toHaveTextContent("Planner")
+		const badge = slotIn(line, "bot-title-badge")
+		await expect(badge).toHaveTextContent("Planner")
+		await expect(getComputedStyle(badge).backgroundColor).toBe(
+			resolvedRootColor("--muted"),
+		)
 	},
+})
+
+type BadgePaint = {
+	fill: string
+	label: string
+}
+
+const BADGE_PAINT = {
+	light: { fill: "oklch(0 0 0 / 0.05)", label: "rgb(107, 107, 107)" },
+	dark: { fill: "oklch(1 0 0 / 0.08)", label: "rgb(163, 163, 163)" },
+} as const satisfies Record<string, BadgePaint>
+
+const expectTitleBadge = async (root: HTMLElement, paint: BadgePaint) => {
+	const badge = slotIn(slotIn(root, "author-line"), "bot-title-badge")
+	const style = getComputedStyle(badge)
+	await expect(badge).toHaveTextContent("Planner")
+	await expect(badge.getBoundingClientRect().height).toBe(18)
+	await expect([
+		style.borderTopLeftRadius,
+		style.paddingInlineStart,
+		style.paddingInlineEnd,
+	]).toEqual(["5px", "6px", "6px"])
+	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+		"11px",
+		"12px",
+		"500",
+	])
+	await expect(style.backgroundColor).toBe(paint.fill)
+	await expect(style.color).toBe(paint.label)
+}
+
+const BubblelessReply = () => (
+	<AssistantTurn identity={ATLAS} sentAt={SENT_AT} now={READ_AT}>
+		{ANSWER}
+	</AssistantTurn>
+)
+
+export const TitleBadge = meta.story({
+	globals: { theme: "light" },
+	render: () => <BubblelessReply />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, light. Reach for this for the role badge of an agent under a bubbleless reply. Check that it is 18 high with radius 5 and 6 on each side, that its label reads 11 on 12 medium in the muted colour, and that its fill is black at 5 percent. Inside a bubble the badge keeps the muted fill, which `Default` checks. Pick `TitleBadgeDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectTitleBadge(canvasElement, BADGE_PAINT.light),
+})
+
+export const TitleBadgeDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <BubblelessReply />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboards 1 to 11, dark. The same badge as `TitleBadge` on the dark thread. Check that its fill is white at 8 percent and that its label stays readable in the muted colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectTitleBadge(canvasElement, BADGE_PAINT.dark),
 })
 
 export const Failed = meta.story({

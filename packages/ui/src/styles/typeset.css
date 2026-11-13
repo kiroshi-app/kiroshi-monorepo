@@ -236,25 +236,47 @@
     &:where(ol > li)::marker {
       color: var(--typeset-muted);
     }
-    &:where(.typeset-answer ul:not(.contains-task-list)) {
+    &:where(.typeset-answer :is(ul, ol):not(.contains-task-list)) {
       padding-inline-start: 0;
     }
-    &:where(.typeset-answer ul:not(.contains-task-list) > li) {
-      position: relative;
-      padding-inline-start: 1.5rem;
+    &:where(.typeset-answer ul:not(.contains-task-list)) {
+      --typeset-marker-column: 0.875rem;
     }
-    &:where(.typeset-answer ul:not(.contains-task-list) > li)::marker {
+    &:where(.typeset-answer ol:not(.contains-task-list)) {
+      --typeset-marker-column: calc(
+        0.875rem + (var(--typeset-marker-digits, 1) - 1) * 1ch
+      );
+    }
+    &:where(.typeset-answer :is(ul, ol):not(.contains-task-list) > li) {
+      position: relative;
+      padding-inline-start: calc(var(--typeset-marker-column) + 0.625rem);
+    }
+    &:where(
+        .typeset-answer :is(ul, ol):not(.contains-task-list) > li
+      )::marker {
       color: transparent;
+    }
+    &:where(
+        .typeset-answer :is(ul, ol):not(.contains-task-list) > li
+      )::before {
+      position: absolute;
+      inset-inline-start: 0;
+      inline-size: var(--typeset-marker-column);
+      color: var(--color-list-marker-foreground);
     }
     &:where(.typeset-answer ul:not(.contains-task-list) > li)::before {
       content: "•";
-      position: absolute;
-      inset-inline-start: 0;
-      inline-size: 0.875rem;
-      color: var(--color-list-marker-foreground);
 
       @supports (content: "•" / "") {
         content: "•" / "";
+      }
+    }
+    &:where(.typeset-answer ol:not(.contains-task-list) > li)::before {
+      content: counter(list-item) ".";
+      text-align: end;
+
+      @supports (content: "•" / "") {
+        content: counter(list-item) "." / "";
       }
     }
 
@@ -539,5 +561,19 @@
       )
     ) {
     margin-block-start: 0;
+  }
+
+  .typeset-answer
+    :where(
+      li:not(.task-list-item) > :is(ul, ol):not(.contains-task-list)
+    ):not(
+      :where(
+        .not-typeset,
+        [data-not-typeset],
+        .not-typeset *,
+        [data-not-typeset] *
+      )
+    ) {
+    margin-block-start: 0.5em;
   }
 }

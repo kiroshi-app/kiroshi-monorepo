@@ -4,6 +4,7 @@ import {
 	type ComponentPropsWithoutRef,
 	Fragment,
 	type ReactNode,
+	useContext,
 	useDeferredValue,
 	useMemo,
 	useState,
@@ -22,6 +23,11 @@ import {
 	isAnswerBlockLabel,
 	readAnswerBlock,
 } from "@workspace/ui/components/markdown/answer-block-source"
+import {
+	AnswerCard,
+	AnswerCardAction,
+	AnswerCardHeader,
+} from "@workspace/ui/components/markdown/answer-card"
 import { PENDING_PROPERTY } from "@workspace/ui/components/markdown/answer-marks"
 import { useMarkdownImageResolver } from "@workspace/ui/components/markdown/image-resolver"
 import {
@@ -33,6 +39,7 @@ import {
 	MERMAID_LANGUAGE,
 } from "@workspace/ui/components/markdown/mermaid"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
+import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
@@ -169,8 +176,49 @@ export const MarkdownFence = ({
 	)
 }
 
+const ANSWER_FENCE_BODY_CLASS =
+	"rounded-none! bg-card-raised! p-3.5! font-mono text-compact leading-5.5 ring-0!"
+
+const AnswerFence = ({ code, language }: MarkdownFenceProps) => {
+	const { t } = useTranslation("chat")
+	const { copied, copy } = useCopyText(code)
+	const named = language?.trim()
+
+	return (
+		<AnswerCard slot="markdown-fence">
+			<AnswerCardHeader label={named} labelFont="mono">
+				<AnswerCardAction
+					icon={<Icons.Copy className="size-3.5" />}
+					isDone={copied}
+					doneAnnouncement={t("code.copyAnnounced")}
+					name={t("code.copy")}
+					onPress={() => {
+						void copy()
+					}}
+				>
+					{t("code.copyTooltip")}
+				</AnswerCardAction>
+			</AnswerCardHeader>
+			<pre className={ANSWER_FENCE_BODY_CLASS}>
+				<span
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
+					tabIndex={0}
+					role="group"
+					aria-label={
+						named ? t("code.namedSnippet", { name: named }) : t("code.snippet")
+					}
+					className="block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+				>
+					<FenceCode code={code} language={language} />
+				</span>
+			</pre>
+		</AnswerCard>
+	)
+}
+
 export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	const resolveImage = useMarkdownImageResolver()
+	const size = useContext(MarkdownSizeContext)
 	const code = codeChildOf(node)
 	if (!code) return <pre {...props}>{children}</pre>
 
@@ -190,7 +238,11 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 		if (block) return <MarkdownAnswerBlock block={block} />
 	}
 
-	return <MarkdownFence code={source} language={language} />
+	return size === "answer" ? (
+		<AnswerFence code={source} language={language} />
+	) : (
+		<MarkdownFence code={source} language={language} />
+	)
 }
 
 export const MarkdownStaticPre = ({

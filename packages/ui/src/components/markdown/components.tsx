@@ -19,6 +19,7 @@ import {
 	MarkdownSpan,
 	MarkdownStaticSpan,
 } from "@workspace/ui/components/markdown/mention"
+import { MarkdownOrderedList } from "@workspace/ui/components/markdown/ordered-list"
 import { MarkdownParagraph } from "@workspace/ui/components/markdown/paragraph"
 import {
 	MarkdownStaticTable,
@@ -38,6 +39,7 @@ export const MARKDOWN_COMPONENTS: Components = {
 	img: MarkdownImage,
 	input: MarkdownTaskCheckbox,
 	li: MarkdownListItem,
+	ol: MarkdownOrderedList,
 	p: MarkdownParagraph,
 	pre: MarkdownPre,
 	span: MarkdownSpan,
@@ -50,6 +52,7 @@ export const MARKDOWN_STATIC_COMPONENTS: Components = {
 	code: MarkdownCode,
 	img: MarkdownStaticImage,
 	input: MarkdownStaticTaskBox,
+	ol: MarkdownOrderedList,
 	pre: MarkdownStaticPre,
 	span: MarkdownStaticSpan,
 	table: MarkdownStaticTable,

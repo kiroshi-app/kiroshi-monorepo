@@ -16,6 +16,7 @@ import {
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
@@ -1005,13 +1006,13 @@ const REPLY_COLOURS = {
 		text: "rgb(10, 10, 10)",
 		muted: "rgb(107, 107, 107)",
 		marker: "rgb(143, 143, 143)",
-		badgeFill: "rgb(242, 242, 242)",
+		badgeFill: "oklch(0 0 0 / 0.05)",
 	},
 	dark: {
 		text: "rgb(245, 245, 245)",
 		muted: "rgb(163, 163, 163)",
 		marker: "rgb(115, 115, 115)",
-		badgeFill: "rgb(38, 38, 38)",
+		badgeFill: "oklch(1 0 0 / 0.08)",
 	},
 } as const satisfies Record<string, ReplyColours>
 
@@ -1300,6 +1301,639 @@ export const Writing = meta.story({
 		await expect(within(line).queryByRole("button", { name: "Pin" })).toBe(null)
 		await expect(line.getBoundingClientRect().height).toBe(20)
 	},
+})
+
+const STREAMED_SO_FAR =
+	"The design system holds every visual, and the Tauri shell only places them where the screen needs"
+
+const STREAMED_FURTHER = `${STREAMED_SO_FAR} them, nothing`
+
+const SHARP = { filter: "none", opacity: "1" }
+
+const TAIL_STEPS = [
+	{ filter: "blur(1px)", opacity: "0.75" },
+	{ filter: "blur(2.5px)", opacity: "0.55" },
+	{ filter: "blur(4px)", opacity: "0.3" },
+]
+
+const paintOf = (word: Element) => {
+	const { filter, opacity } = getComputedStyle(word)
+	return { filter, opacity }
+}
+
+const streamingWordsIn = (reply: HTMLElement) =>
+	slotsIn(reply, "markdown-streaming-word")
+
+const softenedIn = (reply: HTMLElement) =>
+	Array.from(reply.querySelectorAll("*")).filter(
+		(element) =>
+			paintOf(element).filter !== SHARP.filter ||
+			paintOf(element).opacity !== SHARP.opacity,
+	)
+
+type StreamingReplyProps = {
+	children: string
+	isWriting?: boolean
+}
+
+const StreamingReply = ({
+	children,
+	isWriting = true,
+}: StreamingReplyProps) => (
+	<AssistantTurn
+		author={ROLE_BOT}
+		state={isWriting ? "streaming" : "complete"}
+		isWriting={isWriting}
+		copyText={children}
+		onPin={pin}
+		onReply={reply}
+		sentAt={sentOn(10, 9, 20)}
+		now={READ_ON}
+	>
+		<Markdown isWriting={isWriting}>{children}</Markdown>
+	</AssistantTurn>
+)
+
+const StreamingTailTurn = () => (
+	<ThreadColumn>
+		<StreamingReply>{STREAMED_SO_FAR}</StreamingReply>
+	</ThreadColumn>
+)
+
+const expectStreamingTail = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const line = tagIn(reply, "p")
+	const words = streamingWordsIn(reply)
+	await expect(line.textContent).toBe(STREAMED_SO_FAR)
+	await expect(typeOf(line)).toEqual(["16px", "28px", "400"])
+	await expect(getComputedStyle(line).color).toBe(colours.text)
+	const [settling, ...tail] = words
+	await expect(words.map((word) => word.textContent)).toEqual([
+		"where",
+		"the",
+		"screen",
+		"needs",
+	])
+	await expect(paintOf(settling)).toEqual(SHARP)
+	await expect(tail.map(paintOf)).toEqual(TAIL_STEPS)
+	await expect(softenedIn(reply)).toEqual(tail)
+	for (const word of words) {
+		await expect(word.getAttributeNames().sort()).toEqual([
+			"class",
+			"data-slot",
+			"data-step",
+		])
+		await expect(getComputedStyle(word).color).toBe(colours.text)
+		await expect(getComputedStyle(word).transitionProperty).toBe("none")
+	}
+	await withMotionAllowed(async () => {
+		await waitFor(() =>
+			expect([
+				getComputedStyle(settling).transitionProperty,
+				getComputedStyle(settling).transitionDuration,
+			]).toEqual(["filter, opacity", "0.2s"]),
+		)
+	})
+
+	const writing = slotIn(reply, "author-line-writing")
+	await expect(writing).toHaveTextContent("writing…")
+	await expect(getComputedStyle(writing).color).toBe(colours.muted)
+}
+
+export const StreamingTail = meta.story({
+	globals: { theme: "light" },
+	render: () => <StreamingTailTurn />,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 11, light. Reach for this for the reply while its words arrive. Check that the last three words of the line it is writing soften one step each, the last one the softest, that every word before them is sharp, that the line reads as one plain sentence to a screen reader, and that the author line reads writing… under it. The softening eases from one step to the next, and switches at once under `prefers-reduced-motion`. Pick `StreamingTailDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectStreamingTail(canvasElement, REPLY_COLOURS.light),
+})
+
+export const StreamingTailDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <StreamingTailTurn />,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 11, dark. The same streaming line as `StreamingTail` on the dark thread. Check that the three softened words keep their steps and stay in the foreground colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectStreamingTail(canvasElement, REPLY_COLOURS.dark),
+})
+
+type StreamingStage = "started" | "further" | "complete"
+
+const StreamingTailStages = () => {
+	const [stage, setStage] = useState<StreamingStage>("started")
+
+	return (
+		<ThreadColumn>
+			<StreamingReply isWriting={stage !== "complete"}>
+				{stage === "started" ? STREAMED_SO_FAR : STREAMED_FURTHER}
+			</StreamingReply>
+			<div className="flex gap-2">
+				<Button onClick={() => setStage("further")} size="sm" variant="outline">
+					Write two more words
+				</Button>
+				<Button
+					onClick={() => setStage("complete")}
+					size="sm"
+					variant="outline"
+				>
+					Complete the reply
+				</Button>
+			</div>
+		</ThreadColumn>
+	)
+}
+
+export const StreamingTailSettles = meta.story({
+	tags: ["test-only"],
+	render: () => <StreamingTailStages />,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The streaming line as more words arrive, then as the reply completes. Check that the softened steps move to the three newest words, that every word they left is sharp, and that the completed reply holds no softened word at all.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [reply] = agentRepliesIn(canvasElement)
+
+		await fireEvent.click(
+			canvas.getByRole("button", { name: "Write two more words" }),
+		)
+		await expect(tagIn(reply, "p").textContent).toBe(STREAMED_FURTHER)
+		await expect(
+			streamingWordsIn(reply).map((word) => [word.textContent, paintOf(word)]),
+		).toEqual([
+			["screen", SHARP],
+			["needs", TAIL_STEPS[0]],
+			["them,", TAIL_STEPS[1]],
+			["nothing", TAIL_STEPS[2]],
+		])
+		await expect(softenedIn(reply)).toHaveLength(TAIL_STEPS.length)
+
+		await fireEvent.click(
+			canvas.getByRole("button", { name: "Complete the reply" }),
+		)
+		await expect(tagIn(reply, "p").textContent).toBe(STREAMED_FURTHER)
+		await expect(streamingWordsIn(reply)).toEqual([])
+		await expect(softenedIn(reply)).toEqual([])
+	},
+})
+
+const NESTED_BULLETS = `The shell owns three kinds of things:
+
+- Commands and drivers
+  - Tauri IPC
+    - Parsing the payload
+    - Mapping it to props
+  - Transports
+- Routing and providers`
+
+const MARKER_COLUMN = 14
+
+const MARKER_TO_TEXT = 10
+
+const ITEMS_APART = "8px"
+
+const listsIn = (reply: HTMLElement, tag: "ul" | "ol") =>
+	Array.from(reply.querySelectorAll<HTMLElement>(tag))
+
+const itemsOf = (list: HTMLElement) =>
+	Array.from(list.querySelectorAll<HTMLElement>(":scope > li"))
+
+const expectNestedBullets = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const levels = listsIn(reply, "ul")
+	await expect(levels).toHaveLength(3)
+
+	for (const [depth, list] of levels.entries()) {
+		await expect(getComputedStyle(list).paddingInlineStart).toBe("0px")
+		await expect(list.getBoundingClientRect().left).toBe(
+			levels[0].getBoundingClientRect().left +
+				depth * (MARKER_COLUMN + MARKER_TO_TEXT),
+		)
+		for (const [at, item] of itemsOf(list).entries()) {
+			const marker = getComputedStyle(item, "::before")
+			await expect(marker.content).toBe('"•" / ""')
+			await expect([marker.left, marker.width]).toEqual([
+				"0px",
+				`${MARKER_COLUMN}px`,
+			])
+			await expect(marker.color).toBe(colours.marker)
+			await expect(getComputedStyle(item, "::marker").color).toBe(
+				"rgba(0, 0, 0, 0)",
+			)
+			await expect(getComputedStyle(item).paddingInlineStart).toBe(
+				`${MARKER_COLUMN + MARKER_TO_TEXT}px`,
+			)
+			await expect(typeOf(item)).toEqual(["16px", "28px", "400"])
+			if (at > 0) await expect(spaceAbove(item)).toBe(ITEMS_APART)
+		}
+		if (depth > 0) await expect(spaceAbove(list)).toBe(ITEMS_APART)
+	}
+}
+
+type ListReplyProps = {
+	children: string
+}
+
+const ListReply = ({ children }: ListReplyProps) => (
+	<ThreadColumn>
+		<AssistantTurn
+			author={ROLE_BOT}
+			copyText={children}
+			onPin={pin}
+			onReply={reply}
+			sentAt={sentOn(10, 9, 20)}
+			now={READ_ON}
+		>
+			<Markdown>{children}</Markdown>
+		</AssistantTurn>
+	</ThreadColumn>
+)
+
+export const NestedBulletList = meta.story({
+	globals: { theme: "light" },
+	render: () => <ListReply>{NESTED_BULLETS}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bullet list nested three levels deep in the agent reply, light. No artboard of the Conversation feed draws a nested list, so every level keeps the bullet the artboards draw. Check that each level draws the same round bullet in the 14 wide column, 10 before its text, in the marker grey, that items stay 8 apart at every level, and that each level starts under the text of the level above. Pick `NestedBulletListDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNestedBullets(canvasElement, REPLY_COLOURS.light),
+})
+
+export const NestedBulletListDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <ListReply>{NESTED_BULLETS}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same three levels as `NestedBulletList` on the dark thread. Check that every bullet keeps its column and the dark marker grey.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNestedBullets(canvasElement, REPLY_COLOURS.dark),
+})
+
+const NUMBERED_STEPS = [
+	"Read the ticket and its contract",
+	"Open every entrypoint it names",
+	"List the states the change touches",
+	"List the densities and both themes",
+	"Look for the pattern the repo already holds",
+	"Write the smallest change that fits",
+	"Add the story that proves each state",
+	"Run the type check",
+	"Run the lint",
+	"Run the stories the change touches",
+	"Commit the work on its own",
+	"Report what changed and what did not",
+]
+
+const NUMBERED_LIST = NUMBERED_STEPS.map(
+	(step, index) => `${index + 1}. ${step}`,
+).join("\n")
+
+const inkWidthOf = (text: string, like: Element) => {
+	const context = document.createElement("canvas").getContext("2d")
+	if (!context) throw new globalThis.Error("This browser draws no canvas")
+	context.font = getComputedStyle(like).font
+	return context.measureText(text).width
+}
+
+const expectNumberedList = async (
+	canvasElement: HTMLElement,
+	colours: ReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const list = tagIn(reply, "ol")
+	const items = itemsOf(list)
+	const column = MARKER_COLUMN + inkWidthOf("0", items[0])
+	await expect(items).toHaveLength(NUMBERED_STEPS.length)
+	await expect(getComputedStyle(list).paddingInlineStart).toBe("0px")
+	await expect(inkWidthOf("9.", items[0])).toBeLessThanOrEqual(MARKER_COLUMN)
+	await expect(inkWidthOf("12.", items[0])).toBeLessThanOrEqual(column)
+
+	for (const [at, item] of items.entries()) {
+		const marker = getComputedStyle(item, "::before")
+		await expect(marker.content).toBe('counter(list-item) "." / ""')
+		await expect(marker.left).toBe("0px")
+		await expect(Number.parseFloat(marker.width)).toBeCloseTo(column, 1)
+		await expect(marker.textAlign).toBe("end")
+		await expect(marker.color).toBe(colours.marker)
+		await expect([marker.fontSize, marker.lineHeight]).toEqual(["16px", "28px"])
+		await expect(getComputedStyle(item, "::marker").color).toBe(
+			"rgba(0, 0, 0, 0)",
+		)
+		await expect(
+			Number.parseFloat(getComputedStyle(item).paddingInlineStart),
+		).toBeCloseTo(column + MARKER_TO_TEXT, 1)
+		await expect(typeOf(item)).toEqual(["16px", "28px", "400"])
+		if (at > 0) await expect(spaceAbove(item)).toBe(ITEMS_APART)
+	}
+}
+
+export const NumberedList = meta.story({
+	globals: { theme: "light" },
+	render: () => <ListReply>{NUMBERED_LIST}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A numbered list from 1 to 12 in the agent reply, light. No artboard of the Conversation feed draws a numbered list, so it keeps the column, the grey, the gap and the rhythm the artboards draw for bullets. Check that the numbers end on one edge 10 before the text, in the marker grey, that items stay 8 apart, and that the column is the 14 of a bullet plus the one digit that 12 adds. Pick `NumberedListDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNumberedList(canvasElement, REPLY_COLOURS.light),
+})
+
+export const NumberedListDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <ListReply>{NUMBERED_LIST}</ListReply>,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same twelve steps as `NumberedList` on the dark thread. Check that the numbers keep their column and the dark marker grey.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectNumberedList(canvasElement, REPLY_COLOURS.dark),
+})
+
+const RICH_ANSWER = `Here is the script, the four runs it produced and the page it reads its prices from.
+
+\`\`\`ts
+const total = runs.reduce((sum, run) => sum + run.cost, 0)
+\`\`\`
+
+| # | Run | Cost |
+| --- | --- | ---: |
+| 1 | Baseline | 12.40 |
+| 2 | Cached | 8.10 |
+| 3 | Batched | 6.75 |
+| 4 | Batched and cached | 4.20 |
+
+\`\`\`web-page
+url: https://docs.kiroshi.example/pricing
+title: Pricing, how a run is billed
+\`\`\`
+
+The batched and cached run is the cheapest of the four.`
+
+const RICH_TABLE_CSV =
+	"#,Run,Cost\r\n1,Baseline,12.40\r\n2,Cached,8.10\r\n3,Batched,6.75\r\n4,Batched and cached,4.20"
+
+const openWebPage = fn()
+
+const downloadTable = fn()
+
+const RICH_ANSWER_ACTIONS = {
+	agentName: ROLE_BOT.name,
+	onUseValues: fn(),
+	onOpenImage: fn(),
+	onOpenWebPage: openWebPage,
+	onDownloadTable: downloadTable,
+}
+
+type RichReplyColours = ReplyColours & {
+	cardRing: string
+	headerRule: string
+	raised: string
+	rowRule: string
+	pageRing: string
+}
+
+const RICH_REPLY_COLOURS = {
+	light: {
+		...REPLY_COLOURS.light,
+		cardRing: "rgb(229, 229, 229)",
+		headerRule: "rgb(237, 237, 237)",
+		raised: "rgb(250, 250, 250)",
+		rowRule: "rgb(242, 242, 242)",
+		pageRing: "oklch(0 0 0 / 0.08)",
+	},
+	dark: {
+		...REPLY_COLOURS.dark,
+		cardRing: "rgb(33, 34, 36)",
+		headerRule: "rgb(33, 34, 36)",
+		raised: "rgb(24, 24, 26)",
+		rowRule: "rgb(38, 38, 38)",
+		pageRing: "oklch(1 0 0 / 0.08)",
+	},
+} as const satisfies Record<string, RichReplyColours>
+
+const FOREGROUND_RING_AT_12_PERCENT = /oklab\([^)]+ \/ 0\.12\) 0px 0px 0px 1px/
+
+const ringOf = (colour: string) => `${colour} 0px 0px 0px 1px`
+
+const inlinePaddingOf = (element: Element) => {
+	const { paddingInlineStart, paddingInlineEnd } = getComputedStyle(element)
+	return [paddingInlineStart, paddingInlineEnd]
+}
+
+const expectAnswerCard = async (
+	card: HTMLElement,
+	colours: RichReplyColours,
+) => {
+	const header = slotIn(card, "markdown-answer-card-header")
+	const label = slotIn(card, "markdown-answer-card-label")
+	await expect(getComputedStyle(card).borderTopLeftRadius).toBe("16px")
+	await expect(getComputedStyle(card).boxShadow).toContain(
+		ringOf(colours.cardRing),
+	)
+	await expect(header.getBoundingClientRect().height).toBe(40)
+	await expect([
+		getComputedStyle(header).borderBottomWidth,
+		getComputedStyle(header).borderBottomColor,
+	]).toEqual(["1px", colours.headerRule])
+	await expect(typeOf(label)).toEqual(["12px", "16px", "400"])
+	await expect(getComputedStyle(label).color).toBe(colours.muted)
+	await expect(getComputedStyle(label).paddingInlineStart).toBe("8px")
+	for (const action of within(header).getAllByRole("button")) {
+		await expect(typeOf(action)).toEqual(["12px", "16px", "500"])
+		const { width, height } = boxOf(tagIn(action, "svg"))
+		await expect([width, height]).toEqual([14, 14])
+	}
+}
+
+const expectRichReply = async (
+	canvasElement: HTMLElement,
+	colours: RichReplyColours,
+) => {
+	const [reply] = agentRepliesIn(canvasElement)
+	const blocks = Array.from(slotIn(reply, "markdown").children)
+	await expect(typeOf(tagIn(reply, "p"))).toEqual(["16px", "28px", "400"])
+	for (const [at, block] of blocks.entries()) {
+		if (at === 0) continue
+		await expect(
+			block.getBoundingClientRect().top -
+				blocks[at - 1].getBoundingClientRect().bottom,
+		).toBe(16)
+	}
+	await expectActionsAtRest(reply)
+
+	const fence = slotIn(reply, "markdown-fence")
+	const code = tagIn(fence, "pre")
+	const codeStyle = getComputedStyle(code)
+	await expectAnswerCard(fence, colours)
+	await expect(slotIn(fence, "markdown-answer-card-label")).toHaveTextContent(
+		"ts",
+	)
+	await expect(
+		getComputedStyle(slotIn(fence, "markdown-answer-card-label")).fontFamily,
+	).toBe(codeStyle.fontFamily)
+	await expect(
+		within(fence).getByRole("button", { name: "Copy code" }),
+	).toHaveTextContent("Copy")
+	await expect(codeStyle.backgroundColor).toBe(colours.raised)
+	await expect([codeStyle.paddingTop, ...inlinePaddingOf(code)]).toEqual([
+		"14px",
+		"14px",
+		"14px",
+	])
+	await expect([codeStyle.fontSize, codeStyle.lineHeight]).toEqual([
+		"13px",
+		"22px",
+	])
+	await expect(codeStyle.fontFamily).toContain("Geist Mono")
+
+	const table = slotIn(reply, "markdown-table")
+	const [headings, ...rows] = Array.from(table.querySelectorAll("tr"))
+	const heading = tagIn(headings, "th")
+	await expectAnswerCard(table, colours)
+	await expect(slotIn(table, "markdown-answer-card-label")).toHaveTextContent(
+		"Table · 4 rows",
+	)
+	await expect(
+		within(table).getByRole("button", { name: "Copy table" }),
+	).toHaveTextContent("Copy")
+	await expect(headings.getBoundingClientRect().height).toBe(40)
+	await expect(typeOf(heading)).toEqual(["13px", "20px", "600"])
+	await expect(getComputedStyle(heading).borderBottomColor).toBe(
+		colours.headerRule,
+	)
+	await expect(inlinePaddingOf(heading)).toEqual(["14px", "14px"])
+	for (const row of rows) {
+		const cells = Array.from(row.querySelectorAll("td"))
+		const isLast = row === rows.at(-1)
+		await expect(row.getBoundingClientRect().height).toBe(44)
+		await expect(typeOf(cells[0])).toEqual(["14px", "20px", "400"])
+		await expect(inlinePaddingOf(cells[0])).toEqual(["14px", "14px"])
+		await expect(getComputedStyle(cells[0]).borderBottomWidth).toBe(
+			isLast ? "0px" : "1px",
+		)
+		if (!isLast)
+			await expect(getComputedStyle(cells[0]).borderBottomColor).toBe(
+				colours.rowRule,
+			)
+		await expect(getComputedStyle(cells[2]).textAlign).toBe("right")
+	}
+	await fireEvent.click(
+		within(table).getByRole("button", { name: "Download CSV" }),
+	)
+	await expect(downloadTable).toHaveBeenLastCalledWith(RICH_TABLE_CSV)
+
+	const page = slotIn(reply, "web-page-card")
+	const pageStyle = getComputedStyle(page)
+	const open = within(page).getByRole("button", { name: "Open as page" })
+	const openStyle = getComputedStyle(open)
+	const [host, title] = Array.from(page.querySelectorAll("p"))
+	await expect(page.getBoundingClientRect().width).toBe(460)
+	await expect(pageStyle.borderTopLeftRadius).toBe("14px")
+	await expect(pageStyle.boxShadow).toContain(ringOf(colours.pageRing))
+	await expect(pageStyle.borderTopWidth).toBe("0px")
+	await expect(host).toHaveTextContent("docs.kiroshi.example")
+	await expect(typeOf(host)).toEqual(["12px", "16px", "400"])
+	await expect(getComputedStyle(host).color).toBe(colours.muted)
+	await expect(typeOf(title)).toEqual(["14px", "20px", "600"])
+	await expect(host.getBoundingClientRect().left).toBe(
+		page.getBoundingClientRect().left + 12,
+	)
+	await expect(
+		open.getBoundingClientRect().left - title.getBoundingClientRect().right,
+	).toBe(12)
+	await expect(openStyle.borderTopLeftRadius).toBe("8px")
+	await expect(openStyle.boxShadow).toMatch(FOREGROUND_RING_AT_12_PERCENT)
+	await expect(openStyle.paddingTop).toBe("8px")
+	await expect(inlinePaddingOf(open)).toEqual(["8px", "8px"])
+	await expect(typeOf(open)).toEqual(["13px", "18px", "500"])
+}
+
+const RichReplyTurn = () => (
+	<ThreadColumn>
+		<AssistantTurn
+			author={ROLE_BOT}
+			copyText={RICH_ANSWER}
+			onPin={pin}
+			onReply={reply}
+			sentAt={sentOn(10, 9, 20)}
+			now={READ_ON}
+		>
+			<Markdown answerActions={RICH_ANSWER_ACTIONS}>{RICH_ANSWER}</Markdown>
+		</AssistantTurn>
+	</ThreadColumn>
+)
+
+export const RichReply = meta.story({
+	globals: { theme: "light" },
+	render: () => <RichReplyTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 7, light. Reach for this for an agent reply holding a code block, a table and a web page card. Check that the blocks sit 16 apart and the author line 8 under the last words. The code block and the table are cards of radius 16 with a one pixel ring and a 40 high header: the language in mono 12 on 16 and Copy for the code, on a raised body padded 14 in mono 13 on 22; the row count, Copy and Download CSV for the table, over a 40 high heading row in 13 on 20 semibold and 44 high rows in 14 on 20, the last one without a rule. The web page card is 460 wide with radius 14, a ring, 12 of padding and of gap, and an Open button of radius 8. Pick `RichReplyDark` for the dark theme.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectRichReply(canvasElement, RICH_REPLY_COLOURS.light),
+})
+
+export const RichReplyDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <RichReplyTurn />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Conversation feed, artboard 7, dark. The same reply as `RichReply` on the dark thread. Check that the two cards, their headers, the rules between rows and the web page card keep their geometry and take the dark values of the same tokens.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectRichReply(canvasElement, RICH_REPLY_COLOURS.dark),
 })
 
 export const Endings = meta.story({
