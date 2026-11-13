@@ -4,7 +4,6 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
-	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 	expectMutedUntilHoveredOrActive,
 	FRAME_POLL,
 	settled,
@@ -452,17 +451,13 @@ export const ColouredConversationTabsDark = meta.story({
 		expectColouredConversationTabs(canvasElement, "dark"),
 })
 
-const AT_REST = "At rest"
+const TAB_STATES = ["At rest", "Hovered", "Selected"]
 
-const HOVERED = "Hovered"
-
-const SELECTED = "Selected"
-
-const PINNED_AT_REST = "Pinned at rest"
-
-const PINNED_HOVERED = "Pinned hovered"
-
-const PINNED_SELECTED = "Pinned selected"
+const PINNED_TAB_STATES = [
+	"Pinned at rest",
+	"Pinned hovered",
+	"Pinned selected",
+]
 
 const stateTabsOf = (
 	titles: string[],
@@ -478,8 +473,8 @@ const stateTabsOf = (
 })
 
 const TAB_STATE_BARS = [
-	stateTabsOf([AT_REST, HOVERED, SELECTED], false),
-	stateTabsOf([PINNED_AT_REST, PINNED_HOVERED, PINNED_SELECTED], true),
+	stateTabsOf(TAB_STATES, false),
+	stateTabsOf(PINNED_TAB_STATES, true),
 ]
 
 const tabStatesStory = (globals?: { theme: "dark" }) => ({
@@ -497,7 +492,6 @@ const tabStatesStory = (globals?: { theme: "dark" }) => ({
 		</div>
 	),
 	parameters: {
-		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		pseudo: { hover: '[role="tablist"] > [role="tab"]:nth-of-type(2)' },
 		docs: {
 			description: {
@@ -510,19 +504,14 @@ const tabStatesStory = (globals?: { theme: "dark" }) => ({
 		const tab = (name: string) =>
 			within(canvasElement).getByRole("tab", { name })
 
-		for (const [atRest, hovered, active] of [
-			[AT_REST, HOVERED, SELECTED],
-			[PINNED_AT_REST, PINNED_HOVERED, PINNED_SELECTED],
-		])
+		for (const titles of [TAB_STATES, PINNED_TAB_STATES]) {
+			const [atRest, hovered, active] = titles.map(tab)
 			await expectMutedUntilHoveredOrActive({
-				states: {
-					atRest: tab(atRest),
-					hovered: tab(hovered),
-					active: tab(active),
-				},
+				states: { atRest, hovered, active },
 				inkedPartsOf: (owner) => [...owner.querySelectorAll("span, svg")],
 				fullInk: "text-foreground",
 			})
+		}
 	},
 })
 

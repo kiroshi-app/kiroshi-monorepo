@@ -160,11 +160,9 @@ export const WithSecondLine = meta.story({
 	},
 })
 
-const AT_REST = "At rest"
-
-const HOVERED = "Hovered"
-
 const ACTIVE = "Active"
+
+const COMPACT_ROW_STATES = ["At rest", "Hovered", ACTIVE]
 
 const iconOf = (row: HTMLElement) => row.querySelector("svg") as SVGElement
 
@@ -172,7 +170,7 @@ const renderCompactRowStates = (
 	args: ComponentProps<typeof SidebarMenuRow>,
 ) => (
 	<>
-		{[AT_REST, HOVERED, ACTIVE].map((state) => (
+		{COMPACT_ROW_STATES.map((state) => (
 			<SidebarMenuRow
 				{...args}
 				isActive={state === ACTIVE}
@@ -199,28 +197,21 @@ const compactRowStatesStory = (globals?: { theme: "dark" }) => ({
 		},
 	},
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-		const rowNamed = (name: string) =>
-			within(canvasElement).getByRole("button", { name })
+		const rows = COMPACT_ROW_STATES.map((name) =>
+			within(canvasElement).getByRole("button", { name }),
+		)
+		const [atRest, hovered, active] = rows
 
 		await expectMutedUntilHoveredOrActive({
-			states: {
-				atRest: rowNamed(AT_REST),
-				hovered: rowNamed(HOVERED),
-				active: rowNamed(ACTIVE),
-			},
+			states: { atRest, hovered, active },
 			inkedPartsOf: (row) => [within(row).getByText(row.textContent)],
 			steadyPartsOf: (row) => [iconOf(row)],
 			fullInk: "text-sidebar-foreground",
 		})
-		await expect(
-			[AT_REST, HOVERED, ACTIVE].map(
-				(name) => getComputedStyle(iconOf(rowNamed(name))).color,
-			),
-		).toEqual(
-			Array(3).fill(
-				tokenStyleIn(rowNamed(AT_REST), "text-muted-foreground", "color"),
-			),
-		)
+		for (const row of rows)
+			await expect(getComputedStyle(iconOf(row)).color).toBe(
+				tokenStyleIn(atRest, "text-muted-foreground", "color"),
+			)
 	},
 })
 
