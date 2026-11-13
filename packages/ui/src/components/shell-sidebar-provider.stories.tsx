@@ -241,14 +241,11 @@ export const OneOfTwoProvidersUnmounted = meta.story({
 			await waitFor(() => expect(liveKeydownHandlers()).toHaveLength(1))
 			await click("Mount Workspace")
 			await waitFor(() => expect(liveKeydownHandlers()).toHaveLength(2))
-			const handlerOf = {
-				Boot: liveKeydownHandlers()[0],
-				Workspace: liveKeydownHandlers()[1],
-			}
+			const stayingHandler = liveKeydownHandlers()[SHELLS.indexOf(staying)]
 
 			await click(`Unmount ${leaving}`)
 			await waitFor(() =>
-				expect(liveKeydownHandlers()).toEqual([handlerOf[staying]]),
+				expect(liveKeydownHandlers()).toEqual([stayingHandler]),
 			)
 
 			const field = canvas.getByRole("textbox", { name: staying })
