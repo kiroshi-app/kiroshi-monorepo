@@ -9,7 +9,7 @@ import { environmentQueryKeys } from "./environment-query-keys"
 
 import type { EnvEntry, EnvScope } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { isFirstReadPending } from "../query/last-read"
+import { isFirstReadPending, isReadErrorShown } from "../query/last-read"
 
 export type Environment = {
 	entries: EnvEntry[]
@@ -40,7 +40,7 @@ export const useEnvironment = (
 		queryFn: scope ? () => store.environmentVariables(scope) : skipToken,
 		meta: RENDERED_INLINE,
 	})
-	const { data = NO_ENTRIES, isError } = variables
+	const { data = NO_ENTRIES, isError, error } = variables
 
 	const rereadScope = () => queryClient.invalidateQueries({ queryKey })
 
@@ -62,7 +62,7 @@ export const useEnvironment = (
 
 	return {
 		entries: data,
-		hasFailedToRead: isError,
+		hasFailedToRead: isError && isReadErrorShown(error),
 		isPending: isFirstReadPending(variables),
 		set: (name, value) => setVariable.mutateAsync({ name, value }),
 		remove: removeVariable.mutateAsync,

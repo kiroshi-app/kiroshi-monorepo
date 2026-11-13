@@ -31,6 +31,7 @@ import { useReadBound } from "./use-read-bound"
 
 import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import type { TranscriptStore } from "../conversations/store-port"
+import { isReadErrorShown } from "../query/last-read"
 
 export type ApplicationsState = {
 	curated: Application[]
@@ -162,7 +163,11 @@ const useCatalogueRead = (port: ApplicationPort) => {
 	})
 	const curated = catalogue.data ?? NO_APPLICATIONS
 	const hasOverrun = useReadBound(catalogue.isFetching && curated.length === 0)
-	const hasFailed = (catalogue.isError && !catalogue.isFetching) || hasOverrun
+	const hasFailed =
+		(catalogue.isError &&
+			isReadErrorShown(catalogue.error) &&
+			!catalogue.isFetching) ||
+		hasOverrun
 
 	return {
 		curated,
@@ -207,7 +212,11 @@ const useDirectoryRead = (
 	return {
 		applications: answered.applications,
 		isReading: directory.isFetching && !hasOverrun,
-		hasFailed: (directory.isError && !directory.isFetching) || hasOverrun,
+		hasFailed:
+			(directory.isError &&
+				isReadErrorShown(directory.error) &&
+				!directory.isFetching) ||
+			hasOverrun,
 		hasPartlyFailed:
 			answered.hasPartlyFailed && (holdsRows || !directory.isFetching),
 		isStale: !directory.isError && answered.isStale,

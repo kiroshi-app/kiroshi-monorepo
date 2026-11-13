@@ -10,6 +10,7 @@ import { chatQueryKeys } from "./chat-query-keys"
 import { type PinnedBubble, pinnedBubblesOf } from "./pinned-bubbles"
 
 import type { MessagePin } from "../conversations/store-contract"
+import { isReadErrorShown } from "../query/last-read"
 
 const NO_PINS: MessagePin[] = []
 
@@ -82,7 +83,9 @@ export const usePinnedMessages = (
 
 	const pins = read.data ?? NO_PINS
 	const isReadFailureShown =
-		read.isError && read.errorUpdatedAt > dismissed.readFailedAt
+		read.isError &&
+		isReadErrorShown(read.error) &&
+		read.errorUpdatedAt > dismissed.readFailedAt
 	const isWriteFailureShown =
 		write.isError &&
 		write.variables.conversationId === conversationId &&

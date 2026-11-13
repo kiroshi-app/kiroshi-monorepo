@@ -18,6 +18,7 @@ import { INSTALLED_EVENT } from "../applications/application-transport"
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
+import { isReadErrorShown } from "../query/last-read"
 
 export type McpServers = {
 	owner: EnvOwner | null
@@ -70,6 +71,7 @@ export const useMcpServers = (
 	const {
 		data = NO_SERVERS,
 		isError,
+		error,
 		isPending,
 	} = useQuery({
 		queryKey,
@@ -117,7 +119,7 @@ export const useMcpServers = (
 	return {
 		owner,
 		servers: data,
-		hasFailedToLoad: isError,
+		hasFailedToLoad: isError && isReadErrorShown(error),
 		isPending,
 		reread,
 		create: (name, config) =>

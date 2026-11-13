@@ -29,6 +29,7 @@ import type {
 	PluginScope,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { isReadErrorShown } from "../query/last-read"
 
 type PluginState = HistoryFilesState & {
 	skills: BotSkill[]
@@ -197,7 +198,9 @@ export const usePlugin = (
 			...opened.state,
 			skills: skills.data ?? NO_SKILLS,
 			commits: history.data ?? NO_COMMITS,
-			hasFailedToLoad: skills.isError || history.isError,
+			hasFailedToLoad:
+				(skills.isError && isReadErrorShown(skills.error)) ||
+				(history.isError && isReadErrorShown(history.error)),
 			isPending: skills.isPending || history.isPending,
 		},
 		actions: {

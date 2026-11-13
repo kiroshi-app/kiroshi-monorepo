@@ -69,6 +69,7 @@ import type {
 	LastWord,
 } from "../conversations/transcript-state"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
+import { isReadErrorShown } from "../query/last-read"
 import type { FailureMeta } from "../query/query-client"
 import { runMutation } from "../query/run-mutation"
 import {
@@ -643,9 +644,10 @@ export const createRosterController = (
 	const rosterReadIn = (spaceRowId: string) =>
 		queryClient.getQueryData(rosterQuery(spaceRowId).queryKey)
 
-	const hasRosterFailedIn = (spaceRowId: string) =>
-		queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)?.status ===
-		"error"
+	const hasRosterFailedIn = (spaceRowId: string) => {
+		const read = queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)
+		return read?.status === "error" && isReadErrorShown(read.error)
+	}
 
 	const isRosterPendingIn = (spaceRowId: string) => {
 		const read = queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)
