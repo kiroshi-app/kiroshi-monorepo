@@ -544,6 +544,10 @@ const MissionThread = ({
 	</div>
 )
 
+const inMissionThread = (args: MissionHeaderProps) => (
+	<MissionThread header={<MissionHeader {...args} />} />
+)
+
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
 const expectTwoIslandRows = async (canvasElement: HTMLElement) => {
@@ -605,18 +609,13 @@ const expectMissionIslands = async (canvasElement: HTMLElement) => {
 	return { layout, ticket }
 }
 
-const ISLAND_SURFACE = {
-	light: "bg-card",
-	dark: "bg-card-raised",
-}
-
 const expectIslandSurface = async (
 	canvasElement: HTMLElement,
-	theme: keyof typeof ISLAND_SURFACE,
+	surface: "bg-card" | "bg-card-raised",
 ) => {
 	for (const island of slotsIn(canvasElement, "header-island")) {
 		await expect(getComputedStyle(island).backgroundColor).toBe(
-			tokenStyleIn(island, ISLAND_SURFACE[theme], "backgroundColor"),
+			tokenStyleIn(island, surface, "backgroundColor"),
 		)
 	}
 }
@@ -634,13 +633,13 @@ export const Mission3a = meta.story({
 			},
 		},
 	},
-	render: (args) => <MissionThread header={<MissionHeader {...args} />} />,
+	render: inMissionThread,
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const { ticket } = await expectMissionIslands(canvasElement)
 		const island = ticketIslandIn(canvasElement)
 		const opening = slotIn(island, "mission-opening-cell")
 
-		await expectIslandSurface(canvasElement, "light")
+		await expectIslandSurface(canvasElement, "bg-card")
 		await expect(slotIn(opening, "mission-activity")).toHaveTextContent(
 			/^3 commits ahead#482$/,
 		)
@@ -670,7 +669,7 @@ export const MissionWithoutActivity3b = meta.story({
 			},
 		},
 	},
-	render: (args) => <MissionThread header={<MissionHeader {...args} />} />,
+	render: inMissionThread,
 	play: async ({ canvasElement }) => {
 		const { ticket } = await expectMissionIslands(canvasElement)
 		const island = ticketIslandIn(canvasElement)
@@ -696,10 +695,10 @@ export const MissionDark3c = meta.story({
 			},
 		},
 	},
-	render: (args) => <MissionThread header={<MissionHeader {...args} />} />,
+	render: inMissionThread,
 	play: async ({ canvasElement }) => {
 		await expectMissionIslands(canvasElement)
-		await expectIslandSurface(canvasElement, "dark")
+		await expectIslandSurface(canvasElement, "bg-card-raised")
 	},
 })
 

@@ -700,31 +700,19 @@ const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 
 	if (isOpen) return null
 
-	if (isInIsland)
-		return (
-			<HeaderIslandButton
-				{...props}
-				aria-expanded={isOpen}
-				aria-label={t("activity.panel.toggle")}
-				onClick={() => onOpenChange(true)}
-				ref={triggerRef}
-			>
-				<Icons.SidePanel aria-hidden="true" />
-			</HeaderIslandButton>
-		)
+	const trigger = {
+		...props,
+		"aria-expanded": isOpen,
+		"aria-label": t("activity.panel.toggle"),
+		onClick: () => onOpenChange(true),
+		ref: triggerRef,
+		children: <Icons.SidePanel aria-hidden="true" />,
+	}
 
-	return (
-		<Button
-			{...props}
-			aria-expanded={isOpen}
-			aria-label={t("activity.panel.toggle")}
-			onClick={() => onOpenChange(true)}
-			ref={triggerRef}
-			size="icon"
-			variant="ghost"
-		>
-			<Icons.SidePanel aria-hidden="true" />
-		</Button>
+	return isInIsland ? (
+		<HeaderIslandButton {...trigger} />
+	) : (
+		<Button {...trigger} size="icon" variant="ghost" />
 	)
 }
 
