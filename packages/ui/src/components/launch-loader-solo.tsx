@@ -11,7 +11,8 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 const SOLO_SIZE = 72
-const FLIP_PERIOD = 2600
+const TICK = 1300
+const TICKS_PER_TURN = 6
 const ARRIVAL = 640
 
 const SOLO_EXIT =
@@ -27,7 +28,6 @@ const LaunchLoaderSolo = ({
 
 	return (
 		<LaunchLoaderWindow
-			className="perspective-[320px]"
 			direction="solo"
 			exit={SOLO_EXIT}
 			isLeaving={isLeaving}
@@ -38,14 +38,14 @@ const LaunchLoaderSolo = ({
 				className={cn(!isStill && "animate-launch-arrive")}
 				style={launchVariables({
 					"--launch-arrive-duration": `${ARRIVAL}ms`,
-					"--launch-from-scale": 0.3,
+					"--launch-from-scale": 0.4,
 					"--launch-from-rotate": "-120deg",
 				})}
 			>
 				<div
-					className={cn(!isStill && "animate-launch-flip")}
+					className={cn(!isStill && "animate-launch-step")}
 					style={launchVariables({
-						"--launch-period": `${FLIP_PERIOD}ms`,
+						"--launch-period": `${TICKS_PER_TURN * TICK}ms`,
 						"--launch-delay": `${ARRIVAL}ms`,
 					})}
 				>

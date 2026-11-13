@@ -18,13 +18,15 @@ import { cn } from "@workspace/ui/lib/utils"
 const CLUSTER_SIZE = 88
 const CLUSTER_CELLS = 3
 const HOP = 1500
-const HOP_PERIOD = CLUSTER_CELLS * HOP
+const HOPS_PER_PERIOD = 6
+const HOP_PERIOD = HOPS_PER_PERIOD * HOP
+const HOP_TURNS = HOPS_PER_PERIOD / CLUSTER_CELLS
 const ARRIVAL_STAGGER = 80
 const ARRIVAL_REACH = 1.6
 const FIRST_COLOUR_AFTER = 1200
 
 const CLUSTER_EXIT =
-	"transition-[opacity,scale,rotate] duration-300 ease-in group-data-[phase=leaving]/launch:scale-[0.4] group-data-[phase=leaving]/launch:rotate-[60deg] group-data-[phase=leaving]/launch:opacity-0"
+	"transition-[opacity,scale,rotate] duration-300 ease-in group-data-[phase=leaving]/launch:scale-50 group-data-[phase=leaving]/launch:rotate-[60deg] group-data-[phase=leaving]/launch:opacity-0"
 
 const LaunchLoaderCluster = ({
 	agents = [],
@@ -35,7 +37,11 @@ const LaunchLoaderCluster = ({
 	const cast = launchCast(agents.slice(0, CLUSTER_CELLS), CLUSTER_CELLS)
 	const { cells } = hiveLayout({ participants: cast, size: CLUSTER_SIZE })
 	const pivot = centroidOf(cells.map(({ centre }) => centre))
-	const hop = launchVariables({ "--launch-period": `${HOP_PERIOD}ms` })
+	const hop = (turns: number) =>
+		launchVariables({
+			"--launch-period": `${HOP_PERIOD}ms`,
+			"--launch-turn": `${turns}turn`,
+		})
 
 	return (
 		<LaunchLoaderWindow
@@ -46,8 +52,11 @@ const LaunchLoaderCluster = ({
 			side={CLUSTER_SIZE}
 		>
 			<div
-				className={cn("absolute inset-0", !isStill && "animate-launch-hop")}
-				style={{ ...hop, transformOrigin: `${pivot.x}px ${pivot.y}px` }}
+				className={cn("absolute inset-0", !isStill && "animate-launch-step")}
+				style={{
+					...hop(HOP_TURNS),
+					transformOrigin: `${pivot.x}px ${pivot.y}px`,
+				}}
 			>
 				{cells.map((cell, index) => (
 					<div
@@ -64,11 +73,8 @@ const LaunchLoaderCluster = ({
 						}}
 					>
 						<div
-							className={cn(!isStill && "animate-launch-hop")}
-							style={{
-								...hop,
-								...launchVariables({ "--launch-turn": "-1turn" }),
-							}}
+							className={cn(!isStill && "animate-launch-step")}
+							style={hop(-HOP_TURNS)}
 						>
 							<LaunchHexagon
 								agent={cast[index]}

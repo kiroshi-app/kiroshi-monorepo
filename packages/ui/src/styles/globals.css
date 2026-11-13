@@ -550,8 +550,8 @@
 
 @keyframes ui-launch-arrive {
 	from {
-		opacity: 0;
-		scale: var(--launch-from-scale, 0.4);
+		opacity: var(--launch-from-opacity, 0);
+		scale: var(--launch-from-scale, 1);
 		translate: var(--launch-from-x, 0px) var(--launch-from-y, 0px);
 		rotate: var(--launch-from-rotate, 0deg);
 	}
@@ -573,50 +573,42 @@
 		infinite;
 }
 
-@keyframes ui-launch-hop {
+@keyframes ui-launch-step {
+	16.667% {
+		rotate: calc(var(--launch-turn, 1turn) / 6);
+	}
 	33.333% {
 		rotate: calc(var(--launch-turn, 1turn) / 3);
 	}
+	50% {
+		rotate: calc(var(--launch-turn, 1turn) / 2);
+	}
 	66.667% {
 		rotate: calc(var(--launch-turn, 1turn) * 2 / 3);
+	}
+	83.333% {
+		rotate: calc(var(--launch-turn, 1turn) * 5 / 6);
 	}
 	to {
 		rotate: var(--launch-turn, 1turn);
 	}
 }
 
-@utility animate-launch-hop {
-	animation: ui-launch-hop var(--launch-period) cubic-bezier(0.8, 0, 0.2, 1)
-		infinite;
-}
-
-@keyframes ui-launch-flip {
-	from {
-		rotate: y 0turn;
-	}
-	50% {
-		rotate: y 0.5turn;
-	}
-	to {
-		rotate: y 1turn;
-	}
-}
-
-@utility animate-launch-flip {
-	animation: ui-launch-flip var(--launch-period) cubic-bezier(0.7, 0, 0.3, 1)
-		var(--launch-delay, 0ms) infinite backwards;
+@utility animate-launch-step {
+	animation: ui-launch-step var(--launch-period) cubic-bezier(0.8, 0, 0.2, 1)
+		var(--launch-delay, 0ms) infinite;
 }
 
 @keyframes ui-launch-pulse {
 	0%,
 	60%,
 	to {
-		opacity: var(--launch-rest-opacity, 1);
-		scale: var(--launch-rest-scale, 1);
+		scale: 1;
+		translate: 0px 0px;
 	}
 	14% {
-		opacity: var(--launch-peak-opacity, 1);
 		scale: var(--launch-peak-scale, 1);
+		translate: var(--launch-peak-x, 0px) var(--launch-peak-y, 0px);
 	}
 }
 
@@ -639,23 +631,6 @@
 
 @utility animate-launch-lit {
 	animation: ui-launch-lit var(--launch-lit-period) linear
-		var(--launch-lit-delay) infinite backwards;
-}
-
-@keyframes ui-launch-unlit {
-	0%,
-	8.333%,
-	to {
-		opacity: 1;
-	}
-	1.6%,
-	6.7% {
-		opacity: 0;
-	}
-}
-
-@utility animate-launch-unlit {
-	animation: ui-launch-unlit var(--launch-lit-period) linear
 		var(--launch-lit-delay) infinite backwards;
 }
 

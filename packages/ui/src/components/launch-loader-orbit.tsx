@@ -12,11 +12,11 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 const CORE_SIZE = 44
-const SATELLITE_SIZE = 16
+const SATELLITE_SIZE = 20
 const LANES = [
-	{ radius: 36, period: 5200 },
-	{ radius: 48, period: 7800 },
-	{ radius: 60, period: 11700 },
+	{ radius: 38, period: 5200 },
+	{ radius: 52, period: 7800 },
+	{ radius: 66, period: 11700 },
 ]
 const LANE_OFFSET = 0.21
 const ORBIT_SIDE =
@@ -32,7 +32,7 @@ const CORE_EXIT =
 	"transition-[opacity,scale] delay-100 duration-300 ease-in group-data-[phase=leaving]/launch:scale-150 group-data-[phase=leaving]/launch:opacity-0"
 
 const SATELLITE_EXIT =
-	"transition-[opacity,scale] duration-200 ease-in group-data-[phase=leaving]/launch:scale-0 group-data-[phase=leaving]/launch:opacity-0"
+	"transition-[opacity,translate] duration-200 ease-in group-data-[phase=leaving]/launch:translate-y-(--launch-fall) group-data-[phase=leaving]/launch:opacity-0"
 
 const LaunchLoaderOrbit = ({
 	agents = [],
@@ -49,6 +49,66 @@ const LaunchLoaderOrbit = ({
 			isStill={isStill}
 			side={ORBIT_SIDE}
 		>
+			{cast.map((agent, index) => {
+				const lane = index % LANES.length
+				const { radius, period } = LANES[lane]
+				const inLane = Math.ceil((cast.length - lane) / LANES.length)
+				const share =
+					Math.floor(index / LANES.length) / inLane + lane * LANE_OFFSET
+				const turn = (turns: number) =>
+					isStill
+						? { rotate: `${share * turns}turn` }
+						: launchVariables({
+								"--launch-period": `${period}ms`,
+								"--launch-delay": `${Math.round(-share * period)}ms`,
+								"--launch-turn": `${turns}turn`,
+							})
+
+				return (
+					<div
+						className={cn(
+							"absolute inset-0",
+							!isStill && "animate-launch-turn",
+						)}
+						key={agent.id}
+						style={turn(1)}
+					>
+						<div
+							className={cn("absolute", !isStill && SATELLITE_EXIT)}
+							style={{
+								left: (ORBIT_SIDE - SATELLITE_SIZE) / 2,
+								top: ORBIT_SIDE / 2 - radius - SATELLITE_SIZE / 2,
+								...launchVariables({ "--launch-fall": `${radius}px` }),
+							}}
+						>
+							<div
+								className={cn(!isStill && "animate-launch-arrive")}
+								style={launchVariables({
+									"--launch-arrive-delay": `${LAUNCH_AFTER + index * LAUNCH_STAGGER}ms`,
+									"--launch-from-y": `${radius}px`,
+								})}
+							>
+								<div
+									className={cn(!isStill && "animate-launch-turn")}
+									style={turn(-1)}
+								>
+									<LaunchHexagon
+										agent={agent}
+										colourTurn={{
+											index,
+											count: cast.length,
+											beat: COLOUR_BEAT,
+											lead: FIRST_COLOUR_AFTER,
+										}}
+										isStill={isStill}
+										size={SATELLITE_SIZE}
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+				)
+			})}
 			<div
 				className={cn(
 					"absolute inset-0 flex items-center justify-center",
@@ -59,7 +119,7 @@ const LaunchLoaderOrbit = ({
 					className={cn(!isStill && "animate-launch-arrive")}
 					style={launchVariables({
 						"--launch-arrive-duration": `${CORE_ARRIVAL}ms`,
-						"--launch-from-scale": 0.3,
+						"--launch-from-scale": 0.5,
 						"--launch-from-rotate": "-60deg",
 					})}
 				>
@@ -70,66 +130,6 @@ const LaunchLoaderOrbit = ({
 					/>
 				</div>
 			</div>
-			{cast.map((agent, index) => {
-				const lane = index % LANES.length
-				const { radius, period } = LANES[lane]
-				const inLane = Math.ceil((cast.length - lane) / LANES.length)
-				const share =
-					Math.floor(index / LANES.length) / inLane + lane * LANE_OFFSET
-				const turn = launchVariables({
-					"--launch-period": `${period}ms`,
-					"--launch-delay": `${Math.round(-share * period)}ms`,
-				})
-
-				return (
-					<div
-						className={cn(
-							"absolute inset-0",
-							!isStill && "animate-launch-turn",
-							!isStill && SATELLITE_EXIT,
-						)}
-						key={agent.id}
-						style={isStill ? { rotate: `${share}turn` } : turn}
-					>
-						<div
-							className={cn("absolute", !isStill && "animate-launch-arrive")}
-							style={{
-								left: (ORBIT_SIDE - SATELLITE_SIZE) / 2,
-								top: ORBIT_SIDE / 2 - radius - SATELLITE_SIZE / 2,
-								...launchVariables({
-									"--launch-arrive-delay": `${LAUNCH_AFTER + index * LAUNCH_STAGGER}ms`,
-									"--launch-from-scale": 0,
-									"--launch-from-y": `${radius}px`,
-								}),
-							}}
-						>
-							<div
-								className={cn(!isStill && "animate-launch-turn")}
-								style={
-									isStill
-										? { rotate: `${-share}turn` }
-										: {
-												...turn,
-												...launchVariables({ "--launch-turn": "-1turn" }),
-											}
-								}
-							>
-								<LaunchHexagon
-									agent={agent}
-									colourTurn={{
-										index,
-										count: cast.length,
-										beat: COLOUR_BEAT,
-										lead: FIRST_COLOUR_AFTER,
-									}}
-									isStill={isStill}
-									size={SATELLITE_SIZE}
-								/>
-							</div>
-						</div>
-					</div>
-				)
-			})}
 		</LaunchLoaderWindow>
 	)
 }

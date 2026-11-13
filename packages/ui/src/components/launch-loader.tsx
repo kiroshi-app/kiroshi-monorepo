@@ -4,16 +4,24 @@ import type { CSSProperties, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BRAND_NAME } from "@workspace/ui/components/app-icon-mark"
-import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { companionField } from "@workspace/ui/components/companion-avatar"
+import { DitheredField } from "@workspace/ui/components/dithered-field-avatar"
 import {
 	FullWindowContent,
 	FullWindowLayout,
 } from "@workspace/ui/components/full-window-layout"
+import { AvatarFrame } from "@workspace/ui/components/initials-avatar"
+import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 import { usePrefersReducedMotion } from "@workspace/ui/hooks/use-prefers-reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const LAUNCH_AGENT_LIMIT = 12
 const COLOUR_TURNS = 12
+const SMALLEST_APP_AVATAR = 16
+const INK = "var(--foreground)"
+const INK_GROUND =
+	"color-mix(in oklab, var(--foreground) 12%, var(--secondary))"
 
 type LaunchAgent = { id: string; name: string; hue?: number | null }
 
@@ -73,7 +81,6 @@ type LaunchLoaderWindowProps = {
 	isLeaving: boolean
 	isStill: boolean
 	exit?: string
-	className?: string
 	children: ReactNode
 }
 
@@ -83,7 +90,6 @@ const LaunchLoaderWindow = ({
 	isLeaving,
 	isStill,
 	exit,
-	className,
 	children,
 }: LaunchLoaderWindowProps) => {
 	const { t } = useTranslation("common")
@@ -105,11 +111,7 @@ const LaunchLoaderWindow = ({
 			>
 				<div
 					aria-hidden
-					className={cn(
-						"pointer-events-none relative",
-						!isStill && exit,
-						className,
-					)}
+					className={cn("pointer-events-none relative", !isStill && exit)}
 					data-slot="launch-loader-stage"
 					style={{ width: side, height: side }}
 				>
@@ -142,7 +144,6 @@ const LaunchHexagon = ({
 	isStill,
 	colourTurn,
 }: LaunchHexagonProps) => {
-	const state = isStill ? "idle" : "thinking"
 	const hue = agent.hue ?? undefined
 	const takesItsColour =
 		!isStill && colourTurn !== undefined && hue !== undefined
@@ -150,30 +151,29 @@ const LaunchHexagon = ({
 	return (
 		<span
 			className="relative flex"
-			data-slot="launch-loader-hexagon"
 			style={takesItsColour ? colourTurnVariables(colourTurn) : undefined}
 		>
-			<span className={cn("flex", takesItsColour && "animate-launch-unlit")}>
-				<DitheredFieldAvatar
-					hasGround={false}
-					ink="foreground"
+			<AvatarFrame
+				overlay={<OutlinedHexagon fill="none" side={size} />}
+				shape="hexagon"
+				size={size}
+				slot="launch-loader-hexagon"
+			>
+				<DitheredField
+					field={companionField(agent.name)}
+					ink={INK}
 					name={agent.name}
 					size={size}
-					state={state}
+					state={isStill ? "idle" : "thinking"}
+					surface={INK_GROUND}
 				/>
-			</span>
+			</AvatarFrame>
 			{takesItsColour ? (
 				<span
 					className="absolute inset-0 flex animate-launch-lit"
 					data-slot="launch-loader-colour"
 				>
-					<DitheredFieldAvatar
-						hasGround={false}
-						hue={hue}
-						name={agent.name}
-						size={size}
-						state={state}
-					/>
+					<BotIdentityAvatar hue={hue} name={agent.name} size={size} working />
 				</span>
 			) : null}
 		</span>
@@ -189,5 +189,6 @@ export {
 	LaunchLoaderWindow,
 	launchCast,
 	launchVariables,
+	SMALLEST_APP_AVATAR,
 	useLaunchStillness,
 }

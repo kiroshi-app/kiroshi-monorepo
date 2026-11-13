@@ -21,16 +21,19 @@ const HIVE_CELL = { flower: 32, beyondFlower: 26 }
 const FLOWER_CELLS = 7
 const RIPPLE = 2400
 const RIPPLE_DIP = 0.14
+const RIPPLE_DEPTH = 0.72
+const FIRST_RIPPLE_AFTER = 1100
 const RIPPLE_PER_RING = 320
 const RIPPLE_PER_CELL = 40
 const ARRIVAL_STAGGER = 45
 const ARRIVAL_FROM = 0.6
+const ARRIVAL_SCALE = 0.65
 
 const HIVE_EXIT =
 	"transition-[opacity,scale] duration-300 ease-in group-data-[phase=leaving]/launch:scale-150 group-data-[phase=leaving]/launch:opacity-0"
 
 const CELL_EXIT =
-	"transition-[scale] duration-300 ease-in group-data-[phase=leaving]/launch:scale-[0.4]"
+	"transition-[scale] duration-300 ease-in group-data-[phase=leaving]/launch:scale-[0.67]"
 
 type HoneycombCell = { column: number; row: number; ring: number }
 
@@ -115,7 +118,7 @@ const LaunchLoaderHive = ({
 							className={cn(!isStill && "animate-launch-arrive")}
 							style={launchVariables({
 								"--launch-arrive-delay": `${index * ARRIVAL_STAGGER}ms`,
-								"--launch-from-scale": 0,
+								"--launch-from-scale": ARRIVAL_SCALE,
 								"--launch-from-x": `${-x * ARRIVAL_FROM}px`,
 								"--launch-from-y": `${-y * ARRIVAL_FROM}px`,
 							})}
@@ -124,9 +127,8 @@ const LaunchLoaderHive = ({
 								className={cn(!isStill && "animate-launch-pulse")}
 								style={launchVariables({
 									"--launch-period": `${RIPPLE}ms`,
-									"--launch-delay": `${rippleReach - RIPPLE}ms`,
-									"--launch-peak-opacity": 0.6,
-									"--launch-peak-scale": 0.7,
+									"--launch-delay": `${FIRST_RIPPLE_AFTER + rippleReach}ms`,
+									"--launch-peak-scale": RIPPLE_DEPTH,
 								})}
 							>
 								<LaunchHexagon
@@ -135,7 +137,8 @@ const LaunchLoaderHive = ({
 										index,
 										count: cast.length,
 										beat: RIPPLE,
-										lead: RIPPLE * (1 + RIPPLE_DIP) + rippleReach,
+										lead:
+											FIRST_RIPPLE_AFTER + rippleReach + RIPPLE * RIPPLE_DIP,
 									}}
 									isStill={isStill}
 									size={size}
