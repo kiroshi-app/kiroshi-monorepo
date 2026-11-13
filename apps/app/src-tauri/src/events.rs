@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 use crate::{
 	account, agent, applications, claude_import, companions, conversations, devices, hosting,
 	invitations, joined_spaces, library, menu_contract, missions, notifications, routines, spaces,
-	updates, window_controls,
+	updates, user, window_controls,
 };
 
 pub const BUFFERED_FRAMES: usize = 1024;
@@ -142,6 +142,8 @@ declared! {
 	DRAG_GHOST_ENDED: window_controls::drag_ghost::DragGhostEnded =
 		window_controls::drag_ghost::ENDED_EVENT,
 	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,
+	USER_PREFERENCES_CHANGED: user::contract::UserPreferences =
+		user::contract::PREFERENCES_CHANGED_EVENT,
 	FILE_MENU: menu_contract::FileMenuChosen = menu_contract::FILE_MENU_EVENT,
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }

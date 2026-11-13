@@ -484,13 +484,16 @@ struct Me {
 	email: String,
 	created_at: String,
 	#[serde(default)]
+	name: Option<String>,
+	#[serde(default)]
 	plan: Option<Value>,
 }
 
 impl From<Me> for KiroshiAccount {
 	fn from(me: Me) -> Self {
+		let name = me.name.filter(|name| !name.trim().is_empty());
 		let plan = me.plan.and_then(plan_read);
-		Self { id: me.id, email: me.email, created_at: me.created_at, plan }
+		Self { id: me.id, email: me.email, created_at: me.created_at, name, plan }
 	}
 }
 

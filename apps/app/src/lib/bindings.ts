@@ -390,6 +390,8 @@ export const TAB_DRAG_EVENT = "window://tab-drag" as const;
 
 export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 
+export const USER_PREFERENCES_CHANGED_EVENT = "user://preferences-changed" as const;
+
 /* Types */
 export type Account = {
 	email: string | null,
@@ -1207,6 +1209,7 @@ export type KiroshiAccount = {
 	id: string,
 	email: string,
 	createdAt: string,
+	name?: string | null,
 	plan: AccountPlan | null,
 };
 

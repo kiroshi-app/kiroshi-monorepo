@@ -10,6 +10,8 @@ pub struct KiroshiAccount {
 	pub id: String,
 	pub email: String,
 	pub created_at: String,
+	#[specta(optional)]
+	pub name: Option<String>,
 	pub plan: Option<AccountPlan>,
 }
 
@@ -91,6 +93,7 @@ mod tests {
 			id: "u1".to_owned(),
 			email: "steve@example.com".to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: Some("Ada Lovelace".to_owned()),
 			plan: Some(AccountPlan::Pro),
 		});
 
@@ -101,21 +104,34 @@ mod tests {
 				"id": "u1",
 				"email": "steve@example.com",
 				"createdAt": "2026-10-01T00:00:00.000Z",
+				"name": "Ada Lovelace",
 				"plan": "pro"
 			})
 		);
 	}
 
-	#[test]
-	fn an_account_without_a_plan_crosses_with_a_null_plan() {
-		let state = AccountState::SignedIn(KiroshiAccount {
+	fn signed_in_without_name_or_plan() -> AccountState {
+		AccountState::SignedIn(KiroshiAccount {
 			id: "u1".to_owned(),
 			email: "steve@example.com".to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			name: None,
 			plan: None,
-		});
+		})
+	}
+
+	#[test]
+	fn an_account_without_a_plan_crosses_with_a_null_plan() {
+		let state = signed_in_without_name_or_plan();
 
 		assert_eq!(to_value(state).expect("the state serializes")["plan"], json!(null));
+	}
+
+	#[test]
+	fn an_account_without_a_name_crosses_with_a_null_name() {
+		let state = signed_in_without_name_or_plan();
+
+		assert_eq!(to_value(state).expect("the state serializes")["name"], json!(null));
 	}
 
 	#[test]

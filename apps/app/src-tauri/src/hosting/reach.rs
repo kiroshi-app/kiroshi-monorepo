@@ -499,6 +499,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::window_controls::drag_ghost::TAB_EVENT, Audience::HostOnly),
 	(crate::window_controls::drag_ghost::ENDED_EVENT, Audience::HostOnly),
 	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
+	(crate::user::contract::PREFERENCES_CHANGED_EVENT, Audience::HostOnly),
 	(crate::menu_contract::FILE_MENU_EVENT, Audience::HostOnly),
 	(crate::window_controls::tab_drag::TAB_DRAG_EVENT, Audience::HostOnly),
 	(crate::window_controls::native_move::NATIVE_MOVE_ENDED_EVENT, Audience::HostOnly),
