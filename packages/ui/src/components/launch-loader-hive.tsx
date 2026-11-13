@@ -6,6 +6,7 @@ import {
 } from "@workspace/ui/components/hive-layout"
 import { OUTER } from "@workspace/ui/components/kiroshi-hexagon"
 import {
+	centroidOf,
 	LaunchHexagon,
 	type LaunchLoaderProps,
 	LaunchLoaderWindow,
@@ -63,9 +64,6 @@ const honeycomb = (count: number) => {
 	return cells.slice(0, count)
 }
 
-const meanOf = (values: number[]) =>
-	values.reduce((sum, value) => sum + value, 0) / values.length
-
 const honeycombPlaces = (count: number, size: number) => {
 	const cellHeight = (size * OUTER.halfHeight) / OUTER.halfWidth
 	const places = honeycomb(count).map(({ column, row, ring }) => ({
@@ -73,10 +71,7 @@ const honeycombPlaces = (count: number, size: number) => {
 		x: column * COLUMN_GAP_RATIO * cellHeight,
 		y: (row + column / 2) * ROW_PITCH_RATIO * cellHeight,
 	}))
-	const middle = {
-		x: meanOf(places.map(({ x }) => x)),
-		y: meanOf(places.map(({ y }) => y)),
-	}
+	const middle = centroidOf(places)
 	return places.map(({ ring, x, y }) => ({
 		ring,
 		x: x - middle.x,

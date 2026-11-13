@@ -32,6 +32,8 @@ type ColourTurn = {
 	lead: number
 }
 
+type LaunchPoint = { x: number; y: number }
+
 const BRAND_AGENT: LaunchAgent = { id: "brand", name: BRAND_NAME }
 
 const launchVariables = (variables: LaunchVariables) =>
@@ -48,6 +50,11 @@ const launchCast = (agents: LaunchAgent[], fewestCells: number) => {
 	)
 	return [...known, ...inkCells]
 }
+
+const centroidOf = (points: LaunchPoint[]): LaunchPoint => ({
+	x: points.reduce((sum, { x }) => sum + x, 0) / points.length,
+	y: points.reduce((sum, { y }) => sum + y, 0) / points.length,
+})
 
 const colourTurnVariables = ({ index, count, beat, lead }: ColourTurn) =>
 	launchVariables({
@@ -175,6 +182,7 @@ const LaunchHexagon = ({
 
 export {
 	BRAND_AGENT,
+	centroidOf,
 	type LaunchAgent,
 	LaunchHexagon,
 	type LaunchLoaderProps,

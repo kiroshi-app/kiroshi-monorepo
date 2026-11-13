@@ -5,6 +5,7 @@ import {
 	hiveLayout,
 } from "@workspace/ui/components/hive-layout"
 import {
+	centroidOf,
 	LaunchHexagon,
 	type LaunchLoaderProps,
 	LaunchLoaderWindow,
@@ -25,9 +26,6 @@ const FIRST_COLOUR_AFTER = 1200
 const CLUSTER_EXIT =
 	"transition-[opacity,scale,rotate] duration-300 ease-in group-data-[phase=leaving]/launch:scale-[0.4] group-data-[phase=leaving]/launch:rotate-[60deg] group-data-[phase=leaving]/launch:opacity-0"
 
-const meanOf = (values: number[]) =>
-	values.reduce((sum, value) => sum + value, 0) / values.length
-
 const LaunchLoaderCluster = ({
 	agents = [],
 	isLeaving = false,
@@ -36,10 +34,7 @@ const LaunchLoaderCluster = ({
 	const isStill = useLaunchStillness(isHeldStill)
 	const cast = launchCast(agents.slice(0, CLUSTER_CELLS), CLUSTER_CELLS)
 	const { cells } = hiveLayout({ participants: cast, size: CLUSTER_SIZE })
-	const pivot = {
-		x: meanOf(cells.map(({ centre }) => centre.x)),
-		y: meanOf(cells.map(({ centre }) => centre.y)),
-	}
+	const pivot = centroidOf(cells.map(({ centre }) => centre))
 	const hop = launchVariables({ "--launch-period": `${HOP_PERIOD}ms` })
 
 	return (
