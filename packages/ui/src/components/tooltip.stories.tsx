@@ -152,6 +152,27 @@ const meta = preview.meta({
 	},
 })
 
+const renderSendTooltip = () => (
+	<Tooltip>
+		<TooltipTrigger render={<Button variant="outline">Send</Button>} />
+		<TooltipContent>Send this prompt</TooltipContent>
+	</Tooltip>
+)
+
+const openSendTooltip = async ({
+	canvasElement,
+	userEvent,
+}: HoverPlayContext) => {
+	await userEvent.hover(
+		within(canvasElement).getByRole("button", { name: "Send" }),
+	)
+	const bubble = await screen.findByText("Send this prompt")
+	await waitFor(async () => {
+		await expect(bubble).toBeVisible()
+	}, FRAME_POLL)
+	return bubble
+}
+
 export const Default = meta.story({
 	parameters: {
 		docs: {
@@ -161,20 +182,9 @@ export const Default = meta.story({
 			},
 		},
 	},
-	render: () => (
-		<Tooltip>
-			<TooltipTrigger render={<Button variant="outline">Send</Button>} />
-			<TooltipContent>Send this prompt</TooltipContent>
-		</Tooltip>
-	),
-	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
-
-		const bubble = await screen.findByText("Send this prompt")
-
-		await waitFor(async () => {
-			await expect(bubble).toBeVisible()
-		}, FRAME_POLL)
+	render: renderSendTooltip,
+	play: async (context) => {
+		await openSendTooltip(context)
 	},
 })
 
@@ -263,27 +273,6 @@ const expectReferenceSurface = async (bubble: HTMLElement, theme: Theme) => {
 	)
 	await expect(arrows).toHaveLength(1)
 	await expect(getComputedStyle(arrows[0]).display).toBe("none")
-}
-
-const renderSendTooltip = () => (
-	<Tooltip>
-		<TooltipTrigger render={<Button variant="outline">Send</Button>} />
-		<TooltipContent>Send this prompt</TooltipContent>
-	</Tooltip>
-)
-
-const openSendTooltip = async ({
-	canvasElement,
-	userEvent,
-}: HoverPlayContext) => {
-	await userEvent.hover(
-		within(canvasElement).getByRole("button", { name: "Send" }),
-	)
-	const bubble = await screen.findByText("Send this prompt")
-	await waitFor(async () => {
-		await expect(bubble).toBeVisible()
-	}, FRAME_POLL)
-	return bubble
 }
 
 const surfaceStory = (theme: Theme) => ({
