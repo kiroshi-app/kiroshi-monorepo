@@ -204,7 +204,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The record of an answered agent question, posted in the companion's column right under the message that asked it, as the content of one agent bubble, the same soft surface as the turn above. Each question shows its header and the options chosen, painted in the Space's person bubble colour, then a line says who answered and when, and the agent's author line closes the bubble as its foot. Use `ToolQuestion` while the question still waits for an answer.",
+					"The record of an answered agent question, posted in the companion's column right under the message that asked it, as the content of one soft agent bubble, under the bubbleless reply that asked. Each question shows its header and the options chosen, painted in the Space's person bubble colour, then a line says who answered and when, and the agent's author line closes the bubble as its foot. Use `ToolQuestion` while the question still waits for an answer.",
 			},
 		},
 	},
@@ -267,23 +267,20 @@ const expectOneAgentBubble = async (root: HTMLElement) => {
 	const answerTurn = answerTurnIn(root)
 	const answerContent = answerBubbleIn(root)
 	const answer = getComputedStyle(answerContent)
-	const plainTurn = slotIn(root, "message-bubble")
-	const plainContent = slotIn(plainTurn, "message-bubble-content")
-	const plain = getComputedStyle(plainContent)
 
 	await expect(slotsIn(answerTurn, "message-bubble")).toHaveLength(0)
 	await expect(slotsIn(answerTurn, "message-bubble-content")).toHaveLength(1)
 	await expect(answerTurn).toHaveAttribute("data-variant", "soft")
 	await expect(answerContent).toContainElement(cardIn(root))
-	await expect(getComputedStyle(answerTurn).maxWidth).toBe(
-		getComputedStyle(plainTurn).maxWidth,
-	)
-	await expect(answer.paddingTop).toBe(answer.paddingInlineStart)
-	await expect(answer.paddingBottom).toBe(answer.paddingInlineEnd)
-	await expect(answer.paddingTop).toBe(plain.paddingTop)
-	await expect(answer.paddingInlineStart).toBe(plain.paddingInlineStart)
-	await expect(answer.borderStartStartRadius).toBe(plain.borderStartStartRadius)
-	await expect(surfaceOf(answerContent)).toBe(surfaceOf(plainContent))
+	await expect(getComputedStyle(answerTurn).maxWidth).toBe("580px")
+	await expect([
+		answer.paddingTop,
+		answer.paddingInlineEnd,
+		answer.paddingBottom,
+		answer.paddingInlineStart,
+	]).toEqual(["18px", "18px", "18px", "18px"])
+	await expect(answer.borderStartStartRadius).toBe("16px")
+	await expect(surfaceOf(answerContent)).not.toBe("rgba(0, 0, 0, 0)")
 	await expectAgentFoot(answerContent)
 }
 

@@ -127,6 +127,7 @@ const chat = {
 			cancelled: "Stopped",
 			failed: "This response failed",
 			queued: "Waiting to be sent",
+			writing: "writing…",
 		},
 		notSent: "Not sent.",
 		notSentBecause: "Not sent. {{reason}}",

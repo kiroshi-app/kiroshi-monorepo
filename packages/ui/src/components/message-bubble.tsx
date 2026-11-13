@@ -123,7 +123,8 @@ function bubbleContentClass(
 			"on-user-bubble text-user-bubble-foreground [--bubble-surface:var(--user-bubble)] hover:[--bubble-surface:var(--user-bubble-hover)] focus-visible:[--bubble-surface:var(--user-bubble-hover)]",
 			OWN_BUBBLE_FOCUS_RING,
 		],
-		variant === "ghost" && "w-full rounded-none px-0 py-0",
+		variant === "ghost" &&
+			"w-full max-w-full rounded-none px-0 py-0 [--bubble-surface:transparent] has-data-[stuck=true]:overflow-visible",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "on-destructive text-destructive",
 		interactive && MESSAGE_BUBBLE_INTERACTIVE,

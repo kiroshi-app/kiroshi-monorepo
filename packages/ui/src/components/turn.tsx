@@ -133,6 +133,7 @@ type AssistantTurnProps = {
 	cause?: TurnCause
 	identity?: RosterBot
 	carriesMark?: boolean
+	isWriting?: boolean
 	work?: ReactNode
 	footer?: ReactNode
 	className?: string
@@ -171,6 +172,16 @@ const ROW_HIGHLIGHT =
 const TURN_ROW = "flex flex-col gap-1.5"
 
 const AGENT_BUBBLE_WIDTH = "max-w-145"
+
+const AGENT_REPLY_WIDTH = "w-full max-w-full items-stretch"
+
+const AGENT_ANSWER_TYPE = cn(
+	"text-base leading-7",
+	"[&_[data-slot=markdown]]:text-base [&_[data-slot=markdown]]:leading-7 [&_[data-slot=markdown]]:[--typeset-flow:1rem]",
+	"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-base [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-7",
+	"[&_[data-slot=markdown]_h2]:tracking-[-0.01em] [&_[data-slot=markdown]_h2:not(:first-child)]:mt-6",
+	"[&_[data-slot=markdown]_h3]:text-[1.0625rem] [&_[data-slot=markdown]_h3]:leading-7 [&_[data-slot=markdown]_h3:not(:first-child)]:mt-5",
+)
 
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 
@@ -559,6 +570,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		cause,
 		identity,
 		carriesMark = false,
+		isWriting = false,
 		work,
 		footer,
 		className,
@@ -578,6 +590,8 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const face = identity ?? author
 	const paintsOwnSurface = framed && fills
 	const unwrapped = bare || paintsOwnSurface
+	const isBubbleless = !unwrapped && !framed
+	const wrappedVariant = isBubbleless ? "ghost" : "soft"
 	const end = AUTHOR_LINE_END[state]
 	const mark = face ? (
 		<BotIdentityAvatar
@@ -617,6 +631,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			end={end}
 			onRetry={onRetry}
 			actions={turnActionsOf(actions.buttons)}
+			isWriting={isWriting}
 			isSticky
 			renderIdentity={renderIdentity}
 		/>
@@ -637,10 +652,10 @@ function AssistantTurn(props: AssistantTurnProps) {
 		>
 			{cause ? <TurnRunHeader cause={cause} /> : null}
 			<MessageBubble
-				variant={unwrapped ? "bare" : "soft"}
+				variant={unwrapped ? "bare" : wrappedVariant}
 				className={cn(
 					"min-w-0",
-					fills ? "w-full max-w-full items-stretch" : AGENT_BUBBLE_WIDTH,
+					fills || isBubbleless ? AGENT_REPLY_WIDTH : AGENT_BUBBLE_WIDTH,
 				)}
 			>
 				<MessageActions menu={turnMenuOf(actions)}>
@@ -648,6 +663,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 						repliedTo={repliedTo}
 						foot={work ?? authorLine}
 						className={cn(
+							isBubbleless && AGENT_ANSWER_TYPE,
 							paintsOwnSurface && "py-0",
 							framed && !fills && FRAMED_CARD_MIN_WIDTH,
 							fills && "w-full",

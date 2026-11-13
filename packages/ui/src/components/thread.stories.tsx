@@ -357,7 +357,7 @@ export const Conversations1 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard Conversations 1: a one to one conversation at rest. Check every bubble against the PNG: agent on the start side, you on the end side in the Space colour, the author line at the foot of each.",
+					"Artboard Conversations 1: a one to one conversation at rest. Check every message against the PNG: the agent's replies across the column with no bubble, yours on the end side in a bubble in the Space colour, the author line at the foot of each.",
 			},
 		},
 	},
@@ -365,8 +365,8 @@ export const Conversations1 = meta.story({
 		await expect(slotsIn(canvasElement, "author-line")).toHaveLength(7)
 		const answer = slotIn(canvasElement, "markdown").querySelector("p")
 		if (!answer) throw new Error("The answer draws no paragraph")
-		await expect(getComputedStyle(answer).fontSize).toBe("14px")
-		await expect(getComputedStyle(answer).lineHeight).toBe("24px")
+		await expect(getComputedStyle(answer).fontSize).toBe("16px")
+		await expect(getComputedStyle(answer).lineHeight).toBe("28px")
 	},
 })
 
@@ -1279,6 +1279,64 @@ const expectCleanCutStuckLine = async (
 	}
 }
 
+const clipsItsInlineOverflow = (element: HTMLElement) =>
+	getComputedStyle(element).overflowX !== "visible"
+
+const clippingAncestorsOf = (element: HTMLElement, root: HTMLElement) => {
+	const ancestors: HTMLElement[] = []
+	for (
+		let node = element.parentElement;
+		node && root.contains(node);
+		node = node.parentElement
+	)
+		if (clipsItsInlineOverflow(node)) ancestors.push(node)
+	return ancestors
+}
+
+const expectStuckLineOnTheCard = async (canvasElement: HTMLElement) => {
+	const viewports = slotsIn(canvasElement, "message-scroller-viewport")
+	await expect(viewports).toHaveLength(2)
+	for (const viewport of viewports) {
+		const line = await pinnedLineIn(viewport, "agent")
+		const reply = line.closest<HTMLElement>(
+			'[data-slot="message-bubble-content"]',
+		)
+		if (!reply) throw new Error("The stuck line sits outside a reply")
+		const block = getComputedStyle(line, "::before")
+		const lineBox = line.getBoundingClientRect()
+		const replyBox = reply.getBoundingClientRect()
+		await expect(
+			Math.round(viewport.getBoundingClientRect().bottom - lineBox.bottom),
+		).toBe(BUBBLE_PADDING)
+		await expect([block.top, block.right, block.bottom, block.left]).toEqual(
+			Array.from({ length: 4 }, () => `-${BUBBLE_PADDING}px`),
+		)
+		await expect([Math.round(lineBox.left), Math.round(lineBox.width)]).toEqual(
+			[Math.round(replyBox.left), Math.round(replyBox.width)],
+		)
+		await expect(Math.round(Number.parseFloat(block.width))).toBe(
+			Math.round(replyBox.width) + 2 * BUBBLE_PADDING,
+		)
+		await expect(clipsItsInlineOverflow(reply)).toBe(false)
+		for (const ancestor of clippingAncestorsOf(reply, viewport)) {
+			const frame = ancestor.getBoundingClientRect()
+			await expect(frame.left).toBeLessThanOrEqual(
+				replyBox.left - BUBBLE_PADDING,
+			)
+			await expect(frame.right).toBeGreaterThanOrEqual(
+				replyBox.right + BUBBLE_PADDING,
+			)
+		}
+		await expectBlockHasHairline(line)
+		await expect(
+			widestChannelGap(
+				paintedRgb(getComputedStyle(line).getPropertyValue("--card")),
+				paintedBlockRgb(line),
+			),
+		).toBeLessThanOrEqual(1)
+	}
+}
+
 const expectUnwrappedStuckBlockPaintsRestingBubble = async (
 	canvasElement: HTMLElement,
 ) => {
@@ -1370,12 +1428,11 @@ export const AgentAuthorLineStuckOnALongAnswer = meta.story({
 		docs: {
 			description: {
 				story:
-					"An answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 18 above the transcript's bottom edge on a block in the bubble's own grey under a hairline, 18 from both bubble edges, square at the foot and running to the edge, and that the answer scrolling under it is cut at the bubble's sides.",
+					"Conversation feed, artboard 5: an answer taller than the transcript, read from its top, light then dark. Check the author line stays pinned 18 above the transcript's bottom edge, on a block in the card colour under a hairline in the shell border colour, and that the block runs 18 past the column on each side, 716 wide over a 680 column, hiding the answer that scrolls under it.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) =>
-		expectCleanCutStuckLine(canvasElement, "agent"),
+	play: async ({ canvasElement }) => expectStuckLineOnTheCard(canvasElement),
 })
 
 const surfaceOf = (line: HTMLElement) => {
@@ -1434,19 +1491,17 @@ const expectSameGeometryStuck = async (canvasElement: HTMLElement) => {
 		await waitFor(() =>
 			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
 		)
-		for (const tone of ["agent", "you"]) {
-			const line = lineOf(viewport, tone)
-			await scrollLineTo(viewport, line, false)
-			const inPlace = authorLineGeometry(line)
-			await scrollLineTo(viewport, line, true)
-			const stuck = authorLineGeometry(line)
-			await expect(inPlace.padding).toEqual([
-				BUBBLE_PADDING,
-				BUBBLE_PADDING,
-				BUBBLE_PADDING,
-			])
-			await expect(stuck).toEqual(inPlace)
-		}
+		const line = lineOf(viewport, "you")
+		await scrollLineTo(viewport, line, false)
+		const inPlace = authorLineGeometry(line)
+		await scrollLineTo(viewport, line, true)
+		const stuck = authorLineGeometry(line)
+		await expect(inPlace.padding).toEqual([
+			BUBBLE_PADDING,
+			BUBBLE_PADDING,
+			BUBBLE_PADDING,
+		])
+		await expect(stuck).toEqual(inPlace)
 	}
 }
 
@@ -1462,13 +1517,6 @@ export const AuthorLinesKeepTheirPaddingWhenStuck = meta.story({
 					text: LONG_OWN_MESSAGE,
 					time: at(14, 10),
 				}),
-				rowOf({
-					key: "answer",
-					from: "agent",
-					author: ATLAS,
-					text: OFFSITE_ANSWER,
-					time: at(14, 12),
-				}),
 			]}
 		/>
 	),
@@ -1476,7 +1524,7 @@ export const AuthorLinesKeepTheirPaddingWhenStuck = meta.story({
 		docs: {
 			description: {
 				story:
-					"Your message and an answer, both taller than the transcript, light then dark. Scroll each until its end shows, then until its end hides under the bottom edge. Check the author line keeps 18 from both bubble edges and 18 above the foot of its block, with its avatar, name, badge and time where they rested, so nothing moves when it sticks.",
+					"Your message, taller than the transcript, light then dark. Scroll it until its end shows, then until its end hides under the bottom edge. Check the author line keeps 18 from both bubble edges and 18 above the foot of its block, with its avatar, name, badge and time where they rested, so nothing moves when it sticks.",
 			},
 		},
 	},
@@ -1508,35 +1556,6 @@ export const UserAuthorLineStuckOnAHoveredMessage = meta.story({
 	},
 	play: async ({ canvasElement }) =>
 		expectHoveredStuckBlockPaintsBubble(canvasElement, "you"),
-})
-
-export const AgentAuthorLineStuckOnAHoveredAnswer = meta.story({
-	globals: { theme: "light" },
-	render: () => (
-		<ThemedPanels
-			rows={[
-				LISBON_DAY,
-				LISBON_QUESTION,
-				rowOf({
-					key: "answer",
-					from: "agent",
-					author: ATLAS,
-					text: OFFSITE_ANSWER,
-					time: at(14, 12),
-				}),
-			]}
-		/>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A long answer read from its top with the pointer on it, light then dark. Check the stuck block under the author line darkens with the hovered bubble to the same grey, at once, and still hides the answer scrolling under it.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) =>
-		expectHoveredStuckBlockPaintsBubble(canvasElement, "agent"),
 })
 
 export const AgentAuthorLineStuckOnAnUnwrappedAnswer = meta.story({
