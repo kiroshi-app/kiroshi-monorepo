@@ -36,6 +36,8 @@
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.08), 0 8px 20px rgb(0 0 0 / 0.12);
+	--header-island-control-hover: var(--muted);
+	--header-island-control-pressed: #e6e6e6;
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
 		in oklab,
@@ -61,6 +63,8 @@
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.35);
+	--header-island-control-hover: #1f1f21;
+	--header-island-control-pressed: var(--muted);
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -81,6 +85,8 @@
 	--shadow-sidebar-peek: var(--sidebar-peek-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
+	--color-header-island-control-hover: var(--header-island-control-hover);
+	--color-header-island-control-pressed: var(--header-island-control-pressed);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);
