@@ -1112,7 +1112,7 @@ export const Solo1a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control as a 32px cell. Check the transcript starts 56px from the top and that neither control animates its colours. " +
+					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control then the routines opener, two 32px cells 2px apart. Check the transcript starts 56px from the top and that neither control animates its colours. " +
 					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
 			},
 		},
@@ -1205,7 +1205,7 @@ export const Group2a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject icon, the title and the gear, with no role chip and no connection dot. " +
+					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject tile, a square with 6px corners in the conversation colour, the title and the gear, with no role chip and no connection dot. " +
 					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
 			},
 		},
