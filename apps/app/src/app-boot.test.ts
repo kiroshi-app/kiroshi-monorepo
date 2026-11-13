@@ -17,7 +17,6 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted((): { store: TranscriptStore | null } => ({
 	store: null,
@@ -56,9 +55,6 @@ const settle = async () => {
 const isShowing = (slot: string) =>
 	document.querySelector(`[data-slot="${slot}"]`) !== null
 
-const collapseSidebar = () =>
-	writeMirror({ ...readMirror(), sidebarCollapsed: true })
-
 const mountApp = async (store: TranscriptStore) => {
 	vi.useFakeTimers()
 	harness.store = store
@@ -69,7 +65,6 @@ const mountApp = async (store: TranscriptStore) => {
 const SKELETON_MS = 300
 
 it("mounts the sidebar with its skeleton while the roster is read", async () => {
-	collapseSidebar()
 	const store = createFakeTranscriptStore()
 	vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
 
@@ -79,11 +74,10 @@ it("mounts the sidebar with its skeleton while the roster is read", async () => 
 	})
 
 	expect(isShowing("app-boot-screen")).toBe(false)
-	expect(isShowing("collapsed-sidebar-skeleton")).toBe(true)
+	expect(isShowing("sidebar-list-skeleton")).toBe(true)
 })
 
 it("shows a roster failing at launch inside the sidebar, never on the startup screen", async () => {
-	collapseSidebar()
 	const store = createFakeTranscriptStore()
 	vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
 
@@ -91,11 +85,13 @@ it("shows a roster failing at launch inside the sidebar, never on the startup sc
 
 	expect(isShowing("app-boot-screen")).toBe(false)
 	expect(isShowing("app-boot-notice")).toBe(false)
+	const sidebar = within(
+		screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }),
+	)
+	expect(sidebar.getByText(i18n.t("bots:roster.failed"))).toBeTruthy()
 	expect(
-		within(screen.getByRole("navigation", { name: i18n.t("bots:rail.label") }))
-			.getByRole("button", { name: i18n.t("bots:roster.retry") })
-			.getAttribute("aria-description"),
-	).toBe(i18n.t("bots:roster.failed"))
+		sidebar.getByRole("button", { name: i18n.t("bots:roster.retry") }),
+	).toBeTruthy()
 })
 
 it("offers a retry when the space list fails at launch and reads it again on retry", async () => {

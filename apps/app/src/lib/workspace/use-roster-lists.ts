@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 
-import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
+import type { ExpandedSidebarListStatus } from "@workspace/ui/components/expanded-sidebar"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 import { useRosterBots } from "./use-roster-bots"
@@ -36,7 +36,7 @@ const rosterListStatusOf = ({
 	isSkeletonShown,
 	hasFailedToLoad,
 	isEmpty,
-}: RosterListStatusInput): CollapsedSidebarListStatus => {
+}: RosterListStatusInput): ExpandedSidebarListStatus => {
 	if (isSkeletonShown) return "loading"
 	if (hasFailedToLoad && isEmpty) return "failed"
 	return "ready"
@@ -202,15 +202,11 @@ export const useRosterLists = ({
 	)
 
 	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
-	const isSkeletonShown = rosterSkeletonPhase === "skeleton"
-	const listRead = {
+	const expandedListStatus = rosterListStatusOf({
 		hasFailedToLoad: roster.state.hasFailedToLoad,
 		isEmpty: rosterConversations.length === 0,
-	}
-	const rosterListStatus = rosterListStatusOf({ ...listRead, isSkeletonShown })
-	const expandedListStatus = rosterListStatusOf({
-		...listRead,
-		isSkeletonShown: isSkeletonShown || roster.state.isRosterPending,
+		isSkeletonShown:
+			rosterSkeletonPhase === "skeleton" || roster.state.isRosterPending,
 	})
 
 	return {
@@ -220,7 +216,6 @@ export const useRosterLists = ({
 		rosterBotsBySpace,
 		rosterConversations,
 		rosterConversationsBySpace,
-		rosterListStatus,
 	}
 }
 

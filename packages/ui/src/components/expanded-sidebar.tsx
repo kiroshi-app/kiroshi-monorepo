@@ -14,7 +14,6 @@ import {
 	NamedFoldSection,
 	type SectionHeadActions,
 } from "@workspace/ui/components/app-sidebar-section"
-import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
 import {
 	COMPACT_ROW_GAP,
 	COMPACT_ROW_STACK,
@@ -138,6 +137,8 @@ type ExpandedSidebarSection = SectionHeadActions & {
 	headSlotId?: string
 }
 
+type ExpandedSidebarListStatus = "ready" | "loading" | "failed"
+
 type ExpandedSidebarProps = SpaceSwitcherProps & {
 	destination?: ExpandedSidebarDestination
 	isSettingsShown?: boolean
@@ -145,7 +146,7 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	pinned: ReactNode
 	conversations: ReactNode
 	sections?: ExpandedSidebarSection[]
-	listStatus?: CollapsedSidebarListStatus
+	listStatus?: ExpandedSidebarListStatus
 	listEnd?: ListEnd
 	update?: ReactNode
 	user?: UserChipIdentity
@@ -434,6 +435,7 @@ export {
 	type ExpandedSidebarDestination,
 	ExpandedSidebarList,
 	type ExpandedSidebarListProps,
+	type ExpandedSidebarListStatus,
 	type ExpandedSidebarProps,
 	type ExpandedSidebarSection,
 	navigationDestinationsOf,

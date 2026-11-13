@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import { Icons } from "@workspace/ui/components/icons"
 import { NEEDS_YOU_GLYPH } from "@workspace/ui/components/row-anatomy"
+import { useSidebarPeekTrigger } from "@workspace/ui/components/sidebar-peek"
 import {
 	TITLE_BAR_MENU,
 	TITLE_BAR_MENU_ROW,
@@ -123,12 +124,16 @@ const HISTORY = "flex shrink-0 items-center gap-0.5 pe-1"
 const HISTORY_BESIDE_SIDEBAR =
 	"w-[calc(var(--sidebar-width)-var(--title-bar-lead)-var(--spacing))]"
 
-const HISTORY_COLLAPSED = "in-data-[sidebar-open=false]:w-23"
-
-const HISTORY_COLLAPSED_WITH_SEARCH = "in-data-[sidebar-open=false]:w-30.5"
+const HISTORY_COLLAPSED =
+	"in-data-[sidebar-open=false]:w-auto in-data-[sidebar-open=false]:pe-2"
 
 const BAR_BUTTON =
 	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
+
+const SIDEBAR_TOGGLE = cn(
+	BAR_BUTTON,
+	"in-data-[sidebar-open=false]:hover:bg-title-bar-chip in-data-[sidebar-open=false]:hover:text-muted-foreground",
+)
 
 const TABS = "relative flex min-w-0"
 
@@ -978,6 +983,7 @@ const TitleBarTabs = ({
 	onOpenSearch,
 }: TitleBarTabsProps) => {
 	const { t } = useTranslation("common")
+	const sidebarPeekTrigger = useSidebarPeekTrigger()
 	const searchLabel = t("open", { ns: "search" })
 	const pinned = tabs.filter((tab) => tab.isPinned)
 	const unpinned = tabs.filter((tab) => !tab.isPinned)
@@ -1063,19 +1069,17 @@ const TitleBarTabs = ({
 			<div
 				className={cn(
 					HISTORY,
-					onToggleSidebar && [
-						HISTORY_BESIDE_SIDEBAR,
-						onOpenSearch ? HISTORY_COLLAPSED_WITH_SEARCH : HISTORY_COLLAPSED,
-					],
+					onToggleSidebar && [HISTORY_BESIDE_SIDEBAR, HISTORY_COLLAPSED],
 				)}
 				data-slot="title-bar-history"
 			>
 				{onToggleSidebar ? (
 					<button
 						aria-label={t("sidebar.toggle")}
-						className={BAR_BUTTON}
+						className={SIDEBAR_TOGGLE}
 						onClick={onToggleSidebar}
 						type="button"
+						{...sidebarPeekTrigger}
 					>
 						<Icons.Sidebar aria-hidden="true" />
 					</button>

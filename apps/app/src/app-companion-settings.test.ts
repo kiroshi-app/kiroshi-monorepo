@@ -25,7 +25,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { aMission } from "@/lib/missions/mission-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { rosterRowOf, sidebarItemOf } from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -329,10 +329,7 @@ const openContextMenuOn = async (target: Element) => {
 const chooseInMenu = async (label: string) =>
 	press(screen.getByRole("menuitem", { name: label }))
 
-const collapseSidebar = () =>
-	writeMirror({ ...readMirror(), sidebarCollapsed: true })
-
-const openRow = (name: string) => press(sidebarItemOf(name))
+const openRow = (name: string) => press(rosterRowOf(name))
 
 const turnOf = (text: string) => {
 	const turn = screen.getByText(text).closest('[data-slot="message"]')
@@ -601,7 +598,6 @@ it("leaves the Danger zone for the entry chosen after a Delete", async () => {
 })
 
 it("opens the companion screen on General from the Settings of a message avatar menu", async () => {
-	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -612,7 +608,6 @@ it("opens the companion screen on General from the Settings of a message avatar 
 })
 
 it("opens the companion screen on General from the Settings of a mention pill menu", async () => {
-	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 
@@ -623,7 +618,6 @@ it("opens the companion screen on General from the Settings of a mention pill me
 })
 
 it("opens the companion screen on General from the identity button of the solo header", async () => {
-	collapseSidebar()
 	await mountApp()
 	await openRow(ATLAS)
 
@@ -637,7 +631,6 @@ it("opens the companion screen on General from the identity button of the solo h
 })
 
 it("opens the companion screen on Applications from an application install card", async () => {
-	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, { kind: "nothing" }),
@@ -653,7 +646,6 @@ it("opens the companion screen on Applications from an application install card"
 })
 
 it("opens the companion screen on the application a deep link names", async () => {
-	collapseSidebar()
 	const seeded = await mountApp()
 	harness.installs = [
 		installOf(seeded.atlasId, seeded.atlasThreadId, {
@@ -680,7 +672,6 @@ it("opens the companion screen on the application a deep link names", async () =
 })
 
 it("brings back the open conversation and its draft on Back to conversations", async () => {
-	collapseSidebar()
 	await mountApp()
 	await openRow(ROOM)
 	fireEvent.change(composerOf(), { target: { value: DRAFT } })
@@ -959,7 +950,6 @@ const pickSonnetThenSend = async (held: HeldRuntimeWrite) => {
 }
 
 it("starts the session of a prompt sent during a runtime write only once the write lands, on the picked model", async () => {
-	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp(held.change)
@@ -975,7 +965,6 @@ it("starts the session of a prompt sent during a runtime write only once the wri
 })
 
 it("starts the session on the stored model and raises a notice when the held runtime write is refused", async () => {
-	collapseSidebar()
 	harness.models = RUNTIME_MODELS
 	const held = holdingRuntimeWrite()
 	await mountApp((store) => held.change(refusingUpdates(store)))

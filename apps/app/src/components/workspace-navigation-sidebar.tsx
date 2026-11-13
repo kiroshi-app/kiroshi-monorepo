@@ -5,12 +5,7 @@ import {
 	ExpandedRowsProvider,
 	useExpandedSlotElements,
 } from "@/components/expanded-sidebar-rows"
-import {
-	expandedSpaceListOf,
-	railSpaceListOf,
-} from "@/components/space-neighbour-lists"
-import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
-import { useSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
+import { expandedSpaceListOf } from "@/components/space-neighbour-lists"
 import {
 	isHomePage,
 	isLibraryPage,
@@ -36,40 +31,31 @@ const useShownDestination = (
 }
 
 const NavigationSidebarWithRows = () => {
-	const { core, rosterLines, rosterView, sidebarMissions, tabs } =
-		useWorkspace()
+	const { core, rosterLines, sidebarMissions, tabs } = useWorkspace()
 	const { frame, rosterLists } = useWorkspaceFrame()
-	const { collapse, sidebar, selectedSpaceId } = frame
+	const { onOpenConversation: _opensFromARow, ...navigation } = frame.sidebar
 	const destination = useShownDestination(tabs)
 	const isSettingsShown = usePageShown(tabs, isUserSettingsPage)
 	const { roster } = core
-	const zones = sidebarZonesOf(useSidebarConversations())
 	const { conversations, pinned, sections } = useExpandedSlotElements()
-	const { openCount, openMissionId } = sidebarMissions
+	const { openCount } = sidebarMissions
 
 	return (
 		<NavigationSidebar
-			{...sidebar}
+			{...navigation}
 			conversations={conversations}
 			destination={destination}
 			isSettingsShown={isSettingsShown}
 			listEnd={roster.listEnd}
-			listStatus={
-				collapse.isOpen
-					? rosterLists.expandedListStatus
-					: rosterLists.rosterListStatus
-			}
+			listStatus={rosterLists.expandedListStatus}
 			missionCount={openCount > 0 ? openCount : undefined}
 			onRetryList={roster.controller.retryLoad}
-			openConversationId={rosterView.selectedConversationId ?? undefined}
-			openMissionId={openMissionId}
 			pinned={pinned}
-			renderSpaceList={collapse.isOpen ? expandedSpaceListOf : railSpaceListOf}
+			renderSpaceList={expandedSpaceListOf}
 			sections={sections}
-			selectedSpaceId={selectedSpaceId}
-			spaces={sidebar.spaces ?? []}
+			selectedSpaceId={frame.selectedSpaceId}
+			spaces={navigation.spaces ?? []}
 			update={rosterLines.updateBadge}
-			zones={zones}
 		/>
 	)
 }

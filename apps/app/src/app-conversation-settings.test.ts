@@ -19,11 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import {
-	rosterRowNamed,
-	rosterRowOf,
-	sidebarItemOf,
-} from "@/lib/sidebar/sidebar-fixtures"
+import { rosterRowNamed, rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 type Harness = {
@@ -101,8 +97,8 @@ const settle = async () => {
 	})
 }
 
-const mountRouterAt = async (path = "/", sidebarCollapsed = true) => {
-	writeMirror({ ...readMirror(), firstRunDone: true, sidebarCollapsed })
+const mountRouterAt = async (path = "/") => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
@@ -129,7 +125,7 @@ const press = async (control: Element, init: MouseEventInit = {}) => {
 	await settle()
 }
 
-const openRoom = () => press(sidebarItemOf(ROOM))
+const openRoom = () => press(rosterRowOf(ROOM))
 
 const headerButtonOf = (name: string) =>
 	screen.getByRole("button", {
@@ -143,8 +139,6 @@ const rowMenuSettingsOf = async () => {
 	await settle()
 	return screen.getByRole("menuitem", { name: i18n.t("bots:roster.settings") })
 }
-
-const mountExpanded = () => mountRouterAt("/", false)
 
 const openSettingsFromRowMenu = async () => press(await rowMenuSettingsOf())
 
@@ -223,7 +217,7 @@ it("opens the conversation settings full-window from the conversation button of 
 })
 
 it("opens the conversation settings full-window from the Settings of a sidebar conversation row menu", async () => {
-	await mountExpanded()
+	await mountRouterAt()
 
 	await openSettingsFromRowMenu()
 
@@ -244,7 +238,7 @@ it("brings back the open conversation and its draft on Back", async () => {
 })
 
 it("paints a rename in the sidebar", async () => {
-	await mountExpanded()
+	await mountRouterAt()
 	await openSettingsFromRowMenu()
 
 	await act(async () => {
@@ -262,7 +256,7 @@ it("paints a rename in the sidebar", async () => {
 })
 
 it("deletes the conversation from the Danger zone and leaves the screen", async () => {
-	await mountExpanded()
+	await mountRouterAt()
 	await openSettingsFromRowMenu()
 
 	await deleteFromDangerZone()

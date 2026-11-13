@@ -16,7 +16,6 @@ type SidebarNavigateKey =
 	| "onNewConversation"
 	| "onSelectMissions"
 	| "onSelectLibrary"
-	| "onOpenConversation"
 
 type SidebarSwitcherKey =
 	| "badgesBySpaceId"
@@ -33,7 +32,9 @@ type SidebarSwitcherKey =
 export type WorkspaceSidebarNavigation = Required<
 	Pick<NavigationSidebarProps, SidebarNavigateKey>
 > &
-	Pick<NavigationSidebarProps, SidebarSwitcherKey>
+	Pick<NavigationSidebarProps, SidebarSwitcherKey> & {
+		onOpenConversation: (conversationId: string) => void
+	}
 
 export type WorkspaceSidebarRowMenu = {
 	isAgent: (id: string) => boolean

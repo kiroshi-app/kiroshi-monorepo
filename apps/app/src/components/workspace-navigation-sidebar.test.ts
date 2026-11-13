@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 
 import { RouterProvider } from "@tanstack/react-router"
-import { act, cleanup, render, screen, within } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -107,14 +114,22 @@ describe("the sidebar with two Spaces", () => {
 		).not.toBeNull()
 	})
 
-	it("draws the second Space's conversation in its rail panel when collapsed", async () => {
+	it("draws nothing when collapsed, then the second Space's conversation in its panel once the left edge is rested on", async () => {
 		await mountAppWithSidebar(true)
 
 		expect(
-			sidebar().queryByRole("button", { name: SELECTED_SPACE }),
-		).not.toBeNull()
+			screen.queryByRole("navigation", { name: i18n.t("bots:rail.label") }),
+		).toBeNull()
+
+		await act(async () => {
+			fireEvent.pointerEnter(
+				document.querySelector("[data-slot='sidebar-peek-edge']") as Element,
+			)
+		})
+		await settle()
+
 		expect(
-			panelOfUnselectedSpace().queryByLabelText(NEIGHBOUR_CONVERSATION),
+			panelOfUnselectedSpace().queryByText(NEIGHBOUR_CONVERSATION),
 		).not.toBeNull()
 	})
 })

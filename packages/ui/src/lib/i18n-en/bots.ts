@@ -104,10 +104,6 @@ const bots = {
 		searchMissions: "Search missions",
 		spaceSettings: "Space settings",
 		personSettings: "{{name}}, Settings",
-		detail: "· {{detail}}",
-		missionCount_one: "{{count}} mission",
-		missionCount_other: "{{count}} missions",
-		moreMissions: "+{{count}} missions",
 	},
 	spaces: {
 		label: "Spaces",

@@ -385,7 +385,7 @@ describe("the sidebar toggle", () => {
 		await press(toggleSidebarButton())
 
 		expect(slotOf("expanded-sidebar")).toBeNull()
-		expect(slotOf("collapsed-sidebar")).not.toBeNull()
+		expect(slotOf("sidebar-peek-edge")).not.toBeNull()
 		expect(savedLayouts).toHaveBeenLastCalledWith({ isCollapsed: true })
 
 		await press(toggleSidebarButton())
@@ -406,7 +406,7 @@ describe("the sidebar toggle", () => {
 
 		await pressCommand("b")
 
-		expect(slotOf("collapsed-sidebar")).not.toBeNull()
+		expect(slotOf("sidebar-peek-edge")).not.toBeNull()
 		expect(savedLayouts).toHaveBeenCalledExactlyOnceWith({ isCollapsed: true })
 
 		await pressCommand("b", screen.getByRole("textbox"))
@@ -417,11 +417,9 @@ describe("the sidebar toggle", () => {
 	})
 
 	it("opens collapsed with no expanded sidebar ever drawn when the sidebar was left collapsed", async () => {
-		writeMirror({ ...readMirror(), sidebarCollapsed: true })
+		await mountCollapsed()
 
-		await mountApp()
-
-		expect(slotOf("collapsed-sidebar")).not.toBeNull()
+		expect(slotOf("sidebar-peek-edge")).not.toBeNull()
 		expect(harness.mounts.expandedSidebar).toBe(0)
 	})
 
@@ -431,7 +429,7 @@ describe("the sidebar toggle", () => {
 
 		await press(toggleSidebarButton())
 
-		expect(slotOf("collapsed-sidebar")).toBeNull()
+		expect(slotOf("sidebar-peek-edge")).toBeNull()
 		expect(slotOf("expanded-sidebar")).not.toBeNull()
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -474,103 +472,31 @@ const mountCollapsed = (seed?: (held: SpaceSeed) => Promise<void>) => {
 	return mountApp(seed)
 }
 
-const railConversationNames = () =>
-	Array.from(slotsOf("collapsed-sidebar-conversation")).map((item) =>
-		item.getAttribute("aria-label"),
-	)
-
-const rail = () => within(slotOf("collapsed-sidebar") as HTMLElement)
-
-describe("the conversations of the collapsed sidebar", () => {
-	it("lists the pinned conversations, then each section, then the others of the current Space", async () => {
-		await mountCollapsed(async (held) => {
-			const hiring = await roomIn(held, "Hiring loop")
-			const roadmap = await roomIn(held, "Roadmap")
-			await roomIn(held, "Pricing")
-			const clients = await held.store.createSection(held.spaceId, "Clients")
-			await held.store.pinRoster(held.spaceId, [
-				{ id: roadmap.id, sectionId: null },
-				{ id: clients.id, sectionId: null },
-				{ id: hiring.id, sectionId: null },
-			])
-		})
-
-		expect(railConversationNames().slice(0, 2)).toEqual([
-			"Roadmap",
-			"Hiring loop",
-		])
-		expect(railConversationNames()).toContain("Pricing")
-		expect(
-			rail().getByRole("img", {
-				name: i18n.t("bots:roster.titled", {
-					name: "Clients",
-					title: i18n.t("bots:roster.section.empty"),
-				}),
-			}),
-		).toBeTruthy()
+const restOnLeftEdge = async () => {
+	await act(async () => {
+		fireEvent.pointerEnter(slotOf("sidebar-peek-edge") as HTMLElement)
 	})
+	await settle()
+}
 
-	it("shows the mission cell of a conversation under it and opens that conversation on click", async () => {
-		let roomId = ""
-		const { router } = await mountCollapsed(async (held) => {
-			const room = await roomIn(held, "Release train")
-			roomId = room.id
-			harness.missions = [missionOn(held, room, { id: "mission-release" })]
-		})
-
-		const mission = slotOf("collapsed-sidebar-mission") as HTMLElement
-		expect(
-			mission.closest('[data-slot="collapsed-sidebar-group"]'),
-		).not.toBeNull()
-		await press(mission)
-
-		expect(router.state.location.pathname).toBe("/")
-		expect(router.state.location.search).toMatchObject({
-			conversation: roomId,
-		})
-		expect(router.state.location.search).not.toHaveProperty("mission")
-	})
-
-	it("opens a conversation picked from the Missions page", async () => {
+describe("the collapsed sidebar", () => {
+	it("draws nothing on the left, then floats the conversations from the left edge and opens the one picked", async () => {
 		let roomId = ""
 		const { router } = await mountCollapsed(async (held) => {
 			roomId = (await roomIn(held, "Release train")).id
 		})
-		await navigateTo(router, "/missions")
 
-		await press(rail().getByRole("button", { name: "Release train" }))
+		expect(slotOf("expanded-sidebar")).toBeNull()
+		expect(slotOf("sidebar-peek")).toBeNull()
 
-		expect(router.state.location.pathname).toBe("/")
+		await restOnLeftEdge()
+		const peek = slotOf("sidebar-peek") as HTMLElement
+		expect(peek.contains(rosterRowOf("Release train"))).toBe(true)
+		await press(rosterRowOf("Release train"))
+
 		expect(router.state.location.search).toMatchObject({
 			conversation: roomId,
 		})
-	})
-
-	it("shows the skeleton while the list is read", async () => {
-		await mountCollapsed(async ({ store }) => {
-			vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
-		})
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(SKELETON_MS)
-		})
-
-		expect(slotsOf("collapsed-sidebar-skeleton").length).toBeGreaterThan(0)
-	})
-
-	it("offers a retry when the list fails to load and reads it again on retry", async () => {
-		let reads: ReturnType<typeof vi.spyOn> | null = null
-		await mountCollapsed(async ({ store }) => {
-			reads = vi
-				.spyOn(store, "bots")
-				.mockRejectedValueOnce(new Error("no record"))
-		})
-
-		await press(
-			rail().getByRole("button", { name: i18n.t("bots:roster.retry") }),
-		)
-
-		expect(reads).toHaveBeenCalledTimes(2)
-		expect(slotOf("collapsed-sidebar-retry")).toBeNull()
 	})
 })
 
@@ -636,6 +562,21 @@ const dropAreaWith = (name: string) =>
 	rosterRowOf(name).closest("[data-roster-drop]") as Element
 
 describe("the rows of the expanded sidebar", () => {
+	it("opens a conversation picked from the Missions page", async () => {
+		let roomId = ""
+		const { router } = await mountApp(async (held) => {
+			roomId = (await roomIn(held, "Release train")).id
+		})
+		await navigateTo(router, "/missions")
+
+		await press(rosterRowOf("Release train"))
+
+		expect(router.state.location.pathname).toBe("/")
+		expect(router.state.location.search).toMatchObject({
+			conversation: roomId,
+		})
+	})
+
 	it("shows the pinned rows in Pinned in their saved order and the other rows in Conversations", async () => {
 		await mountApp(seedPinned)
 
@@ -863,27 +804,6 @@ describe("the rows of the expanded sidebar", () => {
 
 		expect(slotOf("mission-capsule")?.getAttribute("aria-current")).toBe("page")
 		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBeNull()
-	})
-
-	it("marks the mission cell of the open mission current when collapsed", async () => {
-		let roomId = ""
-		const { router } = await mountCollapsed(async (held) => {
-			const room = await roomIn(held, "Release train")
-			roomId = room.id
-			harness.missions = [missionOn(held, room, { id: "mission-release" })]
-		})
-
-		await act(async () => {
-			await router.navigate({
-				to: "/",
-				search: { conversation: roomId, mission: "mission-release" },
-			})
-		})
-		await settle()
-
-		expect(
-			slotOf("collapsed-sidebar-mission")?.getAttribute("aria-current"),
-		).toBe("page")
 	})
 })
 
