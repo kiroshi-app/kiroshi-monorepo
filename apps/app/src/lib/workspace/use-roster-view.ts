@@ -3,7 +3,9 @@ import { useMemo } from "react"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
+import { useRosterClock } from "../bots/use-roster-clock"
 import { missionsBySpaceId } from "../missions/missions-model"
+import { useLiveMissions } from "../missions/use-live-missions"
 import {
 	type OpenSettings,
 	openCompanionIdOf,
@@ -50,14 +52,25 @@ export const useRosterView = ({
 	const settingsConversation = conversations.find(
 		(conversation) => conversation.id === openConversationId,
 	)
+	const markedMissions = useMemo(
+		() => missionMarks.map(({ mission }) => mission),
+		[missionMarks],
+	)
+	const clock = useRosterClock()
+	const liveMissionIds = useLiveMissions(
+		core.conversationRuntimes,
+		markedMissions,
+		clock,
+	)
 	const missions = useMemo(
 		() =>
 			missionsBySpaceId({
 				entries: missionMarks,
 				conversationRosters,
 				soloThreads,
+				liveMissionIds,
 			}),
-		[missionMarks, conversationRosters, soloThreads],
+		[missionMarks, conversationRosters, soloThreads, liveMissionIds],
 	)
 
 	return {

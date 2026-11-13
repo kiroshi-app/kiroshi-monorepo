@@ -7,6 +7,10 @@ import {
 } from "@workspace/ui/components/compact-rows"
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
+import {
+	TextShimmer,
+	WORKING_SHIMMER_DURATION,
+} from "@workspace/ui/components/motion/text-shimmer"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TREE =
@@ -52,7 +56,8 @@ const MissionTreeRow = ({
 	const { t } = useTranslation("bots")
 	const isCompact = useIsCompactRows()
 	const drawn = isCompact ? COMPACT_ROW : STACKED_ROW
-	const { id, state, ticket, objective } = mission
+	const { id, state, ticket, objective, isLive } = mission
+	const title = ticket.title || objective
 
 	const anatomy = (
 		<>
@@ -78,7 +83,23 @@ const MissionTreeRow = ({
 				</span>
 			) : null}
 			<span className={drawn.title} data-slot="mission-capsule-title">
-				{ticket.title || objective}
+				{isLive ? (
+					<TextShimmer
+						className="inline"
+						duration={WORKING_SHIMMER_DURATION}
+						isHeldUnderReducedMotion
+					>
+						{title}
+					</TextShimmer>
+				) : (
+					title
+				)}
+				{isLive && state !== "working" ? (
+					<>
+						{" "}
+						<span className="sr-only">{t("roster.pose.working")}</span>
+					</>
+				) : null}
 			</span>
 		</>
 	)

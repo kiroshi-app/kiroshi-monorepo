@@ -2155,6 +2155,8 @@ navigation-librarytabstates--unreadable-item
 navigation-librarytabstates--unreadable-item-dark
 navigation-missioncapsule--every-state
 navigation-missioncapsule--every-state-dark
+navigation-missioncapsule--live-mission
+navigation-missioncapsule--silent-mission
 navigation-missionspage--default
 navigation-missionspage--empty
 navigation-missionspage--failed
