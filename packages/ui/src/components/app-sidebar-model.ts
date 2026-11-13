@@ -102,6 +102,14 @@ const badgeOf = (conversation: AppSidebarConversation) =>
 		(participant) => isBusy(participant) && participant.badge,
 	)?.badge ?? conversation.badge
 
+type NeedsYouCarrier = {
+	badge?: BotBadge
+	pendingQuestion?: string
+}
+
+const isNeedingYou = ({ badge, pendingQuestion }: NeedsYouCarrier) =>
+	Boolean(pendingQuestion) || badge === "attention"
+
 const workingBotOf = ({ participants, lastSpeaker }: AppSidebarConversation) =>
 	participants.find((bot) => isBusy(bot) && bot.name === lastSpeaker) ??
 	participants.find(isBusy)
@@ -286,6 +294,7 @@ export {
 	type ConversationRosterActions,
 	heldBotsOf,
 	isBusy,
+	isNeedingYou,
 	NO_BOTS,
 	NO_COLLAPSED_SECTIONS,
 	NO_CONVERSATIONS,

@@ -31,6 +31,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	update: "the scene shows an app that is up to date",
 	missionCount: "the scene rail draws no dot, so it counts no mission",
 	openMissionId: "no mission thread opens in the scene",
+	isSettingsShown: "no settings screen opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
 	onToggleSidebar: "the scene keeps its sidebar open, so it draws no toggle",

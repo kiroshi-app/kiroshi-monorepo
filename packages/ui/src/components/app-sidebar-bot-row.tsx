@@ -14,7 +14,16 @@ import {
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
+import {
+	COMPACT_LEAD_SIDE,
+	COMPACT_ROW_STACK,
+	useIsCompactRows,
+} from "@workspace/ui/components/compact-rows"
 import { CompanionMenuContent } from "@workspace/ui/components/companion-menu"
+import {
+	MissionCapsuleList,
+	type MissionOpening,
+} from "@workspace/ui/components/mission-capsule"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
 import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
@@ -40,7 +49,10 @@ const sidebarRegionOf = (row: HTMLElement | null) => {
 	return region
 }
 
-interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
+interface BotRosterRowProps
+	extends RosterRowSlot,
+		RosterPinActions,
+		MissionOpening {
 	bot: AppSidebarBot
 	isSelected: boolean
 	spaces: Space[]
@@ -84,9 +96,12 @@ const BotRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	openMissionId,
+	onOpenMission,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
+	const isCompact = useIsCompactRows()
 	const rowRef = useRef<HTMLElement | null>(null)
 
 	const focusAfterClose = useRef<HTMLElement | null>(null)
@@ -114,16 +129,23 @@ const BotRosterRow = ({
 			ref={mergeRefs<HTMLElement>(rowRef, (node) => keepFocus?.(bot.id, node))}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger>
+				<ContextMenuTrigger
+					className={isCompact ? COMPACT_ROW_STACK : undefined}
+				>
 					<SidebarListRow
 						{...lift.handlersFor(bot.id)}
 						isLiftable
 						badge={bot.badge}
-						geometry="agent"
+						geometry={isCompact ? "compact" : "agent"}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={working}
-						media={<BotRowAvatar bot={bot} />}
+						media={
+							<BotRowAvatar
+								bot={bot}
+								size={isCompact ? COMPACT_LEAD_SIDE : undefined}
+							/>
+						}
 						name={bot.name}
 						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return
@@ -141,6 +163,13 @@ const BotRosterRow = ({
 							/>
 						}
 					/>
+					{isCompact ? (
+						<MissionCapsuleList
+							missions={bot.missions}
+							onOpenMission={onOpenMission}
+							openMissionId={openMissionId}
+						/>
+					) : null}
 				</ContextMenuTrigger>
 				<CompanionMenuContent
 					companion={bot}

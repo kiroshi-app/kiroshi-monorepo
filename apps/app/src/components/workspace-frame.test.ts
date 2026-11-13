@@ -644,7 +644,7 @@ describe("the rows of the expanded sidebar", () => {
 		expect(recentNames()).not.toContain("First pin")
 	})
 
-	it("shows the mission of a conversation as an inert capsule inside its row's menu area", async () => {
+	it("opens the mission of a conversation from its row, inside the conversation's menu area, and marks it alone as current", async () => {
 		const { router } = await mountApp(async (held) => {
 			const room = await roomIn(held, "Release train")
 			harness.missions = [missionOn(held, room, { id: "mission-release" })]
@@ -653,9 +653,32 @@ describe("the rows of the expanded sidebar", () => {
 		const capsule = slotOf("mission-capsule") as HTMLElement
 		const menuArea = capsule.closest('[data-slot="context-menu-trigger"]')
 		expect(menuArea?.contains(rosterRowOf("Release train"))).toBe(true)
+		expect(capsule.getAttribute("aria-current")).toBeNull()
 		await press(capsule)
 
-		expect(router.state.location.search).not.toHaveProperty("mission")
+		expect(router.state.location.search).toHaveProperty(
+			"mission",
+			"mission-release",
+		)
+		await settle()
+		expect(slotOf("mission-capsule")?.getAttribute("aria-current")).toBe("page")
+		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBeNull()
+	})
+
+	it("marks the person button current while the person's settings are on screen, and at rest once they are left", async () => {
+		const { router } = await mountApp(seedPinned)
+		const personButton = () => slotOf("expanded-sidebar-footer") as HTMLElement
+		expect(personButton().getAttribute("aria-current")).toBeNull()
+
+		await press(personButton())
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/settings/user")
+		expect(personButton().getAttribute("aria-current")).toBe("page")
+
+		await navigateTo(router, "/missions")
+
+		expect(personButton().getAttribute("aria-current")).toBeNull()
 	})
 
 	it("opens a row from any page", async () => {
@@ -822,7 +845,7 @@ describe("the rows of the expanded sidebar", () => {
 		expect(recentNames()).toContain("Loose room")
 	})
 
-	it("highlights the row of the conversation holding the open mission", async () => {
+	it("marks the row of a mission reached by its route current, and not the row of its conversation", async () => {
 		let roomId = ""
 		const { router } = await mountApp(async (held) => {
 			const room = await roomIn(held, "Release train")
@@ -838,9 +861,8 @@ describe("the rows of the expanded sidebar", () => {
 		})
 		await settle()
 
-		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBe(
-			"page",
-		)
+		expect(slotOf("mission-capsule")?.getAttribute("aria-current")).toBe("page")
+		expect(rosterRowOf("Release train").getAttribute("aria-current")).toBeNull()
 	})
 
 	it("marks the mission cell of the open mission current when collapsed", async () => {

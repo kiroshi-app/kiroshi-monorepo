@@ -2,8 +2,13 @@
 
 import type { ReactNode } from "react"
 
+import { isNeedingYou } from "@workspace/ui/components/app-sidebar-model"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
-import { RowAnatomy } from "@workspace/ui/components/row-anatomy"
+import {
+	CompactRowMeta,
+	CompactRowTitle,
+	RowAnatomy,
+} from "@workspace/ui/components/row-anatomy"
 import {
 	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
@@ -13,12 +18,14 @@ import { Item } from "@workspace/ui/components/ui/item"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SidebarListRowGeometry = "roster" | "agent" | "conversation" | "menu"
+type StackedRowGeometry = "roster" | "agent" | "conversation" | "menu"
+
+type SidebarListRowGeometry = StackedRowGeometry | "compact"
 
 const ROSTER_ROW =
 	"flex-nowrap border-0 text-foreground transition-[scale] duration-160 ease-out hover:will-change-transform focus-visible:ring-sidebar-ring active:scale-[0.98] aria-expanded:bg-sidebar-accent/70 *:data-[slot=sidebar-menu-head]:pe-0 group-data-[collapsible=icon]:pl-0 group-data-[collapsible=icon]:pe-0"
 
-const ROW: Record<SidebarListRowGeometry, string> = {
+const ROW: Record<StackedRowGeometry, string> = {
 	roster: cn(ROSTER_ROW, "py-1.5 pl-1.5 pe-1.5"),
 	agent: cn(ROSTER_ROW, SIDEBAR_ROW_INSET),
 	conversation: cn(
@@ -82,6 +89,35 @@ const SidebarListRow = ({
 }: SidebarListRowProps) => {
 	const { state } = useSidebar()
 	const hasStrips = Boolean(strips) && state !== "collapsed"
+
+	if (geometry === "compact") {
+		const needsYou = isNeedingYou({ badge, pendingQuestion })
+
+		return (
+			<SidebarMenuRow
+				{...rowProps}
+				className={isLiftable ? LIFTABLE_ROW : undefined}
+				icon={media}
+				label={name}
+				render={<button type="button" />}
+				trailing={
+					<CompactRowMeta
+						isNeedingYou={needsYou}
+						isTimestampDestructive={isTimestampDestructive}
+						pile={previewTrailing}
+						timestamp={timestamp}
+					/>
+				}
+				variant="navigation"
+			>
+				<CompactRowTitle
+					isNeedingYou={needsYou}
+					isWorking={isWorking}
+					name={name}
+				/>
+			</SidebarMenuRow>
+		)
+	}
 
 	return (
 		<SidebarMenuRow

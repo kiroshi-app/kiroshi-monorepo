@@ -84,6 +84,9 @@ export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
 export const isMissionsPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === MISSIONS_PATH
 
+export const isUserSettingsPage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === USER_SETTINGS_PATH
+
 export type LaunchPage = {
 	spaceId: string
 	href: string

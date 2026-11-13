@@ -11,7 +11,12 @@ import {
 } from "@/components/space-neighbour-lists"
 import { sidebarZonesOf } from "@/lib/sidebar/sidebar-zones"
 import { useSidebarConversations } from "@/lib/sidebar/use-sidebar-conversations"
-import { isHomePage, isLibraryPage, isMissionsPage } from "@/lib/tabs/tab-pages"
+import {
+	isHomePage,
+	isLibraryPage,
+	isMissionsPage,
+	isUserSettingsPage,
+} from "@/lib/tabs/tab-pages"
 import { usePageShown } from "@/lib/tabs/use-page-shown"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import { useWorkspace } from "@/lib/workspace/workspace-context"
@@ -36,6 +41,7 @@ const NavigationSidebarWithRows = () => {
 	const { frame, rosterLists } = useWorkspaceFrame()
 	const { collapse, sidebar, selectedSpaceId } = frame
 	const destination = useShownDestination(tabs)
+	const isSettingsShown = usePageShown(tabs, isUserSettingsPage)
 	const { roster } = core
 	const zones = sidebarZonesOf(useSidebarConversations())
 	const { conversations, pinned, sections } = useExpandedSlotElements()
@@ -46,6 +52,7 @@ const NavigationSidebarWithRows = () => {
 			{...sidebar}
 			conversations={conversations}
 			destination={destination}
+			isSettingsShown={isSettingsShown}
 			listEnd={roster.listEnd}
 			listStatus={
 				collapse.isOpen

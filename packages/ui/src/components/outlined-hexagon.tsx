@@ -14,7 +14,7 @@ import {
 	roundedHexagonPath,
 } from "@workspace/ui/components/kiroshi-hexagon"
 
-const ART = "pointer-events-none absolute inset-0 size-full"
+const ART = "pointer-events-none absolute inset-0 size-full!"
 
 type OutlinedHexagonProps = {
 	side: number

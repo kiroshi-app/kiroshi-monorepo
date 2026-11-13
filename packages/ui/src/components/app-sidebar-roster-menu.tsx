@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
@@ -19,6 +19,7 @@ import {
 	inRuns,
 	PINNED_ZONE,
 	type PinnedEntry,
+	showsNeedsYou,
 	waitingFirst,
 } from "@workspace/ui/components/app-sidebar-pins"
 import {
@@ -33,6 +34,10 @@ import {
 	SectionDropZone,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { RosterSection } from "@workspace/ui/components/app-sidebar-section"
+import {
+	COMPACT_ROW_GAP,
+	useIsCompactRows,
+} from "@workspace/ui/components/compact-rows"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
@@ -45,6 +50,8 @@ interface RosterRowsContext
 		RosterPinActions {
 	activeBotId?: string
 	selectedConversationId?: string
+	openMissionId?: string
+	onOpenMission?: (missionId: string) => void
 	spaceId?: string
 	spaces: Space[]
 	sections: AppSidebarSection[]
@@ -94,13 +101,22 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 		sections: rows.sections,
 		shift: isSlotted ? rows.shiftOf(entry) : undefined,
 		keepFocus: rows.keepFocus,
+		openMissionId: rows.openMissionId,
+		onOpenMission: rows.onOpenMission,
 	}
+	const isShowingMission =
+		(entry.conversation ?? entry.bot)?.missions?.some(
+			({ id }) => id === rows.openMissionId,
+		) ?? false
 	if (entry.conversation)
 		return (
 			<ConversationRosterRow
 				{...shared}
 				conversation={entry.conversation}
-				isSelected={entry.conversation.id === rows.selectedConversationId}
+				isSelected={
+					entry.conversation.id === rows.selectedConversationId &&
+					!isShowingMission
+				}
 				onDelete={rows.onDeleteConversation}
 				onOpenInNewTab={rows.onOpenConversationInNewTab}
 				onOpenSettings={rows.onOpenConversationSettings}
@@ -112,7 +128,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 		<BotRosterRow
 			{...shared}
 			bot={entry.bot}
-			isSelected={entry.bot.id === rows.activeBotId}
+			isSelected={entry.bot.id === rows.activeBotId && !isShowingMission}
 			memberships={memberships}
 			onAddToSpace={rows.onAddBotToSpace}
 			onDelete={rows.onDeleteBot}
@@ -127,12 +143,26 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 	)
 }
 
+interface RosterMenuProps {
+	children: ReactNode
+}
+
+const RosterMenu = ({ children }: RosterMenuProps) => {
+	const isCompact = useIsCompactRows()
+
+	return (
+		<SidebarMenu className={isCompact ? COMPACT_ROW_GAP : NAVIGATION_ROW_GAP}>
+			{children}
+		</SidebarMenu>
+	)
+}
+
 const rosterMenuOf = (
 	entries: PinnedEntry[],
 	isSlotted: boolean,
 	rows: RosterRowsContext,
 ) => (
-	<SidebarMenu className={NAVIGATION_ROW_GAP}>
+	<RosterMenu>
 		{entries.map((entry) => (
 			<RosterRow
 				entry={entry}
@@ -141,24 +171,36 @@ const rosterMenuOf = (
 				rows={rows}
 			/>
 		))}
-	</SidebarMenu>
+	</RosterMenu>
 )
 
-const recentMenuOf = (
-	conversations: AppSidebarConversation[],
-	bots: AppSidebarBot[],
-	rows: RosterRowsContext,
-) =>
-	rosterMenuOf(
+interface RecentMenuProps {
+	conversations: AppSidebarConversation[]
+	bots: AppSidebarBot[]
+	rows: RosterRowsContext
+}
+
+const RecentMenu = ({ conversations, bots, rows }: RecentMenuProps) => {
+	const leads = useIsCompactRows() ? showsNeedsYou : undefined
+
+	return rosterMenuOf(
 		waitingFirst(
 			[
 				...conversations.map((conversation) => conversationEntry(conversation)),
 				...bots.map((bot) => botEntry(bot)),
 			].toSorted(byMostRecent),
+			leads,
 		),
 		false,
 		rows,
 	)
+}
+
+const recentMenuOf = (
+	conversations: AppSidebarConversation[],
+	bots: AppSidebarBot[],
+	rows: RosterRowsContext,
+) => <RecentMenu bots={bots} conversations={conversations} rows={rows} />
 
 const PINNED_ZONE_STACK = "flex flex-col gap-1.5"
 

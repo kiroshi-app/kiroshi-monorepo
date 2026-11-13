@@ -9,6 +9,12 @@ import {
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
+import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
+import {
+	SidebarMenu,
+	SidebarMenuItem,
+	SidebarProvider,
+} from "@workspace/ui/components/ui/sidebar"
 
 const BOTS = [
 	{ id: "atlas", name: "Atlas", blot: BLOT_HUES.blue },
@@ -140,4 +146,108 @@ export const EdgedMembersDark = meta.story({
 		},
 	},
 	play: ({ canvasElement }) => expectEdgedMembers(canvasElement, "dark"),
+})
+
+const ROW_PILES = [BOTS.slice(0, 1), BOTS.slice(0, 2), [...BOTS]]
+
+const PILE_ROWS = [false, true].flatMap((isSelected) =>
+	ROW_PILES.map((bots) => ({
+		bots,
+		isSelected,
+		name: `${isSelected ? "Selected" : "Resting"} row of ${bots.length}`,
+	})),
+)
+
+const PilesOnRowsBoard = () => (
+	<SidebarProvider className="min-h-0 w-70">
+		<SidebarMenu className="gap-px">
+			{PILE_ROWS.map(({ bots, isSelected, name }) => (
+				<SidebarMenuItem key={name}>
+					<SidebarListRow
+						geometry="compact"
+						isActive={isSelected}
+						name={name}
+						previewTrailing={<ConversationBotPile bots={bots} isCompact />}
+						timestamp="1h"
+					/>
+				</SidebarMenuItem>
+			))}
+		</SidebarMenu>
+	</SidebarProvider>
+)
+
+const itemsOf = (pile: HTMLElement) => [
+	...slotsIn(pile, "conversation-bot-pile-bot"),
+	...slotsIn(pile, "conversation-bot-pile-overflow"),
+]
+
+const drawnBoxOf = (item: HTMLElement) => {
+	const slot = item.getBoundingClientRect()
+	const edge = slotIn(item, "outlined-hexagon").getBoundingClientRect()
+	return [edge.width, edge.height, edge.left - slot.left, edge.top - slot.top]
+}
+
+const edgeOf = (item: HTMLElement, theme: GlazeTheme) => {
+	const edge = getComputedStyle(
+		item.querySelector(
+			`[data-theme="${theme}"] [data-slot="outlined-hexagon-edge"]`,
+		) as Element,
+	)
+	return [edge.stroke, edge.strokeOpacity, edge.strokeWidth]
+}
+
+const expectPilesOnRows = async (
+	canvasElement: HTMLElement,
+	theme: GlazeTheme,
+) => {
+	const piles = slotsIn(canvasElement, "conversation-bot-pile")
+	await expect(piles.map((pile) => itemsOf(pile).length)).toEqual([
+		1, 2, 3, 1, 2, 3,
+	])
+	const rows = slotsIn(canvasElement, "sidebar-menu-button")
+	await expect(rows.map((row) => row.hasAttribute("aria-current"))).toEqual([
+		false,
+		false,
+		false,
+		true,
+		true,
+		true,
+	])
+	const first = itemsOf(piles[1])[0]
+	await expect(drawnBoxOf(first)).toEqual([14, 14, 0, 0])
+	for (const pile of piles) {
+		const items = itemsOf(pile)
+		for (const item of items) {
+			await expect(drawnBoxOf(item)).toEqual(drawnBoxOf(first))
+			await expect(edgeOf(item, theme)).toEqual(edgeOf(first, theme))
+			await expect(
+				slotIn(item, "outlined-hexagon").getBoundingClientRect().right,
+			).toBeLessThanOrEqual(pile.getBoundingClientRect().right)
+		}
+		await expect(
+			items.map((item) =>
+				getComputedStyle(item).maskComposite.startsWith("exclude"),
+			),
+		).toEqual(items.map((_item, rank) => rank < items.length - 1))
+	}
+}
+
+const PILES_ON_ROWS =
+	"Three piles, one avatar, two avatars, two avatars and a counter, on three compact sidebar rows at rest and on three selected ones. Check the last item of every pile, a lone avatar and the counter included, draws its edge in the 14px box of its hexagon like the first item, with the same stroke, nothing reaching past the pile, and that every item but the last keeps its knockout."
+
+export const PilesOnRows = meta.story({
+	render: () => <PilesOnRowsBoard />,
+	parameters: { docs: { description: { story: PILES_ON_ROWS } } },
+	play: ({ canvasElement }) => expectPilesOnRows(canvasElement, "light"),
+})
+
+export const PilesOnRowsDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <PilesOnRowsBoard />,
+	parameters: {
+		docs: {
+			description: { story: `${PILES_ON_ROWS} Dark theme.` },
+		},
+	},
+	play: ({ canvasElement }) => expectPilesOnRows(canvasElement, "dark"),
 })

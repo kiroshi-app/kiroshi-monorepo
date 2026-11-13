@@ -71,6 +71,38 @@ describe("the face of a tab", () => {
 		},
 	)
 
+	it("draws the glyph of a room with a colour in that hue, with no tile, and follows a change of colour", () => {
+		const iconAt = (color: number) =>
+			rootOf(
+				tabFaceOf("/?conversation=room", {
+					...SOURCES,
+					conversations: [{ ...ROOM, color }],
+				}).icon,
+			)
+		const glyph = rootOf(createElement(ConversationIcons.Bug)).innerHTML
+		cleanup()
+
+		const icon = iconAt(210)
+
+		expect(icon.dataset.slot).toBe("conversation-subject-icon")
+		expect(icon.dataset.hue).toBe("210")
+		expect(icon.style.color).toBe("var(--conversation-glyph)")
+		expect(icon.querySelector("svg")?.innerHTML).toBe(glyph)
+		expect(icon.querySelector('[data-slot="outlined-hexagon"]')).toBeNull()
+		cleanup()
+		expect(iconAt(30).dataset.hue).toBe("30")
+	})
+
+	it("keeps the bare monochrome glyph for a room whose colour is cleared", () => {
+		const glyph = glyphMarkupOf("Bug")
+		const face = tabFaceOf("/?conversation=room", {
+			...SOURCES,
+			conversations: [{ ...ROOM, color: null }],
+		})
+
+		expect(markupOf(face.icon)).toBe(glyph)
+	})
+
 	it.each([
 		["a room", "/?conversation=room"],
 		["Settings", "/settings/user"],

@@ -50,7 +50,7 @@ const toTabConversations = (conversations: Conversation[]) =>
 		(conversation): TabConversation => ({
 			id: conversation.id,
 			name: conversationName(conversation),
-			icon: toConversationLook(conversation).icon,
+			...toConversationLook(conversation),
 		}),
 	)
 

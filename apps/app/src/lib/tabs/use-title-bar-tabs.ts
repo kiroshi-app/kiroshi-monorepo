@@ -43,10 +43,12 @@ const tabConversationOf = ({
 	id,
 	name,
 	icon,
+	color,
 }: TabConversation): TabConversation => ({
 	id,
 	name,
 	icon,
+	color,
 })
 
 const reportUnwatchedDrag = (reason: unknown) => {

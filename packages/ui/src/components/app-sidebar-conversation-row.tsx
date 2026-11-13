@@ -13,10 +13,18 @@ import {
 	type RosterRowSlot,
 	rosterRowSlotOf,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
+import {
+	COMPACT_LEAD_SIDE,
+	COMPACT_ROW_STACK,
+	useIsCompactRows,
+} from "@workspace/ui/components/compact-rows"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
-import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
+import {
+	MissionCapsuleList,
+	type MissionOpening,
+} from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -43,7 +51,13 @@ const ROW_ICON_SIDE = 28
 const SURFACE =
 	"rounded-lg hover:bg-sidebar-accent has-data-active:bg-sidebar-accent data-popup-open:bg-sidebar-accent/70"
 
-interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
+const stackedGeometryOf = (hasSurface: boolean) =>
+	hasSurface ? "conversation" : "roster"
+
+interface ConversationRosterRowProps
+	extends RosterRowSlot,
+		RosterPinActions,
+		MissionOpening {
 	conversation: AppSidebarConversation
 	isSelected: boolean
 	sections: AppSidebarSection[]
@@ -75,11 +89,17 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	openMissionId,
+	onOpenMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const { state } = useSidebar()
+	const isCompact = useIsCompactRows()
 	const hasSurface =
 		state !== "collapsed" || Boolean(conversation.missions?.length)
+	const leadSide = isCompact ? COMPACT_LEAD_SIDE : ROW_ICON_SIDE
+	const stackedSurface = hasSurface ? SURFACE : undefined
+	const isAgentLine = isCompact && Boolean(conversation.agent)
 
 	return (
 		<SidebarMenuItem
@@ -95,23 +115,27 @@ const ConversationRosterRow = ({
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
 			<ContextMenu>
-				<ContextMenuTrigger className={hasSurface ? SURFACE : undefined}>
+				<ContextMenuTrigger
+					className={isCompact ? COMPACT_ROW_STACK : stackedSurface}
+				>
 					<SidebarListRow
 						{...lift.handlersFor(conversation.id)}
 						isLiftable
 						badge={badgeOf(conversation)}
-						geometry={hasSurface ? "conversation" : "roster"}
+						geometry={isCompact ? "compact" : stackedGeometryOf(hasSurface)}
 						isActive={isSelected}
 						isMiddleClickSelectable
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							conversation.agent ? (
-								<BotRowAvatar bot={conversation.agent} size={ROW_ICON_SIDE} />
+								<BotRowAvatar bot={conversation.agent} size={leadSide} />
 							) : (
 								<ConversationSubjectIcon
 									hue={conversation.color}
 									icon={conversation.icon}
-									side={ROW_ICON_SIDE}
+									isBare={isCompact}
+									isFilled={isSelected}
+									side={leadSide}
 								/>
 							)
 						}
@@ -123,7 +147,12 @@ const ConversationRosterRow = ({
 						pendingQuestion={conversation.pendingQuestion}
 						preview={previewOf(t, conversation) ?? ""}
 						previewTrailing={
-							<ConversationBotPile bots={heldBotsOf(conversation)} />
+							isAgentLine ? undefined : (
+								<ConversationBotPile
+									bots={heldBotsOf(conversation)}
+									isCompact={isCompact}
+								/>
+							)
 						}
 						isTimestampDestructive={conversation.isNotSent}
 						timestamp={
@@ -132,7 +161,11 @@ const ConversationRosterRow = ({
 								: (conversation.timestamp ?? "")
 						}
 					/>
-					<MissionCapsuleList missions={conversation.missions} />
+					<MissionCapsuleList
+						missions={conversation.missions}
+						onOpenMission={onOpenMission}
+						openMissionId={openMissionId}
+					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
 					aria-label={t("roster.actions", { name: conversation.name })}

@@ -1828,6 +1828,8 @@ navigation-conversationbotpile--edged-members
 navigation-conversationbotpile--edged-members-dark
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
+navigation-conversationbotpile--piles-on-rows
+navigation-conversationbotpile--piles-on-rows-dark
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--blue
@@ -1851,6 +1853,8 @@ navigation-conversationsubjecticon--red-shield-key
 navigation-conversationsubjecticon--red-shield-key-dark
 navigation-conversationsubjecticon--unknown-icon-falls-back-to-message-square
 navigation-conversationsubjecticon--yellow
+navigation-conversationtabicon--coloured
+navigation-conversationtabicon--monochrome
 navigation-documentpanel--after-a-drag
 navigation-documentpanel--asked-under-the-room-left
 navigation-documentpanel--board-and-document-share-one-header
@@ -1874,6 +1878,22 @@ navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
 navigation-expandedsidebar--a-1-slots-composed-as-the-app-expanded
 navigation-expandedsidebar--active-row-hovered-expanded
 navigation-expandedsidebar--active-row-hovered-light-expanded
+navigation-expandedsidebar--compact-coloured-icons-expanded
+navigation-expandedsidebar--compact-focus-expanded
+navigation-expandedsidebar--compact-hover-expanded
+navigation-expandedsidebar--compact-hovered-mission-expanded
+navigation-expandedsidebar--compact-needs-you-expanded
+navigation-expandedsidebar--compact-needs-you-light-expanded
+navigation-expandedsidebar--compact-needs-you-without-question-expanded
+navigation-expandedsidebar--compact-panel-padding-and-block-gap-expanded
+navigation-expandedsidebar--compact-rest-expanded
+navigation-expandedsidebar--compact-scrolled-expanded
+navigation-expandedsidebar--compact-selected-coloured-icon-expanded
+navigation-expandedsidebar--compact-selected-destination-expanded
+navigation-expandedsidebar--compact-selected-expanded
+navigation-expandedsidebar--compact-selected-mission-expanded
+navigation-expandedsidebar--compact-selected-person-expanded
+navigation-expandedsidebar--compact-working-expanded
 navigation-expandedsidebar--d-1-row-carried-to-conversations-expanded
 navigation-expandedsidebar--d-2-closed-section-hidden-during-lift-expanded
 navigation-expandedsidebar--e-1-no-agents-yet-expanded
@@ -1898,7 +1918,6 @@ navigation-expandedsidebar--s-1-several-spaces-expanded
 navigation-expandedsidebar--s-2-shared-space-host-not-connected-expanded
 navigation-expandedsidebar--shared-rows-expanded
 navigation-expandedsidebar--shared-rows-light-expanded
-navigation-expandedsidebar--shared-rows-line-up-across-views
 navigation-expandedsidebar--swipe-moves-between-spaces-expanded
 navigation-expandedsidebar--swipe-with-switching-not-allowed-does-nothing-expanded
 navigation-expandedsidebar--top-menu-at-rest-expanded
@@ -2279,6 +2298,8 @@ navigation-titlebartabchip--not-allowed
 navigation-titlebartabchip--not-allowed-dark
 navigation-titlebartabchip--short-title
 navigation-titlebartabchip--short-title-dark
+navigation-titlebartabs--coloured-conversation-tabs
+navigation-titlebartabs--coloured-conversation-tabs-dark
 navigation-titlebartabs--library-document-tab
 navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated

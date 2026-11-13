@@ -1,6 +1,6 @@
 "use client"
 
-import { Children, type ReactNode } from "react"
+import { Children, createContext, type ReactNode, useContext } from "react"
 import { useTranslation } from "react-i18next"
 
 import { CurrentSpaceCarousel } from "@workspace/ui/components/app-sidebar-carousel"
@@ -15,7 +15,12 @@ import {
 	type SectionHeadActions,
 } from "@workspace/ui/components/app-sidebar-section"
 import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
-import { type Icon, Icons } from "@workspace/ui/components/icons"
+import {
+	COMPACT_ROW_GAP,
+	COMPACT_ROW_STACK,
+	CompactRowsContext,
+} from "@workspace/ui/components/compact-rows"
+import { FillIcons, type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
 	displayNameOf,
@@ -32,7 +37,6 @@ import {
 import {
 	SIDEBAR_AVATAR_SIDE,
 	SIDEBAR_COLUMN,
-	SIDEBAR_ROW_INSET,
 	SidebarMenuRow,
 } from "@workspace/ui/components/sidebar-menu-row"
 import type { Space } from "@workspace/ui/components/space"
@@ -50,11 +54,11 @@ import {
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width)")
+const BLOCK_GAP = "gap-6"
 
-const SECTIONS = "gap-3"
+const COLUMN = cn(SIDEBAR_COLUMN, "w-(--sidebar-width) p-3", BLOCK_GAP)
 
-const CONVERSATIONS_BODY = "flex flex-col gap-0.5"
+const SECTIONS = BLOCK_GAP
 
 const LIST_EMPTY = "p-3 text-start text-compact text-faint-foreground leading-5"
 
@@ -62,24 +66,24 @@ const LIST_FAILED =
 	"flex flex-col items-start gap-2 p-3 text-start text-compact text-muted-foreground leading-5"
 
 const LIST_RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-foreground text-xs leading-4 transition-none"
+	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-4.5 transition-none"
 
 const MISSION_COUNT =
-	"grid size-5 shrink-0 place-items-center font-normal text-muted-foreground text-xs tabular-nums"
+	"w-16 shrink-0 text-end text-[11px] text-sidebar-muted-foreground leading-4 tabular-nums"
 
-const FOOTER = cn(
-	SIDEBAR_ROW_INSET,
-	"flex w-full shrink-0 items-center gap-2.5 rounded-lg text-start text-muted-foreground hover:bg-rail-item-selected/50 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1",
-)
+const FOOTER_BLOCK = cn(COMPACT_ROW_STACK, "shrink-0")
+
+const FOOTER =
+	"group/person flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-sidebar-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1 aria-[current]:bg-sidebar-selected aria-[current]:hover:bg-sidebar-selected"
 
 const FOOTER_GLYPH =
-	"grid size-7 shrink-0 place-items-center [&>svg]:size-4.5 [&>svg]:stroke-[1.75]"
+	"grid size-4.5 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
-	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase"
+	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase leading-none group-aria-[current]/person:bg-background"
 
 const FOOTER_NAME =
-	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5"
+	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-4.5 group-aria-[current]/person:text-foreground"
 
 const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
@@ -94,6 +98,7 @@ type NavigationDestination = {
 	id: ExpandedSidebarDestination
 	label: "rail.newConversation" | "rail.missions" | "rail.library"
 	Icon: Icon
+	FilledIcon: Icon
 	onSelect?: () => void
 }
 
@@ -106,18 +111,21 @@ const navigationDestinationsOf = ({
 		id: "newConversation",
 		label: "rail.newConversation",
 		Icon: Icons.Add,
+		FilledIcon: FillIcons.Add,
 		onSelect: onNewConversation,
 	},
 	{
 		id: "missions",
 		label: "rail.missions",
 		Icon: Icons.Missions,
+		FilledIcon: FillIcons.Missions,
 		onSelect: onSelectMissions,
 	},
 	{
 		id: "library",
 		label: "rail.library",
 		Icon: Icons.Library,
+		FilledIcon: FillIcons.Library,
 		onSelect: onSelectLibrary,
 	},
 ]
@@ -132,6 +140,7 @@ type ExpandedSidebarSection = SectionHeadActions & {
 
 type ExpandedSidebarProps = SpaceSwitcherProps & {
 	destination?: ExpandedSidebarDestination
+	isSettingsShown?: boolean
 	missionCount?: number
 	pinned: ReactNode
 	conversations: ReactNode
@@ -181,15 +190,22 @@ const NavigationItem = ({
 
 type PersonFooterProps = {
 	user?: UserChipIdentity
+	isCurrent?: boolean
 	onOpenSettings?: () => void
 }
 
-const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
+const PersonFooter = ({
+	user,
+	isCurrent = false,
+	onOpenSettings,
+}: PersonFooterProps) => {
 	const { t } = useTranslation("bots")
 	const name = displayNameOf(user?.name)
+	const SettingsIcon = (isCurrent ? FillIcons : Icons).Settings
 
 	return (
 		<button
+			aria-current={isCurrent ? "page" : undefined}
 			aria-label={t("rail.personSettings", { name })}
 			className={FOOTER}
 			data-slot="expanded-sidebar-footer"
@@ -208,7 +224,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			</AvatarFrame>
 			<span className={FOOTER_NAME}>{name}</span>
 			<span aria-hidden="true" className={FOOTER_GLYPH}>
-				<Icons.Settings />
+				<SettingsIcon />
 			</span>
 		</button>
 	)
@@ -289,7 +305,7 @@ const ExpandedSidebarListBody = ({
 			)}
 			{hasConversations ? (
 				<FoldSection name={t("rail.conversations")}>
-					<div className={CONVERSATIONS_BODY}>
+					<div className={COMPACT_ROW_STACK}>
 						{conversations}
 						{listEndSlot}
 					</div>
@@ -301,14 +317,24 @@ const ExpandedSidebarListBody = ({
 	)
 }
 
-const ExpandedSidebarList = (props: ExpandedSidebarListProps) => (
-	<SidebarContent className={SECTIONS}>
-		<ExpandedSidebarListBody {...props} />
-	</SidebarContent>
-)
+const ScrollingMenuContext = createContext<ReactNode>(null)
+
+const ExpandedSidebarList = (props: ExpandedSidebarListProps) => {
+	const menu = useContext(ScrollingMenuContext)
+
+	return (
+		<CompactRowsContext.Provider value>
+			<SidebarContent className={SECTIONS}>
+				{menu}
+				<ExpandedSidebarListBody {...props} />
+			</SidebarContent>
+		</CompactRowsContext.Provider>
+	)
+}
 
 const ExpandedSidebar = ({
 	destination,
+	isSettingsShown,
 	missionCount,
 	pinned,
 	conversations,
@@ -328,6 +354,34 @@ const ExpandedSidebar = ({
 	...switcher
 }: ExpandedSidebarProps) => {
 	const { t } = useTranslation("bots")
+	const menu = (
+		<SidebarMenu className={COMPACT_ROW_GAP}>
+			{navigationDestinationsOf({
+				onNewConversation,
+				onSelectMissions,
+				onSelectLibrary,
+			}).map(({ id, label, Icon, FilledIcon, onSelect }) => (
+				<NavigationItem
+					icon={destination === id ? <FilledIcon /> : <Icon />}
+					isCurrent={destination === id}
+					key={id}
+					label={t(label)}
+					onSelect={onSelect}
+					trailing={
+						id === "missions" && missionCount !== undefined ? (
+							<span className={MISSION_COUNT}>{missionCount}</span>
+						) : null
+					}
+				/>
+			))}
+		</SidebarMenu>
+	)
+	const neighbourMenu = <div aria-hidden="true">{menu}</div>
+	const renderNeighbourList = (space: Space) => (
+		<ScrollingMenuContext.Provider value={neighbourMenu}>
+			{renderSpaceList?.(space)}
+		</ScrollingMenuContext.Provider>
+	)
 
 	return (
 		<nav
@@ -338,51 +392,39 @@ const ExpandedSidebar = ({
 			<div className={SWITCHER_ROW} data-slot="expanded-sidebar-switcher-row">
 				<SpaceSwitcher {...switcher} />
 			</div>
-			<SidebarMenu>
-				{navigationDestinationsOf({
-					onNewConversation,
-					onSelectMissions,
-					onSelectLibrary,
-				}).map(({ id, label, Icon, onSelect }) => (
-					<NavigationItem
-						icon={<Icon />}
-						isCurrent={destination === id}
-						key={id}
-						label={t(label)}
-						onSelect={onSelect}
-						trailing={
-							id === "missions" && missionCount !== undefined ? (
-								<span className={MISSION_COUNT}>{missionCount}</span>
-							) : null
-						}
+			<ScrollingMenuContext.Provider value={menu}>
+				<CurrentSpaceCarousel
+					isSwitchingEnabled={isSpaceSwitchingEnabled}
+					onSelectSpace={switcher.onSelectSpace}
+					renderSpaceList={renderNeighbourList}
+					selectedSpaceId={switcher.selectedSpaceId}
+					spaces={switcher.spaces}
+				>
+					<ExpandedSidebarList
+						conversations={conversations}
+						listEnd={listEnd}
+						listStatus={listStatus}
+						onRetryList={onRetryList}
+						pinned={pinned}
+						sections={sections}
 					/>
-				))}
-			</SidebarMenu>
-			<CurrentSpaceCarousel
-				isSwitchingEnabled={isSpaceSwitchingEnabled}
-				onSelectSpace={switcher.onSelectSpace}
-				renderSpaceList={renderSpaceList}
-				selectedSpaceId={switcher.selectedSpaceId}
-				spaces={switcher.spaces}
-			>
-				<ExpandedSidebarList
-					conversations={conversations}
-					listEnd={listEnd}
-					listStatus={listStatus}
-					onRetryList={onRetryList}
-					pinned={pinned}
-					sections={sections}
+				</CurrentSpaceCarousel>
+			</ScrollingMenuContext.Provider>
+			<div className={FOOTER_BLOCK} data-slot="expanded-sidebar-footer-block">
+				<SpaceDots
+					badgesBySpaceId={switcher.badgesBySpaceId}
+					onReorderSpaces={onReorderSpaces}
+					onSelectSpace={switcher.onSelectSpace}
+					selectedSpaceId={switcher.selectedSpaceId}
+					spaces={switcher.spaces}
 				/>
-			</CurrentSpaceCarousel>
-			<SpaceDots
-				badgesBySpaceId={switcher.badgesBySpaceId}
-				onReorderSpaces={onReorderSpaces}
-				onSelectSpace={switcher.onSelectSpace}
-				selectedSpaceId={switcher.selectedSpaceId}
-				spaces={switcher.spaces}
-			/>
-			{update}
-			<PersonFooter onOpenSettings={onOpenSettings} user={user} />
+				{update}
+				<PersonFooter
+					isCurrent={isSettingsShown}
+					onOpenSettings={onOpenSettings}
+					user={user}
+				/>
+			</div>
 		</nav>
 	)
 }

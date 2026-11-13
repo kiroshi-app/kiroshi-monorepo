@@ -3,8 +3,8 @@ import type {
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
-import { ConversationIcons, Icons } from "@workspace/ui/components/icons"
+import { ConversationTabIcon } from "@workspace/ui/components/conversation-tab-icon"
+import { Icons } from "@workspace/ui/components/icons"
 import type {
 	TitleBarTab,
 	TitleBarTabDescriptor,
@@ -35,7 +35,7 @@ export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon"
+	"id" | "name" | "icon" | "color"
 >
 
 export type TabFaceSources = {
@@ -119,10 +119,14 @@ const botFaceOf = (bot: TabBot): TabFace => ({
 	),
 })
 
-const conversationFaceOf = (conversation: TabConversation): TabFace => {
-	const Glyph = ConversationIcons[conversationIconOf(conversation.icon)]
-	return { title: conversation.name, icon: <Glyph /> }
-}
+const conversationFaceOf = ({
+	name,
+	icon,
+	color,
+}: TabConversation): TabFace => ({
+	title: name,
+	icon: <ConversationTabIcon hue={color} icon={icon} />,
+})
 
 const unknownRowFace = (): TabFace => ({
 	title: i18n.t("chat:transcript.label"),
