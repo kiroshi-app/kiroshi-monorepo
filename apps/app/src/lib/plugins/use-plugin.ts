@@ -2,7 +2,6 @@ import {
 	hashKey,
 	skipToken,
 	useMutation,
-	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
 import { useState } from "react"
@@ -29,7 +28,7 @@ import type {
 	PluginScope,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { isReadErrorShown } from "../query/last-read"
+import { isReadErrorShown, useLastRead } from "../query/last-read"
 
 type PluginState = HistoryFilesState & {
 	skills: BotSkill[]
@@ -111,12 +110,12 @@ export const usePlugin = (
 	const [enqueue] = useState(createQueue)
 	const opened = useOpenedFiles(scope)
 
-	const skills = useQuery({
+	const skills = useLastRead({
 		queryKey: pluginQueryKeys.skills(scope),
 		queryFn: scope ? () => store.pluginSkills(scope) : skipToken,
 		meta: RENDERED_INLINE,
 	})
-	const history = useQuery({
+	const history = useLastRead({
 		queryKey: pluginQueryKeys.history(scope),
 		queryFn: scope ? () => store.pluginHistory(scope) : skipToken,
 		meta: RENDERED_INLINE,

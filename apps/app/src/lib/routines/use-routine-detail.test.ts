@@ -1,16 +1,21 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
+import type { RoutinesPanelDetail } from "@workspace/ui/components/routines-panel"
 
 import type { RoutineRun } from "./routine-contract"
 import { routineQueryKeys } from "./routine-query-keys"
 import { DEFAULT_RUN_PAGE, routinesTransport } from "./routines-transport"
 import { useRoutineDetail } from "./use-routine-detail"
 
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { HostRefused } from "@/lib/host/host-refused"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "@/lib/query/query-test-wrapper"
 
 vi.mock("./routines-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./routines-transport")>()),
@@ -48,6 +53,12 @@ const SKIPPED_RUN: RoutineRun = {
 
 const pageOf = (length: number): RoutineRun[] =>
 	Array.from({ length }, (_, rank) => ({ ...RUN, id: `run-${rank}` }))
+
+const OLDER_HOST_REFUSAL = new HostRefused(
+	"this host knows no command named routine_runs",
+	null,
+	"unknownCommand",
+)
 
 const onWriteFailure = vi.fn()
 
@@ -353,4 +364,60 @@ it("shows none of the runs of the routine it left while the next one reads", asy
 	expect(result.current.open?.id).toBe(other.id)
 	expect(result.current.open?.runs).toEqual([])
 	expect(result.current.open?.isReadingRuns).toBe(true)
+})
+
+describe("when an older host refused the runs", () => {
+	const isEmptyState = ({ open }: RoutinesPanelDetail) =>
+		open?.runs.length === 0 && !open.isReadingRuns && !open.hasFailedToReadRuns
+
+	const openRefused = async () => {
+		readRuns.mockReset().mockRejectedValueOnce(OLDER_HOST_REFUSAL)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const frames: RoutinesPanelDetail[] = []
+		const { result } = renderHook(
+			() => {
+				const detail = useRoutineDetail({ routines: [ROW], onWriteFailure })
+				frames.push(detail)
+				return detail
+			},
+			{ wrapper },
+		)
+		await act(async () => {
+			result.current.onOpen(ROW.id)
+		})
+		await waitFor(() => expect(isEmptyState(result.current)).toBe(true))
+		frames.length = 0
+		return { queryClient, result, framesSinceRefusal: frames }
+	}
+
+	it("stays on its empty state while they are read again and refused again", async () => {
+		const { queryClient, result, framesSinceRefusal } = await openRefused()
+		const reread = Promise.withResolvers<RoutineRun[]>()
+		readRuns.mockReturnValueOnce(reread.promise)
+
+		await readEveryQueryAgain(queryClient)
+
+		expect(readRuns).toHaveBeenCalledTimes(2)
+		expect(isEmptyState(result.current)).toBe(true)
+
+		reread.reject(OLDER_HOST_REFUSAL)
+		await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+		await act(() => new Promise((settle) => setTimeout(settle, 0)))
+
+		expect(framesSinceRefusal.every(isEmptyState)).toBe(true)
+	})
+
+	it("shows the runs once the read again is answered", async () => {
+		const { queryClient, result, framesSinceRefusal } = await openRefused()
+		const reread = Promise.withResolvers<RoutineRun[]>()
+		readRuns.mockReturnValueOnce(reread.promise)
+
+		await readEveryQueryAgain(queryClient)
+		reread.resolve([RUN])
+
+		await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
+		expect(
+			framesSinceRefusal.some(({ open }) => open?.hasFailedToReadRuns),
+		).toBe(false)
+	})
 })

@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { MissionChanged, MissionDetail } from "./mission-contract"
 import { missionsTransport } from "./missions-transport"
-import { useMissionDetail } from "./use-mission-detail"
+import { type MissionDetailRead, useMissionDetail } from "./use-mission-detail"
 
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { HostRefused } from "@/lib/host/host-refused"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "@/lib/query/query-test-wrapper"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
 
 vi.mock("./missions-transport", async (importOriginal) => ({
@@ -62,6 +66,12 @@ const DETAIL: MissionDetail = {
 		},
 	],
 }
+
+const OLDER_HOST_REFUSAL = new HostRefused(
+	"this host knows no command named mission_detail",
+	null,
+	"unknownCommand",
+)
 
 let announce: (changed: MissionChanged) => void
 
@@ -284,5 +294,79 @@ describe("the skeleton of the mission detail", () => {
 
 		expect(result.current.isPending).toBe(false)
 		expect(result.current.hasFailedToRead).toBe(true)
+	})
+})
+
+describe("when an older host refused the mission", () => {
+	const isEmptyState = ({
+		read,
+		isReading,
+		isPending,
+		hasFailedToRead,
+	}: MissionDetailRead) =>
+		read === null && !isReading && !isPending && !hasFailedToRead
+
+	const mountRefused = async () => {
+		readDetail.mockRejectedValue(OLDER_HOST_REFUSAL)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const frames: MissionDetailRead[] = []
+		const { result } = renderHook(
+			() => {
+				const detail = useMissionDetail("m-1", SPACE_ROW)
+				frames.push(detail)
+				return detail
+			},
+			{ wrapper },
+		)
+		await waitFor(() => expect(isEmptyState(result.current)).toBe(true))
+		frames.length = 0
+		return { queryClient, wrapper, result, framesSinceRefusal: frames }
+	}
+
+	it("stays on its empty state while it is read again and refused again", async () => {
+		const { queryClient, result, framesSinceRefusal } = await mountRefused()
+		const reread = Promise.withResolvers<MissionDetail>()
+		readDetail.mockReturnValue(reread.promise)
+
+		await readEveryQueryAgain(queryClient)
+
+		expect(readDetail).toHaveBeenCalledTimes(2)
+		expect(isEmptyState(result.current)).toBe(true)
+
+		reread.reject(OLDER_HOST_REFUSAL)
+		await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+		await act(() => new Promise((settle) => setTimeout(settle, 0)))
+
+		expect(framesSinceRefusal.every(isEmptyState)).toBe(true)
+	})
+
+	it("opens on its empty state when it mounts again on the refused mission", async () => {
+		const { wrapper } = await mountRefused()
+		cleanup()
+		readDetail.mockReturnValue(new Promise(() => undefined))
+
+		const again = renderHook(() => useMissionDetail("m-1", SPACE_ROW), {
+			wrapper,
+		})
+
+		expect(isEmptyState(again.result.current)).toBe(true)
+		await waitFor(() => expect(readDetail).toHaveBeenCalledTimes(2))
+		expect(isEmptyState(again.result.current)).toBe(true)
+	})
+
+	it("shows the mission once the read again is answered", async () => {
+		const { queryClient, result, framesSinceRefusal } = await mountRefused()
+		const reread = Promise.withResolvers<MissionDetail>()
+		readDetail.mockReturnValue(reread.promise)
+
+		await readEveryQueryAgain(queryClient)
+		reread.resolve(DETAIL)
+
+		await waitFor(() =>
+			expect(result.current.read?.mission).toEqual(DETAIL.mission),
+		)
+		expect(
+			framesSinceRefusal.some(({ hasFailedToRead }) => hasFailedToRead),
+		).toBe(false)
 	})
 })

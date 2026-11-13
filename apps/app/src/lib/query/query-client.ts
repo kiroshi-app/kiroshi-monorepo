@@ -11,6 +11,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
 import { isUnknownCommandRefusal } from "@/lib/host/host-refused"
+import { recordLastAnswer } from "@/lib/query/last-read"
 
 type InlineFailure = { rendersErrorInline: true }
 
@@ -94,6 +95,7 @@ const createQueryCache = (): QueryCache => {
 		onSuccess: (_data, query) => {
 			noticedOutages.delete(query)
 		},
+		onSettled: (_data, error, query) => recordLastAnswer(query, error),
 	})
 }
 

@@ -1,4 +1,4 @@
-import { skipToken, useQuery } from "@tanstack/react-query"
+import { skipToken } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 
 import { useMissionChanges } from "./mission-changes"
@@ -7,7 +7,7 @@ import { missionQueryKeys } from "./mission-query-keys"
 import { missionsTransport } from "./missions-transport"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { hasLastReadFailed } from "@/lib/query/last-read"
+import { hasLastReadFailed, useLastRead } from "@/lib/query/last-read"
 
 const NO_MISSIONS: Mission[] = []
 
@@ -27,7 +27,7 @@ export const useMissions = (
 	const canRead = conversationId !== null && host !== null
 	useMissionChanges()
 
-	const read = useQuery({
+	const read = useLastRead({
 		queryKey: missionQueryKeys.conversation(conversationId, host),
 		queryFn: canRead ? () => missionsTransport.list(conversationId) : skipToken,
 		meta: { rendersErrorInline: true },

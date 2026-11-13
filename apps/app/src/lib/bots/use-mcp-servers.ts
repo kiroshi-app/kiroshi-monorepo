@@ -2,7 +2,6 @@ import {
 	hashKey,
 	skipToken,
 	useMutation,
-	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
 
@@ -18,7 +17,7 @@ import { INSTALLED_EVENT } from "../applications/application-transport"
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
-import { isReadErrorShown } from "../query/last-read"
+import { isReadErrorShown, useLastRead } from "../query/last-read"
 
 export type McpServers = {
 	owner: EnvOwner | null
@@ -73,7 +72,7 @@ export const useMcpServers = (
 		isError,
 		error,
 		isPending,
-	} = useQuery({
+	} = useLastRead({
 		queryKey,
 		queryFn: owner ? () => declaredServers(store, owner) : skipToken,
 		meta: RENDERED_INLINE,

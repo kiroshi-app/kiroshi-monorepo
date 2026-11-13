@@ -11,7 +11,10 @@ import { createFakeTranscriptStore } from "../conversations/fake-transcript-stor
 import type { EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { HostRefused } from "../host/host-refused"
-import { createQueryTestWrapper } from "../query/query-test-wrapper"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({
 	listen: vi.fn(async () => () => undefined),
@@ -41,6 +44,12 @@ const A_MARK = {
 	logo: "<svg />",
 	logoUrl: "https://ledger.internal/logo.png",
 }
+
+const OLDER_HOST_REFUSAL = new HostRefused(
+	"this host knows no command named plugin_mcp_servers",
+	null,
+	"unknownCommand",
+)
 
 const rendered = (store: TranscriptStore, owner: EnvOwner | null = BOT) => {
 	const { wrapper } = createQueryTestWrapper()
@@ -115,16 +124,30 @@ describe("useMcpServers", () => {
 
 	it("opens on an empty panel when the joined host knows no such listing", async () => {
 		const store = createFakeTranscriptStore()
-		vi.spyOn(store, "pluginMcpServers").mockRejectedValue(
-			new HostRefused(
-				"this host knows no command named plugin_mcp_servers",
-				null,
-				"unknownCommand",
-			),
-		)
+		vi.spyOn(store, "pluginMcpServers").mockRejectedValue(OLDER_HOST_REFUSAL)
 
 		const { result } = await opened(store)
 
+		expect(result.current).toMatchObject({
+			servers: [],
+			isPending: false,
+			hasFailedToLoad: false,
+		})
+	})
+
+	it("stays on an empty panel while a listing the joined host refused is read again", async () => {
+		const store = createFakeTranscriptStore()
+		const listing = vi
+			.spyOn(store, "pluginMcpServers")
+			.mockRejectedValueOnce(OLDER_HOST_REFUSAL)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const { result } = renderHook(() => useMcpServers(store, BOT), { wrapper })
+		await waitFor(() => expect(result.current.isPending).toBe(false))
+		listing.mockReturnValue(new Promise(() => undefined))
+
+		await readEveryQueryAgain(queryClient)
+
+		expect(listing).toHaveBeenCalledTimes(2)
 		expect(result.current).toMatchObject({
 			servers: [],
 			isPending: false,

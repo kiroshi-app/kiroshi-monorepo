@@ -6,10 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Mission, MissionChanged } from "./mission-contract"
 import { aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
-import { useMissions } from "./use-missions"
+import { type ConversationMissionsRead, useMissions } from "./use-missions"
 import { useSpaceMissions } from "./use-space-missions"
 
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { HostRefused } from "@/lib/host/host-refused"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "@/lib/query/query-test-wrapper"
 
 vi.mock("./missions-transport", () => ({
 	missionsTransport: {
@@ -61,6 +65,12 @@ const MISSION: Mission = {
 }
 
 const A_MINUTE_MS = 60_000
+
+const OLDER_HOST_REFUSAL = new HostRefused(
+	"this host knows no command named mission_list",
+	null,
+	"unknownCommand",
+)
 
 describe("useMissions", () => {
 	beforeEach(() => {
@@ -234,6 +244,77 @@ describe("useMissions", () => {
 		expect(listMissions).toHaveBeenCalledTimes(2)
 		expect(result.current.hasFailed).toBe(true)
 		expect(result.current.isPending).toBe(false)
+	})
+
+	describe("when an older host refused the list", () => {
+		const isEmptyState = ({
+			hasFailed,
+			isPending,
+			missions,
+		}: ConversationMissionsRead) =>
+			!hasFailed && !isPending && missions.length === 0
+
+		const mountRefused = async () => {
+			listMissions.mockRejectedValue(OLDER_HOST_REFUSAL)
+			const { queryClient, wrapper } = createQueryTestWrapper()
+			const frames: ConversationMissionsRead[] = []
+			const { result } = renderHook(
+				() => {
+					const read = useMissions("c-1")
+					frames.push(read)
+					return read
+				},
+				{ wrapper },
+			)
+			await waitFor(() => expect(result.current.isPending).toBe(false))
+			frames.length = 0
+			return { queryClient, wrapper, result, framesSinceRefusal: frames }
+		}
+
+		it("stays on its empty state while it is read again and refused again", async () => {
+			const { queryClient, result, framesSinceRefusal } = await mountRefused()
+			const reread = Promise.withResolvers<never>()
+			listMissions.mockReturnValue(reread.promise)
+
+			await readEveryQueryAgain(queryClient)
+
+			expect(listMissions).toHaveBeenCalledTimes(2)
+			expect(isEmptyState(result.current)).toBe(true)
+
+			reread.reject(OLDER_HOST_REFUSAL)
+			await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+			await act(() => new Promise((settle) => setTimeout(settle, 0)))
+
+			expect(framesSinceRefusal.every(isEmptyState)).toBe(true)
+		})
+
+		it("opens on its empty state when it mounts again on the refused list", async () => {
+			const { wrapper, result } = await mountRefused()
+			expect(isEmptyState(result.current)).toBe(true)
+			cleanup()
+			listMissions.mockReturnValue(new Promise(() => undefined))
+
+			const again = renderHook(() => useMissions("c-1"), { wrapper })
+
+			expect(isEmptyState(again.result.current)).toBe(true)
+			await waitFor(() => expect(listMissions).toHaveBeenCalledTimes(2))
+			expect(isEmptyState(again.result.current)).toBe(true)
+		})
+
+		it("shows the missions once the list read again is answered", async () => {
+			const { queryClient, result, framesSinceRefusal } = await mountRefused()
+			const reread = Promise.withResolvers<{
+				open: Mission[]
+				done: Mission[]
+			}>()
+			listMissions.mockReturnValue(reread.promise)
+
+			await readEveryQueryAgain(queryClient)
+			reread.resolve({ open: [MISSION], done: [] })
+
+			await waitFor(() => expect(result.current.missions).toEqual([MISSION]))
+			expect(framesSinceRefusal.some(({ hasFailed }) => hasFailed)).toBe(false)
+		})
 	})
 
 	it("patches a change into the conversation and the space feed it holds at once", async () => {

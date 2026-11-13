@@ -1,4 +1,5 @@
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { act } from "@testing-library/react"
 import type { PropsWithChildren } from "react"
 
 import { createQueryClient } from "./query-client"
@@ -24,4 +25,11 @@ export const createQueryTestWrapper = (): QueryTestWrapper => {
 		<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 	)
 	return { queryClient, wrapper }
+}
+
+export const readEveryQueryAgain = async (queryClient: QueryClient) => {
+	act(() => {
+		void queryClient.invalidateQueries()
+	})
+	await act(() => new Promise((settle) => setTimeout(settle, 0)))
 }

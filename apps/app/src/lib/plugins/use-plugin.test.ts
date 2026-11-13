@@ -14,7 +14,11 @@ import {
 } from "../conversations/plugin-scope"
 import type { BotSkill, PluginScope } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { createQueryTestWrapper } from "../query/query-test-wrapper"
+import { HostRefused } from "../host/host-refused"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "../query/query-test-wrapper"
 
 afterEach(cleanup)
 
@@ -265,6 +269,44 @@ describe("usePlugin", () => {
 		const controller = await opened(refusing)
 
 		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("stays on an empty panel while the reads an older host refused are read again", async () => {
+		const refusal = new HostRefused(
+			"this host knows no command named plugin_skills",
+			null,
+			"unknownCommand",
+		)
+		const neverAnswered = new Promise<never>(() => undefined)
+		const readSkills = vi
+			.fn<TranscriptStore["pluginSkills"]>()
+			.mockRejectedValueOnce(refusal)
+			.mockReturnValue(neverAnswered)
+		const readHistory = vi
+			.fn<TranscriptStore["pluginHistory"]>()
+			.mockRejectedValueOnce(refusal)
+			.mockReturnValue(neverAnswered)
+		const refusing: TranscriptStore = {
+			...createFakeTranscriptStore(),
+			pluginSkills: readSkills,
+			pluginHistory: readHistory,
+		}
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const { result } = renderHook(() => usePlugin(refusing, A_COMPANION), {
+			wrapper,
+		})
+		await settled()
+
+		await readEveryQueryAgain(queryClient)
+
+		expect(readSkills).toHaveBeenCalledTimes(2)
+		expect(readHistory).toHaveBeenCalledTimes(2)
+		expect(result.current.state).toMatchObject({
+			skills: [],
+			commits: [],
+			isPending: false,
+			hasFailedToLoad: false,
+		})
 	})
 
 	it("clears the reported failure once the plugin reads again", async () => {
