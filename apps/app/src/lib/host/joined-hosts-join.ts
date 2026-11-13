@@ -70,8 +70,6 @@ const logJoinFailure = (id: string, reason: unknown) => {
 	)
 }
 
-const outdatedHostCauseOf = (id: string) => `host-outdated:${id}`
-
 const logOutdatedHost = (id: string, { command, message }: HostRefusal) => {
 	console.warn(
 		[
@@ -178,7 +176,7 @@ export const createJoinedHostsJoin = ({
 		}
 		outdatedHostsOnNotice.add(id)
 		reportFailure(refusal, {
-			cause: outdatedHostCauseOf(id),
+			cause: `host-outdated:${id}`,
 			onClose: () => {
 				outdatedHostsOnNotice.delete(id)
 			},
