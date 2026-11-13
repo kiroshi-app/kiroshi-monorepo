@@ -1727,6 +1727,7 @@ navigation-boardcanvas--comment-draft-on-board
 navigation-boardcanvas--comment-draft-on-board-dark
 navigation-boardcanvas--comment-draft-on-node
 navigation-boardcanvas--comment-draft-on-node-dark
+navigation-boardcanvas--comment-escape-closes-innermost
 navigation-boardcanvas--comment-mode
 navigation-boardcanvas--comment-mode-dark
 navigation-boardcanvas--comment-mode-survives-list-escape
@@ -1737,6 +1738,8 @@ navigation-boardcanvas--comment-pins
 navigation-boardcanvas--comment-pins-dark
 navigation-boardcanvas--comment-thread-open
 navigation-boardcanvas--comment-thread-open-dark
+navigation-boardcanvas--commented-node-across-zoom
+navigation-boardcanvas--commented-node-across-zoom-dark
 navigation-boardcanvas--connector-being-drawn
 navigation-boardcanvas--connector-being-drawn-dark
 navigation-boardcanvas--connector-by-keyboard
@@ -2463,8 +2466,13 @@ overlays-imagemenu--in-viewer
 overlays-imagemenu--saving-to-library
 overlays-imagemenu--without-callbacks
 overlays-libraryimagecomments--at-rest
+overlays-libraryimagecomments--card-kept-inside-stage
 overlays-libraryimagecomments--comment-mode
+overlays-libraryimagecomments--comment-mode-light
+overlays-libraryimagecomments--escape-after-comment-button-leaves-mode
+overlays-libraryimagecomments--escape-closes-innermost
 overlays-libraryimagecomments--point-draft
+overlays-libraryimagecomments--resolved-thread-in-place
 overlays-libraryimagecomments--zone-draft
 overlays-libraryimagecomments--zone-thread-open
 overlays-libraryimagecomments--zone-thread-open-light

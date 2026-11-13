@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next"
 import type { BoardClientPoint } from "@workspace/ui/components/board/board-dock"
 import {
 	type BoardCommentAnchor,
-	commentPinPointOf,
+	commentPinTailOf,
 	commentRingRadiusOf,
 	commentRingRectOf,
 	composerCornerOf,
@@ -29,7 +29,9 @@ import type {
 	BoardViewport,
 } from "@workspace/ui/components/board-view"
 import type { LibraryCommentAuthor } from "@workspace/ui/components/library-comment-author"
+import { COMMENT_TOGGLE_SLOT } from "@workspace/ui/components/library-comment-bar-controls"
 import { LibraryCommentComposer } from "@workspace/ui/components/library-comment-composer"
+import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
 import type { LibraryCommentDraftOptions } from "@workspace/ui/components/library-comment-field"
 import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
 import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
@@ -46,6 +48,7 @@ type BoardCommentThread = {
 type BoardCommentDraft = LibraryCommentDraftOptions & {
 	anchor: BoardCommentAnchor
 	author: LibraryCommentAuthor
+	onClose: () => void
 }
 
 type BoardOpenCommentThread = Omit<
@@ -73,14 +76,11 @@ const placedOf = (
 ) => {
 	const node = isNodeAnchor(anchor) ? items.get(anchor) : undefined
 	const isGone = isNodeAnchor(anchor) && !node
-	const point = node
-		? commentPinPointOf(boundsOf(node))
-		: isNodeAnchor(anchor)
-			? lastPoint
-			: anchor
-	return point
-		? { node, isGone, pinTail: toScreenPoint(point, viewport) }
-		: null
+	const boardPoint = isNodeAnchor(anchor) ? lastPoint : anchor
+	const pinTail = node
+		? commentPinTailOf(boundsOf(node), viewport)
+		: boardPoint && toScreenPoint(boardPoint, viewport)
+	return pinTail ? { node, isGone, pinTail } : null
 }
 
 const drawnRadiusOf = (object: Element | null | undefined) => {
@@ -167,6 +167,14 @@ const focusCommentField = (corner: HTMLElement | null) =>
 		?.querySelector<HTMLElement>('[data-slot="library-comment-field"] textarea')
 		?.focus({ preventScroll: true })
 
+const isFromBoardOrCommentToggle = (
+	focused: Element,
+	board: HTMLElement | null,
+) =>
+	focused === document.body ||
+	Boolean(board?.contains(focused)) ||
+	focused.closest(`[data-slot="${COMMENT_TOGGLE_SLOT}"]`) !== null
+
 type BoardCommentAim = {
 	at: BoardPoint
 	nodeId: string | null
@@ -180,31 +188,18 @@ type BoardCommentIntents = {
 }
 
 type BoardCommentSurfaceProps = BoardCommentScene &
-	BoardCommentIntents & {
+	Pick<BoardCommentIntents, "nodeIdUnder" | "onStartCommentAt"> & {
 		ringedNodes: readonly BoardItem[]
 	}
 
 const BoardCommentSurface = ({
-	board,
 	nodeIdUnder,
 	onStartCommentAt,
-	onLeaveCommentMode,
 	ringedNodes,
 	...scene
 }: BoardCommentSurfaceProps) => {
 	const [aim, setAim] = useState<BoardCommentAim | null>(null)
 	const aimedNode = aim?.nodeId ? scene.items.get(aim.nodeId) : undefined
-
-	useEffect(() => {
-		const leaveOnEscape = (event: KeyboardEvent) => {
-			const focused = event.target as Node
-			const isFromBoard =
-				focused === document.body || board.current?.contains(focused)
-			if (event.key === "Escape" && isFromBoard) onLeaveCommentMode?.()
-		}
-		window.addEventListener("keydown", leaveOnEscape)
-		return () => window.removeEventListener("keydown", leaveOnEscape)
-	}, [board, onLeaveCommentMode])
 
 	const aimWithPointer = (event: PointerEvent<HTMLDivElement>) => {
 		const surface = event.currentTarget.getBoundingClientRect()
@@ -233,7 +228,7 @@ const BoardCommentSurface = ({
 			{aim ? (
 				<div
 					aria-hidden="true"
-					className="pointer-events-none absolute z-20 size-5 -translate-y-full rounded-full rounded-bl-[2px] bg-primary shadow-comment-pin-selected ring-2 ring-white"
+					className="pointer-events-none absolute z-20 size-5 -translate-y-full rounded-full rounded-bl-[2px] bg-primary shadow-comment-cursor ring-2 ring-comment-cursor-ring"
 					data-slot="board-comment-cursor"
 					style={{ left: aim.at.x, top: aim.at.y }}
 				/>
@@ -265,6 +260,24 @@ const BoardCommentLayer = ({
 }: BoardCommentLayerProps) => {
 	const { t } = useTranslation("common")
 
+	useEffect(() => {
+		if (!isCommentMode && !draft && !openThread) return
+
+		const answerEscape = (event: KeyboardEvent) => {
+			const isAnsweredAlready = event.defaultPrevented || event.isComposing
+			if (event.key !== "Escape" || isAnsweredAlready) return
+			if (!isFromBoardOrCommentToggle(event.target as Element, board.current))
+				return
+			closeInnermostCommentLayer({
+				draft,
+				openThread,
+				leaveCommentMode: isCommentMode ? onLeaveCommentMode : undefined,
+			})
+		}
+		window.addEventListener("keydown", answerEscape)
+		return () => window.removeEventListener("keydown", answerEscape)
+	}, [board, draft, openThread, isCommentMode, onLeaveCommentMode])
+
 	const anchorLineOf = (node?: BoardItem) =>
 		node
 			? t("board.comments.anchor.node", {
@@ -289,9 +302,7 @@ const BoardCommentLayer = ({
 			{isCommentMode ? (
 				<BoardCommentSurface
 					{...scene}
-					board={board}
 					nodeIdUnder={nodeIdUnder}
-					onLeaveCommentMode={onLeaveCommentMode}
 					onStartCommentAt={onStartCommentAt}
 					ringedNodes={ringedNodes}
 				/>
