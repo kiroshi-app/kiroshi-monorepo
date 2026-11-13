@@ -48,6 +48,7 @@ type LibraryDocumentThread = {
 
 type LibraryDocumentOpenThread = Pick<
 	LibraryCommentThreadProps,
+	| "resolution"
 	| "reply"
 	| "onReplyChange"
 	| "onReply"

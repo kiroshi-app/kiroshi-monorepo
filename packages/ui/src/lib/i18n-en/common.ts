@@ -669,6 +669,13 @@ const common = {
 			copy: "Couldn’t copy the image",
 			reveal: "Couldn’t show the file in its folder",
 			delete: "Couldn’t delete the item",
+			comment: {
+				list: "Couldn’t show the comments. Open the item again from the Library.",
+				send: "Couldn’t send the comment. Press Send to try again.",
+				reply: "Couldn’t send the reply. Press Send to try again.",
+				resolve: "Couldn’t resolve the comment. Press Resolve to try again.",
+				reopen: "Couldn’t reopen the comment. Press Reopen to try again.",
+			},
 			document: {
 				create: "Couldn’t create the document. Try again from New document.",
 				open: "Couldn’t open the document. Open it again from the Library.",
