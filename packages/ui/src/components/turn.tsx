@@ -196,7 +196,7 @@ const sentTimeOf = (sentAt?: number, now?: number) => {
 	return now === undefined ? (
 		<MessageClock at={sentAt} />
 	) : (
-		<MessageTime at={sentAt} now={now} className="leading-4" />
+		<MessageTime at={sentAt} now={now} />
 	)
 }
 
