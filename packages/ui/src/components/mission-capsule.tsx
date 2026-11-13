@@ -16,7 +16,7 @@ const BRANCH = "ms-3.5 h-[1.5px] w-4 shrink-0 bg-rail-section-placeholder"
 
 const COMPACT_TREE = cn(
 	COMPACT_ROW_STACK,
-	"pointer-events-none relative before:absolute before:inset-y-0 before:start-3.25 before:w-[1.5px] before:bg-sidebar-tree-line",
+	"relative before:pointer-events-none before:absolute before:inset-y-0 before:start-3.75 before:w-[1.5px] before:bg-sidebar-tree-line",
 )
 
 const STACKED_ROW = {
@@ -28,24 +28,34 @@ const STACKED_ROW = {
 } as const
 
 const COMPACT_ROW = {
-	row: "flex h-7 w-full min-w-0 items-center gap-2 p-1.5 text-muted-foreground text-xs leading-4",
-	lead: "size-4 shrink-0",
-	glyphSide: 12,
+	row: "group/mission flex h-8 w-full min-w-0 items-center gap-2 rounded-sm p-1.5 text-start text-compact text-muted-foreground leading-5 outline-hidden ring-sidebar-ring hover:bg-mission-list-hover focus-visible:ring-2 focus-visible:ring-inset active:bg-mission-list-hover aria-[current]:bg-sidebar-accent",
+	lead: "size-5 shrink-0",
+	glyphSide: 14,
 	identifier: "shrink-0 font-medium tabular-nums",
-	title: "min-w-0 grow truncate",
+	title: "min-w-0 grow truncate group-aria-[current]/mission:text-foreground",
 } as const
 
-type MissionTreeRowProps = {
+type MissionOpening = {
+	openMissionId?: string
+	onOpenMission?: (missionId: string) => void
+}
+
+type MissionTreeRowProps = MissionOpening & {
 	mission: AppSidebarRowMission
 }
 
-const MissionTreeRow = ({ mission }: MissionTreeRowProps) => {
+const MissionTreeRow = ({
+	mission,
+	openMissionId,
+	onOpenMission,
+}: MissionTreeRowProps) => {
 	const { t } = useTranslation("bots")
-	const drawn = useIsCompactRows() ? COMPACT_ROW : STACKED_ROW
-	const { state, ticket, objective } = mission
+	const isCompact = useIsCompactRows()
+	const drawn = isCompact ? COMPACT_ROW : STACKED_ROW
+	const { id, state, ticket, objective } = mission
 
-	return (
-		<div className={drawn.row} data-slot="mission-capsule" data-state={state}>
+	const anatomy = (
+		<>
 			<span
 				aria-hidden="true"
 				className={drawn.lead}
@@ -68,15 +78,36 @@ const MissionTreeRow = ({ mission }: MissionTreeRowProps) => {
 			<span className={drawn.title} data-slot="mission-capsule-title">
 				{ticket.title || objective}
 			</span>
+		</>
+	)
+
+	return isCompact ? (
+		<button
+			aria-current={id === openMissionId ? "page" : undefined}
+			className={drawn.row}
+			data-slot="mission-capsule"
+			data-state={state}
+			onClick={() => onOpenMission?.(id)}
+			type="button"
+		>
+			{anatomy}
+		</button>
+	) : (
+		<div className={drawn.row} data-slot="mission-capsule" data-state={state}>
+			{anatomy}
 		</div>
 	)
 }
 
-type MissionCapsuleListProps = {
+type MissionCapsuleListProps = MissionOpening & {
 	missions: AppSidebarRowMission[] | undefined
 }
 
-const MissionCapsuleList = ({ missions }: MissionCapsuleListProps) => {
+const MissionCapsuleList = ({
+	missions,
+	openMissionId,
+	onOpenMission,
+}: MissionCapsuleListProps) => {
 	const isCompact = useIsCompactRows()
 
 	return missions && missions.length > 0 ? (
@@ -85,10 +116,15 @@ const MissionCapsuleList = ({ missions }: MissionCapsuleListProps) => {
 			data-slot="mission-capsule-list"
 		>
 			{missions.map((mission) => (
-				<MissionTreeRow key={mission.id} mission={mission} />
+				<MissionTreeRow
+					key={mission.id}
+					mission={mission}
+					onOpenMission={onOpenMission}
+					openMissionId={openMissionId}
+				/>
 			))}
 		</div>
 	) : null
 }
 
-export { MissionCapsuleList }
+export { MissionCapsuleList, type MissionOpening }

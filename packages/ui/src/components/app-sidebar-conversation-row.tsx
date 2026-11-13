@@ -21,7 +21,10 @@ import {
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
-import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
+import {
+	MissionCapsuleList,
+	type MissionOpening,
+} from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -51,7 +54,10 @@ const SURFACE =
 const stackedGeometryOf = (hasSurface: boolean) =>
 	hasSurface ? "conversation" : "roster"
 
-interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
+interface ConversationRosterRowProps
+	extends RosterRowSlot,
+		RosterPinActions,
+		MissionOpening {
 	conversation: AppSidebarConversation
 	isSelected: boolean
 	sections: AppSidebarSection[]
@@ -83,6 +89,8 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	openMissionId,
+	onOpenMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const { state } = useSidebar()
@@ -126,6 +134,7 @@ const ConversationRosterRow = ({
 									hue={conversation.color}
 									icon={conversation.icon}
 									isBare={isCompact}
+									isFilled={isSelected}
 									side={leadSide}
 								/>
 							)
@@ -152,7 +161,11 @@ const ConversationRosterRow = ({
 								: (conversation.timestamp ?? "")
 						}
 					/>
-					<MissionCapsuleList missions={conversation.missions} />
+					<MissionCapsuleList
+						missions={conversation.missions}
+						onOpenMission={onOpenMission}
+						openMissionId={openMissionId}
+					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
 					aria-label={t("roster.actions", { name: conversation.name })}

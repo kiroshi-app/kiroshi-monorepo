@@ -19,6 +19,7 @@ type ConversationSubjectIconProps = {
 	hue?: number | null
 	side?: number
 	isBare?: boolean
+	isFilled?: boolean
 }
 
 const untintedStyleOf = (roles: string[]) =>
@@ -56,8 +57,10 @@ const ConversationSubjectIcon = ({
 	hue,
 	side = 40,
 	isBare = false,
+	isFilled = false,
 }: ConversationSubjectIconProps) => {
-	const drawn = isBare ? ConversationOutlineIcons : ConversationIcons
+	const drawn =
+		isBare && !isFilled ? ConversationOutlineIcons : ConversationIcons
 	const Pictogram = drawn[conversationIconOf(icon)]
 	const scope = hueScopeOf(hue, isBare)
 

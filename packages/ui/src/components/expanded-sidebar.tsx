@@ -16,12 +16,11 @@ import {
 } from "@workspace/ui/components/app-sidebar-section"
 import type { CollapsedSidebarListStatus } from "@workspace/ui/components/collapsed-sidebar"
 import {
-	COMPACT_LEAD_SIDE,
 	COMPACT_ROW_GAP,
 	COMPACT_ROW_STACK,
 	CompactRowsContext,
 } from "@workspace/ui/components/compact-rows"
-import { type Icon, Icons } from "@workspace/ui/components/icons"
+import { FillIcons, type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
 	displayNameOf,
@@ -36,6 +35,7 @@ import {
 	SidebarListSkeleton,
 } from "@workspace/ui/components/sidebar-list-skeleton"
 import {
+	SIDEBAR_AVATAR_SIDE,
 	SIDEBAR_COLUMN,
 	SidebarMenuRow,
 } from "@workspace/ui/components/sidebar-menu-row"
@@ -64,22 +64,22 @@ const LIST_FAILED =
 	"flex flex-col items-start gap-2 p-3 text-start text-compact text-muted-foreground leading-5"
 
 const LIST_RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-foreground text-xs leading-4 transition-none"
+	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-5 transition-none"
 
 const MISSION_COUNT =
 	"w-16 shrink-0 text-end text-[11px] text-muted-foreground leading-4 tabular-nums"
 
 const FOOTER =
-	"flex h-7 w-full shrink-0 items-center gap-2 rounded-sm p-1.5 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"flex w-full shrink-0 items-center gap-2.5 rounded-sm p-2 text-start text-muted-foreground hover:bg-mission-list-hover focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const FOOTER_GLYPH =
-	"grid size-4 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
+	"grid size-5 shrink-0 place-items-center [&>svg]:size-full [&>svg]:stroke-[1.75]"
 
 const FOOTER_AVATAR =
-	"grid size-full place-items-center bg-sidebar-accent font-medium text-[9px] text-foreground uppercase leading-none"
+	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-foreground uppercase leading-none"
 
 const FOOTER_NAME =
-	"min-w-0 flex-1 truncate text-compact text-sidebar-person-foreground leading-4"
+	"min-w-0 flex-1 truncate text-sidebar-person-foreground text-sm leading-5"
 
 const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
@@ -94,6 +94,7 @@ type NavigationDestination = {
 	id: ExpandedSidebarDestination
 	label: "rail.newConversation" | "rail.missions" | "rail.library"
 	Icon: Icon
+	FilledIcon: Icon
 	onSelect?: () => void
 }
 
@@ -106,18 +107,21 @@ const navigationDestinationsOf = ({
 		id: "newConversation",
 		label: "rail.newConversation",
 		Icon: Icons.Add,
+		FilledIcon: FillIcons.Add,
 		onSelect: onNewConversation,
 	},
 	{
 		id: "missions",
 		label: "rail.missions",
 		Icon: Icons.Missions,
+		FilledIcon: FillIcons.Missions,
 		onSelect: onSelectMissions,
 	},
 	{
 		id: "library",
 		label: "rail.library",
 		Icon: Icons.Library,
+		FilledIcon: FillIcons.Library,
 		onSelect: onSelectLibrary,
 	},
 ]
@@ -199,7 +203,7 @@ const PersonFooter = ({ user, onOpenSettings }: PersonFooterProps) => {
 			<AvatarFrame
 				image={user?.image}
 				shape="round"
-				size={COMPACT_LEAD_SIDE}
+				size={SIDEBAR_AVATAR_SIDE}
 				slot="expanded-sidebar-avatar"
 			>
 				<span aria-hidden="true" className={FOOTER_AVATAR}>
@@ -345,9 +349,9 @@ const ExpandedSidebar = ({
 					onNewConversation,
 					onSelectMissions,
 					onSelectLibrary,
-				}).map(({ id, label, Icon, onSelect }) => (
+				}).map(({ id, label, Icon, FilledIcon, onSelect }) => (
 					<NavigationItem
-						icon={<Icon />}
+						icon={destination === id ? <FilledIcon /> : <Icon />}
 						isCurrent={destination === id}
 						key={id}
 						label={t(label)}

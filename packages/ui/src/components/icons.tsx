@@ -164,6 +164,7 @@ import {
 	PauseIcon as PauseFillIcon,
 	PenIcon as PenFillIcon,
 	PlayIcon as PlayFillIcon,
+	PlusIcon as PlusFillIcon,
 	RocketIcon as RocketFillIcon,
 	ServerIcon as ServerFillIcon,
 	SettingsIcon as SettingsFillIcon,
@@ -436,6 +437,7 @@ const Icons = {
 }
 
 const FillIcons = {
+	Add: PlusFillIcon,
 	Alert: TriangleAlertFillIcon,
 	Bell: BellFillIcon,
 	Clock: ClockFillIcon,

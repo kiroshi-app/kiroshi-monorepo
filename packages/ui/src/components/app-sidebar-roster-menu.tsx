@@ -50,6 +50,8 @@ interface RosterRowsContext
 		RosterPinActions {
 	activeBotId?: string
 	selectedConversationId?: string
+	openMissionId?: string
+	onOpenMission?: (missionId: string) => void
 	spaceId?: string
 	spaces: Space[]
 	sections: AppSidebarSection[]
@@ -99,13 +101,22 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 		sections: rows.sections,
 		shift: isSlotted ? rows.shiftOf(entry) : undefined,
 		keepFocus: rows.keepFocus,
+		openMissionId: rows.openMissionId,
+		onOpenMission: rows.onOpenMission,
 	}
+	const isShowingMission =
+		(entry.conversation ?? entry.bot)?.missions?.some(
+			({ id }) => id === rows.openMissionId,
+		) ?? false
 	if (entry.conversation)
 		return (
 			<ConversationRosterRow
 				{...shared}
 				conversation={entry.conversation}
-				isSelected={entry.conversation.id === rows.selectedConversationId}
+				isSelected={
+					entry.conversation.id === rows.selectedConversationId &&
+					!isShowingMission
+				}
 				onDelete={rows.onDeleteConversation}
 				onOpenInNewTab={rows.onOpenConversationInNewTab}
 				onOpenSettings={rows.onOpenConversationSettings}
@@ -117,7 +128,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 		<BotRosterRow
 			{...shared}
 			bot={entry.bot}
-			isSelected={entry.bot.id === rows.activeBotId}
+			isSelected={entry.bot.id === rows.activeBotId && !isShowingMission}
 			memberships={memberships}
 			onAddToSpace={rows.onAddBotToSpace}
 			onDelete={rows.onDeleteBot}

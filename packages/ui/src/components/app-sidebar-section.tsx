@@ -10,7 +10,10 @@ import { useTranslation } from "react-i18next"
 
 import type { AppSidebarSection } from "@workspace/ui/components/app-sidebar-model"
 import { rosterSlot } from "@workspace/ui/components/app-sidebar-roster-parts"
-import { COMPACT_ROW_STACK } from "@workspace/ui/components/compact-rows"
+import {
+	COMPACT_ROW_STACK,
+	useIsCompactRows,
+} from "@workspace/ui/components/compact-rows"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ContextMenu,
@@ -63,15 +66,17 @@ const SECTION_BODY_INNER_OPEN =
 const FOLD_SECTION = cn(COMPACT_ROW_STACK, "p-0")
 
 const FOLD_TRIGGER =
-	"flex h-7 w-full min-w-0 items-center justify-between gap-1 rounded-sm p-1.5 text-start font-medium text-faint-foreground text-xs leading-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+	"flex h-8 w-full min-w-0 items-center justify-between gap-1 rounded-sm p-1.5 text-start font-medium text-compact text-faint-foreground leading-5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
 
 const NAMED_FOLD_TRIGGER = cn(FOLD_TRIGGER, "touch-none select-none")
 
 const FOLD_CHEVRON =
-	"size-3 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
+	"size-3.5 shrink-0 text-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
 
 const SECTION_FIELD =
 	"w-full min-w-0 border-none bg-transparent p-1.5 text-sidebar-foreground text-xs leading-4 outline-none"
+
+const COMPACT_SECTION_FIELD = "text-compact leading-5"
 
 const ZONE = "flex flex-col gap-0.5"
 
@@ -119,6 +124,7 @@ const SectionNameField = ({
 	onCancel,
 }: SectionNameFieldProps) => {
 	const [draft, setDraft] = useState(initialName)
+	const isCompact = useIsCompactRows()
 	const isSettled = useRef(false)
 	const selectAll = useCallback((node: HTMLInputElement | null) => {
 		node?.select()
@@ -140,7 +146,7 @@ const SectionNameField = ({
 	return (
 		<input
 			aria-label={ariaLabel}
-			className={SECTION_FIELD}
+			className={cn(SECTION_FIELD, isCompact && COMPACT_SECTION_FIELD)}
 			data-slot="roster-section-field"
 			onBlur={settle}
 			onChange={(event) => setDraft(event.target.value)}

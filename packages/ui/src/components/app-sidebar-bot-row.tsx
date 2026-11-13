@@ -20,7 +20,10 @@ import {
 	useIsCompactRows,
 } from "@workspace/ui/components/compact-rows"
 import { CompanionMenuContent } from "@workspace/ui/components/companion-menu"
-import { MissionCapsuleList } from "@workspace/ui/components/mission-capsule"
+import {
+	MissionCapsuleList,
+	type MissionOpening,
+} from "@workspace/ui/components/mission-capsule"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
 import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
@@ -46,7 +49,10 @@ const sidebarRegionOf = (row: HTMLElement | null) => {
 	return region
 }
 
-interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
+interface BotRosterRowProps
+	extends RosterRowSlot,
+		RosterPinActions,
+		MissionOpening {
 	bot: AppSidebarBot
 	isSelected: boolean
 	spaces: Space[]
@@ -90,6 +96,8 @@ const BotRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	openMissionId,
+	onOpenMission,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
@@ -155,7 +163,13 @@ const BotRosterRow = ({
 							/>
 						}
 					/>
-					{isCompact ? <MissionCapsuleList missions={bot.missions} /> : null}
+					{isCompact ? (
+						<MissionCapsuleList
+							missions={bot.missions}
+							onOpenMission={onOpenMission}
+							openMissionId={openMissionId}
+						/>
+					) : null}
 				</ContextMenuTrigger>
 				<CompanionMenuContent
 					companion={bot}

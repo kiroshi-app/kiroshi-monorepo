@@ -282,7 +282,13 @@ type ExpandedRowsSource = {
 }
 
 const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
-	const { collapsedSectionIds, rosterLines, rosterView, tabs } = useWorkspace()
+	const {
+		collapsedSectionIds,
+		rosterLines,
+		rosterView,
+		sidebarMissions,
+		tabs,
+	} = useWorkspace()
 	const isListShown = usePageShown(tabs, isListPage)
 	const { frame, rosterLists } = useWorkspaceFrame()
 	const { rowMenu, sidebar } = frame
@@ -359,6 +365,7 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 	})
 	const openInNewTab = useStableCallback(rowMenu.onOpenInNewTab)
 	const openSettings = useStableCallback(rowMenu.onOpenSettings)
+	const openMission = useStableCallback(sidebarMissions.page.onOpen)
 	const createSectionFor = useStableCallback((rowId: string) =>
 		setNaming({ rowId }),
 	)
@@ -374,9 +381,11 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		onMoveToSection: sections.length > 0 ? fileRow : undefined,
 		onOpenConversationInNewTab: openInNewTab,
 		onOpenConversationSettings: openSettings,
+		onOpenMission: openMission,
 		onPin: pinLast,
 		onSelectConversation: selectRow,
 		onUnpin: unpin,
+		openMissionId: sidebarMissions.openMissionId,
 		sections,
 		selectedConversationId: selectedRowId,
 		shiftOf: drag.isLifting ? drag.rowShiftOf : NO_SHIFT,
