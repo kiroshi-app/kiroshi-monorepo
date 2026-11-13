@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 import { parseArgs } from "node:util"
 
-import { type Browser, type CDPSession, chromium, type Page } from "playwright"
+import { type Browser, chromium, type Page } from "playwright"
 
 const STORY_ID = "layout-workspaceshell--long-content"
 const HANDLE = '[data-slot="sidebar-resize-handle"]'
@@ -269,7 +269,8 @@ const cpuSelfTimes = ({ nodes, samples = [], timeDeltas = [] }: CpuProfile) => {
 	return selfTimes
 }
 
-const profiledDrag = async (browser: Browser, page: Page, cdp: CDPSession) => {
+const profiledDrag = async (browser: Browser, page: Page) => {
+	const cdp = await page.context().newCDPSession(page)
 	await cdp.send("Profiler.enable")
 	await browser.startTracing(page, {
 		categories: ["devtools.timeline", "disabled-by-default-devtools.timeline"],
@@ -295,7 +296,7 @@ const plainDrag = async (page: Page) => {
 	return { reading: await detection }
 }
 
-const measure = async (url: string, isProfiled: boolean, throttle: number) => {
+const measure = async (url: string, isProfiled: boolean) => {
 	const browser = await chromium.launch()
 	try {
 		const page = await browser.newPage({ viewport: VIEWPORT })
@@ -305,14 +306,12 @@ const measure = async (url: string, isProfiled: boolean, throttle: number) => {
 		await page.locator(HANDLE).waitFor({ timeout: SERVER_TIMEOUT_MS })
 		await page.waitForLoadState("networkidle")
 		await sleep(STORY_SETTLE_MS)
-		const cdp = await page.context().newCDPSession(page)
-		await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle })
 		const { reading, ...profile } = isProfiled
-			? await profiledDrag(browser, page, cdp)
+			? await profiledDrag(browser, page)
 			: await plainDrag(page)
 		return {
 			scenario: `${DRAG_MS} ms drag of the left handle, ${STORY_ID}, ${await page.locator(TURN).count()} turns, ${VIEWPORT.width}x${VIEWPORT.height}`,
-			detector: `requestAnimationFrame deltas and PerformanceObserver longtask, Chromium ${browser.version()}, CPU throttle ${throttle}x, profiler ${isProfiled ? "on" : "off"}`,
+			detector: `requestAnimationFrame deltas and PerformanceObserver longtask, Chromium ${browser.version()}, profiler ${isProfiled ? "on" : "off"}`,
 			frames: frameSummary(reading.frames),
 			longTasks: reading.longTasks,
 			pointerMoves: reading.pointerMoves,
@@ -328,17 +327,12 @@ const measure = async (url: string, isProfiled: boolean, throttle: number) => {
 const { values } = parseArgs({
 	options: {
 		profile: { type: "boolean", default: false },
-		throttle: { type: "string", default: "1" },
 	},
 })
 
 const server = await storyServer()
 try {
-	const report = await measure(
-		server.url,
-		values.profile,
-		Number(values.throttle),
-	)
+	const report = await measure(server.url, values.profile)
 	console.log(JSON.stringify(report, null, "\t"))
 } finally {
 	server.stop()
