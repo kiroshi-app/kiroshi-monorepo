@@ -3375,9 +3375,7 @@ const resolved2 = {
 		await expect(look.backgroundColor).toBe(washOf(passage, 5, "foreground"))
 		await expect(look.borderBottomWidth).toBe("2px")
 		await expect(look.borderBottomStyle).toBe("dashed")
-		await expect(look.borderBottomColor).toBe(
-			colourOf(passage, "comment-resolved-rule"),
-		)
+		await expect(look.borderBottomColor).toBe(colourOf(passage, "sketch-mark"))
 
 		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
 		await expect(pin).toHaveAttribute("data-state", "resolved")

@@ -429,7 +429,7 @@ type PassageState = LibraryCommentPinState
 const PASSAGE_LOOK: Record<PassageState, string> = {
 	rest: "border-primary/50 bg-primary/8",
 	selected: "border-primary bg-primary/16 dark:bg-primary/20",
-	resolved: "border-comment-resolved-rule border-dashed bg-foreground/5",
+	resolved: "border-sketch-mark border-dashed bg-foreground/5",
 }
 
 type PassageProps = {
