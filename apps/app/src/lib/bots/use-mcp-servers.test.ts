@@ -11,7 +11,10 @@ import { createFakeTranscriptStore } from "../conversations/fake-transcript-stor
 import type { EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { HostRefused } from "../host/host-refused"
-import { createQueryTestWrapper } from "../query/query-test-wrapper"
+import {
+	createQueryTestWrapper,
+	readEveryQueryAgain,
+} from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({
 	listen: vi.fn(async () => () => undefined),
@@ -125,6 +128,33 @@ describe("useMcpServers", () => {
 
 		const { result } = await opened(store)
 
+		expect(result.current).toMatchObject({
+			servers: [],
+			isPending: false,
+			hasFailedToLoad: false,
+		})
+	})
+
+	it("stays on an empty panel while a listing the joined host refused is read again", async () => {
+		const store = createFakeTranscriptStore()
+		const listing = vi
+			.spyOn(store, "pluginMcpServers")
+			.mockRejectedValueOnce(
+				new HostRefused(
+					"this host knows no command named plugin_mcp_servers",
+					null,
+					"unknownCommand",
+				),
+			)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const { result } = renderHook(() => useMcpServers(store, BOT), { wrapper })
+		await waitFor(() => expect(result.current.isPending).toBe(false))
+		const readsBeforeRereading = listing.mock.calls.length
+		listing.mockReturnValue(new Promise(() => undefined))
+
+		await readEveryQueryAgain(queryClient)
+
+		expect(listing.mock.calls.length).toBeGreaterThan(readsBeforeRereading)
 		expect(result.current).toMatchObject({
 			servers: [],
 			isPending: false,
