@@ -263,6 +263,17 @@ const expectAgentFoot = async (answer: HTMLElement) => {
 	)
 }
 
+const GROUP_GAP = 12
+
+const expectCardKeepsTheGroupGap = async (answerTurn: HTMLElement) => {
+	const card = answerTurn.closest<HTMLElement>('[data-slot="message"]')
+	const asking = card?.previousElementSibling
+	if (!card || !asking) throw new Error("No reply asks above the card")
+	await expect(
+		card.getBoundingClientRect().top - asking.getBoundingClientRect().bottom,
+	).toBe(GROUP_GAP)
+}
+
 const expectOneAgentBubble = async (root: HTMLElement) => {
 	const answerTurn = answerTurnIn(root)
 	const answerContent = answerBubbleIn(root)
@@ -281,6 +292,7 @@ const expectOneAgentBubble = async (root: HTMLElement) => {
 	]).toEqual(["18px", "18px", "18px", "18px"])
 	await expect(answer.borderStartStartRadius).toBe("16px")
 	await expect(surfaceOf(answerContent)).not.toBe("rgba(0, 0, 0, 0)")
+	await expectCardKeepsTheGroupGap(answerTurn)
 	await expectAgentFoot(answerContent)
 }
 

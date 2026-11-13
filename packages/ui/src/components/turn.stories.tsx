@@ -35,6 +35,7 @@ import {
 	AssistantTurn,
 	PersonTurn,
 	type TurnCause,
+	TurnGroup,
 	UserTurn,
 } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -1123,6 +1124,51 @@ export const BubblelessReplySeveralAgents = meta.story({
 			await expectNoBubble(reply, column)
 			await expectActionsAtRest(reply)
 		}
+	},
+})
+
+const REPLIES_APART = 32
+
+export const BubblelessRepliesInOneGroup = meta.story({
+	render: () => (
+		<ThreadColumn>
+			<TurnGroup>
+				<AssistantTurn
+					author={ROLE_BOT}
+					copyText={REPORT}
+					onPin={pin}
+					onReply={reply}
+					sentAt={sentOn(10, 9, 20)}
+					now={READ_ON}
+				>
+					{REPORT}
+				</AssistantTurn>
+				<AssistantTurn
+					author={ROLE_BOT}
+					copyText={TESTS}
+					onPin={pin}
+					onReply={reply}
+					sentAt={sentOn(10, 9, 21)}
+					now={READ_ON}
+				>
+					{TESTS}
+				</AssistantTurn>
+			</TurnGroup>
+		</ThreadColumn>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two replies of one agent in a row, held in one group the way the thread groups a run. Check that the second reply starts 32 under the author line of the first, the same distance as two replies in separate groups.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const [first, second] = canvas.getAllByLabelText("assistant message")
+		await expect(
+			second.getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+		).toBe(REPLIES_APART)
 	},
 })
 

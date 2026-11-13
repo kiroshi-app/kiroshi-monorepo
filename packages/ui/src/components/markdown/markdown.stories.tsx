@@ -16,6 +16,7 @@ import {
 } from "@workspace/ui/components/library.fixtures"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownBoardLinkRenderer } from "@workspace/ui/components/markdown/board-link"
+import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -683,7 +684,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw HTML is never turned into nodes and reads as the source text it was written with, `script`, `style` and `iframe` included, while `on*` attributes and `javascript:` URLs are dropped from everything markdown itself produced, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go. Math and diagrams are the two blocks that need code this renderer does not carry: `$…$`, `$$…$$` and a `mermaid` fence each fetch their renderer the first time a document holds one, keep the source on screen until it lands, and keep that same source when it cannot be parsed.",
+					"Renders one markdown block, the payload of a single chat bubble, as GFM. Every author goes through the same allowlist: raw HTML is never turned into nodes and reads as the source text it was written with, `script`, `style` and `iframe` included, while `on*` attributes and `javascript:` URLs are dropped from everything markdown itself produced, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. It comes in two sizes read from `MarkdownSizeContext`: `chat`, 14 on 24, the default, and `answer`, 16 on 28, which a bubbleless agent reply asks for. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it, its destination the last thing to go. Math and diagrams are the two blocks that need code this renderer does not carry: `$…$`, `$$…$$` and a `mermaid` fence each fetch their renderer the first time a document holds one, keep the source on screen until it lands, and keep that same source when it cannot be parsed.",
 			},
 		},
 	},
@@ -739,6 +740,51 @@ export const Headings = meta.story({
 					RENDERED_BY_TURN_BODY,
 			},
 		},
+	},
+})
+
+const typeOf = (element: Element) => {
+	const { fontSize, lineHeight, fontWeight } = getComputedStyle(element)
+	return [fontSize, lineHeight, fontWeight]
+}
+
+const firstIn = (root: HTMLElement, tag: string) => {
+	const node = root.querySelector<HTMLElement>(tag)
+	if (!node) throw new Error(`This block holds no ${tag}`)
+	return node
+}
+
+export const AnswerSize = meta.story({
+	args: { children: HEADINGS },
+	render: (args) => (
+		<MarkdownSizeContext value="answer">
+			<Markdown {...args} />
+		</MarkdownSizeContext>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The answer size a bubbleless agent reply asks for. Check that the body reads 16 on 28, an h2 20 on 28 and an h3 17 on 28, both semibold. Pick `Headings` for the same block at chat size.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(typeOf(firstIn(canvasElement, "p"))).toEqual([
+			"16px",
+			"28px",
+			"400",
+		])
+		await expect(typeOf(firstIn(canvasElement, "h2"))).toEqual([
+			"20px",
+			"28px",
+			"600",
+		])
+		await expect(typeOf(firstIn(canvasElement, "h3"))).toEqual([
+			"17px",
+			"28px",
+			"600",
+		])
 	},
 })
 

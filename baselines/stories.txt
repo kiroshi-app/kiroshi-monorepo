@@ -281,6 +281,7 @@ conversation-markdown-mapcard--in-narrow-column
 conversation-markdown-mapcard--one-place-without-link
 conversation-markdown-mapcard--with-route
 conversation-markdown-markdown--adjacent-blocks
+conversation-markdown-markdown--answer-size
 conversation-markdown-markdown--appended-block
 conversation-markdown-markdown--attachment-file-among-code-paths
 conversation-markdown-markdown--attachment-file-mid-answer
@@ -625,6 +626,7 @@ conversation-message-transcriptscrollprobe--long-thread
 conversation-message-transcriptscrollprobe--long-thread-streaming
 conversation-message-transcriptscrollprobe--whole-thread
 conversation-message-turn--author-with-custom-image
+conversation-message-turn--bubbleless-replies-in-one-group
 conversation-message-turn--bubbleless-reply
 conversation-message-turn--bubbleless-reply-dark
 conversation-message-turn--bubbleless-reply-several-agents

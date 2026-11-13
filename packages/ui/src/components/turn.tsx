@@ -24,6 +24,7 @@ import { useCompanionSelect } from "@workspace/ui/components/companion-select"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
+import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import {
 	Message,
 	MessageAuthor,
@@ -175,13 +176,9 @@ const AGENT_BUBBLE_WIDTH = "max-w-145"
 
 const AGENT_REPLY_WIDTH = "w-full max-w-full items-stretch"
 
-const AGENT_ANSWER_TYPE = cn(
-	"text-base leading-7",
-	"[&_[data-slot=markdown]]:text-base [&_[data-slot=markdown]]:leading-7 [&_[data-slot=markdown]]:[--typeset-flow:1rem]",
-	"[&_[data-slot=markdown]_:is(p,li,blockquote)]:text-base [&_[data-slot=markdown]_:is(p,li,blockquote)]:leading-7",
-	"[&_[data-slot=markdown]_h2]:tracking-[-0.01em] [&_[data-slot=markdown]_h2:not(:first-child)]:mt-6",
-	"[&_[data-slot=markdown]_h3]:text-[1.0625rem] [&_[data-slot=markdown]_h3]:leading-7 [&_[data-slot=markdown]_h3:not(:first-child)]:mt-5",
-)
+const AGENT_ANSWER_TYPE = "text-base leading-7"
+
+const BUBBLELESS_REPLIES_APART = "[&>[data-bubbleless]+[data-bubbleless]]:mt-5"
 
 const FRAMED_CARD_MIN_WIDTH = "min-w-[min(--spacing(90),100%)]"
 
@@ -383,7 +380,12 @@ function TurnGroup({
 		<MessageBubbleGroup
 			data-slot="chat-turn-group"
 			{...anchor}
-			className={cn("gap-3", messageId && HIGHLIGHT, className)}
+			className={cn(
+				"gap-3",
+				BUBBLELESS_REPLIES_APART,
+				messageId && HIGHLIGHT,
+				className,
+			)}
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
@@ -641,6 +643,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	return (
 		<Message
 			from="assistant"
+			data-bubbleless={isBubbleless || undefined}
 			{...anchor}
 			className={cn(
 				TURN_ROW,
@@ -669,7 +672,9 @@ function AssistantTurn(props: AssistantTurnProps) {
 							fills && "w-full",
 						)}
 					>
-						{children}
+						<MarkdownSizeContext value={isBubbleless ? "answer" : "chat"}>
+							{children}
+						</MarkdownSizeContext>
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>

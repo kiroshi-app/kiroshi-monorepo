@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react"
+import { useContext, useId, useMemo } from "react"
 import ReactMarkdown, { type Options } from "react-markdown"
 import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
@@ -45,6 +45,10 @@ import {
 } from "@workspace/ui/components/markdown/runs"
 import { MARKDOWN_SANITIZE_SCHEMA } from "@workspace/ui/components/markdown/sanitize"
 import { rehypeScopeIds } from "@workspace/ui/components/markdown/scope-ids"
+import {
+	type MarkdownSize,
+	MarkdownSizeContext,
+} from "@workspace/ui/components/markdown/size"
 import { MarkdownTaskToggleContext } from "@workspace/ui/components/markdown/task-list"
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { cn } from "@workspace/ui/lib/utils"
@@ -78,6 +82,15 @@ export const MARKDOWN_CLASS = cn(
 	"text-sm leading-6",
 )
 
+const MARKDOWN_SIZE_CLASS = {
+	chat: MARKDOWN_CLASS,
+	answer: cn(
+		"typeset typeset-answer",
+		MARKDOWN_CODE_SURFACE_CLASS,
+		MARKDOWN_WHITESPACE_CLASS,
+	),
+} as const satisfies Record<MarkdownSize, string>
+
 export const Markdown = ({
 	children,
 	className,
@@ -93,6 +106,7 @@ export const Markdown = ({
 	onOpenAttachment,
 }: MarkdownProps) => {
 	const scope = useId()
+	const size = useContext(MarkdownSizeContext)
 	const inheritedResolveImage = useMarkdownImageResolver()
 	const inheritedAttachments = useMarkdownAttachments()
 	const remarkPlugins = useMemo<Options["remarkPlugins"]>(
@@ -104,7 +118,10 @@ export const Markdown = ({
 	)
 
 	return (
-		<div data-slot="markdown" className={cn(MARKDOWN_CLASS, className)}>
+		<div
+			data-slot="markdown"
+			className={cn(MARKDOWN_SIZE_CLASS[size], className)}
+		>
 			<NestedMarkdownContext value={Markdown}>
 				<MarkdownAnswerContext value={answerActions ?? null}>
 					<MarkdownRunContext value={renderRun ?? null}>
