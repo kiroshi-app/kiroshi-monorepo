@@ -2,7 +2,12 @@ import type { UnlistenFn } from "@tauri-apps/api/event"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
-import type { HostRefusal, HostSocket, HttpHost } from "./http"
+import type {
+	HostRefusal,
+	HostSocket,
+	HttpHost,
+	RefusalNoticeLifetime,
+} from "./http"
 import type { JoinedSpaceNaming } from "./join-refusal"
 import { createJoinedHostsDown } from "./joined-hosts-down"
 import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
@@ -42,7 +47,10 @@ export type JoinedHostsOptions = {
 	join: (id: string) => Promise<JoinOutcome>
 	fetch: typeof fetch
 	openSocket: (url: string) => HostSocket
-	reportFailure: (refusal: HostRefusal) => void
+	reportFailure: (
+		refusal: HostRefusal,
+		lifetime?: RefusalNoticeLifetime,
+	) => void
 	reportJoinRefusal?: (notice: NoticeMessage, facts: ReporterFacts) => void
 }
 

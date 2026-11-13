@@ -427,6 +427,23 @@ describe("the refusal notice", () => {
 			report: refusalReport(undefined),
 		})
 	})
+
+	it("carries the lifetime its caller holds the notice by", async () => {
+		const lifetime = { cause: "host-outdated:garage", onClose: vi.fn() }
+
+		await raiseRefusalNotice(
+			memberRefusal("this host knows no command named bot_list", 404),
+			lifetime,
+		)
+
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t send that request",
+			description:
+				"The computer hosting this Space runs an older Kiroshi. Update Kiroshi there, then try again.",
+			...lifetime,
+			report: refusalReport(404),
+		})
+	})
 })
 
 describe("a call the host refuses", () => {
