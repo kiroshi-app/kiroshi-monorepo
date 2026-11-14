@@ -49,10 +49,18 @@ export const useLibraryDocumentComments = ({
 	return {
 		comments: comments.bar,
 		threads: comments.threads.flatMap(
-			({ thread, comments: shown, resolution }) => {
+			({ thread, comments: shown, resolution, workingAgent }) => {
 				const anchor = blockAnchorOf(thread.anchor)
 				return anchor
-					? [{ id: thread.id, anchor, comments: shown, resolution }]
+					? [
+							{
+								id: thread.id,
+								anchor,
+								comments: shown,
+								resolution,
+								workingAgent,
+							},
+						]
 					: []
 			},
 		),

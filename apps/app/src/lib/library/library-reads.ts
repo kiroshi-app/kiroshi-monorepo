@@ -1,5 +1,6 @@
 import type {
 	LibraryBoardSummary,
+	LibraryCommentAgentTurn,
 	LibraryCommentThread,
 	LibraryDocument,
 	LibraryDocumentState,
@@ -23,6 +24,9 @@ export const readLibraryBoardSummary = (spaceId: string, name: string) =>
 
 export const readLibraryCommentThreads = (spaceId: string, name: string) =>
 	invoke<LibraryCommentThread[]>("library_comment_threads", { spaceId, name })
+
+export const readLibraryCommentAgentTurns = (spaceId: string) =>
+	invoke<LibraryCommentAgentTurn[]>("library_comment_agent_turns", { spaceId })
 
 export const readLibraryFile = (spaceId: string, name: string) =>
 	invoke<LibraryFile>("library_read_file", { spaceId, name })

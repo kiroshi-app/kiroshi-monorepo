@@ -153,6 +153,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
 	}),
 	library_comment_threads: () => [],
+	library_comment_agent_turns: () => [],
 	library_apply_update: ({ name, update }) => {
 		host.appliedUpdates += 1
 		Y.applyUpdate(documentOf(name), bytesOf(update))

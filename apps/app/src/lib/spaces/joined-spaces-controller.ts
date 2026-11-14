@@ -192,7 +192,7 @@ const describeRefusalNoticeOf = (refusal: unknown) => ({
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
 
-const hostSpaceIdOf = (joined: JoinedSpace): string =>
+export const hostSpaceIdOf = (joined: JoinedSpace): string =>
 	joined.remoteSpaceId ?? joined.id
 
 const HOST_OF_STATUS: Record<JoinedHostState["status"], SpaceHost> = {

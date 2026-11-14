@@ -2,6 +2,7 @@ import { skipToken, useQuery } from "@tanstack/react-query"
 import { useContext, useMemo } from "react"
 
 import type {
+	LibraryCommentAgent,
 	LibraryCommentAuthor,
 	LibraryCommentPerson,
 } from "@workspace/ui/components/library-comment-author"
@@ -14,11 +15,14 @@ import {
 	joinedPeopleOf,
 	personNamed,
 } from "./library-comment-people"
+import { workingAgentOf } from "./library-comment-views"
+import { useLibraryCommentAgentTurns } from "./use-library-comment-agent-turns"
 
 import {
 	HOSTING_MEMBERS_CHANGED_EVENT,
 	LIBRARY_COMMENT_HOST_AUTHOR_ID,
 	type LibraryCommentParty,
+	type LibraryCommentThread,
 	type Member,
 } from "../bindings"
 import { ThreadAuthorshipContext } from "../chat/thread-authorship"
@@ -40,6 +44,9 @@ export type LibraryCommentPeople = {
 	self: LibraryCommentPerson
 	participants: LibraryCommentAuthor[]
 	authorOf: (party: LibraryCommentParty) => LibraryCommentAuthor
+	workingAgentOf: (
+		thread: LibraryCommentThread,
+	) => LibraryCommentAgent | undefined
 }
 
 const NO_MEMBERS: Member[] = []
@@ -71,6 +78,7 @@ export const useLibraryCommentPeople = ({
 	const { accountId, host } = useContext(ThreadAuthorshipContext)
 	const unnamed = useChatCopy()("working.name")
 	const hostedMembers = useHostedMembers(spaceId, host.kind === "hosted")
+	const workingTurns = useLibraryCommentAgentTurns(spaceId)
 
 	return useMemo(() => {
 		const ownName = viewerName || unnamed
@@ -86,12 +94,14 @@ export const useLibraryCommentPeople = ({
 			host.kind === "joined" && accountId
 				? accountId
 				: LIBRARY_COMMENT_HOST_AUTHOR_ID
-		const participants = [...agentsOf(bots), ...people]
+		const agents = agentsOf(bots)
+		const participants = [...agents, ...people]
 		return {
 			self:
 				people.find(({ id }) => id === ownId) ?? personNamed(ownId, ownName),
 			participants,
 			authorOf: (party) => authorAmong(participants, party, unnamed),
+			workingAgentOf: (thread) => workingAgentOf(thread, workingTurns, agents),
 		}
-	}, [accountId, host, hostedMembers, bots, viewerName, unnamed])
+	}, [accountId, host, hostedMembers, workingTurns, bots, viewerName, unnamed])
 }

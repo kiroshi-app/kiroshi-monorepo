@@ -17,6 +17,7 @@ import { useWorkspaceSubscriptions } from "./use-workspace-subscriptions"
 import { useNewDevice } from "../devices/use-new-device"
 import { useHomeAgent } from "../home/use-home-agent"
 import { useLibraryBoardFileReplacedNotices } from "../library/use-library-board-file-replaced-notices"
+import { useLibraryCommentMentionOpening } from "../library/use-library-comment-mention-opening"
 import { useOpenSettings } from "../navigation/open-settings"
 import { useSettingsNavigation } from "../navigation/use-settings-navigation"
 import { useClaudeImportEntry } from "../onboarding/use-claude-import-entry"
@@ -78,6 +79,7 @@ export const useWorkspaceAssembly = () => {
 	useNewTabClicks(tabs)
 	useTabsFollowingRenames(tabs)
 	useLibraryBoardFileReplacedNotices(rosteredHostSpaceId ?? null)
+	useLibraryCommentMentionOpening(core.joinedSpaces.controller)
 	useTabThreadSync({
 		tabs,
 		roster: core.roster.controller,
