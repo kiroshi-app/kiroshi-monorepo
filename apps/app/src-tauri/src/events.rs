@@ -130,6 +130,10 @@ declared! {
 		library::contract::COMMENT_THREAD_CHANGED_EVENT,
 	LIBRARY_COMMENT_AGENT_TURNS_CHANGED: library::contract::LibraryCommentAgentTurnsChanged =
 		library::contract::COMMENT_AGENT_TURNS_CHANGED_EVENT,
+	LIBRARY_COMMENT_MENTIONED: library::contract::LibraryCommentMentioned =
+		library::contract::COMMENT_MENTIONED_EVENT,
+	LIBRARY_COMMENT_MENTION_OPENED: library::contract::LibraryCommentMentionOpened =
+		library::contract::COMMENT_MENTION_OPENED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

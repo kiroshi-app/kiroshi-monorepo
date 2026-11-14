@@ -499,6 +499,8 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::library::contract::CHANGED_EVENT, IN_THE_SPACE),
 	(crate::library::contract::COMMENT_THREAD_CHANGED_EVENT, IN_THE_SPACE),
 	(crate::library::contract::COMMENT_AGENT_TURNS_CHANGED_EVENT, IN_THE_SPACE),
+	(crate::library::contract::COMMENT_MENTIONED_EVENT, IN_THE_SPACE),
+	(crate::library::contract::COMMENT_MENTION_OPENED_EVENT, Audience::HostOnly),
 	(crate::missions::commands::CHANGED_EVENT, Audience::Scoped(child(Mission, "/missionId"))),
 	(crate::notifications::commands::ACTIVATED_EVENT, Audience::HostOnly),
 	(crate::routines::commands::CHANGED_EVENT, IN_THE_CONVERSATION),

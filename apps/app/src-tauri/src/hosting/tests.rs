@@ -93,14 +93,15 @@ use crate::host_api::files::ATTACHMENT_PATH;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::member_link::{MemberLink, Resync};
+use crate::joined_spaces::mentions::raised_if_mentioned;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{
-	LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_THREAD_CHANGED_EVENT, DOCUMENT_RENAMED_EVENT,
-	DOCUMENT_UPDATED_EVENT,
+	LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_MENTIONED_EVENT, COMMENT_MENTION_OPENED_EVENT,
+	COMMENT_THREAD_CHANGED_EVENT, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
 };
 use crate::library::tests::YjsClient;
-use crate::library::{CommentTurn, CommentTurns, Said};
+use crate::library::{CommentTurn, CommentTurns, PersonHere, Said};
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -108,6 +109,7 @@ use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
 use crate::missions::commands::{mission_space_feed, mission_space_page};
 use crate::missions::contract::{MissionDetail, MissionDraft, Ticket};
+use crate::notifications::{self, Notice, SystemNotifications};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -4139,6 +4141,217 @@ fn a_member_creates_a_library_board_in_the_shared_space_only() {
 }
 
 const A_LIBRARY_BOARD: &str = r#"{"nodes":[{"id":"a","type":"text","text":"","x":0,"y":0,"width":10,"height":10}],"edges":[]}"#;
+
+const A_JOINED_SPACE: &str = "joined-1";
+
+type Notices = Arc<Mutex<Vec<Notice>>>;
+
+fn counting_notices(computer: &tauri::AppHandle<MockRuntime>) -> Notices {
+	let raised = Notices::default();
+	let kept = Arc::clone(&raised);
+	computer.manage(SystemNotifications::raising_with(move |notice| {
+		kept.lock().expect("the notices are kept").push(notice);
+	}));
+	raised
+}
+
+fn titles(raised: &Notices) -> Vec<String> {
+	raised.lock().expect("the notices are kept").iter().map(|notice| notice.title.clone()).collect()
+}
+
+fn the_computer_of(account_id: &str) -> PersonHere {
+	PersonHere { person_id: account_id.to_owned(), space_id: A_JOINED_SPACE.to_owned() }
+}
+
+fn a_library_comment_mentioning(people: &[&str]) -> Value {
+	let mut comment = a_library_comment_on_the_cover(PERSONAL);
+	comment["mentions"] = people.iter().map(|id| json!({ "kind": "person", "id": id })).collect();
+	comment
+}
+
+fn a_joiner_named(name: &str) -> Value {
+	let mut joiner = cloud_member(A_JOINER, "joiner@example.com", "member", "joined");
+	joiner["name"] = json!(name);
+	joiner
+}
+
+fn kept_if_a_mention(mentions: &Mutex<Vec<String>>, frame: &Value) {
+	if frame["event"]["event"] == COMMENT_MENTIONED_EVENT {
+		mentions.lock().expect("the mentions are kept").push(frame["event"].to_string());
+	}
+}
+
+impl Guest {
+	async fn mentions_heard_into(&mut self, mentions: &Mutex<Vec<String>>) {
+		let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": "mentions" }));
+		events::emit(self.harness.app.handle(), Event::untyped(probed.0), probed.1.clone())
+			.expect("emitted");
+		let probe = as_forwarded(probed);
+		next_text(&mut self.member, |frame| {
+			kept_if_a_mention(mentions, frame);
+			*frame == probe
+		})
+		.await;
+	}
+
+	async fn mentions_heard(&mut self) -> Vec<String> {
+		let mentions = Mutex::new(Vec::new());
+		self.mentions_heard_into(&mentions).await;
+		mentions.into_inner().expect("the mentions are kept")
+	}
+
+	async fn called_hearing_mentions(
+		&mut self,
+		command: &str,
+		args: Value,
+	) -> (Value, Vec<String>) {
+		let mentions = Mutex::new(Vec::new());
+		let call = json!({ "id": command, "command": command, "args": args });
+		send(&mut self.member, &call.to_string()).await;
+		let answered = next_text(&mut self.member, |frame| {
+			kept_if_a_mention(&mentions, frame);
+			frame.get("event").is_none()
+		})
+		.await;
+		self.mentions_heard_into(&mentions).await;
+		(answered, mentions.into_inner().expect("the mentions are kept"))
+	}
+}
+
+#[test]
+fn the_host_mentioning_a_member_notifies_the_computer_of_that_member_and_no_other() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-by-the-host").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let on_the_host = counting_notices(&app);
+		let member_computer = an_app_of_its_own("mentioned-member", mock_builder());
+		let on_the_member = counting_notices(member_computer.handle());
+		let bystander_computer = an_app_of_its_own("unmentioned-member", mock_builder());
+		let on_the_bystander = counting_notices(bystander_computer.handle());
+		let database = db::open(&guest.effects.database);
+		let mut preferences = database.user().preferences().await.expect("the preferences read");
+		preferences.display_name = "Ada".to_owned();
+		database.user().set_preferences(preferences).await.expect("the host is named");
+
+		let said = Said::by_the_person_calling(
+			&Caller::Host,
+			&app,
+			"Crop here\nthen ship".to_owned(),
+			typed(&a_library_comment_mentioning(&[A_JOINER, A_JOINER]), "mentions"),
+		)
+		.expect("the host is named");
+		let anchor = typed(&a_library_comment_on_the_cover(PERSONAL), "anchor");
+		let opened = library::open_comment_thread(
+			&app,
+			&database,
+			&library,
+			PERSONAL,
+			"cover.png",
+			anchor,
+			said,
+		)
+		.await
+		.expect("the host comments");
+		let heard = guest.mentions_heard().await;
+		for frame in &heard {
+			raised_if_mentioned(member_computer.handle(), &the_computer_of(A_JOINER), frame);
+			let bystander = the_computer_of("bystander-account");
+			raised_if_mentioned(bystander_computer.handle(), &bystander, frame);
+		}
+
+		assert_eq!(heard.len(), 1, "{heard:?}");
+		let raised = std::mem::take(&mut *on_the_member.lock().expect("the notices are kept"));
+		let shown: Vec<_> = raised
+			.iter()
+			.map(|notice| (notice.title.as_str(), notice.body.as_str(), notice.clicked.to_string()))
+			.collect();
+		let thread = format!("comment thread {} of space {A_JOINED_SPACE}", opened.id);
+		assert_eq!(shown, [("Ada mentioned you in cover.png", "Crop here", thread)]);
+		assert_eq!(titles(&on_the_host), Vec::<String>::new());
+		assert_eq!(titles(&on_the_bystander), Vec::<String>::new());
+	});
+}
+
+#[test]
+fn a_member_mentioning_the_host_notifies_the_host_computer_alone_and_a_click_hands_over_the_thread()
+{
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-by-a-member").await;
+		guest.harness.seed(&[a_joiner_named("Joiner")]);
+		let app = guest.harness.app.handle().clone();
+		restore(app.clone()).await;
+		let on_the_host = counting_notices(&app);
+		let member_computer = an_app_of_its_own("mentioning-member", mock_builder());
+		let on_the_member = counting_notices(member_computer.handle());
+		let main = WebviewWindowBuilder::new(&app, "main", Default::default())
+			.build()
+			.expect("the window builds");
+		let (told, clicked) = std::sync::mpsc::channel();
+		main.listen(COMMENT_MENTION_OPENED_EVENT, move |event| {
+			told.send(event.payload().to_owned()).expect("the test hears");
+		});
+		let AccountState::SignedIn(host) = app.state::<AccountSession>().current() else {
+			panic!("the host is signed out");
+		};
+
+		let named_twice = a_library_comment_mentioning(&[COMMENT_HOST_AUTHOR_ID, &host.id]);
+		let (created, mut heard) =
+			guest.called_hearing_mentions("library_comment_create", named_twice).await;
+		let thread =
+			json!({ "spaceId": PERSONAL, "name": "cover.png", "threadId": created["body"]["id"] });
+		for command in ["library_comment_resolve", "library_comment_reopen"] {
+			heard.extend(guest.called_hearing_mentions(command, thread.clone()).await.1);
+		}
+		for frame in &heard {
+			raised_if_mentioned(member_computer.handle(), &the_computer_of(A_JOINER), frame);
+		}
+
+		assert_eq!(heard.len(), 1, "{created} {heard:?}");
+		let mut raised = std::mem::take(&mut *on_the_host.lock().expect("the notices are kept"));
+		assert_eq!(raised.len(), 1, "{created}");
+		let notice = raised.remove(0);
+		assert_eq!(notice.title, "Joiner mentioned you in cover.png");
+		assert_eq!(notice.body, "Crop here");
+		assert_eq!(titles(&on_the_member), Vec::<String>::new());
+		notifications::activated(&app, notice.clicked);
+		let clicked = clicked.recv_timeout(PATIENCE).expect("the window hears");
+		assert_eq!(
+			serde_json::from_str::<Value>(&clicked).expect("a payload"),
+			json!({
+				"spaceId": PERSONAL,
+				"itemName": "cover.png",
+				"itemKind": "image",
+				"threadId": created["body"]["id"]
+			})
+		);
+	});
+}
+
+#[test]
+fn a_member_mentioning_itself_or_no_person_notifies_no_computer() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-of-oneself").await;
+		guest.harness.seed(&[a_joiner_named("Joiner")]);
+		let app = guest.harness.app.handle().clone();
+		let on_the_host = counting_notices(&app);
+
+		let (to_itself, mut heard) = guest
+			.called_hearing_mentions(
+				"library_comment_create",
+				a_library_comment_mentioning(&[A_JOINER]),
+			)
+			.await;
+		let (to_nobody, unheard) = guest
+			.called_hearing_mentions("library_comment_create", a_library_comment_mentioning(&[]))
+			.await;
+		heard.extend(unheard);
+
+		assert_eq!(to_itself["status"], json!(200), "{to_itself}");
+		assert_eq!(to_nobody["status"], json!(200), "{to_nobody}");
+		assert_eq!(heard, Vec::<String>::new());
+		assert_eq!(titles(&on_the_host), Vec::<String>::new());
+	});
+}
 
 async fn a_guest_with_a_board(name: &str) -> Guest {
 	let guest = Guest::of_two_spaces(name).await;

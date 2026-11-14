@@ -4,7 +4,7 @@ use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use tauri::{Listener, Manager};
+use tauri::{Listener, Manager, WebviewWindowBuilder};
 
 use super::*;
 use crate::agent::contract::RuntimeScope;
@@ -22,13 +22,15 @@ use crate::library::commands::{
 };
 use crate::library::contract::{
 	LibraryCommentAgentTurn, LibraryCommentAgentTurnState, LibraryCommentAgentTurnsChanged,
-	LibraryCommentCount, LibraryCommentThreadState, LibraryCommentTurnFailure,
-	COMMENT_AGENT_TURNS_CHANGED_EVENT, COMMENT_THREAD_CHANGED_EVENT,
+	LibraryCommentCount, LibraryCommentMentioned, LibraryCommentThreadState,
+	LibraryCommentTurnFailure, COMMENT_AGENT_TURNS_CHANGED_EVENT, COMMENT_MENTIONED_EVENT,
+	COMMENT_MENTION_OPENED_EVENT, COMMENT_THREAD_CHANGED_EVENT,
 };
 use crate::library::documents::BoardTarget;
 use crate::library::host::{LibraryHost, Operation};
 use crate::library::root;
 use crate::library::tests::{a_host, a_space, put, A_BOARD};
+use crate::notifications::{self, Notice, SystemNotifications};
 use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::test_app::AppOfItsOwn;
 
@@ -1032,4 +1034,150 @@ async fn a_turn_left_running_by_a_quit_reads_failed_once_the_app_starts_again() 
 		}
 	);
 	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+}
+
+type Raised = Arc<Mutex<Vec<Notice>>>;
+
+fn titles(raised: &Raised) -> Vec<String> {
+	let raised = raised.lock().unwrap_or_else(PoisonError::into_inner);
+	raised.iter().map(|notice| notice.title.clone()).collect()
+}
+
+impl Shelf {
+	fn counting_notices(&self) -> Raised {
+		let raised = Raised::default();
+		let kept = Arc::clone(&raised);
+		self.app.manage(SystemNotifications::raising_with(move |notice| {
+			kept.lock().unwrap_or_else(PoisonError::into_inner).push(notice);
+		}));
+		raised
+	}
+
+	fn hearing_mentions(&self) -> mpsc::Receiver<LibraryCommentMentioned> {
+		let (told, heard) = mpsc::channel();
+		self.app.listen_any(COMMENT_MENTIONED_EVENT, move |event| {
+			let mentioned = serde_json::from_str(event.payload()).expect("a payload");
+			told.send(mentioned).expect("the test listens");
+		});
+		heard
+	}
+
+	async fn host_named(&self, display_name: &str) {
+		let user = self.database().user();
+		let mut preferences = user.preferences().await.expect("the preferences read");
+		preferences.display_name = display_name.to_owned();
+		user.set_preferences(preferences).await.expect("the host is named");
+	}
+}
+
+#[tokio::test]
+async fn a_host_comment_mentioning_a_person_tells_the_space_once_per_comment_and_notifies_nobody_on_the_host(
+) {
+	let shelf = Shelf::of("mention-told").await;
+	shelf.host_named("Ada").await;
+	let (raised, heard) = (shelf.counting_notices(), shelf.hearing_mentions());
+	let host = person(COMMENT_HOST_AUTHOR_ID);
+	let named_twice = [person(BEA), agent(NYX), person(BEA)];
+
+	let opening = said(host.clone(), "Look here\nand there", &named_twice);
+	let opened = shelf.opened_saying(NOTES, block("head01"), opening).await.expect("it opens");
+	let reply = said(host, "Again", &[person(BEA)]);
+	shelf.replied(NOTES, &opened.id, reply).await.expect("the reply lands");
+	shelf.resolved(NOTES, &opened.id).await.expect("the thread resolves");
+	let reopened = shelf.reopened(NOTES, &opened.id).await.expect("the thread reopens");
+
+	let told = |text: &str| LibraryCommentMentioned {
+		space_id: shelf.space_id.clone(),
+		item_name: NOTES.to_owned(),
+		item_kind: LibraryItemKind::Document,
+		thread_id: opened.id.clone(),
+		author_name: "Ada".to_owned(),
+		text: text.to_owned(),
+		people: vec![BEA.to_owned()],
+	};
+	let patience = Duration::from_secs(5);
+	assert_eq!(heard.recv_timeout(patience), Ok(told("Look here\nand there")));
+	assert_eq!(heard.recv_timeout(patience), Ok(told("Again")));
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+	assert_eq!(titles(&raised), Vec::<String>::new());
+	assert_eq!(shelf.counts().await, [(NOTES.to_owned(), 1)]);
+	assert_eq!(reopened.comments[0].mentions, named_twice);
+}
+
+#[tokio::test]
+async fn a_comment_naming_no_other_person_tells_and_notifies_nobody() {
+	let shelf = Shelf::of("mention-silent").await;
+	shelf.host_named("Ada").await;
+	let (raised, heard) = (shelf.counting_notices(), shelf.hearing_mentions());
+	let host = person(COMMENT_HOST_AUTHOR_ID);
+	let naming = |named: &[LibraryCommentParty]| said(host.clone(), "Tighten this", named);
+
+	let opened = shelf.opened_saying(NOTES, block("head01"), naming(&[])).await.expect("it opens");
+	shelf.replied(NOTES, &opened.id, naming(&[agent(NYX)])).await.expect("the reply lands");
+	shelf
+		.replied(NOTES, &opened.id, naming(std::slice::from_ref(&host)))
+		.await
+		.expect("the reply lands");
+
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+	assert_eq!(titles(&raised), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn a_mention_whose_author_has_no_name_to_show_stays_stored_and_tells_nobody() {
+	let shelf = Shelf::of("mention-unnamed").await;
+	let (raised, heard) = (shelf.counting_notices(), shelf.hearing_mentions());
+
+	let opening = said(person(BEA), "Look here", &[person(COMMENT_HOST_AUTHOR_ID)]);
+	let opened = shelf.opened_saying(NOTES, block("head01"), opening).await.expect("it opens");
+
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+	assert_eq!(titles(&raised), Vec::<String>::new());
+	assert_eq!(shelf.threads(NOTES).await, Ok(vec![opened]));
+}
+
+#[tokio::test]
+async fn the_person_a_mention_names_gets_one_notice_and_its_click_hands_the_thread_to_the_window() {
+	let shelf = Shelf::of("mention-raised").await;
+	let raised = shelf.counting_notices();
+	let window = WebviewWindowBuilder::new(shelf.app.handle(), "main", Default::default())
+		.build()
+		.expect("the window builds");
+	let (told, clicked) = mpsc::channel();
+	window.listen(COMMENT_MENTION_OPENED_EVENT, move |event| {
+		told.send(event.payload().to_owned()).expect("the test listens");
+	});
+	let mentioned = LibraryCommentMentioned {
+		space_id: "work".to_owned(),
+		item_name: NOTES.to_owned(),
+		item_kind: LibraryItemKind::Document,
+		thread_id: "t-1".to_owned(),
+		author_name: "Ada".to_owned(),
+		text: "\n  Look here  \nand there".to_owned(),
+		people: vec![BEA.to_owned()],
+	};
+	let on_the_computer_of = |person_id: &str| PersonHere {
+		person_id: person_id.to_owned(),
+		space_id: "joined-1".to_owned(),
+	};
+
+	raised_for(shelf.app.handle(), &on_the_computer_of("account-cyd"), mentioned.clone());
+	raised_for(shelf.app.handle(), &on_the_computer_of(BEA), mentioned);
+
+	let mut raised = mem::take(&mut *raised.lock().unwrap_or_else(PoisonError::into_inner));
+	assert_eq!(raised.len(), 1);
+	let notice = raised.remove(0);
+	assert_eq!(notice.title, "Ada mentioned you in notes.md");
+	assert_eq!(notice.body, "Look here");
+	notifications::activated(shelf.app.handle(), notice.clicked);
+	let clicked = clicked.recv_timeout(Duration::from_secs(5)).expect("the window hears");
+	assert_eq!(
+		serde_json::from_str::<Value>(&clicked).expect("a payload"),
+		json!({
+			"spaceId": "joined-1",
+			"itemName": NOTES,
+			"itemKind": "document",
+			"threadId": "t-1"
+		})
+	);
 }

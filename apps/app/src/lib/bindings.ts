@@ -377,6 +377,8 @@ export const LIBRARY_COMMENT_AGENT_TURNS_CHANGED_EVENT = "library://comment-agen
 
 export const LIBRARY_COMMENT_HOST_AUTHOR_ID = "host" as const;
 
+export const LIBRARY_COMMENT_MENTION_OPENED_EVENT = "library://comment-mention-opened" as const;
+
 export const LIBRARY_COMMENT_THREAD_CHANGED_EVENT = "library://comment-thread-changed" as const;
 
 export const LIBRARY_DOCUMENT_RENAMED_EVENT = "library://document-renamed" as const;
@@ -1307,6 +1309,13 @@ export type LibraryCommentAnchor = { kind: "block"; blockId: string } | { kind: 
 export type LibraryCommentCount = {
 	itemName: string,
 	openThreads: number,
+};
+
+export type LibraryCommentMentionOpened = {
+	spaceId: string,
+	itemName: string,
+	itemKind: LibraryItemKind,
+	threadId: string,
 };
 
 export type LibraryCommentParty = {

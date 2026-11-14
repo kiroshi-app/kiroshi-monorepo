@@ -7,6 +7,7 @@ pub mod join;
 pub(crate) mod member_link;
 mod member_wire;
 pub mod members;
+pub(crate) mod mentions;
 mod proxy;
 pub mod relay;
 mod roster_set;

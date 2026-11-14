@@ -1,6 +1,8 @@
 use serde::{de, Deserialize, Deserializer, Serialize};
 use tauri::{AppHandle, Runtime};
 
+use super::Clicked;
+
 pub const ACTIVATED_EVENT: &str = "notification://activated";
 
 #[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
@@ -40,19 +42,21 @@ pub async fn notification_show<R: Runtime>(
 	title: String,
 	body: String,
 ) {
-	show(app, target, title, body);
+	show(app, Clicked::Target(target), title, body);
 }
 
 #[cfg(target_os = "macos")]
-fn show<R: Runtime>(app: AppHandle<R>, target: NotificationTarget, title: String, body: String) {
-	super::macos::show(app, target, title, body);
+pub(super) fn show<R: Runtime>(app: AppHandle<R>, clicked: Clicked, title: String, body: String) {
+	super::macos::show(app, clicked, title, body);
 }
 
 #[cfg(not(target_os = "macos"))]
-fn show<R: Runtime>(app: AppHandle<R>, _target: NotificationTarget, title: String, body: String) {
+pub(super) fn show<R: Runtime>(app: AppHandle<R>, clicked: Clicked, title: String, body: String) {
 	use tauri_plugin_notification::NotificationExt;
 
-	let _ = app.notification().builder().title(title).body(body).show();
+	if let Err(failure) = app.notification().builder().title(title).body(body).show() {
+		eprintln!("the notification of {clicked} was not shown: {failure}");
+	}
 }
 
 #[cfg(test)]

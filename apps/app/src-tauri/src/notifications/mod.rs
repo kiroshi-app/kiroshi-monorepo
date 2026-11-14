@@ -2,16 +2,72 @@ pub mod commands;
 #[cfg(target_os = "macos")]
 mod macos;
 
-use tauri::{AppHandle, Runtime};
+use std::fmt;
 
-use crate::events::{self, NOTIFICATION_ACTIVATED};
+use tauri::{AppHandle, Manager, Runtime};
+
+use crate::events::{self, LIBRARY_COMMENT_MENTION_OPENED, NOTIFICATION_ACTIVATED};
+use crate::library::contract::LibraryCommentMentionOpened;
 use crate::window_controls;
 use commands::NotificationTarget;
 
+pub(crate) enum Clicked {
+	Target(NotificationTarget),
+	CommentMention(LibraryCommentMentionOpened),
+}
+
+impl fmt::Display for Clicked {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Clicked::Target(target) => write!(formatter, "{:?} {}", target.kind, target.id),
+			Clicked::CommentMention(mention) => write!(
+				formatter,
+				"comment thread {} of space {}",
+				mention.thread_id, mention.space_id
+			),
+		}
+	}
+}
+
+pub(crate) struct Notice {
+	pub(crate) title: String,
+	pub(crate) body: String,
+	pub(crate) clicked: Clicked,
+}
+
+pub(crate) struct SystemNotifications {
+	raise: Box<dyn Fn(Notice) + Send + Sync>,
+}
+
+impl SystemNotifications {
+	pub(crate) fn raising_with(raise: impl Fn(Notice) + Send + Sync + 'static) -> Self {
+		Self { raise: Box::new(raise) }
+	}
+}
+
+pub(crate) fn raise<R: Runtime>(app: &AppHandle<R>, notice: Notice) {
+	if window_controls::focused_app_window(app).is_some() {
+		return;
+	}
+	if app.try_state::<SystemNotifications>().is_none() {
+		let shown_by = app.clone();
+		app.manage(SystemNotifications::raising_with(move |notice| {
+			commands::show(shown_by.clone(), notice.clicked, notice.title, notice.body);
+		}));
+	}
+	(app.state::<SystemNotifications>().raise)(notice);
+}
+
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn activated<R: Runtime>(app: &AppHandle<R>, target: NotificationTarget) {
+pub(crate) fn activated<R: Runtime>(app: &AppHandle<R>, clicked: Clicked) {
 	let window = window_controls::receiving_window(app);
-	if let Err(failure) = events::emit_to(app, &window, NOTIFICATION_ACTIVATED, target) {
+	let emitted = match clicked {
+		Clicked::Target(target) => events::emit_to(app, &window, NOTIFICATION_ACTIVATED, target),
+		Clicked::CommentMention(mention) => {
+			events::emit_to(app, &window, LIBRARY_COMMENT_MENTION_OPENED, mention)
+		}
+	};
+	if let Err(failure) = emitted {
 		eprintln!("the notification activation did not reach the window {window}: {failure}");
 	}
 }
@@ -40,10 +96,9 @@ mod tests {
 	}
 
 	fn clicked(app: &App<MockRuntime>) {
-		activated(
-			app.handle(),
-			NotificationTarget { kind: NotificationKind::Conversation, id: "c-1".to_owned() },
-		);
+		let target =
+			NotificationTarget { kind: NotificationKind::Conversation, id: "c-1".to_owned() };
+		activated(app.handle(), Clicked::Target(target));
 	}
 
 	const CLICKED: &str = r#"{"kind":"conversation","id":"c-1"}"#;
