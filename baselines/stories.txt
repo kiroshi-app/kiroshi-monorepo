@@ -2114,6 +2114,7 @@ navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
 navigation-librarydocumenteditor--comment-draft-above-view-scrolls-into-view
 navigation-librarydocumenteditor--comment-draft-below-view-scrolls-into-view
+navigation-librarydocumenteditor--comment-draft-in-clipped-shell-scrolls-column-alone
 navigation-librarydocumenteditor--comment-draft-in-view-keeps-scroll
 navigation-librarydocumenteditor--comment-draft-scroll-never-animates
 navigation-librarydocumenteditor--comment-escape-closes-innermost
@@ -2123,6 +2124,7 @@ navigation-librarydocumenteditor--comment-mode-click-starts-block-comment
 navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-over-mention
 navigation-librarydocumenteditor--comment-mode-selection-starts-passage-comment
+navigation-librarydocumenteditor--comment-passage-draft-below-view-scrolls-into-view
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--doc-1-pins-at-rest
 navigation-librarydocumenteditor--doc-1-pins-at-rest-dark

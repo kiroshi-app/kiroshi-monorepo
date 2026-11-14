@@ -259,9 +259,19 @@ const DraftCard = ({ draft, anchor, participants }: DraftCardProps) => {
 	const card = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
-		card.current
-			?.querySelector('[data-slot="library-comment-composer"]')
-			?.scrollIntoView({ behavior: "instant", block: "nearest" })
+		const composer = card.current?.querySelector(
+			'[data-slot="library-comment-composer"]',
+		)
+		if (!card.current || !composer) return
+		const column = clippingBoxOf(card.current)
+		const box = composer.getBoundingClientRect()
+		const columnTop = column.getBoundingClientRect().top + column.clientTop
+		const above = box.top - columnTop
+		const below = box.bottom - columnTop - column.clientHeight
+		column.scrollBy({
+			behavior: "instant",
+			top: above < 0 ? above : Math.max(below, 0),
+		})
 	}, [])
 
 	return (
