@@ -10,7 +10,6 @@ use crate::agent::commands::{agent_start_or_resume_session, submit_prompt};
 use crate::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
 use crate::agent::translate::now_ms;
 use crate::conversations::context::{clipped, unfenced, UNTRUSTED_CLOSE, UNTRUSTED_OPEN};
-use crate::db::repositories::conversations::Bot;
 use crate::db::repositories::library::{AgentOfThread, ThreadOfItem};
 use crate::db::Database;
 use crate::events;
@@ -163,41 +162,38 @@ pub(super) async fn mentioned_agents(
 	database: &Database,
 	space_id: &str,
 	mentions: &[LibraryCommentParty],
-) -> Result<Vec<Bot>, LibraryError> {
-	let mut agent_ids: Vec<&str> = Vec::new();
-	for mention in mentions {
-		let is_new = !agent_ids.contains(&mention.id.as_str());
-		if mention.kind == LibraryCommentPartyKind::Agent && is_new {
-			agent_ids.push(&mention.id);
-		}
-	}
-	if agent_ids.is_empty() {
+) -> Result<Vec<String>, LibraryError> {
+	let is_mentioned = |agent_id: &str| {
+		mentions
+			.iter()
+			.any(|mention| mention.kind == LibraryCommentPartyKind::Agent && mention.id == agent_id)
+	};
+	if !mentions.iter().any(|mention| mention.kind == LibraryCommentPartyKind::Agent) {
 		return Ok(Vec::new());
 	}
-	let mut of_the_space = database.conversations().bots(Some(space_id.to_owned())).await?;
-	of_the_space.retain(|agent| agent_ids.contains(&agent.id.as_str()));
-	Ok(of_the_space)
+	let of_the_space = database.conversations().bots(Some(space_id.to_owned())).await?;
+	Ok(of_the_space.into_iter().map(|agent| agent.id).filter(|id| is_mentioned(id)).collect())
 }
 
 pub(super) fn summon<R: Runtime>(
 	app: &AppHandle<R>,
 	commented: &Commented,
 	thread: &LibraryCommentThread,
-	agents: Vec<Bot>,
+	agent_ids: Vec<String>,
 ) {
-	if agents.is_empty() {
+	if agent_ids.is_empty() {
 		return;
 	}
 	let turns = turns(app);
 	let prompt = prompt_for(&commented.briefed(thread.clone()));
 	let heard_comments = u32::try_from(thread.comments.len()).unwrap_or(u32::MAX);
-	for agent in agents {
-		let key = TurnKey { thread_id: thread.id.clone(), agent_id: agent.id.clone() };
+	for agent_id in agent_ids {
+		let key = TurnKey { thread_id: thread.id.clone(), agent_id: agent_id.clone() };
 		let turn = CommentTurn {
 			space_id: thread.space_id.clone(),
 			item_name: thread.item_name.clone(),
 			thread_id: thread.id.clone(),
-			agent_id: agent.id,
+			agent_id,
 			prompt: prompt.clone(),
 			heard_comments,
 			order: turns.joined(&thread.space_id, key),
@@ -212,19 +208,14 @@ pub(crate) async fn comment_agent_turns<R: Runtime>(
 	database: &Database,
 	space_id: String,
 ) -> Result<Vec<LibraryCommentAgentTurn>, LibraryError> {
-	let mut held = turns(app).working_in(&space_id);
-	let failed = database.library().failed_agent_turns(space_id).await?;
-	let is_working = |failed: &LibraryCommentAgentTurn, held: &[LibraryCommentAgentTurn]| {
-		held.iter().any(|working| {
+	let working = turns(app).working_in(&space_id);
+	let mut failed = database.library().failed_agent_turns(space_id).await?;
+	failed.retain(|failed| {
+		!working.iter().any(|working| {
 			working.thread_id == failed.thread_id && working.agent_id == failed.agent_id
 		})
-	};
-	for turn in failed {
-		if !is_working(&turn, &held) {
-			held.push(turn);
-		}
-	}
-	Ok(held)
+	});
+	Ok([working, failed].concat())
 }
 
 fn prompt_for(thread: &BriefedThread) -> String {
