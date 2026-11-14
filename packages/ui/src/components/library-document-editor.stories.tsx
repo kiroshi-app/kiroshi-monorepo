@@ -3911,35 +3911,39 @@ export const CodePassageScrolledOnLongLine = meta.story({
 
 const resolvedSnippet = snippetDocument(SNIPPET_SOURCE, RESOLVED_SESSION_THREAD)
 
+const expectResolvedPinWholeAbove = async (
+	canvasElement: HTMLElement,
+	line: Element,
+) => {
+	const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+	await expect(pin).toHaveAttribute("data-state", "resolved")
+	await expect(pin).toBeVisible()
+	await expectPinAbovePassageEnd(
+		pin,
+		shownPassageOf(blockOf(canvasElement, SNIPPET_BLOCK), SNIPPET_PASSAGE),
+	)
+	await expect(boxOf(pin).top).toBeLessThan(boxOf(line).top)
+	await expectDrawnWhole(pin)
+}
+
 export const CodeResolvedPinWholeAtRest = meta.story({
 	tags: ["test-only"],
 	args: resolvedSnippet,
-	play: async ({ canvasElement }) => {
-		const block = blockOf(canvasElement, SNIPPET_BLOCK)
-		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
-		await expect(pin).toHaveAttribute("data-state", "resolved")
-		await expect(pin).toBeVisible()
-		await expectPinAbovePassageEnd(pin, shownPassageOf(block, SNIPPET_PASSAGE))
-		await expect(boxOf(pin).top).toBeLessThan(
-			boxOf(snippetScrollerIn(block)).top,
-		)
-		await expectDrawnWhole(pin)
-	},
+	play: ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			snippetScrollerIn(blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
 })
 
 export const CodeResolvedPinWholeWhileFocused = meta.story({
 	tags: ["test-only"],
 	args: resolvedSnippet,
-	play: async ({ canvasElement }) => {
-		const block = blockOf(canvasElement, SNIPPET_BLOCK)
-		const field = await openBlock(canvasElement, block)
-		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
-		await expect(pin).toHaveAttribute("data-state", "resolved")
-		await expect(pin).toBeVisible()
-		await expectPinAbovePassageEnd(pin, shownPassageOf(block, SNIPPET_PASSAGE))
-		await expect(boxOf(pin).top).toBeLessThan(boxOf(field).top)
-		await expectDrawnWhole(pin)
-	},
+	play: async ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			await openBlock(canvasElement, blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
 })
 
 export const CodeFieldTypedSelectedAndTabbed = meta.story({
