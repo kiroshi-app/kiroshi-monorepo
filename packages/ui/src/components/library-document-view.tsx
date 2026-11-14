@@ -233,7 +233,7 @@ const LibraryDocumentColumn = ({
 				data-slot="library-document-column"
 				onMouseDown={onColumnMouseDown}
 				ref={isReadOnly ? scrollerRef : undefined}
-				tabIndex={isReadOnly && overflows ? 0 : undefined}
+				tabIndex={overflows ? 0 : undefined}
 			>
 				<article
 					className={cn(
