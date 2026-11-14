@@ -11,20 +11,21 @@ use tokio::sync::oneshot;
 use futures_util::future::join_all;
 
 use super::contract::{
-	LibraryBoardSummary, LibraryCommentAnchor, LibraryCommentCount, LibraryCommentParty,
-	LibraryCommentThread, LibraryCommentThreadState, LibraryDocument, LibraryDocumentState,
-	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem,
-	LibraryPresenceAt, LibraryTemplate,
+	LibraryBoardSummary, LibraryCommentAgentTurn, LibraryCommentAnchor, LibraryCommentCount,
+	LibraryCommentParty, LibraryCommentThread, LibraryCommentThreadState, LibraryDocument,
+	LibraryDocumentState, LibraryError, LibraryFile, LibraryImage, LibraryImport,
+	LibraryImportUrlError, LibraryItem, LibraryPresenceAt, LibraryTemplate,
 };
 use super::host::stop_writers;
 use super::presence::{seated_identity, share_presence, unseat_writer, Identity, Seat};
 use super::url_import::{admission_for, import_url};
 use super::{
-	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_threads, create_board,
-	create_document, delete_item, import, import_paths, list, open_comment_thread, open_document,
-	read_document, read_file, read_image, read_picked_image, read_thumbnail, rename_board,
-	rename_linked_document, reply_to_comment_thread, resolve, root, save, save_bytes, save_message,
-	set_comment_thread_state, summarise_board, templates, ClipboardPayload, Said,
+	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_agent_turns,
+	comment_threads, create_board, create_document, delete_item, import, import_paths, list,
+	open_comment_thread, open_document, read_document, read_file, read_image, read_picked_image,
+	read_thumbnail, rename_board, rename_linked_document, reply_to_comment_thread, resolve, root,
+	save, save_bytes, save_message, set_comment_thread_state, summarise_board, templates,
+	ClipboardPayload, Said,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
@@ -237,6 +238,17 @@ pub async fn library_comment_counts(
 ) -> Result<Vec<LibraryCommentCount>, LibraryError> {
 	let database = known_space(&state, &space_id).await?;
 	Ok(database.library().open_thread_counts(space_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_comment_agent_turns<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<LibraryCommentAgentTurn>, LibraryError> {
+	let database = known_space(&state, &space_id).await?;
+	comment_agent_turns(&app, database, space_id).await
 }
 
 #[tauri::command]

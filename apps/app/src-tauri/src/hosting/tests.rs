@@ -100,7 +100,7 @@ use crate::library::contract::{
 	DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
 };
 use crate::library::tests::YjsClient;
-use crate::library::Said;
+use crate::library::{CommentTurn, CommentTurns, Said};
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -868,6 +868,11 @@ async fn host_effect_applied(
 		"library_comment_counts" => {
 			let counted = database.library().open_thread_counts(text("spaceId")).await;
 			return answered_by_the_library(counted.map_err(LibraryError::from));
+		}
+		"library_comment_agent_turns" => {
+			return answered_by_the_library(
+				library::comment_agent_turns(effects.app(), &database, text("spaceId")).await,
+			);
 		}
 		"library_comment_create" => {
 			let (app, library) = (effects.app(), effects.library());
@@ -3958,6 +3963,11 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 		let mut guest = Guest::of_two_spaces("library-comments").await;
 		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
 		let by_the_member = json!({ "kind": "person", "id": A_JOINER });
+		let started = Arc::new(Mutex::new(Vec::<CommentTurn>::new()));
+		let kept = Arc::clone(&started);
+		app.manage(CommentTurns::starting_with(move |turn| {
+			kept.lock().expect("the turns are kept").push(turn);
+		}));
 
 		guest.refused("library_comment_create", a_library_comment_on_the_cover(ELSEWHERE)).await;
 		let created =
@@ -3982,6 +3992,8 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 			.await;
 		guest.refused("library_comment_counts", space_named(ELSEWHERE)).await;
 		let counted = guest.called("library_comment_counts", space_named(PERSONAL)).await;
+		guest.refused("library_comment_agent_turns", space_named(ELSEWHERE)).await;
+		let working = guest.called("library_comment_agent_turns", space_named(PERSONAL)).await;
 
 		let database = db::open(&guest.effects.database);
 		restore(app.clone()).await;
@@ -4028,6 +4040,21 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 		assert_eq!(reopened["body"]["state"], json!("open"), "{reopened}");
 		assert_eq!(read["body"], json!([reopened["body"]]), "{read}");
 		assert_eq!(counted["body"], json!([{ "itemName": "cover.png", "openThreads": 1 }]));
+		let summoned: Vec<(String, String, String)> = started
+			.lock()
+			.expect("the turns are kept")
+			.iter()
+			.map(|turn| (turn.space_id.clone(), turn.thread_id.clone(), turn.agent_id.clone()))
+			.collect();
+		assert_eq!(
+			summoned,
+			[(PERSONAL.to_owned(), thread_id.clone(), "b-mine".to_owned())],
+			"the comment of a member starts the turn a host comment starts, once"
+		);
+		assert_eq!(
+			working["body"],
+			json!([{ "threadId": thread_id, "agentId": "b-mine", "state": { "kind": "working" } }])
+		);
 		assert!(is_signed_in);
 		assert_ne!(by_the_host_person, by_the_member);
 		assert_eq!(
@@ -4047,6 +4074,7 @@ fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_ho
 				"library_comment_reopen",
 				"library_comment_threads",
 				"library_comment_counts",
+				"library_comment_agent_turns",
 				"library_comment_threads"
 			]
 		);

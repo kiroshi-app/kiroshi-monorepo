@@ -45,7 +45,7 @@ const QUESTION_REASON: &str = "a run cannot be asked a question";
 
 const PERMISSION_REASON: &str = "a run cannot be asked for a permission";
 
-const QUESTION_TOOL: &str = "AskUserQuestion";
+pub(crate) const QUESTION_TOOL: &str = "AskUserQuestion";
 
 const DEADLINE_REASON: &str = "the run outlived its deadline";
 
@@ -134,7 +134,9 @@ impl<R: Runtime> RunSink for Runner<R> {
 }
 
 async fn run<R: Runtime>(app: AppHandle<R>, timing: RunTiming, requested: RunRequested) {
-	let scope = match opened_scope(&app, &requested).await {
+	let opened =
+		opened_scope(&app, requested.conversation_id.clone(), requested.bot_id.clone()).await;
+	let scope = match opened {
 		Ok(scope) => scope,
 		Err(detail) => return close(&app, &requested, could_not_start(&detail)).await,
 	};
@@ -341,15 +343,16 @@ fn announce_report<R: Runtime>(app: &AppHandle<R>, report: ScopedEvent) {
 	}
 }
 
-async fn opened_scope<R: Runtime>(
+pub(crate) async fn opened_scope<R: Runtime>(
 	app: &AppHandle<R>,
-	requested: &RunRequested,
+	conversation_id: String,
+	bot_id: String,
 ) -> Result<RuntimeScope, String> {
 	let state = managed::<R, db::DatabaseState>(app, NO_DATABASE)?;
 	let opened = conversation_open_runtime_session(
 		state,
-		requested.conversation_id.clone(),
-		requested.bot_id.clone(),
+		conversation_id,
+		bot_id,
 		SystemClock.now_ms(),
 		None,
 		None,
@@ -394,7 +397,10 @@ async fn refused<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope, reason: &
 	}
 }
 
-async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
+pub(crate) async fn cancelled<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: &RuntimeScope,
+) -> Result<(), String> {
 	match cancel_session_turn(app, &*managed::<R, AgentState>(app, NO_AGENT)?, scope).await {
 		CancelOutcome::Failed { failures } => Err(detail_of(&failures)),
 		CancelOutcome::Cancelled | CancelOutcome::NothingToCancel => Ok(()),
@@ -407,7 +413,10 @@ async fn shut_down<R: Runtime>(app: &AppHandle<R>, run_id: &str, scope: RuntimeS
 	}
 }
 
-async fn shut<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> Result<(), String> {
+pub(crate) async fn shut<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: RuntimeScope,
+) -> Result<(), String> {
 	agent_shutdown(app.clone(), managed(app, NO_AGENT)?, scope)
 		.await
 		.map_err(|error| detail_of(&error))

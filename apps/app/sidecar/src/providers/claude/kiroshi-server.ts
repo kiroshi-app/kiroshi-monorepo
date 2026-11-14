@@ -5,6 +5,7 @@ import {
 
 import { applicationTools } from "./application-tools"
 import { bundleTools } from "./bundle-tools"
+import { commentTools } from "./comment-tools"
 import { type AttachScope, companionTools } from "./companion-tools"
 import {
 	DELEGATE_TOOL_NAME,
@@ -32,6 +33,7 @@ export const kiroshiTools = ({ session, ...scope }: KiroshiScope) => [
 	...bundleTools(session),
 	guideTool(),
 	...libraryTools(session, scope),
+	...commentTools(session),
 ]
 
 export const kiroshiServer = (

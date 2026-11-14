@@ -37,6 +37,7 @@ const SEARCH_MESSAGES: &str = "SELECT message_id, seq, conversation_id, kind, ti
 		JOIN messages ON messages.id = message_search.message_id
 		JOIN conversations ON conversations.id = messages.conversation_id
 		WHERE message_search MATCH ?1
+			AND conversations.kind <> 'comment'
 			AND (?9 IS NULL OR conversations.owner IS NULL OR conversations.owner = ?9)
 	)
 	WHERE space_id = ?6 AND (?8 IS NULL OR kind = ?8)

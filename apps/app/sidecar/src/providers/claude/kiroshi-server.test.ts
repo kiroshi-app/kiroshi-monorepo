@@ -120,7 +120,7 @@ describe("kiroshiServer", () => {
 		}
 	})
 
-	it("carries the delegate tool and every routine, mission, application, companion, bundle and library tool of the session", () => {
+	it("carries the delegate tool and every routine, mission, application, companion, bundle, library and comment tool of the session", () => {
 		expect(kiroshiTools(scope).map((held) => held.name)).toEqual([
 			"delegate",
 			"routine_list",
@@ -185,6 +185,9 @@ describe("kiroshiServer", () => {
 			"board_find",
 			"board_view",
 			"screenshot",
+			"comment_list",
+			"comment_read",
+			"comment_reply",
 		])
 	})
 

@@ -23,10 +23,10 @@ use super::contract::{
 use super::documents::{carets_at, text_of_state, BoardTarget, RemoveStep, WriteStep};
 use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Seated};
 use super::{
-	a_document, announce, announce_change, create_board, create_document, delete_item,
-	document_text, documents, encoded_content, import_path, item_at, list, overwrite_path,
-	read_document, rename_linked_document, resolve, root, space_dir, AcceptedType,
-	OverwriteRefusal,
+	a_document, announce, announce_change, briefed_comment_thread, create_board, create_document,
+	delete_item, document_text, documents, encoded_content, import_path, item_at, list,
+	listed_comment_threads, overwrite_path, read_document, rename_linked_document,
+	reply_to_comment_thread, resolve, root, space_dir, AcceptedType, OverwriteRefusal, Said,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
@@ -38,6 +38,7 @@ use crate::board::{
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
+use crate::db::repositories::library::ThreadOfItem;
 use crate::{db, events};
 use screenshot::{render, Rendered, Scale, ScreenshotBlock, ScreenshotTarget, Shot};
 
@@ -192,6 +193,9 @@ pub enum Operation {
 	BoardFind,
 	BoardView,
 	Screenshot,
+	CommentList,
+	CommentRead,
+	CommentReply,
 }
 
 #[derive(Debug, Deserialize)]
@@ -337,6 +341,21 @@ struct BlockNamed {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ThreadNamed {
+	name: String,
+	thread_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ThreadReplied {
+	name: String,
+	thread_id: String,
+	text: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BlocksInserted {
 	name: String,
 	after: Option<String>,
@@ -401,6 +420,13 @@ enum ItemRead {
 #[serde(rename_all = "camelCase")]
 struct Deleted {
 	name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommentReplied {
+	thread_id: String,
+	comments: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -1043,6 +1069,27 @@ impl<R: Runtime> Host for LibraryHost<R> {
 						Self::answered(self.document_shot(database, &root, &space_id, asked).await?)
 					}
 				}
+			}
+			Operation::CommentList => {
+				let Named { name } = Self::read(payload)?;
+				let listed = listed_comment_threads(&self.app, database, &root, &space_id, &name);
+				Self::answered(listed.await?)
+			}
+			Operation::CommentRead => {
+				let ThreadNamed { name, thread_id } = Self::read(payload)?;
+				let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+				Self::answered(briefed_comment_thread(&self.app, database, &root, thread).await?)
+			}
+			Operation::CommentReply => {
+				let ThreadReplied { name, thread_id, text } = Self::read(payload)?;
+				let said = Said::by_the_agent(self.agent(database).await?.id, text);
+				let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+				let replied =
+					reply_to_comment_thread(&self.app, database, &root, thread, said).await?;
+				Self::answered(CommentReplied {
+					thread_id: replied.id,
+					comments: replied.comments.len(),
+				})
 			}
 		}
 	}

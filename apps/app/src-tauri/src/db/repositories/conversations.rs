@@ -55,6 +55,7 @@ const CHAT_TITLE: &str = "Chat";
 const CHAT_KIND: &str = "main";
 pub const TOPIC_KIND: &str = "topic";
 pub const MISSION_KIND: &str = "mission";
+const COMMENT_KIND: &str = "comment";
 
 #[derive(Debug)]
 pub enum ConversationError {
@@ -810,6 +811,23 @@ pub(in crate::db) fn open_thread_under(
 			VALUES (?1, ?2, ?3, ?4, 0)",
 		params![id, bot_id, PARTICIPANT_ROLE, at],
 	)?;
+	Ok(id)
+}
+
+pub(in crate::db) fn open_comment_room(
+	transaction: &Transaction<'_>,
+	space_id: &str,
+	bot_id: &str,
+	title: &str,
+) -> Result<String, ConversationError> {
+	let id = Uuid::new_v4().to_string();
+	let at = now();
+	transaction.execute(
+		"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+		params![id, COMMENT_KIND, space_id, title, at],
+	)?;
+	seat(transaction, &id, bot_id, Some(space_id), PARTICIPANT_ROLE)?;
 	Ok(id)
 }
 

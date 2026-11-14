@@ -1,23 +1,35 @@
+use std::mem;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use serde_json::{json, Value};
 use tauri::{Listener, Manager};
 
 use super::*;
+use crate::agent::contract::RuntimeScope;
+use crate::agent::host::Host;
 use crate::board::BoardEdit;
+use crate::conversations::context::{UNTRUSTED_CLOSE, UNTRUSTED_OPEN};
 use crate::db;
+use crate::db::repositories::conversations::{BotIdentity, ChatOwner, DEFAULT_BOT_MODEL};
+use crate::db::repositories::library::AgentOfThread;
+use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
 use crate::library::commands::{
-	library_comment_counts, library_comment_create, library_comment_reopen, library_comment_reply,
-	library_comment_resolve, library_comment_threads, library_delete, library_rename_board,
-	library_rename_document,
+	library_comment_agent_turns, library_comment_counts, library_comment_create,
+	library_comment_reopen, library_comment_reply, library_comment_resolve,
+	library_comment_threads, library_delete, library_rename_board, library_rename_document,
 };
 use crate::library::contract::{
-	LibraryBoardPoint, LibraryCommentCount, COMMENT_THREAD_CHANGED_EVENT,
+	LibraryBoardPoint, LibraryCommentAgentTurn, LibraryCommentAgentTurnState,
+	LibraryCommentAgentTurnsChanged, LibraryCommentCount, LibraryCommentTurnFailure,
+	COMMENT_AGENT_TURNS_CHANGED_EVENT, COMMENT_THREAD_CHANGED_EVENT,
 };
 use crate::library::documents::BoardTarget;
+use crate::library::host::{LibraryHost, Operation};
 use crate::library::root;
 use crate::library::tests::{a_host, a_space, put, A_BOARD};
+use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::test_app::AppOfItsOwn;
 
 const A_DOCUMENT: &str = "# Launch ^head01\n\nShip the beta on Friday. ^para01\n";
@@ -66,6 +78,26 @@ fn the_six_anchors() -> [(&'static str, Anchor); 6] {
 	]
 }
 
+type Started = Arc<Mutex<Vec<CommentTurn>>>;
+
+fn taken(started: &Started) -> Vec<CommentTurn> {
+	mem::take(&mut *started.lock().unwrap_or_else(PoisonError::into_inner))
+}
+
+fn briefed_in(prompt: &str) -> Value {
+	let open = prompt.find(UNTRUSTED_OPEN).expect("the fence opens") + UNTRUSTED_OPEN.len();
+	let close = prompt.find(UNTRUSTED_CLOSE).expect("the fence closes");
+	serde_json::from_str(&prompt[open..close]).expect("the thread is fenced as JSON")
+}
+
+fn working(thread_id: &str, agent_id: &str) -> LibraryCommentAgentTurn {
+	LibraryCommentAgentTurn {
+		thread_id: thread_id.to_owned(),
+		agent_id: agent_id.to_owned(),
+		state: LibraryCommentAgentTurnState::Working,
+	}
+}
+
 struct Shelf {
 	app: AppOfItsOwn,
 	space_id: String,
@@ -85,6 +117,97 @@ impl Shelf {
 
 	fn database(&self) -> &db::Database {
 		self.app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	}
+
+	fn recording_turns(&self) -> Started {
+		let started = Started::default();
+		let kept = Arc::clone(&started);
+		self.app.manage(CommentTurns::starting_with(move |turn| {
+			kept.lock().unwrap_or_else(PoisonError::into_inner).push(turn);
+		}));
+		started
+	}
+
+	async fn an_agent_of(&self, space_id: &str, name: &str) -> String {
+		let identity = BotIdentity {
+			name: name.to_owned(),
+			title: String::new(),
+			model: DEFAULT_BOT_MODEL.to_owned(),
+			avatar_blot: None,
+			avatar_image_path: None,
+			instructions: String::new(),
+			denied_tools: Vec::new(),
+			effort: None,
+		};
+		self.database()
+			.conversations()
+			.create_bot(identity, Some(space_id.to_owned()), None)
+			.await
+			.expect("the agent is created")
+			.id
+	}
+
+	async fn an_agent(&self, name: &str) -> String {
+		self.an_agent_of(&self.space_id, name).await
+	}
+
+	async fn mentioning(&self, name: &str, anchor: Anchor, agent_id: &str) -> LibraryCommentThread {
+		self.opened_saying(name, anchor, said(person(BEA), "Tighten this", &[agent(agent_id)]))
+			.await
+			.expect("the thread opens")
+	}
+
+	async fn agent_turns(&self) -> Vec<LibraryCommentAgentTurn> {
+		library_comment_agent_turns(
+			self.app.handle().clone(),
+			self.app.state(),
+			self.space_id.clone(),
+		)
+		.await
+		.expect("the agent turns read")
+	}
+
+	async fn room_of(&self, thread: &LibraryCommentThread, agent_id: &str) -> String {
+		self.database()
+			.library()
+			.agent_turn_started(self.thread(&thread.item_name, &thread.id), agent_id.to_owned(), 7)
+			.await
+			.expect("the room opens")
+			.expect("the thread stands")
+	}
+
+	async fn said_in(&self, conversation_id: &str, agent_id: &str, text: &str) {
+		let messages = self.database().messages();
+		let turn = NewTurn {
+			id: "turn-1".to_owned(),
+			conversation_id: conversation_id.to_owned(),
+			started_at: 1,
+		};
+		messages.start_turn(turn).await.expect("the turn starts");
+		let message = NewAssistantMessage {
+			id: "message-1".to_owned(),
+			conversation_id: conversation_id.to_owned(),
+			turn_id: "turn-1".to_owned(),
+			author_bot_id: Some(agent_id.to_owned()),
+			replied_to_message_id: None,
+			created_at: 1,
+		};
+		messages.open_assistant_message(message).await.expect("the message opens");
+		messages.append_text("message-1".to_owned(), text.to_owned()).await.expect("the text");
+		messages
+			.finalize_message("message-1".to_owned(), TerminalState::Complete, None)
+			.await
+			.expect("the message completes");
+	}
+
+	fn host_of(&self, room: &str, agent_id: &str) -> LibraryHost<tauri::test::MockRuntime> {
+		let scope = RuntimeScope {
+			conversation_id: room.to_owned(),
+			bot_id: agent_id.to_owned(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 0,
+		};
+		LibraryHost::new(self.app.handle().clone(), scope)
 	}
 
 	fn thread(&self, name: &str, id: &str) -> ThreadOfItem {
@@ -526,4 +649,329 @@ async fn a_relayed_caller_nobody_vouches_for_is_refused_and_stores_nothing() {
 	assert_eq!(replied, Err(LibraryError::UnknownAuthor));
 	assert_eq!(shelf.threads(NOTES).await, Ok(vec![by_the_host]));
 	assert_eq!(shelf.stored_rows("library_comments").await, 1);
+}
+
+#[tokio::test]
+async fn a_comment_mentioning_an_agent_of_the_space_starts_one_turn_carrying_the_thread_and_its_target(
+) {
+	let shelf = Shelf::of("summons").await;
+	let started = shelf.recording_turns();
+	let nyx = shelf.an_agent("Nyx").await;
+	let kinds = [(NOTES, "document"), (COVER, "image"), (PLAN, "board")];
+	let target_texts = [Some("Launch"), Some("Ship the beta on Friday."), None, None, None, None];
+
+	for ((name, anchor), target_text) in the_six_anchors().into_iter().zip(target_texts) {
+		let opened = shelf.mentioning(name, anchor.clone(), &nyx).await;
+		let turns = taken(&started);
+
+		assert_eq!(turns.len(), 1, "{anchor:?}");
+		let turn = &turns[0];
+		assert_eq!(
+			(turn.space_id.as_str(), turn.item_name.as_str(), turn.thread_id.as_str()),
+			(shelf.space_id.as_str(), name, opened.id.as_str())
+		);
+		assert_eq!(turn.agent_id, nyx, "{anchor:?}");
+		assert!(turn.prompt.contains(&format!("threadId {:?}", opened.id)), "{}", turn.prompt);
+		assert_eq!(turn.prompt.matches(UNTRUSTED_OPEN).count(), 1, "{}", turn.prompt);
+		let briefed = briefed_in(&turn.prompt);
+		let kind = kinds.iter().find(|(held, _)| *held == name).map(|(_, kind)| *kind);
+		assert_eq!(briefed["itemName"], json!(name));
+		assert_eq!(briefed["itemKind"], json!(kind));
+		assert_eq!(briefed["threadId"], json!(opened.id));
+		assert_eq!(briefed["state"], json!("open"));
+		assert_eq!(briefed["target"], json!(anchor));
+		assert_eq!(briefed["targetMissing"], json!(false));
+		assert_eq!(briefed["comments"], json!(opened.comments));
+		match target_text {
+			Some(text) => assert!(
+				briefed["targetText"].as_str().is_some_and(|held| held.contains(text)),
+				"{briefed}"
+			),
+			None => assert_eq!(briefed["targetText"], Value::Null, "{anchor:?}"),
+		}
+	}
+}
+
+#[tokio::test]
+async fn a_reply_mentioning_an_agent_starts_one_turn_carrying_every_comment_in_order() {
+	let shelf = Shelf::of("summons-reply").await;
+	let started = shelf.recording_turns();
+	let nyx = shelf.an_agent("Nyx").await;
+	let opened = shelf.opened_saying(NOTES, block("para01"), said(person(BEA), "Too long", &[]));
+	let opened = opened.await.expect("the thread opens");
+	let after_the_opening = taken(&started).len();
+
+	let reply = said(person(BEA), "Shorten it", &[agent(&nyx)]);
+	shelf.replied(NOTES, &opened.id, reply).await.expect("the reply lands");
+	let turns = taken(&started);
+
+	assert_eq!(after_the_opening, 0, "a comment without a mention started a turn");
+	assert_eq!(turns.len(), 1);
+	assert_eq!((turns[0].thread_id.as_str(), turns[0].agent_id.as_str()), (&*opened.id, &*nyx));
+	let said_in_order: Vec<Value> = briefed_in(&turns[0].prompt)["comments"]
+		.as_array()
+		.expect("the comments are listed")
+		.iter()
+		.map(|comment| comment["text"].clone())
+		.collect();
+	assert_eq!(said_in_order, [json!("Too long"), json!("Shorten it")]);
+}
+
+#[tokio::test]
+async fn one_turn_starts_per_agent_of_the_space_mentioned_and_none_for_anyone_else() {
+	let shelf = Shelf::of("summons-each").await;
+	let started = shelf.recording_turns();
+	let nyx = shelf.an_agent("Nyx").await;
+	let bean = shelf.an_agent("Bean").await;
+	let elsewhere = a_space(&shelf.app, "Elsewhere").await;
+	let stranger = shelf.an_agent_of(&elsewhere, "Stranger").await;
+	let opened_mentioning = |mentions: Vec<LibraryCommentParty>| {
+		shelf.opened_saying(NOTES, block("head01"), said(person(BEA), "Look", &mentions))
+	};
+
+	let nobody = opened_mentioning(Vec::new()).await.expect("the thread opens");
+	opened_mentioning(vec![person(BEA)]).await.expect("the thread opens");
+	opened_mentioning(vec![agent(&stranger), agent("bot-unknown")])
+		.await
+		.expect("the thread opens");
+	let without_an_agent_of_the_space = taken(&started).len();
+	let both = opened_mentioning(vec![
+		agent(&nyx),
+		agent(&bean),
+		agent(&nyx),
+		person(BEA),
+		agent(&stranger),
+	])
+	.await
+	.expect("the thread opens");
+	let mut summoned: Vec<(String, String)> =
+		taken(&started).into_iter().map(|turn| (turn.thread_id, turn.agent_id)).collect();
+	summoned.sort();
+	let mut expected = vec![(both.id.clone(), nyx.clone()), (both.id.clone(), bean.clone())];
+	expected.sort();
+	let mut held = shelf.agent_turns().await;
+	held.sort_by(|one, other| one.agent_id.cmp(&other.agent_id));
+	let mut held_working = vec![working(&both.id, &nyx), working(&both.id, &bean)];
+	held_working.sort_by(|one, other| one.agent_id.cmp(&other.agent_id));
+
+	assert_eq!(without_an_agent_of_the_space, 0);
+	assert_eq!(summoned, expected);
+	assert_eq!(held, held_working);
+	assert!(held.iter().all(|turn| turn.thread_id != nobody.id));
+}
+
+#[tokio::test]
+async fn the_reply_of_the_agent_lands_in_the_thread_under_its_name_announced_and_starts_no_turn() {
+	let shelf = Shelf::of("agent-reply").await;
+	let started = shelf.recording_turns();
+	let nyx = shelf.an_agent("Nyx").await;
+	let opened = shelf.mentioning(NOTES, passage("para01", "the beta"), &nyx).await;
+	let summoned = taken(&started);
+	let room = shelf.room_of(&opened, &nyx).await;
+	let host = shelf.host_of(&room, &nyx);
+	let replies = shelf.database().library();
+	let of_the_agent = || AgentOfThread { thread_id: opened.id.clone(), agent_id: nyx.clone() };
+	let had_replied = replies.agent_replied_from(of_the_agent(), 1).await;
+	let (told, heard) = mpsc::channel();
+	shelf.app.listen_any(COMMENT_THREAD_CHANGED_EVENT, move |event| {
+		let changed: LibraryCommentThreadChanged =
+			serde_json::from_str(event.payload()).expect("a payload");
+		told.send(changed).expect("the test listens");
+	});
+	let on_the_thread = json!({ "name": NOTES, "threadId": opened.id });
+	let saying = |text: &str| json!({ "name": NOTES, "threadId": opened.id, "text": text });
+
+	let listed = host.served(Operation::CommentList, json!({ "name": NOTES })).await;
+	let read = host.served(Operation::CommentRead, on_the_thread).await;
+	let replied = host.served(Operation::CommentReply, saying("Done.")).await;
+	let blank = host.served(Operation::CommentReply, saying(" ")).await;
+	let gone = json!({ "name": NOTES, "threadId": "gone", "text": "Done." });
+	let unknown = host.served(Operation::CommentReply, gone).await;
+
+	let threads = shelf.threads(NOTES).await.expect("the threads read");
+	let announced = heard.recv_timeout(Duration::from_secs(5)).expect("the reply was announced");
+	assert_eq!(
+		listed.expect("the threads are listed"),
+		json!([{
+			"threadId": opened.id,
+			"state": "open",
+			"target": opened.anchor,
+			"targetMissing": false,
+			"comments": 1,
+			"opening": "Tighten this"
+		}])
+	);
+	assert_eq!(read.expect("the thread is read"), briefed_in(&summoned[0].prompt));
+	assert_eq!(replied.expect("the reply lands"), json!({ "threadId": opened.id, "comments": 2 }));
+	assert!(blank.is_err(), "a blank reply was stored");
+	assert!(unknown.is_err(), "a reply landed in a thread the item does not hold");
+	assert_eq!(threads.len(), 1);
+	let comments = &threads[0].comments;
+	assert_eq!(comments.len(), 2);
+	assert_eq!(
+		(&comments[1].author, comments[1].text.as_str(), comments[1].mentions.len()),
+		(&agent(&nyx), "Done.", 0)
+	);
+	assert_eq!(announced.thread, threads[0]);
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+	assert!(taken(&started).is_empty(), "the reply of an agent started a turn");
+	assert!(!had_replied.expect("the replies read"), "a reply was read before the agent spoke");
+	assert!(replies.agent_replied_from(of_the_agent(), 1).await.expect("the replies read"));
+	assert!(!replies.agent_replied_from(of_the_agent(), 2).await.expect("the replies read"));
+}
+
+#[tokio::test]
+async fn the_room_behind_a_thread_is_listed_nowhere_and_leaves_with_the_item() {
+	let shelf = Shelf::of("room").await;
+	shelf.recording_turns();
+	let nyx = shelf.an_agent("Nyx").await;
+	let opened = shelf.mentioning(NOTES, block("head01"), &nyx).await;
+	let conversations = shelf.database().conversations();
+
+	let room = shelf.room_of(&opened, &nyx).await;
+	let again = shelf.room_of(&opened, &nyx).await;
+	let kind = conversations.kind(room.clone()).await.expect("the kind reads");
+	let of_the_space =
+		conversations.conversations(shelf.space_id.clone()).await.expect("the rooms list");
+	let in_the_feed =
+		conversations.conversation_in_page(room.clone()).await.expect("the feed reads");
+	let listed = conversations.listed_conversation(room.clone()).await.expect("the list reads");
+	let seats = conversations.seats(room.clone()).await.expect("the seats read");
+	shelf.said_in(&room, &nyx, "Tightened the heading").await;
+	let found = shelf
+		.database()
+		.search()
+		.messages(
+			MessageSearchQuery {
+				text: "Tightened".to_owned(),
+				space_id: shelf.space_id.clone(),
+				kind: None,
+			},
+			None,
+		)
+		.await
+		.expect("the messages are searched");
+	let scope =
+		CatalogueScope { query: String::new(), space_id: shelf.space_id.clone(), kind: None };
+	let catalogued = shelf.database().catalogue().search(scope, None).await;
+	let catalogued = catalogued.expect("the catalogue is searched");
+	let is_shown_to_a_member = shelf
+		.database()
+		.space_children()
+		.shows_conversation(shelf.space_id.clone(), room.clone(), ChatOwner::Host)
+		.await
+		.expect("the reach reads");
+	library_delete(
+		shelf.app.handle().clone(),
+		shelf.app.state(),
+		shelf.space_id.clone(),
+		NOTES.to_owned(),
+	)
+	.await
+	.expect("the item is deleted");
+
+	assert_eq!(again, room, "a second turn of the agent on the thread opened another room");
+	assert_eq!(kind.as_deref(), Some("comment"));
+	assert!(of_the_space.iter().all(|held| held.id != room));
+	assert!(in_the_feed.is_none(), "the room is in the sidebar feed");
+	assert!(listed.is_none(), "the room is in the conversation list");
+	assert!(found.is_empty(), "a message of the room is found by the search: {found:?}");
+	assert!(catalogued.chats.iter().all(|chat| chat.conversation_id != room));
+	assert!(!is_shown_to_a_member, "the room is reachable as a conversation of the Space");
+	assert_eq!(seats.iter().map(|seat| seat.bot_id.as_str()).collect::<Vec<_>>(), [nyx.as_str()]);
+	assert_eq!(conversations.kind(room).await.expect("the kind reads"), None);
+}
+
+#[tokio::test]
+async fn a_turn_that_cannot_run_records_a_failure_on_the_thread_and_clears_the_working_state() {
+	let shelf = Shelf::of("turn-failed").await;
+	let nyx = shelf.an_agent("Nyx").await;
+	let (told, heard) = mpsc::channel();
+	shelf.app.listen_any(COMMENT_AGENT_TURNS_CHANGED_EVENT, move |event| {
+		let changed: LibraryCommentAgentTurnsChanged =
+			serde_json::from_str(event.payload()).expect("a payload");
+		told.send(changed).expect("the test listens");
+	});
+
+	let opened = shelf.mentioning(NOTES, block("head01"), &nyx).await;
+	let changed = LibraryCommentAgentTurnsChanged {
+		space_id: shelf.space_id.clone(),
+		thread_id: opened.id.clone(),
+		agent_id: nyx.clone(),
+	};
+	let announced: Vec<_> = (0..2)
+		.map(|_| heard.recv_timeout(Duration::from_secs(5)).expect("a change was announced"))
+		.collect();
+	let after_the_turn = shelf.agent_turns().await;
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_a_start_with_nothing_running = shelf.agent_turns().await;
+	let announced_by_that_start = heard.recv_timeout(Duration::from_millis(100));
+	shelf.room_of(&opened, &nyx).await;
+	let after_a_new_turn_took_the_room = shelf.agent_turns().await;
+
+	assert_eq!(announced, [changed.clone(), changed]);
+	assert_eq!(after_a_start_with_nothing_running, after_the_turn);
+	assert!(announced_by_that_start.is_err(), "a settled turn was still marked running");
+	assert_eq!(after_the_turn.len(), 1, "{after_the_turn:?}");
+	assert_eq!(
+		(after_the_turn[0].thread_id.as_str(), after_the_turn[0].agent_id.as_str()),
+		(opened.id.as_str(), nyx.as_str())
+	);
+	assert!(matches!(
+		after_the_turn[0].state,
+		LibraryCommentAgentTurnState::Failed {
+			reason: LibraryCommentTurnFailure::TurnFailed,
+			failed_at: 1..
+		}
+	));
+	assert_eq!(after_a_new_turn_took_the_room, []);
+}
+
+#[tokio::test]
+async fn a_turn_left_running_by_a_quit_reads_failed_once_the_app_starts_again() {
+	let shelf = Shelf::of("turn-cut").await;
+	let nyx = shelf.an_agent("Nyx").await;
+	let bean = shelf.an_agent("Bean").await;
+	let cut = shelf.opened(NOTES, block("head01")).await;
+	let settled = shelf.opened(NOTES, block("para01")).await;
+	let (told, heard) = mpsc::channel();
+	shelf.app.listen_any(COMMENT_AGENT_TURNS_CHANGED_EVENT, move |event| {
+		let changed: LibraryCommentAgentTurnsChanged =
+			serde_json::from_str(event.payload()).expect("a payload");
+		told.send(changed).expect("the test listens");
+	});
+	shelf.room_of(&cut, &nyx).await;
+	shelf.room_of(&settled, &bean).await;
+	let of_the_settled = AgentOfThread { thread_id: settled.id.clone(), agent_id: bean.clone() };
+	shelf.database().library().agent_turn_replied(of_the_settled).await.expect("the turn settles");
+	let with_no_live_turn = shelf.agent_turns().await;
+
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_the_start = shelf.agent_turns().await;
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_another_start = shelf.agent_turns().await;
+
+	assert_eq!(with_no_live_turn, [], "a persisted running mark read as a working turn");
+	assert_eq!(after_the_start.len(), 1, "{after_the_start:?}");
+	assert_eq!(
+		(after_the_start[0].thread_id.as_str(), after_the_start[0].agent_id.as_str()),
+		(cut.id.as_str(), nyx.as_str())
+	);
+	assert!(matches!(
+		after_the_start[0].state,
+		LibraryCommentAgentTurnState::Failed {
+			reason: LibraryCommentTurnFailure::TurnFailed,
+			failed_at: 8..
+		}
+	));
+	assert_eq!(after_another_start, after_the_start);
+	assert_eq!(
+		heard.recv_timeout(Duration::from_secs(5)).expect("the failure was announced"),
+		LibraryCommentAgentTurnsChanged {
+			space_id: shelf.space_id.clone(),
+			thread_id: cut.id.clone(),
+			agent_id: nyx.clone(),
+		}
+	);
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
 }

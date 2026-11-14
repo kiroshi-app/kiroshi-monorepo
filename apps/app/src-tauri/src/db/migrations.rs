@@ -79,6 +79,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 70, statements: OPEN_TURNS_BY_CONVERSATION },
 	Migration { version: 71, statements: MAIN_CONVERSATION_OWNER },
 	Migration { version: 72, statements: LIBRARY_COMMENTS },
+	Migration { version: 73, statements: COMMENT_AGENT_TURNS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1455,6 +1456,86 @@ CREATE TABLE library_comments (
 );
 ";
 
+const COMMENT_AGENT_TURNS: &str = "
+DROP TRIGGER messages_leave_the_index_with_their_conversation;
+DROP TRIGGER conversations_are_active_from_their_creation;
+DROP TRIGGER main_conversations_belong_to_the_host_unless_owned;
+
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE conversations RENAME TO conversations_without_comment_rooms;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE TABLE conversations (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL CHECK (kind IN ('main', 'topic', 'mission', 'comment')),
+	title TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	archived_at INTEGER,
+	pin_position INTEGER,
+	space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
+	section_id TEXT REFERENCES sections(id) ON DELETE SET NULL,
+	instructions TEXT NOT NULL DEFAULT '',
+	last_activity_at INTEGER NOT NULL DEFAULT 0,
+	icon TEXT,
+	color INTEGER CHECK (color BETWEEN 0 AND 359),
+	owner TEXT CHECK (owner IS NULL OR kind = 'main')
+);
+
+INSERT INTO conversations (id, kind, title, created_at, updated_at, archived_at, pin_position,
+		space_id, section_id, instructions, last_activity_at, icon, color, owner)
+	SELECT id, kind, title, created_at, updated_at, archived_at, pin_position,
+		space_id, section_id, instructions, last_activity_at, icon, color, owner
+	FROM conversations_without_comment_rooms;
+
+DROP TABLE conversations_without_comment_rooms;
+
+CREATE INDEX conversations_of_space ON conversations (space_id) WHERE kind = 'topic';
+
+CREATE INDEX conversations_and_solos_by_activity
+	ON conversations (space_id, last_activity_at, id) WHERE kind IN ('topic', 'main');
+
+CREATE INDEX mission_threads_of_space ON conversations (space_id) WHERE kind = 'mission';
+
+CREATE TRIGGER messages_leave_the_index_with_their_conversation
+AFTER DELETE ON conversations
+BEGIN
+	DELETE FROM message_search WHERE conversation_id = OLD.id;
+END;
+
+CREATE TRIGGER conversations_are_active_from_their_creation
+AFTER INSERT ON conversations
+WHEN NEW.last_activity_at < NEW.created_at
+BEGIN
+	UPDATE conversations SET last_activity_at = NEW.created_at WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER main_conversations_belong_to_the_host_unless_owned
+AFTER INSERT ON conversations
+WHEN NEW.kind = 'main' AND NEW.owner IS NULL
+BEGIN
+	UPDATE conversations SET owner = 'host' WHERE id = NEW.id;
+END;
+
+CREATE TABLE library_comment_agent_turns (
+	thread_id TEXT NOT NULL REFERENCES library_comment_threads (id) ON DELETE CASCADE,
+	agent_id TEXT NOT NULL REFERENCES bots (id) ON DELETE CASCADE,
+	conversation_id TEXT UNIQUE REFERENCES conversations (id) ON DELETE SET NULL,
+	failure TEXT CHECK (failure IN ('noReply', 'turnFailed')),
+	failed_at INTEGER,
+	running_since INTEGER,
+	PRIMARY KEY (thread_id, agent_id),
+	CHECK ((failure IS NULL) = (failed_at IS NULL)),
+	CHECK (running_since IS NULL OR failure IS NULL)
+);
+
+CREATE TRIGGER comment_rooms_leave_with_their_agent_turn
+AFTER DELETE ON library_comment_agent_turns
+BEGIN
+	DELETE FROM conversations WHERE id = OLD.conversation_id AND kind = 'comment';
+END;
+";
+
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =
 	"UPDATE spaces SET colour = NULL WHERE id = 'personal';";
 
@@ -1583,6 +1664,7 @@ mod tests {
 	const MESSAGE_WEB_SOURCES_STEP: u32 = 68;
 	const MESSAGE_DOCUMENTS_STEP: u32 = 69;
 	const MAIN_CONVERSATION_OWNER_STEP: u32 = 71;
+	const COMMENT_AGENT_TURNS_STEP: u32 = 73;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -5407,6 +5489,122 @@ mod tests {
 				assert!(set(refused).is_err(), "{table}.{column} stored {refused}");
 			}
 		}
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+	fn conversations_shape(connection: &Connection) -> Vec<String> {
+		let described = |query: &str| -> Vec<String> {
+			let mut statement = connection.prepare(query).expect("prepare");
+			let columns = statement.column_count();
+			statement
+				.query_map([], |row| {
+					(0..columns)
+						.map(|at| row.get::<_, rusqlite::types::Value>(at))
+						.collect::<rusqlite::Result<Vec<_>>>()
+				})
+				.expect("query")
+				.map(|row| format!("{:?}", row.expect("row")))
+				.collect()
+		};
+		[
+			described("SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('conversations')"),
+			described(
+				"SELECT type, name FROM sqlite_master
+					WHERE tbl_name = 'conversations' AND type IN ('index', 'trigger')
+						AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
+			),
+			described("SELECT * FROM conversations ORDER BY id"),
+		]
+		.concat()
+	}
+
+	#[test]
+	fn conversations_stored_before_the_comment_rooms_step_keep_rows_columns_indexes_and_triggers() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(COMMENT_AGENT_TURNS_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+				INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id, owner)
+					VALUES ('c1', 'main', 'Chat', 1, 2, 'personal', 'account-bea');
+				INSERT INTO conversations (id, kind, title, created_at, updated_at, archived_at,
+						pin_position, space_id, instructions, last_activity_at, icon, color)
+					VALUES ('c2', 'topic', 'Launch', 3, 4, 5, 6, 'personal', 'Be brief.', 7,
+						'rocket', 210);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id)
+					VALUES ('c3', 'mission', 'Fix it', 8, 9, 'personal');
+				INSERT INTO conversation_participants
+					(conversation_id, bot_id, role, joined_at, join_seq)
+					VALUES ('c2', 'b1', 'lead', 1, 0);
+				INSERT INTO library_comment_threads (id, space_id, item_name, anchor, created_at)
+					VALUES ('t1', 'personal', 'notes.md', '{}', 1);",
+			)
+			.expect("the conversations this build upgrades from");
+		let shipped = conversations_shape(&connection);
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			conversations_shape(&connection),
+			shipped,
+			"the rebuild changed a column, an index, a trigger or a row it was only meant to carry"
+		);
+		let orphans: i64 = connection
+			.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| row.get(0))
+			.expect("the check runs");
+		assert_eq!(orphans, 0, "the rebuild left a row pointing at no conversation");
+		let seats: i64 = connection
+			.query_row(
+				"SELECT count(*) FROM conversation_participants WHERE conversation_id = 'c2'",
+				[],
+				|row| row.get(0),
+			)
+			.expect("query");
+		assert_eq!(seats, 1, "the rebuild erased the seats of a carried conversation");
+		let unknown_kind = write(
+			&connection,
+			"INSERT INTO conversations (id, kind, title, created_at, updated_at)
+				VALUES ('c9', 'draft', 'Nope', 1, 1)",
+		);
+		assert!(unknown_kind.is_err(), "a kind outside the schema was stored");
+		connection
+			.execute_batch(
+				"INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id)
+					VALUES ('c4', 'main', 'Chat', 10, 10, 'personal'),
+						('c5', 'comment', 'notes.md', 11, 11, 'personal');
+				INSERT INTO library_comment_agent_turns
+					(thread_id, agent_id, conversation_id, running_since)
+					VALUES ('t1', 'b1', 'c5', 12);",
+			)
+			.expect("a comment room is a kind the schema knows");
+		let running_and_failed = write(
+			&connection,
+			"UPDATE library_comment_agent_turns SET failure = 'turnFailed', failed_at = 13",
+		);
+		assert!(running_and_failed.is_err(), "a turn was stored both running and failed");
+		let held: (String, i64) = connection
+			.query_row(
+				"SELECT owner, last_activity_at FROM conversations WHERE id = 'c4'",
+				[],
+				|row| Ok((row.get(0)?, row.get(1)?)),
+			)
+			.expect("query");
+		assert_eq!(held, ("host".to_owned(), 10), "an insert trigger was lost in the rebuild");
+
+		write(&connection, "DELETE FROM library_comment_threads WHERE id = 't1'")
+			.expect("the thread is deleted");
+
+		let rooms: i64 = connection
+			.query_row("SELECT count(*) FROM conversations WHERE kind = 'comment'", [], |row| {
+				row.get(0)
+			})
+			.expect("query");
+		assert_eq!(rooms, 0, "a comment room outlived the thread it stood behind");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
