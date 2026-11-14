@@ -19,7 +19,7 @@ use crate::db::Database;
 use crate::events;
 use crate::hosting::authorship::Caller;
 
-pub(crate) use turns::comment_agent_turns;
+pub(crate) use turns::{comment_agent_turns, fail_comment_turns_cut_by_a_quit};
 #[cfg(test)]
 pub(crate) use turns::{CommentTurn, CommentTurns};
 

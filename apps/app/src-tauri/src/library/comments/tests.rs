@@ -170,7 +170,7 @@ impl Shelf {
 	async fn room_of(&self, thread: &LibraryCommentThread, agent_id: &str) -> String {
 		self.database()
 			.library()
-			.comment_room(self.thread(&thread.item_name, &thread.id), agent_id.to_owned())
+			.agent_turn_started(self.thread(&thread.item_name, &thread.id), agent_id.to_owned(), 7)
 			.await
 			.expect("the room opens")
 			.expect("the thread stands")
@@ -903,10 +903,15 @@ async fn a_turn_that_cannot_run_records_a_failure_on_the_thread_and_clears_the_w
 		.map(|_| heard.recv_timeout(Duration::from_secs(5)).expect("a change was announced"))
 		.collect();
 	let after_the_turn = shelf.agent_turns().await;
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_a_start_with_nothing_running = shelf.agent_turns().await;
+	let announced_by_that_start = heard.recv_timeout(Duration::from_millis(100));
 	shelf.room_of(&opened, &nyx).await;
 	let after_a_new_turn_took_the_room = shelf.agent_turns().await;
 
 	assert_eq!(announced, [changed.clone(), changed]);
+	assert_eq!(after_a_start_with_nothing_running, after_the_turn);
+	assert!(announced_by_that_start.is_err(), "a settled turn was still marked running");
 	assert_eq!(after_the_turn.len(), 1, "{after_the_turn:?}");
 	assert_eq!(
 		(after_the_turn[0].thread_id.as_str(), after_the_turn[0].agent_id.as_str()),
@@ -920,4 +925,53 @@ async fn a_turn_that_cannot_run_records_a_failure_on_the_thread_and_clears_the_w
 		}
 	));
 	assert_eq!(after_a_new_turn_took_the_room, []);
+}
+
+#[tokio::test]
+async fn a_turn_left_running_by_a_quit_reads_failed_once_the_app_starts_again() {
+	let shelf = Shelf::of("turn-cut").await;
+	let nyx = shelf.an_agent("Nyx").await;
+	let bean = shelf.an_agent("Bean").await;
+	let cut = shelf.opened(NOTES, block("head01")).await;
+	let settled = shelf.opened(NOTES, block("para01")).await;
+	let (told, heard) = mpsc::channel();
+	shelf.app.listen_any(COMMENT_AGENT_TURNS_CHANGED_EVENT, move |event| {
+		let changed: LibraryCommentAgentTurnsChanged =
+			serde_json::from_str(event.payload()).expect("a payload");
+		told.send(changed).expect("the test listens");
+	});
+	shelf.room_of(&cut, &nyx).await;
+	shelf.room_of(&settled, &bean).await;
+	let of_the_settled = AgentOfThread { thread_id: settled.id.clone(), agent_id: bean.clone() };
+	shelf.database().library().agent_turn_replied(of_the_settled).await.expect("the turn settles");
+	let with_no_live_turn = shelf.agent_turns().await;
+
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_the_start = shelf.agent_turns().await;
+	fail_comment_turns_cut_by_a_quit(shelf.app.handle()).await;
+	let after_another_start = shelf.agent_turns().await;
+
+	assert_eq!(with_no_live_turn, [], "a persisted running mark read as a working turn");
+	assert_eq!(after_the_start.len(), 1, "{after_the_start:?}");
+	assert_eq!(
+		(after_the_start[0].thread_id.as_str(), after_the_start[0].agent_id.as_str()),
+		(cut.id.as_str(), nyx.as_str())
+	);
+	assert!(matches!(
+		after_the_start[0].state,
+		LibraryCommentAgentTurnState::Failed {
+			reason: LibraryCommentTurnFailure::TurnFailed,
+			failed_at: 8..
+		}
+	));
+	assert_eq!(after_another_start, after_the_start);
+	assert_eq!(
+		heard.recv_timeout(Duration::from_secs(5)).expect("the failure was announced"),
+		LibraryCommentAgentTurnsChanged {
+			space_id: shelf.space_id.clone(),
+			thread_id: cut.id.clone(),
+			agent_id: nyx.clone(),
+		}
+	);
+	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
 }

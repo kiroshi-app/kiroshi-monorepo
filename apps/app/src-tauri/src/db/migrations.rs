@@ -1523,8 +1523,10 @@ CREATE TABLE library_comment_agent_turns (
 	conversation_id TEXT UNIQUE REFERENCES conversations (id) ON DELETE SET NULL,
 	failure TEXT CHECK (failure IN ('noReply', 'turnFailed')),
 	failed_at INTEGER,
+	running_since INTEGER,
 	PRIMARY KEY (thread_id, agent_id),
-	CHECK ((failure IS NULL) = (failed_at IS NULL))
+	CHECK ((failure IS NULL) = (failed_at IS NULL)),
+	CHECK (running_since IS NULL OR failure IS NULL)
 );
 
 CREATE TRIGGER comment_rooms_leave_with_their_agent_turn
@@ -5575,10 +5577,16 @@ mod tests {
 				"INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id)
 					VALUES ('c4', 'main', 'Chat', 10, 10, 'personal'),
 						('c5', 'comment', 'notes.md', 11, 11, 'personal');
-				INSERT INTO library_comment_agent_turns (thread_id, agent_id, conversation_id)
-					VALUES ('t1', 'b1', 'c5');",
+				INSERT INTO library_comment_agent_turns
+					(thread_id, agent_id, conversation_id, running_since)
+					VALUES ('t1', 'b1', 'c5', 12);",
 			)
 			.expect("a comment room is a kind the schema knows");
+		let running_and_failed = write(
+			&connection,
+			"UPDATE library_comment_agent_turns SET failure = 'turnFailed', failed_at = 13",
+		);
+		assert!(running_and_failed.is_err(), "a turn was stored both running and failed");
 		let held: (String, i64) = connection
 			.query_row(
 				"SELECT owner, last_activity_at FROM conversations WHERE id = 'c4'",

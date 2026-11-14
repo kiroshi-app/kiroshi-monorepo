@@ -8,8 +8,9 @@ use super::messages::rename_document_links;
 use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 use crate::library::contract::{
-	LibraryComment, LibraryCommentAgentTurn, LibraryCommentAgentTurnState, LibraryCommentAnchor,
-	LibraryCommentCount, LibraryCommentParty, LibraryCommentPartyKind, LibraryCommentThreadState,
+	LibraryComment, LibraryCommentAgentTurn, LibraryCommentAgentTurnState,
+	LibraryCommentAgentTurnsChanged, LibraryCommentAnchor, LibraryCommentCount,
+	LibraryCommentParty, LibraryCommentPartyKind, LibraryCommentThreadState,
 	LibraryCommentTurnFailure,
 };
 
@@ -38,14 +39,15 @@ const SET_THREAD_STATE: &str = "UPDATE library_comment_threads SET state = ?4
 
 const AGENT_TURNS: &str = "library_comment_agent_turns";
 
-const SET_ROOM: &str =
-	"INSERT INTO library_comment_agent_turns (thread_id, agent_id, conversation_id)
-	VALUES (?1, ?2, ?3)
+const START_IN_A_NEW_ROOM: &str = "INSERT INTO library_comment_agent_turns
+		(thread_id, agent_id, running_since, conversation_id)
+	VALUES (?1, ?2, ?3, ?4)
 	ON CONFLICT (thread_id, agent_id) DO UPDATE
-		SET conversation_id = excluded.conversation_id, failure = NULL, failed_at = NULL";
+		SET conversation_id = excluded.conversation_id, failure = NULL, failed_at = NULL,
+			running_since = excluded.running_since";
 
-const CLEAR_FAILURE_OF_ROOM: &str =
-	"UPDATE library_comment_agent_turns SET failure = NULL, failed_at = NULL
+const START_IN_ITS_ROOM: &str = "UPDATE library_comment_agent_turns
+	SET failure = NULL, failed_at = NULL, running_since = ?3
 	WHERE thread_id = ?1 AND agent_id = ?2 AND conversation_id IS NOT NULL
 	RETURNING conversation_id";
 
@@ -53,7 +55,20 @@ const SET_TURN_FAILURE: &str =
 	"INSERT INTO library_comment_agent_turns (thread_id, agent_id, failure, failed_at)
 	VALUES (?1, ?2, ?3, ?4)
 	ON CONFLICT (thread_id, agent_id) DO UPDATE
-		SET failure = excluded.failure, failed_at = excluded.failed_at";
+		SET failure = excluded.failure, failed_at = excluded.failed_at, running_since = NULL";
+
+const CLEAR_RUNNING: &str = "UPDATE library_comment_agent_turns SET running_since = NULL
+	WHERE thread_id = ?1 AND agent_id = ?2";
+
+const SELECT_RUNNING_TURNS: &str = "SELECT threads.space_id, turns.thread_id, turns.agent_id
+	FROM library_comment_agent_turns AS turns
+	JOIN library_comment_threads AS threads ON threads.id = turns.thread_id
+	WHERE turns.running_since IS NOT NULL
+	ORDER BY turns.thread_id, turns.agent_id";
+
+const FAIL_RUNNING_TURNS: &str = "UPDATE library_comment_agent_turns
+	SET running_since = NULL, failure = 'turnFailed', failed_at = ?1
+	WHERE running_since IS NOT NULL";
 
 const SELECT_FAILED_TURNS_OF_SPACE: &str = "SELECT turns.thread_id, turns.agent_id, turns.failure,
 		turns.failed_at
@@ -221,15 +236,55 @@ impl LibraryRepository {
 			.at("open_thread_counts", THREADS)
 	}
 
-	pub async fn comment_room(
+	pub async fn agent_turn_started(
 		&self,
 		thread: ThreadOfItem,
 		agent_id: String,
+		started_at: i64,
 	) -> Result<Option<String>, ConversationError> {
 		self.access
-			.call_mut(move |connection| Ok(comment_room(connection, &thread, &agent_id)))
+			.call_mut(move |connection| {
+				Ok(room_of_started_turn(connection, &thread, &agent_id, started_at))
+			})
 			.await?
-			.at("comment_room", AGENT_TURNS)
+			.at("agent_turn_started", AGENT_TURNS)
+	}
+
+	pub async fn agent_turn_replied(&self, turn: AgentOfThread) -> Result<(), DatabaseError> {
+		self.access
+			.call(move |connection| {
+				connection
+					.prepare_cached(CLEAR_RUNNING)?
+					.execute(params![turn.thread_id, turn.agent_id])?;
+				Ok(())
+			})
+			.await
+			.at("agent_turn_replied", AGENT_TURNS)
+	}
+
+	pub async fn fail_running_agent_turns(
+		&self,
+		failed_at: i64,
+	) -> Result<Vec<LibraryCommentAgentTurnsChanged>, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				let running = transaction
+					.prepare_cached(SELECT_RUNNING_TURNS)?
+					.query_map([], |row| {
+						Ok(LibraryCommentAgentTurnsChanged {
+							space_id: row.get(0)?,
+							thread_id: row.get(1)?,
+							agent_id: row.get(2)?,
+						})
+					})?
+					.collect::<Result<_, _>>()?;
+				transaction.prepare_cached(FAIL_RUNNING_TURNS)?.execute(params![failed_at])?;
+				transaction.commit()?;
+				Ok(running)
+			})
+			.await
+			.at("fail_running_agent_turns", AGENT_TURNS)
 	}
 
 	pub async fn agent_replied_from(
@@ -338,21 +393,24 @@ fn store_comment(
 	Ok(())
 }
 
-fn comment_room(
+fn room_of_started_turn(
 	connection: &mut Connection,
 	thread: &ThreadOfItem,
 	agent_id: &str,
+	started_at: i64,
 ) -> Result<Option<String>, ConversationError> {
 	let transaction = connection.transaction()?;
 	if read_thread(&transaction, thread)?.is_none() {
 		return Ok(None);
 	}
-	let room = match room_cleared_of_its_failure(&transaction, &thread.id, agent_id)? {
+	let room = match started_in_its_room(&transaction, &thread.id, agent_id, started_at)? {
 		Some(room) => room,
 		None => {
 			let room =
 				open_comment_room(&transaction, &thread.space_id, agent_id, &thread.item_name)?;
-			transaction.prepare_cached(SET_ROOM)?.execute(params![thread.id, agent_id, room])?;
+			transaction
+				.prepare_cached(START_IN_A_NEW_ROOM)?
+				.execute(params![thread.id, agent_id, started_at, room])?;
 			room
 		}
 	};
@@ -360,14 +418,15 @@ fn comment_room(
 	Ok(Some(room))
 }
 
-fn room_cleared_of_its_failure(
+fn started_in_its_room(
 	transaction: &Transaction<'_>,
 	thread_id: &str,
 	agent_id: &str,
+	started_at: i64,
 ) -> rusqlite::Result<Option<String>> {
 	transaction
-		.prepare_cached(CLEAR_FAILURE_OF_ROOM)?
-		.query_row(params![thread_id, agent_id], |row| row.get(0))
+		.prepare_cached(START_IN_ITS_ROOM)?
+		.query_row(params![thread_id, agent_id, started_at], |row| row.get(0))
 		.optional()
 }
 

@@ -85,6 +85,14 @@ impl CommentTurn {
 		}
 	}
 
+	fn changed(&self) -> LibraryCommentAgentTurnsChanged {
+		LibraryCommentAgentTurnsChanged {
+			space_id: self.space_id.clone(),
+			thread_id: self.thread_id.clone(),
+			agent_id: self.agent_id.clone(),
+		}
+	}
+
 	fn agent_of_thread(&self) -> AgentOfThread {
 		AgentOfThread { thread_id: self.thread_id.clone(), agent_id: self.agent_id.clone() }
 	}
@@ -198,7 +206,7 @@ pub(super) fn summon<R: Runtime>(
 			heard_comments,
 			order: turns.joined(&thread.space_id, key),
 		};
-		announce(app, &turn);
+		announce(app, turn.changed());
 		(turns.start)(turn);
 	}
 }
@@ -253,7 +261,7 @@ async fn spoken<R: Runtime>(app: &AppHandle<R>, turn: &CommentTurn) -> Result<()
 	let database = database(app).map_err(|error| failed(detail_of(&error)))?;
 	let room = database
 		.library()
-		.comment_room(turn.thread(), turn.agent_id.clone())
+		.agent_turn_started(turn.thread(), turn.agent_id.clone(), now_ms())
 		.await
 		.map_err(|error| failed(format!("{error:?}")))?
 		.ok_or_else(|| failed(THREAD_GONE_REASON))?;
@@ -369,49 +377,65 @@ async fn refused<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope, reason: &
 }
 
 async fn settle<R: Runtime>(app: &AppHandle<R>, turn: &CommentTurn, ended: Result<(), Failed>) {
-	if let Err(failure) = ended {
+	let failure = ended.err();
+	if let Some(failure) = &failure {
 		log::warn!(
 			"comment turn failed | thread: {} | agent: {} | reason: {}",
 			turn.thread_id,
 			turn.agent_id,
 			failure.detail
 		);
-		if let Err(detail) = recorded(app, turn, failure.reason).await {
-			log::error!(
-				"comment turn failure not recorded | thread: {} | agent: {} | detail: {detail}",
-				turn.thread_id,
-				turn.agent_id
-			);
-		}
+	}
+	if let Err(detail) = recorded(app, turn, failure.map(|failure| failure.reason)).await {
+		log::error!(
+			"comment turn end not recorded | thread: {} | agent: {} | detail: {detail}",
+			turn.thread_id,
+			turn.agent_id
+		);
 	}
 	turns(app).left(&turn.key());
-	announce(app, turn);
+	announce(app, turn.changed());
 }
 
 async fn recorded<R: Runtime>(
 	app: &AppHandle<R>,
 	turn: &CommentTurn,
-	reason: LibraryCommentTurnFailure,
+	failure: Option<LibraryCommentTurnFailure>,
 ) -> Result<(), String> {
+	let library = database(app).map_err(|error| detail_of(&error))?.library();
+	let written = match failure {
+		Some(reason) => library.agent_turn_failed(turn.agent_of_thread(), reason, now_ms()).await,
+		None => library.agent_turn_replied(turn.agent_of_thread()).await,
+	};
+	written.map_err(|error| format!("{error:?}"))
+}
+
+pub(crate) async fn fail_comment_turns_cut_by_a_quit<R: Runtime>(app: &AppHandle<R>) {
+	match cut_by_a_quit(app).await {
+		Ok(cut) => cut.into_iter().for_each(|changed| announce(app, changed)),
+		Err(detail) => {
+			log::error!("comment turns cut by a quit not recorded as failed | detail: {detail}");
+		}
+	}
+}
+
+async fn cut_by_a_quit<R: Runtime>(
+	app: &AppHandle<R>,
+) -> Result<Vec<LibraryCommentAgentTurnsChanged>, String> {
 	database(app)
 		.map_err(|error| detail_of(&error))?
 		.library()
-		.agent_turn_failed(turn.agent_of_thread(), reason, now_ms())
+		.fail_running_agent_turns(now_ms())
 		.await
 		.map_err(|error| format!("{error:?}"))
 }
 
-fn announce<R: Runtime>(app: &AppHandle<R>, turn: &CommentTurn) {
-	let changed = LibraryCommentAgentTurnsChanged {
-		space_id: turn.space_id.clone(),
-		thread_id: turn.thread_id.clone(),
-		agent_id: turn.agent_id.clone(),
-	};
+fn announce<R: Runtime>(app: &AppHandle<R>, changed: LibraryCommentAgentTurnsChanged) {
+	let (thread_id, agent_id) = (changed.thread_id.clone(), changed.agent_id.clone());
 	if let Err(error) = events::emit(app, events::LIBRARY_COMMENT_AGENT_TURNS_CHANGED, changed) {
 		log::warn!(
-			"a change of the turn of agent {} on comment thread {} was not announced: {error}",
-			turn.agent_id,
-			turn.thread_id
+			"a change of the turn of agent {agent_id} on comment thread {thread_id} was not \
+			announced: {error}"
 		);
 	}
 }
