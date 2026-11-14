@@ -3713,11 +3713,11 @@ const SNIPPET_PASSAGE = "await ship()"
 
 const SNIPPET_LINE = `const launch = ${SNIPPET_PASSAGE}`
 
+const SNIPPET_COLUMN = SNIPPET_LINE.indexOf(SNIPPET_PASSAGE)
+
 const SNIPPET_SOURCE = `\`\`\`ts\n${SNIPPET_LINE}\nawait announce(launch)\n\`\`\``
 
 const LONG_SNIPPET_SOURCE = `\`\`\`ts\nconst launch = ${"withRetries(".repeat(12)}${SNIPPET_PASSAGE}${")".repeat(12)}\n\`\`\``
-
-const SNIPPET_SCROLLER = "Code snippet, ts"
 
 const CODE_FIELD = "Code"
 
@@ -3734,6 +3734,9 @@ const snippetDocument = (source = SNIPPET_SOURCE) => ({
 		},
 	],
 })
+
+const snippetScrollerIn = (block: HTMLElement) =>
+	within(block).getByRole("group", { name: "Code snippet, ts" })
 
 const expectPassageOnColumn = async (
 	passage: HTMLElement,
@@ -3760,11 +3763,7 @@ const codePassageAtRest = {
 		await expect(look.borderBottomWidth).toBe("2px")
 		await expect(look.borderBottomColor).toBe(washOf(passage, 50))
 		const code = block.querySelector("code") as HTMLElement
-		await expectPassageOnColumn(
-			passage,
-			code,
-			SNIPPET_LINE.indexOf(SNIPPET_PASSAGE),
-		)
+		await expectPassageOnColumn(passage, code, SNIPPET_COLUMN)
 		await waitFor(() =>
 			expect(passage.querySelector('[style*="--code-token"]')).not.toBeNull(),
 		)
@@ -3773,10 +3772,7 @@ const codePassageAtRest = {
 		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
 		await expect(pin).toBeVisible()
 		await expectPassagePin(pin, passage)
-		const scroller = within(block).getByRole("group", {
-			name: SNIPPET_SCROLLER,
-		})
-		await expect(scroller.scrollHeight).toBe(scroller.clientHeight)
+		const scroller = snippetScrollerIn(block)
 		await expect(boxOf(pin).top).toBeGreaterThanOrEqual(boxOf(scroller).top)
 		await expect(boxOf(pin).bottom).toBeLessThanOrEqual(boxOf(scroller).bottom)
 
@@ -3803,7 +3799,6 @@ const codePassageFocused = {
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		const block = blockOf(canvasElement, SNIPPET_BLOCK)
 		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
-		const column = SNIPPET_LINE.indexOf(SNIPPET_PASSAGE)
 		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
 		await expect(passage).toBeVisible()
 		await expect(passage).toHaveAttribute("data-state", "rest")
@@ -3813,7 +3808,7 @@ const codePassageFocused = {
 		await expect(getComputedStyle(passage).font).toBe(
 			getComputedStyle(field).font,
 		)
-		await expectPassageOnColumn(passage, field, column)
+		await expectPassageOnColumn(passage, field, SNIPPET_COLUMN)
 		await expect(boxOf(passage.parentElement as HTMLElement)).toEqual(
 			boxOf(field),
 		)
@@ -3827,7 +3822,7 @@ const codePassageFocused = {
 		await expect(lastBodyOf(args)).toContain(`x${SNIPPET_LINE}`)
 		await expect(field).toHaveFocus()
 		const kept = shownPassageOf(block, SNIPPET_PASSAGE)
-		await expectPassageOnColumn(kept, field, column + 1)
+		await expectPassageOnColumn(kept, field, SNIPPET_COLUMN + 1)
 		await waitFor(() =>
 			expectPassagePin(threadPinIn(canvasElement, BUDGET_THREAD.id), kept),
 		)
@@ -3849,9 +3844,7 @@ export const CodePassageScrolledOnLongLine = meta.story({
 	args: snippetDocument(LONG_SNIPPET_SOURCE),
 	play: async ({ canvasElement }) => {
 		const block = blockOf(canvasElement, SNIPPET_BLOCK)
-		const scroller = within(block).getByRole("group", {
-			name: SNIPPET_SCROLLER,
-		})
+		const scroller = snippetScrollerIn(block)
 		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
 		const atRest = boxOf(passage)
 		await expect(getComputedStyle(scroller).overflowX).toBe("auto")

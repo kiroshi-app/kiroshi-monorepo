@@ -233,7 +233,7 @@ export const MarkdownFence = ({
 						aria-label={snippetLabel}
 						className={cn(
 							"mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
-							runs?.length ? RUN_OVERHANG : undefined,
+							runs?.length && RUN_OVERHANG,
 						)}
 					>
 						<FenceCode code={code} language={language} runs={runs} />
