@@ -112,14 +112,12 @@ impl Host {
 	}
 
 	fn failure(&self) -> LibraryCommentTurnFailure {
-		self.wait_for("the turn to settle as failed", |host| {
-			match host.agent_turns().as_slice() {
-				[LibraryCommentAgentTurn {
-					state: LibraryCommentAgentTurnState::Failed { reason, .. },
-					..
-				}] => Some(*reason),
-				_ => None,
-			}
+		self.wait_for("the turn to settle as failed", |host| match host.agent_turns().as_slice() {
+			[LibraryCommentAgentTurn {
+				state: LibraryCommentAgentTurnState::Failed { reason, .. },
+				..
+			}] => Some(*reason),
+			_ => None,
 		})
 	}
 
@@ -154,7 +152,11 @@ impl Host {
 			self.thread.item_name.clone(),
 		))
 		.expect("the threads read");
-		assert_eq!(threads, [self.thread.clone()], "a failed turn left a comment in the thread");
+		assert_eq!(
+			threads,
+			std::slice::from_ref(&self.thread),
+			"a failed turn left a comment in the thread"
+		);
 	}
 
 	fn listed_conversations(&self) -> usize {
