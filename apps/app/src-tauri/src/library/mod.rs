@@ -32,8 +32,11 @@ use documents::Documents;
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
 pub(crate) use comments::{
-	comment_threads, open_comment_thread, reply_to_comment_thread, set_comment_thread_state, Said,
+	briefed_comment_thread, comment_agent_turns, comment_threads, listed_comment_threads,
+	open_comment_thread, reply_to_comment_thread, set_comment_thread_state, Said,
 };
+#[cfg(test)]
+pub(crate) use comments::{CommentTurn, CommentTurns};
 
 use crate::attachments::{self, attached_content, Attachments};
 use crate::db;

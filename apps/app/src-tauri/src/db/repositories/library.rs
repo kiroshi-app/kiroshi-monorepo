@@ -1,14 +1,16 @@
 use rusqlite::types::Type;
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use super::conversations::{open_comment_room, ConversationError};
 use super::messages::rename_document_links;
 use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 use crate::library::contract::{
-	LibraryComment, LibraryCommentAnchor, LibraryCommentCount, LibraryCommentParty,
-	LibraryCommentPartyKind, LibraryCommentThreadState,
+	LibraryComment, LibraryCommentAgentTurn, LibraryCommentAgentTurnState, LibraryCommentAnchor,
+	LibraryCommentCount, LibraryCommentParty, LibraryCommentPartyKind, LibraryCommentThreadState,
+	LibraryCommentTurnFailure,
 };
 
 const THREADS: &str = "library_comment_threads";
@@ -33,6 +35,35 @@ const SELECT_COMMENTS: &str = "SELECT author_kind, author_id, created_at, text, 
 
 const SET_THREAD_STATE: &str = "UPDATE library_comment_threads SET state = ?4
 	WHERE space_id = ?1 AND item_name = ?2 AND id = ?3";
+
+const AGENT_TURNS: &str = "library_comment_agent_turns";
+
+const SET_ROOM: &str =
+	"INSERT INTO library_comment_agent_turns (thread_id, agent_id, conversation_id)
+	VALUES (?1, ?2, ?3)
+	ON CONFLICT (thread_id, agent_id) DO UPDATE
+		SET conversation_id = excluded.conversation_id, failure = NULL, failed_at = NULL";
+
+const CLEAR_FAILURE_OF_ROOM: &str =
+	"UPDATE library_comment_agent_turns SET failure = NULL, failed_at = NULL
+	WHERE thread_id = ?1 AND agent_id = ?2 AND conversation_id IS NOT NULL
+	RETURNING conversation_id";
+
+const SET_TURN_FAILURE: &str =
+	"INSERT INTO library_comment_agent_turns (thread_id, agent_id, failure, failed_at)
+	VALUES (?1, ?2, ?3, ?4)
+	ON CONFLICT (thread_id, agent_id) DO UPDATE
+		SET failure = excluded.failure, failed_at = excluded.failed_at";
+
+const SELECT_FAILED_TURNS_OF_SPACE: &str = "SELECT turns.thread_id, turns.agent_id, turns.failure,
+		turns.failed_at
+	FROM library_comment_threads AS threads
+	JOIN library_comment_agent_turns AS turns ON turns.thread_id = threads.id
+	WHERE threads.space_id = ?1 AND turns.failure IS NOT NULL
+	ORDER BY turns.failed_at, turns.thread_id, turns.agent_id";
+
+const SELECT_AGENT_REPLIED_FROM: &str = "SELECT EXISTS (SELECT 1 FROM library_comments
+	WHERE thread_id = ?1 AND author_kind = 'agent' AND author_id = ?2 AND position >= ?3)";
 
 const COUNT_OPEN_THREADS: &str = "SELECT item_name, COUNT(*) FROM library_comment_threads
 	WHERE space_id = ?1 AND state = 'open' GROUP BY item_name ORDER BY item_name";
@@ -65,6 +96,11 @@ pub struct StoredThread {
 	pub anchor: LibraryCommentAnchor,
 	pub state: LibraryCommentThreadState,
 	pub comments: Vec<LibraryComment>,
+}
+
+pub struct AgentOfThread {
+	pub thread_id: String,
+	pub agent_id: String,
 }
 
 pub struct LibraryRepository {
@@ -185,6 +221,70 @@ impl LibraryRepository {
 			.at("open_thread_counts", THREADS)
 	}
 
+	pub async fn comment_room(
+		&self,
+		thread: ThreadOfItem,
+		agent_id: String,
+	) -> Result<Option<String>, ConversationError> {
+		self.access
+			.call_mut(move |connection| Ok(comment_room(connection, &thread, &agent_id)))
+			.await?
+			.at("comment_room", AGENT_TURNS)
+	}
+
+	pub async fn agent_replied_from(
+		&self,
+		turn: AgentOfThread,
+		position: u32,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(SELECT_AGENT_REPLIED_FROM)?
+					.query_row(params![turn.thread_id, turn.agent_id, position], |row| {
+						row.get(0)
+					})?)
+			})
+			.await
+			.at("agent_replied_from", "library_comments")
+	}
+
+	pub async fn agent_turn_failed(
+		&self,
+		turn: AgentOfThread,
+		reason: LibraryCommentTurnFailure,
+		failed_at: i64,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call(move |connection| {
+				connection.prepare_cached(SET_TURN_FAILURE)?.execute(params![
+					turn.thread_id,
+					turn.agent_id,
+					failure_text(reason),
+					failed_at
+				])?;
+				Ok(())
+			})
+			.await
+			.at("agent_turn_failed", AGENT_TURNS)
+	}
+
+	pub async fn failed_agent_turns(
+		&self,
+		space_id: String,
+	) -> Result<Vec<LibraryCommentAgentTurn>, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let failed = connection
+					.prepare_cached(SELECT_FAILED_TURNS_OF_SPACE)?
+					.query_map(params![space_id], failed_turn)?
+					.collect::<Result<_, _>>()?;
+				Ok(failed)
+			})
+			.await
+			.at("failed_agent_turns", AGENT_TURNS)
+	}
+
 	pub async fn item_renamed(
 		&self,
 		space_id: String,
@@ -236,6 +336,65 @@ fn store_comment(
 		as_json(&comment.mentions)?
 	])?;
 	Ok(())
+}
+
+fn comment_room(
+	connection: &mut Connection,
+	thread: &ThreadOfItem,
+	agent_id: &str,
+) -> Result<Option<String>, ConversationError> {
+	let transaction = connection.transaction()?;
+	if read_thread(&transaction, thread)?.is_none() {
+		return Ok(None);
+	}
+	let room = match room_cleared_of_its_failure(&transaction, &thread.id, agent_id)? {
+		Some(room) => room,
+		None => {
+			let room =
+				open_comment_room(&transaction, &thread.space_id, agent_id, &thread.item_name)?;
+			transaction.prepare_cached(SET_ROOM)?.execute(params![thread.id, agent_id, room])?;
+			room
+		}
+	};
+	transaction.commit()?;
+	Ok(Some(room))
+}
+
+fn room_cleared_of_its_failure(
+	transaction: &Transaction<'_>,
+	thread_id: &str,
+	agent_id: &str,
+) -> rusqlite::Result<Option<String>> {
+	transaction
+		.prepare_cached(CLEAR_FAILURE_OF_ROOM)?
+		.query_row(params![thread_id, agent_id], |row| row.get(0))
+		.optional()
+}
+
+fn failed_turn(row: &Row<'_>) -> rusqlite::Result<LibraryCommentAgentTurn> {
+	Ok(LibraryCommentAgentTurn {
+		thread_id: row.get(0)?,
+		agent_id: row.get(1)?,
+		state: LibraryCommentAgentTurnState::Failed {
+			reason: text_column(row, 2, turn_failure)?,
+			failed_at: row.get(3)?,
+		},
+	})
+}
+
+fn failure_text(reason: LibraryCommentTurnFailure) -> &'static str {
+	match reason {
+		LibraryCommentTurnFailure::NoReply => "noReply",
+		LibraryCommentTurnFailure::TurnFailed => "turnFailed",
+	}
+}
+
+fn turn_failure(text: &str) -> Option<LibraryCommentTurnFailure> {
+	match text {
+		"noReply" => Some(LibraryCommentTurnFailure::NoReply),
+		"turnFailed" => Some(LibraryCommentTurnFailure::TurnFailed),
+		_ => None,
+	}
 }
 
 fn read_thread(

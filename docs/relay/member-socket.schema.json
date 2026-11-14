@@ -3861,6 +3861,78 @@
       ],
       "type": "object"
     },
+    "LibraryCommentAgentTurn": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/LibraryCommentAgentTurnState"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "agentId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentAgentTurnState": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "working"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "failedAt": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "failed"
+            },
+            "reason": {
+              "$ref": "#/$defs/LibraryCommentTurnFailure"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "failedAt"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LibraryCommentAgentTurnsChanged": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "threadId",
+        "agentId"
+      ],
+      "type": "object"
+    },
     "LibraryCommentAnchor": {
       "anyOf": [
         {
@@ -4083,6 +4155,12 @@
       "enum": [
         "open",
         "resolved"
+      ]
+    },
+    "LibraryCommentTurnFailure": {
+      "enum": [
+        "noReply",
+        "turnFailed"
       ]
     },
     "LibraryDocument": {
@@ -12600,6 +12678,28 @@
         "$ref": "#/$defs/LibraryBoardSummary"
       }
     },
+    "library_comment_agent_turns": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentAgentTurn"
+        },
+        "type": "array"
+      }
+    },
     "library_comment_counts": {
       "args": {
         "properties": {
@@ -14469,6 +14569,11 @@
     "library://changed": {
       "payload": {
         "$ref": "#/$defs/LibraryChanged"
+      }
+    },
+    "library://comment-agent-turns-changed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentAgentTurnsChanged"
       }
     },
     "library://comment-thread-changed": {

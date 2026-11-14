@@ -1,13 +1,14 @@
 use std::path::Path;
 
+use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 use uuid::Uuid;
 
-use super::blocks::{blocks_of, Block};
+use super::blocks::{blocks_of, preview, Block, BlockKind};
 use super::contract::{
 	LibraryComment, LibraryCommentAnchor as Anchor, LibraryCommentParty, LibraryCommentPartyKind,
 	LibraryCommentThread, LibraryCommentThreadChanged, LibraryCommentThreadState, LibraryError,
-	COMMENT_HOST_AUTHOR_ID,
+	LibraryItemKind, COMMENT_HOST_AUTHOR_ID,
 };
 use super::{document_text, documents, resolve, AcceptedType};
 use crate::agent::translate::now_ms;
@@ -17,6 +18,12 @@ use crate::db::repositories::library::{NewThread, StoredThread, ThreadOfItem};
 use crate::db::Database;
 use crate::events;
 use crate::hosting::authorship::Caller;
+
+pub(crate) use turns::comment_agent_turns;
+#[cfg(test)]
+pub(crate) use turns::{CommentTurn, CommentTurns};
+
+mod turns;
 
 pub(crate) struct Said {
 	pub(crate) author: LibraryCommentParty,
@@ -39,6 +46,11 @@ impl Said {
 		Ok(Said { author, text, mentions })
 	}
 
+	pub(crate) fn by_the_agent(id: String, text: String) -> Self {
+		let author = LibraryCommentParty { kind: LibraryCommentPartyKind::Agent, id };
+		Said { author, text, mentions: Vec::new() }
+	}
+
 	fn comment(self) -> Result<LibraryComment, LibraryError> {
 		if self.text.trim().is_empty() {
 			return Err(LibraryError::BlankComment);
@@ -49,6 +61,45 @@ impl Said {
 			text: self.text,
 			mentions: self.mentions,
 		})
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BriefedThread {
+	item_name: String,
+	item_kind: LibraryItemKind,
+	thread_id: String,
+	state: LibraryCommentThreadState,
+	target: Anchor,
+	target_text: Option<String>,
+	target_missing: bool,
+	comments: Vec<LibraryComment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ListedThread {
+	thread_id: String,
+	state: LibraryCommentThreadState,
+	target: Anchor,
+	target_missing: bool,
+	comments: usize,
+	opening: String,
+}
+
+impl ListedThread {
+	fn of(thread: LibraryCommentThread) -> Self {
+		let opening =
+			thread.comments.first().map(|comment| preview(BlockKind::Paragraph, &comment.text));
+		ListedThread {
+			thread_id: thread.id,
+			state: thread.state,
+			target: thread.anchor,
+			target_missing: thread.target_missing,
+			comments: thread.comments.len(),
+			opening: opening.unwrap_or_default(),
+		}
 	}
 }
 
@@ -122,6 +173,37 @@ impl Commented {
 		(!is_held).then_some(target.as_str())
 	}
 
+	fn kind(&self) -> LibraryItemKind {
+		match self {
+			Commented::Document { .. } => LibraryItemKind::Document,
+			Commented::Image => LibraryItemKind::Image,
+			Commented::Board(_) => LibraryItemKind::Board,
+		}
+	}
+
+	fn target_text(&self, anchor: &Anchor) -> Option<String> {
+		let Commented::Document { text, blocks } = self else {
+			return None;
+		};
+		let (Anchor::Block { block_id } | Anchor::Passage { block_id, .. }) = anchor else {
+			return None;
+		};
+		block_of(blocks, block_id).map(|block| text[block.content.clone()].to_owned())
+	}
+
+	fn briefed(&self, thread: LibraryCommentThread) -> BriefedThread {
+		BriefedThread {
+			item_name: thread.item_name,
+			item_kind: self.kind(),
+			thread_id: thread.id,
+			state: thread.state,
+			target_text: self.target_text(&thread.anchor),
+			target: thread.anchor,
+			target_missing: thread.target_missing,
+			comments: thread.comments,
+		}
+	}
+
 	fn as_it_stands(&self, thread: StoredThread) -> LibraryCommentThread {
 		LibraryCommentThread {
 			target_missing: self.missing_target(&thread.anchor).is_some(),
@@ -166,6 +248,30 @@ pub(crate) async fn comment_threads<R: Runtime>(
 	Ok(threads.into_iter().map(|thread| commented.as_it_stands(thread)).collect())
 }
 
+pub(crate) async fn listed_comment_threads<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<Vec<ListedThread>, LibraryError> {
+	let threads = comment_threads(app, database, root, space_id, name).await?;
+	Ok(threads.into_iter().map(ListedThread::of).collect())
+}
+
+pub(crate) async fn briefed_comment_thread<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	root: &Path,
+	thread: ThreadOfItem,
+) -> Result<BriefedThread, LibraryError> {
+	let commented = Commented::read(app, root, &thread.space_id, &thread.item_name)?;
+	let threads = database.library().threads(thread.space_id, thread.item_name).await?;
+	let held = threads.into_iter().find(|held| held.id == thread.id);
+	let held = held.ok_or(LibraryError::UnknownThread { id: thread.id })?;
+	Ok(commented.briefed(commented.as_it_stands(held)))
+}
+
 pub(crate) async fn open_comment_thread<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &Database,
@@ -177,6 +283,7 @@ pub(crate) async fn open_comment_thread<R: Runtime>(
 ) -> Result<LibraryCommentThread, LibraryError> {
 	let commented = Commented::read(app, root, space_id, name)?;
 	commented.accepts(name, &anchor)?;
+	let summoned = turns::mentioned_agents(database, space_id, &said.mentions).await?;
 	let thread = NewThread {
 		id: Uuid::new_v4().to_string(),
 		space_id: space_id.to_owned(),
@@ -185,7 +292,9 @@ pub(crate) async fn open_comment_thread<R: Runtime>(
 		opening: said.comment()?,
 	};
 	let opened = database.library().open_thread(thread).await?;
-	Ok(announced(app, commented.as_it_stands(opened)))
+	let opened = announced(app, commented.as_it_stands(opened));
+	turns::summon(app, &commented, &opened, summoned);
+	Ok(opened)
 }
 
 pub(crate) async fn reply_to_comment_thread<R: Runtime>(
@@ -197,8 +306,11 @@ pub(crate) async fn reply_to_comment_thread<R: Runtime>(
 ) -> Result<LibraryCommentThread, LibraryError> {
 	let commented = Commented::read(app, root, &thread.space_id, &thread.item_name)?;
 	let unknown = LibraryError::UnknownThread { id: thread.id.clone() };
+	let summoned = turns::mentioned_agents(database, &thread.space_id, &said.mentions).await?;
 	let replied = database.library().reply(thread, said.comment()?).await?.ok_or(unknown)?;
-	Ok(announced(app, commented.as_it_stands(replied)))
+	let replied = announced(app, commented.as_it_stands(replied));
+	turns::summon(app, &commented, &replied, summoned);
+	Ok(replied)
 }
 
 pub(crate) async fn set_comment_thread_state<R: Runtime>(

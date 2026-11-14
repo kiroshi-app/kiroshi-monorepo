@@ -13,7 +13,9 @@ type Row = Map<String, Value>;
 pub type MintedIds = HashMap<String, String>;
 
 const EXPORTED: &str = "WITH
-	exported_conversations(id) AS (SELECT id FROM conversations WHERE space_id = ?1),
+	exported_conversations(id) AS (
+		SELECT id FROM conversations WHERE space_id = ?1 AND kind <> 'comment'
+	),
 	exported_bots(id) AS (
 		SELECT bot_id FROM bot_spaces WHERE space_id = ?1
 		UNION SELECT bot_id FROM conversation_participants

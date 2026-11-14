@@ -64,6 +64,7 @@ export const commands = {
 	libraryDelete: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_delete", { spaceId, name })),
 	libraryCommentThreads: (spaceId: string, name: string) => typedError<LibraryCommentThread[], LibraryError>(__TAURI_INVOKE("library_comment_threads", { spaceId, name })),
 	libraryCommentCounts: (spaceId: string) => typedError<LibraryCommentCount[], LibraryError>(__TAURI_INVOKE("library_comment_counts", { spaceId })),
+	libraryCommentAgentTurns: (spaceId: string) => typedError<LibraryCommentAgentTurn[], LibraryError>(__TAURI_INVOKE("library_comment_agent_turns", { spaceId })),
 	libraryCommentCreate: (spaceId: string, name: string, anchor: LibraryCommentAnchor, text: string, mentions: LibraryCommentParty[]) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_create", { spaceId, name, anchor, text, mentions })),
 	libraryCommentReply: (spaceId: string, name: string, threadId: string, text: string, mentions: LibraryCommentParty[]) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_reply", { spaceId, name, threadId, text, mentions })),
 	libraryCommentResolve: (spaceId: string, name: string, threadId: string) => typedError<LibraryCommentThread, LibraryError>(__TAURI_INVOKE("library_comment_resolve", { spaceId, name, threadId })),
@@ -371,6 +372,8 @@ export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 export const LIBRARY_BOARD_FILE_REPLACED_EVENT = "library://board-file-replaced" as const;
 
 export const LIBRARY_CHANGED_EVENT = "library://changed" as const;
+
+export const LIBRARY_COMMENT_AGENT_TURNS_CHANGED_EVENT = "library://comment-agent-turns-changed" as const;
 
 export const LIBRARY_COMMENT_HOST_AUTHOR_ID = "host" as const;
 
@@ -1285,6 +1288,20 @@ export type LibraryComment = {
 	mentions: LibraryCommentParty[],
 };
 
+export type LibraryCommentAgentTurn = {
+	threadId: string,
+	agentId: string,
+	state: LibraryCommentAgentTurnState,
+};
+
+export type LibraryCommentAgentTurnState = { kind: "working" } | { kind: "failed"; reason: LibraryCommentTurnFailure; failedAt: number };
+
+export type LibraryCommentAgentTurnsChanged = {
+	spaceId: string,
+	threadId: string,
+	agentId: string,
+};
+
 export type LibraryCommentAnchor = { kind: "block"; blockId: string } | { kind: "passage"; blockId: string; quote: string; start: number; end: number } | { kind: "imagePoint"; x: number | null; y: number | null } | { kind: "imageZone"; x: number | null; y: number | null; width: number | null; height: number | null } | { kind: "boardNode"; nodeId: string } | { kind: "boardPoint"; point: LibraryBoardPoint };
 
 export type LibraryCommentCount = {
@@ -1316,6 +1333,8 @@ export type LibraryCommentThreadChanged = {
 };
 
 export type LibraryCommentThreadState = "open" | "resolved";
+
+export type LibraryCommentTurnFailure = "noReply" | "turnFailed";
 
 export type LibraryDocument = {
 	name: string,

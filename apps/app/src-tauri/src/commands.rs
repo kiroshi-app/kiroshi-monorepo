@@ -41,6 +41,10 @@ pub fn builder() -> Builder<tauri::Wry> {
 			"LIBRARY_COMMENT_THREAD_CHANGED_EVENT",
 			library::contract::COMMENT_THREAD_CHANGED_EVENT,
 		)
+		.constant(
+			"LIBRARY_COMMENT_AGENT_TURNS_CHANGED_EVENT",
+			library::contract::COMMENT_AGENT_TURNS_CHANGED_EVENT,
+		)
 		.constant("LIBRARY_COMMENT_HOST_AUTHOR_ID", library::contract::COMMENT_HOST_AUTHOR_ID)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
@@ -76,6 +80,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<library::contract::LibraryDocumentWriterFinished>()
 		.typ::<library::contract::LibraryChanged>()
 		.typ::<library::contract::LibraryCommentThreadChanged>()
+		.typ::<library::contract::LibraryCommentAgentTurnsChanged>()
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
@@ -138,6 +143,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_delete::<tauri::Wry>,
 		library::commands::library_comment_threads::<tauri::Wry>,
 		library::commands::library_comment_counts,
+		library::commands::library_comment_agent_turns::<tauri::Wry>,
 		library::commands::library_comment_create::<tauri::Wry>,
 		library::commands::library_comment_reply::<tauri::Wry>,
 		library::commands::library_comment_resolve::<tauri::Wry>,
