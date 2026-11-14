@@ -25,6 +25,7 @@ import {
 	withColumn,
 	withRow,
 } from "@workspace/ui/components/library-document-blocks"
+import type { SourceRange } from "@workspace/ui/components/library-document-inline"
 import type { MarkdownRunRenderer } from "@workspace/ui/components/markdown/run"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { MarkdownTable } from "@workspace/ui/components/markdown/table"
@@ -34,11 +35,6 @@ type LibraryTableEditorProps = {
 	onEdit: SourceEdit
 	runs?: MarkdownRun[]
 	renderRun?: MarkdownRunRenderer
-}
-
-type CellRange = {
-	from: number
-	to: number
 }
 
 type CellFocus = {
@@ -60,7 +56,7 @@ const DELIMITER_ROWS = 1
 
 const NO_RUNS: MarkdownRun[] = []
 
-const runsWithin = (runs: MarkdownRun[], cell: CellRange | undefined) =>
+const runsWithin = (runs: MarkdownRun[], cell: SourceRange | undefined) =>
 	cell
 		? runs.flatMap(({ id, start, end }) => {
 				const run = {
