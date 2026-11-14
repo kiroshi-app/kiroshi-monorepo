@@ -4,15 +4,12 @@ import { useEffect } from "react"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
-	isFailedTurn,
+	logTurnFailureOffScreen,
 	raiseUnnoticedTurnFailures,
 	type TurnAgent,
 } from "./library-comment-turn-failures"
 import { libraryQueryKeys } from "./library-query-keys"
-import {
-	readLibraryCommentAgentTurns,
-	readLibraryCommentAgentTurnsOn,
-} from "./library-reads"
+import { readLibraryCommentAgentTurns } from "./library-reads"
 import { reportUnheard } from "./use-library-document-writers"
 
 import {
@@ -26,29 +23,6 @@ const NO_TURNS: LibraryCommentAgentTurn[] = []
 
 const workingTurnsIn = (turns: LibraryCommentAgentTurn[]) =>
 	turns.filter(({ state }) => state.kind === "working")
-
-const logFailureOffScreen = (
-	hostId: string | null,
-	{ spaceId, threadId, agentId }: LibraryCommentAgentTurnsChanged,
-) =>
-	readLibraryCommentAgentTurnsOn(hostId, spaceId).then(
-		(turns) => {
-			const hasFailed = turns
-				.filter(isFailedTurn)
-				.some((turn) => turn.threadId === threadId && turn.agentId === agentId)
-			if (hasFailed) {
-				console.info(
-					`library: the comment turn of agent ${agentId} on thread ${threadId} failed in Space ${spaceId}, which is not on screen`,
-				)
-			}
-		},
-		(reason: unknown) => {
-			console.error(
-				`library: the comment turns of Space ${spaceId}, which is not on screen, could not be read`,
-				reason,
-			)
-		},
-	)
 
 export const useLibraryCommentAgentTurns = (
 	spaceId: string,
@@ -76,7 +50,7 @@ export const useLibraryCommentAgentTurns = (
 			LIBRARY_COMMENT_AGENT_TURNS_CHANGED_EVENT,
 			({ payload }, hostId) => {
 				if (payload.spaceId !== spaceId) {
-					void logFailureOffScreen(hostId, payload)
+					void logTurnFailureOffScreen(hostId, payload)
 					return
 				}
 				void queryClient.invalidateQueries({

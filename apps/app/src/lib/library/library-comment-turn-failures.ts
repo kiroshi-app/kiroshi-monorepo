@@ -4,10 +4,12 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { titleOf } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
+import { readLibraryCommentAgentTurnsOn } from "./library-reads"
 
 import type {
 	LibraryCommentAgentTurn,
 	LibraryCommentAgentTurnState,
+	LibraryCommentAgentTurnsChanged,
 	LibraryCommentThread,
 	LibraryItem,
 } from "../bindings"
@@ -36,9 +38,8 @@ const noticedIn = (queryClient: QueryClient) => {
 	return noticed
 }
 
-export const isFailedTurn = (
-	turn: LibraryCommentAgentTurn,
-): turn is FailedTurn => turn.state.kind === "failed"
+const isFailedTurn = (turn: LibraryCommentAgentTurn): turn is FailedTurn =>
+	turn.state.kind === "failed"
 
 const failureKeyOf = (
 	spaceId: string,
@@ -105,3 +106,26 @@ export const raiseUnnoticedTurnFailures = (
 		}
 	}
 }
+
+export const logTurnFailureOffScreen = (
+	hostId: string | null,
+	{ spaceId, threadId, agentId }: LibraryCommentAgentTurnsChanged,
+) =>
+	readLibraryCommentAgentTurnsOn(hostId, spaceId).then(
+		(turns) => {
+			const hasFailed = turns
+				.filter(isFailedTurn)
+				.some((turn) => turn.threadId === threadId && turn.agentId === agentId)
+			if (hasFailed) {
+				console.info(
+					`library: the comment turn of agent ${agentId} on thread ${threadId} failed in Space ${spaceId}, which is not on screen`,
+				)
+			}
+		},
+		(reason: unknown) => {
+			console.error(
+				`library: the comment turns of Space ${spaceId}, which is not on screen, could not be read`,
+				reason,
+			)
+		},
+	)
