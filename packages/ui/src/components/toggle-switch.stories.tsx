@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -74,7 +74,7 @@ export const Default = meta.story({
 export const States = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		pseudo: { focusVisible: "#toggle-switch-focus" },
+		pseudo: { focusVisible: '[role="switch"][aria-label="Focused"]' },
 		docs: {
 			description: {
 				story:
@@ -86,12 +86,7 @@ export const States = meta.story({
 		<div className="flex items-center gap-4">
 			<ToggleSwitch aria-label="Off" checked={false} onCheckedChange={fn()} />
 			<ToggleSwitch aria-label="On" checked onCheckedChange={fn()} />
-			<ToggleSwitch
-				aria-label="Focused"
-				checked
-				id="toggle-switch-focus"
-				onCheckedChange={fn()}
-			/>
+			<ToggleSwitch aria-label="Focused" checked onCheckedChange={fn()} />
 			<ToggleSwitch
 				aria-label="Disabled off"
 				checked={false}
@@ -106,6 +101,13 @@ export const States = meta.story({
 			/>
 		</div>
 	),
+	play: async ({ canvas }) => {
+		if (!isInBrowserRunner()) return
+		const focused = canvas.getByRole("switch", { name: "Focused" })
+		await waitFor(() =>
+			expect(getComputedStyle(focused).boxShadow).toMatch(/\b3px\b/),
+		)
+	},
 })
 
 export const WithLabel = meta.story({

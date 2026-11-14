@@ -960,7 +960,7 @@ const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 		) as HTMLElement
 		await withMotionAllowed(async () => {
 			await hoverMissionGroup(row)
-			await expectOneMissionSurface(row, TRANSPARENT)
+			await expectOneMissionSurface(row, missionGroupFillOf(row))
 			await hoverMissionGroup(row, lastMission)
 			await hoverMissionGroup(missionFreeRow)
 		})
