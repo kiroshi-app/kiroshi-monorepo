@@ -7,6 +7,7 @@ import {
 	type Ref,
 	type TextareaHTMLAttributes,
 	useCallback,
+	useId,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -209,7 +210,7 @@ type LibraryDocumentColumnProps = {
 	heading: ReactNode
 	detail: string
 	children: ReactNode
-	isReadOnly?: boolean
+	readOnlyHeadingId?: string
 	onColumnMouseDown?: (event: MouseEvent<HTMLDivElement>) => void
 }
 
@@ -217,10 +218,13 @@ const LibraryDocumentColumn = ({
 	heading,
 	detail,
 	children,
-	isReadOnly = false,
+	readOnlyHeadingId,
 	onColumnMouseDown,
 }: LibraryDocumentColumnProps) => {
 	const { overflows, scrollerRef } = useOverflowsBlock()
+	const keyboardScrollRegion = overflows
+		? { role: "region", "aria-labelledby": readOnlyHeadingId, tabIndex: 0 }
+		: undefined
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col">
@@ -232,8 +236,8 @@ const LibraryDocumentColumn = ({
 				)}
 				data-slot="library-document-column"
 				onMouseDown={onColumnMouseDown}
-				ref={isReadOnly ? scrollerRef : undefined}
-				tabIndex={overflows ? 0 : undefined}
+				ref={readOnlyHeadingId ? scrollerRef : undefined}
+				{...keyboardScrollRegion}
 			>
 				<article
 					className={cn(
@@ -323,6 +327,7 @@ const LibraryDocumentView = ({
 }: LibraryDocumentViewProps) => {
 	const { t } = useTranslation("common")
 	const isWriting = writers.length > 0
+	const headingId = useId()
 
 	return (
 		<ScreenLayout
@@ -349,11 +354,11 @@ const LibraryDocumentView = ({
 				<LibraryDocumentColumn
 					detail={document.detail}
 					heading={
-						<h1 className={DOCUMENT_TITLE}>
+						<h1 className={DOCUMENT_TITLE} id={headingId}>
 							{libraryDisplayName(document.name, t)}
 						</h1>
 					}
-					isReadOnly
+					readOnlyHeadingId={headingId}
 				>
 					<LibraryDocumentBody
 						body={document.body}

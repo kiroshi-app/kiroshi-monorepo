@@ -257,9 +257,10 @@ const expectIslandsAtRest = async (
 		heading.getBoundingClientRect().top - page.getBoundingClientRect().top,
 	).toBe(CONTENT_START)
 	await expect(slotsIn(canvasElement, "screen-layout-fade")).toEqual([])
-	await expect(
-		slotIn(canvasElement, "library-document-column"),
-	).not.toHaveAttribute("tabindex")
+	const column = slotIn(canvasElement, "library-document-column")
+	await expect(column).not.toHaveAttribute("tabindex")
+	await expect(column).not.toHaveAttribute("role")
+	await expect(column).not.toHaveAttribute("aria-labelledby")
 }
 
 export const Light = meta.story({
@@ -269,7 +270,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard 6a draws it. Check that the two islands sit 8 from the top and from either side, 40 tall on the card surface, that the back button is the chevron alone, named Library, before the 14/16 medium document name, that the actions island reads the two collaborators, Download, Copy drawn as two rounded squares, More, then a 1 px rule in the border colour and Close, that no control fades its colour in, that the heading starts 56 below the top with no fade over it, and that the column, fitting its card, is not a Tab stop.",
+					"The document at rest in the light theme, as artboard 6a draws it. Check that the two islands sit 8 from the top and from either side, 40 tall on the card surface, that the back button is the chevron alone, named Library, before the 14/16 medium document name, that the actions island reads the two collaborators, Download, Copy drawn as two rounded squares, More, then a 1 px rule in the border colour and Close, that no control fades its colour in, that the heading starts 56 below the top with no fade over it, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
@@ -359,13 +360,16 @@ export const ScrolledFromTheKeyboard = meta.story({
 		docs: {
 			description: {
 				story:
-					"The read-only document taller than its card, reached from the keyboard. Check that Tab moves from Close to the document column, that the column wears a 2 px ring in the ring colour just inside its edge while it holds keyboard focus, and that the down arrow, Page Down and Space each scroll it further.",
+					"The read-only document taller than its card, reached from the keyboard. Check that the column is a region named by the document title, that Tab moves from Close to it, that it wears a 2 px ring in the ring colour just inside its edge while it holds keyboard focus, and that the down arrow, Page Down and Space each scroll it further.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const column = slotIn(canvasElement, "library-document-column")
 		await waitFor(() => expect(column).toHaveAttribute("tabindex", "0"))
+		await expect(
+			within(canvasElement).getByRole("region", { name: LONG_BRIEF.name }),
+		).toBe(column)
 		if (!isInBrowserRunner()) return
 		const keys = await realPointer()
 
