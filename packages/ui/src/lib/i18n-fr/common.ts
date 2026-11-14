@@ -710,6 +710,15 @@ const common = {
 					"Impossible de résoudre le commentaire. Appuyez sur Résoudre pour réessayer.",
 				reopen:
 					"Impossible de rouvrir le commentaire. Appuyez sur Rouvrir pour réessayer.",
+				agentTurns:
+					"Impossible d’afficher les agents qui travaillent sur les commentaires. Rouvrez l’élément depuis la Bibliothèque.",
+				mentionedThreadGone:
+					"Le commentaire où vous étiez mentionné n’est plus sur {{name}}.",
+				turnFailedOn:
+					"{{agent}} n’a pas pu répondre au commentaire sur {{item}}. Mentionnez-le à nouveau pour réessayer.",
+				turnFailed:
+					"{{agent}} n’a pas pu répondre à un commentaire. Mentionnez-le à nouveau pour réessayer.",
+				unnamedAgent: "Un agent",
 			},
 			document: {
 				create:

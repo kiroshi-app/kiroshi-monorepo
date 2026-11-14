@@ -1,6 +1,7 @@
 import type { BoardCommentAnchor } from "@workspace/ui/components/board-comments"
 import type { BoardItem } from "@workspace/ui/components/board-view"
 import type {
+	LibraryCommentAgent,
 	LibraryCommentAuthor,
 	LibraryCommentAnchor as ShownAnchor,
 } from "@workspace/ui/components/library-comment-author"
@@ -18,6 +19,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { toElapsedTime, toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import type {
+	LibraryCommentAgentTurn,
 	LibraryCommentAnchor,
 	LibraryCommentParty,
 	LibraryCommentThread,
@@ -76,6 +78,19 @@ export const resolutionOf = (
 	unnamed: string,
 ): LibraryCommentResolution | undefined =>
 	state === "resolved" ? { by: unnamed, time: "" } : undefined
+
+export const workingAgentOf = (
+	{ id, state }: LibraryCommentThread,
+	workingTurns: LibraryCommentAgentTurn[],
+	agents: LibraryCommentAgent[],
+): LibraryCommentAgent | undefined =>
+	state === "resolved"
+		? undefined
+		: agents.find((agent) =>
+				workingTurns.some(
+					({ threadId, agentId }) => threadId === id && agentId === agent.id,
+				),
+			)
 
 export const blockAnchorOf = (
 	anchor: LibraryCommentAnchor,

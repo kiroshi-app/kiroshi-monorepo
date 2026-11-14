@@ -675,6 +675,15 @@ const common = {
 				reply: "Couldn’t send the reply. Press Send to try again.",
 				resolve: "Couldn’t resolve the comment. Press Resolve to try again.",
 				reopen: "Couldn’t reopen the comment. Press Reopen to try again.",
+				agentTurns:
+					"Couldn’t show which agents are working on comments. Open the item again from the Library.",
+				mentionedThreadGone:
+					"The comment you were mentioned in isn’t on {{name}} anymore.",
+				turnFailedOn:
+					"{{agent}} couldn’t reply to the comment on {{item}}. Mention it again to try again.",
+				turnFailed:
+					"{{agent}} couldn’t reply to a comment. Mention it again to try again.",
+				unnamedAgent: "An agent",
 			},
 			document: {
 				create: "Couldn’t create the document. Try again from New document.",

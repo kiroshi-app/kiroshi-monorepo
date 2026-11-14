@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import type { LibraryCommentAnchor as ShownAnchor } from "@workspace/ui/components/library-comment-author"
 import {
@@ -15,6 +15,7 @@ import {
 	resolutionOf,
 	summaryOf,
 } from "./library-comment-views"
+import { openMentionedThreadsOn } from "./mentioned-comment-thread"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
 import { useLibraryCommentThreads } from "./use-library-comment-threads"
 
@@ -53,6 +54,22 @@ const closedOn = <Target,>(
 	tab: "open",
 })
 
+const changedOn =
+	<Target,>(
+		name: string | undefined,
+		changes: Partial<CommentsState<Target>>,
+	) =>
+	(current: CommentsState<Target>): CommentsState<Target> => ({
+		...(current.name === name ? current : closedOn<Target>(name)),
+		...changes,
+	})
+
+const showingThread = (openThreadId: string) => ({
+	openThreadId,
+	reply: "",
+	draft: null,
+})
+
 export const anchoredDraftOf = <Target, Draft extends { target: Target }>({
 	target,
 	...written
@@ -72,17 +89,27 @@ export const useLibraryComments = <Target,>({
 		useLibraryCommentThreads(spaceId, name, partyOf(people.self))
 
 	const change = (changes: Partial<CommentsState<Target>>) =>
-		setHeld((current) => ({
-			...(current.name === name ? current : closedOn<Target>(name)),
-			...changes,
-		}))
+		setHeld(changedOn(name, changes))
 	const changeIfStillOn = (
 		after: (current: CommentsState<Target>) => CommentsState<Target>,
 	) => setHeld((current) => (current.name === name ? after(current) : current))
 
+	useEffect(() => {
+		if (!name) {
+			return
+		}
+		return openMentionedThreadsOn({ spaceId, itemName: name }, (threadId) =>
+			setHeld(changedOn<Target>(name, showingThread(threadId))),
+		)
+	}, [spaceId, name])
+
 	const now = Date.now()
 	const commented = commentedThreadsOf(threads, people.authorOf, now).map(
-		(each) => ({ ...each, resolution: resolutionOf(each.thread, unnamed) }),
+		(each) => ({
+			...each,
+			resolution: resolutionOf(each.thread, unnamed),
+			workingAgent: people.workingAgentOf(each.thread),
+		}),
 	)
 	const opened = commented.find(
 		({ thread }) => thread.id === state.openThreadId,
@@ -90,7 +117,7 @@ export const useLibraryComments = <Target,>({
 	const counts = countsOf(threads)
 
 	const openThreadById = (openThreadId: string) =>
-		change({ openThreadId, reply: "", draft: null })
+		change(showingThread(openThreadId))
 	const setCommentMode = (isCommentMode: boolean) =>
 		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
 
@@ -161,6 +188,7 @@ export const useLibraryComments = <Target,>({
 			anchor: anchorLineOf(opened.thread),
 			comments: opened.comments,
 			participants: people.participants,
+			workingAgent: opened.workingAgent,
 			resolution: opened.resolution,
 			reply: state.reply,
 			onReplyChange: (text: string) => change({ reply: text }),
