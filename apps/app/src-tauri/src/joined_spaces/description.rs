@@ -18,9 +18,9 @@ use crate::spaces::contract::{Space, SpaceDescribed, DESCRIBED_EVENT};
 const SPACE_UPDATE_COMMAND: &str = "space_update";
 
 #[derive(Deserialize)]
-struct HeardEvent {
-	event: String,
-	payload: Value,
+pub(super) struct HeardEvent {
+	pub(super) event: String,
+	pub(super) payload: Value,
 }
 
 pub(super) async fn asked<R: Runtime>(

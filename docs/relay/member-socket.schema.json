@@ -4073,6 +4073,44 @@
       ],
       "type": "object"
     },
+    "LibraryCommentMentioned": {
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "itemKind": {
+          "$ref": "#/$defs/LibraryItemKind"
+        },
+        "itemName": {
+          "type": "string"
+        },
+        "people": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "itemName",
+        "itemKind",
+        "threadId",
+        "authorName",
+        "text",
+        "people"
+      ],
+      "type": "object"
+    },
     "LibraryCommentParty": {
       "properties": {
         "id": {
@@ -14607,6 +14645,11 @@
     "library://comment-agent-turns-changed": {
       "payload": {
         "$ref": "#/$defs/LibraryCommentAgentTurnsChanged"
+      }
+    },
+    "library://comment-mentioned": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentMentioned"
       }
     },
     "library://comment-thread-changed": {

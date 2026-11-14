@@ -214,6 +214,10 @@ pub const COMMENT_THREAD_CHANGED_EVENT: &str = "library://comment-thread-changed
 
 pub const COMMENT_AGENT_TURNS_CHANGED_EVENT: &str = "library://comment-agent-turns-changed";
 
+pub const COMMENT_MENTIONED_EVENT: &str = "library://comment-mentioned";
+
+pub const COMMENT_MENTION_OPENED_EVENT: &str = "library://comment-mention-opened";
+
 pub const COMMENT_HOST_AUTHOR_ID: &str = "host";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -318,6 +322,27 @@ pub struct LibraryCommentAgentTurnsChanged {
 	pub space_id: String,
 	pub thread_id: String,
 	pub agent_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentMentioned {
+	pub space_id: String,
+	pub item_name: String,
+	pub item_kind: LibraryItemKind,
+	pub thread_id: String,
+	pub author_name: String,
+	pub text: String,
+	pub people: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryCommentMentionOpened {
+	pub space_id: String,
+	pub item_name: String,
+	pub item_kind: LibraryItemKind,
+	pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

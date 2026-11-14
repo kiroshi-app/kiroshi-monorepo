@@ -140,11 +140,28 @@ fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
 	})
 }
 
-pub(super) fn person_of<R: Runtime>(app: &AppHandle<R>, account_id: &str) -> ChatOwner {
+pub(crate) fn person_of<R: Runtime>(app: &AppHandle<R>, account_id: &str) -> ChatOwner {
 	match signed_in_account(app) {
 		Some(host) if host.id == account_id => ChatOwner::Host,
 		_ => ChatOwner::Member(account_id.to_owned()),
 	}
+}
+
+pub(crate) async fn name_of<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	space_id: &str,
+	person: &ChatOwner,
+) -> Result<Option<String>, DatabaseError> {
+	let user_id = match person {
+		ChatOwner::Host => return Ok(host_author(app, database).await?.name),
+		ChatOwner::Member(account_id) => account_id.clone(),
+	};
+	if app.try_state::<Hosting>().is_none() {
+		return Ok(None);
+	}
+	let member = RelayedMember { space_id: space_id.to_owned(), user_id, computer: None };
+	Ok(member_author(app, database, member).await?.name)
 }
 
 pub(super) fn account_of<R: Runtime>(app: &AppHandle<R>, owner: &ChatOwner) -> Option<String> {

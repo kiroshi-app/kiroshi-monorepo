@@ -34,8 +34,8 @@ pub(crate) use canvas::{create_board, rename_board, summarise_board};
 use comments::{board_written, written_boards_followed};
 pub(crate) use comments::{
 	briefed_comment_thread, comment_agent_turns, comment_threads, fail_comment_turns_cut_by_a_quit,
-	listed_comment_threads, open_comment_thread, person_calling, reopen_comment_thread,
-	reply_to_comment_thread, resolve_comment_thread, Said,
+	listed_comment_threads, open_comment_thread, person_calling, raised_for, reopen_comment_thread,
+	reply_to_comment_thread, resolve_comment_thread, PersonHere, Said,
 };
 #[cfg(test)]
 pub(crate) use comments::{CommentTurn, CommentTurns};

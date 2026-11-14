@@ -21,10 +21,12 @@ use crate::db::{Database, DatabaseState};
 use crate::events;
 use crate::hosting::authorship::Caller;
 
+pub(crate) use mentions::{raised_for, PersonHere};
 pub(crate) use turns::{comment_agent_turns, fail_comment_turns_cut_by_a_quit};
 #[cfg(test)]
 pub(crate) use turns::{CommentTurn, CommentTurns};
 
+mod mentions;
 mod turns;
 
 pub(crate) struct Said {
@@ -58,6 +60,13 @@ impl Said {
 			text: self.text,
 			mentions: self.mentions,
 		})
+	}
+}
+
+fn party_id(person: ChatOwner) -> String {
+	match person {
+		ChatOwner::Host => COMMENT_HOST_AUTHOR_ID.to_owned(),
+		ChatOwner::Member(account_id) => account_id,
 	}
 }
 
@@ -104,10 +113,7 @@ pub(crate) fn person_calling<R: Runtime>(
 	caller: &Caller,
 	app: &AppHandle<R>,
 ) -> Result<LibraryCommentParty, LibraryError> {
-	let id = match caller.chat_owner(app).ok_or(LibraryError::UnknownAuthor)? {
-		ChatOwner::Host => COMMENT_HOST_AUTHOR_ID.to_owned(),
-		ChatOwner::Member(account_id) => account_id,
-	};
+	let id = party_id(caller.chat_owner(app).ok_or(LibraryError::UnknownAuthor)?);
 	Ok(LibraryCommentParty { kind: LibraryCommentPartyKind::Person, id })
 }
 
@@ -308,17 +314,19 @@ pub(crate) async fn open_comment_thread<R: Runtime>(
 	let commented = Commented::read(app, root, space_id, name)?;
 	commented.accepts(name, &anchor)?;
 	let summoned = turns::mentioned_agents(database, space_id, &said.mentions).await?;
+	let opening = said.comment()?;
 	let thread = NewThread {
 		id: Uuid::new_v4().to_string(),
 		space_id: space_id.to_owned(),
 		item_name: name.to_owned(),
 		last_board_point: commented.board_point(&anchor),
 		anchor,
-		opening: said.comment()?,
+		opening: opening.clone(),
 	};
 	let opened = database.library().open_thread(thread).await?;
 	let opened = announced(app, commented.as_it_stands(opened));
 	turns::summon(app, &commented, &opened, summoned);
+	mentions::told(app, &commented, &opened, opening);
 	Ok(opened)
 }
 
@@ -332,9 +340,11 @@ pub(crate) async fn reply_to_comment_thread<R: Runtime>(
 	let commented = Commented::read(app, root, &thread.space_id, &thread.item_name)?;
 	let unknown = LibraryError::UnknownThread { id: thread.id.clone() };
 	let summoned = turns::mentioned_agents(database, &thread.space_id, &said.mentions).await?;
-	let replied = database.library().reply(thread, said.comment()?).await?.ok_or(unknown)?;
+	let reply = said.comment()?;
+	let replied = database.library().reply(thread, reply.clone()).await?.ok_or(unknown)?;
 	let replied = announced(app, commented.as_it_stands(replied));
 	turns::summon(app, &commented, &replied, summoned);
+	mentions::told(app, &commented, &replied, reply);
 	Ok(replied)
 }
 

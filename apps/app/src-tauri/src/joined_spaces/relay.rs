@@ -24,6 +24,7 @@ use super::join::{bearer_of, member_socket_of, registered_relay_device};
 use super::member_link::{Answer, MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
+use super::mentions;
 use super::proxy;
 use super::roster_set::HeldRoster;
 use super::wait_reason::wait_ended;
@@ -39,6 +40,7 @@ use crate::hosting::relay::{
 	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
 	SILENCE_BOUND,
 };
+use crate::library::PersonHere;
 use crate::spaces::contract::SpaceDescribed;
 
 pub(super) const HOST_ABSENT: u16 = 4002;
@@ -782,8 +784,11 @@ async fn started_in_turn<R: Runtime>(
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
 	let linked =
 		Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link), joined: found.clone() };
+	let mentioned_here =
+		PersonHere { person_id: held.roster.own.account_id.clone(), space_id: id.to_owned() };
 	let linked = guest_linked(app.clone(), linked, held, stopped);
 	let linked = description::alongside(app.clone(), id.to_owned(), &link, linked);
+	let linked = mentions::alongside(app.clone(), mentioned_here, &link, linked);
 	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
 	let reached = Reached {
 		origin: origin.clone(),
