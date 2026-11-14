@@ -8,7 +8,7 @@ import type {
 	LibraryImage,
 	LibraryItem,
 } from "../bindings"
-import { invoke } from "../host/index"
+import { invoke, invokeOn } from "../host/index"
 
 export const readLibraryItems = (spaceId: string) =>
 	invoke<LibraryItem[]>("library_list", { spaceId })
@@ -27,6 +27,14 @@ export const readLibraryCommentThreads = (spaceId: string, name: string) =>
 
 export const readLibraryCommentAgentTurns = (spaceId: string) =>
 	invoke<LibraryCommentAgentTurn[]>("library_comment_agent_turns", { spaceId })
+
+export const readLibraryCommentAgentTurnsOn = (
+	hostId: string | null,
+	spaceId: string,
+) =>
+	invokeOn(hostId)<LibraryCommentAgentTurn[]>("library_comment_agent_turns", {
+		spaceId,
+	})
 
 export const readLibraryFile = (spaceId: string, name: string) =>
 	invoke<LibraryFile>("library_read_file", { spaceId, name })

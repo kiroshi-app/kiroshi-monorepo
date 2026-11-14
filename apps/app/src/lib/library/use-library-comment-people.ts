@@ -78,7 +78,7 @@ export const useLibraryCommentPeople = ({
 	const { accountId, host } = useContext(ThreadAuthorshipContext)
 	const unnamed = useChatCopy()("working.name")
 	const hostedMembers = useHostedMembers(spaceId, host.kind === "hosted")
-	const workingTurns = useLibraryCommentAgentTurns(spaceId)
+	const workingTurns = useLibraryCommentAgentTurns(spaceId, bots)
 
 	return useMemo(() => {
 		const ownName = viewerName || unnamed
