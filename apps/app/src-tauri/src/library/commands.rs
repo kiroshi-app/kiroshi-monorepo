@@ -12,8 +12,8 @@ use futures_util::future::join_all;
 
 use super::contract::{
 	LibraryBoardSummary, LibraryCommentAgentTurn, LibraryCommentAnchor, LibraryCommentCount,
-	LibraryCommentParty, LibraryCommentThread, LibraryDocument, LibraryDocumentState,
-	LibraryError, LibraryFile, LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem,
+	LibraryCommentParty, LibraryCommentThread, LibraryDocument, LibraryDocumentState, LibraryError,
+	LibraryFile, LibraryImage, LibraryImport, LibraryImportUrlError, LibraryItem,
 	LibraryPresenceAt, LibraryTemplate,
 };
 use super::host::stop_writers;
@@ -23,10 +23,9 @@ use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_agent_turns,
 	comment_threads, create_board, create_document, delete_item, import, import_paths, list,
 	open_comment_thread, open_document, person_calling, read_document, read_file, read_image,
-	read_picked_image, read_thumbnail, rename_board, rename_linked_document,
-	reopen_comment_thread, reply_to_comment_thread, resolve, resolve_comment_thread, root, save,
-	save_bytes, save_message, summarise_board, templates,
-	ClipboardPayload, Said,
+	read_picked_image, read_thumbnail, rename_board, rename_linked_document, reopen_comment_thread,
+	reply_to_comment_thread, resolve, resolve_comment_thread, root, save, save_bytes, save_message,
+	summarise_board, templates, ClipboardPayload, Said,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
