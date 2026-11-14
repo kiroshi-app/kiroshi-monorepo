@@ -47,7 +47,6 @@ import {
 	highlightCode,
 	toCodeLines,
 } from "@workspace/ui/lib/code-highlight"
-import { cn } from "@workspace/ui/lib/utils"
 
 export type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & ExtraProps
 export type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps
@@ -74,8 +73,6 @@ const LANGUAGE_PREFIX = "language-"
 const HIGHLIGHT_BUDGET_LINES = 200
 
 const NO_RUNS: MarkdownRun[] = []
-
-const RUN_OVERHANG = "-my-1.5 py-1.5"
 
 const isCodeElement = (child: FenceChild): child is FenceElement =>
 	child.type === "element" && child.tagName === "code"
@@ -231,10 +228,7 @@ export const MarkdownFence = ({
 						tabIndex={0}
 						role="group"
 						aria-label={snippetLabel}
-						className={cn(
-							"mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
-							runs?.length && RUN_OVERHANG,
-						)}
+						className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 					>
 						<FenceCode code={code} language={language} runs={runs} />
 					</span>

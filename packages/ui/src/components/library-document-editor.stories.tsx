@@ -3721,12 +3721,12 @@ const LONG_SNIPPET_SOURCE = `\`\`\`ts\nconst launch = ${"withRetries(".repeat(12
 
 const CODE_FIELD = "Code"
 
-const snippetDocument = (source = SNIPPET_SOURCE) => ({
+const snippetDocument = (source = SNIPPET_SOURCE, thread = BUDGET_THREAD) => ({
 	...commentedDocument(),
 	body: `${source}\n\n^${SNIPPET_BLOCK}`,
 	threads: [
 		{
-			...BUDGET_THREAD,
+			...thread,
 			anchor: {
 				blockId: SNIPPET_BLOCK,
 				passage: passageIn(source, SNIPPET_PASSAGE),
@@ -3734,6 +3734,38 @@ const snippetDocument = (source = SNIPPET_SOURCE) => ({
 		},
 	],
 })
+
+const clippersOf = (element: Element): Element[] => {
+	const parent = element.parentElement
+	if (!parent) return []
+	const { overflowX, overflowY } = getComputedStyle(parent)
+	return [
+		...(overflowX === "visible" && overflowY === "visible" ? [] : [parent]),
+		...clippersOf(parent),
+	]
+}
+
+const expectDrawnWhole = async (pin: HTMLElement) => {
+	const box = boxOf(pin)
+	for (const clipper of clippersOf(pin)) {
+		const around = boxOf(clipper)
+		await expect(box.top).toBeGreaterThanOrEqual(around.top)
+		await expect(box.bottom).toBeLessThanOrEqual(around.bottom)
+		await expect(box.left).toBeGreaterThanOrEqual(around.left)
+		await expect(box.right).toBeLessThanOrEqual(around.right)
+	}
+	const centre = (box.left + box.right) / 2
+	for (const edge of [box.top + 1, box.bottom - 1])
+		await expect(pin.contains(document.elementFromPoint(centre, edge))).toBe(
+			true,
+		)
+}
+
+const paintOf = (pin: HTMLElement) =>
+	[pin, ...pin.querySelectorAll("*")].map((part) => {
+		const { color, backgroundColor, opacity } = getComputedStyle(part)
+		return { color, backgroundColor, opacity }
+	})
 
 const snippetScrollerIn = (block: HTMLElement) =>
 	within(block).getByRole("group", { name: "Code snippet, ts" })
@@ -3751,7 +3783,7 @@ const expectPassageOnColumn = async (
 const codePassageAtRest = {
 	args: snippetDocument(),
 	parameters: describedAs(
-		"A commented passage on a code block at rest, drawn as the passage of artboard Doc 1. Check the wash at 8 percent over a 2px underline on exactly the commented characters, their syntax colours kept, the pin starting on the end of the passage and centred on its line without being cut by the block, and that pressing the pin raises `onOpenThread` with its thread.",
+		"A commented passage on a code block at rest, drawn as the passage of artboard Doc 1. Check the wash at 8 percent over a 2px underline on exactly the commented characters, their syntax colours kept, the pin starting on the end of the passage and centred on its line, drawn whole over the block, and that pressing the pin raises `onOpenThread` with its thread.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		const block = blockOf(canvasElement, SNIPPET_BLOCK)
@@ -3772,9 +3804,7 @@ const codePassageAtRest = {
 		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
 		await expect(pin).toBeVisible()
 		await expectPassagePin(pin, passage)
-		const scroller = snippetScrollerIn(block)
-		await expect(boxOf(pin).top).toBeGreaterThanOrEqual(boxOf(scroller).top)
-		await expect(boxOf(pin).bottom).toBeLessThanOrEqual(boxOf(scroller).bottom)
+		await expectDrawnWhole(pin)
 
 		await userEvent.click(pin)
 		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
@@ -3794,10 +3824,11 @@ export const CodePassageAtRestDark = meta.story({
 const codePassageFocused = {
 	args: snippetDocument(),
 	parameters: describedAs(
-		"A commented passage on a code block whose field has focus. Check the passage keeps its wash and its underline under exactly the commented characters of the field, the pin stays on the end of the passage outside the field, and after one character typed before the passage the highlight is still on the same characters, one column further, with its pin.",
+		"A commented passage on a code block whose field has focus. Check the passage keeps its wash and its underline under exactly the commented characters of the field, the text under the field stays invisible, the pin stays whole on the end of the passage, painted as at rest, pressing it raises `onOpenThread` with its thread and leaves the focus in the field, and after one character typed before the passage the highlight is still on the same characters, one column further, with its pin.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const paintAtRest = paintOf(threadPinIn(canvasElement, BUDGET_THREAD.id))
 		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
 		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
 		await expect(passage).toBeVisible()
@@ -3809,13 +3840,23 @@ const codePassageFocused = {
 			getComputedStyle(field).font,
 		)
 		await expectPassageOnColumn(passage, field, SNIPPET_COLUMN)
-		await expect(boxOf(passage.parentElement as HTMLElement)).toEqual(
-			boxOf(field),
-		)
+		const underField = passage.parentElement as HTMLElement
+		await expect(boxOf(underField)).toEqual(boxOf(field))
+		await expect(underField).toHaveTextContent(field.value, {
+			normalizeWhitespace: false,
+		})
+		for (const part of [underField, ...underField.querySelectorAll("*")])
+			await expect(getComputedStyle(part).color).toBe("rgba(0, 0, 0, 0)")
 		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
 		await expect(pin).toBeVisible()
-		await expect(block.querySelector("pre")?.contains(pin)).toBe(false)
+		await expect(underField.contains(pin)).toBe(false)
 		await expectPassagePin(pin, passage)
+		await expectDrawnWhole(pin)
+		await expect(paintOf(pin)).toEqual(paintAtRest)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+		await expect(field).toHaveFocus()
 
 		field.setSelectionRange(0, 0)
 		await userEvent.keyboard("x")
@@ -3846,10 +3887,12 @@ export const CodePassageScrolledOnLongLine = meta.story({
 		const block = blockOf(canvasElement, SNIPPET_BLOCK)
 		const scroller = snippetScrollerIn(block)
 		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
 		const atRest = boxOf(passage)
 		await expect(getComputedStyle(scroller).overflowX).toBe("auto")
 		await expect(boxOf(scroller).right).toBeLessThanOrEqual(boxOf(block).right)
 		await expect(atRest.left).toBeGreaterThan(boxOf(scroller).right)
+		await expect(pin).not.toBeVisible()
 
 		scroller.scrollLeft = scroller.scrollWidth
 		await expect(scroller.scrollLeft).toBeGreaterThan(0)
@@ -3861,10 +3904,41 @@ export const CodePassageScrolledOnLongLine = meta.story({
 		await expect(boxOf(passage).right).toBeLessThanOrEqual(
 			boxOf(scroller).right,
 		)
-		await expectPassagePin(
-			threadPinIn(canvasElement, BUDGET_THREAD.id),
-			passage,
+		await waitFor(() => expect(pin).toBeVisible())
+		await expectPassagePin(pin, passage)
+	},
+})
+
+const resolvedSnippet = snippetDocument(SNIPPET_SOURCE, RESOLVED_SESSION_THREAD)
+
+export const CodeResolvedPinWholeAtRest = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toBeVisible()
+		await expectPinAbovePassageEnd(pin, shownPassageOf(block, SNIPPET_PASSAGE))
+		await expect(boxOf(pin).top).toBeLessThan(
+			boxOf(snippetScrollerIn(block)).top,
 		)
+		await expectDrawnWhole(pin)
+	},
+})
+
+export const CodeResolvedPinWholeWhileFocused = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const field = await openBlock(canvasElement, block)
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toBeVisible()
+		await expectPinAbovePassageEnd(pin, shownPassageOf(block, SNIPPET_PASSAGE))
+		await expect(boxOf(pin).top).toBeLessThan(boxOf(field).top)
+		await expectDrawnWhole(pin)
 	},
 })
 

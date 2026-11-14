@@ -1433,20 +1433,21 @@ const LibraryDocumentBlockEditor = ({
 				const hasBlockEditor = BLOCK_EDITORS.includes(type)
 				const textType = textTypeOf(type)
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
+				const isCode = type === "code"
 				const commentRuns = commentRunsIn(commentLayer, block.id)
-				const runs =
-					type === "code"
-						? commentRuns
-						: [
-								...runsIn({
-									writers,
-									held: heldRuns,
-									people,
-									start: offsets[index],
-									length: block.source.length,
-								}),
-								...commentRuns,
-							]
+				const runs = isCode
+					? commentRuns
+					: [
+							...runsIn({
+								writers,
+								held: heldRuns,
+								people,
+								start: offsets[index],
+								length: block.source.length,
+							}),
+							...commentRuns,
+						]
+				const renderShownRun = isCode ? renderFieldRun : renderRun
 				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1
@@ -1571,7 +1572,7 @@ const LibraryDocumentBlockEditor = ({
 									<Markdown
 										className={DOCUMENT_TYPE}
 										onToggleTask={toggleTaskIn(block.id)}
-										renderRun={runs.length > 0 ? renderRun : undefined}
+										renderRun={runs.length > 0 ? renderShownRun : undefined}
 										resolveImage={resolveImage}
 										runs={runs.length > 0 ? runs : undefined}
 									>
@@ -1586,8 +1587,10 @@ const LibraryDocumentBlockEditor = ({
 						) : null}
 						<LibraryDocumentBlockComments
 							blockId={block.id}
-							isWriting={
-								isEditing && (!hasBlockEditor || PASSAGE_EDITORS.includes(type))
+							hasPlacedPins={
+								isCode ||
+								(isEditing &&
+									(!hasBlockEditor || PASSAGE_EDITORS.includes(type)))
 							}
 							layer={commentLayer}
 							source={block.source}
