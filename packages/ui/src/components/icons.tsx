@@ -4,6 +4,7 @@ import {
 	ArchiveIcon,
 	ArrowDownIcon,
 	ArrowRightIcon,
+	ArrowRightLeftIcon,
 	ArrowUpIcon,
 	ArrowUpRightIcon,
 	BanIcon,
@@ -215,6 +216,25 @@ const ConnectorElbow = ({ size = 24, ...props }: IconProps) => (
 	</svg>
 )
 
+const Duplicate = ({ size = 24, ...props }: IconProps) => (
+	<svg
+		aria-hidden="true"
+		fill="none"
+		focusable="false"
+		height={size}
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		viewBox="0 0 24 24"
+		width={size}
+		xmlns="http://www.w3.org/2000/svg"
+		{...props}
+	>
+		<rect height="12" rx="2.625" width="12" x="8.25" y="8.25" />
+		<path d="M15.75 8.25V6.375A2.625 2.625 0 0 0 13.125 3.75h-6.75A2.625 2.625 0 0 0 3.75 6.375v6.75A2.625 2.625 0 0 0 6.375 15.75H8.25" />
+	</svg>
+)
+
 const GitHub = ({ size = 24, ...props }: IconProps) => (
 	<svg
 		aria-hidden="true"
@@ -329,6 +349,7 @@ const Icons = {
 	Docs: BookOpenIcon,
 	Download: DownloadIcon,
 	Drag: GripVerticalIcon,
+	Duplicate,
 	Edit: PenIcon,
 	Ellipse: CircleIcon,
 	Error: CircleXIcon,
@@ -413,6 +434,7 @@ const Icons = {
 	Strikethrough: StrikethroughIcon,
 	Success: CircleCheckIcon,
 	Superset,
+	Switch: ArrowRightLeftIcon,
 	SystemScheme: MonitorIcon,
 	Table: TableIcon,
 	Template: LayoutDashboardIcon,

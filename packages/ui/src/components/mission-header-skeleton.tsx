@@ -1,23 +1,34 @@
 import { useTranslation } from "react-i18next"
 
 import { AppHeader } from "@workspace/ui/components/app-header"
+import {
+	HeaderIsland,
+	HeaderIslandButton,
+	HeaderIslandCell,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	SkeletonBar,
 	SkeletonHexagon,
 } from "@workspace/ui/components/list-skeleton"
-import type { MissionHeaderProps } from "@workspace/ui/components/mission-header"
-import { Button } from "@workspace/ui/components/ui/button"
+import {
+	MISSION_HEADER_ROWS,
+	MISSION_TICKET_ISLAND,
+	MISSION_TICKET_SPACER,
+	MISSION_TICKET_STACKED_CELL,
+	type MissionHeaderProps,
+} from "@workspace/ui/components/mission-header"
 import { cn } from "@workspace/ui/lib/utils"
+
+const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none"
 
 type MissionHeaderSkeletonProps = Pick<
 	MissionHeaderProps,
-	"onBack" | "windowControls" | "dragRegion" | "className"
+	"onBack" | "dragRegion" | "className"
 >
 
 const MissionHeaderSkeleton = ({
 	onBack,
-	windowControls,
 	dragRegion,
 	className,
 }: MissionHeaderSkeletonProps) => {
@@ -26,44 +37,51 @@ const MissionHeaderSkeleton = ({
 	return (
 		<div
 			aria-busy="true"
-			className={cn("flex w-full shrink-0 flex-col", className)}
+			className={cn(MISSION_HEADER_ROWS, className)}
 			data-slot="mission-header-skeleton"
 		>
 			<AppHeader
 				data-tauri-drag-region={dragRegion}
+				isFloating
 				leading={
 					<>
-						<Button
+						<HeaderIslandButton
 							aria-label={t("missions.header.back")}
 							onClick={onBack}
-							size="icon"
-							variant="ghost"
 						>
 							<Icons.Previous aria-hidden="true" />
-						</Button>
-						<span
+						</HeaderIslandButton>
+						<HeaderIslandCell
 							aria-hidden="true"
-							className="flex min-w-0 animate-pulse items-center gap-2 motion-reduce:animate-none"
+							className={cn("p-1", SKELETON_PULSE)}
 						>
 							<SkeletonHexagon className="size-6" />
 							<SkeletonBar className="w-48" />
-						</span>
+						</HeaderIslandCell>
 					</>
 				}
-				windowControls={windowControls}
 			/>
-			<div
-				className="flex h-8.5 shrink-0 items-center gap-2 border-border border-b pe-4 ps-12.5"
-				data-slot="mission-ticket-band-skeleton"
+			<HeaderIsland
+				aria-hidden="true"
+				className={MISSION_TICKET_ISLAND}
+				data-island="mission-ticket"
 			>
-				<span
-					aria-hidden="true"
-					className="flex min-w-0 flex-1 animate-pulse items-center gap-2 motion-reduce:animate-none"
+				<HeaderIslandCell
+					className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
 				>
-					<SkeletonBar className="w-40" />
-					<SkeletonBar className="ms-auto w-16 shrink-0" isFaint />
-				</span>
-			</div>
+					<SkeletonBar className="w-12 shrink-0" />
+					<SkeletonBar className="w-48" />
+				</HeaderIslandCell>
+				<HeaderIslandCell
+					className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
+				>
+					<SkeletonBar className="w-40" isFaint />
+				</HeaderIslandCell>
+				<span className={MISSION_TICKET_SPACER} />
+				<HeaderIslandCell className={cn("shrink-0", SKELETON_PULSE)}>
+					<SkeletonBar className="w-20" isFaint />
+				</HeaderIslandCell>
+			</HeaderIsland>
 		</div>
 	)
 }

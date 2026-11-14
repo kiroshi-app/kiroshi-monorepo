@@ -3,14 +3,18 @@ import { expect, fn, userEvent } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	botIdentityAvatars,
+	colourTransitionsOf,
 	companionGlyphOf,
 	companionHueOf,
 	listExhaustively,
+	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+import { HeaderIsland } from "@workspace/ui/components/header-island"
 
 const CONNECTION_STATES = listExhaustively<ConnectionStatusState>({
 	checking: true,
@@ -195,5 +199,37 @@ export const InLayout = meta.story({
 		await expect(button.height).toBe(36)
 		await expect(button.left - header.left).toBe(6)
 		await expect(Math.abs(button.top - header.top - 6)).toBeLessThan(1)
+	},
+})
+
+export const ExpandedInIsland = meta.story({
+	args: { connection: "ready", isSettingsOpen: true, name: "Nest" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the agent's settings are open from a floating header: the button is one 32px cell of the island and stays lit under its own panel. Check that it wears the island hover fill with a full foreground, that assistive tech reads it as expanded, and that the fill arrives with no colour transition. Pick `Expanded` for the button in the fixed bar.",
+			},
+		},
+	},
+	render: (args) => (
+		<HeaderIsland>
+			<HeaderIdentityButton {...args} />
+		</HeaderIsland>
+	),
+	play: async ({ canvas }) => {
+		const button = canvas.getByRole("button")
+
+		await expect(button).toHaveAttribute("aria-expanded", "true")
+		await expect(button.getBoundingClientRect().height).toBe(32)
+		await expect(getComputedStyle(button).backgroundColor).toBe(
+			tokenStyleIn(button, "bg-header-island-control-hover", "backgroundColor"),
+		)
+		await expect(getComputedStyle(button).color).toBe(
+			tokenStyleIn(button, "text-foreground", "color"),
+		)
+		await withMotionAllowed(() =>
+			expect(colourTransitionsOf(button)).toEqual([]),
+		)
 	},
 })

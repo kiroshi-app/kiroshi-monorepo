@@ -84,7 +84,6 @@ import {
 	ThreadRoutines,
 } from "@/components/thread-routines"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
-import { titleBarDragRegion } from "@/components/window-caption-controls"
 import type { ApplicationInstall } from "@/lib/applications/application-port"
 import {
 	isLeftOutOf,
@@ -460,7 +459,7 @@ const ThreadHeader = ({
 				state={mission.mission.state}
 				ticket={mission.mission.ticket}
 				tools={mission.mission.tools}
-				dragRegion={titleBarDragRegion()}
+				dragRegion="deep"
 			/>
 		)
 	}
@@ -476,6 +475,7 @@ const ThreadHeader = ({
 	return (
 		<AppHeader
 			data-tauri-drag-region="deep"
+			isFloating
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
@@ -2013,6 +2013,7 @@ function ThreadView(props: ThreadViewProps) {
 						))
 			}
 			header={header}
+			isHeaderFloating
 			notice={notice}
 			overlay={overlay}
 			pending={departure ? undefined : approval}

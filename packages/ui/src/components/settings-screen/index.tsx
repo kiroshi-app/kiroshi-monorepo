@@ -38,6 +38,7 @@ import {
 import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
+import { HeaderIslandCell } from "@workspace/ui/components/header-island"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
@@ -515,16 +516,26 @@ const SettingsScreenBodyLayout = ({
 			</SettingsMenu>
 			<ContentCard>
 				<ScreenLayout
-					contentClassName={shown.value === SPACE_ENTRY ? "gap-6" : "gap-4"}
+					contentClassName={cn(
+						"pt-14",
+						shown.value === SPACE_ENTRY ? "gap-6" : "gap-4",
+					)}
 					data-entry={shown.value}
 					data-slot="settings-screen-page"
 					header={
 						<AppHeader
-							className="pl-6"
 							data-tauri-drag-region="deep"
-							leading={<h2 className="truncate">{shown.label}</h2>}
+							isFloating
+							leading={
+								<HeaderIslandCell>
+									<h2 className="truncate font-medium leading-4">
+										{shown.label}
+									</h2>
+								</HeaderIslandCell>
+							}
 						/>
 					}
+					isHeaderFloating
 					ref={(layout) => {
 						scroller.current =
 							layout?.querySelector<HTMLElement>(

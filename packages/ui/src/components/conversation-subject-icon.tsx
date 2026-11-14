@@ -14,12 +14,19 @@ const PICTOGRAM = "relative"
 
 const BARE_PICTOGRAM = "size-full stroke-[1.75]!"
 
+const SQUARE_TILE = "absolute inset-0 rounded-sm bg-(--conversation-icon)"
+
+const SQUARE_PICTOGRAM_SHARE = 7 / 12
+
+const HEXAGON_PICTOGRAM_SHARE = 1 / 2
+
 type ConversationSubjectIconProps = {
 	icon?: string
 	hue?: number | null
 	side?: number
 	isBare?: boolean
 	isFilled?: boolean
+	isSquare?: boolean
 }
 
 const untintedStyleOf = (roles: string[]) =>
@@ -61,11 +68,14 @@ const ConversationSubjectIcon = ({
 	side = 40,
 	isBare = false,
 	isFilled = false,
+	isSquare = false,
 }: ConversationSubjectIconProps) => {
 	const drawn =
 		isBare && !isFilled ? ConversationOutlineIcons : ConversationIcons
 	const Pictogram = drawn[conversationIconOf(icon)]
 	const scope = hueScopeOf(hue, isBare)
+	const pictogramSide =
+		side * (isSquare ? SQUARE_PICTOGRAM_SHARE : HEXAGON_PICTOGRAM_SHARE)
 
 	return (
 		<span
@@ -87,10 +97,17 @@ const ConversationSubjectIcon = ({
 				/>
 			) : (
 				<>
-					<OutlinedHexagon fill="var(--conversation-icon)" side={side} />
+					{isSquare ? (
+						<span
+							className={SQUARE_TILE}
+							data-slot="conversation-subject-icon-tile"
+						/>
+					) : (
+						<OutlinedHexagon fill="var(--conversation-icon)" side={side} />
+					)}
 					<span
 						className={PICTOGRAM}
-						style={{ width: side / 2, height: side / 2 }}
+						style={{ width: pictogramSide, height: pictogramSide }}
 					>
 						<Pictogram
 							className="size-full"

@@ -6,10 +6,8 @@ import {
 	ConversationSubjectIcon,
 	type ConversationSubjectIconProps,
 } from "@workspace/ui/components/conversation-subject-icon"
-import { HEADER_IDENTITY_CLASS } from "@workspace/ui/components/header-identity-button"
-import { Icons } from "@workspace/ui/components/icons"
-import { Button } from "@workspace/ui/components/ui/button"
-import { cn } from "@workspace/ui/lib/utils"
+import { HeaderSubjectButton } from "@workspace/ui/components/header-identity-button"
+import { useIsInHeaderIsland } from "@workspace/ui/components/header-island"
 
 const AVATAR_SIZE = 24
 
@@ -33,20 +31,24 @@ const HeaderConversationButton = ({
 	className,
 }: HeaderConversationButtonProps) => {
 	const { t } = useTranslation("chat")
+	const isInIsland = useIsInHeaderIsland()
 
 	return (
-		<Button
-			aria-expanded={isSettingsOpen}
+		<HeaderSubjectButton
 			aria-label={t("screen.conversationIdentity", { name })}
-			className={cn(HEADER_IDENTITY_CLASS, className)}
+			className={className}
 			data-slot="header-conversation-button"
-			onClick={onOpenSettings}
-			variant="ghost"
+			isSettingsOpen={isSettingsOpen}
+			onOpenSettings={onOpenSettings}
 		>
-			<ConversationSubjectIcon hue={color} icon={icon} side={AVATAR_SIZE} />
+			<ConversationSubjectIcon
+				hue={color}
+				icon={icon}
+				isSquare={isInIsland}
+				side={AVATAR_SIZE}
+			/>
 			<span className="min-w-0 truncate">{name}</span>
-			<Icons.Settings aria-hidden="true" className="text-muted-foreground" />
-		</Button>
+		</HeaderSubjectButton>
 	)
 }
 

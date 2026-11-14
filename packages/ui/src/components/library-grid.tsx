@@ -260,10 +260,7 @@ const LibraryGrid = ({
 	onOpenItem,
 	...itemActions
 }: LibraryGridProps) => (
-	<ul
-		className={cn(GRID_COLUMNS, "gap-y-7 px-10 pt-2 pb-10")}
-		data-slot="library-grid"
-	>
+	<ul className={cn(GRID_COLUMNS, "gap-y-7")} data-slot="library-grid">
 		{items.map((item) => (
 			<li className="flex min-w-0 flex-col" key={item.id}>
 				{item.importProgress === undefined ? (
@@ -305,7 +302,7 @@ const SkeletonGridRow = () => (
 )
 
 const LibraryGridSkeleton = () => (
-	<div className="min-h-0 flex-1 px-10 pt-2" data-slot="library-grid-skeleton">
+	<div className="min-h-0 flex-1" data-slot="library-grid-skeleton">
 		<ListSkeleton className="gap-7" row={<SkeletonGridRow />} />
 	</div>
 )

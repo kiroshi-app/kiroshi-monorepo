@@ -1,28 +1,39 @@
-import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+	botIdentityAvatars,
+	colourTransitionsOf,
+	LAPTOP_WINDOW,
 	mergeA11y,
 	probedStyleOf,
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
+import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
 import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
+import { NO_EARLIER_TODAY } from "@workspace/ui/components/missions.fixtures"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import {
+	RoutinesPanel,
+	RoutinesPanelTrigger,
+} from "@workspace/ui/components/routines-panel"
 import {
 	ThreadLayout,
 	type ThreadLayoutProps,
@@ -900,5 +911,388 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 				await expect(surfaceOf(skeleton, frame)).toEqual(loadedSurface)
 			}
 		}
+	},
+})
+
+const HEADER_ISLAND_INSET = 8
+
+const HEADER_ISLAND_HEIGHT = 40
+
+const HEADER_CONTROL_SIZE = 32
+
+const CONVERSATION_CONTENT_TOP = 56
+
+const NARROW_CONVERSATION_WIDTH = 400
+
+const HEADER_ISLAND_EDGE = 5
+
+const TWO_CONTROL_ISLAND_WIDTH = 76
+
+const SOLO_NAME = "Ichi"
+
+const SOLO_ROLE = "Frontend engineer"
+
+const GROUP_TITLE = "Launch checklist"
+
+const LONG_GROUP_TITLE =
+	"Launch checklist for the 0.42 release and the notes that ship with it"
+
+const openSubjectSettings = fn()
+
+const FLOATING_CONTROLS = (
+	<>
+		<PinnedMessages messages={[]} onJump={fn()} onUnpin={fn()} />
+		<RoutinesPanelTrigger />
+	</>
+)
+
+const SOLO_ISLANDS = (
+	<AppHeader
+		isFloating
+		leading={
+			<HeaderIdentityButton
+				blot={BOT.blot}
+				connection="ready"
+				name={SOLO_NAME}
+				onOpenSettings={openSubjectSettings}
+				seed={BOT.id}
+				title={SOLO_ROLE}
+				version="2.1.233"
+			/>
+		}
+		trailing={FLOATING_CONTROLS}
+	/>
+)
+
+const groupIslands = (name: string) => (
+	<AppHeader
+		isFloating
+		leading={
+			<HeaderConversationButton
+				color={BLOT_HUES.blue}
+				icon="FileText"
+				name={name}
+				onOpenSettings={openSubjectSettings}
+			/>
+		}
+		trailing={FLOATING_CONTROLS}
+	/>
+)
+
+const LONG_CONVERSATION_ROWS: TranscriptItem[] = [
+	...LONG_TRANSCRIPT,
+	...LONG_TRANSCRIPT,
+	...LONG_TRANSCRIPT,
+].map((question, turn) => ({
+	key: `turn-${turn}`,
+	render: () => <UserTurn>{question}</UserTurn>,
+}))
+
+const FLOATING_THREAD = {
+	isHeaderFloating: true,
+	rows: CONVERSATION_ROWS,
+	children: null,
+}
+
+const inRoutinesShell = (Story: () => ReactNode) => (
+	<div className="h-svh bg-card" data-content-card="">
+		<RoutinesPanel
+			failure={null}
+			isOpen={false}
+			missions={{ open: [], earlierToday: NO_EARLIER_TODAY, onOpen: fn() }}
+			onDelete={fn()}
+			onEnabledChange={fn()}
+			onOpenChange={fn()}
+			onRetry={fn()}
+			routines={[]}
+		>
+			<Story />
+		</RoutinesPanel>
+	</div>
+)
+
+const inNarrowConversation = (Story: () => ReactNode) => (
+	<div style={{ width: NARROW_CONVERSATION_WIDTH }}>
+		<Story />
+	</div>
+)
+
+const boxOf = (element: Element) => element.getBoundingClientRect()
+
+const expectConversationIslands = async (
+	canvasElement: HTMLElement,
+	subjectSlot: string,
+) => {
+	const layout = slotIn(canvasElement, "chat-layout")
+	const frame = boxOf(layout)
+	const bar = slotIn(layout, "app-header")
+	const [leading, trailing] = slotsIn(bar, "header-island")
+	const subject = slotIn(leading, subjectSlot)
+	const gear = subject.lastElementChild as HTMLElement
+	const pins = slotIn(trailing, "pinned-messages-trigger")
+
+	await expect(getComputedStyle(bar).borderBottomWidth).toBe("0px")
+	await expect([
+		boxOf(leading).left - frame.left,
+		boxOf(leading).top - frame.top,
+		boxOf(leading).height,
+	]).toEqual([HEADER_ISLAND_INSET, HEADER_ISLAND_INSET, HEADER_ISLAND_HEIGHT])
+	await expect([
+		frame.right - boxOf(trailing).right,
+		boxOf(trailing).top - frame.top,
+		boxOf(trailing).height,
+	]).toEqual([HEADER_ISLAND_INSET, HEADER_ISLAND_INSET, HEADER_ISLAND_HEIGHT])
+
+	await expect(within(leading).getAllByRole("button")).toEqual([subject])
+	await expect(subject).toHaveAttribute("aria-expanded", "false")
+	await expect([
+		boxOf(subject).left - boxOf(leading).left,
+		boxOf(subject).height,
+		boxOf(leading).right - boxOf(subject).right,
+	]).toEqual([HEADER_ISLAND_EDGE, HEADER_CONTROL_SIZE, HEADER_ISLAND_EDGE])
+	await expect([
+		boxOf(gear).width,
+		boxOf(subject).right - boxOf(gear).right,
+	]).toEqual([HEADER_CONTROL_SIZE, 0])
+	await expect(boxOf(gear.firstElementChild as Element).width).toBe(16)
+	await expect([boxOf(pins).width, boxOf(pins).height]).toEqual([
+		HEADER_CONTROL_SIZE,
+		HEADER_CONTROL_SIZE,
+	])
+	await expect(boxOf(pins.firstElementChild as Element).width).toBe(16)
+	await withMotionAllowed(async () => {
+		await expect(colourTransitionsOf(subject)).toEqual([])
+		await expect(colourTransitionsOf(pins)).toEqual([])
+	})
+	await waitFor(() =>
+		expect(
+			getComputedStyle(slotIn(layout, "message-scroller-content")).paddingTop,
+		).toBe(`${CONVERSATION_CONTENT_TOP}px`),
+	)
+
+	return { frame, leading, trailing, subject, gear }
+}
+
+const expectSoloIslands = async (canvasElement: HTMLElement) => {
+	const islands = await expectConversationIslands(
+		canvasElement,
+		"header-identity-button",
+	)
+	const [avatar] = botIdentityAvatars(islands.subject)
+	const dot = slotIn(islands.subject, "connection-status")
+		.firstElementChild as HTMLElement
+
+	await expect(islands.subject).toHaveAccessibleName(
+		`${SOLO_NAME} · agent settings`,
+	)
+	await expect(boxOf(avatar).width).toBe(24)
+	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
+
+	return { ...islands, dot, role: slotIn(islands.subject, "bot-title-badge") }
+}
+
+const expectIslandSurface = async (
+	canvasElement: HTMLElement,
+	surface: "bg-card" | "bg-card-raised",
+) => {
+	for (const island of slotsIn(canvasElement, "header-island")) {
+		await expect(getComputedStyle(island).backgroundColor).toBe(
+			tokenStyleIn(island, surface, "backgroundColor"),
+		)
+	}
+}
+
+const ASSEMBLED_ONCE_THE_APP_OPTS_IN =
+	"`apps/app/src/components/thread-screen.tsx:477` assembles it once it passes `isFloating` to the header and `isHeaderFloating` to the layout."
+
+export const Solo1a = meta.story({
+	args: { ...FLOATING_THREAD, header: SOLO_ISLANDS },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control then the routines opener, two 32px cells 2px apart. Check the transcript starts 56px from the top and that neither control animates its colours. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const { subject, role } = await expectSoloIslands(canvasElement)
+
+		await expectIslandSurface(canvasElement, "bg-card")
+		await expect(role).toBeVisible()
+		await expect(role).toHaveTextContent(SOLO_ROLE)
+		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
+
+		await userEvent.click(subject)
+		await expect(openSubjectSettings).toHaveBeenCalledOnce()
+	},
+})
+
+export const SoloDark1b = meta.story({
+	args: Solo1a.input.args,
+	decorators: [inRoutinesShell],
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 1b, the conversation with one agent in the dark theme. Check that both islands wear the raised card surface and keep the geometry of `Solo1a`. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSoloIslands(canvasElement)
+		await expectIslandSurface(canvasElement, "bg-card-raised")
+	},
+})
+
+export const SoloScrolled1c = meta.story({
+	args: { ...Solo1a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 1c, a conversation with one agent long enough to scroll. Check that the turns pass under both islands and that the top fade of the layout covers them as they leave. Pick `Solo1a` for a conversation short enough to rest whole. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSoloIslands(canvasElement)
+		await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
+	},
+})
+
+export const SoloNarrow1d = meta.story({
+	args: Solo1a.input.args,
+	decorators: [inRoutinesShell, inNarrowConversation],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 1d, the conversation with one agent in a thread 400px wide. Check that the role chip is gone and that the name, the connection dot and the gear stay whole inside the leading island, with the trailing island whole beside it. Pick `Solo1a` for the width that keeps the role. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { frame, leading, trailing, subject, role, dot, gear } =
+			await expectSoloIslands(canvasElement)
+		const name = within(subject).getByText(SOLO_NAME)
+
+		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
+		await expect(role).not.toBeVisible()
+		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
+		for (const whole of [dot, gear]) {
+			await expect(boxOf(whole).right).toBeLessThanOrEqual(
+				boxOf(leading).right - 4,
+			)
+		}
+		await expect(boxOf(leading).right).toBeLessThan(boxOf(trailing).left)
+	},
+})
+
+export const Group2a = meta.story({
+	args: { ...FLOATING_THREAD, header: groupIslands(GROUP_TITLE) },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject tile, a square with 6px corners in the conversation colour, the title and the gear, with no role chip and no connection dot. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const { subject } = await expectConversationIslands(
+			canvasElement,
+			"header-conversation-button",
+		)
+
+		await expectIslandSurface(canvasElement, "bg-card")
+		await expect(subject).toHaveAccessibleName(
+			`${GROUP_TITLE} · conversation settings`,
+		)
+		const tile = slotIn(subject, "conversation-subject-icon-tile")
+		await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([24, 24])
+		await expect(getComputedStyle(tile).borderTopLeftRadius).toBe("6px")
+		await expect(slotsIn(subject, "bot-title-badge")).toHaveLength(0)
+		await expect(slotsIn(subject, "connection-status")).toHaveLength(0)
+
+		await userEvent.click(subject)
+		await expect(openSubjectSettings).toHaveBeenCalledOnce()
+	},
+})
+
+export const GroupDark2b = meta.story({
+	args: Group2a.input.args,
+	decorators: [inRoutinesShell],
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 2b, the group conversation in the dark theme. Check that both islands wear the raised card surface and keep the geometry of `Group2a`. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectConversationIslands(canvasElement, "header-conversation-button")
+		await expectIslandSurface(canvasElement, "bg-card-raised")
+	},
+})
+
+export const GroupScrolled2c = meta.story({
+	args: { ...Group2a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 2c, a group conversation long enough to scroll. Check that the turns pass under both islands and that the top fade of the layout covers them as they leave. Pick `Group2a` for a conversation short enough to rest whole. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectConversationIslands(canvasElement, "header-conversation-button")
+		await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
+	},
+})
+
+export const GroupNarrow2d = meta.story({
+	args: { ...FLOATING_THREAD, header: groupIslands(LONG_GROUP_TITLE) },
+	decorators: [inRoutinesShell, inNarrowConversation],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 2d, a group conversation with a title written as a sentence, in a thread 400px wide. Check that the title truncates with an ellipsis, that the gear keeps its 32px cell inside the leading island, and that the trailing island stays whole, 8px from the side. Pick `Group2a` for a title that fits. " +
+					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const { frame, leading, trailing } = await expectConversationIslands(
+			canvasElement,
+			"header-conversation-button",
+		)
+		const title = canvas.getByText(LONG_GROUP_TITLE)
+
+		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
+		await expect(boxOf(leading).right).toBeLessThan(boxOf(trailing).left)
+		await expect(boxOf(trailing).width).toBe(TWO_CONTROL_ISLAND_WIDTH)
 	},
 })

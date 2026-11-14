@@ -22,6 +22,10 @@ import {
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
+import {
+	HeaderIslandButton,
+	useIsInHeaderIsland,
+} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ListSkeleton,
@@ -692,21 +696,27 @@ type RoutinesPanelTriggerProps = ButtonHTMLAttributes<HTMLButtonElement>
 const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 	const { t } = useTranslation("chat")
 	const { isOpen, onOpenChange, triggerRef } = useRoutinesPanel()
+	const isInIsland = useIsInHeaderIsland()
 
 	if (isOpen) return null
 
-	return (
-		<Button
-			{...props}
-			aria-expanded={isOpen}
-			aria-label={t("activity.panel.toggle")}
-			onClick={() => onOpenChange(true)}
-			ref={triggerRef}
-			size="icon"
-			variant="ghost"
-		>
+	const trigger = {
+		...props,
+		"aria-expanded": isOpen,
+		"aria-label": t("activity.panel.toggle"),
+		onClick: () => onOpenChange(true),
+		ref: triggerRef,
+		children: isInIsland ? (
+			<Icons.Switch aria-hidden="true" />
+		) : (
 			<Icons.SidePanel aria-hidden="true" />
-		</Button>
+		),
+	}
+
+	return isInIsland ? (
+		<HeaderIslandButton {...trigger} />
+	) : (
+		<Button {...trigger} size="icon" variant="ghost" />
 	)
 }
 

@@ -34,6 +34,17 @@ describe("toRelativeTime", () => {
 		expect(ago(63_072_000_000)).toBe("2 years ago")
 	})
 
+	it("abbreviates the unit in the short style", () => {
+		expect(toRelativeTime(NOW - 7_200_000, NOW, "short")).toBe("2 hr. ago")
+		expect(toRelativeTime(NOW - 45_000, NOW, "short")).toBe("now")
+
+		activateLanguage("fr")
+
+		expect(toRelativeTime(NOW - 7_200_000, NOW, "short")).toMatch(
+			/^il y a 2\sh$/,
+		)
+	})
+
 	it("says now for anything under a minute", () => {
 		expect(ago(0)).toBe("now")
 		expect(ago(45_000)).toBe("now")
@@ -55,6 +66,11 @@ describe("toElapsedTime", () => {
 		expect(since(7_200_000)).toBe("2h")
 		expect(since(1_209_600_000)).toBe("14d")
 		expect(since(63_072_000_000)).toBe("2y")
+	})
+
+	it("spells the unit short on demand", () => {
+		expect(toElapsedTime(NOW - 240_000, NOW, "short")).toBe("4 min")
+		expect(toElapsedTime(NOW - 7_200_000, NOW, "short")).toBe("2 hr")
 	})
 
 	it("says it in the language the runtime carries", () => {

@@ -6,6 +6,7 @@ import {
 	expectSkeletonFilledTo,
 	hueScopeOf,
 	slotIn,
+	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
@@ -47,8 +48,30 @@ const expectShapesHidden = async (region: HTMLElement) => {
 	}
 }
 
+const ISLAND_INSET = 8
+
+const ISLAND_HEIGHT = 40
+
+const LOADED_CONTENT_TOP = 56
+
+const expectIslandsWhereLoaded = async (region: HTMLElement) => {
+	const room = region.getBoundingClientRect()
+	const [context, actions, ...others] = slotsIn(region, "header-island").map(
+		(island) => island.getBoundingClientRect(),
+	)
+	if (!context || !actions)
+		throw new Error("The skeleton does not draw its two islands")
+	await expect(others).toEqual([])
+	for (const island of [context, actions]) {
+		await expect(island.top - room.top).toBe(ISLAND_INSET)
+		await expect(island.height).toBe(ISLAND_HEIGHT)
+	}
+	await expect(context.left - room.left).toBe(ISLAND_INSET)
+	await expect(room.right - actions.right).toBe(ISLAND_INSET)
+}
+
 const DOCUMENT_LOADING_STORY =
-	"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 794px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
+	"A document tab before its text lands. Check the two floating islands where the loaded document draws them, the title line starting 56 below the top like the loaded title, the detail line and the body lines in the 794px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
 
 const expectDocumentLoading = async (canvasElement: HTMLElement) => {
 	const region = within(canvasElement).getByRole("region", {
@@ -58,9 +81,12 @@ const expectDocumentLoading = async (canvasElement: HTMLElement) => {
 	await expectShapesHidden(region)
 	await expectFillsFrameHeight(region)
 	await expectSkeletonFilledTo(canvasElement, "bottom")
-	await expect(
-		slotIn(canvasElement, "list-skeleton").getBoundingClientRect().width,
-	).toBe(DOCUMENT_COLUMN_WIDTH)
+	const lines = slotIn(canvasElement, "list-skeleton").getBoundingClientRect()
+	await expect(lines.width).toBe(DOCUMENT_COLUMN_WIDTH)
+	await expectIslandsWhereLoaded(region)
+	await expect(lines.top - region.getBoundingClientRect().top).toBe(
+		LOADED_CONTENT_TOP,
+	)
 }
 
 const MISSING_ITEM_STORY =
@@ -208,7 +234,7 @@ export const ImageLoading = meta.story({
 		docs: {
 			description: {
 				story:
-					"An image tab before its file lands, drawn on the viewer's dark surface. Check the bar with back, name and actions, the two step buttons around the stage and the zoom bar at the bottom, all as placeholders inside one busy region. Pick DocumentLoading for a document tab.",
+					"An image tab before its file lands, drawn on the viewer's dark surface. Check the two floating islands with back, name and actions where the loaded viewer draws them, the stage starting 56 below the top like the loaded stage, the two step buttons around it and the zoom bar at the bottom, all as placeholders inside one busy region. Pick DocumentLoading for a document tab.",
 			},
 		},
 	},
@@ -217,6 +243,11 @@ export const ImageLoading = meta.story({
 		await expect(region).toHaveAttribute("aria-busy", "true")
 		await expectShapesHidden(region)
 		await expectFillsFrameHeight(region)
+		await expectIslandsWhereLoaded(region)
+		await expect(
+			slotIn(region, "library-image-skeleton-stage").getBoundingClientRect()
+				.top - region.getBoundingClientRect().top,
+		).toBe(LOADED_CONTENT_TOP)
 	},
 })
 

@@ -33,6 +33,7 @@ import {
 } from "@/lib/bindings"
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { invoke, listen } from "@/lib/host"
+import { takesPress } from "@/lib/host/fake-window-drag"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
@@ -387,6 +388,30 @@ describe("a Library board on its live session", () => {
 		expect(
 			await screen.findByRole("option", { name: textNamed("First") }),
 		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("floats its bar as islands over a canvas starting at the top edge, Back staying clickable", async () => {
+		const { onBack } = mountBoardOpening(async () => openedState())
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = document.querySelector(
+			'[data-slot="screen-layout-floating-header"]',
+		) as HTMLElement
+		const canvas = document.querySelector(
+			'[data-slot="board-canvas"]',
+		) as HTMLElement
+		const back = within(header).getByRole("button", {
+			name: common("library.document.back"),
+		})
+
+		expect(back.closest('[data-slot="header-island"]')).not.toBeNull()
+		expect(canvas.closest('[data-slot="screen-layout-column"]')).toBeNull()
+		expect(takesPress(header)).toBe(false)
+		expect(takesPress(canvas)).toBe(true)
+		expect(takesPress(back)).toBe(true)
+
+		fireEvent.click(back)
+
+		expect(onBack).toHaveBeenCalledOnce()
 	})
 
 	it("deletes the focused object through the session and brings it back on undo", async () => {

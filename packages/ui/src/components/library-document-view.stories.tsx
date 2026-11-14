@@ -8,7 +8,13 @@ import {
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
+import {
+	hueScopeOf,
+	isInBrowserRunner,
+	realPointer,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
@@ -60,12 +66,27 @@ const NO_DOCUMENT_ACTIONS = {
 	onDelete: undefined,
 }
 
+const COLLABORATORS = [
+	{ id: "lea", name: "Lea Martin" },
+	{ id: "noor", name: "Noor Haddad" },
+]
+
 const BAR_ACTION_NAMES = ["Download", "Copy"]
 
 const barButtonNames = (bar: HTMLElement) =>
 	within(bar)
 		.getAllByRole("button")
 		.map((button) => button.getAttribute("aria-label") ?? button.textContent)
+
+const barIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-bar")
+
+const islandsIn = (canvasElement: HTMLElement) => {
+	const [context, actions] = slotsIn(barIn(canvasElement), "header-island")
+	if (!context || !actions)
+		throw new Error("The document bar does not draw its two islands")
+	return { context, actions }
+}
 
 const TITLE_TARGET_ID = "library-document-title-target"
 
@@ -101,7 +122,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. The bar carries the breadcrumb back to the Library, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the bar does not already show as a button, and Close, which calls `onBack` like the breadcrumb; the body is the document's markdown, rendered by the repo renderer in a 794 wide column.",
+					"One document of the Library, read-only, in place of the grid. Two islands float over it: the context island carries the back button, named Library, then the document name; the actions island carries the people who have the document open, when `people` names any, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the island does not already show as a button, then a rule and Close, which calls `onBack` like the back button. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts below the islands and scrolls under them. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
 			},
 		},
 	},
@@ -128,7 +149,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document open from the Library, as artboard 9 draws it. Check that Library in the breadcrumb calls `onBack`, that More names itself in a tooltip, and that the body keeps 15/24 paragraphs with 17/24 headings.",
+					"A document open from the Library. Check that the back button, named Library, calls `onBack`, that More names itself in a tooltip, and that the body keeps 15/24 paragraphs with 17/24 headings.",
 			},
 		},
 	},
@@ -153,30 +174,296 @@ export const Default = meta.story({
 	},
 })
 
-export const BarMatchesImageBar = meta.story({
+const ISLAND_INSET = 8
+
+const ISLAND_HEIGHT = 40
+
+const CONTENT_START = ISLAND_INSET + ISLAND_HEIGHT + ISLAND_INSET
+
+type IslandSkin = {
+	surface: string
+	rule: string
+}
+
+const LIGHT_SKIN: IslandSkin = {
+	surface: "rgb(255, 255, 255)",
+	rule: "rgb(229, 229, 229)",
+}
+
+const DARK_SKIN: IslandSkin = {
+	surface: "rgb(24, 24, 26)",
+	rule: "rgba(255, 255, 255, 0.12)",
+}
+
+const DUPLICATE_GLYPH_CORNER = "2.625"
+
+const expectIslandsAtTheEdges = async (canvasElement: HTMLElement) => {
+	const page = slotIn(
+		canvasElement,
+		"library-document-view",
+	).getBoundingClientRect()
+	const { context, actions } = islandsIn(canvasElement)
+	const start = context.getBoundingClientRect()
+	const end = actions.getBoundingClientRect()
+	await expect(start.top - page.top).toBe(ISLAND_INSET)
+	await expect(end.top - page.top).toBe(ISLAND_INSET)
+	await expect(start.left - page.left).toBe(ISLAND_INSET)
+	await expect(page.right - end.right).toBe(ISLAND_INSET)
+	await expect(start.height).toBe(ISLAND_HEIGHT)
+	await expect(end.height).toBe(ISLAND_HEIGHT)
+	await expect(end.left - start.right).toBeGreaterThanOrEqual(ISLAND_INSET)
+}
+
+const expectIslandsAtRest = async (
+	canvasElement: HTMLElement,
+	skin: IslandSkin,
+) => {
+	await expectIslandsAtTheEdges(canvasElement)
+	const { context, actions } = islandsIn(canvasElement)
+	for (const island of [context, actions])
+		await expect(getComputedStyle(island).backgroundColor).toBe(skin.surface)
+	await expect(
+		getComputedStyle(within(actions).getByRole("separator")).backgroundColor,
+	).toBe(skin.rule)
+
+	const collaborators = slotIn(actions, "library-document-people")
+	await expect(actions.firstElementChild).toBe(collaborators)
+	await expect(collaborators.children).toHaveLength(COLLABORATORS.length)
+	await expect(barButtonNames(actions)).toEqual([
+		...BAR_ACTION_NAMES,
+		"More",
+		"Close",
+	])
+	await expect(
+		within(actions)
+			.getByRole("button", { name: "Copy" })
+			.querySelector("svg rect"),
+	).toHaveAttribute("rx", DUPLICATE_GLYPH_CORNER)
+
+	const back = within(context).getByRole("button", { name: "Library" })
+	await expect(back).toHaveTextContent(/^$/)
+	await expect(context).toHaveTextContent(SPRING_BRIEF.name)
+	for (const control of [back, ...within(actions).getAllByRole("button")])
+		await expect(getComputedStyle(control).transitionDuration).toBe("0s")
+
+	const title = context.querySelector('[aria-current="page"]') as HTMLElement
+	await expect(getComputedStyle(title).fontSize).toBe("14px")
+	await expect(getComputedStyle(title).fontWeight).toBe("500")
+	await expect(getComputedStyle(title).lineHeight).toBe("16px")
+
+	const page = slotIn(canvasElement, "library-document-view")
+	const heading = within(page).getByRole("heading", { level: 1 })
+	await expect(
+		heading.getBoundingClientRect().top - page.getBoundingClientRect().top,
+	).toBe(CONTENT_START)
+	await expect(slotsIn(canvasElement, "screen-layout-fade")).toEqual([])
+	const column = slotIn(canvasElement, "library-document-column")
+	await expect(column).not.toHaveAttribute("tabindex")
+	await expect(column).not.toHaveAttribute("role")
+	await expect(column).not.toHaveAttribute("aria-labelledby")
+}
+
+export const Light = meta.story({
+	args: { people: COLLABORATORS },
+	globals: { theme: "light" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The document bar given the same item actions as the image viewer's Default story. Check that it is 56 tall like the image bar, that Download, Copy, More then Close follow the breadcrumb in the image bar's order, each a 32 px button that changes colour instantly and names itself in a tooltip, and that the divider between More and Close is 20 tall and centred on the row. Pick it to compare the two bars side by side with Overlays/LibraryLightbox Default.",
+					"The document at rest in the light theme, as artboard 6a draws it. Check that the two islands sit 8 from the top and from either side, 40 tall on the card surface, that the back button is the chevron alone, named Library, before the 14/16 medium document name, that the actions island reads the two collaborators, Download, Copy drawn as two rounded squares, More, then a 1 px rule in the border colour and Close, that no control fades its colour in, that the heading starts 56 below the top with no fade over it, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
-		await expect(bar.getBoundingClientRect().height).toBe(56)
-		await expect(barButtonNames(bar)).toEqual([
-			"Library",
+	play: ({ canvasElement }) => expectIslandsAtRest(canvasElement, LIGHT_SKIN),
+})
+
+export const Dark = meta.story({
+	...Light.input,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same document in the dark theme, as artboard 6b draws it. Check that the islands wear the raised card surface, that the rule before Close is white at 12 percent, and that the geometry is the light one.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectIslandsAtRest(canvasElement, DARK_SKIN),
+})
+
+const LONG_BRIEF: LibraryDocument = {
+	...SPRING_BRIEF,
+	body: Array.from({ length: 4 }, () => SPRING_BRIEF.body).join("\n\n"),
+}
+
+const SCROLLED_AWAY = 240
+
+const FADE_HEIGHT = 64
+
+export const Scrolled = meta.story({
+	args: { document: LONG_BRIEF, people: COLLABORATORS },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document scrolled away from its top, as artboard 6c draws it. Check that a 64 tall fade in the card surface covers the top of the column, that the text passes under the two islands, which stay where they were and on top, and that the fade goes once the document is back at its top.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const page = slotIn(canvasElement, "library-document-view")
+		const column = slotIn(canvasElement, "library-document-column")
+		await expect(slotsIn(canvasElement, "screen-layout-fade")).toEqual([])
+
+		column.scrollTo({ top: SCROLLED_AWAY })
+		const fade = await waitFor(() =>
+			slotIn(canvasElement, "screen-layout-fade"),
+		)
+		const fadeBox = fade.getBoundingClientRect()
+		await expect(fadeBox.top).toBe(page.getBoundingClientRect().top)
+		await expect(fadeBox.height).toBe(FADE_HEIGHT)
+		await expect(getComputedStyle(fade).pointerEvents).toBe("none")
+
+		await expectIslandsAtTheEdges(canvasElement)
+		const { context, actions } = islandsIn(canvasElement)
+		const heading = within(page).getByRole("heading", { level: 1 })
+		await expect(heading.getBoundingClientRect().top).toBeLessThan(
+			context.getBoundingClientRect().top,
+		)
+		for (const island of [context, actions]) {
+			const box = island.getBoundingClientRect()
+			const drawn = document.elementFromPoint(
+				box.left + box.width / 2,
+				box.top + box.height / 2,
+			)
+			await expect(island.contains(drawn)).toBe(true)
+		}
+
+		column.scrollTo({ top: 0 })
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "screen-layout-fade")).toEqual([]),
+		)
+		column.scrollTo({ top: SCROLLED_AWAY })
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(1),
+		)
+	},
+})
+
+const SCROLL_KEYS = ["{ArrowDown}", "{PageDown}", " "]
+
+export const ScrolledFromTheKeyboard = meta.story({
+	args: { document: LONG_BRIEF, people: COLLABORATORS },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read-only document taller than its card, reached from the keyboard. Check that the column is a region named by the document title, that Tab moves from Close to it, that it wears a 2 px ring in the ring colour just inside its edge while it holds keyboard focus, and that the down arrow, Page Down and Space each scroll it further.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const column = slotIn(canvasElement, "library-document-column")
+		await waitFor(() => expect(column).toHaveAttribute("tabindex", "0"))
+		await expect(
+			within(canvasElement).getByRole("region", { name: LONG_BRIEF.name }),
+		).toBe(column)
+		if (!isInBrowserRunner()) return
+		const keys = await realPointer()
+
+		within(canvasElement).getByRole("button", { name: "Close" }).focus()
+		await keys.tab()
+		await expect(column).toHaveFocus()
+		await expect(column.matches(":focus-visible")).toBe(true)
+		const ring = getComputedStyle(column)
+		await expect(ring.outlineStyle).toBe("solid")
+		await expect(ring.outlineWidth).toBe("2px")
+		await expect(ring.outlineOffset).toBe("-2px")
+
+		for (const key of SCROLL_KEYS) {
+			const from = column.scrollTop
+			await keys.keyboard(key)
+			await waitFor(() => expect(column.scrollTop).toBeGreaterThan(from))
+		}
+	},
+})
+
+const LONG_NAMED_BRIEF: LibraryDocument = {
+	...SPRING_BRIEF,
+	name: "Spring launch brief for every team joining the Library on the 14th, final draft",
+}
+
+const CONTROL_SIZE = 32
+
+export const NarrowLongTitle = meta.story({
+	args: { document: LONG_NAMED_BRIEF, people: COLLABORATORS },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long document name in a 480 wide document, as artboard 6d draws it. Check that the context island shrinks and ends its name with an ellipsis on one line, that every control of the actions island keeps its 32 px, and that the two islands stay 8 from either side with a gap between them.",
+			},
+		},
+	},
+	render: (args) => (
+		<div
+			className="flex h-[832px] w-[480px] bg-background"
+			{...hueScopeOf("blue")}
+		>
+			<ContentCard isLandmark={false}>
+				<LibraryDocumentView {...args} />
+			</ContentCard>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		await expectIslandsAtTheEdges(canvasElement)
+		const { context, actions } = islandsIn(canvasElement)
+		const title = context.querySelector('[aria-current="page"]') as HTMLElement
+		await expect(title).toHaveTextContent(LONG_NAMED_BRIEF.name)
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expect(title.getBoundingClientRect().height).toBe(CONTROL_SIZE)
+
+		await expect(barButtonNames(actions)).toEqual([
 			"Download",
 			"Copy",
 			"More",
 			"Close",
 		])
-		for (const name of ["Download", "Copy", "More", "Close"]) {
+		for (const control of [
+			...within(context).getAllByRole("button"),
+			...within(actions).getAllByRole("button"),
+		]) {
+			const box = control.getBoundingClientRect()
+			await expect(box.width).toBe(CONTROL_SIZE)
+			await expect(box.height).toBe(CONTROL_SIZE)
+		}
+	},
+})
+
+export const BarMatchesImageBar = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document islands given the same item actions as the image viewer's Default story. Check that both islands are 40 tall like the image islands, that Download, Copy, More then Close follow the back button in the image islands' order, each a 32 px button that changes colour instantly and names itself in a tooltip, and that the rule between More and Close is 16 tall and centred on its island. Pick it to compare the two headers side by side with Overlays/LibraryLightbox Default.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const bar = barIn(canvasElement)
+		const { context, actions } = islandsIn(canvasElement)
+		await expect(context.getBoundingClientRect().height).toBe(40)
+		await expect(actions.getBoundingClientRect().height).toBe(40)
+		const actionNames = ["Library", "Download", "Copy", "More", "Close"]
+		await expect(barButtonNames(bar)).toEqual(actionNames)
+		for (const name of actionNames) {
 			const action = within(bar).getByRole("button", { name })
 			await expect(action.getBoundingClientRect().width).toBe(32)
 			await expect(action.getBoundingClientRect().height).toBe(32)
-			await expect(getComputedStyle(action).transitionProperty).toBe("none")
+			await expect(getComputedStyle(action).transitionDuration).toBe("0s")
 			await userEvent.hover(action)
 			await expect(await screen.findByRole("tooltip")).toHaveTextContent(name)
 			await userEvent.unhover(action)
@@ -186,7 +473,7 @@ export const BarMatchesImageBar = meta.story({
 		const divider = within(bar).getByRole("separator")
 		const box = divider.getBoundingClientRect()
 		const row = divider.parentElement?.getBoundingClientRect()
-		await expect(box.height).toBe(20)
+		await expect(box.height).toBe(16)
 		await expect(box.top + box.height / 2).toBeCloseTo(
 			(row?.top ?? 0) + (row?.height ?? 0) / 2,
 			0,
@@ -242,7 +529,7 @@ export const WhitespaceNameReadsUntitled = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document whose name holds only spaces. Check that the breadcrumb, the heading and the More menu all say Untitled, and that an entry still hands the document its own name.",
+					"A document whose name holds only spaces. Check that the context island, the heading and the More menu all say Untitled, and that an entry still hands the document its own name.",
 			},
 		},
 	},
@@ -347,13 +634,12 @@ export const OnlyBarActionsGiven = meta.story({
 		docs: {
 			description: {
 				story:
-					"Only Download and Copy given, both already buttons of the bar. Check that the bar draws them and no More, since its menu would have nothing left to list.",
+					"Only Download and Copy given, both already buttons of the actions island. Check that the island draws them and no More, since its menu would have nothing left to list.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
-		await expect(barButtonNames(bar)).toEqual([
+	play: async ({ canvasElement }) => {
+		await expect(barButtonNames(barIn(canvasElement))).toEqual([
 			"Library",
 			"Download",
 			"Copy",
@@ -368,13 +654,15 @@ export const Member = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document open in a joined Space, where no item action is given for a member. Check that the bar keeps the breadcrumb and Close and draws neither Download, Copy nor More.",
+					"A document open in a joined Space, where no item action is given for a member. Check that the islands keep the back button and Close and draw neither Download, Copy nor More.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
-		const bar = canvas.getByRole("navigation").parentElement as HTMLElement
-		await expect(barButtonNames(bar)).toEqual(["Library", "Close"])
+	play: async ({ canvasElement }) => {
+		await expect(barButtonNames(barIn(canvasElement))).toEqual([
+			"Library",
+			"Close",
+		])
 	},
 })
 
@@ -418,6 +706,8 @@ const isTruncatedOnOneLine = (element: HTMLElement) =>
 	element.offsetHeight ===
 		Number.parseFloat(getComputedStyle(element).lineHeight)
 
+const PRESENCE_AVATAR_SIZE = 22
+
 export const AgentsWriting = meta.story({
 	args: {
 		...AGENT_CALLBACKS,
@@ -428,13 +718,27 @@ export const AgentsWriting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Atlas and Mira writing in the document, as artboard 10 draws it, Mira's hover card open. Check that the presence pill counts the writers and reports Stop all, that each added run and its named caret paint in the agent's own colour, and that the card reports Stop Mira and Open conversation with Mira.",
+					"Atlas and Mira writing in the document, as artboard 10 draws it, Mira's hover card open. Check that the presence pill sits in the actions island with a padding of 4 around 22 px avatars set 2 apart, that it counts the writers and reports Stop all, that each added run and its named caret paint in the agent's own colour, and that the card reports Stop Mira and Open conversation with Mira.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const presence = slotIn(canvasElement, "library-document-presence")
 		await expect(presence).toHaveTextContent("2 agents writing")
+		await expect(islandsIn(canvasElement).actions).toContainElement(presence)
+		await expect(getComputedStyle(presence).padding).toBe("4px")
+		await expect(getComputedStyle(presence).columnGap).toBe("2px")
+		const avatars = Array.from(
+			presence.firstElementChild?.children ?? [],
+			(avatar) => avatar.getBoundingClientRect(),
+		)
+		await expect(avatars).toHaveLength(LIBRARY_WRITERS.length)
+		for (const [index, avatar] of avatars.entries()) {
+			await expect(avatar.width).toBe(PRESENCE_AVATAR_SIZE)
+			await expect(avatar.height).toBe(PRESENCE_AVATAR_SIZE)
+			const previous = avatars[index - 1]
+			if (previous) await expect(avatar.left - previous.right).toBe(2)
+		}
 		await userEvent.click(canvas.getByRole("button", { name: "Stop all" }))
 		await expect(args.onStopAll).toHaveBeenCalledOnce()
 
