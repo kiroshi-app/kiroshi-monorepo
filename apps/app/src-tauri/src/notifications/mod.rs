@@ -52,7 +52,7 @@ pub(crate) fn raise<R: Runtime>(app: &AppHandle<R>, notice: Notice) {
 	if app.try_state::<SystemNotifications>().is_none() {
 		let shown_by = app.clone();
 		app.manage(SystemNotifications::raising_with(move |notice| {
-			commands::show(shown_by.clone(), notice.clicked, notice.title, notice.body);
+			commands::show(shown_by.clone(), notice);
 		}));
 	}
 	(app.state::<SystemNotifications>().raise)(notice);

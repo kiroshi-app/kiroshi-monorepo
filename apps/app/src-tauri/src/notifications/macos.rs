@@ -3,9 +3,9 @@ use std::{env::current_exe, ffi::OsStr, fmt::Display, path::Path};
 use mac_usernotifications::{request_auth, Notification};
 use tauri::{AppHandle, Runtime};
 
-use super::Clicked;
+use super::{Clicked, Notice};
 
-pub fn show<R: Runtime>(app: AppHandle<R>, clicked: Clicked, title: String, body: String) {
+pub fn show<R: Runtime>(app: AppHandle<R>, notice: Notice) {
 	let executable = match current_exe() {
 		Ok(path) => Some(path),
 		Err(failure) => {
@@ -15,9 +15,9 @@ pub fn show<R: Runtime>(app: AppHandle<R>, clicked: Clicked, title: String, body
 	};
 
 	if executable.is_some_and(|path| is_inside_app_bundle(&path)) {
-		through_notification_center(app, clicked, title, body);
+		through_notification_center(app, notice);
 	} else {
-		through_notification_sys(app, clicked, title, body);
+		through_notification_sys(app, notice);
 	}
 }
 
@@ -34,12 +34,8 @@ fn is_inside_app_bundle(executable: &Path) -> bool {
 		&& bundle.extension() == Some(OsStr::new("app"))
 }
 
-fn through_notification_center<R: Runtime>(
-	app: AppHandle<R>,
-	clicked: Clicked,
-	title: String,
-	body: String,
-) {
+fn through_notification_center<R: Runtime>(app: AppHandle<R>, notice: Notice) {
+	let Notice { title, body, clicked } = notice;
 	tauri::async_runtime::spawn(async move {
 		match request_auth().await {
 			Ok(true) => {}
@@ -74,14 +70,10 @@ fn through_notification_center<R: Runtime>(
 	});
 }
 
-fn through_notification_sys<R: Runtime>(
-	app: AppHandle<R>,
-	clicked: Clicked,
-	title: String,
-	body: String,
-) {
+fn through_notification_sys<R: Runtime>(app: AppHandle<R>, notice: Notice) {
 	use mac_notification_sys::{set_application, NotificationResponse};
 
+	let Notice { title, body, clicked } = notice;
 	let identifier = app.config().identifier.clone();
 	tauri::async_runtime::spawn_blocking(move || {
 		let _ = set_application(&identifier);
