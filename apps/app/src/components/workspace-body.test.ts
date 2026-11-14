@@ -801,19 +801,6 @@ describe("WorkspaceBody frame", () => {
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
 	})
-})
-
-describe("WorkspaceBody conversation header", () => {
-	beforeEach(() => {
-		vi.clearAllMocks()
-		listRoutines.mockResolvedValue([])
-		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([])
-		listenToMissions.mockResolvedValue(() => undefined)
-		listMissions.mockResolvedValue({ open: [], done: [] })
-	})
-
-	afterEach(cleanup)
 
 	const thread = () =>
 		document.querySelector('[data-slot="chat-layout"]') as HTMLElement
