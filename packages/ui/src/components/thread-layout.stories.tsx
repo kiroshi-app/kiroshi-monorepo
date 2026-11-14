@@ -24,11 +24,16 @@ import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-b
 import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
 import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
+import { NO_EARLIER_TODAY } from "@workspace/ui/components/missions.fixtures"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import {
+	RoutinesPanel,
+	RoutinesPanelTrigger,
+} from "@workspace/ui/components/routines-panel"
 import {
 	ThreadLayout,
 	type ThreadLayoutProps,
@@ -919,17 +924,26 @@ const CONVERSATION_CONTENT_TOP = 56
 
 const NARROW_CONVERSATION_WIDTH = 400
 
-const SOLO_ROLE = "Engineer"
+const HEADER_ISLAND_EDGE = 5
 
-const GROUP_TITLE = "Launch week"
+const TWO_CONTROL_ISLAND_WIDTH = 76
+
+const SOLO_NAME = "Ichi"
+
+const SOLO_ROLE = "Frontend engineer"
+
+const GROUP_TITLE = "Launch checklist"
 
 const LONG_GROUP_TITLE =
-	"Launch week planning with design, engineering and the support rota"
+	"Launch checklist for the 0.42 release and the notes that ship with it"
 
 const openSubjectSettings = fn()
 
-const FLOATING_PINS = (
-	<PinnedMessages messages={[]} onJump={fn()} onUnpin={fn()} />
+const FLOATING_CONTROLS = (
+	<>
+		<PinnedMessages messages={[]} onJump={fn()} onUnpin={fn()} />
+		<RoutinesPanelTrigger />
+	</>
 )
 
 const SOLO_ISLANDS = (
@@ -939,14 +953,14 @@ const SOLO_ISLANDS = (
 			<HeaderIdentityButton
 				blot={BOT.blot}
 				connection="ready"
-				name={BOT.name}
+				name={SOLO_NAME}
 				onOpenSettings={openSubjectSettings}
 				seed={BOT.id}
 				title={SOLO_ROLE}
 				version="2.1.233"
 			/>
 		}
-		trailing={FLOATING_PINS}
+		trailing={FLOATING_CONTROLS}
 	/>
 )
 
@@ -956,11 +970,12 @@ const groupIslands = (name: string) => (
 		leading={
 			<HeaderConversationButton
 				color={BLOT_HUES.blue}
+				icon="FileText"
 				name={name}
 				onOpenSettings={openSubjectSettings}
 			/>
 		}
-		trailing={FLOATING_PINS}
+		trailing={FLOATING_CONTROLS}
 	/>
 )
 
@@ -978,6 +993,23 @@ const FLOATING_THREAD = {
 	rows: CONVERSATION_ROWS,
 	children: null,
 }
+
+const inRoutinesShell = (Story: () => ReactNode) => (
+	<div className="h-svh bg-card" data-content-card="">
+		<RoutinesPanel
+			failure={null}
+			isOpen={false}
+			missions={{ open: [], earlierToday: NO_EARLIER_TODAY, onOpen: fn() }}
+			onDelete={fn()}
+			onEnabledChange={fn()}
+			onOpenChange={fn()}
+			onRetry={fn()}
+			routines={[]}
+		>
+			<Story />
+		</RoutinesPanel>
+	</div>
+)
 
 const inNarrowConversation = (Story: () => ReactNode) => (
 	<div style={{ width: NARROW_CONVERSATION_WIDTH }}>
@@ -1017,7 +1049,7 @@ const expectConversationIslands = async (
 		boxOf(subject).left - boxOf(leading).left,
 		boxOf(subject).height,
 		boxOf(leading).right - boxOf(subject).right,
-	]).toEqual([4, HEADER_CONTROL_SIZE, 4])
+	]).toEqual([HEADER_ISLAND_EDGE, HEADER_CONTROL_SIZE, HEADER_ISLAND_EDGE])
 	await expect([
 		boxOf(gear).width,
 		boxOf(subject).right - boxOf(gear).right,
@@ -1051,7 +1083,7 @@ const expectSoloIslands = async (canvasElement: HTMLElement) => {
 		.firstElementChild as HTMLElement
 
 	await expect(islands.subject).toHaveAccessibleName(
-		`${BOT.name} · agent settings`,
+		`${SOLO_NAME} · agent settings`,
 	)
 	await expect(boxOf(avatar).width).toBe(24)
 	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
@@ -1075,12 +1107,13 @@ const ASSEMBLED_ONCE_THE_APP_OPTS_IN =
 
 export const Solo1a = meta.story({
 	args: { ...FLOATING_THREAD, header: SOLO_ISLANDS },
+	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control as a 32px cell. Check the transcript starts 56px from the top and that neither control animates its colours. " +
+					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control then the routines opener, two 32px cells 2px apart. Check the transcript starts 56px from the top and that neither control animates its colours. " +
 					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
 			},
 		},
@@ -1100,6 +1133,7 @@ export const Solo1a = meta.story({
 
 export const SoloDark1b = meta.story({
 	args: Solo1a.input.args,
+	decorators: [inRoutinesShell],
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
 	parameters: {
 		docs: {
@@ -1118,6 +1152,7 @@ export const SoloDark1b = meta.story({
 
 export const SoloScrolled1c = meta.story({
 	args: { ...Solo1a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
@@ -1136,7 +1171,7 @@ export const SoloScrolled1c = meta.story({
 
 export const SoloNarrow1d = meta.story({
 	args: Solo1a.input.args,
-	decorators: [inNarrowConversation],
+	decorators: [inRoutinesShell, inNarrowConversation],
 	parameters: {
 		docs: {
 			description: {
@@ -1149,7 +1184,7 @@ export const SoloNarrow1d = meta.story({
 	play: async ({ canvasElement }) => {
 		const { frame, leading, trailing, subject, role, dot, gear } =
 			await expectSoloIslands(canvasElement)
-		const name = within(subject).getByText(BOT.name)
+		const name = within(subject).getByText(SOLO_NAME)
 
 		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
 		await expect(role).not.toBeVisible()
@@ -1165,12 +1200,13 @@ export const SoloNarrow1d = meta.story({
 
 export const Group2a = meta.story({
 	args: { ...FLOATING_THREAD, header: groupIslands(GROUP_TITLE) },
+	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject icon, the title and the gear, with no role chip and no connection dot. " +
+					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject tile, a square with 6px corners in the conversation colour, the title and the gear, with no role chip and no connection dot. " +
 					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
 			},
 		},
@@ -1185,7 +1221,9 @@ export const Group2a = meta.story({
 		await expect(subject).toHaveAccessibleName(
 			`${GROUP_TITLE} · conversation settings`,
 		)
-		await expect(boxOf(subject.querySelector("svg") as Element).width).toBe(24)
+		const tile = slotIn(subject, "conversation-subject-icon-tile")
+		await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([24, 24])
+		await expect(getComputedStyle(tile).borderTopLeftRadius).toBe("6px")
 		await expect(slotsIn(subject, "bot-title-badge")).toHaveLength(0)
 		await expect(slotsIn(subject, "connection-status")).toHaveLength(0)
 
@@ -1196,6 +1234,7 @@ export const Group2a = meta.story({
 
 export const GroupDark2b = meta.story({
 	args: Group2a.input.args,
+	decorators: [inRoutinesShell],
 	globals: { ...LAPTOP_WINDOW, theme: "dark" },
 	parameters: {
 		docs: {
@@ -1214,6 +1253,7 @@ export const GroupDark2b = meta.story({
 
 export const GroupScrolled2c = meta.story({
 	args: { ...Group2a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
@@ -1232,7 +1272,7 @@ export const GroupScrolled2c = meta.story({
 
 export const GroupNarrow2d = meta.story({
 	args: { ...FLOATING_THREAD, header: groupIslands(LONG_GROUP_TITLE) },
-	decorators: [inNarrowConversation],
+	decorators: [inRoutinesShell, inNarrowConversation],
 	parameters: {
 		docs: {
 			description: {
@@ -1253,6 +1293,6 @@ export const GroupNarrow2d = meta.story({
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
 		await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
 		await expect(boxOf(leading).right).toBeLessThan(boxOf(trailing).left)
-		await expect(boxOf(trailing).width).toBe(HEADER_ISLAND_HEIGHT)
+		await expect(boxOf(trailing).width).toBe(TWO_CONTROL_ISLAND_WIDTH)
 	},
 })

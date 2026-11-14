@@ -7,6 +7,7 @@ import {
 	type ConversationSubjectIconProps,
 } from "@workspace/ui/components/conversation-subject-icon"
 import { HeaderSubjectButton } from "@workspace/ui/components/header-identity-button"
+import { useIsInHeaderIsland } from "@workspace/ui/components/header-island"
 
 const AVATAR_SIZE = 24
 
@@ -30,6 +31,7 @@ const HeaderConversationButton = ({
 	className,
 }: HeaderConversationButtonProps) => {
 	const { t } = useTranslation("chat")
+	const isInIsland = useIsInHeaderIsland()
 
 	return (
 		<HeaderSubjectButton
@@ -39,7 +41,12 @@ const HeaderConversationButton = ({
 			isSettingsOpen={isSettingsOpen}
 			onOpenSettings={onOpenSettings}
 		>
-			<ConversationSubjectIcon hue={color} icon={icon} side={AVATAR_SIZE} />
+			<ConversationSubjectIcon
+				hue={color}
+				icon={icon}
+				isSquare={isInIsland}
+				side={AVATAR_SIZE}
+			/>
 			<span className="min-w-0 truncate">{name}</span>
 		</HeaderSubjectButton>
 	)

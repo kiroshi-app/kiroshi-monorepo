@@ -13,6 +13,9 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import {
 	MISSION_HEADER_ROWS,
+	MISSION_TICKET_ISLAND,
+	MISSION_TICKET_SPACER,
+	MISSION_TICKET_STACKED_CELL,
 	type MissionHeaderProps,
 } from "@workspace/ui/components/mission-header"
 import { cn } from "@workspace/ui/lib/utils"
@@ -58,13 +61,25 @@ const MissionHeaderSkeleton = ({
 					</>
 				}
 			/>
-			<HeaderIsland data-island="mission-ticket">
+			<HeaderIsland
+				aria-hidden="true"
+				className={MISSION_TICKET_ISLAND}
+				data-island="mission-ticket"
+			>
 				<HeaderIslandCell
-					aria-hidden="true"
-					className={cn("flex-1", SKELETON_PULSE)}
+					className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
 				>
-					<SkeletonBar className="w-40" />
-					<SkeletonBar className="ms-auto w-16 shrink-0" isFaint />
+					<SkeletonBar className="w-12 shrink-0" />
+					<SkeletonBar className="w-48" />
+				</HeaderIslandCell>
+				<HeaderIslandCell
+					className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
+				>
+					<SkeletonBar className="w-40" isFaint />
+				</HeaderIslandCell>
+				<span className={MISSION_TICKET_SPACER} />
+				<HeaderIslandCell className={cn("shrink-0", SKELETON_PULSE)}>
+					<SkeletonBar className="w-20" isFaint />
 				</HeaderIslandCell>
 			</HeaderIsland>
 		</div>

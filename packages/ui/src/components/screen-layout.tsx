@@ -40,7 +40,7 @@ const publishHeaderHeight = (header: HTMLDivElement) => {
 }
 
 const HEADER_FADE_UNMERGEABLE =
-	"pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-linear-to-b from-(percentage:--screen-layout-fade-stop) from-background to-transparent in-data-content-card:from-card"
+	"pointer-events-none absolute inset-x-0 top-0 z-10 h-[calc(var(--screen-layout-header-height,--spacing(14))_+_--spacing(2))] bg-linear-to-b from-[percentage:max(var(--screen-layout-fade-stop),100%_-_--spacing(10))] from-background to-transparent in-data-content-card:from-card"
 
 const isNestedScroller = (scrolled: Element, region: Element) => {
 	for (

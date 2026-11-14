@@ -262,7 +262,7 @@ const expectTitleIsland = async (surface: "bg-card" | "bg-card-raised") => {
 	])
 	await expect(
 		title.getBoundingClientRect().left - island.getBoundingClientRect().left,
-	).toBe(12)
+	).toBe(13)
 	await expect(getComputedStyle(island).backgroundColor).toBe(
 		tokenStyleIn(island, surface, "backgroundColor"),
 	)
@@ -305,7 +305,7 @@ export const SettingsScrolled8c = meta.story({
 	globals: { ...LAPTOP_WINDOW, theme: "light" },
 	decorators: [
 		(Story) => (
-			<div className="h-64">
+			<div className="h-56">
 				<Story />
 			</div>
 		),
@@ -314,7 +314,7 @@ export const SettingsScrolled8c = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 8c, the General page scrolled away from its start, in a window 256px high so the page is long enough to scroll. Check that the page passes under the title island and that the top fade of the layout covers it as it leaves. Pick `Settings8a` for the page at rest.",
+					"Artboard 8c, the General page scrolled away from its start, in a window 224px high so the page is long enough to scroll. Check that the page passes under the title island and that the top fade of the layout covers it as it leaves. Pick `Settings8a` for the page at rest.",
 			},
 		},
 	},

@@ -706,7 +706,11 @@ const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 		"aria-label": t("activity.panel.toggle"),
 		onClick: () => onOpenChange(true),
 		ref: triggerRef,
-		children: <Icons.SidePanel aria-hidden="true" />,
+		children: isInIsland ? (
+			<Icons.Switch aria-hidden="true" />
+		) : (
+			<Icons.SidePanel aria-hidden="true" />
+		),
 	}
 
 	return isInIsland ? (

@@ -7,7 +7,7 @@ const HeaderIslandContext = createContext(false)
 const useIsInHeaderIsland = () => useContext(HeaderIslandContext)
 
 const HEADER_ISLAND_CONTROL =
-	"rounded-md border border-transparent text-soft-foreground outline-hidden hover:bg-header-island-control-hover hover:text-foreground focus-visible:border-ring focus-visible:ring-4 focus-visible:ring-ring/30 active:translate-y-px active:bg-header-island-control-pressed active:text-foreground aria-expanded:bg-header-island-control-hover aria-expanded:text-foreground"
+	"rounded-md text-soft-foreground outline-ring hover:bg-header-island-control-hover hover:text-foreground focus-visible:outline-1 focus-visible:ring-4 focus-visible:ring-ring/30 active:translate-y-px active:bg-header-island-control-pressed active:text-foreground aria-expanded:bg-header-island-control-hover aria-expanded:text-foreground"
 
 const HeaderIsland = ({
 	className,
@@ -17,7 +17,7 @@ const HeaderIsland = ({
 	<div
 		data-slot="header-island"
 		className={cn(
-			"pointer-events-auto flex h-10 shrink-0 items-center gap-0.5 rounded-control border border-selection-toolbar-border bg-card p-0.75 text-foreground shadow-selection-toolbar dark:bg-card-raised",
+			"pointer-events-auto flex h-10 shrink-0 items-center gap-0.5 rounded-control border border-selection-toolbar-border bg-card px-1 py-0.75 text-foreground shadow-selection-toolbar dark:bg-card-raised",
 			className,
 		)}
 		{...props}

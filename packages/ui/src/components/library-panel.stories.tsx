@@ -1819,7 +1819,7 @@ export const FloatingHeaderScrolled = FloatingHeader.extend({
 			boxOf(fade).height,
 		]).toEqual([frame.top, frame.width, 64])
 		await expect(getComputedStyle(fade).backgroundImage).toContain(
-			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} 50%, ${TRANSPARENT} 100%`,
+			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} max(50%, 100% - 40px), ${TRANSPARENT} 100%`,
 		)
 		await expect(boxOf(firstItem).top).toBeLessThan(boxOf(title).top)
 		await expect(
