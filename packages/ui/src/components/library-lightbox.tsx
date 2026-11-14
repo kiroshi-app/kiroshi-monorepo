@@ -49,10 +49,14 @@ const ZOOM_STEPS = [MIN_ZOOM, 0.5, 0.75, 1, 1.5, 2, 3, MAX_ZOOM]
 
 const STEP = cn(
 	LIBRARY_BAR_ROUND,
-	"size-10 bg-foreground/10 hover:bg-foreground/16",
+	LIBRARY_OVERLAY_ISLAND,
+	"size-10 border border-selection-toolbar-border shadow-selection-toolbar hover:bg-header-island-control-hover dark:hover:bg-header-island-control-hover",
 )
 
-const STEP_BELOW_ISLANDS = "mt-14 flex"
+const STEP_OVER_STAGE =
+	"absolute top-[calc(50%_+_--spacing(5))] flex -translate-y-1/2"
+
+const ZOOMED_CLEAR_OF_CONTROLS = "px-10 pb-10"
 
 const LIGHTBOX_SURFACE = "dark bg-lightbox-surface text-foreground"
 
@@ -129,7 +133,10 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 	return (
 		<>
 			<div
-				className="flex min-h-0 flex-1 overflow-auto rounded-md pt-14 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+				className={cn(
+					"flex min-h-0 flex-1 overflow-auto rounded-md pt-14 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					zoom !== null && ZOOMED_CLEAR_OF_CONTROLS,
+				)}
 				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
 				tabIndex={zoom === null ? undefined : 0}
@@ -158,12 +165,9 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 					}
 				/>
 			</div>
-			<div
-				className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center"
-				data-lightbox-backdrop
-			>
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-18 items-center justify-center">
 				<div
-					className="flex h-9 items-center gap-0.5 rounded-[18px] bg-[#1c1c1e] p-1 shadow-[0_8px_24px_rgb(0_0_0/0.4)] ring-1 ring-foreground/10"
+					className="pointer-events-auto flex h-9 items-center gap-0.5 rounded-[18px] bg-[#1c1c1e] p-1 shadow-[0_8px_24px_rgb(0_0_0/0.4)] ring-1 ring-foreground/10"
 					data-slot="library-lightbox-zoom-bar"
 				>
 					<TooltipButton
@@ -335,10 +339,10 @@ const LibraryLightbox = ({
 							/>
 						</div>
 						<div
-							className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18"
+							className="relative flex min-h-0 flex-1 px-4 pb-4"
 							data-lightbox-backdrop
 						>
-							<span className={STEP_BELOW_ISLANDS}>
+							<span className={cn(STEP_OVER_STAGE, "start-4")}>
 								<TooltipButton
 									aria-label={t("library.lightbox.previous")}
 									className={STEP}
@@ -373,7 +377,7 @@ const LibraryLightbox = ({
 									position={position}
 								/>
 							</div>
-							<span className={STEP_BELOW_ISLANDS}>
+							<span className={cn(STEP_OVER_STAGE, "end-4")}>
 								<TooltipButton
 									aria-label={t("library.lightbox.next")}
 									className={STEP}
