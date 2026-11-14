@@ -154,6 +154,8 @@ const BLOCK_EDITORS: LibraryBlockType[] = [
 	"web-page",
 ]
 
+const PASSAGE_EDITORS: LibraryBlockType[] = ["callout", "table"]
+
 const POINTED_PARTS = "li, th, td, img"
 
 const POINTER_CONTROLS = "a, button, input, [role='button']"
@@ -1184,10 +1186,18 @@ const LibraryDocumentBlockEditor = ({
 					source={source}
 				/>
 			)
+		const passages = {
+			renderRun: renderFieldRun,
+			runs: commentRunsIn(commentLayer, block.id),
+		}
 		if (type === "callout")
-			return <LibraryCalloutEditor onEdit={onEdit} source={source} />
+			return (
+				<LibraryCalloutEditor {...passages} onEdit={onEdit} source={source} />
+			)
 		if (type === "table")
-			return <LibraryTableEditor onEdit={onEdit} source={source} />
+			return (
+				<LibraryTableEditor {...passages} onEdit={onEdit} source={source} />
+			)
 		if (type === "code")
 			return <LibraryCodeEditor onEdit={onEdit} source={source} />
 		return (
@@ -1273,6 +1283,10 @@ const LibraryDocumentBlockEditor = ({
 		}
 
 	const commentLayer = commentLayerOf(doc.blocks, commentProps)
+
+	const renderFieldRun = (run: MarkdownRunRenderProps) => (
+		<LibraryDocumentCommentRun {...run} isInField layer={commentLayer} />
+	)
 
 	const renderRun = ({ id, isEnd, children }: MarkdownRunRenderProps) => {
 		if (isCommentRun(id))
@@ -1498,13 +1512,7 @@ const LibraryDocumentBlockEditor = ({
 											)
 									}}
 									onKeyDown={keyInField(block, textType)}
-									renderRun={(run) => (
-										<LibraryDocumentCommentRun
-											{...run}
-											isInField
-											layer={commentLayer}
-										/>
-									)}
+									renderRun={renderFieldRun}
 									runs={commentRunsIn(commentLayer, block.id)}
 									source={block.source}
 									type={textType}
@@ -1578,7 +1586,9 @@ const LibraryDocumentBlockEditor = ({
 						) : null}
 						<LibraryDocumentBlockComments
 							blockId={block.id}
-							isWriting={isEditing && !hasBlockEditor}
+							isWriting={
+								isEditing && (!hasBlockEditor || PASSAGE_EDITORS.includes(type))
+							}
 							layer={commentLayer}
 							source={block.source}
 						/>

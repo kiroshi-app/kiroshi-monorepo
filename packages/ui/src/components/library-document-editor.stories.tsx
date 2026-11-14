@@ -2773,14 +2773,17 @@ const colourOf = (host: Element, token: string) => {
 	return colour
 }
 
-const shadowOf = (host: Element, token: string) => {
+const drawnShadowOf = (host: Element, value: string) => {
 	const probe = document.createElement("span")
-	probe.style.boxShadow = `var(--${token})`
+	probe.style.boxShadow = value
 	host.append(probe)
 	const shadow = getComputedStyle(probe).boxShadow
 	probe.remove()
 	return shadow
 }
+
+const shadowOf = (host: Element, token: string) =>
+	drawnShadowOf(host, `var(--${token})`)
 
 const expectCalledOnceWith = async (mock: unknown, ...sent: unknown[]) => {
 	await expect(mock).toHaveBeenCalledOnce()
@@ -2815,6 +2818,15 @@ const expectPassagePin = async (pin: HTMLElement, passage: HTMLElement) => {
 	const line = lastLineOf(passage)
 	await expectClose(boxOf(pin).left, line.right)
 	await expectClose(middleOf(boxOf(pin)), middleOf(line))
+}
+
+const expectPinAbovePassageEnd = async (
+	pin: HTMLElement,
+	passage: HTMLElement,
+) => {
+	const line = lastLineOf(passage)
+	await expectClose(boxOf(pin).left, line.right)
+	await expect(boxOf(pin).bottom).toBeCloseTo(line.top + 1, 1)
 }
 
 const doc1 = {
@@ -3067,12 +3079,34 @@ export const Doc6ThreadOpen = meta.story({
 	),
 })
 
+const edge3 = threadOpen(20)
+
+const EDGE_3_PIN_GROUND = "rgb(42, 42, 42)"
+
+const EDGE_3_PIN_SHADOW = "0 2px 8px #00000066, 0 0 0 1px #ffffff1f"
+
 export const Edge3ThreadOpenDark = meta.story({
-	...threadOpen(20),
+	...edge3,
 	globals: DARK,
 	parameters: describedAs(
-		"Artboard Edge 3, the dark twin of Doc 6. Check the same placement, with the selected passage washed at 20 percent.",
+		"Artboard Edge 3, the dark twin of Doc 6. Check the same placement, with the selected passage washed at 20 percent, and the 32px pin of an agent at rest on the dark pin surface, under the dark pin shadow and its 1px ring, around its 24px avatar.",
 	),
+	play: async (context: CommentPlay) => {
+		const agentPin = threadPinIn(context.canvasElement, MARKET_THREAD.id)
+		await expect(agentPin).toHaveAttribute("data-state", "rest")
+		const look = getComputedStyle(agentPin)
+		await expect(look.backgroundColor).toBe(EDGE_3_PIN_GROUND)
+		await expect(look.boxShadow).toContain(
+			drawnShadowOf(agentPin, EDGE_3_PIN_SHADOW),
+		)
+		await expect(boxOf(agentPin).width).toBe(32)
+		await expect(boxOf(agentPin).height).toBe(32)
+		await expect(boxOf(slotIn(agentPin, "library-comment-avatar")).width).toBe(
+			24,
+		)
+
+		await edge3.play(context)
+	},
 })
 
 const GONE_LINE = "On text that’s no longer in the document"
@@ -3368,7 +3402,7 @@ const resolved2 = {
 		openThread: openThreadOf(RESOLVED_SESSION_THREAD.id),
 	},
 	parameters: describedAs(
-		"Artboard Resolved 2: a resolved thread drawn in place, open. Check its passage under the neutral wash and a 2px dashed underline, its pin in the resolved state where an open passage pin sits, under the resolved pin shadow, the 360px thread in its resolved state 8px right of the pin with its top on the pin top, and Reopen raising `onReopen`.",
+		"Artboard Resolved 2: a resolved thread drawn in place, open. Check its passage under the neutral wash and a 2px dashed underline, its pin in the resolved state with its left edge on the end of the passage and its bottom edge on the top of the last line of the passage, under the resolved pin shadow, the 360px thread in its resolved state 8px right of the pin with its top on the pin top, and Reopen raising `onReopen`.",
 	),
 	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
 		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
@@ -3382,7 +3416,7 @@ const resolved2 = {
 		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
 		await expect(pin).toHaveAttribute("data-state", "resolved")
 		await expect(pin).toHaveAttribute("aria-expanded", "true")
-		await expectPassagePin(pin, passage)
+		await expectPinAbovePassageEnd(pin, passage)
 		await expect(getComputedStyle(pin).boxShadow).toContain(
 			shadowOf(pin, "comment-pin-resolved-shadow"),
 		)
@@ -3416,6 +3450,43 @@ export const Resolved2ThreadInPlace = meta.story({
 export const Resolved2ThreadInPlaceDark = meta.story({
 	...resolved2,
 	globals: DARK,
+})
+
+const resolvedCardClosed = { ...resolved2.args, openThread: undefined }
+
+export const ResolvedThreadInPlaceCardClosed = meta.story({
+	args: resolvedCardClosed,
+	globals: LIGHT,
+	parameters: describedAs(
+		"A resolved thread drawn in place, its card closed. Check its pin where Resolved 2 draws it, its left edge on the end of the passage and its bottom edge on the top of the last line of the passage, no thread card, and that pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toHaveAttribute("aria-expanded", "false")
+		await expectPinAbovePassageEnd(
+			pin,
+			shownPassageOf(canvasElement, SESSION_PASSAGE),
+		)
+		await expect(
+			canvas.queryByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		).toBe(null)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, RESOLVED_SESSION_THREAD.id)
+	},
+})
+
+export const ResolvedPinKeptWhileBlockFocused = meta.story({
+	tags: ["test-only"],
+	args: resolvedCardClosed,
+	play: async ({ canvasElement }) => {
+		const field = await openBlockWith(canvasElement, SESSION_PASSAGE)
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPinAbovePassageEnd(pin, shownPassageOf(field, SESSION_PASSAGE))
+	},
 })
 
 export const BlockThreadOpensUnderPin = meta.story({
@@ -3462,6 +3533,123 @@ export const PassageKeptWhileBlockFocused = meta.story({
 		await expect(fieldSelectionOf(field)?.start).toBe(end + 1)
 		await keyboard("x")
 		await expect(lastBodyOf(args)).toContain(`${SESSION_PASSAGE} xThe boat`)
+	},
+})
+
+const PLAN_BLOCK = "plan01"
+
+const PLAN_TABLE = "| Day | Plan |\n| --- | --- |\n| Friday | Roadmap review |"
+
+const EDITED_BLOCKS = [
+	{
+		id: "note01",
+		source: "> [!NOTE]\n> Bring a coat for the boat.",
+		passage: "a coat",
+	},
+	{ id: PLAN_BLOCK, source: PLAN_TABLE, passage: "Roadmap" },
+]
+
+const editingSlotOf = (block: HTMLElement) =>
+	waitFor(() => {
+		const editing = slotIn(block, "library-document-block-editing")
+		expect(editing.contains(document.activeElement)).toBe(true)
+		return editing
+	})
+
+export const PassageKeptWhileBlockEditorFocused = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: EDITED_BLOCKS.map(({ id, source }) => `${source}\n\n^${id}`).join(
+			"\n\n",
+		),
+		threads: EDITED_BLOCKS.map(({ id, source, passage }) => ({
+			...BUDGET_THREAD,
+			id,
+			anchor: { blockId: id, passage: passageIn(source, passage) },
+		})),
+	},
+	play: async ({ canvasElement }) => {
+		for (const { id, passage: text } of EDITED_BLOCKS) {
+			const block = blockOf(canvasElement, id)
+			block.querySelector<HTMLElement>("[tabindex]")?.focus()
+			await editingSlotOf(block)
+			const passage = shownPassageOf(block, text)
+			await expect(passage).toBeVisible()
+			await expect(passage).toHaveAttribute("data-state", "rest")
+			const pin = threadPinIn(canvasElement, id)
+			await expect(pin).toBeVisible()
+			await expectPassagePin(pin, passage)
+		}
+	},
+})
+
+export const PassageAcrossTableCellsPinnedOnLastCell = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: `${PLAN_TABLE}\n\n^${PLAN_BLOCK}`,
+		threads: [
+			{
+				...BUDGET_THREAD,
+				anchor: {
+					blockId: PLAN_BLOCK,
+					passage: passageIn(PLAN_TABLE, "Friday | Roadmap"),
+				},
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, PLAN_BLOCK)
+		const shownPieces = () =>
+			piecesIn(canvasElement, PLAN_BLOCK).map((piece) => piece.textContent)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		await expectPassagePin(
+			threadPinIn(canvasElement, BUDGET_THREAD.id),
+			lastOf(piecesIn(canvasElement, PLAN_BLOCK)),
+		)
+
+		block.querySelector<HTMLElement>("[tabindex]")?.focus()
+		const editing = await editingSlotOf(block)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		const pieces = piecesIn(canvasElement, PLAN_BLOCK)
+		await expect(pieces.every((piece) => editing.contains(piece))).toBe(true)
+		await expect(pieces[0].closest("td")).not.toBe(lastOf(pieces).closest("td"))
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(slotsIn(block, "library-comment-pin")).toHaveLength(1)
+		await expectPassagePin(pin, lastOf(pieces))
+	},
+})
+
+export const PassageDraftOnBlockBeingWritten = meta.story({
+	args: {
+		...commentedDocument(),
+		commentDraft: draftOn({
+			blockId: SESSION_BLOCK,
+			passage: passageIn(SESSION_PARAGRAPH, DINNER_PASSAGE),
+			origin: "shortcut",
+		}),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"A passage draft on a paragraph that is being written. Check the passage in its selected state inside the focused field, the selected draft pin outside the field on the end of the passage, and the 320px composer 8px right of the pin with its top on the pin top.",
+	),
+	play: async ({ canvasElement }) => {
+		const field = await openBlockWith(canvasElement, DINNER_PASSAGE)
+		const passage = shownPassageOf(field, DINNER_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "selected")
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+		await waitFor(async () => {
+			const composer = boxOf(composerIn(canvasElement))
+			await expect(composer.width).toBe(320)
+			await expectClose(composer.left, boxOf(pin).right + 8)
+			await expectClose(composer.top, boxOf(pin).top)
+		})
+		await expect(field).toHaveFocus()
 	},
 })
 

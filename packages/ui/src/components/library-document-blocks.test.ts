@@ -30,6 +30,7 @@ import {
 	serializeBlocks,
 	shiftedAcross,
 	shiftedOffset,
+	tableCellRangesOf,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,
@@ -288,6 +289,19 @@ describe("library rich block sources", () => {
 			"| Room | Seats |  |\n| :-- | --: | --- |\n| Atlas | 12 |  |\n|  |  |  |",
 		)
 		expect(tableRowsOf("| a \\| b | c |")).toEqual([["a \\| b", "c"]])
+	})
+
+	it("finds each table cell where its source wrote it", () => {
+		const source = "| Day | Day |\n| --- | --- |\n|  | a \\| b |"
+		expect(
+			tableCellRangesOf(source).map((cells) =>
+				cells.map(({ from, to }) => source.slice(from, to)),
+			),
+		).toEqual(tableRowsOf(source))
+		expect(tableCellRangesOf(source)[0]).toEqual([
+			{ from: 2, to: 5 },
+			{ from: 8, to: 11 },
+		])
 	})
 
 	it("writes the language and the body of a code fence", () => {

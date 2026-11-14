@@ -111,6 +111,8 @@ const DRAFT_RUN = "comment-draft"
 
 const PIN_GAP = 8
 
+const RESOLVED_PIN_OVERLAP = 1
+
 const isCommentRun = (id: string) =>
 	id === DRAFT_RUN || id.startsWith(COMMENT_RUN)
 
@@ -354,21 +356,30 @@ const besidePin =
 	}
 
 const onPassageEnd =
-	(run: string): PlaceIn =>
+	(run: string, isAboveLine: boolean): PlaceIn =>
 	(block) => {
-		const end = block.querySelector(`[data-passage-end="${run}"]`)
+		const end = [...block.querySelectorAll(`[data-passage-end="${run}"]`)].at(
+			-1,
+		)
 		const line = [...(end?.getClientRects() ?? [])].at(-1)
 		if (!line) return undefined
 		const from = block.getBoundingClientRect()
 		return {
 			left: line.right - from.left,
-			top: (line.top + line.bottom) / 2 - from.top,
+			top:
+				(isAboveLine
+					? line.top + RESOLVED_PIN_OVERLAP
+					: (line.top + line.bottom) / 2) - from.top,
 		}
 	}
 
 type PlacedOnPinProps = {
 	pin: string
 	children: ReactNode
+}
+
+type PinOnPassageEndProps = PlacedOnPinProps & {
+	isAboveLine: boolean
 }
 
 const CardBesidePin = ({ pin, children }: PlacedOnPinProps) => (
@@ -380,12 +391,19 @@ const CardBesidePin = ({ pin, children }: PlacedOnPinProps) => (
 	</CardFrame>
 )
 
-const PinOnPassageEnd = ({ pin, children }: PlacedOnPinProps) => (
+const PinOnPassageEnd = ({
+	pin,
+	isAboveLine,
+	children,
+}: PinOnPassageEndProps) => (
 	// biome-ignore lint/a11y/noStaticElementInteractions: a press on a pin beside the field being written leaves the caret and the focus in that field
 	<div
-		className="invisible absolute z-10 flex -translate-y-1/2 data-placed:visible"
+		className={cn(
+			"invisible absolute z-10 flex data-placed:visible",
+			isAboveLine ? "-translate-y-full" : "-translate-y-1/2",
+		)}
 		onMouseDown={(event) => event.preventDefault()}
-		ref={usePlaceInBlock(onPassageEnd(pin))}
+		ref={usePlaceInBlock(onPassageEnd(pin, isAboveLine))}
 	>
 		{children}
 	</div>
@@ -419,9 +437,15 @@ const LibraryDocumentModeCursor = ({
 	/>
 )
 
-const PASSAGE_PIN = "absolute start-0 top-1/2 -translate-y-1/2"
-
 type PassageState = LibraryCommentPinState
+
+const ON_PASSAGE_LINE = "absolute start-0 top-1/2 -translate-y-1/2"
+
+const PASSAGE_PIN: Record<PassageState, string> = {
+	rest: ON_PASSAGE_LINE,
+	selected: ON_PASSAGE_LINE,
+	resolved: "absolute start-0 bottom-full translate-y-px",
+}
 
 const PASSAGE_LOOK: Record<PassageState, string> = {
 	rest: "border-primary/50 bg-primary/8",
@@ -490,17 +514,22 @@ const LibraryDocumentCommentRun = ({
 	const placed = layer.threads.find(({ thread }) => runIdOf(thread) === id)
 	const draft = id === DRAFT_RUN ? layer.draft?.draft : undefined
 	if (!placed && !draft) return children
+	const state = placed ? pinStateOf(layer, placed.thread) : "selected"
 	const pin = placed ? (
-		<ThreadPin className={PASSAGE_PIN} layer={layer} thread={placed.thread} />
+		<ThreadPin
+			className={PASSAGE_PIN[state]}
+			layer={layer}
+			thread={placed.thread}
+		/>
 	) : (
-		draft && <DraftPin className={PASSAGE_PIN} draft={draft} />
+		draft && <DraftPin className={PASSAGE_PIN[state]} draft={draft} />
 	)
 
 	return (
 		<Passage
 			endOf={isEnd && isInField ? id : undefined}
 			pin={isEnd && !isInField ? pin : null}
-			state={placed ? pinStateOf(layer, placed.thread) : "selected"}
+			state={state}
 		>
 			{children}
 		</Passage>
@@ -544,13 +573,20 @@ const LibraryDocumentBlockComments = ({
 						? [
 								{
 									run: runIdOf(thread),
+									isAboveLine: pinStateOf(layer, thread) === "resolved",
 									pin: <ThreadPin layer={layer} thread={thread} />,
 								},
 							]
 						: [],
 				),
 				...(draft?.anchor.passage
-					? [{ run: DRAFT_RUN, pin: <DraftPin draft={draft.draft} /> }]
+					? [
+							{
+								run: DRAFT_RUN,
+								isAboveLine: false,
+								pin: <DraftPin draft={draft.draft} />,
+							},
+						]
 					: []),
 			]
 		: []
@@ -608,8 +644,8 @@ const LibraryDocumentBlockComments = ({
 			{isBlockDraft && isFromShortcut ? (
 				<CardFrame className="-end-2 top-full mt-3">{draftCard}</CardFrame>
 			) : null}
-			{fieldPins.map(({ run, pin }) => (
-				<PinOnPassageEnd key={run} pin={run}>
+			{fieldPins.map(({ run, isAboveLine, pin }) => (
+				<PinOnPassageEnd isAboveLine={isAboveLine} key={run} pin={run}>
 					{pin}
 				</PinOnPassageEnd>
 			))}
