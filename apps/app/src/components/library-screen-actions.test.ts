@@ -95,6 +95,7 @@ const OPENED_STATE = stateWith("Draft")
 
 const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_list: () => harness.listed,
+	library_comment_agent_turns: () => [],
 	library_read_document: ({ name }) => ({ name, format: "text", content: "" }),
 	library_read_image: ({ name }) => ({
 		name,
