@@ -206,7 +206,7 @@ pub(super) fn summon<R: Runtime>(
 			heard_comments,
 			order: turns.joined(&thread.space_id, key),
 		};
-		announce(app, turn.changed());
+		announce(app, &turn.changed());
 		(turns.start)(turn);
 	}
 }
@@ -394,7 +394,7 @@ async fn settle<R: Runtime>(app: &AppHandle<R>, turn: &CommentTurn, ended: Resul
 		);
 	}
 	turns(app).left(&turn.key());
-	announce(app, turn.changed());
+	announce(app, &turn.changed());
 }
 
 async fn recorded<R: Runtime>(
@@ -412,7 +412,7 @@ async fn recorded<R: Runtime>(
 
 pub(crate) async fn fail_comment_turns_cut_by_a_quit<R: Runtime>(app: &AppHandle<R>) {
 	match cut_by_a_quit(app).await {
-		Ok(cut) => cut.into_iter().for_each(|changed| announce(app, changed)),
+		Ok(cut) => cut.iter().for_each(|changed| announce(app, changed)),
 		Err(detail) => {
 			log::error!("comment turns cut by a quit not recorded as failed | detail: {detail}");
 		}
@@ -430,12 +430,13 @@ async fn cut_by_a_quit<R: Runtime>(
 		.map_err(|error| format!("{error:?}"))
 }
 
-fn announce<R: Runtime>(app: &AppHandle<R>, changed: LibraryCommentAgentTurnsChanged) {
-	let (thread_id, agent_id) = (changed.thread_id.clone(), changed.agent_id.clone());
-	if let Err(error) = events::emit(app, events::LIBRARY_COMMENT_AGENT_TURNS_CHANGED, changed) {
+fn announce<R: Runtime>(app: &AppHandle<R>, changed: &LibraryCommentAgentTurnsChanged) {
+	let emitted = events::emit(app, events::LIBRARY_COMMENT_AGENT_TURNS_CHANGED, changed.clone());
+	if let Err(error) = emitted {
 		log::warn!(
-			"a change of the turn of agent {agent_id} on comment thread {thread_id} was not \
-			announced: {error}"
+			"a change of the turn of agent {} on comment thread {} was not announced: {error}",
+			changed.agent_id,
+			changed.thread_id
 		);
 	}
 }
