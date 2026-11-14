@@ -84,7 +84,6 @@ import {
 	ThreadRoutines,
 } from "@/components/thread-routines"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
-import { titleBarDragRegion } from "@/components/window-caption-controls"
 import type { ApplicationInstall } from "@/lib/applications/application-port"
 import {
 	isLeftOutOf,
@@ -460,7 +459,7 @@ const ThreadHeader = ({
 				state={mission.mission.state}
 				ticket={mission.mission.ticket}
 				tools={mission.mission.tools}
-				dragRegion={titleBarDragRegion()}
+				dragRegion="deep"
 			/>
 		)
 	}
