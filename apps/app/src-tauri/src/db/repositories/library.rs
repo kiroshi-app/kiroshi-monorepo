@@ -8,7 +8,7 @@ use super::messages::rename_document_links;
 use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 use crate::library::contract::{
-	LibraryComment, LibraryCommentAgentTurn, LibraryCommentAgentTurnState,
+	LibraryBoardPoint, LibraryComment, LibraryCommentAgentTurn, LibraryCommentAgentTurnState,
 	LibraryCommentAgentTurnsChanged, LibraryCommentAnchor, LibraryCommentCount,
 	LibraryCommentParty, LibraryCommentPartyKind, LibraryCommentThreadState,
 	LibraryCommentTurnFailure,
@@ -16,26 +16,39 @@ use crate::library::contract::{
 
 const THREADS: &str = "library_comment_threads";
 
-const INSERT_THREAD: &str =
-	"INSERT INTO library_comment_threads (id, space_id, item_name, anchor, created_at)
-	VALUES (?1, ?2, ?3, ?4, ?5)";
+const INSERT_THREAD: &str = "INSERT INTO library_comment_threads
+		(id, space_id, item_name, anchor, created_at, last_board_x, last_board_y)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
 
 const INSERT_COMMENT: &str = "INSERT INTO library_comments
 		(thread_id, position, author_kind, author_id, created_at, text, mentions)
 	VALUES (?1, (SELECT COUNT(*) FROM library_comments WHERE thread_id = ?1), ?2, ?3, ?4, ?5, ?6)";
 
-const SELECT_THREADS_OF_ITEM: &str = "SELECT id, space_id, item_name, anchor, state
+const SELECT_THREADS_OF_ITEM: &str = "SELECT id, space_id, item_name, anchor, state,
+		resolved_by_kind, resolved_by_id, resolved_at, last_board_x, last_board_y
 	FROM library_comment_threads WHERE space_id = ?1 AND item_name = ?2
 	ORDER BY created_at, rowid";
 
-const SELECT_THREAD: &str = "SELECT id, space_id, item_name, anchor, state
+const SELECT_THREAD: &str = "SELECT id, space_id, item_name, anchor, state,
+		resolved_by_kind, resolved_by_id, resolved_at, last_board_x, last_board_y
 	FROM library_comment_threads WHERE space_id = ?1 AND item_name = ?2 AND id = ?3";
+
+const SELECT_ANCHORS_OF_ITEM: &str =
+	"SELECT id, anchor FROM library_comment_threads WHERE space_id = ?1 AND item_name = ?2";
 
 const SELECT_COMMENTS: &str = "SELECT author_kind, author_id, created_at, text, mentions
 	FROM library_comments WHERE thread_id = ?1 ORDER BY position";
 
-const SET_THREAD_STATE: &str = "UPDATE library_comment_threads SET state = ?4
+const RESOLVE_OPEN_THREAD: &str = "UPDATE library_comment_threads
+	SET state = 'resolved', resolved_by_kind = ?4, resolved_by_id = ?5, resolved_at = ?6
+	WHERE space_id = ?1 AND item_name = ?2 AND id = ?3 AND state = 'open'";
+
+const REOPEN_THREAD: &str = "UPDATE library_comment_threads
+	SET state = 'open', resolved_by_kind = NULL, resolved_by_id = NULL, resolved_at = NULL
 	WHERE space_id = ?1 AND item_name = ?2 AND id = ?3";
+
+const SET_LAST_BOARD_POINT: &str =
+	"UPDATE library_comment_threads SET last_board_x = ?2, last_board_y = ?3 WHERE id = ?1";
 
 const AGENT_TURNS: &str = "library_comment_agent_turns";
 
@@ -95,6 +108,7 @@ pub struct NewThread {
 	pub item_name: String,
 	pub anchor: LibraryCommentAnchor,
 	pub opening: LibraryComment,
+	pub last_board_point: Option<LibraryBoardPoint>,
 }
 
 pub struct ThreadOfItem {
@@ -111,6 +125,14 @@ pub struct StoredThread {
 	pub anchor: LibraryCommentAnchor,
 	pub state: LibraryCommentThreadState,
 	pub comments: Vec<LibraryComment>,
+	pub resolution: Option<Resolution>,
+	pub last_board_point: Option<LibraryBoardPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resolution {
+	pub by: LibraryCommentParty,
+	pub at: i64,
 }
 
 pub struct AgentOfThread {
@@ -136,7 +158,9 @@ impl LibraryRepository {
 					thread.space_id,
 					thread.item_name,
 					as_json(&thread.anchor)?,
-					thread.opening.created_at
+					thread.opening.created_at,
+					thread.last_board_point.map(|point| point.x),
+					thread.last_board_point.map(|point| point.y)
 				])?;
 				store_comment(&transaction, &thread.id, &thread.opening)?;
 				transaction.commit()?;
@@ -147,6 +171,8 @@ impl LibraryRepository {
 					anchor: thread.anchor,
 					state: LibraryCommentThreadState::Open,
 					comments: vec![thread.opening],
+					resolution: None,
+					last_board_point: thread.last_board_point,
 				})
 			})
 			.await
@@ -173,26 +199,80 @@ impl LibraryRepository {
 			.at("reply", "library_comments")
 	}
 
-	pub async fn set_state(
+	pub async fn resolve(
 		&self,
 		thread: ThreadOfItem,
-		state: LibraryCommentThreadState,
+		resolution: Resolution,
 	) -> Result<Option<StoredThread>, DatabaseError> {
 		self.access
 			.call_mut(move |connection| {
 				let transaction = connection.transaction()?;
-				transaction.prepare_cached(SET_THREAD_STATE)?.execute(params![
+				transaction.prepare_cached(RESOLVE_OPEN_THREAD)?.execute(params![
 					thread.space_id,
 					thread.item_name,
 					thread.id,
-					state_text(state)
+					party_kind_text(resolution.by.kind),
+					resolution.by.id,
+					resolution.at
 				])?;
-				let settled = read_thread(&transaction, &thread)?;
+				let resolved = read_thread(&transaction, &thread)?;
 				transaction.commit()?;
-				Ok(settled)
+				Ok(resolved)
 			})
 			.await
-			.at("set_state", THREADS)
+			.at("resolve", THREADS)
+	}
+
+	pub async fn reopen(
+		&self,
+		thread: ThreadOfItem,
+	) -> Result<Option<StoredThread>, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				transaction.prepare_cached(REOPEN_THREAD)?.execute(params![
+					thread.space_id,
+					thread.item_name,
+					thread.id
+				])?;
+				let reopened = read_thread(&transaction, &thread)?;
+				transaction.commit()?;
+				Ok(reopened)
+			})
+			.await
+			.at("reopen", THREADS)
+	}
+
+	pub async fn follow_board_nodes(
+		&self,
+		space_id: String,
+		item_name: String,
+		point_of: impl Fn(&str) -> Option<LibraryBoardPoint> + Send + 'static,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				let anchors = transaction
+					.prepare_cached(SELECT_ANCHORS_OF_ITEM)?
+					.query_map(params![space_id, item_name], |row| {
+						Ok((row.get::<_, String>(0)?, from_json::<LibraryCommentAnchor>(row, 1)?))
+					})?
+					.collect::<Result<Vec<_>, _>>()?;
+				for (thread_id, anchor) in anchors {
+					let LibraryCommentAnchor::BoardNode { node_id } = anchor else {
+						continue;
+					};
+					if let Some(point) = point_of(&node_id) {
+						transaction
+							.prepare_cached(SET_LAST_BOARD_POINT)?
+							.execute(params![thread_id, point.x, point.y])?;
+					}
+				}
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.at("follow_board_nodes", THREADS)
 	}
 
 	pub async fn threads(
@@ -476,7 +556,21 @@ fn thread_without_comments(row: &Row<'_>) -> rusqlite::Result<StoredThread> {
 		anchor: from_json(row, 3)?,
 		state: text_column(row, 4, thread_state)?,
 		comments: Vec::new(),
+		resolution: resolution(row)?,
+		last_board_point: board_point(row.get(8)?, row.get(9)?),
 	})
+}
+
+fn resolution(row: &Row<'_>) -> rusqlite::Result<Option<Resolution>> {
+	let Some(at) = row.get(7)? else {
+		return Ok(None);
+	};
+	let by = LibraryCommentParty { kind: text_column(row, 5, party_kind)?, id: row.get(6)? };
+	Ok(Some(Resolution { by, at }))
+}
+
+fn board_point(x: Option<i64>, y: Option<i64>) -> Option<LibraryBoardPoint> {
+	x.zip(y).map(|(x, y)| LibraryBoardPoint { x, y })
 }
 
 fn with_comments(connection: &Connection, thread: StoredThread) -> rusqlite::Result<StoredThread> {
@@ -494,13 +588,6 @@ fn read_comment(row: &Row<'_>) -> rusqlite::Result<LibraryComment> {
 		text: row.get(3)?,
 		mentions: from_json(row, 4)?,
 	})
-}
-
-fn state_text(state: LibraryCommentThreadState) -> &'static str {
-	match state {
-		LibraryCommentThreadState::Open => "open",
-		LibraryCommentThreadState::Resolved => "resolved",
-	}
 }
 
 fn thread_state(text: &str) -> Option<LibraryCommentThreadState> {
@@ -550,7 +637,7 @@ fn from_json<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Resu
 mod tests {
 	use rusqlite::{params_from_iter, Connection};
 
-	use super::{COUNT_OPEN_THREADS, SELECT_THREADS_OF_ITEM};
+	use super::{COUNT_OPEN_THREADS, SELECT_ANCHORS_OF_ITEM, SELECT_THREADS_OF_ITEM};
 	use crate::db::connection::temp_dir;
 
 	fn plan_of(
@@ -573,6 +660,7 @@ mod tests {
 			.call(|connection| {
 				Ok([
 					plan_of(connection, SELECT_THREADS_OF_ITEM, &["personal", "notes.md"])?,
+					plan_of(connection, SELECT_ANCHORS_OF_ITEM, &["personal", "plan.canvas"])?,
 					plan_of(connection, COUNT_OPEN_THREADS, &["personal"])?,
 				])
 			})

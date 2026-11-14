@@ -24,8 +24,8 @@ pub use draw::{
 	deleted, updated, ArrowPatch, ChangedNode, DrawRefusal, DrawnArrow, DrawnNode, Touched,
 };
 pub use read::{
-	content_hash, find, framed, holds_node, info, node_file, node_info, tree, under, BoardDetail,
-	BoardInfo, BoardTree, Frame, Framed, Sought,
+	content_hash, find, framed, holds_node, info, node_file, node_info, node_position, tree, under,
+	BoardDetail, BoardInfo, BoardTree, Frame, Framed, Sought,
 };
 use schema::{FieldSpec, Fields, KindSpec, Placement, SCHEMA};
 

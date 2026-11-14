@@ -39,6 +39,9 @@ export const threadBeingSent = (
 	state: "open",
 	comments: [comment],
 	targetMissing: false,
+	resolvedBy: null,
+	resolvedAt: null,
+	lastBoardPoint: null,
 })
 
 const isSameSaying = (one: LibraryComment, other: LibraryComment) =>

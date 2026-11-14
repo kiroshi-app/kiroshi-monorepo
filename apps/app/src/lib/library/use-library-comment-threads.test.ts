@@ -65,6 +65,9 @@ const threadOf = (
 		},
 	],
 	targetMissing: false,
+	resolvedBy: null,
+	resolvedAt: null,
+	lastBoardPoint: null,
 	...changes,
 })
 

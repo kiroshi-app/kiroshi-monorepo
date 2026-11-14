@@ -339,6 +339,11 @@ pub fn holds_node(board: &Board, id: &str) -> bool {
 	board.nodes.contains_key(id)
 }
 
+pub fn node_position(board: &Board, id: &str) -> Option<(i64, i64)> {
+	let rect = Rect::of(board.nodes.get(id)?);
+	Some((rect.x, rect.y))
+}
+
 pub fn node_file(board: &Board, id: &str) -> Option<NodeFile> {
 	let node = board.nodes.get(id)?;
 	Some(NodeFile {

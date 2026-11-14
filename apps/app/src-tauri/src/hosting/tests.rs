@@ -96,8 +96,8 @@ use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
 use crate::library::contract::{
-	LibraryCommentThreadState, LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_THREAD_CHANGED_EVENT,
-	DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
+	LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_THREAD_CHANGED_EVENT, DOCUMENT_RENAMED_EVENT,
+	DOCUMENT_UPDATED_EVENT,
 };
 use crate::library::tests::YjsClient;
 use crate::library::{CommentTurn, CommentTurns, Said};
@@ -899,18 +899,25 @@ async fn host_effect_applied(
 			};
 			return answered_by_the_library(replied);
 		}
-		"library_comment_resolve" | "library_comment_reopen" => {
-			let state = match command.as_str() {
-				"library_comment_resolve" => LibraryCommentThreadState::Resolved,
-				_ => LibraryCommentThreadState::Open,
+		"library_comment_resolve" => {
+			let (app, library) = (effects.app(), effects.library());
+			let caller = caller_vouched_in(&effects, &headers);
+			let resolved = match library::person_calling(&caller, app) {
+				Ok(by) => {
+					let thread = thread_named(&args);
+					library::resolve_comment_thread(app, &database, &library, thread, by).await
+				}
+				Err(refused) => Err(refused),
 			};
+			return answered_by_the_library(resolved);
+		}
+		"library_comment_reopen" => {
 			return answered_by_the_library(
-				library::set_comment_thread_state(
+				library::reopen_comment_thread(
 					effects.app(),
 					&database,
 					&effects.library(),
 					thread_named(&args),
-					state,
 				)
 				.await,
 			);
@@ -3955,6 +3962,51 @@ fn is_a_comment_change_outside(thread_id: &str) -> impl Fn(&Value) -> bool + '_ 
 		frame["event"]["event"] == COMMENT_THREAD_CHANGED_EVENT
 			&& frame["event"]["payload"]["thread"]["id"] != thread_id
 	}
+}
+
+#[test]
+fn a_thread_a_member_resolves_names_that_member_to_the_host_and_to_the_member_until_reopened() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-comment-resolver").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let database = db::open(&guest.effects.database);
+		let created =
+			guest.called("library_comment_create", a_library_comment_on_the_cover(PERSONAL)).await;
+		let thread_id = created["body"]["id"].as_str().expect("a thread id").to_owned();
+		let on_the_thread =
+			json!({ "spaceId": PERSONAL, "name": "cover.png", "threadId": thread_id });
+		let the_cover = a_library_entry_of("cover.png")(PERSONAL);
+		let read_by_the_host = || async {
+			let read = library::comment_threads(&app, &database, &library, PERSONAL, "cover.png");
+			json!(read.await.expect("the host reads the threads"))
+		};
+
+		let resolved = guest.called("library_comment_resolve", on_the_thread.clone()).await;
+		let thread = thread_named(&on_the_thread);
+		let by_the_host = library::person_calling(&Caller::Host, &app).expect("the host is named");
+		let resolved_again =
+			library::resolve_comment_thread(&app, &database, &library, thread, by_the_host)
+				.await
+				.expect("the host resolves the resolved thread");
+		let resolved_for_the_member =
+			guest.called("library_comment_threads", the_cover.clone()).await;
+		let resolved_for_the_host = read_by_the_host().await;
+		let reopened = guest.called("library_comment_reopen", on_the_thread).await;
+		let reopened_for_the_member = guest.called("library_comment_threads", the_cover).await;
+		let reopened_for_the_host = read_by_the_host().await;
+
+		let resolved = &resolved["body"];
+		assert_eq!(resolved["resolvedBy"], json!({ "kind": "person", "id": A_JOINER }));
+		assert!(resolved["resolvedAt"].is_i64(), "{resolved}");
+		assert_eq!(created["body"]["resolvedBy"], Value::Null, "{created}");
+		assert_eq!(created["body"]["resolvedAt"], Value::Null, "{created}");
+		assert_eq!(&json!(resolved_again), resolved);
+		assert_eq!(resolved_for_the_member["body"], json!([resolved]));
+		assert_eq!(resolved_for_the_host, json!([resolved]));
+		assert_eq!(reopened["body"], created["body"], "{reopened}");
+		assert_eq!(reopened_for_the_member["body"], json!([created["body"]]));
+		assert_eq!(reopened_for_the_host, json!([created["body"]]));
+	});
 }
 
 #[test]

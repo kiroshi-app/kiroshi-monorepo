@@ -1324,6 +1324,9 @@ export type LibraryCommentThread = {
 	state: LibraryCommentThreadState,
 	comments: LibraryComment[],
 	targetMissing: boolean,
+	resolvedBy: LibraryCommentParty | null,
+	resolvedAt: number | null,
+	lastBoardPoint: LibraryBoardPoint | null,
 };
 
 export type LibraryCommentThreadChanged = {
