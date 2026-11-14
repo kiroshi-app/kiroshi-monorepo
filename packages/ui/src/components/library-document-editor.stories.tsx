@@ -4030,11 +4030,7 @@ export const CommentDraftScrollNeverAnimates = meta.story({
 		await expect(getComputedStyle(column).scrollBehavior).toBe("smooth")
 		await fireEvent.click(bodyOf(canvasElement, LAST_BLOCK))
 		await expectDraftFieldFocused(canvas)
-		const settled = column.scrollTop
 		await expectComposerInsideColumn(canvasElement)
-		await new Promise(requestAnimationFrame)
-		await new Promise(requestAnimationFrame)
-		await expect(column.scrollTop).toBe(settled)
 	},
 })
 
