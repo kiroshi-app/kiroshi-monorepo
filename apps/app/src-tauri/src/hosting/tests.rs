@@ -4194,6 +4194,28 @@ impl Guest {
 		.await;
 	}
 
+	async fn mention_heard(&mut self) -> String {
+		let is_a_mention = |frame: &Value| frame["event"]["event"] == COMMENT_MENTIONED_EVENT;
+		next_text(&mut self.member, is_a_mention).await["event"].to_string()
+	}
+
+	async fn called_until_mentioned(&mut self, command: &str, args: Value) -> (Value, String) {
+		let call = json!({ "id": command, "command": command, "args": args });
+		send(&mut self.member, &call.to_string()).await;
+		let (mut answered, mut mentioned) = (None, None);
+		loop {
+			let frame = unstamped(next_json(&mut self.member).await);
+			if frame.get("event").is_none() {
+				answered = Some(frame);
+			} else if frame["event"]["event"] == COMMENT_MENTIONED_EVENT {
+				mentioned = Some(frame["event"].to_string());
+			}
+			if let (Some(answered), Some(mentioned)) = (&answered, &mentioned) {
+				return (answered.clone(), mentioned.clone());
+			}
+		}
+	}
+
 	async fn mentions_heard(&mut self) -> Vec<String> {
 		let mentions = Mutex::new(Vec::new());
 		self.mentions_heard_into(&mentions).await;
@@ -4252,7 +4274,8 @@ fn the_host_mentioning_a_member_notifies_the_computer_of_that_member_and_no_othe
 		)
 		.await
 		.expect("the host comments");
-		let heard = guest.mentions_heard().await;
+		let mut heard = vec![guest.mention_heard().await];
+		heard.extend(guest.mentions_heard().await);
 		for frame in &heard {
 			raised_if_mentioned(member_computer.handle(), &the_computer_of(A_JOINER), frame);
 			let bystander = the_computer_of("bystander-account");
@@ -4295,8 +4318,9 @@ fn a_member_mentioning_the_host_notifies_the_host_computer_alone_and_a_click_han
 		};
 
 		let named_twice = a_library_comment_mentioning(&[COMMENT_HOST_AUTHOR_ID, &host.id]);
-		let (created, mut heard) =
-			guest.called_hearing_mentions("library_comment_create", named_twice).await;
+		let (created, mentioned) =
+			guest.called_until_mentioned("library_comment_create", named_twice).await;
+		let mut heard = vec![mentioned];
 		let thread =
 			json!({ "spaceId": PERSONAL, "name": "cover.png", "threadId": created["body"]["id"] });
 		for command in ["library_comment_resolve", "library_comment_reopen"] {

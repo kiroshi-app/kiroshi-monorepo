@@ -33,6 +33,7 @@ use crate::library::tests::{a_host, a_space, put, A_BOARD};
 use crate::notifications::{self, Notice, SystemNotifications};
 use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::test_app::AppOfItsOwn;
+use crate::test_log::{capturing, warnings_naming};
 
 const A_DOCUMENT: &str = "# Launch ^head01\n\nShip the beta on Friday. ^para01\n";
 
@@ -1079,10 +1080,13 @@ async fn a_host_comment_mentioning_a_person_tells_the_space_once_per_comment_and
 	let host = person(COMMENT_HOST_AUTHOR_ID);
 	let named_twice = [person(BEA), agent(NYX), person(BEA)];
 
+	let patience = Duration::from_secs(5);
 	let opening = said(host.clone(), "Look here\nand there", &named_twice);
 	let opened = shelf.opened_saying(NOTES, block("head01"), opening).await.expect("it opens");
+	let told_of_the_opening = heard.recv_timeout(patience);
 	let reply = said(host, "Again", &[person(BEA)]);
 	shelf.replied(NOTES, &opened.id, reply).await.expect("the reply lands");
+	let told_of_the_reply = heard.recv_timeout(patience);
 	shelf.resolved(NOTES, &opened.id).await.expect("the thread resolves");
 	let reopened = shelf.reopened(NOTES, &opened.id).await.expect("the thread reopens");
 
@@ -1095,9 +1099,8 @@ async fn a_host_comment_mentioning_a_person_tells_the_space_once_per_comment_and
 		text: text.to_owned(),
 		people: vec![BEA.to_owned()],
 	};
-	let patience = Duration::from_secs(5);
-	assert_eq!(heard.recv_timeout(patience), Ok(told("Look here\nand there")));
-	assert_eq!(heard.recv_timeout(patience), Ok(told("Again")));
+	assert_eq!(told_of_the_opening, Ok(told("Look here\nand there")));
+	assert_eq!(told_of_the_reply, Ok(told("Again")));
 	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
 	assert_eq!(titles(&raised), Vec::<String>::new());
 	assert_eq!(shelf.counts().await, [(NOTES.to_owned(), 1)]);
@@ -1124,14 +1127,21 @@ async fn a_comment_naming_no_other_person_tells_and_notifies_nobody() {
 }
 
 #[tokio::test]
-async fn a_mention_whose_author_has_no_name_to_show_stays_stored_and_tells_nobody() {
+async fn a_mention_whose_author_has_no_name_to_show_stays_stored_is_logged_and_tells_nobody() {
+	capturing();
 	let shelf = Shelf::of("mention-unnamed").await;
 	let (raised, heard) = (shelf.counting_notices(), shelf.hearing_mentions());
 
 	let opening = said(person(BEA), "Look here", &[person(COMMENT_HOST_AUTHOR_ID)]);
 	let opened = shelf.opened_saying(NOTES, block("head01"), opening).await.expect("it opens");
+	let logged = warnings_naming(&opened.id).await;
 
-	assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+	let unnamed = format!(
+		"the mention in comment thread {} of space {} notified nobody: its author has no name to show",
+		opened.id, shelf.space_id
+	);
+	assert_eq!(logged, [unnamed]);
+	assert!(heard.try_recv().is_err());
 	assert_eq!(titles(&raised), Vec::<String>::new());
 	assert_eq!(shelf.threads(NOTES).await, Ok(vec![opened]));
 }

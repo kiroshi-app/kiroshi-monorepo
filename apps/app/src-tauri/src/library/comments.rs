@@ -326,7 +326,7 @@ pub(crate) async fn open_comment_thread<R: Runtime>(
 	let opened = database.library().open_thread(thread).await?;
 	let opened = announced(app, commented.as_it_stands(opened));
 	turns::summon(app, &commented, &opened, summoned);
-	mentions::told(app, database, &commented, &opened, &opening).await;
+	mentions::told(app, &commented, &opened, opening);
 	Ok(opened)
 }
 
@@ -344,7 +344,7 @@ pub(crate) async fn reply_to_comment_thread<R: Runtime>(
 	let replied = database.library().reply(thread, reply.clone()).await?.ok_or(unknown)?;
 	let replied = announced(app, commented.as_it_stands(replied));
 	turns::summon(app, &commented, &replied, summoned);
-	mentions::told(app, database, &commented, &replied, &reply).await;
+	mentions::told(app, &commented, &replied, reply);
 	Ok(replied)
 }
 
