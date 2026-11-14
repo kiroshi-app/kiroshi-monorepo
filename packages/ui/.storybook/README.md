@@ -112,6 +112,10 @@ export const States = meta.story({
 })
 ```
 
+The addon is registered once, in `preview.tsx`: a story only sets `parameters.pseudo` and never loads the addon's decorator itself. The sidebar draws the state once the story has finished rendering, play function and animations included. `test:storybook` draws it right after mount, before the play function and the a11y check, so a play assertion in such a story never reads a resting value off the targeted element.
+
+Target the element that carries the `hover:` or `focus-visible:` class. A selector that lands on another element, such as the hidden input a Base UI switch gives its `id` to, draws nothing.
+
 **Scenario names** — named after the real data condition they exercise, never after the render.
 
 | Export | The condition |
@@ -241,3 +245,9 @@ Vite root, reachable only through a `/@fs/`-prefixed URL that does not get emitt
 addon skips injecting its own copy when `test.setupFiles` names a file whose
 directory is this one and whose source contains `setProjectAnnotations`, so the file
 must stay here, must keep that call, and must stay listed in `vitest.config.ts`.
+
+Its first import, `@storybook/addon-vitest/internal/setup-file`, must stay first. It
+installs the Storybook channel before the preview loads, and
+`storybook-addon-pseudo-states` subscribes its stylesheet rewrite to whatever channel
+exists at that moment: loaded after the preview, no `parameters.pseudo` state renders
+in the run.
