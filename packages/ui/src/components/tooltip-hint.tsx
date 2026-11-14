@@ -2,6 +2,7 @@
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import {
+	type ComponentProps,
 	createContext,
 	type ReactElement,
 	type ReactNode,
@@ -23,13 +24,24 @@ const HINT_CLOSE_GRACE_MS = 80
 
 const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
-const BUBBLE = cn("break-words", STILL_UNDER_REDUCED_MOTION)
+type TooltipHintVariant = "hint" | "line"
+
+const HINT = cn("break-words", STILL_UNDER_REDUCED_MOTION)
+
+const BUBBLE: Record<TooltipHintVariant, string> = {
+	hint: HINT,
+	line: cn("block truncate", STILL_UNDER_REDUCED_MOTION),
+}
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"
+
+type TooltipHintSideOffset = ComponentProps<typeof TooltipContent>["sideOffset"]
 
 type SharedBubble = {
 	content: ReactNode
 	side: TooltipHintSide
+	sideOffset: TooltipHintSideOffset
+	variant: TooltipHintVariant
 }
 
 const SharedBubbleContext = createContext<
@@ -40,9 +52,17 @@ type TooltipHintProps = {
 	content: ReactNode
 	children: ReactElement
 	side?: TooltipHintSide
+	sideOffset?: TooltipHintSideOffset
+	variant?: TooltipHintVariant
 }
 
-const TooltipHint = ({ content, children, side = "top" }: TooltipHintProps) => {
+const TooltipHint = ({
+	content,
+	children,
+	side = "top",
+	sideOffset,
+	variant = "hint",
+}: TooltipHintProps) => {
 	const sharedBubble = useContext(SharedBubbleContext)
 
 	if (sharedBubble) {
@@ -53,7 +73,7 @@ const TooltipHint = ({ content, children, side = "top" }: TooltipHintProps) => {
 				delay={HOVER_INTENT_DELAY_MS}
 				disabled={!content}
 				handle={sharedBubble}
-				payload={{ content, side }}
+				payload={{ content, side, sideOffset, variant }}
 				render={children}
 			/>
 		)
@@ -63,7 +83,12 @@ const TooltipHint = ({ content, children, side = "top" }: TooltipHintProps) => {
 		<Tooltip>
 			<TooltipTrigger delay={HOVER_INTENT_DELAY_MS} render={children} />
 			{content ? (
-				<TooltipContent className={BUBBLE} role="tooltip" side={side}>
+				<TooltipContent
+					className={BUBBLE[variant]}
+					role="tooltip"
+					side={side}
+					sideOffset={sideOffset}
+				>
 					{content}
 				</TooltipContent>
 			) : null}
@@ -88,9 +113,10 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 			<TooltipPrimitive.Root handle={sharedBubble}>
 				{({ payload }) => (
 					<TooltipContent
-						className={BUBBLE}
+						className={BUBBLE[payload?.variant ?? "hint"]}
 						role="tooltip"
 						side={payload?.side}
+						sideOffset={payload?.sideOffset}
 					>
 						{payload?.content}
 					</TooltipContent>

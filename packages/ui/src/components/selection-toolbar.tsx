@@ -79,12 +79,11 @@ const PLAIN_BUTTON = cn(
 )
 
 const TOOLTIP = cn(
-	"rounded-control p-1.5 font-medium text-card break-words **:data-[slot=kbd]:rounded-md [&>[data-side]]:hidden",
+	"break-words **:data-[slot=kbd]:rounded-md",
 	STILL_UNDER_REDUCED_MOTION,
 )
 
-const SHORTCUT =
-	"px-0.5 in-data-[slot=tooltip-content]:bg-card/10 in-data-[slot=tooltip-content]:text-card dark:in-data-[slot=tooltip-content]:bg-card/10"
+const SHORTCUT = "px-0.5"
 
 const NAME = {
 	bold: "library.editor.toolbar.bold",

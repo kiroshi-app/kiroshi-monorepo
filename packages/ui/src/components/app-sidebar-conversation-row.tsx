@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -95,6 +96,7 @@ const ConversationRosterRow = ({
 	const { t } = useTranslation("bots")
 	const { state } = useSidebar()
 	const isCompact = useIsCompactRows()
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const hasSurface =
 		state !== "collapsed" || Boolean(conversation.missions?.length)
 	const leadSide = isCompact ? COMPACT_LEAD_SIDE : ROW_ICON_SIDE
@@ -114,7 +116,7 @@ const ConversationRosterRow = ({
 			data-tauri-drag-region="false"
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
-			<ContextMenu>
+			<ContextMenu onOpenChange={setIsMenuOpen}>
 				<ContextMenuTrigger
 					className={isCompact ? COMPACT_ROW_STACK : stackedSurface}
 				>
@@ -123,8 +125,10 @@ const ConversationRosterRow = ({
 						isLiftable
 						badge={badgeOf(conversation)}
 						geometry={isCompact ? "compact" : stackedGeometryOf(hasSurface)}
+						hasRowTooltip
 						isActive={isSelected}
 						isMiddleClickSelectable
+						isTooltipHidden={isLifted || isMenuOpen}
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							conversation.agent ? (
@@ -162,6 +166,7 @@ const ConversationRosterRow = ({
 						}
 					/>
 					<MissionCapsuleList
+						isTooltipHidden={isLifted || isMenuOpen}
 						missions={conversation.missions}
 						onOpenMission={onOpenMission}
 						openMissionId={openMissionId}
