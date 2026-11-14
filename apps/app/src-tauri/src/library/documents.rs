@@ -37,10 +37,14 @@ const BOARD_WRITE_LONGEST_WAIT: Duration = Duration::from_secs(2);
 
 type Key = (String, String);
 
+type BoardFileReplaced = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+type BoardWritten = Arc<dyn Fn(&str, &str, &Board) + Send + Sync>;
+
 #[derive(Clone)]
 struct BoardWriteHooks {
-	on_file_replaced: Arc<dyn Fn(&str, &str) + Send + Sync>,
-	on_written: Arc<dyn Fn(&str, &str, &Board) + Send + Sync>,
+	on_file_replaced: BoardFileReplaced,
+	on_written: BoardWritten,
 }
 
 pub(crate) struct Documents {
