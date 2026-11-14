@@ -28,17 +28,17 @@ type MentionOpeningOptions = {
 	raiseFailure: (notice: UnreportedFailureNotice) => void
 }
 
-const MISSING_ITEM = "missing"
-
-const refusalKindOf = (cause: unknown) => {
+const isMissingItem = (cause: unknown) => {
 	const refusal = isHostRefused(cause) ? cause.cause : cause
-	return typeof refusal === "object" && refusal !== null
-		? (refusal as { kind?: unknown }).kind
-		: undefined
+	return (
+		typeof refusal === "object" &&
+		refusal !== null &&
+		(refusal as { kind?: unknown }).kind === "missing"
+	)
 }
 
 const unreadNoticeOf = (cause: unknown): UnreportedFailureNotice =>
-	refusalKindOf(cause) === MISSING_ITEM
+	isMissingItem(cause)
 		? { title: i18n.t("common:library.tab.unavailable.missing.title") }
 		: { title: i18n.t("common:library.failure.comment.list") }
 

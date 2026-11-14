@@ -64,7 +64,7 @@ const changedOn =
 		...changes,
 	})
 
-const onThread = (openThreadId: string) => ({
+const showingThread = (openThreadId: string) => ({
 	openThreadId,
 	reply: "",
 	draft: null,
@@ -99,7 +99,7 @@ export const useLibraryComments = <Target,>({
 			return
 		}
 		return openMentionedThreadsOn({ spaceId, itemName: name }, (threadId) =>
-			setHeld(changedOn<Target>(name, onThread(threadId))),
+			setHeld(changedOn<Target>(name, showingThread(threadId))),
 		)
 	}, [spaceId, name])
 
@@ -117,7 +117,7 @@ export const useLibraryComments = <Target,>({
 	const counts = countsOf(threads)
 
 	const openThreadById = (openThreadId: string) =>
-		change(onThread(openThreadId))
+		change(showingThread(openThreadId))
 	const setCommentMode = (isCommentMode: boolean) =>
 		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
 
