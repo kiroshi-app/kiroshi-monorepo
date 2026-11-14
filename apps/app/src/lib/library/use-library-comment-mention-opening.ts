@@ -14,7 +14,12 @@ import {
 	type LibraryCommentThread,
 } from "../bindings"
 import { raiseReportedFailure } from "../failure-report"
-import { invokeOn, isDesktopHost, listenOnThisWindow } from "../host"
+import {
+	invokeOn,
+	isDesktopHost,
+	listenOnThisWindow,
+	revealWindow,
+} from "../host"
 import { showLibraryItemOfSpace } from "../navigation/use-open-library-document"
 import {
 	hostSpaceIdOf,
@@ -67,6 +72,7 @@ export const useLibraryCommentMentionOpening = (
 				}
 			},
 			askForThread: askForMentionedThread,
+			raiseWindow: () => revealWindow({ withFocus: true }),
 			raiseFailure: (notice) =>
 				void raiseReportedFailure(notice, { raisedIn: RAISED_IN }),
 		})

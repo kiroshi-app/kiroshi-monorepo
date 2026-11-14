@@ -37,14 +37,23 @@ const threadOf = (id: string): LibraryCommentThread => ({
 	lastBoardPoint: null,
 })
 
+const BOTH_THERE = () =>
+	Promise.resolve([threadOf("thread-budget"), threadOf("thread-intro")])
+
+const windowRaisedAtOnce = () => Promise.resolve()
+
+const threadsRead = () => new Promise((flush) => setTimeout(flush, 0))
+
 const mentionOpeningOn = (
 	readThreads: () => Promise<LibraryCommentThread[]>,
+	raiseWindow: () => Promise<void> = windowRaisedAtOnce,
 ) => {
 	const seams = {
 		spaceOf: vi.fn(() => JOINED_SPACE),
 		readThreads: vi.fn(readThreads),
 		showItem: vi.fn(),
 		askForThread: vi.fn(),
+		raiseWindow: vi.fn(raiseWindow),
 		raiseFailure: vi.fn(),
 	}
 	return { ...seams, openMention: createLibraryCommentMentionOpening(seams) }
@@ -55,9 +64,7 @@ const noticeTitlesOf = (raiseFailure: ReturnType<typeof vi.fn>) =>
 
 describe("createLibraryCommentMentionOpening", () => {
 	it("shows the item in its Space and asks for the thread when both are there", async () => {
-		const opening = mentionOpeningOn(() =>
-			Promise.resolve([threadOf("thread-budget"), threadOf("thread-intro")]),
-		)
+		const opening = mentionOpeningOn(BOTH_THERE)
 
 		await opening.openMention(MENTION)
 
@@ -75,6 +82,52 @@ describe("createLibraryCommentMentionOpening", () => {
 		expect(opening.raiseFailure).not.toHaveBeenCalled()
 	})
 
+	it("brings the window forward before it shows the item on its thread", async () => {
+		let raise = () => {}
+		const opening = mentionOpeningOn(
+			BOTH_THERE,
+			() =>
+				new Promise<void>((raised) => {
+					raise = raised
+				}),
+		)
+
+		const opened = opening.openMention(MENTION)
+		await threadsRead()
+
+		expect(opening.raiseWindow).toHaveBeenCalledTimes(1)
+		expect(opening.showItem).not.toHaveBeenCalled()
+		expect(opening.askForThread).not.toHaveBeenCalled()
+
+		raise()
+		await opened
+
+		expect(opening.askForThread).toHaveBeenCalledTimes(1)
+		expect(opening.showItem).toHaveBeenCalledTimes(1)
+	})
+
+	it("still shows the item and reports it when the window cannot be brought forward", async () => {
+		const opening = mentionOpeningOn(BOTH_THERE, () =>
+			Promise.reject(new Error("no window to reveal")),
+		)
+
+		await opening.openMention(MENTION)
+
+		expect(opening.raiseFailure.mock.calls).toEqual([
+			[
+				{
+					title: "Couldn’t bring Kiroshi to the front. Switch to it yourself.",
+					description: "no window to reveal",
+				},
+			],
+		])
+		expect(opening.askForThread).toHaveBeenCalledTimes(1)
+		expect(opening.showItem).toHaveBeenCalledExactlyOnceWith(
+			"joined:host-lena",
+			{ kind: "document", name: "plan.md" },
+		)
+	})
+
 	it("names the item as gone and leaves the screen when the item is gone", async () => {
 		const opening = mentionOpeningOn(() =>
 			Promise.reject({ kind: "missing", name: "plan.md" }),
@@ -85,6 +138,7 @@ describe("createLibraryCommentMentionOpening", () => {
 		expect(noticeTitlesOf(opening.raiseFailure)).toEqual([
 			"This item isn’t in the Library anymore.",
 		])
+		expect(opening.raiseWindow).toHaveBeenCalledTimes(1)
 		expect(opening.showItem).not.toHaveBeenCalled()
 		expect(opening.askForThread).not.toHaveBeenCalled()
 	})
@@ -118,6 +172,7 @@ describe("createLibraryCommentMentionOpening", () => {
 		expect(noticeTitlesOf(opening.raiseFailure)).toEqual([
 			"The comment you were mentioned in isn’t on plan anymore.",
 		])
+		expect(opening.raiseWindow).toHaveBeenCalledTimes(1)
 		expect(opening.showItem).not.toHaveBeenCalled()
 		expect(opening.askForThread).not.toHaveBeenCalled()
 	})

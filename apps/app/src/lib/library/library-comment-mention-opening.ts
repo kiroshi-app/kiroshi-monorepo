@@ -7,9 +7,13 @@ import type {
 	LibraryCommentMentionOpened,
 	LibraryCommentThread,
 } from "../bindings"
-import type { UnreportedFailureNotice } from "../failure-report"
+import {
+	describeFailure,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { isHostRefused } from "../host/host-refused"
 import type { LibraryOpening } from "../navigation/library-search"
+import { notificationFailureTitleFor } from "../notifications/notification-words"
 
 export type MentionedSpace = {
 	rowId: string
@@ -25,6 +29,7 @@ type MentionOpeningOptions = {
 	) => Promise<LibraryCommentThread[]>
 	showItem: (rowId: string, opening: LibraryOpening) => void
 	askForThread: (asked: MentionedCommentThread) => void
+	raiseWindow: () => Promise<void>
 	raiseFailure: (notice: UnreportedFailureNotice) => void
 }
 
@@ -51,28 +56,41 @@ const threadGoneNoticeOf = ({
 	}),
 })
 
+const unraisedNoticeOf = (reason: unknown): UnreportedFailureNotice => ({
+	title: notificationFailureTitleFor("reveal"),
+	description: describeFailure(reason),
+})
+
 export const createLibraryCommentMentionOpening =
 	({
 		spaceOf,
 		readThreads,
 		showItem,
 		askForThread,
+		raiseWindow,
 		raiseFailure,
 	}: MentionOpeningOptions) =>
-	(opened: LibraryCommentMentionOpened) => {
+	async (opened: LibraryCommentMentionOpened) => {
 		const { spaceId, itemName, itemKind, threadId } = opened
 		const space = spaceOf(spaceId)
+		const windowRaised = async () => raiseWindow()
+		const raised = windowRaised().catch((reason: unknown) =>
+			raiseFailure(unraisedNoticeOf(reason)),
+		)
 
-		const openAmong = (threads: LibraryCommentThread[]) => {
-			if (!threads.some(({ id }) => id === threadId)) {
-				raiseFailure(threadGoneNoticeOf(opened))
-				return
-			}
+		const showOnThread = async () => {
+			await raised
 			askForThread({ spaceId: space.hostSpaceId, itemName, threadId })
 			showItem(space.rowId, { kind: itemKind, name: itemName })
 		}
 
-		return readThreads(space, itemName).then(openAmong, (cause: unknown) =>
+		const openAmong = (threads: LibraryCommentThread[]) =>
+			threads.some(({ id }) => id === threadId)
+				? showOnThread()
+				: raiseFailure(threadGoneNoticeOf(opened))
+
+		await readThreads(space, itemName).then(openAmong, (cause: unknown) =>
 			raiseFailure(unreadNoticeOf(cause)),
 		)
+		await raised
 	}
