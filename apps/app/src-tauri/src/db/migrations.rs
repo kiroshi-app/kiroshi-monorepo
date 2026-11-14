@@ -5414,6 +5414,7 @@ mod tests {
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, shipped_before(LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT_STEP))
 			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), COMMENT_AGENT_TURNS_STEP);
 		connection
 			.execute_batch(
 				r#"INSERT INTO library_comment_threads
@@ -5453,6 +5454,15 @@ mod tests {
 		assert_eq!(threads[0].comments.len(), 1);
 
 		drop(database);
+		let started_again = crate::db::open(&dir);
+		let still_there = started_again
+			.library()
+			.threads("personal".to_owned(), "plan.canvas".to_owned())
+			.await
+			.expect("the threads load on the next start");
+		assert_eq!(still_there, threads);
+
+		drop(started_again);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
