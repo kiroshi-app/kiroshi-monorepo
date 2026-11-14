@@ -111,6 +111,8 @@ const DRAFT_RUN = "comment-draft"
 
 const PIN_GAP = 8
 
+const RESOLVED_PIN_OVERLAP = 1
+
 const isCommentRun = (id: string) =>
 	id === DRAFT_RUN || id.startsWith(COMMENT_RUN)
 
@@ -356,13 +358,18 @@ const besidePin =
 const onPassageEnd =
 	(run: string, isAboveLine: boolean): PlaceIn =>
 	(block) => {
-		const end = block.querySelector(`[data-passage-end="${run}"]`)
+		const end = [...block.querySelectorAll(`[data-passage-end="${run}"]`)].at(
+			-1,
+		)
 		const line = [...(end?.getClientRects() ?? [])].at(-1)
 		if (!line) return undefined
 		const from = block.getBoundingClientRect()
 		return {
 			left: line.right - from.left,
-			top: (isAboveLine ? line.top : (line.top + line.bottom) / 2) - from.top,
+			top:
+				(isAboveLine
+					? line.top + RESOLVED_PIN_OVERLAP
+					: (line.top + line.bottom) / 2) - from.top,
 		}
 	}
 
@@ -437,7 +444,7 @@ const ON_PASSAGE_LINE = "absolute start-0 top-1/2 -translate-y-1/2"
 const PASSAGE_PIN: Record<PassageState, string> = {
 	rest: ON_PASSAGE_LINE,
 	selected: ON_PASSAGE_LINE,
-	resolved: "absolute start-0 bottom-full",
+	resolved: "absolute start-0 bottom-full translate-y-px",
 }
 
 const PASSAGE_LOOK: Record<PassageState, string> = {

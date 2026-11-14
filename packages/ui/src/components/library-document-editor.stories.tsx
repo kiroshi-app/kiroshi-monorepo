@@ -2826,7 +2826,7 @@ const expectPinAbovePassageEnd = async (
 ) => {
 	const line = lastLineOf(passage)
 	await expectClose(boxOf(pin).left, line.right)
-	await expectClose(boxOf(pin).bottom, line.top)
+	await expect(boxOf(pin).bottom).toBeCloseTo(line.top + 1, 1)
 }
 
 const doc1 = {
@@ -3536,18 +3536,25 @@ export const PassageKeptWhileBlockFocused = meta.story({
 	},
 })
 
+const PLAN_BLOCK = "plan01"
+
+const PLAN_TABLE = "| Day | Plan |\n| --- | --- |\n| Friday | Roadmap review |"
+
 const EDITED_BLOCKS = [
 	{
 		id: "note01",
 		source: "> [!NOTE]\n> Bring a coat for the boat.",
 		passage: "a coat",
 	},
-	{
-		id: "plan01",
-		source: "| Day | Plan |\n| --- | --- |\n| Friday | Roadmap review |",
-		passage: "Roadmap",
-	},
+	{ id: PLAN_BLOCK, source: PLAN_TABLE, passage: "Roadmap" },
 ]
+
+const editingSlotOf = (block: HTMLElement) =>
+	waitFor(() => {
+		const editing = slotIn(block, "library-document-block-editing")
+		expect(editing.contains(document.activeElement)).toBe(true)
+		return editing
+	})
 
 export const PassageKeptWhileBlockEditorFocused = meta.story({
 	tags: ["test-only"],
@@ -3566,13 +3573,7 @@ export const PassageKeptWhileBlockEditorFocused = meta.story({
 		for (const { id, passage: text } of EDITED_BLOCKS) {
 			const block = blockOf(canvasElement, id)
 			block.querySelector<HTMLElement>("[tabindex]")?.focus()
-			await waitFor(() =>
-				expect(
-					slotIn(block, "library-document-block-editing").contains(
-						document.activeElement,
-					),
-				).toBe(true),
-			)
+			await editingSlotOf(block)
 			const passage = shownPassageOf(block, text)
 			await expect(passage).toBeVisible()
 			await expect(passage).toHaveAttribute("data-state", "rest")
@@ -3580,6 +3581,44 @@ export const PassageKeptWhileBlockEditorFocused = meta.story({
 			await expect(pin).toBeVisible()
 			await expectPassagePin(pin, passage)
 		}
+	},
+})
+
+export const PassageAcrossTableCellsPinnedOnLastCell = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: `${PLAN_TABLE}\n\n^${PLAN_BLOCK}`,
+		threads: [
+			{
+				...BUDGET_THREAD,
+				anchor: {
+					blockId: PLAN_BLOCK,
+					passage: passageIn(PLAN_TABLE, "Friday | Roadmap"),
+				},
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, PLAN_BLOCK)
+		const shownPieces = () =>
+			piecesIn(canvasElement, PLAN_BLOCK).map((piece) => piece.textContent)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		await expectPassagePin(
+			threadPinIn(canvasElement, BUDGET_THREAD.id),
+			lastOf(piecesIn(canvasElement, PLAN_BLOCK)),
+		)
+
+		block.querySelector<HTMLElement>("[tabindex]")?.focus()
+		const editing = await editingSlotOf(block)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		const pieces = piecesIn(canvasElement, PLAN_BLOCK)
+		await expect(pieces.every((piece) => editing.contains(piece))).toBe(true)
+		await expect(pieces[0].closest("td")).not.toBe(lastOf(pieces).closest("td"))
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(slotsIn(block, "library-comment-pin")).toHaveLength(1)
+		await expectPassagePin(pin, lastOf(pieces))
 	},
 })
 

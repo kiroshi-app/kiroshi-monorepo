@@ -2151,6 +2151,7 @@ navigation-librarydocumenteditor--overlapping-passages
 navigation-librarydocumenteditor--overlapping-passages-dark
 navigation-librarydocumenteditor--passage-across-formatting
 navigation-librarydocumenteditor--passage-across-formatting-dark
+navigation-librarydocumenteditor--passage-across-table-cells-pinned-on-last-cell
 navigation-librarydocumenteditor--passage-card-kept-inside-editor
 navigation-librarydocumenteditor--passage-draft-on-block-being-written
 navigation-librarydocumenteditor--passage-kept-while-block-editor-focused
