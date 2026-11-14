@@ -20,6 +20,10 @@ const MARKDOWN_RUN_ATTRIBUTE = "data-markdown-run"
 
 const MARKDOWN_RUN_END_ATTRIBUTE = "data-markdown-run-end"
 
+const MARKDOWN_CODE_RUNS_ATTRIBUTE = "data-markdown-code-runs"
+
+type MarkedFile = { value: unknown }
+
 type Cut = { from: number; to: number; id: string }
 
 type RunPiece = { from: number; to: number; ids: string[] }
@@ -116,9 +120,38 @@ const splitRuns = (node: MdastNode, runs: MarkdownRun[]) => {
 	)
 }
 
+const codeRunsOf = (
+	node: MdastNode,
+	runs: MarkdownRun[],
+	source: string,
+): MarkdownRun[] => {
+	const from = node.position?.start.offset
+	const to = node.position?.end.offset
+	if (from === undefined || to === undefined) return []
+	const bodyFrom = from + source.slice(from, to).indexOf("\n") + 1
+	const bodyTo = bodyFrom + (node.value ?? "").length
+	if (source.slice(bodyFrom, bodyTo) !== node.value) return []
+	return cutsWithin(runs, bodyFrom, bodyTo).flatMap((cut) =>
+		cut.from < cut.to ? [{ id: cut.id, start: cut.from, end: cut.to }] : [],
+	)
+}
+
+const markCodeRuns = (node: MdastNode, runs: MarkdownRun[], source: string) => {
+	const codeRuns = codeRunsOf(node, runs, source)
+	if (codeRuns.length === 0) return
+	node.data = {
+		...node.data,
+		hProperties: {
+			...node.data?.hProperties,
+			[MARKDOWN_CODE_RUNS_ATTRIBUTE]: JSON.stringify(codeRuns),
+		},
+	}
+}
+
 const remarkRuns =
 	({ runs: received }: RemarkRunsOptions) =>
-	(tree: MdastNode) => {
+	(tree: MdastNode, file: MarkedFile) => {
+		const source = String(file.value ?? "")
 		const runs = caretsSnappedToText(received, tree)
 		const lastPieces = new Map<string, MdastNode>()
 
@@ -140,6 +173,7 @@ const remarkRuns =
 
 			for (const child of node.children) {
 				if (child.type === "markdownRun") noteLastPieces(child)
+				else if (child.type === "code") markCodeRuns(child, runs, source)
 				else rewrite(child)
 			}
 		}
@@ -152,6 +186,7 @@ const remarkRuns =
 	}
 
 export {
+	MARKDOWN_CODE_RUNS_ATTRIBUTE,
 	MARKDOWN_RUN_ATTRIBUTE,
 	MARKDOWN_RUN_END_ATTRIBUTE,
 	type MarkdownRun,

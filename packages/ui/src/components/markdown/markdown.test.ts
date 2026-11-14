@@ -640,4 +640,42 @@ describe("markdown runs", () => {
 		)
 		expect(html).toContain('data-slot="bot-mention"')
 	})
+
+	const markedIn = (html: string) =>
+		[
+			...html.matchAll(
+				/<mark data-run="passage"( data-end="true")?>(.*?)<\/mark>/gs,
+			),
+		].map(([, end, drawn]) => ({
+			text: drawn.replace(/<[^>]+>/g, ""),
+			isEnd: end !== undefined,
+		}))
+
+	it("draws a run inside a fence over its characters, line by line, with their syntax colours", () => {
+		const source =
+			"```ts\nconst launch = await ship()\nawait announce(launch)\n```"
+		const html = renderRuns(
+			[runOver("passage", "ship()\nawait", source)],
+			source,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "ship()", isEnd: false },
+			{ text: "await", isEnd: true },
+		])
+		expect(html).toMatch(
+			/<mark data-run="passage"><span><span style="--code-token-light/,
+		)
+		expect(html.replace(/<[^>]+>/g, "")).toContain(
+			"const launch = await ship()\nawait announce(launch)",
+		)
+	})
+
+	it("draws no run in a fence whose lines are indented under a list item", () => {
+		const source = "- Run it:\n\n  ```\n  ship()\n  announce()\n  ```"
+		const html = renderRuns([runOver("passage", "announce", source)], source)
+
+		expect(markedIn(html)).toEqual([])
+		expect(html.replace(/<[^>]+>/g, "")).toContain("ship()\nannounce()")
+	})
 })

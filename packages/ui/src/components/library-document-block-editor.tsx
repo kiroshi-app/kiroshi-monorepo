@@ -155,7 +155,7 @@ const BLOCK_EDITORS: LibraryBlockType[] = [
 	"web-page",
 ]
 
-const PASSAGE_EDITORS: LibraryBlockType[] = ["callout", "table"]
+const PASSAGE_EDITORS: LibraryBlockType[] = ["callout", "table", "code"]
 
 const POINTED_PARTS = "li, th, td, img"
 
@@ -1195,7 +1195,7 @@ const LibraryDocumentBlockEditor = ({
 				<LibraryTableEditor {...passages} onEdit={onEdit} source={source} />
 			)
 		if (type === "code")
-			return <LibraryCodeEditor onEdit={onEdit} source={source} />
+			return <LibraryCodeEditor {...passages} onEdit={onEdit} source={source} />
 		return (
 			<LibraryWebPageEditor
 				onEdit={onEdit}
@@ -1433,16 +1433,20 @@ const LibraryDocumentBlockEditor = ({
 				const hasBlockEditor = BLOCK_EDITORS.includes(type)
 				const textType = textTypeOf(type)
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
-				const runs = [
-					...runsIn({
-						writers,
-						held: heldRuns,
-						people,
-						start: offsets[index],
-						length: block.source.length,
-					}),
-					...commentRunsIn(commentLayer, block.id),
-				]
+				const commentRuns = commentRunsIn(commentLayer, block.id)
+				const runs =
+					type === "code"
+						? commentRuns
+						: [
+								...runsIn({
+									writers,
+									held: heldRuns,
+									people,
+									start: offsets[index],
+									length: block.source.length,
+								}),
+								...commentRuns,
+							]
 				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1

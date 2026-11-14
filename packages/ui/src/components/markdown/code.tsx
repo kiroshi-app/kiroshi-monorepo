@@ -33,10 +33,21 @@ import {
 	MERMAID_LANGUAGE,
 } from "@workspace/ui/components/markdown/mermaid"
 import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
+import { MarkdownRunSpan } from "@workspace/ui/components/markdown/run"
+import {
+	MARKDOWN_CODE_RUNS_ATTRIBUTE,
+	type MarkdownRun,
+	runPiecesOf,
+} from "@workspace/ui/components/markdown/runs"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
-import { highlightCode, toCodeLines } from "@workspace/ui/lib/code-highlight"
+import {
+	type CodeSourceLine,
+	highlightCode,
+	toCodeLines,
+} from "@workspace/ui/lib/code-highlight"
+import { cn } from "@workspace/ui/lib/utils"
 
 export type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & ExtraProps
 export type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps
@@ -46,6 +57,12 @@ interface MarkdownFenceProps {
 	language?: string
 	header?: ReactNode
 	body?: ReactNode
+	runs?: MarkdownRun[]
+}
+
+type MarkdownFenceLinesProps = {
+	lines: CodeSourceLine[]
+	runs?: MarkdownRun[]
 }
 
 type FenceNode = NonNullable<ExtraProps["node"]>
@@ -55,6 +72,10 @@ type FenceElement = Extract<FenceChild, { tagName: string }>
 const LANGUAGE_PREFIX = "language-"
 
 const HIGHLIGHT_BUDGET_LINES = 200
+
+const NO_RUNS: MarkdownRun[] = []
+
+const RUN_OVERHANG = "-my-1.5 py-1.5"
 
 const isCodeElement = (child: FenceChild): child is FenceElement =>
 	child.type === "element" && child.tagName === "code"
@@ -77,6 +98,45 @@ const languageOf = (node: FenceElement) => {
 		?.slice(LANGUAGE_PREFIX.length)
 }
 
+const runsOf = (node: FenceElement): MarkdownRun[] => {
+	const written = node.properties?.[MARKDOWN_CODE_RUNS_ATTRIBUTE]
+	return typeof written === "string" ? JSON.parse(written) : NO_RUNS
+}
+
+const endOf = ({ offset, content }: CodeSourceLine) => offset + content.length
+
+const runEndsOf = (lines: CodeSourceLine[], runs: MarkdownRun[]) =>
+	new Map(
+		runs.map(({ id, start, end }) => [
+			id,
+			Math.max(
+				...lines
+					.filter((line) => start < endOf(line) && end > line.offset)
+					.map((line) => Math.min(end, endOf(line))),
+			),
+		]),
+	)
+
+const partOf = (line: CodeSourceLine, from: number, to: number) => ({
+	content: line.content.slice(from - line.offset, to - line.offset),
+	tokens: line.tokens?.flatMap((token) => {
+		const start = Math.max(token.offset, from)
+		const end = Math.min(token.offset + token.content.length, to)
+		return start < end
+			? [
+					{
+						...token,
+						offset: start,
+						content: token.content.slice(
+							start - token.offset,
+							end - token.offset,
+						),
+					},
+				]
+			: []
+	}),
+})
+
 const fitsInOneFrame = (code: string) =>
 	code.split("\n", HIGHLIGHT_BUDGET_LINES + 1).length <= HIGHLIGHT_BUDGET_LINES
 
@@ -92,7 +152,40 @@ export const MarkdownCode = ({
 	return <code {...props}>{children}</code>
 }
 
-const FenceCode = ({ code, language }: MarkdownFenceProps) => {
+export const MarkdownFenceLines = ({
+	lines,
+	runs = NO_RUNS,
+}: MarkdownFenceLinesProps) => {
+	const runEnds = runEndsOf(lines, runs)
+
+	return lines.map((line, index) => (
+		<Fragment key={line.offset}>
+			{runs.length === 0 ? (
+				<CodeLine content={line.content} tokens={line.tokens} />
+			) : (
+				runPiecesOf(runs, line.offset, endOf(line)).map((piece) => {
+					const from = line.offset + piece.from
+					const to = line.offset + piece.to
+					return piece.ids.reduceRight<ReactNode>(
+						(children, id) => (
+							<MarkdownRunSpan
+								id={id}
+								isEnd={runEnds.get(id) === to}
+								key={from}
+							>
+								{children}
+							</MarkdownRunSpan>
+						),
+						<CodeLine key={from} {...partOf(line, from, to)} />,
+					)
+				})
+			)}
+			{index < lines.length - 1 ? "\n" : null}
+		</Fragment>
+	))
+}
+
+const FenceCode = ({ code, language, runs }: MarkdownFenceProps) => {
 	const [firstPaint] = useState(() => (fitsInOneFrame(code) ? code : ""))
 	const painted = useDeferredValue(code, firstPaint)
 	const ready = useCodeHighlightReady(language)
@@ -107,12 +200,7 @@ const FenceCode = ({ code, language }: MarkdownFenceProps) => {
 
 	return (
 		<code>
-			{lines.map((line, index) => (
-				<Fragment key={line.offset}>
-					<CodeLine content={line.content} tokens={line.tokens} />
-					{index < lines.length - 1 ? "\n" : null}
-				</Fragment>
-			))}
+			<MarkdownFenceLines lines={lines} runs={runs} />
 		</code>
 	)
 }
@@ -124,6 +212,7 @@ export const MarkdownFence = ({
 	language,
 	header,
 	body,
+	runs,
 }: MarkdownFenceProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(code)
@@ -142,9 +231,12 @@ export const MarkdownFence = ({
 						tabIndex={0}
 						role="group"
 						aria-label={snippetLabel}
-						className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+						className={cn(
+							"mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+							runs?.length ? RUN_OVERHANG : undefined,
+						)}
 					>
-						<FenceCode code={code} language={language} />
+						<FenceCode code={code} language={language} runs={runs} />
 					</span>
 				)}
 			</pre>
@@ -190,7 +282,7 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 		if (block) return <MarkdownAnswerBlock block={block} />
 	}
 
-	return <MarkdownFence code={source} language={language} />
+	return <MarkdownFence code={source} language={language} runs={runsOf(code)} />
 }
 
 export const MarkdownStaticPre = ({
