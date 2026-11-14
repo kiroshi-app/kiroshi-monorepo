@@ -51,6 +51,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { createHomeVisits } from "@/lib/home/home-visits"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -414,6 +415,18 @@ const screenSlot = (slot: string) => framedSlot("screen-layout", slot)
 
 const threadSlot = (slot: string) => framedSlot("chat-layout", slot)
 
+const floatingHeader = () =>
+	document.querySelector(
+		'[data-slot="screen-layout-floating-header"]',
+	) as HTMLElement
+
+const islandsIn = (surface: Element) => [
+	...surface.querySelectorAll<HTMLElement>('[data-slot="header-island"]'),
+]
+
+const islandOf = (control: HTMLElement) =>
+	control.closest('[data-slot="header-island"]') as HTMLElement
+
 const missionChanges = () => {
 	const listeners = new Set<(changed: MissionChanged) => void>()
 
@@ -639,6 +652,36 @@ describe("WorkspaceBody missions", () => {
 		expect(missionHeader()).toBeNull()
 	})
 
+	it("floats the header of the loading mission as islands dragging the window, Back excepted", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		readMission.mockReturnValue(new Promise(() => undefined))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		const back = screen.getByRole("button", { name: BACK })
+
+		expect(floatingHeader().contains(missionHeaderSkeleton())).toBe(true)
+		expect(startsWindowDrag(islandOf(back))).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+	})
+
+	it("floats the header of the open mission as islands dragging the window, Back excepted", async () => {
+		const { workspace } = await seed((mission) => ({
+			mission,
+			events: [eventOf("opened", 0)],
+		}))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		const back = screen.getByRole("button", { name: BACK })
+
+		expect(floatingHeader().contains(missionHeader())).toBe(true)
+		expect(startsWindowDrag(islandOf(back))).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+	})
+
 	it("returns to the origin conversation from Back while the mission loads", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
@@ -757,6 +800,68 @@ describe("WorkspaceBody frame", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
+	})
+
+	const thread = () =>
+		document.querySelector('[data-slot="chat-layout"]') as HTMLElement
+
+	const expectIslandsFloatingOverThread = () => {
+		expect(floatingHeader().contains(threadSlot("app-header"))).toBe(true)
+		expect(islandsIn(floatingHeader()).length).toBeGreaterThan(0)
+	}
+
+	it("floats the header of a solo conversation as islands over the thread", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+
+		expectIslandsFloatingOverThread()
+	})
+
+	it("floats the header of a group conversation as islands over the thread", async () => {
+		const store = createFakeTranscriptStore()
+		const workspace = await workspaceOf(store)
+		const [ada] = await seatBots(store, SPACE, ["Ada"])
+		const group = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Garden",
+			botIds: [workspace.bot.id, ada.id],
+		})
+		render(
+			workspace.body({
+				selected: group,
+				overrides: { bots: [workspace.bot, ada] },
+			}),
+		)
+		await settle()
+
+		expect(within(floatingHeader()).getByText("Garden")).toBeTruthy()
+		expectIslandsFloatingOverThread()
+	})
+
+	it("drags the window from an island, never from its control", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+		const [island] = islandsIn(floatingHeader())
+		const [control] = within(island).getAllByRole("button")
+
+		expect(startsWindowDrag(island)).toBe(true)
+		expect(startsWindowDrag(control)).toBe(false)
+	})
+
+	it("hands a press on the gap between islands or on the thread to the thread, dragging nothing", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+		const gap = threadSlot("app-header") as HTMLElement
+
+		expect(takesPress(gap)).toBe(false)
+		expect(takesPress(floatingHeader())).toBe(false)
+		expect(startsWindowDrag(gap)).toBe(false)
+		expect(takesPress(thread())).toBe(true)
+		expect(startsWindowDrag(thread())).toBe(false)
 	})
 })
 
@@ -956,6 +1061,16 @@ describe("WorkspaceBody Home", () => {
 
 		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
 		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("shows the Home with no header", async () => {
+		const home = await launchHome()
+
+		await home.open()
+
+		expect(homeSlot("home-layout")).not.toBeNull()
+		expect(homeSlot("app-header")).toBeNull()
+		expect(homeSlot("header-island")).toBeNull()
 	})
 
 	it("shows the normal thread of an agent opened outside the Home, never a Home view", async () => {
@@ -1658,6 +1773,33 @@ describe("WorkspaceBody library", () => {
 				"notes",
 			].sort(),
 		)
+	})
+
+	it("floats the Library header as islands over the grid", async () => {
+		await openLibrary()
+
+		expect(islandsIn(floatingHeader()).length).toBeGreaterThan(0)
+		expect(takesPress(floatingHeader())).toBe(false)
+	})
+
+	it("floats the bar of an opened document as islands over its text", async () => {
+		await openLibrary()
+
+		await open("Spring launch brief")
+		const back = screen.getByRole("button", { name: "Library" })
+
+		expect(floatingHeader().contains(islandOf(back))).toBe(true)
+		expect(takesPress(back)).toBe(true)
+		expect(takesPress(floatingHeader())).toBe(false)
+	})
+
+	it("floats the bar of an opened image as islands over the image", async () => {
+		await openLibrary()
+
+		await open("hero-dunes.png")
+		const lightbox = screen.getByRole("dialog", { name: "hero-dunes.png" })
+
+		expect(islandsIn(lightbox).length).toBeGreaterThan(0)
 	})
 
 	it("shows an empty Library with its header actions, a new document and its templates", async () => {

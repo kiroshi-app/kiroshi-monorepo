@@ -37,6 +37,7 @@ import {
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -462,6 +463,26 @@ describe("SpaceSettingsScreen on a joined space", () => {
 })
 
 describe("SpaceSettingsScreen on a local space", () => {
+	it("floats the header of the shown entry as an island dragging the window, over the page", async () => {
+		const gear = await gearWithGarage()
+
+		const dialog = openSettingsOf(gear, gear.home.id)
+		const header = dialog.querySelector(
+			'[data-slot="screen-layout-floating-header"]',
+		) as HTMLElement
+		const island = header.querySelector(
+			'[data-slot="header-island"]',
+		) as HTMLElement
+		const page = dialog.querySelector(
+			'[data-slot="settings-screen-page"]',
+		) as HTMLElement
+
+		expect(within(island).getByRole("heading")).toBeTruthy()
+		expect(startsWindowDrag(island)).toBe(true)
+		expect(takesPress(header)).toBe(false)
+		expect(startsWindowDrag(page)).toBe(false)
+	})
+
 	it("opens the local mode with its editable Name field, its transfer actions and Danger zone pinned", async () => {
 		const gear = await gearWithGarage()
 

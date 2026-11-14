@@ -12,15 +12,11 @@ import { createElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
-import { MissionHeader } from "@workspace/ui/components/mission-header"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import "@workspace/ui/lib/i18n"
 
-import {
-	titleBarDragRegion,
-	titleBarWindowControls,
-} from "@/components/window-caption-controls"
+import { titleBarWindowControls } from "@/components/window-caption-controls"
 import type { MaximizeButtonState } from "@/lib/bindings"
 import {
 	closeWindow,
@@ -33,6 +29,7 @@ import {
 	watchWindowFocus,
 	watchWindowMaximized,
 } from "@/lib/host"
+import { startsWindowDrag } from "@/lib/host/fake-window-drag"
 
 vi.mock("@/lib/host", () => ({
 	hasCaptionWindowControls: vi.fn(),
@@ -80,31 +77,6 @@ const renderTitleBar = () => {
 
 const titleBar = () =>
 	document.querySelector("[data-slot=app-title-bar]") as HTMLElement
-
-const renderMissionHeader = () =>
-	render(
-		createElement(MissionHeader, {
-			bot: { name: "Ada Martin", seed: "bot-ada-martin" },
-			objective: "Ship the title bar",
-			ticket: {
-				externalId: "OPE-438",
-				title: "Window controls",
-				platform: "linear",
-				url: "https://linear.example/OPE-438",
-			},
-			tools: [],
-			state: "waiting_human",
-			isWorking: false,
-			openedAt: 0,
-			now: 0,
-			onBack: vi.fn(),
-			dragRegion: titleBarDragRegion(),
-		}),
-	)
-
-const isDragBlocking = (element: HTMLElement) =>
-	element.tagName === "BUTTON" &&
-	!element.hasAttribute("data-tauri-drag-region")
 
 const reportedMaximized = (isMaximized: boolean) => {
 	const [watch] = vi.mocked(watchWindowMaximized).mock.calls.at(-1) as [
@@ -196,10 +168,17 @@ describe("title bar window controls", () => {
 	it("drags the window from the title bar but not from its caption buttons", () => {
 		renderTitleBar()
 
-		expect(titleBar().getAttribute("data-tauri-drag-region")).toBe("deep")
+		expect(startsWindowDrag(titleBar())).toBe(true)
 		for (const name of ["Minimize", "Maximize", "Close"]) {
-			expect(isDragBlocking(screen.getByRole("button", { name }))).toBe(true)
+			expect(startsWindowDrag(screen.getByRole("button", { name }))).toBe(false)
 		}
+	})
+
+	it("drags the window from the title bar off Windows too", () => {
+		vi.mocked(hasCaptionWindowControls).mockReturnValue(false)
+		renderTitleBar()
+
+		expect(startsWindowDrag(titleBar())).toBe(true)
 	})
 
 	it("drives the current window from each button", () => {
@@ -354,27 +333,5 @@ describe("title bar window controls", () => {
 		expect(await screen.findAllByText(POINTER_FAILURE)).toBeTruthy()
 		reportedPointer("hover")
 		expect(maximizeShows("idle")).toBe(true)
-	})
-
-	it("drags the window from the mission header on Windows without caption buttons", () => {
-		renderMissionHeader()
-		const header = screen.getByRole("banner")
-
-		expect(header.getAttribute("data-tauri-drag-region")).toBe("deep")
-		expect(
-			isDragBlocking(
-				screen.getByRole("button", { name: "Back to the conversation" }),
-			),
-		).toBe(true)
-		expect(screen.queryByRole("button", { name: "Minimize" })).toBeNull()
-	})
-
-	it("leaves the mission header without a drag region off Windows", () => {
-		vi.mocked(hasCaptionWindowControls).mockReturnValue(false)
-		renderMissionHeader()
-
-		expect(
-			screen.getByRole("banner").hasAttribute("data-tauri-drag-region"),
-		).toBe(false)
 	})
 })

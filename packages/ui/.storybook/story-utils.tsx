@@ -9,6 +9,8 @@ import {
 	fireEvent,
 	fn,
 	type Mock,
+	screen,
+	userEvent,
 	waitFor,
 	within,
 } from "storybook/test"
@@ -201,10 +203,16 @@ export const expectAnswerInsideFrame = async (root: HTMLElement) => {
 type SidebarFrameProps = {
 	children: ReactNode
 	width?: number
+	isCollapsed?: boolean
 }
 
-export const SidebarFrame = ({ children, width }: SidebarFrameProps) => (
+export const SidebarFrame = ({
+	children,
+	width,
+	isCollapsed = false,
+}: SidebarFrameProps) => (
 	<SidebarProvider
+		defaultOpen={!isCollapsed}
 		style={
 			width === undefined
 				? undefined
@@ -1244,4 +1252,54 @@ export const expectQuestionCutInsideTheRow = async (row: HTMLElement) => {
 		label.getBoundingClientRect().width + 1,
 	)
 	await expect(sidesOf(slotIn(line, "needs-you-glyph"))).toEqual([12, 12])
+}
+
+export const openTooltipOf = async (trigger: HTMLElement) => {
+	await userEvent.hover(trigger)
+	return settled(await screen.findByRole("tooltip"))
+}
+
+const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
+
+const GAP_PAST_SIDEBAR_EDGE = 4
+
+const expectTooltipBesideTheSidebar = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	const sidebar = row.closest(SIDEBAR_BOX)
+	if (!sidebar) throw new Error("The row sits in no sidebar")
+	await waitFor(
+		() =>
+			expect(
+				tooltip.getBoundingClientRect().left -
+					sidebar.getBoundingClientRect().right,
+			).toBeCloseTo(GAP_PAST_SIDEBAR_EDGE, 0),
+		FRAME_POLL,
+	)
+}
+
+export const expectTooltipPastTheSidebarEdge = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	await expectTooltipBesideTheSidebar(row, tooltip)
+	await waitFor(async () => {
+		const bubble = tooltip.getBoundingClientRect()
+		const held = row.getBoundingClientRect()
+		await expect(bubble.top + bubble.height / 2).toBeCloseTo(
+			held.top + held.height / 2,
+			0,
+		)
+	}, FRAME_POLL)
+}
+
+export const expectTooltipOnOneLine = async (tooltip: HTMLElement) => {
+	const style = getComputedStyle(tooltip)
+	await expect(tooltip.getBoundingClientRect().height).toBeCloseTo(
+		Number.parseFloat(style.lineHeight) +
+			Number.parseFloat(style.paddingTop) +
+			Number.parseFloat(style.paddingBottom),
+		0,
+	)
 }

@@ -9,7 +9,6 @@ import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
-import { titleBarDragRegion } from "@/components/window-caption-controls"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
@@ -154,12 +153,7 @@ export function MissionThreadScreen({
 		if (hasFailedToRead) return <MissionReadFailure onRetry={onRetry} />
 		return detailSkeleton ? (
 			<ThreadLayout
-				header={
-					<MissionHeaderSkeleton
-						dragRegion={titleBarDragRegion()}
-						onBack={onLeave}
-					/>
-				}
+				header={<MissionHeaderSkeleton dragRegion="deep" onBack={onLeave} />}
 				isHeaderFloating
 				skeleton={detailSkeleton}
 			>
