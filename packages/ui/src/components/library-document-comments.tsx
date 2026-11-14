@@ -256,23 +256,32 @@ type DraftCardProps = {
 
 const DraftCard = ({ draft, anchor, participants }: DraftCardProps) => {
 	const { t } = useTranslation("common")
+	const card = useRef<HTMLDivElement>(null)
+
+	useEffect(() => {
+		card.current
+			?.querySelector('[data-slot="library-comment-composer"]')
+			?.scrollIntoView({ behavior: "instant", block: "nearest" })
+	}, [])
 
 	return (
-		<LibraryCommentComposer
-			anchor={anchor}
-			className="w-80"
-			onSubmit={draft.onSubmit}
-			onValueChange={draft.onValueChange}
-			participants={participants}
-			shortcut={
-				draft.target.origin === "shortcut"
-					? t(
-							`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
-						)
-					: undefined
-			}
-			value={draft.value}
-		/>
+		<div className="contents" ref={card}>
+			<LibraryCommentComposer
+				anchor={anchor}
+				className="w-80"
+				onSubmit={draft.onSubmit}
+				onValueChange={draft.onValueChange}
+				participants={participants}
+				shortcut={
+					draft.target.origin === "shortcut"
+						? t(
+								`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
+							)
+						: undefined
+				}
+				value={draft.value}
+			/>
+		</div>
 	)
 }
 

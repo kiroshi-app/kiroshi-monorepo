@@ -5151,6 +5151,41 @@ export const CommentDraftMovesWithAnchor = meta.story({
 	},
 })
 
+const scrollOffsetsAbove = (element: Element) => {
+	const offsets: number[] = []
+	for (let box: Element | null = element; box; box = box.parentElement)
+		offsets.push(box.scrollLeft, box.scrollTop)
+	return offsets
+}
+
+export const CommentDraftAtEdgeKeepsBoardStill = meta.story({
+	tags: ["test-only"],
+	globals: LAPTOP_WINDOW,
+	args: CommentDraftOnNode.input.args,
+	render: (args) => <DraftFollowingClicks {...args} />,
+	parameters: commentDocs(
+		"A comment being written on the Boat shape, then a click in the bottom end corner of the board, where the composer has no room left. Check the composer opening past the edge of the board with its field holding the focus, the viewport never changed, and nothing scrolled from the composer up to the page.",
+	),
+	play: async ({ canvasElement, args }) => {
+		const surface = slotIn(canvasElement, "board-comment-surface")
+		const board = slotIn(canvasElement, "board-canvas").getBoundingClientRect()
+
+		await expectComposerOn(canvasElement, BOAT_ANCHOR_LINE)
+		await userEvent.pointer({
+			keys: "[MouseLeft]",
+			target: surface,
+			coords: { clientX: board.right - 24, clientY: board.bottom - 24 },
+		})
+		await expectComposerOn(canvasElement, "On the board")
+		const composer = slotIn(canvasElement, "library-comment-composer")
+		await expect(args.onViewportChange).not.toHaveBeenCalled()
+		await expect(scrollOffsetsAbove(composer).some(Boolean)).toBe(false)
+		await expect(composer.getBoundingClientRect().right).toBeGreaterThan(
+			board.right,
+		)
+	},
+})
+
 export const CommentModeSurvivesListEscape = meta.story({
 	tags: ["test-only"],
 	globals: LAPTOP_WINDOW,

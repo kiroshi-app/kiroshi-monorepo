@@ -1722,6 +1722,7 @@ navigation-boardcanvas--arrows-after-board
 navigation-boardcanvas--arrows-after-board-dark
 navigation-boardcanvas--cancel-draft-by-escape
 navigation-boardcanvas--cancel-draft-by-escape-dark
+navigation-boardcanvas--comment-draft-at-edge-keeps-board-still
 navigation-boardcanvas--comment-draft-moves-with-anchor
 navigation-boardcanvas--comment-draft-on-board
 navigation-boardcanvas--comment-draft-on-board-dark
@@ -2111,6 +2112,10 @@ navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
+navigation-librarydocumenteditor--comment-draft-above-view-scrolls-into-view
+navigation-librarydocumenteditor--comment-draft-below-view-scrolls-into-view
+navigation-librarydocumenteditor--comment-draft-in-view-keeps-scroll
+navigation-librarydocumenteditor--comment-draft-scroll-never-animates
 navigation-librarydocumenteditor--comment-escape-closes-innermost
 navigation-librarydocumenteditor--comment-escape-from-block-closes-thread
 navigation-librarydocumenteditor--comment-escape-from-toggle-closes-thread
