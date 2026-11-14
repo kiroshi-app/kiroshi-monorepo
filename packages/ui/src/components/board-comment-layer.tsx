@@ -3,7 +3,6 @@
 import {
 	type PointerEvent,
 	type ReactNode,
-	type Ref,
 	type RefObject,
 	useEffect,
 	useState,
@@ -148,24 +147,17 @@ const BoardCommentMark = ({
 
 type BoardCommentCornerProps = {
 	at: BoardPoint
-	ref?: Ref<HTMLDivElement>
 	children: ReactNode
 }
 
-const BoardCommentCorner = ({ at, ref, children }: BoardCommentCornerProps) => (
+const BoardCommentCorner = ({ at, children }: BoardCommentCornerProps) => (
 	<div
 		className="absolute z-10 size-0 select-text"
-		ref={ref}
 		style={{ left: at.x, top: at.y }}
 	>
 		{children}
 	</div>
 )
-
-const focusCommentField = (corner: HTMLElement | null) =>
-	corner
-		?.querySelector<HTMLElement>('[data-slot="library-comment-field"] textarea')
-		?.focus({ preventScroll: true })
 
 const isFromBoardOrCommentToggle = (
 	focused: Element,
@@ -353,7 +345,6 @@ const BoardCommentLayer = ({
 				<BoardCommentCorner
 					at={composerCornerOf(drafted.pinTail)}
 					key={JSON.stringify(draft.anchor)}
-					ref={focusCommentField}
 				>
 					<LibraryCommentComposer
 						anchor={anchorLineOf(drafted.node)}

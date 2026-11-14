@@ -4,6 +4,7 @@ import {
 	type ReactNode,
 	type RefObject,
 	useEffect,
+	useState,
 	useSyncExternalStore,
 } from "react"
 import {
@@ -2689,6 +2690,7 @@ const draftOn = (
 	value: "",
 	onValueChange: fn(),
 	onSubmit: fn(),
+	onClose: fn(),
 })
 
 const openThreadOf = (id: string) => ({
@@ -3621,3 +3623,131 @@ export const CaretInsideCommentedPassage = meta.story({
 		)
 	},
 })
+
+const EscapeLadderDocument = ({
+	commentDraft,
+	openThread,
+	...args
+}: LibraryDocumentEditorProps) => {
+	const [isDraftClosed, setDraftClosed] = useState(false)
+	const [isThreadClosed, setThreadClosed] = useState(false)
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				commentDraft={
+					commentDraft && !isDraftClosed
+						? {
+								...commentDraft,
+								onClose: () => {
+									setDraftClosed(true)
+									commentDraft.onClose()
+								},
+							}
+						: undefined
+				}
+				openThread={
+					openThread && !isThreadClosed
+						? {
+								...openThread,
+								onClose: () => {
+									setThreadClosed(true)
+									openThread.onClose()
+								},
+							}
+						: undefined
+				}
+			/>
+		</EditorFrame>
+	)
+}
+
+export const CommentEscapeClosesInnermost = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		commentDraft: {
+			...draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
+			value: "@",
+		},
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	render: (args) => <EscapeLadderDocument {...args} />,
+	parameters: describedAs(
+		"Comment mode on with a thread card open, a comment being written on another paragraph and its mention menu open, then Esc pressed four times with no click in between. Check the first Esc closing the menu alone with the draft and its @ kept, the second raising `onClose` of the draft alone, the third, sent from the page the focus fell back to, raising `onClose` of the thread card alone, comment mode kept all along, and the fourth raising `onCommentModeChange` with false.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const field = canvas.getByRole("textbox", { name: "Comment, @ to mention" })
+		await expectDraftFieldFocused(canvas)
+		await canvas.findByRole("listbox", { name: "Mention" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(canvas.queryByRole("listbox", { name: "Mention" })).toBeNull(),
+		)
+		await expect(field).toHaveValue("@")
+		await expect(field).toHaveFocus()
+		await expect(args.commentDraft?.onClose).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "library-comment-composer")).toEqual([]),
+		)
+		await expect(args.commentDraft?.onClose).toHaveBeenCalledOnce()
+		await expect(args.commentDraft?.onValueChange).not.toHaveBeenCalled()
+		await expect(args.openThread?.onClose).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "library-comment-thread")).toEqual([]),
+		)
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+		await expect(args.commentDraft?.onClose).toHaveBeenCalledOnce()
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await expectCalledOnceWith(args.comments?.onCommentModeChange, false)
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+	},
+})
+
+const toggleIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-comment-toggle")
+
+const blockHandleIn = (canvasElement: HTMLElement) =>
+	within(
+		slotIn(blockOf(canvasElement, MARKET_BLOCK), "library-block-handle"),
+	).getAllByRole("button")[0]
+
+const threadEscapeFrom = (
+	place: string,
+	controlIn: (canvasElement: HTMLElement) => HTMLElement,
+) => ({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		`Comment mode on with a thread card open and the focus on ${place}, then Esc. Check that Esc raises \`onClose\` of the thread card once, never \`onCommentModeChange\`, and that the hint of comment mode stays.`,
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const control = controlIn(canvasElement)
+		control.focus()
+		await expect(control).toHaveFocus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(
+			slotIn(canvasElement, "library-comment-mode-hint"),
+		).toBeVisible()
+	},
+})
+
+export const CommentEscapeFromToggleClosesThread = meta.story(
+	threadEscapeFrom("the Comment toggle of the bar", toggleIn),
+)
+
+export const CommentEscapeFromBlockClosesThread = meta.story(
+	threadEscapeFrom("the handle of a paragraph of the body", blockHandleIn),
+)

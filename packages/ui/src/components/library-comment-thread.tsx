@@ -46,7 +46,7 @@ type LibraryCommentThreadProps = {
 	onReply: () => void
 	onResolve: () => void
 	onReopen: () => void
-	onMore: () => void
+	onMore?: () => void
 	onClose: () => void
 	className?: string
 }
@@ -171,12 +171,14 @@ const LibraryCommentThread = ({
 								<Icons.Success aria-hidden="true" />
 							</HeaderButton>
 						)}
-						<HeaderButton
-							label={t("library.comments.thread.more")}
-							onClick={onMore}
-						>
-							<Icons.More aria-hidden="true" />
-						</HeaderButton>
+						{onMore ? (
+							<HeaderButton
+								label={t("library.comments.thread.more")}
+								onClick={onMore}
+							>
+								<Icons.More aria-hidden="true" />
+							</HeaderButton>
+						) : null}
 						<HeaderButton
 							label={t("library.comments.thread.close")}
 							onClick={onClose}

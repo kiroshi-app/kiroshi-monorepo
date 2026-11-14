@@ -1998,6 +1998,7 @@ navigation-librarycommentthread--shape-gone
 navigation-librarycommentthread--shape-gone-dark
 navigation-librarycommentthread--target-gone
 navigation-librarycommentthread--target-gone-dark
+navigation-librarycommentthread--without-more
 navigation-librarydocumentblockeditor--agents-writing
 navigation-librarydocumentblockeditor--autolink-shows-its-text
 navigation-librarydocumentblockeditor--backspace-at-the-start-turns-into-text
@@ -2100,6 +2101,9 @@ navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
 navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
+navigation-librarydocumenteditor--comment-escape-closes-innermost
+navigation-librarydocumenteditor--comment-escape-from-block-closes-thread
+navigation-librarydocumenteditor--comment-escape-from-toggle-closes-thread
 navigation-librarydocumenteditor--comment-mode-click-starts-block-comment
 navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-over-mention

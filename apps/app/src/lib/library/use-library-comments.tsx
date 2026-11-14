@@ -53,8 +53,6 @@ const closedOn = <Target,>(
 	tab: "open",
 })
 
-const ignoreMore = () => {}
-
 export const anchoredDraftOf = <Target, Draft extends { target: Target }>({
 	target,
 	...written
@@ -169,7 +167,6 @@ export const useLibraryComments = <Target,>({
 			onReply: sendReply,
 			onResolve: () => resolve(opened.thread.id),
 			onReopen: () => reopen(opened.thread.id),
-			onMore: ignoreMore,
 			onClose: () => change({ openThreadId: null, reply: "" }),
 		},
 		draft: state.draft && {

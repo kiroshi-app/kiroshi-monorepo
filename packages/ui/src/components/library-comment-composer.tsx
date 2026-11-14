@@ -21,6 +21,10 @@ type LibraryCommentComposerProps = LibraryCommentDraftOptions & {
 
 const ANCHOR_LINE = "break-words text-muted-foreground text-xs leading-4"
 
+const focusFieldIn = (form: HTMLFormElement | null) => {
+	form?.querySelector("textarea")?.focus({ preventScroll: true })
+}
+
 const LibraryCommentComposer = ({
 	anchor,
 	shortcut,
@@ -39,6 +43,7 @@ const LibraryCommentComposer = ({
 				className="flex flex-col gap-3 rounded-control bg-comment-card p-3 text-foreground shadow-comment-card"
 				data-slot="library-comment-composer"
 				onSubmit={draft.submit}
+				ref={focusFieldIn}
 			>
 				{shortcut ? (
 					<div className="flex items-start justify-between gap-2">

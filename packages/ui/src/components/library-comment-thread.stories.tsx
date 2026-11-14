@@ -82,7 +82,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgent` adds the row of a mentioned agent at work. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container.",
+					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, More drawn only when `onMore` is passed, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgent` adds the row of a mentioned agent at work. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container.",
 			},
 		},
 	},
@@ -134,6 +134,27 @@ export const FirstComment = meta.story({
 export const FirstCommentDark = meta.story({
 	globals: { theme: "dark" },
 	play: FirstComment.input.play,
+})
+
+export const WithoutMore = meta.story({
+	args: { onMore: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread given no `onMore`. Check the header holds Resolve and Close alone, side by side, with no button named More and nothing left where it stood.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const thread = within(threadIn(canvasElement))
+		await expect(thread.queryByRole("button", { name: "More" })).toBe(null)
+
+		const resolve = thread.getByRole("button", { name: "Resolve" })
+		await expect(resolve.nextElementSibling).toBe(
+			thread.getByRole("button", { name: "Close" }),
+		)
+	},
 })
 
 export const AgentAtWork = meta.story({
