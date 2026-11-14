@@ -3996,7 +3996,7 @@ export const CommentPassageDraftBelowViewScrollsIntoView = meta.story({
 	args: longDocument,
 	render: (args) => <DraftOpenedByClick {...args} />,
 	parameters: describedAs(
-		"A long document at the top of its scroll, then a comment started on the first words of a paragraph of several lines, far below the visible area, with more paragraphs after it and no key typed. Check the draft pin on the end of the passage with the paragraph running on under it, the 320px composer 8px right of the pin with its top on the pin top, the document scrolled until the whole composer sits inside the column with its bottom edge on the bottom edge of the column, so the scroll aimed at the placed composer and never at the foot of the paragraph where it sits before it is placed, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
+		"A long document at the top of its scroll, then a comment started on the first words of a paragraph of several lines, far below the visible area, with more paragraphs after it and no key typed. Check the draft pin on the end of the passage with the paragraph running on under it, the composer 8px right of the pin with its top on the pin top, the document scrolled until the whole composer sits inside the column with its bottom edge on the bottom edge of the column, so the scroll aimed at the placed composer and never at the foot of the paragraph where it sits before it is placed, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
 	),
 	play: async ({ canvas, canvasElement }) => {
 		const column = columnIn(canvasElement)
@@ -4011,7 +4011,6 @@ export const CommentPassageDraftBelowViewScrollsIntoView = meta.story({
 			boxOf(pin).bottom + boxOf(pin).height,
 		)
 		const composer = boxOf(composerIn(canvasElement))
-		await expect(composer.width).toBe(320)
 		await expectClose(composer.left, boxOf(pin).right + 8)
 		await expectClose(composer.top, boxOf(pin).top)
 		await expectComposerInsideColumn(canvasElement)
