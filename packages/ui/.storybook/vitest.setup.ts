@@ -1,3 +1,5 @@
+import "@storybook/addon-vitest/internal/setup-file"
+
 import { getProjectAnnotations } from "virtual:/@storybook/builder-vite/project-annotations.js"
 
 import { composeStory, setProjectAnnotations } from "storybook/preview-api"

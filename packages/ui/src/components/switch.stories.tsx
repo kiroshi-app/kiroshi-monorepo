@@ -1,7 +1,7 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Row } from "@workspace/storybook/story-utils"
+import { isInBrowserRunner, Row } from "@workspace/storybook/story-utils"
 import { Switch } from "@workspace/ui/components/ui/switch"
 
 const LONG_LABEL =
@@ -46,7 +46,7 @@ export const Default = meta.story({
 export const States = meta.story({
 	tags: ["test-only"],
 	parameters: {
-		pseudo: { focusVisible: "#switch-focus" },
+		pseudo: { focusVisible: '[role="switch"][aria-label="Focused"]' },
 		docs: {
 			description: {
 				story:
@@ -58,7 +58,7 @@ export const States = meta.story({
 		<Row>
 			<Switch aria-label="Off" />
 			<Switch aria-label="On" defaultChecked />
-			<Switch aria-label="Focused" defaultChecked id="switch-focus" />
+			<Switch aria-label="Focused" defaultChecked />
 			<Switch aria-label="Disabled off" disabled />
 			<Switch aria-label="Disabled on" defaultChecked disabled />
 		</Row>
@@ -67,6 +67,11 @@ export const States = meta.story({
 		await expect(
 			canvas.getByRole("switch", { name: "Disabled off" }),
 		).toHaveAttribute("aria-disabled", "true")
+		if (!isInBrowserRunner()) return
+		const focused = canvas.getByRole("switch", { name: "Focused" })
+		await waitFor(() =>
+			expect(getComputedStyle(focused).boxShadow).toMatch(/\b3px\b/),
+		)
 	},
 })
 
