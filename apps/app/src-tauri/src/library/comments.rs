@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -377,7 +377,7 @@ pub(crate) struct WrittenBoards {
 }
 
 impl WrittenBoards {
-	fn unfollowed(&self) -> std::sync::MutexGuard<'_, VecDeque<WrittenBoard>> {
+	fn unfollowed(&self) -> MutexGuard<'_, VecDeque<WrittenBoard>> {
 		self.unfollowed.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
