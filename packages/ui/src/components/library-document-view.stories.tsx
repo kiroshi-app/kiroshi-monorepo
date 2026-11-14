@@ -8,7 +8,13 @@ import {
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	hueScopeOf,
+	isInBrowserRunner,
+	realPointer,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
@@ -59,6 +65,11 @@ const NO_DOCUMENT_ACTIONS = {
 	onShowInFolder: undefined,
 	onDelete: undefined,
 }
+
+const COLLABORATORS = [
+	{ id: "lea", name: "Lea Martin" },
+	{ id: "noor", name: "Noor Haddad" },
+]
 
 const BAR_ACTION_NAMES = ["Download", "Copy"]
 
@@ -111,7 +122,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. Two islands float over it: the context island carries the back button, named Library, then the document name; the actions island carries the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the island does not already show as a button, then a rule and Close, which calls `onBack` like the back button. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts below the islands and scrolls under them.",
+					"One document of the Library, read-only, in place of the grid. Two islands float over it: the context island carries the back button, named Library, then the document name; the actions island carries the people who have the document open, when `people` names any, then the image viewer's actions: Download and Copy, each drawn only when its callback is given, More, drawn only when an item action is left that the island does not already show as a button, then a rule and Close, which calls `onBack` like the back button. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts below the islands and scrolls under them. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
 			},
 		},
 	},
@@ -184,6 +195,8 @@ const DARK_SKIN: IslandSkin = {
 	rule: "rgba(255, 255, 255, 0.12)",
 }
 
+const DUPLICATE_GLYPH_CORNER = "2.625"
+
 const expectIslandsAtTheEdges = async (canvasElement: HTMLElement) => {
 	const page = slotIn(
 		canvasElement,
@@ -213,9 +226,25 @@ const expectIslandsAtRest = async (
 		getComputedStyle(within(actions).getByRole("separator")).backgroundColor,
 	).toBe(skin.rule)
 
+	const collaborators = slotIn(actions, "library-document-people")
+	await expect(actions.firstElementChild).toBe(collaborators)
+	await expect(collaborators.children).toHaveLength(COLLABORATORS.length)
+	await expect(barButtonNames(actions)).toEqual([
+		...BAR_ACTION_NAMES,
+		"More",
+		"Close",
+	])
+	await expect(
+		within(actions)
+			.getByRole("button", { name: "Copy" })
+			.querySelector("svg rect"),
+	).toHaveAttribute("rx", DUPLICATE_GLYPH_CORNER)
+
 	const back = within(context).getByRole("button", { name: "Library" })
 	await expect(back).toHaveTextContent(/^$/)
 	await expect(context).toHaveTextContent(SPRING_BRIEF.name)
+	for (const control of [back, ...within(actions).getAllByRole("button")])
+		await expect(getComputedStyle(control).transitionDuration).toBe("0s")
 
 	const title = context.querySelector('[aria-current="page"]') as HTMLElement
 	await expect(getComputedStyle(title).fontSize).toBe("14px")
@@ -228,15 +257,20 @@ const expectIslandsAtRest = async (
 		heading.getBoundingClientRect().top - page.getBoundingClientRect().top,
 	).toBe(CONTENT_START)
 	await expect(slotsIn(canvasElement, "screen-layout-fade")).toEqual([])
+	const column = slotIn(canvasElement, "library-document-column")
+	await expect(column).not.toHaveAttribute("tabindex")
+	await expect(column).not.toHaveAttribute("role")
+	await expect(column).not.toHaveAttribute("aria-labelledby")
 }
 
 export const Light = meta.story({
+	args: { people: COLLABORATORS },
 	globals: { theme: "light" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard 6a draws it. Check that the two islands sit 8 from the top and from either side, 40 tall on the card surface, that the back button is the chevron alone, named Library, before the 14/16 medium document name, that a 1 px rule in the border colour precedes Close, and that the heading starts 56 below the top with no fade over it.",
+					"The document at rest in the light theme, as artboard 6a draws it. Check that the two islands sit 8 from the top and from either side, 40 tall on the card surface, that the back button is the chevron alone, named Library, before the 14/16 medium document name, that the actions island reads the two collaborators, Download, Copy drawn as two rounded squares, More, then a 1 px rule in the border colour and Close, that no control fades its colour in, that the heading starts 56 below the top with no fade over it, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
@@ -262,21 +296,14 @@ const LONG_BRIEF: LibraryDocument = {
 	body: Array.from({ length: 4 }, () => SPRING_BRIEF.body).join("\n\n"),
 }
 
-const A11Y_READ_ONLY_SCROLL_FOCUS_AWAITING_DESIGN_DECISION = {
-	config: {
-		rules: [{ id: "scrollable-region-focusable", reviewOnFail: true }],
-	},
-}
-
 const SCROLLED_AWAY = 240
 
 const FADE_HEIGHT = 64
 
 export const Scrolled = meta.story({
-	args: { document: LONG_BRIEF },
+	args: { document: LONG_BRIEF, people: COLLABORATORS },
 	globals: { theme: "light" },
 	parameters: {
-		a11y: A11Y_READ_ONLY_SCROLL_FOCUS_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
@@ -324,6 +351,45 @@ export const Scrolled = meta.story({
 	},
 })
 
+const SCROLL_KEYS = ["{ArrowDown}", "{PageDown}", " "]
+
+export const ScrolledFromTheKeyboard = meta.story({
+	args: { document: LONG_BRIEF, people: COLLABORATORS },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read-only document taller than its card, reached from the keyboard. Check that the column is a region named by the document title, that Tab moves from Close to it, that it wears a 2 px ring in the ring colour just inside its edge while it holds keyboard focus, and that the down arrow, Page Down and Space each scroll it further.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const column = slotIn(canvasElement, "library-document-column")
+		await waitFor(() => expect(column).toHaveAttribute("tabindex", "0"))
+		await expect(
+			within(canvasElement).getByRole("region", { name: LONG_BRIEF.name }),
+		).toBe(column)
+		if (!isInBrowserRunner()) return
+		const keys = await realPointer()
+
+		within(canvasElement).getByRole("button", { name: "Close" }).focus()
+		await keys.tab()
+		await expect(column).toHaveFocus()
+		await expect(column.matches(":focus-visible")).toBe(true)
+		const ring = getComputedStyle(column)
+		await expect(ring.outlineStyle).toBe("solid")
+		await expect(ring.outlineWidth).toBe("2px")
+		await expect(ring.outlineOffset).toBe("-2px")
+
+		for (const key of SCROLL_KEYS) {
+			const from = column.scrollTop
+			await keys.keyboard(key)
+			await waitFor(() => expect(column.scrollTop).toBeGreaterThan(from))
+		}
+	},
+})
+
 const LONG_NAMED_BRIEF: LibraryDocument = {
 	...SPRING_BRIEF,
 	name: "Spring launch brief for every team joining the Library on the 14th, final draft",
@@ -332,7 +398,7 @@ const LONG_NAMED_BRIEF: LibraryDocument = {
 const CONTROL_SIZE = 32
 
 export const NarrowLongTitle = meta.story({
-	args: { document: LONG_NAMED_BRIEF },
+	args: { document: LONG_NAMED_BRIEF, people: COLLABORATORS },
 	globals: { theme: "light" },
 	parameters: {
 		docs: {

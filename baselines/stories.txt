@@ -2125,6 +2125,7 @@ navigation-librarydocumentview--rename-with-focus-left-in-place
 navigation-librarydocumentview--rename-with-focus-target
 navigation-librarydocumentview--rename-without-focus-target
 navigation-librarydocumentview--scrolled
+navigation-librarydocumentview--scrolled-from-the-keyboard
 navigation-librarydocumentview--whitespace-name-reads-untitled
 navigation-librarynewdocumentdialog--blank-selected
 navigation-librarynewdocumentdialog--meeting-notes-selected

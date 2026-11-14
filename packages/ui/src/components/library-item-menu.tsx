@@ -436,7 +436,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					onClick={copy}
 				>
 					<IconSwap
-						icon={<Icons.Copy aria-hidden="true" />}
+						icon={<Icons.Duplicate aria-hidden="true" />}
 						isSwapped={isCopied}
 						swappedIcon={<Icons.Check aria-hidden="true" />}
 					/>

@@ -1,6 +1,15 @@
 "use client"
 
-import type { MouseEvent, ReactNode, Ref, TextareaHTMLAttributes } from "react"
+import {
+	type ComponentProps,
+	type MouseEvent,
+	type ReactNode,
+	type Ref,
+	type TextareaHTMLAttributes,
+	useCallback,
+	useId,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { HeaderIsland } from "@workspace/ui/components/header-island"
@@ -42,7 +51,7 @@ const DOCUMENT_TYPE = cn(
 )
 
 const DOCUMENT_TITLE =
-	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.02em]"
+	"break-words font-heading font-semibold text-[1.75rem] text-foreground leading-[2.125rem] tracking-[-0.01em]"
 
 const PLACEHOLDER_LOOK =
 	"pointer-events-none before:text-placeholder-foreground before:content-[attr(data-placeholder)]"
@@ -179,10 +188,29 @@ const DOCUMENT_PAGE = "size-full min-h-0"
 const DOCUMENT_COLUMN_MEASURE =
 	"[--document-column-width:794px] max-w-(--document-column-width)"
 
+const useOverflowsBlock = () => {
+	const [overflows, setOverflows] = useState(false)
+
+	const scrollerRef = useCallback((scroller: HTMLElement | null) => {
+		if (!scroller) return
+
+		const observer = new ResizeObserver(() =>
+			setOverflows(scroller.scrollHeight > scroller.clientHeight),
+		)
+		observer.observe(scroller)
+		for (const content of scroller.children) observer.observe(content)
+
+		return () => observer.disconnect()
+	}, [])
+
+	return { overflows, scrollerRef }
+}
+
 type LibraryDocumentColumnProps = {
 	heading: ReactNode
 	detail: string
 	children: ReactNode
+	readOnlyHeadingId?: string
 	onColumnMouseDown?: (event: MouseEvent<HTMLDivElement>) => void
 }
 
@@ -190,35 +218,45 @@ const LibraryDocumentColumn = ({
 	heading,
 	detail,
 	children,
+	readOnlyHeadingId,
 	onColumnMouseDown,
-}: LibraryDocumentColumnProps) => (
-	<div className="relative flex min-h-0 flex-1 flex-col">
-		{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
-		<div
-			className={cn(
-				"@container min-h-0 flex-1 overflow-y-auto px-10 pt-14 pb-10",
-				onColumnMouseDown && "cursor-text",
-			)}
-			data-slot="library-document-column"
-			onMouseDown={onColumnMouseDown}
-		>
-			<article
+}: LibraryDocumentColumnProps) => {
+	const { overflows, scrollerRef } = useOverflowsBlock()
+	const keyboardScrollRegion = overflows
+		? { role: "region", "aria-labelledby": readOnlyHeadingId, tabIndex: 0 }
+		: undefined
+
+	return (
+		<div className="relative flex min-h-0 flex-1 flex-col">
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
+			<div
 				className={cn(
-					"mx-auto flex w-full flex-col gap-3.5",
-					DOCUMENT_COLUMN_MEASURE,
+					"@container min-h-0 flex-1 overflow-y-auto px-10 pt-14 pb-10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					onColumnMouseDown && "cursor-text",
 				)}
+				data-slot="library-document-column"
+				onMouseDown={onColumnMouseDown}
+				ref={readOnlyHeadingId ? scrollerRef : undefined}
+				{...keyboardScrollRegion}
 			>
-				<header className="flex flex-col gap-1.5 pb-1.5">
-					{heading}
-					<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
-						{detail}
-					</p>
-				</header>
-				{children}
-			</article>
+				<article
+					className={cn(
+						"mx-auto flex w-full flex-col gap-3.5",
+						DOCUMENT_COLUMN_MEASURE,
+					)}
+				>
+					<header className="flex flex-col gap-1.5 pb-1.5">
+						{heading}
+						<p className="text-compact text-muted-foreground leading-4.5 tabular-nums">
+							{detail}
+						</p>
+					</header>
+					{children}
+				</article>
+			</div>
 		</div>
-	</div>
-)
+	)
+}
 
 type LibraryDocumentBodyProps = WriterActions & {
 	body: string
@@ -271,6 +309,7 @@ type LibraryDocumentViewProps = WriterActions &
 		document: LibraryDocument
 		onBack: () => void
 		writers?: LibraryDocumentWriter[]
+		people?: ComponentProps<typeof LibraryDocumentPresence>["people"]
 		onStopAll?: () => void
 		resolveImage?: ResolveImage
 	}
@@ -279,6 +318,7 @@ const LibraryDocumentView = ({
 	document,
 	onBack,
 	writers = [],
+	people = [],
 	onStopAll,
 	onStop,
 	onOpenConversation,
@@ -287,6 +327,7 @@ const LibraryDocumentView = ({
 }: LibraryDocumentViewProps) => {
 	const { t } = useTranslation("common")
 	const isWriting = writers.length > 0
+	const headingId = useId()
 
 	return (
 		<ScreenLayout
@@ -298,9 +339,10 @@ const LibraryDocumentView = ({
 					item={document}
 					onBack={onBack}
 					presence={
-						isWriting ? (
+						isWriting || people.length > 0 ? (
 							<LibraryDocumentPresence
 								onStopAll={onStopAll}
+								people={people}
 								writers={writers}
 							/>
 						) : null
@@ -312,10 +354,11 @@ const LibraryDocumentView = ({
 				<LibraryDocumentColumn
 					detail={document.detail}
 					heading={
-						<h1 className={DOCUMENT_TITLE}>
+						<h1 className={DOCUMENT_TITLE} id={headingId}>
 							{libraryDisplayName(document.name, t)}
 						</h1>
 					}
+					readOnlyHeadingId={headingId}
 				>
 					<LibraryDocumentBody
 						body={document.body}
