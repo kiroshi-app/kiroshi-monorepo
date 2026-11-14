@@ -114,6 +114,8 @@ export const States = meta.story({
 
 The addon is registered once, in `preview.tsx`: a story only sets `parameters.pseudo` and never loads the addon's decorator itself. The sidebar draws the state once the story has finished rendering, play function and animations included. `test:storybook` draws it right after mount, before the play function and the a11y check, so a play assertion in such a story never reads a resting value off the targeted element.
 
+A story that sets `parameters.pseudo` clears the addon's `pseudo` global when it is left, so the story opened next starts at rest. The toolbar still applies a state by hand on any story.
+
 Target the element that carries the `hover:` or `focus-visible:` class. A selector that lands on another element, such as the hidden input a Base UI switch gives its `id` to, draws nothing.
 
 **Scenario names** — named after the real data condition they exercise, never after the render.

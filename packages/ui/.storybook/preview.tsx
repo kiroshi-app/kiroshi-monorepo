@@ -9,7 +9,7 @@ import {
 	type ReactRenderer,
 	type StoryContext,
 } from "@storybook/react-vite"
-import { STORY_RENDERED } from "storybook/internal/core-events"
+import { STORY_RENDERED, UPDATE_GLOBALS } from "storybook/internal/core-events"
 import { addons } from "storybook/preview-api"
 import addonPseudoStates from "storybook-addon-pseudo-states"
 
@@ -78,6 +78,13 @@ const renderPseudoStatesOnMount = (context: StoryContext) => {
 	}
 }
 
+const takePseudoStatesAwayOnLeave = (context: StoryContext) => {
+	if (!context.parameters.pseudo) return
+	return () => {
+		addons.getChannel().emit(UPDATE_GLOBALS, { globals: { pseudo: false } })
+	}
+}
+
 const isClockDriven = (animation: Animation) =>
 	animation.timeline === document.timeline
 
@@ -100,7 +107,11 @@ const settleAnimations = () => {
 export default definePreview({
 	addons: [addonDocs(), addonA11y(), addonThemes(), addonPseudoStates()],
 	tags: ["autodocs"],
-	beforeEach: [parkPointerOffThePage, renderPseudoStatesOnMount],
+	beforeEach: [
+		parkPointerOffThePage,
+		renderPseudoStatesOnMount,
+		takePseudoStatesAwayOnLeave,
+	],
 	afterEach: settleAnimations,
 	decorators: [
 		withThemeByClassName<ReactRenderer>({
