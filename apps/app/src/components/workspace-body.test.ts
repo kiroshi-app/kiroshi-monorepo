@@ -135,6 +135,7 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 			library_open_document: libraryHost.openDocument,
 			library_read_image: libraryHost.readImage,
 			library_read_file: libraryHost.readFile,
+			library_comment_threads: async () => [],
 		}
 	const invoke: Invoke = <T>(...call: Parameters<Invoke>) => {
 		const [command, args] = call

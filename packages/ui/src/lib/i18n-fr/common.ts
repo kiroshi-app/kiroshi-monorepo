@@ -701,6 +701,16 @@ const common = {
 			copy: "Impossible de copier l’image",
 			reveal: "Impossible d’afficher le fichier dans son dossier",
 			delete: "Impossible de supprimer l’élément",
+			comment: {
+				list: "Impossible d’afficher les commentaires. Rouvrez l’élément depuis la Bibliothèque.",
+				send: "Impossible d’envoyer le commentaire. Appuyez sur Envoyer pour réessayer.",
+				reply:
+					"Impossible d’envoyer la réponse. Appuyez sur Envoyer pour réessayer.",
+				resolve:
+					"Impossible de résoudre le commentaire. Appuyez sur Résoudre pour réessayer.",
+				reopen:
+					"Impossible de rouvrir le commentaire. Appuyez sur Rouvrir pour réessayer.",
+			},
 			document: {
 				create:
 					"Impossible de créer le document. Réessayez depuis Nouveau document.",

@@ -208,6 +208,7 @@ const LIBRARY_READS: Record<string, (name: string) => unknown> = {
 		content: HOSTED_CONTENT,
 	}),
 	library_read_image: (name) => ({ name, mimeType: "image/png", content: "" }),
+	library_comment_threads: () => [],
 	library_board_summary: (name) => {
 		if (harness.loadingBoards.includes(name)) {
 			return new Promise(() => {})

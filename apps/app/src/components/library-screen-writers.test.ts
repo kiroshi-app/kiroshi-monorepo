@@ -152,6 +152,7 @@ const LIBRARY_COMMANDS: Record<string, (call: LibraryCall) => unknown> = {
 		name,
 		update: base64Of(Y.encodeStateAsUpdate(documentOf(name))),
 	}),
+	library_comment_threads: () => [],
 	library_apply_update: ({ name, update }) => {
 		host.appliedUpdates += 1
 		Y.applyUpdate(documentOf(name), bytesOf(update))
@@ -1555,6 +1556,7 @@ describe.each([
 		seedDocument(NOTES, documentAround(galleryOf(STORED_SOFA)))
 		await renderLibraryScreen(isJoined)
 		await openDocument(NOTES)
+		await screen.findByRole("button", { name: "Comment" })
 		screenQueryClient.removeQueries({
 			queryKey: libraryQueryKeys.itemsOf(SPACE_ID),
 		})

@@ -8,9 +8,9 @@ import type { LibraryOpening } from "@/lib/navigation/library-search"
 
 type LibraryScreenHoldingOpeningProps = Omit<
 	LibraryScreenProps,
-	"opening" | "onOpeningChange" | "onOpenBoard"
+	"opening" | "onOpeningChange" | "onOpenBoard" | "viewerName"
 > &
-	Partial<Pick<LibraryScreenProps, "onOpenBoard">> & {
+	Partial<Pick<LibraryScreenProps, "onOpenBoard" | "viewerName">> & {
 		openedFirst?: LibraryOpening
 	}
 
@@ -21,6 +21,7 @@ export const LibraryScreenHoldingOpening = ({
 	const [opening, setOpening] = useState(openedFirst)
 	return createElement(LibraryScreen, {
 		onOpenBoard: setOpening,
+		viewerName: "Sam",
 		...props,
 		opening,
 		onOpeningChange: setOpening,

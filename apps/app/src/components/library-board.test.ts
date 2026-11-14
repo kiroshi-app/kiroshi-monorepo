@@ -49,6 +49,7 @@ import {
 	readLibraryDocument,
 	readLibraryItems,
 } from "@/lib/library/library-reads"
+import type { LibraryCommentPeople } from "@/lib/library/use-library-comment-people"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { useTabKeys } from "@/lib/tabs/use-tab-keys"
 import type { WorkspaceTabs } from "@/lib/tabs/workspace-tabs"
@@ -241,6 +242,14 @@ const BOTS = [
 	{ id: JUNIPER_ID, name: "Juniper", avatarBlot: 130, avatarImagePath: null },
 ] as Bot[]
 
+const SAM = { kind: "person", id: "host", name: "Sam" } as const
+
+const COMMENT_PEOPLE: LibraryCommentPeople = {
+	self: SAM,
+	participants: [SAM],
+	authorOf: () => SAM,
+}
+
 type BoardElementOptions = {
 	onBack?: () => void
 	name?: string
@@ -258,6 +267,7 @@ const boardElement = ({
 		spaceId: SPACE_ID,
 		isJoined,
 		bots: BOTS,
+		commentPeople: COMMENT_PEOPLE,
 		name,
 		title: "Roadmap",
 		summary,

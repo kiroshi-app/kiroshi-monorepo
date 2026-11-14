@@ -18,5 +18,7 @@ export const libraryQueryKeys = {
 		] as const,
 	documentOf: (spaceId: string, name: string) =>
 		[...libraryQueryKeys.all, "document", spaceId, name] as const,
+	commentThreadsOf: (spaceId: string, name: string | undefined) =>
+		[...libraryQueryKeys.all, "commentThreads", spaceId, name] as const,
 	imageSave: () => [...libraryQueryKeys.all, "imageSave"] as const,
 }
