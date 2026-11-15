@@ -15,7 +15,7 @@ import {
 	joinedPeopleOf,
 	personNamed,
 } from "./library-comment-people"
-import { workingAgentOf } from "./library-comment-views"
+import { workingAgentsOf } from "./library-comment-views"
 import { useLibraryCommentAgentTurns } from "./use-library-comment-agent-turns"
 
 import {
@@ -44,9 +44,7 @@ export type LibraryCommentPeople = {
 	self: LibraryCommentPerson
 	participants: LibraryCommentAuthor[]
 	authorOf: (party: LibraryCommentParty) => LibraryCommentAuthor
-	workingAgentOf: (
-		thread: LibraryCommentThread,
-	) => LibraryCommentAgent | undefined
+	workingAgentsOf: (thread: LibraryCommentThread) => LibraryCommentAgent[]
 }
 
 const NO_MEMBERS: Member[] = []
@@ -101,7 +99,8 @@ export const useLibraryCommentPeople = ({
 				people.find(({ id }) => id === ownId) ?? personNamed(ownId, ownName),
 			participants,
 			authorOf: (party) => authorAmong(participants, party, unnamed),
-			workingAgentOf: (thread) => workingAgentOf(thread, workingTurns, agents),
+			workingAgentsOf: (thread) =>
+				workingAgentsOf(thread, workingTurns, agents),
 		}
 	}, [accountId, host, hostedMembers, workingTurns, bots, viewerName, unnamed])
 }

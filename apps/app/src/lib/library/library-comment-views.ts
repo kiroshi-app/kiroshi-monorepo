@@ -15,6 +15,7 @@ import type {
 } from "@workspace/ui/components/library-comments-list"
 import type { LibraryBlockAnchor } from "@workspace/ui/components/library-document-blocks"
 import type { LibraryImageAnchor } from "@workspace/ui/components/library-image-comments"
+import type { ThreadWorkLineAgent } from "@workspace/ui/components/thread-work-line"
 import { i18n } from "@workspace/ui/lib/i18n"
 import { toElapsedTime, toRelativeTime } from "@workspace/ui/lib/time-format"
 
@@ -79,18 +80,22 @@ export const resolutionOf = (
 ): LibraryCommentResolution | undefined =>
 	state === "resolved" ? { by: unnamed, time: "" } : undefined
 
-export const workingAgentOf = (
+export const workingAgentsOf = (
 	{ id, state }: LibraryCommentThread,
 	workingTurns: LibraryCommentAgentTurn[],
 	agents: LibraryCommentAgent[],
-): LibraryCommentAgent | undefined =>
+): LibraryCommentAgent[] =>
 	state === "resolved"
-		? undefined
-		: agents.find((agent) =>
+		? []
+		: agents.filter((agent) =>
 				workingTurns.some(
 					({ threadId, agentId }) => threadId === id && agentId === agent.id,
 				),
 			)
+
+export const agentAtWorkOf = (
+	agent: LibraryCommentAgent,
+): ThreadWorkLineAgent => ({ ...agent, state: "thinking" })
 
 export const blockAnchorOf = (
 	anchor: LibraryCommentAnchor,
