@@ -41,11 +41,6 @@ type OpenThread = {
 	comments: { body: string }[]
 }
 
-type DocumentCardAgents = {
-	workingAgent?: AgentAtWork
-	workingAgents?: AgentAtWork[]
-}
-
 type Draft = {
 	onValueChange: (text: string) => void
 	onSubmit: () => void
@@ -111,11 +106,6 @@ const peopleWith = (
 	workingAgentsOf: ({ id }) => (id === workingThreadId ? agentsAtWork : []),
 })
 
-const agentsOnDocumentCard = ({
-	workingAgent,
-	workingAgents,
-}: DocumentCardAgents) => workingAgents ?? (workingAgent ? [workingAgent] : [])
-
 const useDocumentSurface: UseSurface = (people) => {
 	const shown = useLibraryDocumentComments({
 		spaceId: SPACE_ID,
@@ -129,10 +119,7 @@ const useDocumentSurface: UseSurface = (people) => {
 	return {
 		isCommentMode: shown.comments?.isCommentMode,
 		openThread,
-		agentsAtWork: agentsOnDocumentCard({
-			...shown.openThread,
-			workingAgent: openThread?.workingAgent,
-		}),
+		agentsAtWork: openThread?.workingAgents ?? [],
 		draft: shown.commentDraft,
 		startComment: () =>
 			shown.onStartComment?.({ blockId: "outro", origin: "pointer" }),
@@ -173,14 +160,10 @@ const useBoardSurface: UseSurface = (people) => {
 	}
 }
 
-const SURFACES_SHOWING_EVERY_AGENT = [
-	{ surface: "image", use: useImageSurface },
-	{ surface: "board", use: useBoardSurface },
-]
-
 const SURFACES = [
 	{ surface: "document", use: useDocumentSurface },
-	...SURFACES_SHOWING_EVERY_AGENT,
+	{ surface: "image", use: useImageSurface },
+	{ surface: "board", use: useBoardSurface },
 ]
 
 const settle = () => act(() => new Promise((flush) => setTimeout(flush, 0)))
@@ -370,7 +353,7 @@ describe.each(SURFACES)("comments on a Library $surface", ({ use }) => {
 	})
 })
 
-describe.each(SURFACES_SHOWING_EVERY_AGENT)(
+describe.each(SURFACES)(
 	"agents at work on a Library $surface thread",
 	({ use }) => {
 		it("shows every agent at work on the open thread, then only the one still at work", async () => {
@@ -388,15 +371,3 @@ describe.each(SURFACES_SHOWING_EVERY_AGENT)(
 		})
 	},
 )
-
-describe("agents at work on a Library document thread", () => {
-	it("shows only the first of the agents at work on the open thread", async () => {
-		answersAtOnce()
-		const { shown, showWorkingOn, idsAtWork } = await mount(useDocumentSurface)
-		act(() => shown().openThreadById(INTRO_THREAD.id))
-
-		showWorkingOn(INTRO_THREAD.id, [ATLAS, JUNIPER])
-
-		expect(idsAtWork()).toEqual([ATLAS.id])
-	})
-})

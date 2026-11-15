@@ -110,7 +110,7 @@ export const useLibraryComments = <Target,>({
 		(each) => ({
 			...each,
 			resolution: resolutionOf(each.thread, unnamed),
-			workingAgents: people.workingAgentsOf(each.thread),
+			workingAgents: people.workingAgentsOf(each.thread).map(agentAtWorkOf),
 		}),
 	)
 	const opened = commented.find(
@@ -198,7 +198,7 @@ export const useLibraryComments = <Target,>({
 			anchor: anchorLineOf(opened.thread),
 			comments: opened.comments,
 			participants: people.participants,
-			workingAgents: opened.workingAgents.map(agentAtWorkOf),
+			workingAgents: opened.workingAgents,
 			resolution: opened.resolution,
 			reply: state.reply,
 			onReplyChange: (text: string) => change({ reply: text }),
