@@ -2,7 +2,7 @@ import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
+import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
 import {
 	LibraryCommentThread,
@@ -103,10 +103,10 @@ const ReturningAgentsThread = (props: LibraryCommentThreadProps) => {
 const threadIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "library-comment-thread")
 
-const WORK_ROW = '[data-slot="library-comment-working"]'
+const WORK_ROW_SLOT = "library-comment-working"
 
 const workRowIn = (canvasElement: HTMLElement) =>
-	slotIn(canvasElement, "library-comment-working")
+	slotIn(canvasElement, WORK_ROW_SLOT)
 
 const workToggleIn = (canvasElement: HTMLElement) =>
 	within(workRowIn(canvasElement)).getByRole("button", {
@@ -346,7 +346,7 @@ export const AgentsBackAtWork = meta.story({
 		)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Agents stop" }))
-		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
+		await expect(slotsIn(canvasElement, WORK_ROW_SLOT)).toHaveLength(0)
 		await expect(canvas.queryByRole("status")).toBe(null)
 
 		await userEvent.click(
@@ -381,7 +381,7 @@ export const HandoverToReply = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Atlas replies" }))
 
-		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
+		await expect(slotsIn(canvasElement, WORK_ROW_SLOT)).toHaveLength(0)
 		await expect(canvas.queryByRole("status")).toBe(null)
 		await expect(authorsIn(canvasElement)).toEqual(["person", "agent"])
 		await expect(canvas.getByText(AGENT_REPLY.body)).toBeVisible()
@@ -509,7 +509,7 @@ export const Resolved = meta.story({
 		const thread = within(threadIn(canvasElement))
 		await expect(thread.queryByRole("button", { name: "Resolve" })).toBe(null)
 		await expect(thread.queryByRole("textbox")).toBe(null)
-		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
+		await expect(slotsIn(canvasElement, WORK_ROW_SLOT)).toHaveLength(0)
 		await expect(thread.queryByRole("status")).toBe(null)
 		await expect(authorsIn(canvasElement)).toEqual(["person"])
 

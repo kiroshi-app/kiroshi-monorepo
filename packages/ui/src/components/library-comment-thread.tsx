@@ -117,6 +117,9 @@ const repliersOf = (replies: LibraryComment[]) => [
 	...new Set(replies.map((reply) => reply.author.name)),
 ]
 
+const joinNames = (language: string, names: string[]) =>
+	new Intl.ListFormat(language, { type: "conjunction" }).format(names)
+
 type AgentsAtWorkRowProps = { agents: ThreadWorkLineAgent[] }
 
 const AgentsAtWorkRow = ({ agents }: AgentsAtWorkRowProps) => {
@@ -134,9 +137,10 @@ const AgentsAtWorkRow = ({ agents }: AgentsAtWorkRowProps) => {
 			<p className="sr-only" role="status">
 				{t("library.comments.thread.working", {
 					count: agents.length,
-					names: new Intl.ListFormat(i18n.language, {
-						type: "conjunction",
-					}).format(agents.map((agent) => agent.name)),
+					names: joinNames(
+						i18n.language,
+						agents.map((agent) => agent.name),
+					),
 				})}
 			</p>
 		</div>
@@ -238,9 +242,7 @@ const LibraryCommentThread = ({
 					>
 						{t("library.comments.thread.replies", {
 							count: replies.length,
-							names: new Intl.ListFormat(i18n.language, {
-								type: "conjunction",
-							}).format(repliersOf(replies)),
+							names: joinNames(i18n.language, repliersOf(replies)),
 						})}
 					</p>
 				) : null}
