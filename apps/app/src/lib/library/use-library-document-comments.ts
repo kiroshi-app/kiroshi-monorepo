@@ -27,14 +27,7 @@ type DocumentCommentProps = Pick<
 	| "onStartComment"
 >
 
-type OpenThread = NonNullable<
-	ReturnType<typeof useLibraryComments>["openThread"]
->
-
 const NO_COMMENTS: DocumentCommentProps = {}
-
-const withoutAgentsAtWork = ({ workingAgents, ...openThread }: OpenThread) =>
-	openThread
 
 export const useLibraryDocumentComments = ({
 	spaceId,
@@ -65,13 +58,13 @@ export const useLibraryDocumentComments = ({
 								anchor,
 								comments: shown,
 								resolution,
-								workingAgent: workingAgents[0],
+								workingAgents,
 							},
 						]
 					: []
 			},
 		),
-		openThread: comments.openThread && withoutAgentsAtWork(comments.openThread),
+		openThread: comments.openThread,
 		commentDraft: comments.draft || undefined,
 		commentParticipants: comments.participants,
 		onOpenThread: comments.openThreadById,
