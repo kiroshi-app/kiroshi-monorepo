@@ -117,18 +117,6 @@ const repliersOf = (replies: LibraryComment[]) => [
 	...new Set(replies.map((reply) => reply.author.name)),
 ]
 
-type AgentsAtWorkInput = Pick<
-	LibraryCommentThreadProps,
-	"workingAgent" | "workingAgents"
->
-
-const agentsAtWorkOf = ({
-	workingAgent,
-	workingAgents,
-}: AgentsAtWorkInput): ThreadWorkLineAgent[] =>
-	workingAgents ??
-	(workingAgent ? [{ ...workingAgent, state: "thinking" }] : [])
-
 const LibraryCommentThread = ({
 	anchor,
 	comments,
@@ -156,7 +144,9 @@ const LibraryCommentThread = ({
 	const [first, ...replies] = comments
 	const isResolved = resolution !== undefined
 	const shown = isResolved ? [first] : comments
-	const agentsAtWork = agentsAtWorkOf({ workingAgent, workingAgents })
+	const agentsAtWork: ThreadWorkLineAgent[] =
+		workingAgents ??
+		(workingAgent ? [{ ...workingAgent, state: "thinking" }] : [])
 	const [isWorkDetailOpen, setWorkDetailOpen] = useState(false)
 
 	return (
