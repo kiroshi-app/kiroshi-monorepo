@@ -351,23 +351,18 @@ describe.each(SURFACES)("comments on a Library $surface", ({ use }) => {
 
 		expect(shown().openThread?.id).toBe(INTRO_THREAD.id)
 	})
+
+	it("shows every agent at work on the open thread, then only the one still at work", async () => {
+		answersAtOnce()
+		const { shown, showWorkingOn, idsAtWork } = await mount(use)
+		act(() => shown().openThreadById(INTRO_THREAD.id))
+
+		showWorkingOn(INTRO_THREAD.id, [ATLAS, JUNIPER])
+
+		expect(idsAtWork()).toEqual([ATLAS.id, JUNIPER.id])
+
+		showWorkingOn(INTRO_THREAD.id, [JUNIPER])
+
+		expect(idsAtWork()).toEqual([JUNIPER.id])
+	})
 })
-
-describe.each(SURFACES)(
-	"agents at work on a Library $surface thread",
-	({ use }) => {
-		it("shows every agent at work on the open thread, then only the one still at work", async () => {
-			answersAtOnce()
-			const { shown, showWorkingOn, idsAtWork } = await mount(use)
-			act(() => shown().openThreadById(INTRO_THREAD.id))
-
-			showWorkingOn(INTRO_THREAD.id, [ATLAS, JUNIPER])
-
-			expect(idsAtWork()).toEqual([ATLAS.id, JUNIPER.id])
-
-			showWorkingOn(INTRO_THREAD.id, [JUNIPER])
-
-			expect(idsAtWork()).toEqual([JUNIPER.id])
-		})
-	},
-)
