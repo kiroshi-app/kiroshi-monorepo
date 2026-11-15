@@ -80,11 +80,51 @@ const HandoverThread = (props: LibraryCommentThreadProps) => {
 	)
 }
 
+const ReturningAgentsThread = (props: LibraryCommentThreadProps) => {
+	const [isAtWork, setIsAtWork] = useState(true)
+
+	return (
+		<div className="flex flex-col items-start gap-3">
+			<ThreadOnPage
+				{...props}
+				workingAgents={isAtWork ? SEVERAL_AGENTS_AT_WORK : []}
+			/>
+			<Button
+				onClick={() => setIsAtWork((wasAtWork) => !wasAtWork)}
+				size="sm"
+				variant="outline"
+			>
+				{isAtWork ? "Agents stop" : "Agents start again"}
+			</Button>
+		</div>
+	)
+}
+
 const threadIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "library-comment-thread")
 
+const WORK_ROW = '[data-slot="library-comment-working"]'
+
 const workRowIn = (canvasElement: HTMLElement) =>
-	within(canvasElement).getByRole("status")
+	slotIn(canvasElement, "library-comment-working")
+
+const workToggleIn = (canvasElement: HTMLElement) =>
+	within(workRowIn(canvasElement)).getByRole("button", {
+		name: "Each agent’s work",
+	})
+
+const expectHiddenStatus = async (canvasElement: HTMLElement, text: string) => {
+	const working = workRowIn(canvasElement)
+	const status = within(working).getByRole("status")
+
+	await expect(status.textContent).toBe(text)
+	await expect(status.offsetWidth).toBe(1)
+	await expect(status.parentElement).toBe(working)
+	await expect(status.querySelector("*")).toBe(null)
+	await expect(
+		slotIn(working, "thread-work-line").closest("[role='status'], [aria-live]"),
+	).toBe(null)
+}
 
 const expectAlignedWithComments = async (canvasElement: HTMLElement) => {
 	const working = workRowIn(canvasElement)
@@ -206,7 +246,7 @@ export const AgentAtWork = meta.story({
 		docs: {
 			description: {
 				story:
-					"The agent the first comment mentions has a turn on the thread, passed through `workingAgent` alone. Check the row is the one-agent work line of a conversation, Atlas thinking with no toggle, announced as a status, under the comment and above the reply field, and starting where the comment avatars start, inside the same padding.",
+					"The agent the first comment mentions has a turn on the thread, passed through `workingAgent` alone. Check the row is the one-agent work line of a conversation, Atlas thinking with no toggle, under the comment and above the reply field, starting where the comment avatars start, inside the same padding, and that a status the screen does not show names Atlas beside the line, never around it.",
 			},
 		},
 	},
@@ -216,6 +256,7 @@ export const AgentAtWork = meta.story({
 		await expect(within(working).getByText("is thinking…")).toBeVisible()
 		await expect(slotIn(working, "bot-identity-avatar")).toBeVisible()
 		await expect(within(working).queryByRole("button")).toBe(null)
+		await expectHiddenStatus(canvasElement, "Atlas is working on it")
 		await expectAlignedWithComments(canvasElement)
 		await expect(
 			slotIn(canvasElement, "library-comment").compareDocumentPosition(working),
@@ -240,26 +281,29 @@ export const SeveralAgentsAtWork = meta.story({
 		docs: {
 			description: {
 				story:
-					"A comment mentioned three agents and each has a turn on the thread, `workingAgent` still passed beside `workingAgents`. Check the row draws the group line for the three listed agents alone, the pile, the headline and the toggle, that the toggle opens one row per agent, and that every row stays inside the 360 px card, the long name giving way.",
+					"A comment mentioned three agents and each has a turn on the thread, `workingAgent` still passed beside `workingAgents`. Check the row draws the group line for the three listed agents alone, the pile, the headline and the toggle, that the toggle opens one row per agent, that every row stays inside the 360 px card, the long name giving way, and that a status the screen does not show names the three agents beside the line, the same once the detail is open.",
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const working = workRowIn(canvasElement)
+		const status =
+			"Atlas, Juniper, and Supercalifragilisticexpialidocious are working on it"
 		await expect(slotIn(working, "conversation-bot-pile")).toBeVisible()
 		await expect(within(working).getByText("3 agents")).toBeVisible()
+		await expectHiddenStatus(canvasElement, status)
 		await expectAlignedWithComments(canvasElement)
 
-		const toggle = within(working).getByRole("button", {
-			name: "Each agent’s work",
-		})
+		const toggle = workToggleIn(canvasElement)
 		await expect(toggle).toHaveAttribute("aria-expanded", "false")
 		await expect(within(working).queryByRole("list")).toBe(null)
 		await userEvent.click(toggle)
 
-		await expect(
-			within(working).getByRole("button", { name: "Each agent’s work" }),
-		).toHaveAttribute("aria-expanded", "true")
+		await expect(workToggleIn(canvasElement)).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
+		await expectHiddenStatus(canvasElement, status)
 		const rows = within(within(working).getByRole("list")).getAllByRole(
 			"listitem",
 		)
@@ -283,13 +327,48 @@ export const SeveralAgentsAtWorkDark = meta.story({
 	play: SeveralAgentsAtWork.input.play,
 })
 
+export const AgentsBackAtWork = meta.story({
+	render: (args) => <ReturningAgentsThread {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The agents finish, then a later mention puts them back at work: open the detail, press Agents stop, then Agents start again under the card. Check the row leaves with its status, and comes back with the detail closed, not as it was left.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const canvas = within(canvasElement)
+		await userEvent.click(workToggleIn(canvasElement))
+		await expect(workToggleIn(canvasElement)).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Agents stop" }))
+		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
+		await expect(canvas.queryByRole("status")).toBe(null)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Agents start again" }),
+		)
+		await expect(workToggleIn(canvasElement)).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		)
+		await expect(within(workRowIn(canvasElement)).queryByRole("list")).toBe(
+			null,
+		)
+	},
+})
+
 export const HandoverToReply = meta.story({
 	render: (args) => <HandoverThread {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The moment the agent at work hands over to its reply: press Atlas replies under the card. Check the thread starts with Atlas at work under the first comment, then holds its reply as the last comment, with no at-work row and no empty container left above the reply field.",
+					"The moment the agent at work hands over to its reply: press Atlas replies under the card. Check the thread starts with Atlas at work under the first comment, then holds its reply as the last comment, with no at-work row, no status and no empty container left above the reply field.",
 			},
 		},
 	},
@@ -302,10 +381,8 @@ export const HandoverToReply = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Atlas replies" }))
 
+		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
 		await expect(canvas.queryByRole("status")).toBe(null)
-		await expect(
-			canvasElement.querySelector('[data-slot="library-comment-working"]'),
-		).toBe(null)
 		await expect(authorsIn(canvasElement)).toEqual(["person", "agent"])
 		await expect(canvas.getByText(AGENT_REPLY.body)).toBeVisible()
 	},
@@ -432,6 +509,7 @@ export const Resolved = meta.story({
 		const thread = within(threadIn(canvasElement))
 		await expect(thread.queryByRole("button", { name: "Resolve" })).toBe(null)
 		await expect(thread.queryByRole("textbox")).toBe(null)
+		await expect(canvasElement.querySelector(WORK_ROW)).toBe(null)
 		await expect(thread.queryByRole("status")).toBe(null)
 		await expect(authorsIn(canvasElement)).toEqual(["person"])
 

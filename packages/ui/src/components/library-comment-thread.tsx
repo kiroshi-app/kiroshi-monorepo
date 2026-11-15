@@ -117,6 +117,32 @@ const repliersOf = (replies: LibraryComment[]) => [
 	...new Set(replies.map((reply) => reply.author.name)),
 ]
 
+type AgentsAtWorkRowProps = { agents: ThreadWorkLineAgent[] }
+
+const AgentsAtWorkRow = ({ agents }: AgentsAtWorkRowProps) => {
+	const { t, i18n } = useTranslation("common")
+	const [isDetailOpen, setDetailOpen] = useState(false)
+
+	return (
+		<div className="p-3" data-slot="library-comment-working">
+			<ThreadWorkLine
+				agents={agents}
+				className="not-data-open:ps-0"
+				isOpen={isDetailOpen}
+				onOpenChange={setDetailOpen}
+			/>
+			<p className="sr-only" role="status">
+				{t("library.comments.thread.working", {
+					count: agents.length,
+					names: new Intl.ListFormat(i18n.language, {
+						type: "conjunction",
+					}).format(agents.map((agent) => agent.name)),
+				})}
+			</p>
+		</div>
+	)
+}
+
 const LibraryCommentThread = ({
 	anchor,
 	comments,
@@ -147,7 +173,6 @@ const LibraryCommentThread = ({
 	const agentsAtWork: ThreadWorkLineAgent[] =
 		workingAgents ??
 		(workingAgent ? [{ ...workingAgent, state: "thinking" }] : [])
-	const [isWorkDetailOpen, setWorkDetailOpen] = useState(false)
 
 	return (
 		<LibraryCommentMentionMenu
@@ -220,18 +245,7 @@ const LibraryCommentThread = ({
 					</p>
 				) : null}
 				{agentsAtWork.length > 0 && !isResolved ? (
-					<div
-						className="p-3"
-						data-slot="library-comment-working"
-						role="status"
-					>
-						<ThreadWorkLine
-							agents={agentsAtWork}
-							className="not-data-open:ps-0"
-							isOpen={isWorkDetailOpen}
-							onOpenChange={setWorkDetailOpen}
-						/>
-					</div>
+					<AgentsAtWorkRow agents={agentsAtWork} />
 				) : null}
 				{resolution ? (
 					<footer

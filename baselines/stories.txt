@@ -1985,6 +1985,7 @@ navigation-librarycommentslist--resolved-tab
 navigation-librarycommentslist--resolved-tab-dark
 navigation-librarycommentthread--agent-at-work
 navigation-librarycommentthread--agent-at-work-dark
+navigation-librarycommentthread--agents-back-at-work
 navigation-librarycommentthread--first-comment
 navigation-librarycommentthread--first-comment-dark
 navigation-librarycommentthread--handover-to-reply
