@@ -2774,6 +2774,11 @@ export const TableEditingAt320 = meta.story(
 const MAC_AGENT =
 	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
 
+const LINUX_AGENT =
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+const COMMAND_OPTION = { metaKey: true, altKey: true }
+
 const COMMENT_COMPOSER_SLOT = "library-comment-composer"
 
 const leaveDraftAlone = () => {}
@@ -2811,16 +2816,20 @@ type CommentShortcutPress = {
 	code: string
 	keyCode: number
 	isOpeningTheDraft: boolean
+	userAgent?: string
+	held?: KeyboardEventInit
 }
 
 const commentShortcutStory = ({
 	isOpeningTheDraft,
+	userAgent = MAC_AGENT,
+	held = COMMAND_OPTION,
 	...pressed
 }: CommentShortcutPress) => ({
 	tags: ["test-only"],
 	beforeEach: () => {
 		const agent = spyOn(navigator, "userAgent", "get").mockReturnValue(
-			MAC_AGENT,
+			userAgent,
 		)
 		return () => agent.mockRestore()
 	},
@@ -2829,7 +2838,7 @@ const commentShortcutStory = ({
 	),
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const field = await focusBlockWith(canvasElement, "The spring launch puts")
-		fireEvent.keyDown(field, { ...pressed, metaKey: true, altKey: true })
+		fireEvent.keyDown(field, { ...pressed, ...held })
 		if (isOpeningTheDraft) {
 			await waitFor(() =>
 				expect(slotsIn(canvasElement, COMMENT_COMPOSER_SLOT)).toHaveLength(1),
@@ -2865,5 +2874,27 @@ export const CommentShortcutNotOnTheAzertyCommaKey = meta.story(
 		code: "KeyM",
 		keyCode: 188,
 		isOpeningTheDraft: false,
+	}),
+)
+
+export const CommentShortcutNotOnTheWindowsGermanMKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: { modifierAltGraph: true },
+		key: "µ",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: false,
+	}),
+)
+
+export const CommentShortcutOnTheLinuxMKey = meta.story(
+	commentShortcutStory({
+		userAgent: LINUX_AGENT,
+		held: { ctrlKey: true, altKey: true },
+		key: "m",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
 	}),
 )

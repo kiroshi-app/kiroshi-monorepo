@@ -15,6 +15,10 @@ const COMMAND_OPTION = { metaKey: true, altKey: true }
 
 const CONTROL_ALT = { ctrlKey: true, altKey: true }
 
+const ALT_GRAPH = {
+	getModifierState: (modifier: string) => modifier === "AltGraph",
+}
+
 const NOTHING_HELD = {
 	metaKey: false,
 	ctrlKey: false,
@@ -57,7 +61,7 @@ describe("isCommandAltLetter", () => {
 		{ layout: "AZERTY", key: "m", code: "Semicolon", keyCode: 77 },
 		{ layout: "QWERTZ", key: "m", code: "KeyM", keyCode: 77 },
 	])(
-		"hears the M key of a $layout keyboard on Linux",
+		"hears the M key of a $layout keyboard on Linux, where WebKitGTK builds the event in Source/WebKit/Shared/gtk/WebEventFactory.cpp",
 		({ layout: _, ...key }) => {
 			expect(pressed(LINUX_AGENT, { ...CONTROL_ALT, ...key })).toBe(true)
 		},
@@ -98,12 +102,24 @@ describe("isCommandAltLetter", () => {
 		expect(pressed(MAC_AGENT, { ...COMMAND_OPTION, ...key })).toBe(false)
 	})
 
-	it("leaves AltGr typing µ on a German QWERTZ keyboard on Windows, which reports Ctrl+Alt+M as AltGr", () => {
+	it("leaves µ typed on a German QWERTZ keyboard on Windows, where Chromium reports Ctrl+Alt+M and AltGr+M as one AltGraph event in ui/events/keycodes/platform_key_map_win.cc", () => {
 		expect(
 			pressed(WINDOWS_AGENT, {
+				...ALT_GRAPH,
 				key: "µ",
 				code: "KeyM",
 				keyCode: 77,
+			}),
+		).toBe(false)
+	})
+
+	it("leaves AltGr typing µ on a German QWERTZ keyboard on Linux, where WebKitGTK reports Mod5 as AltGraph in Source/WebKit/Shared/gtk/WebEventFactory.cpp", () => {
+		expect(
+			pressed(LINUX_AGENT, {
+				...ALT_GRAPH,
+				key: "µ",
+				code: "KeyM",
+				keyCode: 0,
 			}),
 		).toBe(false)
 	})
