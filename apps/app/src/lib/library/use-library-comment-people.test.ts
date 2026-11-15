@@ -103,6 +103,12 @@ const failedTurnOf = ({ id }: Bot): LibraryCommentAgentTurn => ({
 	state: { kind: "failed", reason: "turnFailed", failedAt: 2_000 },
 })
 
+const ATLAS_TURN_CHANGED: LibraryCommentAgentTurnsChanged = {
+	spaceId: SPACE_ID,
+	threadId: THREAD_ID,
+	agentId: ATLAS.id,
+}
+
 const SPACES: { space: string; authorship: ThreadAuthorship }[] = [
 	{ space: "hosted here", authorship: HOSTED_SIGNED_OUT },
 	{
@@ -152,28 +158,13 @@ const mountPeople = async ({ authorship, heldOnStart }: Mounting) => {
 	const namesAtWorkOn = (thread: LibraryCommentThread) =>
 		hook.result.current.workingAgentsOf(thread).map(({ name }) => name)
 	const namesAtWork = () => namesAtWorkOn(threadOf(THREAD_ID))
-	await waitFor(() =>
-		expect(namesAtWork()).toHaveLength(
-			heldOnStart.filter(({ state }) => state.kind === "working").length,
-		),
-	)
+	await waitFor(() => expect(namesAtWork()).toHaveLength(heldOnStart.length))
 	return {
 		namesAtWork,
 		namesAtWorkOn,
 		hearTurnsNow: (held: LibraryCommentAgentTurn[]) => {
 			host.invoke.mockResolvedValue(held)
-			act(() =>
-				hear(
-					{
-						payload: {
-							spaceId: SPACE_ID,
-							threadId: THREAD_ID,
-							agentId: ATLAS.id,
-						},
-					},
-					null,
-				),
-			)
+			act(() => hear({ payload: ATLAS_TURN_CHANGED }, null))
 		},
 	}
 }
