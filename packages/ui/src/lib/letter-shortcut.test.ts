@@ -15,8 +15,6 @@ const COMMAND_OPTION = { metaKey: true, altKey: true }
 
 const CONTROL_ALT = { ctrlKey: true, altKey: true }
 
-const ALT_GRAPH = { ctrlKey: false, altKey: false }
-
 const NOTHING_HELD = {
 	metaKey: false,
 	ctrlKey: false,
@@ -103,7 +101,6 @@ describe("isCommandAltLetter", () => {
 	it("leaves AltGr typing µ on a German QWERTZ keyboard on Windows, which reports Ctrl+Alt+M as AltGr", () => {
 		expect(
 			pressed(WINDOWS_AGENT, {
-				...ALT_GRAPH,
 				key: "µ",
 				code: "KeyM",
 				keyCode: 77,
