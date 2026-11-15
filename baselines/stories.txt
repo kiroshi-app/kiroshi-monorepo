@@ -2024,6 +2024,9 @@ navigation-librarydocumentblockeditor--click-places-the-caret
 navigation-librarydocumentblockeditor--click-puts-the-caret-on-the-character
 navigation-librarydocumentblockeditor--code-body-edited
 navigation-librarydocumentblockeditor--code-language-chosen
+navigation-librarydocumentblockeditor--comment-shortcut-not-on-the-azerty-comma-key
+navigation-librarydocumentblockeditor--comment-shortcut-on-the-azerty-m-key
+navigation-librarydocumentblockeditor--comment-shortcut-on-the-qwerty-m-key
 navigation-librarydocumentblockeditor--drag-moves-block
 navigation-librarydocumentblockeditor--drag-moves-text
 navigation-librarydocumentblockeditor--drag-with-drop-indicator
