@@ -3129,11 +3129,11 @@ const workRowOf = (canvas: CommentPlay["canvas"]) =>
 const expectOneAgentWorkLine = async ({ canvas }: CommentPlay) => {
 	const working = workRowOf(canvas)
 	await expect(slotIn(working, "thread-work-line")).toBeVisible()
-	await expect(within(working).getByText("Atlas")).toBeVisible()
+	await expect(within(working).getByText(ATLAS.name)).toBeVisible()
 	await expect(within(working).getByText("is thinking…")).toBeVisible()
 	await expect(within(working).queryByRole("button")).toBeNull()
 	await expect(within(working).getByRole("status").textContent).toBe(
-		"Atlas is working on it",
+		`${ATLAS.name} is working on it`,
 	)
 }
 
