@@ -201,6 +201,25 @@ const mount = async (use: UseSurface) => {
 	}
 }
 
+const pressC = (target: HTMLElement) => {
+	const press = new KeyboardEvent("keydown", {
+		key: "c",
+		bubbles: true,
+		cancelable: true,
+	})
+	act(() => {
+		target.dispatchEvent(press)
+	})
+	return press
+}
+
+const textWithCaret = () => {
+	const text = document.createElement("div")
+	text.setAttribute("contenteditable", "true")
+	document.body.append(text)
+	return text
+}
+
 afterEach(() => {
 	cleanup()
 	document.body.replaceChildren()
@@ -208,6 +227,31 @@ afterEach(() => {
 })
 
 describe.each(SURFACES)("comments on a Library $surface", ({ use }) => {
+	it("enters comment mode on C, and leaves it on C again, when no text has the focus", async () => {
+		answersAtOnce()
+		const { shown } = await mount(use)
+
+		const press = pressC(document.body)
+
+		expect(shown().isCommentMode).toBe(true)
+		expect(press.defaultPrevented).toBe(true)
+
+		pressC(document.body)
+
+		expect(shown().isCommentMode).toBe(false)
+	})
+
+	it("lets C be typed, and starts no comment, while the caret is in a text", async () => {
+		answersAtOnce()
+		const { shown } = await mount(use)
+
+		const press = pressC(textWithCaret())
+
+		expect(press.defaultPrevented).toBe(false)
+		expect(shown().isCommentMode).toBe(false)
+		expect(shown().draft).toBeUndefined()
+	})
+
 	it("leaves the thread of a sent comment that mentions an agent open", async () => {
 		answersAtOnce()
 		const { shown, send, bodiesShown } = await mount(use)

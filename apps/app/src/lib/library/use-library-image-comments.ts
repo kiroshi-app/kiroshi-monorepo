@@ -6,7 +6,6 @@ import {
 	imageAnchorLineOf,
 	imageAnchorOf,
 } from "./library-comment-views"
-import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
 import { anchoredDraftOf, useLibraryComments } from "./use-library-comments"
 
@@ -36,7 +35,6 @@ export const useLibraryImageComments = ({
 		anchorLineOf: ({ anchor }) => imageAnchorLineOf(anchor),
 	})
 	const { bar, openThread, draft } = comments
-	useCommentModeKey(bar !== undefined, comments.toggleCommentMode)
 
 	if (!bar) {
 		return NO_COMMENTS

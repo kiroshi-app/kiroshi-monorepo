@@ -16,6 +16,7 @@ import {
 	summaryOf,
 } from "./library-comment-views"
 import { openMentionedThreadsOn } from "./mentioned-comment-thread"
+import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
 import { useLibraryCommentThreads } from "./use-library-comment-threads"
 
@@ -120,6 +121,7 @@ export const useLibraryComments = <Target,>({
 		change(showingThread(openThreadId))
 	const setCommentMode = (isCommentMode: boolean) =>
 		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
+	useCommentModeKey(hasLoaded, () => setCommentMode(!state.isCommentMode))
 
 	const openUnlessBusy = ({ id }: LibraryCommentThread) =>
 		changeIfStillOn((current) =>
@@ -221,7 +223,6 @@ export const useLibraryComments = <Target,>({
 		openThreadById,
 		startComment: (target: Target) =>
 			change({ draft: { target, text: "" }, openThreadId: null, reply: "" }),
-		toggleCommentMode: () => setCommentMode(!state.isCommentMode),
 		leaveCommentMode: () => setCommentMode(false),
 	}
 }
