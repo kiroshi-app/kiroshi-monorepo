@@ -9,7 +9,6 @@ import {
 	type CommentedThread,
 	commentAnchorOfBoard,
 } from "./library-comment-views"
-import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
 import { anchoredDraftOf, useLibraryComments } from "./use-library-comments"
 
@@ -77,7 +76,6 @@ export const useLibraryBoardComments = ({
 			boardAnchorLineOf(thread, (id) => nodeIn(view, id)),
 	})
 	const { bar, draft } = comments
-	useCommentModeKey(bar !== undefined, comments.toggleCommentMode)
 
 	if (!bar) {
 		return NO_COMMENTS

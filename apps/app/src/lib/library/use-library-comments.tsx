@@ -8,7 +8,7 @@ import {
 import type { LibraryBarComments } from "@workspace/ui/components/library-item-menu"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import { mentionsIn, partyOf } from "./library-comment-people"
+import { mentionsAnAgent, mentionsIn, partyOf } from "./library-comment-people"
 import {
 	commentedThreadsOf,
 	countsOf,
@@ -16,6 +16,7 @@ import {
 	summaryOf,
 } from "./library-comment-views"
 import { openMentionedThreadsOn } from "./mentioned-comment-thread"
+import { useCommentModeKey } from "./use-comment-mode-key"
 import type { LibraryCommentPeople } from "./use-library-comment-people"
 import { useLibraryCommentThreads } from "./use-library-comment-threads"
 
@@ -120,23 +121,31 @@ export const useLibraryComments = <Target,>({
 		change(showingThread(openThreadId))
 	const setCommentMode = (isCommentMode: boolean) =>
 		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
+	useCommentModeKey(hasLoaded, () => setCommentMode(!state.isCommentMode))
+
+	const openUnlessBusy = ({ id }: LibraryCommentThread) =>
+		changeIfStillOn((current) =>
+			current.draft || current.openThreadId
+				? current
+				: { ...current, ...showingThread(id) },
+		)
 
 	const sendDraft = () => {
 		const sent = state.draft
 		if (!sent) {
 			return
 		}
+		const mentions = mentionsIn(sent.text, people.participants)
 		change({ draft: null })
 		send(
-			{
-				anchor: anchorOf(sent.target),
-				text: sent.text,
-				mentions: mentionsIn(sent.text, people.participants),
-			},
+			{ anchor: anchorOf(sent.target), text: sent.text, mentions },
 			() =>
 				changeIfStillOn((current) =>
 					current.draft ? current : { ...current, draft: sent },
 				),
+			(thread) => {
+				if (mentionsAnAgent(mentions)) openUnlessBusy(thread)
+			},
 		)
 	}
 
@@ -214,7 +223,6 @@ export const useLibraryComments = <Target,>({
 		openThreadById,
 		startComment: (target: Target) =>
 			change({ draft: { target, text: "" }, openThreadId: null, reply: "" }),
-		toggleCommentMode: () => setCommentMode(!state.isCommentMode),
 		leaveCommentMode: () => setCommentMode(false),
 	}
 }

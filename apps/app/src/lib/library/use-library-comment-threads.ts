@@ -206,8 +206,16 @@ export const useLibraryCommentThreads = (
 		threads: threads ?? NO_THREADS,
 		hasLoaded: threads !== undefined,
 		hasFailedToLoad: isError,
-		send: (sent: SentComment, onRefused: () => void) => {
-			if (name) creation.mutate({ name, ...sent }, { onError: onRefused })
+		send: (
+			sent: SentComment,
+			onRefused: () => void,
+			onSent: (thread: LibraryCommentThread) => void,
+		) => {
+			if (name)
+				creation.mutate(
+					{ name, ...sent },
+					{ onError: onRefused, onSuccess: onSent },
+				)
 		},
 		reply: (sent: SentReply, onRefused: () => void) => {
 			if (name) answer.mutate({ name, ...sent }, { onError: onRefused })

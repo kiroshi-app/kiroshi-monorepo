@@ -81,6 +81,9 @@ export const authorAmong = (
 		name: unnamed,
 	}
 
+export const mentionsAnAgent = (mentions: LibraryCommentParty[]) =>
+	mentions.some(({ kind }) => kind === "agent")
+
 export const mentionsIn = (
 	text: string,
 	participants: LibraryCommentAuthor[],
