@@ -152,23 +152,25 @@ const SURFACES = [
 
 const settle = () => act(() => new Promise((flush) => setTimeout(flush, 0)))
 
-const answersAtOnce = () =>
+const answersSentCommentWith = (
+	answerOf: (thread: LibraryCommentThread) => Promise<LibraryCommentThread>,
+) =>
 	host.invoke.mockImplementation((command: string, sent: SentComment) =>
-		Promise.resolve(
-			command === "library_comment_create"
-				? threadOf(SENT_ID, sent)
-				: [INTRO_THREAD],
-		),
+		command === "library_comment_create"
+			? answerOf(threadOf(SENT_ID, sent))
+			: Promise.resolve([INTRO_THREAD]),
 	)
+
+const answersAtOnce = () =>
+	answersSentCommentWith((thread) => Promise.resolve(thread))
 
 const answersLater = () => {
 	let answer = () => {}
-	host.invoke.mockImplementation((command: string, sent: SentComment) =>
-		command === "library_comment_create"
-			? new Promise((resolve) => {
-					answer = () => resolve(threadOf(SENT_ID, sent))
-				})
-			: Promise.resolve([INTRO_THREAD]),
+	answersSentCommentWith(
+		(thread) =>
+			new Promise((resolve) => {
+				answer = () => resolve(thread)
+			}),
 	)
 	return () => act(async () => answer())
 }
