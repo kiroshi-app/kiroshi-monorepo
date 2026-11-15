@@ -2029,6 +2029,7 @@ navigation-librarydocumentblockeditor--comment-shortcut-not-on-the-windows-germa
 navigation-librarydocumentblockeditor--comment-shortcut-on-the-azerty-m-key
 navigation-librarydocumentblockeditor--comment-shortcut-on-the-linux-m-key
 navigation-librarydocumentblockeditor--comment-shortcut-on-the-qwerty-m-key
+navigation-librarydocumentblockeditor--comment-shortcut-on-the-windows-qwerty-m-key
 navigation-librarydocumentblockeditor--drag-moves-block
 navigation-librarydocumentblockeditor--drag-moves-text
 navigation-librarydocumentblockeditor--drag-with-drop-indicator

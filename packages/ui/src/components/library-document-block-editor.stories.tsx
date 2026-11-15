@@ -2875,6 +2875,17 @@ export const CommentShortcutNotOnTheAzertyCommaKey = meta.story(
 	}),
 )
 
+export const CommentShortcutOnTheWindowsQwertyMKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: { ctrlKey: true, altKey: true },
+		key: "m",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
 export const CommentShortcutNotOnTheWindowsGermanMKey = meta.story(
 	commentShortcutStory({
 		userAgent: WINDOWS_AGENT,
