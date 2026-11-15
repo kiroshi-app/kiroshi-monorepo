@@ -24,13 +24,14 @@ import {
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	SlidingTab,
+	SlidingTabCount,
+	SlidingTabs,
+} from "@workspace/ui/components/sliding-tabs"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
-import {
-	ToggleGroup,
-	ToggleGroupItem,
-} from "@workspace/ui/components/ui/toggle-group"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -73,20 +74,10 @@ type FilterSegmentProps = {
 }
 
 const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
-	<ToggleGroupItem
-		className="gap-1.5 rounded-header-island-segment border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-header-island-control-hover aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
-		data-slot="library-filter"
-		size="sm"
-		value={value}
-	>
+	<SlidingTab value={value}>
 		{label}
-		<span
-			className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground dark:group-aria-pressed/toggle:text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]"
-			data-slot="library-filter-count"
-		>
-			{count}
-		</span>
-	</ToggleGroupItem>
+		<SlidingTabCount>{count}</SlidingTabCount>
+	</SlidingTab>
 )
 
 type LibraryFiltersProps = {
@@ -103,15 +94,12 @@ const LibraryFilters = ({
 	const { t } = useTranslation("common")
 
 	return (
-		<ToggleGroup
+		<SlidingTabs
 			aria-label={t("library.filters.label")}
-			className="rounded-header-island-control bg-muted p-0.5"
 			data-slot="library-filters"
-			onValueChange={([pressed]) =>
-				onFilterChange((pressed as LibraryFilter | undefined) ?? filter)
-			}
-			spacing={0.5}
-			value={[filter]}
+			kind="filters"
+			onValueChange={onFilterChange}
+			value={filter}
 		>
 			<FilterSegment
 				count={counts.all}
@@ -133,7 +121,7 @@ const LibraryFilters = ({
 				label={t("library.filters.boards")}
 				value="boards"
 			/>
-		</ToggleGroup>
+		</SlidingTabs>
 	)
 }
 

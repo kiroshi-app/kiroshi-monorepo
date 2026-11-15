@@ -2307,6 +2307,17 @@ navigation-sidebarresize--right-side
 navigation-skiplink--custom-label
 navigation-skiplink--focused
 navigation-skiplink--hidden
+navigation-slidingtabs--first-render
+navigation-slidingtabs--keyboard-focus
+navigation-slidingtabs--library-filters
+navigation-slidingtabs--library-filters-dark
+navigation-slidingtabs--palette-tabs
+navigation-slidingtabs--palette-tabs-dark
+navigation-slidingtabs--question-segments
+navigation-slidingtabs--question-segments-dark
+navigation-slidingtabs--reduced-motion
+navigation-slidingtabs--scrolling-strip
+navigation-slidingtabs--width-change
 navigation-spaceswitcher--badge-and-long-name
 navigation-spaceswitcher--badge-done-elsewhere
 navigation-spaceswitcher--badge-here

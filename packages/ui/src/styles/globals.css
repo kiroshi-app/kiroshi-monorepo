@@ -722,6 +722,30 @@
 	animation: none;
 }
 
+/* Tabs sliding, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/cli/free/tabs-sliding.md */
+:root {
+	--tabs-dur: 250ms;
+	--tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="sliding-tabs-pill"] {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+	width: 0;
+	transform: translateX(0);
+	transition:
+		transform var(--tabs-dur) var(--tabs-ease),
+		width var(--tabs-dur) var(--tabs-ease);
+	will-change: transform, width;
+	pointer-events: none;
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
 /* Tooltip open/close, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/skills/transitions-dev/17-tooltip.md */
 :root {
 	--tt-in-dur: 150ms;
