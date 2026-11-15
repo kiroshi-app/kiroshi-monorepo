@@ -26,6 +26,7 @@ import {
 	type LibraryCommentResolution,
 	LibraryCommentThread,
 	type LibraryCommentThreadProps,
+	type ThreadWorkLineAgent,
 } from "@workspace/ui/components/library-comment-thread"
 import {
 	foundAnchorIn,
@@ -43,6 +44,7 @@ type LibraryDocumentThread = {
 	anchor: LibraryBlockAnchor
 	comments: [LibraryComment, ...LibraryComment[]]
 	workingAgent?: LibraryCommentAgent
+	workingAgents?: ThreadWorkLineAgent[]
 	resolution?: LibraryCommentResolution
 }
 
@@ -242,6 +244,7 @@ const LibraryDocumentThreadCard = ({
 		participants={participants}
 		resolution={thread.resolution}
 		workingAgent={thread.workingAgent}
+		workingAgents={thread.workingAgents}
 	/>
 )
 

@@ -43,6 +43,8 @@ import {
 	COMMENT_PARTICIPANTS,
 	DINNER_PASSAGE,
 	DOCUMENT_THREADS,
+	JUNIPER,
+	LONG_NAMED_AGENT,
 	MARKET_BLOCK,
 	MARKET_PARAGRAPH,
 	MARKET_THREAD,
@@ -59,6 +61,7 @@ import {
 	STEVE,
 } from "@workspace/ui/components/library-comments.fixtures"
 import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
+import type { LibraryDocumentThread } from "@workspace/ui/components/library-document-comments"
 import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
@@ -3106,6 +3109,88 @@ export const Edge3ThreadOpenDark = meta.story({
 		)
 
 		await edge3.play(context)
+	},
+})
+
+type ThreadWork = Pick<LibraryDocumentThread, "workingAgent" | "workingAgents">
+
+const threadAtWork = (work: ThreadWork) => ({
+	...commentedDocument(),
+	threads: [{ ...SESSION_THREAD, ...work }, MARKET_THREAD, BUDGET_THREAD],
+	openThread: openThreadOf(SESSION_THREAD.id),
+})
+
+const workRowOf = (canvas: CommentPlay["canvas"]) =>
+	slotIn(
+		canvas.getByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		"library-comment-working",
+	)
+
+const expectOneAgentWorkLine = async ({ canvas }: CommentPlay) => {
+	const working = workRowOf(canvas)
+	await expect(slotIn(working, "thread-work-line")).toBeVisible()
+	await expect(within(working).getByText("Atlas")).toBeVisible()
+	await expect(within(working).getByText("is thinking…")).toBeVisible()
+	await expect(within(working).queryByRole("button")).toBeNull()
+	await expect(within(working).getByRole("status").textContent).toBe(
+		"Atlas is working on it",
+	)
+}
+
+export const ThreadAgentAtWork = meta.story({
+	args: threadAtWork({ workingAgents: [{ ...ATLAS, state: "thinking" }] }),
+	globals: LIGHT,
+	parameters: describedAs(
+		"The thread of a passage open while the agent its first comment mentions has a turn on it, passed as the one entry of `workingAgents` of the thread. Check the card draws the one-agent work line of a conversation, Atlas thinking with no toggle, and that a status the screen does not show names Atlas.",
+	),
+	play: expectOneAgentWorkLine,
+})
+
+export const ThreadAgentAtWorkFromSingleField = meta.story({
+	tags: ["test-only"],
+	args: threadAtWork({ workingAgent: ATLAS }),
+	parameters: describedAs(
+		"The same thread with the agent passed through `workingAgent` alone, no `workingAgents`. Check the card still draws that agent thinking on the one-agent work line, with no toggle.",
+	),
+	play: expectOneAgentWorkLine,
+})
+
+const SEVERAL_AGENTS_AT_WORK = [JUNIPER, LONG_NAMED_AGENT].map((agent) => ({
+	...agent,
+	state: "thinking" as const,
+}))
+
+export const ThreadSeveralAgentsAtWork = meta.story({
+	args: threadAtWork({
+		workingAgent: ATLAS,
+		workingAgents: SEVERAL_AGENTS_AT_WORK,
+	}),
+	parameters: describedAs(
+		"The thread of a passage open while two agents have a turn on it, listed in `workingAgents`, with `workingAgent` still naming a third one. Check the card draws the group work line for the two listed agents alone, the pile, the headline naming both inside the 360px card and the toggle, that the toggle opens one row per listed agent, and that the agent of `workingAgent` is nowhere on the line.",
+	),
+	play: async ({ canvas, userEvent }: CommentPlay) => {
+		const working = workRowOf(canvas)
+		const toggleOf = () =>
+			within(working).getByRole("button", { name: "Each agent’s work" })
+		await expect(slotIn(working, "conversation-bot-pile")).toBeVisible()
+		for (const { name } of SEVERAL_AGENTS_AT_WORK) {
+			await expect(within(working).getByText(name)).toBeVisible()
+		}
+		await expect(working.scrollWidth).toBeLessThanOrEqual(working.clientWidth)
+		await expect(toggleOf()).toHaveAttribute("aria-expanded", "false")
+		await expect(within(working).queryByRole("list")).toBeNull()
+
+		await userEvent.click(toggleOf())
+
+		await expect(toggleOf()).toHaveAttribute("aria-expanded", "true")
+		const rows = within(within(working).getByRole("list")).getAllByRole(
+			"listitem",
+		)
+		await expect(rows).toHaveLength(SEVERAL_AGENTS_AT_WORK.length)
+		await expect(within(working).getByRole("status").textContent).toBe(
+			`${JUNIPER.name} and ${LONG_NAMED_AGENT.name} are working on it`,
+		)
+		await expect(within(working).queryByText(ATLAS.name)).toBeNull()
 	},
 })
 
