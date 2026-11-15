@@ -34,10 +34,16 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 
 type Heard = (event: { payload: LibraryCommentThreadChanged }) => void
 
+type AgentAtWork = { id: string }
+
 type OpenThread = {
 	id: string
 	comments: { body: string }[]
-	workingAgent?: { id: string }
+}
+
+type DocumentCardAgents = {
+	workingAgent?: AgentAtWork
+	workingAgents?: AgentAtWork[]
 }
 
 type Draft = {
@@ -48,6 +54,7 @@ type Draft = {
 type Surface = {
 	isCommentMode: boolean | undefined
 	openThread: OpenThread | undefined
+	agentsAtWork: AgentAtWork[]
 	draft: Draft | undefined
 	startComment: () => void
 	openThreadById: (threadId: string) => void
@@ -64,7 +71,12 @@ const ATLAS: LibraryCommentAgent = {
 	id: "bot-atlas",
 	name: "Atlas",
 }
-const PARTICIPANTS = [ATLAS, MONA]
+const JUNIPER: LibraryCommentAgent = {
+	kind: "agent",
+	id: "bot-juniper",
+	name: "Juniper",
+}
+const PARTICIPANTS = [ATLAS, JUNIPER, MONA]
 const EMPTY_BOARD = { objects: [] }
 
 const threadOf = (
@@ -89,12 +101,20 @@ const INTRO_THREAD = threadOf("thread-intro", {
 	mentions: [],
 })
 
-const peopleWith = (workingThreadId?: string): LibraryCommentPeople => ({
+const peopleWith = (
+	workingThreadId?: string,
+	agentsAtWork: LibraryCommentAgent[] = [ATLAS],
+): LibraryCommentPeople => ({
 	self: MONA,
 	participants: PARTICIPANTS,
 	authorOf: (party) => authorAmong(PARTICIPANTS, party, "Someone"),
-	workingAgentOf: ({ id }) => (id === workingThreadId ? ATLAS : undefined),
+	workingAgentsOf: ({ id }) => (id === workingThreadId ? agentsAtWork : []),
 })
+
+const agentsOnDocumentCard = ({
+	workingAgent,
+	workingAgents,
+}: DocumentCardAgents) => workingAgents ?? (workingAgent ? [workingAgent] : [])
 
 const useDocumentSurface: UseSurface = (people) => {
 	const shown = useLibraryDocumentComments({
@@ -103,9 +123,16 @@ const useDocumentSurface: UseSurface = (people) => {
 		hasOpened: true,
 		people,
 	})
+	const openThread = shown.threads?.find(
+		({ id }) => id === shown.openThread?.id,
+	)
 	return {
 		isCommentMode: shown.comments?.isCommentMode,
-		openThread: shown.threads?.find(({ id }) => id === shown.openThread?.id),
+		openThread,
+		agentsAtWork: agentsOnDocumentCard({
+			...shown.openThread,
+			workingAgent: openThread?.workingAgent,
+		}),
 		draft: shown.commentDraft,
 		startComment: () =>
 			shown.onStartComment?.({ blockId: "outro", origin: "pointer" }),
@@ -122,6 +149,7 @@ const useImageSurface: UseSurface = (people) => {
 	return {
 		isCommentMode: shown.comments?.isCommentMode,
 		openThread: shown.imageComments?.openThread,
+		agentsAtWork: shown.imageComments?.openThread?.workingAgents ?? [],
 		draft: shown.imageComments?.draft,
 		startComment: () => shown.imageComments?.onStartComment({ x: 0.4, y: 0.6 }),
 		openThreadById: (threadId) => shown.imageComments?.onOpenThread(threadId),
@@ -138,16 +166,21 @@ const useBoardSurface: UseSurface = (people) => {
 	return {
 		isCommentMode: bar?.isCommentMode,
 		openThread: canvas.openCommentThread,
+		agentsAtWork: canvas.openCommentThread?.workingAgents ?? [],
 		draft: canvas.commentDraft,
 		startComment: () => canvas.onStartComment?.({ x: 40, y: 60 }),
 		openThreadById: (threadId) => canvas.onOpenCommentThread?.(threadId),
 	}
 }
 
-const SURFACES = [
-	{ surface: "document", use: useDocumentSurface },
+const SURFACES_SHOWING_EVERY_AGENT = [
 	{ surface: "image", use: useImageSurface },
 	{ surface: "board", use: useBoardSurface },
+]
+
+const SURFACES = [
+	{ surface: "document", use: useDocumentSurface },
+	...SURFACES_SHOWING_EVERY_AGENT,
 ]
 
 const settle = () => act(() => new Promise((flush) => setTimeout(flush, 0)))
@@ -194,7 +227,9 @@ const mount = async (use: UseSurface) => {
 			act(() => shown().draft?.onValueChange(text))
 			act(() => shown().draft?.onSubmit())
 		},
-		showWorkingOn: (threadId: string) => hook.rerender(peopleWith(threadId)),
+		showWorkingOn: (threadId: string, agentsAtWork?: LibraryCommentAgent[]) =>
+			hook.rerender(peopleWith(threadId, agentsAtWork)),
+		idsAtWork: () => shown().agentsAtWork.map(({ id }) => id),
 		hear: (thread: LibraryCommentThread) =>
 			act(() =>
 				hear({ payload: { spaceId: SPACE_ID, itemName: ITEM, thread } }),
@@ -267,14 +302,15 @@ describe.each(SURFACES)("comments on a Library $surface", ({ use }) => {
 
 	it("shows the agent at work, then its reply, in the thread left open", async () => {
 		answersAtOnce()
-		const { shown, send, showWorkingOn, hear, bodiesShown } = await mount(use)
+		const { shown, send, showWorkingOn, hear, bodiesShown, idsAtWork } =
+			await mount(use)
 		send("Check this @Atlas")
 		await waitFor(() => expect(shown().openThread?.id).toBe(SENT_ID))
 		const sent = host.invoke.mock.lastCall?.[1] as SentComment
 
 		showWorkingOn(SENT_ID)
 
-		expect(shown().openThread?.workingAgent?.id).toBe(ATLAS.id)
+		expect(idsAtWork()).toEqual([ATLAS.id])
 
 		const answered = threadOf(SENT_ID, sent)
 		hear({
@@ -331,5 +367,36 @@ describe.each(SURFACES)("comments on a Library $surface", ({ use }) => {
 		await settle()
 
 		expect(shown().openThread?.id).toBe(INTRO_THREAD.id)
+	})
+})
+
+describe.each(SURFACES_SHOWING_EVERY_AGENT)(
+	"agents at work on a Library $surface thread",
+	({ use }) => {
+		it("shows every agent at work on the open thread, then only the one still at work", async () => {
+			answersAtOnce()
+			const { shown, showWorkingOn, idsAtWork } = await mount(use)
+			act(() => shown().openThreadById(INTRO_THREAD.id))
+
+			showWorkingOn(INTRO_THREAD.id, [ATLAS, JUNIPER])
+
+			expect(idsAtWork()).toEqual([ATLAS.id, JUNIPER.id])
+
+			showWorkingOn(INTRO_THREAD.id, [JUNIPER])
+
+			expect(idsAtWork()).toEqual([JUNIPER.id])
+		})
+	},
+)
+
+describe("agents at work on a Library document thread", () => {
+	it("shows only the first of the agents at work on the open thread", async () => {
+		answersAtOnce()
+		const { shown, showWorkingOn, idsAtWork } = await mount(useDocumentSurface)
+		act(() => shown().openThreadById(INTRO_THREAD.id))
+
+		showWorkingOn(INTRO_THREAD.id, [ATLAS, JUNIPER])
+
+		expect(idsAtWork()).toEqual([ATLAS.id])
 	})
 })

@@ -248,7 +248,7 @@ const COMMENT_PEOPLE: LibraryCommentPeople = {
 	self: SAM,
 	participants: [SAM],
 	authorOf: () => SAM,
-	workingAgentOf: () => undefined,
+	workingAgentsOf: () => [],
 }
 
 type BoardElementOptions = {

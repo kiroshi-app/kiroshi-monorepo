@@ -10,6 +10,7 @@ import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { mentionsAnAgent, mentionsIn, partyOf } from "./library-comment-people"
 import {
+	agentAtWorkOf,
 	commentedThreadsOf,
 	countsOf,
 	resolutionOf,
@@ -109,7 +110,7 @@ export const useLibraryComments = <Target,>({
 		(each) => ({
 			...each,
 			resolution: resolutionOf(each.thread, unnamed),
-			workingAgent: people.workingAgentOf(each.thread),
+			workingAgents: people.workingAgentsOf(each.thread),
 		}),
 	)
 	const opened = commented.find(
@@ -197,7 +198,7 @@ export const useLibraryComments = <Target,>({
 			anchor: anchorLineOf(opened.thread),
 			comments: opened.comments,
 			participants: people.participants,
-			workingAgent: opened.workingAgent,
+			workingAgents: opened.workingAgents.map(agentAtWorkOf),
 			resolution: opened.resolution,
 			reply: state.reply,
 			onReplyChange: (text: string) => change({ reply: text }),
