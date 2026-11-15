@@ -35,7 +35,9 @@ import {
 	fieldSelectionOf,
 	selectInField,
 } from "@workspace/ui/components/library-block-text"
+import { STEVE } from "@workspace/ui/components/library-comments.fixtures"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
+import type { LibraryDocumentCommentTarget } from "@workspace/ui/components/library-document-comments"
 import {
 	DOCUMENT_TITLE,
 	LibraryDocumentBar,
@@ -2767,4 +2769,101 @@ export const GalleryEditingAt320 = meta.story(
 
 export const TableEditingAt320 = meta.story(
 	narrowStory(WIDE_TABLE_DOCUMENT, "table"),
+)
+
+const MAC_AGENT =
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+const COMMENT_COMPOSER_SLOT = "library-comment-composer"
+
+const leaveDraftAlone = () => {}
+
+type CommentShortcutFrameProps = BodyArgs & { body: string }
+
+const CommentShortcutFrame = ({
+	body,
+	onBodyChange,
+}: CommentShortcutFrameProps) => {
+	const [target, setTarget] = useState<LibraryDocumentCommentTarget>()
+	return (
+		<DocumentFrame>
+			<LibraryDocumentBlockEditor
+				body={body}
+				commentDraft={
+					target && {
+						target,
+						author: STEVE,
+						value: "",
+						onValueChange: leaveDraftAlone,
+						onSubmit: leaveDraftAlone,
+						onClose: () => setTarget(undefined),
+					}
+				}
+				onBodyChange={onBodyChange}
+				onStartComment={setTarget}
+			/>
+		</DocumentFrame>
+	)
+}
+
+type CommentShortcutPress = {
+	key: string
+	code: string
+	keyCode: number
+	isOpeningTheDraft: boolean
+}
+
+const commentShortcutStory = ({
+	isOpeningTheDraft,
+	...pressed
+}: CommentShortcutPress) => ({
+	tags: ["test-only"],
+	beforeEach: () => {
+		const agent = spyOn(navigator, "userAgent", "get").mockReturnValue(
+			MAC_AGENT,
+		)
+		return () => agent.mockRestore()
+	},
+	render: (args: CommentShortcutFrameProps) => (
+		<CommentShortcutFrame {...args} />
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const field = await focusBlockWith(canvasElement, "The spring launch puts")
+		fireEvent.keyDown(field, { ...pressed, metaKey: true, altKey: true })
+		if (isOpeningTheDraft) {
+			await waitFor(() =>
+				expect(slotsIn(canvasElement, COMMENT_COMPOSER_SLOT)).toHaveLength(1),
+			)
+			return
+		}
+		await nextFrame()
+		await expect(slotsIn(canvasElement, COMMENT_COMPOSER_SLOT)).toHaveLength(0)
+	},
+})
+
+export const CommentShortcutOnTheQwertyMKey = meta.story(
+	commentShortcutStory({
+		key: "µ",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShortcutOnTheAzertyMKey = meta.story(
+	commentShortcutStory({
+		key: "µ",
+		code: "Semicolon",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShortcutNotOnTheAzertyCommaKey = meta.story(
+	commentShortcutStory({
+		key: "∞",
+		code: "KeyM",
+		keyCode: 188,
+		isOpeningTheDraft: false,
+	}),
 )
