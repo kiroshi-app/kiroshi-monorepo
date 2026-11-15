@@ -63,16 +63,15 @@ const expectConcentricWithTheCard = async ({
 	const islandBox = island.getBoundingClientRect()
 	const surface = getComputedStyle(island)
 
-	await expect([
+	for (const edgeGap of [
 		islandBox.left - cardBox.left,
 		islandBox.top - cardBox.top,
-	]).toEqual([9, 9])
-	await expect(surface.borderTopLeftRadius).toBe(
-		concentricRadius(cardRadius, islandBox.left - cardBox.left),
-	)
-	await expect(surface.borderTopLeftRadius).toBe(
-		concentricRadius(cardRadius, islandBox.top - cardBox.top),
-	)
+	]) {
+		await expect(edgeGap).toBe(9)
+		await expect(surface.borderTopLeftRadius).toBe(
+			concentricRadius(cardRadius, edgeGap),
+		)
+	}
 	await expect(surface.boxShadow).toBe("none")
 }
 
@@ -108,11 +107,13 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 	await expect([pinsBox.width, pinsBox.height]).toEqual([32, 32])
 	await expect(pinsBox.left - islandBox.left).toBe(5)
 	await expect(pinsBox.top - islandBox.top).toBe(4)
-	await expect([
-		concentricRadius(islandRadius, pinsBox.left - islandBox.left),
-		concentricRadius(islandRadius, pinsBox.top - islandBox.top),
-	]).toEqual(["0px", "0px"])
-	await expect(getComputedStyle(pins).borderTopLeftRadius).toBe("0px")
+	for (const edgeGap of [
+		pinsBox.left - islandBox.left,
+		pinsBox.top - islandBox.top,
+	])
+		await expect(getComputedStyle(pins).borderTopLeftRadius).toBe(
+			concentricRadius(islandRadius, edgeGap),
+		)
 	await expect(getComputedStyle(pins).boxShadow).toBe("none")
 	await expect(routinesBox.left - pinsBox.right).toBe(2)
 	await expect([icon?.width, icon?.height]).toEqual([16, 16])
