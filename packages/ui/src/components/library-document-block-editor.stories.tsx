@@ -2777,8 +2777,6 @@ const MAC_AGENT =
 const LINUX_AGENT =
 	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)"
 
-const COMMAND_OPTION = { metaKey: true, altKey: true }
-
 const COMMENT_COMPOSER_SLOT = "library-comment-composer"
 
 const leaveDraftAlone = () => {}
@@ -2823,7 +2821,7 @@ type CommentShortcutPress = {
 const commentShortcutStory = ({
 	isOpeningTheDraft,
 	userAgent = MAC_AGENT,
-	held = COMMAND_OPTION,
+	held = { metaKey: true, altKey: true },
 	...pressed
 }: CommentShortcutPress) => ({
 	tags: ["test-only"],
