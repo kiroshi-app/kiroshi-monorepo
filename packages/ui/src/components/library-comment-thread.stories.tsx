@@ -7,12 +7,14 @@ import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
 import {
 	LibraryCommentThread,
 	type LibraryCommentThreadProps,
+	type ThreadWorkLineAgent,
 } from "@workspace/ui/components/library-comment-thread"
 import {
 	AGENT_REPLY,
 	ATLAS,
 	COMMENT_PARTICIPANTS,
 	FIRST_COMMENT,
+	JUNIPER,
 	LONG_COMMENT,
 	LONG_NAMED_AGENT,
 	LONG_NAMED_PERSON,
@@ -20,6 +22,7 @@ import {
 	PASSAGE_ANCHOR,
 	UNBREAKABLE,
 } from "@workspace/ui/components/library-comments.fixtures"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const ThreadOnPage = ({
 	reply: initialReply,
@@ -52,8 +55,48 @@ const ThreadOnPage = ({
 	)
 }
 
+const ATLAS_AT_WORK: ThreadWorkLineAgent = { ...ATLAS, state: "thinking" }
+
+const SEVERAL_AGENTS_AT_WORK: ThreadWorkLineAgent[] = [
+	ATLAS_AT_WORK,
+	{ ...JUNIPER, state: "thinking" },
+	{ ...LONG_NAMED_AGENT, state: "thinking" },
+]
+
+const HandoverThread = (props: LibraryCommentThreadProps) => {
+	const [hasReplied, setHasReplied] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-3">
+			<ThreadOnPage
+				{...props}
+				comments={hasReplied ? [FIRST_COMMENT, AGENT_REPLY] : [FIRST_COMMENT]}
+				workingAgents={hasReplied ? [] : [ATLAS_AT_WORK]}
+			/>
+			<Button onClick={() => setHasReplied(true)} size="sm" variant="outline">
+				Atlas replies
+			</Button>
+		</div>
+	)
+}
+
 const threadIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "library-comment-thread")
+
+const workRowIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getByRole("status")
+
+const expectAlignedWithComments = async (canvasElement: HTMLElement) => {
+	const working = workRowIn(canvasElement)
+	const comment = slotIn(canvasElement, "library-comment")
+
+	await expect(getComputedStyle(working).padding).toBe(
+		getComputedStyle(comment).padding,
+	)
+	await expect(
+		slotIn(working, "thread-work-line-line").getBoundingClientRect().left,
+	).toBe(slotIn(comment, "library-comment-avatar").getBoundingClientRect().left)
+}
 
 const authorsIn = (canvasElement: HTMLElement) =>
 	Array.from(
@@ -82,7 +125,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, More drawn only when `onMore` is passed, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgent` adds the row of a mentioned agent at work. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container.",
+					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, More drawn only when `onMore` is passed, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgents` draws the agents at work with the work line of a conversation, one line for one agent, the pile and its toggle for several; `workingAgent` alone still draws that agent thinking. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container.",
 			},
 		},
 	},
@@ -163,14 +206,17 @@ export const AgentAtWork = meta.story({
 		docs: {
 			description: {
 				story:
-					"The agent the first comment mentions is at work, as artboard Thread 4 draws it. Check the row names the agent as a status, under the comment and above the reply field, with its hexagonal avatar.",
+					"The agent the first comment mentions has a turn on the thread, passed through `workingAgent` alone. Check the row is the one-agent work line of a conversation, Atlas thinking with no toggle, announced as a status, under the comment and above the reply field, and starting where the comment avatars start, inside the same padding.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const working = within(canvasElement).getByRole("status")
-		await expect(working).toHaveTextContent("Atlas is working on it")
+		const working = workRowIn(canvasElement)
+		await expect(within(working).getByText("Atlas")).toBeVisible()
+		await expect(within(working).getByText("is thinking…")).toBeVisible()
 		await expect(slotIn(working, "bot-identity-avatar")).toBeVisible()
+		await expect(within(working).queryByRole("button")).toBe(null)
+		await expectAlignedWithComments(canvasElement)
 		await expect(
 			slotIn(canvasElement, "library-comment").compareDocumentPosition(working),
 		).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
@@ -186,6 +232,83 @@ export const AgentAtWorkDark = meta.story({
 	args: AgentAtWork.input.args,
 	globals: { theme: "dark" },
 	play: AgentAtWork.input.play,
+})
+
+export const SeveralAgentsAtWork = meta.story({
+	args: { workingAgent: ATLAS, workingAgents: SEVERAL_AGENTS_AT_WORK },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A comment mentioned three agents and each has a turn on the thread, `workingAgent` still passed beside `workingAgents`. Check the row draws the group line for the three listed agents alone, the pile, the headline and the toggle, that the toggle opens one row per agent, and that every row stays inside the 360 px card, the long name giving way.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const working = workRowIn(canvasElement)
+		await expect(slotIn(working, "conversation-bot-pile")).toBeVisible()
+		await expect(within(working).getByText("3 agents")).toBeVisible()
+		await expectAlignedWithComments(canvasElement)
+
+		const toggle = within(working).getByRole("button", {
+			name: "Each agent’s work",
+		})
+		await expect(toggle).toHaveAttribute("aria-expanded", "false")
+		await expect(within(working).queryByRole("list")).toBe(null)
+		await userEvent.click(toggle)
+
+		await expect(
+			within(working).getByRole("button", { name: "Each agent’s work" }),
+		).toHaveAttribute("aria-expanded", "true")
+		const rows = within(within(working).getByRole("list")).getAllByRole(
+			"listitem",
+		)
+		await expect(rows).toHaveLength(SEVERAL_AGENTS_AT_WORK.length)
+
+		const thread = threadIn(canvasElement)
+		await expect(thread.offsetWidth).toBe(360)
+		await expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth)
+		for (const row of rows) {
+			await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
+			await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
+				thread.getBoundingClientRect().right,
+			)
+		}
+	},
+})
+
+export const SeveralAgentsAtWorkDark = meta.story({
+	args: SeveralAgentsAtWork.input.args,
+	globals: { theme: "dark" },
+	play: SeveralAgentsAtWork.input.play,
+})
+
+export const HandoverToReply = meta.story({
+	render: (args) => <HandoverThread {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The moment the agent at work hands over to its reply: press Atlas replies under the card. Check the thread starts with Atlas at work under the first comment, then holds its reply as the last comment, with no at-work row and no empty container left above the reply field.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const canvas = within(canvasElement)
+		await expect(
+			within(workRowIn(canvasElement)).getByText("Atlas"),
+		).toBeVisible()
+		await expect(authorsIn(canvasElement)).toEqual(["person"])
+
+		await userEvent.click(canvas.getByRole("button", { name: "Atlas replies" }))
+
+		await expect(canvas.queryByRole("status")).toBe(null)
+		await expect(
+			canvasElement.querySelector('[data-slot="library-comment-working"]'),
+		).toBe(null)
+		await expect(authorsIn(canvasElement)).toEqual(["person", "agent"])
+		await expect(canvas.getByText(AGENT_REPLY.body)).toBeVisible()
+	},
 })
 
 export const Replies = meta.story({
@@ -295,12 +418,13 @@ export const Resolved = meta.story({
 			AGENT_REPLY,
 		],
 		resolution: { by: "Steve", time: "1 min" },
+		workingAgents: [ATLAS_AT_WORK],
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A resolved thread, as artboards Thread 6 and Resolved 2 draw it. Check Resolve and the reply field are gone, only the first comment shows, the replies fold into one line in the Space colour naming who replied, the footer names who resolved it beside a check on the Space colour, and Reopen reports once with no colour transition.",
+					"A resolved thread, as artboards Thread 6 and Resolved 2 draw it, resolved while an agent still had a turn on it. Check Resolve, the reply field and the at-work row are gone, only the first comment shows, the replies fold into one line in the Space colour naming who replied, the footer names who resolved it beside a check on the Space colour, and Reopen reports once with no colour transition.",
 			},
 		},
 	},
@@ -308,6 +432,7 @@ export const Resolved = meta.story({
 		const thread = within(threadIn(canvasElement))
 		await expect(thread.queryByRole("button", { name: "Resolve" })).toBe(null)
 		await expect(thread.queryByRole("textbox")).toBe(null)
+		await expect(thread.queryByRole("status")).toBe(null)
 		await expect(authorsIn(canvasElement)).toEqual(["person"])
 
 		const replies = slotIn(canvasElement, "library-comment-replies")

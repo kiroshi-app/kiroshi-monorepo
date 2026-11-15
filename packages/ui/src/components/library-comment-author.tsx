@@ -39,13 +39,11 @@ const useLibraryCommentAnchorLine = (anchor: LibraryCommentAnchor) => {
 
 type LibraryCommentAvatarProps = {
 	author: LibraryCommentAuthor
-	isWorking?: boolean
 	className?: string
 }
 
 const LibraryCommentAvatar = ({
 	author,
-	isWorking = false,
 	className,
 }: LibraryCommentAvatarProps) => (
 	<span
@@ -62,7 +60,6 @@ const LibraryCommentAvatar = ({
 				name={author.name}
 				seed={author.id}
 				size={AVATAR_SIZE}
-				working={isWorking}
 			/>
 		) : (
 			<AvatarFrame

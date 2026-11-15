@@ -529,7 +529,6 @@ const common = {
 				resolve: "Resolve",
 				more: "More",
 				close: "Close",
-				working: "is working on it",
 				replies_one: "{{count}} reply, {{names}}",
 				replies_other: "{{count}} replies, {{names}}",
 				resolvedBy: "Resolved by {{name}}",

@@ -554,7 +554,6 @@ const common = {
 				resolve: "Résoudre",
 				more: "Plus",
 				close: "Fermer",
-				working: "y travaille",
 				replies_one: "{{count}} réponse, {{names}}",
 				replies_many: "{{count}} réponses, {{names}}",
 				replies_other: "{{count}} réponses, {{names}}",

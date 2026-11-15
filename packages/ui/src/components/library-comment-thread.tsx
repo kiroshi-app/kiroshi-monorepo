@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -22,6 +22,10 @@ import {
 } from "@workspace/ui/components/library-comment-field"
 import { LibraryCommentMentionMenu } from "@workspace/ui/components/library-comment-mention-menu"
 import { mentionRunsOf } from "@workspace/ui/components/library-comment-mentions"
+import {
+	ThreadWorkLine,
+	type ThreadWorkLineAgent,
+} from "@workspace/ui/components/thread-work-line"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -40,6 +44,7 @@ type LibraryCommentThreadProps = {
 	comments: [LibraryComment, ...LibraryComment[]]
 	participants: LibraryCommentAuthor[]
 	workingAgent?: LibraryCommentAgent
+	workingAgents?: ThreadWorkLineAgent[]
 	resolution?: LibraryCommentResolution
 	reply: string
 	onReplyChange: (reply: string) => void
@@ -112,11 +117,24 @@ const repliersOf = (replies: LibraryComment[]) => [
 	...new Set(replies.map((reply) => reply.author.name)),
 ]
 
+type AgentsAtWorkInput = Pick<
+	LibraryCommentThreadProps,
+	"workingAgent" | "workingAgents"
+>
+
+const agentsAtWorkOf = ({
+	workingAgent,
+	workingAgents,
+}: AgentsAtWorkInput): ThreadWorkLineAgent[] =>
+	workingAgents ??
+	(workingAgent ? [{ ...workingAgent, state: "thinking" }] : [])
+
 const LibraryCommentThread = ({
 	anchor,
 	comments,
 	participants,
 	workingAgent,
+	workingAgents,
 	resolution,
 	reply,
 	onReplyChange,
@@ -138,6 +156,8 @@ const LibraryCommentThread = ({
 	const [first, ...replies] = comments
 	const isResolved = resolution !== undefined
 	const shown = isResolved ? [first] : comments
+	const agentsAtWork = agentsAtWorkOf({ workingAgent, workingAgents })
+	const [isWorkDetailOpen, setWorkDetailOpen] = useState(false)
 
 	return (
 		<LibraryCommentMentionMenu
@@ -209,21 +229,18 @@ const LibraryCommentThread = ({
 						})}
 					</p>
 				) : null}
-				{workingAgent && !isResolved ? (
+				{agentsAtWork.length > 0 && !isResolved ? (
 					<div
-						className={cn(ROW, "items-center")}
+						className="p-3"
 						data-slot="library-comment-working"
 						role="status"
 					>
-						<LibraryCommentAvatar author={workingAgent} isWorking />
-						<p className={cn(AUTHOR_LINE, "min-w-0")}>
-							<span className="font-semibold text-foreground">
-								{workingAgent.name}
-							</span>
-							<span className="text-muted-foreground">
-								{` ${t("library.comments.thread.working")}`}
-							</span>
-						</p>
+						<ThreadWorkLine
+							agents={agentsAtWork}
+							className="not-data-open:ps-0"
+							isOpen={isWorkDetailOpen}
+							onOpenChange={setWorkDetailOpen}
+						/>
 					</div>
 				) : null}
 				{resolution ? (
@@ -291,4 +308,5 @@ export {
 	type LibraryCommentResolution,
 	LibraryCommentThread,
 	type LibraryCommentThreadProps,
+	type ThreadWorkLineAgent,
 }
