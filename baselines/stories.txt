@@ -2175,6 +2175,9 @@ navigation-librarydocumenteditor--shortcut-keycap-off-mac
 navigation-librarydocumenteditor--shortcut-starts-comment
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--task-toggle
+navigation-librarydocumenteditor--thread-agent-at-work
+navigation-librarydocumenteditor--thread-agent-at-work-from-single-field
+navigation-librarydocumenteditor--thread-several-agents-at-work
 navigation-librarydocumenteditor--title-at-rest
 navigation-librarydocumenteditor--title-click-away-keeps
 navigation-librarydocumenteditor--title-emptied-restores
