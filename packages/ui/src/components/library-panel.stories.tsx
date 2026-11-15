@@ -283,6 +283,7 @@ export const GridAll = meta.story({
 				await expect(getComputedStyle(pressedFillOf(all)).backgroundColor).toBe(
 					rgbOf(accent),
 				)
+				await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
 			} finally {
 				await pointer.unhover(all)
 			}
@@ -1233,8 +1234,9 @@ export const LongNames = meta.story({
 
 		await waitFor(() =>
 			expect(
-				getComputedStyle(canvas.getByRole("button", { name: /^All/ }))
-					.backgroundColor,
+				getComputedStyle(
+					pressedFillOf(canvas.getByRole("button", { name: /^All/ })),
+				).backgroundColor,
 			).toBe(rgbOf(hueTone(HUE_PRESETS.pink, "dark", "accent").hex)),
 		)
 		await expect(
@@ -2057,6 +2059,7 @@ export const FloatingHeaderControlStates = meta.story({
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
 		await expectFill(pressedFillOf(all), "bg-primary", all)
+		await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
 		await expect(getComputedStyle(boardGlyph).color).toBe(
 			tokenStyleIn(newBoard, "text-soft-foreground", "color"),
 		)
@@ -2156,6 +2159,7 @@ export const FloatingHeaderFilterHover = meta.story({
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
 		await expectFill(pressedFillOf(all), "bg-primary", all)
+		await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
 		await pointer.unhover(all)
 	},
 })
