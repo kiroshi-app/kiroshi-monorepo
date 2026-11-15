@@ -56,7 +56,7 @@ const flushStyleOf = (element: HTMLElement) => {
 	element.getBoundingClientRect()
 }
 
-const placePill = (pill: HTMLElement) => {
+const placePill = (pill: HTMLElement, canGlide = true) => {
 	const tab = pill.parentElement?.querySelector<HTMLElement>(ACTIVE_TAB)
 	if (!tab) return
 
@@ -66,7 +66,7 @@ const placePill = (pill: HTMLElement) => {
 	if (placed?.tab === tab && placed.box === box) return
 	PLACEMENTS.set(pill, { tab, box })
 
-	const isGliding = placed !== undefined && placed.tab !== tab
+	const isGliding = canGlide && placed !== undefined && placed.tab !== tab
 	if (!isGliding) pill.style.transition = "none"
 	pill.style.transform = `translate(${offsetLeft}px, ${offsetTop}px)`
 	pill.style.width = `${offsetWidth}px`
@@ -77,8 +77,9 @@ const placePill = (pill: HTMLElement) => {
 	pill.style.transition = ""
 }
 
-const ACTIVATION = {
+const ACTIVATIONS_AND_TAB_LIST = {
 	attributeFilter: ["aria-selected", "aria-pressed"],
+	childList: true,
 	subtree: true,
 }
 
@@ -86,17 +87,27 @@ const followActiveTab = (pill: HTMLSpanElement) => {
 	const track = pill.parentElement
 	if (!track) return
 
-	const place = () => placePill(pill)
-	const resizes = new ResizeObserver(place)
-	const activations = new MutationObserver(place)
-	resizes.observe(track)
-	for (const child of track.children) resizes.observe(child)
-	activations.observe(track, ACTIVATION)
-	place()
+	const resizes = new ResizeObserver(() => placePill(pill))
+	const watchTabs = () => {
+		resizes.disconnect()
+		resizes.observe(track)
+		for (const child of track.children)
+			if (child !== pill) resizes.observe(child)
+	}
+	const changes = new MutationObserver((records) => {
+		const hasTabListChanged = records.some(
+			({ type, target }) => type === "childList" && target === track,
+		)
+		if (hasTabListChanged) watchTabs()
+		placePill(pill, !hasTabListChanged)
+	})
+	watchTabs()
+	changes.observe(track, ACTIVATIONS_AND_TAB_LIST)
+	placePill(pill)
 
 	return () => {
 		resizes.disconnect()
-		activations.disconnect()
+		changes.disconnect()
 	}
 }
 

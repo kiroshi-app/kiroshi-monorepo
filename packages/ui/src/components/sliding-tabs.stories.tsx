@@ -137,16 +137,23 @@ const FilterIsland = ({ children }: GroundProps) => (
 
 const GrowingFilterRow = (props: SlidingTabsProps) => {
 	const [hasGrown, setHasGrown] = useState(false)
+	const [hasVideos, setHasVideos] = useState(false)
+	const { All, ...kinds } = hasGrown ? GROWN_FILTER_COUNTS : FILTER_COUNTS
 
 	return (
 		<div className="flex flex-col items-start gap-4">
 			<FilterIsland>
 				<HeldSlidingTabs {...props}>
-					{filterTabsOf(hasGrown ? GROWN_FILTER_COUNTS : FILTER_COUNTS)}
+					{filterTabsOf(
+						hasVideos ? { All, Videos: 3, ...kinds } : { All, ...kinds },
+					)}
 				</HeldSlidingTabs>
 			</FilterIsland>
 			<Button onClick={() => setHasGrown(true)} variant="outline">
 				Import a thousand images
+			</Button>
+			<Button onClick={() => setHasVideos(true)} variant="outline">
+				Import a video
 			</Button>
 		</div>
 	)
@@ -416,7 +423,7 @@ export const WidthChange = meta.story({
 		docs: {
 			description: {
 				story:
-					"The filter row while its counts change under the pressed segment, motion allowed. Check that when All and Images each gain a thousand items the pill is refitted to Images, moved and widened, without a glide, and that a width the component did not render, the way a late font lands, is followed too.",
+					"The filter row while its counts and its segments change under the pressed one, motion allowed. Check that when All and Images each gain a thousand items the pill is refitted to Images, moved and widened, without a glide, that a width the component did not render, the way a late font lands, is followed too, that a Videos segment arriving before Images moves the pill with Images without a glide, and that once Videos is pressed the pill follows its width as well.",
 			},
 		},
 	},
@@ -439,7 +446,22 @@ export const WidthChange = meta.story({
 
 			canvas.getByRole("button", { name: /^All/ }).style.paddingInline = "24px"
 			await expectPillUnder(images)
+
+			const leftBeforeVideos = images.getBoundingClientRect().left
+			await userEvent.click(
+				canvas.getByRole("button", { name: "Import a video" }),
+			)
+			const videos = canvas.getByRole("button", { name: /^Videos/ })
+			await expect(images.getBoundingClientRect().left).toBeGreaterThan(
+				leftBeforeVideos,
+			)
+			await expectPillUnder(images)
 			await expect(onPillGlide).not.toHaveBeenCalled()
+
+			await userEvent.click(videos)
+			await expectPillUnder(videos)
+			videos.style.paddingInline = "24px"
+			await expectPillUnder(videos)
 		} finally {
 			await restoreReducedMotion()
 		}
