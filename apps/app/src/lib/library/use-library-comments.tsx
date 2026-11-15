@@ -8,7 +8,7 @@ import {
 import type { LibraryBarComments } from "@workspace/ui/components/library-item-menu"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import { mentionsIn, partyOf } from "./library-comment-people"
+import { mentionsAnAgent, mentionsIn, partyOf } from "./library-comment-people"
 import {
 	commentedThreadsOf,
 	countsOf,
@@ -121,22 +121,29 @@ export const useLibraryComments = <Target,>({
 	const setCommentMode = (isCommentMode: boolean) =>
 		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
 
+	const openUnlessBusy = ({ id }: LibraryCommentThread) =>
+		changeIfStillOn((current) =>
+			current.draft || current.openThreadId
+				? current
+				: { ...current, ...showingThread(id) },
+		)
+
 	const sendDraft = () => {
 		const sent = state.draft
 		if (!sent) {
 			return
 		}
+		const mentions = mentionsIn(sent.text, people.participants)
 		change({ draft: null })
 		send(
-			{
-				anchor: anchorOf(sent.target),
-				text: sent.text,
-				mentions: mentionsIn(sent.text, people.participants),
-			},
+			{ anchor: anchorOf(sent.target), text: sent.text, mentions },
 			() =>
 				changeIfStillOn((current) =>
 					current.draft ? current : { ...current, draft: sent },
 				),
+			(thread) => {
+				if (mentionsAnAgent(mentions)) openUnlessBusy(thread)
+			},
 		)
 	}
 

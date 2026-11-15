@@ -180,10 +180,13 @@ describe("useLibraryCommentThreads", () => {
 		const created = answeredLater("library_comment_create")
 		const anchor = { kind: "block", blockId: "outro" } as const
 
+		const openSentThread = vi.fn()
+
 		act(() =>
 			hook.result.current.send(
 				{ anchor, text: "Ship it @Atlas", mentions: [ATLAS] },
 				vi.fn(),
+				openSentThread,
 			),
 		)
 
@@ -207,13 +210,16 @@ describe("useLibraryCommentThreads", () => {
 		await waitFor(() =>
 			expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD, answered]),
 		)
+		expect(openSentThread.mock.calls.map(([thread]) => thread)).toEqual([
+			answered,
+		])
 	})
 
 	it("shows one thread when the host announces a sent comment before answering it", async () => {
 		const { hook, threads, hear } = await mountThreads()
 		const created = answeredLater("library_comment_create")
 
-		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn(), vi.fn()))
 		await waitFor(() => expect(threads()).toHaveLength(3))
 		hear({ ...OUTRO_THREAD, anchor: { blockId: "outro", kind: "block" } })
 
@@ -231,7 +237,7 @@ describe("useLibraryCommentThreads", () => {
 		const { hook, threads, hear } = await mountThreads()
 		const created = answeredLater("library_comment_create")
 
-		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn(), vi.fn()))
 		await waitFor(() => expect(threads()).toHaveLength(3))
 		await act(async () => created.settle(OUTRO_THREAD))
 		await waitFor(() =>
@@ -249,7 +255,7 @@ describe("useLibraryCommentThreads", () => {
 		answeredLater("library_comment_create")
 		const fromLena = threadOf("thread-lena", { anchor: OUTRO_COMMENT.anchor })
 
-		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn()))
+		act(() => hook.result.current.send(OUTRO_COMMENT, vi.fn(), vi.fn()))
 		await waitFor(() => expect(threads()).toHaveLength(3))
 		hear(fromLena)
 
@@ -261,11 +267,13 @@ describe("useLibraryCommentThreads", () => {
 		const { hook, threads } = await mountThreads()
 		const created = answeredLater("library_comment_create")
 		const keepTypedText = vi.fn()
+		const openSentThread = vi.fn()
 
 		act(() =>
 			hook.result.current.send(
 				{ anchor: INTRO_BLOCK, text: "Ship it", mentions: [] },
 				keepTypedText,
+				openSentThread,
 			),
 		)
 		await waitFor(() => expect(threads()).toHaveLength(3))
@@ -275,6 +283,7 @@ describe("useLibraryCommentThreads", () => {
 			expect(threads()).toEqual([INTRO_THREAD, BUDGET_THREAD]),
 		)
 		expect(keepTypedText).toHaveBeenCalledOnce()
+		expect(openSentThread).not.toHaveBeenCalled()
 		expect(noticeTitles()).toEqual([
 			"Couldn’t send the comment. Press Send to try again.",
 		])
