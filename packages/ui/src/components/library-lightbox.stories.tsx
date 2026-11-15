@@ -317,7 +317,7 @@ export const OverlayFitted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image fitted to the stage under the two islands, as artboard 7a draws it. Check that the overlay is #0B0B0C at 92 percent, that each island is #18181A at 85 percent behind a 16 px blur, 8 from the top and from its side, that the name reads #F5F5F5 at 14/16 medium with the details after it in #A3A3A3 at regular weight, that no island control fades its colour in, that the image, its corners rounded by 4, is fitted in a stage starting 56 below the top and 16 from the sides and the bottom, and that Previous and Next float over that stage, outside both islands, 16 from either side at its mid-height.",
+					"The image fitted to the stage under the two islands, as artboard 7a draws it. Check that the overlay is #0B0B0C at 92 percent, that each island is #18181A at 85 percent behind a 16 px blur, 8 from the top and from its side, that the name reads #F5F5F5 at 14/16 medium with the details after it in #A3A3A3 at regular weight, that no island, no island control and neither Previous nor Next casts a shadow, that no island control fades its colour in, that the image, its corners rounded by 4, is fitted in a stage starting 56 below the top and 16 from the sides and the bottom, and that Previous and Next float over that stage, outside both islands, 16 from either side at its mid-height.",
 			},
 		},
 	},
@@ -337,6 +337,7 @@ export const OverlayFitted = meta.story({
 				ISLAND_INSET,
 			)
 			await expect(island.getBoundingClientRect().height).toBe(40)
+			await expect(skin.boxShadow).toBe("none")
 		}
 		await expect(context.getBoundingClientRect().left - overlay.left).toBe(
 			ISLAND_INSET,
@@ -383,8 +384,10 @@ export const OverlayFitted = meta.story({
 		for (const control of [
 			...within(context).getAllByRole("button"),
 			...within(actions).getAllByRole("button"),
-		])
+		]) {
 			await expect(getComputedStyle(control).transitionDuration).toBe("0s")
+			await expect(getComputedStyle(control).boxShadow).toBe("none")
+		}
 
 		const previous = within(popup).getByRole("button", {
 			name: "Previous image",
@@ -393,6 +396,7 @@ export const OverlayFitted = meta.story({
 		const stageMiddle = (overlay.top + STAGE_TOP + stage.bottom) / 2
 		for (const step of [previous, next]) {
 			await expect(context.contains(step) || actions.contains(step)).toBe(false)
+			await expect(getComputedStyle(step).boxShadow).toBe("none")
 			const box = step.getBoundingClientRect()
 			await expect(box.top + box.height / 2).toBeCloseTo(stageMiddle, 0)
 		}
