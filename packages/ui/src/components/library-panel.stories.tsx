@@ -108,6 +108,9 @@ const LibraryArtboardFrame = ({
 	</div>
 )
 
+const pressedFillOf = (segment: HTMLElement) =>
+	slotIn(segment.parentElement as HTMLElement, "sliding-tabs-pill")
+
 const islandsIn = (canvasElement: HTMLElement) => {
 	const [title, actions, filters] = slotsIn(canvasElement, "header-island")
 	if (!title) throw new Error("The header lost its title island")
@@ -268,14 +271,18 @@ export const GridAll = meta.story({
 		const accent = getComputedStyle(slotIn(canvasElement, "library-panel"))
 			.getPropertyValue("--primary")
 			.trim()
-		await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+		await expect(getComputedStyle(pressedFillOf(all)).backgroundColor).toBe(
+			rgbOf(accent),
+		)
 		if (isInBrowserRunner()) {
 			const pointer = await realPointer()
 			try {
 				await pointer.hover(all)
 				await waitFor(() => expect(all.matches(":hover")).toBe(true))
 				await expect(all).toHaveAttribute("aria-pressed", "true")
-				await expect(getComputedStyle(all).backgroundColor).toBe(rgbOf(accent))
+				await expect(getComputedStyle(pressedFillOf(all)).backgroundColor).toBe(
+					rgbOf(accent),
+				)
 			} finally {
 				await pointer.unhover(all)
 			}
@@ -1673,19 +1680,17 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(all).lineHeight,
 		getComputedStyle(all).fontWeight,
 	]).toEqual([28, "0px", "12px", "16px", "500"])
-	await expectFill(all, "bg-primary")
+	await expectFill(pressedFillOf(all), "bg-primary", all)
 	await expect(getComputedStyle(all).color).toBe(
 		tokenStyleIn(all, "text-primary-foreground", "color"),
 	)
-	await expect(
-		getComputedStyle(slotIn(all, "library-filter-count")).color,
-	).toBe(
+	await expect(getComputedStyle(slotIn(all, "sliding-tab-count")).color).toBe(
 		tokenStyleIn(all, SELECTED_COUNT_INK[isDark ? "dark" : "light"], "color"),
 	)
 	await expect(getComputedStyle(images).fontWeight).toBe("400")
 	await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
 	await expect(
-		getComputedStyle(slotIn(images, "library-filter-count")).color,
+		getComputedStyle(slotIn(images, "sliding-tab-count")).color,
 	).toBe(tokenStyleIn(images, "text-muted-foreground", "color"))
 
 	await expect(actions.firstElementChild).toBe(searchField)
@@ -1974,7 +1979,7 @@ const controlStateRowId = (row: ControlStateRow | HeaderControlState) =>
 const inRow = (row: ControlStateRow | HeaderControlState, selector: string) =>
 	`#${controlStateRowId(row)} ${selector}`
 
-const IMAGES_SEGMENT = "[data-slot=library-filter]:nth-child(2)"
+const IMAGES_SEGMENT = "[data-slot=toggle-group-item]:nth-of-type(2)"
 const NEW_BOARD_ACTION = "[data-slot=button]:nth-last-child(2)"
 const NEW_DOCUMENT_ACTION = "[data-slot=button]:last-child"
 
@@ -2051,7 +2056,7 @@ export const FloatingHeaderControlStates = meta.story({
 		)
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
-		await expectFill(all, "bg-primary")
+		await expectFill(pressedFillOf(all), "bg-primary", all)
 		await expect(getComputedStyle(boardGlyph).color).toBe(
 			tokenStyleIn(newBoard, "text-soft-foreground", "color"),
 		)
@@ -2150,7 +2155,7 @@ export const FloatingHeaderFilterHover = meta.story({
 		)
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
-		await expectFill(all, "bg-primary")
+		await expectFill(pressedFillOf(all), "bg-primary", all)
 		await pointer.unhover(all)
 	},
 })
