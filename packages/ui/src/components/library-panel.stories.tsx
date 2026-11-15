@@ -1630,13 +1630,13 @@ const expectHeaderOnOneRow = async (
 		]).toEqual([
 			4,
 			"4px",
-			"12px",
+			"3px",
 			tokenStyleIn(
 				island,
 				"border border-selection-toolbar-border",
 				"borderTopColor",
 			),
-			tokenStyleIn(island, "shadow-selection-toolbar", "boxShadow"),
+			"none",
 		])
 		await expectFill(island, isDark ? "bg-card-raised" : "bg-card")
 	}
@@ -1662,7 +1662,7 @@ const expectHeaderOnOneRow = async (
 	await expect([
 		boxOf(group).height,
 		getComputedStyle(group).borderTopLeftRadius,
-	]).toEqual([32, "8px"])
+	]).toEqual([32, "0px"])
 	await expectFill(group, "bg-muted")
 
 	await expect(all).toHaveAttribute("aria-pressed", "true")
@@ -1672,7 +1672,7 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(all).fontSize,
 		getComputedStyle(all).lineHeight,
 		getComputedStyle(all).fontWeight,
-	]).toEqual([28, "6px", "12px", "16px", "500"])
+	]).toEqual([28, "0px", "12px", "16px", "500"])
 	await expectFill(all, "bg-primary")
 	await expect(getComputedStyle(all).color).toBe(
 		tokenStyleIn(all, "text-primary-foreground", "color"),
@@ -1693,7 +1693,7 @@ const expectHeaderOnOneRow = async (
 		boxOf(search).width,
 		boxOf(search).height,
 		getComputedStyle(search).borderTopLeftRadius,
-	]).toEqual([200, 32, "8px"])
+	]).toEqual([200, 32, "0px"])
 	await expectFill(search, "bg-muted", searchField)
 	await expect([
 		boxOf(searchGlyph).width,
@@ -1726,7 +1726,7 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(newBoard).lineHeight,
 		getComputedStyle(newBoard).fontWeight,
 		boxOf(boardGlyph).width,
-	]).toEqual([32, "8px", "13px", "16px", "500", 14])
+	]).toEqual([32, "0px", "13px", "16px", "500", 14])
 	await expect(getComputedStyle(newBoard).backgroundColor).toBe(TRANSPARENT)
 	await expect(getComputedStyle(boardGlyph).color).toBe(
 		tokenStyleIn(newBoard, "text-soft-foreground", "color"),

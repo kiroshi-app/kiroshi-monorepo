@@ -9,11 +9,13 @@ import {
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
+import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	HeaderIsland,
 	HeaderIslandButton,
 } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 const STATE_CONTROL_ID = "header-island-state-control"
 const STATE_CONTROL = `#${STATE_CONTROL_ID}`
@@ -45,9 +47,39 @@ const expectForegroundIcon = (control: HTMLElement) =>
 		tokenStyleIn(control, "text-foreground", "color"),
 	)
 
+const concentricRadius = (outerRadius: number, edgeGap: number) =>
+	`${Math.max(0, outerRadius - edgeGap)}px`
+
+const expectConcentricWithTheCard = async ({
+	canvasElement,
+}: StatePlayContext) => {
+	const { island } = controlsIn(canvasElement)
+	const card = island.closest<HTMLElement>("[data-content-card]")
+	if (!card) throw new Error("The island floats in no content card")
+	const cardRadius = Number.parseFloat(
+		getComputedStyle(card).borderTopLeftRadius,
+	)
+	const cardBox = card.getBoundingClientRect()
+	const islandBox = island.getBoundingClientRect()
+	const surface = getComputedStyle(island)
+
+	for (const edgeGap of [
+		islandBox.left - cardBox.left,
+		islandBox.top - cardBox.top,
+	]) {
+		await expect(edgeGap).toBe(9)
+		await expect(surface.borderTopLeftRadius).toBe(
+			concentricRadius(cardRadius, edgeGap),
+		)
+	}
+	await expect(surface.boxShadow).toBe("none")
+}
+
 const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
+	await expectConcentricWithTheCard({ canvasElement })
 	const { island, pins, routines } = controlsIn(canvasElement)
 	const surface = getComputedStyle(island)
+	const islandRadius = Number.parseFloat(surface.borderTopLeftRadius)
 	const isDark = island.closest(".dark") !== null
 	const islandBox = island.getBoundingClientRect()
 	const pinsBox = pins.getBoundingClientRect()
@@ -55,7 +87,6 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 	const icon = pins.querySelector("svg")?.getBoundingClientRect()
 
 	await expect([islandBox.width, islandBox.height]).toEqual([76, 40])
-	await expect(surface.borderTopLeftRadius).toBe("12px")
 	await expect(surface.borderTopWidth).toBe("1px")
 	await expect(surface.borderTopColor).toBe(
 		tokenStyleIn(
@@ -63,9 +94,6 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 			"border border-selection-toolbar-border",
 			"borderTopColor",
 		),
-	)
-	await expect(surface.boxShadow).toBe(
-		tokenStyleIn(island, "shadow-selection-toolbar", "boxShadow"),
 	)
 	await expect(surface.backgroundColor).toBe(
 		tokenStyleIn(
@@ -77,9 +105,16 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 
 	await expect(pins.tagName).toBe("BUTTON")
 	await expect([pinsBox.width, pinsBox.height]).toEqual([32, 32])
-	await expect(getComputedStyle(pins).borderTopLeftRadius).toBe("8px")
 	await expect(pinsBox.left - islandBox.left).toBe(5)
 	await expect(pinsBox.top - islandBox.top).toBe(4)
+	for (const edgeGap of [
+		pinsBox.left - islandBox.left,
+		pinsBox.top - islandBox.top,
+	])
+		await expect(getComputedStyle(pins).borderTopLeftRadius).toBe(
+			concentricRadius(islandRadius, edgeGap),
+		)
+	await expect(getComputedStyle(pins).boxShadow).toBe("none")
 	await expect(routinesBox.left - pinsBox.right).toBe(2)
 	await expect([icon?.width, icon?.height]).toEqual([16, 16])
 	await expect(getComputedStyle(pins).color).toBe(
@@ -89,6 +124,7 @@ const expectAtRest = async ({ canvasElement }: StatePlayContext) => {
 }
 
 const expectHover = async ({ canvasElement }: StatePlayContext) => {
+	await expectConcentricWithTheCard({ canvasElement })
 	if (!isInBrowserRunner()) return
 	const { pins } = controlsIn(canvasElement)
 	const pointer = await realPointer()
@@ -103,6 +139,7 @@ const expectHover = async ({ canvasElement }: StatePlayContext) => {
 }
 
 const expectPressed = async ({ canvasElement }: StatePlayContext) => {
+	await expectConcentricWithTheCard({ canvasElement })
 	if (!isInBrowserRunner()) return
 	const { pins } = controlsIn(canvasElement)
 	const pointer = await realPointer()
@@ -119,6 +156,7 @@ const expectPressed = async ({ canvasElement }: StatePlayContext) => {
 }
 
 const expectKeyboardFocus = async ({ canvasElement }: StatePlayContext) => {
+	await expectConcentricWithTheCard({ canvasElement })
 	const { pins, routines } = controlsIn(canvasElement)
 	if (!isInBrowserRunner()) {
 		await userEvent.tab()
@@ -146,6 +184,7 @@ const expectKeyboardFocus = async ({ canvasElement }: StatePlayContext) => {
 		tokenStyleIn(routines, "border border-ring", "borderTopColor"),
 	)
 	await expect(routines.getBoundingClientRect().width).toBe(32)
+	await expect(line.borderTopLeftRadius).toBe("0px")
 }
 
 const meta = preview.meta({
@@ -155,20 +194,30 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The raised surface a floating content header is made of: a 40px island holding `HeaderIslandButton` controls, one island on each side of the content area. It wears the selection toolbar border and shadow, the card fill in light and the raised card fill in dark. A control is a native button named by `aria-label`.",
+					"The raised surface a floating content header is made of: a 40px island holding `HeaderIslandButton` controls, one island on each side of the content area. It wears the selection toolbar border and no shadow, the card fill in light and the raised card fill in dark. Its corner is concentric with the content card it floats in: the card radius less the distance between their outer edges, and each control takes the island inner radius less the island padding, a square corner once that reaches zero. A control is a native button named by `aria-label`.",
 			},
 		},
 	},
 	render: () => (
-		<div className="flex">
-			<HeaderIsland>
-				<HeaderIslandButton aria-label="Pinned messages" id={STATE_CONTROL_ID}>
-					<Icons.Pin />
-				</HeaderIslandButton>
-				<HeaderIslandButton aria-label="Routines">
-					<Icons.Switch />
-				</HeaderIslandButton>
-			</HeaderIsland>
+		<div className="w-80">
+			<ContentCard isLandmark={false}>
+				<ScreenLayout
+					header={
+						<HeaderIsland>
+							<HeaderIslandButton
+								aria-label="Pinned messages"
+								id={STATE_CONTROL_ID}
+							>
+								<Icons.Pin />
+							</HeaderIslandButton>
+							<HeaderIslandButton aria-label="Routines">
+								<Icons.Switch />
+							</HeaderIslandButton>
+						</HeaderIsland>
+					}
+					isHeaderFloating
+				/>
+			</ContentCard>
 		</div>
 	),
 })
@@ -178,7 +227,7 @@ export const AtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read the island geometry with no pointer and no focus on it. Check the 40px island, its 12px corners, the 32px controls 5px from its sides, 4px from its top and 2px apart, and the icons in the soft foreground on no fill.",
+					"Reach for this to read the island geometry with no pointer and no focus on it. Check the 40px island 9px inside the card outer edge on both axes, its 3px corners, the card 12px less those 9px, no shadow under it, the 32px square controls 5px from its sides, 4px from its top and 2px apart, and the icons in the soft foreground on no fill.",
 			},
 		},
 	},
@@ -231,7 +280,7 @@ export const KeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when a control is reached with Tab. In the Vitest browser runner the play clicks the pins control and checks it takes focus with no ring, then tabs to Routines and checks the 1px ring line drawn around the 32px control and its 4px halo, both in the ring colour; here it only tabs to the pins control.",
+					"Reach for this when a control is reached with Tab. In the Vitest browser runner the play clicks the pins control and checks it takes focus with no ring, then tabs to Routines and checks the 1px ring line drawn around the 32px control, on its square corner, and its 4px halo, both in the ring colour; here it only tabs to the pins control.",
 			},
 		},
 	},

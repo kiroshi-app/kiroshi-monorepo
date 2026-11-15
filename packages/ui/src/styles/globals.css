@@ -248,6 +248,31 @@
 	--radius-4xl: calc(var(--radius-root) * 2.6);
 	--radius-bubble: calc(var(--radius-root) * 1.6);
 	--radius-control: calc(var(--radius-root) * 1.2);
+	--radius-header-island: calc(
+		var(--radius-control) -
+		1px -
+		var(--spacing) *
+		2
+	);
+	--radius-header-island-control-inline: max(
+		0px,
+		var(--radius-header-island) -
+		1px -
+		var(--spacing)
+	);
+	--radius-header-island-control-block: max(
+		0px,
+		var(--radius-header-island) -
+		1px -
+		var(--spacing) *
+		0.75
+	);
+	--radius-header-island-control:
+		var(--radius-header-island-control-inline) /
+		var(--radius-header-island-control-block);
+	--radius-header-island-segment:
+		max(0px, var(--radius-header-island-control-inline) - var(--spacing) * 0.5)
+		/ max(0px, var(--radius-header-island-control-block) - var(--spacing) * 0.5);
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
 	--text-reading--line-height: 1.375rem;

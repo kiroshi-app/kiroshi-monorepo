@@ -74,7 +74,7 @@ type FilterSegmentProps = {
 
 const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
 	<ToggleGroupItem
-		className="gap-1.5 rounded-sm border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-header-island-control-hover aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
+		className="gap-1.5 rounded-header-island-segment border border-transparent px-1.25 font-normal text-xs leading-4 transition-none hover:bg-header-island-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-header-island-control-hover aria-pressed:bg-primary aria-pressed:font-medium aria-pressed:text-primary-foreground"
 		data-slot="library-filter"
 		size="sm"
 		value={value}
@@ -105,7 +105,7 @@ const LibraryFilters = ({
 	return (
 		<ToggleGroup
 			aria-label={t("library.filters.label")}
-			className="rounded-md bg-muted p-0.5"
+			className="rounded-header-island-control bg-muted p-0.5"
 			data-slot="library-filters"
 			onValueChange={([pressed]) =>
 				onFilterChange((pressed as LibraryFilter | undefined) ?? filter)
@@ -186,7 +186,7 @@ const LibrarySearch = ({
 			/>
 			<Input
 				aria-label={t("library.search")}
-				className="text-ellipsis rounded-md bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact dark:placeholder:text-placeholder-foreground"
+				className="text-ellipsis rounded-header-island-control bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact dark:placeholder:text-placeholder-foreground"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
@@ -238,7 +238,7 @@ const LibraryHeader = ({ actions, filters, layout }: LibraryHeaderProps) => {
 }
 
 const ISLAND_ACTION =
-	"rounded-md px-1.75 text-compact leading-4 transition-none focus-visible:ring-4 active:translate-y-px! active:scale-none!"
+	"rounded-header-island-control px-1.75 text-compact leading-4 transition-none focus-visible:ring-4 active:translate-y-px! active:scale-none!"
 
 const GHOST_ISLAND_ACTION = cn(
 	ISLAND_ACTION,
