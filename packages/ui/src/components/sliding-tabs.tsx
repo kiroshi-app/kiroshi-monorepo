@@ -36,15 +36,11 @@ const tabVariants = cva("relative transition-none", {
 	},
 })
 
-const pillVariants = cva("", {
-	variants: {
-		kind: {
-			tabs: "rounded-lg bg-background dark:bg-input/30",
-			segments: "rounded-md bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
-			filters: "rounded-header-island-segment bg-primary",
-		},
-	},
-})
+const PILL_CLASS = {
+	tabs: "rounded-lg bg-background dark:bg-input/30",
+	segments: "rounded-md bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
+	filters: "rounded-header-island-segment bg-primary",
+} as const satisfies Record<SlidingTabsKind, string>
 
 const ACTIVE_TAB =
 	':scope > [aria-selected="true"], :scope > [aria-pressed="true"]'
@@ -104,21 +100,6 @@ const followActiveTab = (pill: HTMLSpanElement) => {
 	}
 }
 
-type SlidingTabsPillProps = {
-	kind: SlidingTabsKind
-}
-
-const SlidingTabsPill = ({ kind }: SlidingTabsPillProps) => {
-	return (
-		<span
-			aria-hidden="true"
-			className={pillVariants({ kind })}
-			data-slot="sliding-tabs-pill"
-			ref={followActiveTab}
-		/>
-	)
-}
-
 const SlidingTabsKindContext = createContext<SlidingTabsKind>("tabs")
 
 type SlidingTabsProps<Value extends SlidingTabsValue> = {
@@ -143,7 +124,12 @@ export const SlidingTabs = <Value extends SlidingTabsValue>({
 }: SlidingTabsProps<Value>) => {
 	const tabs = (
 		<SlidingTabsKindContext.Provider value={kind}>
-			<SlidingTabsPill kind={kind} />
+			<span
+				aria-hidden="true"
+				className={PILL_CLASS[kind]}
+				data-slot="sliding-tabs-pill"
+				ref={followActiveTab}
+			/>
 			{children}
 		</SlidingTabsKindContext.Provider>
 	)
