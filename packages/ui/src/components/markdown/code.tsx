@@ -36,7 +36,7 @@ import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/
 import { MarkdownRunSpan } from "@workspace/ui/components/markdown/run"
 import {
 	MARKDOWN_CODE_RUNS_ATTRIBUTE,
-	type MarkdownRun,
+	type MarkdownFenceRun,
 	runPiecesOf,
 } from "@workspace/ui/components/markdown/runs"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
@@ -56,12 +56,12 @@ interface MarkdownFenceProps {
 	language?: string
 	header?: ReactNode
 	body?: ReactNode
-	runs?: MarkdownRun[]
+	runs?: MarkdownFenceRun[]
 }
 
 type MarkdownFenceLinesProps = {
 	lines: CodeSourceLine[]
-	runs?: MarkdownRun[]
+	runs?: MarkdownFenceRun[]
 }
 
 type FenceNode = NonNullable<ExtraProps["node"]>
@@ -72,7 +72,7 @@ const LANGUAGE_PREFIX = "language-"
 
 const HIGHLIGHT_BUDGET_LINES = 200
 
-const NO_RUNS: MarkdownRun[] = []
+const NO_RUNS: MarkdownFenceRun[] = []
 
 const isCodeElement = (child: FenceChild): child is FenceElement =>
 	child.type === "element" && child.tagName === "code"
@@ -95,23 +95,27 @@ const languageOf = (node: FenceElement) => {
 		?.slice(LANGUAGE_PREFIX.length)
 }
 
-const runsOf = (node: FenceElement): MarkdownRun[] => {
+const runsOf = (node: FenceElement): MarkdownFenceRun[] => {
 	const written = node.properties?.[MARKDOWN_CODE_RUNS_ATTRIBUTE]
 	return typeof written === "string" ? JSON.parse(written) : NO_RUNS
 }
 
 const endOf = ({ offset, content }: CodeSourceLine) => offset + content.length
 
-const runEndsOf = (lines: CodeSourceLine[], runs: MarkdownRun[]) =>
+const runEndsOf = (lines: CodeSourceLine[], runs: MarkdownFenceRun[]) =>
 	new Map(
-		runs.map(({ id, start, end }) => [
-			id,
-			Math.max(
-				...lines
-					.filter((line) => start < endOf(line) && end > line.offset)
-					.map((line) => Math.min(end, endOf(line))),
-			),
-		]),
+		runs
+			.filter(({ isContinued }) => !isContinued)
+			.map(({ id, start, end }) => [
+				id,
+				start === end
+					? end
+					: Math.max(
+							...lines
+								.filter((line) => start < endOf(line) && end > line.offset)
+								.map((line) => Math.min(end, endOf(line))),
+						),
+			]),
 	)
 
 const partOf = (line: CodeSourceLine, from: number, to: number) => ({
@@ -163,17 +167,14 @@ export const MarkdownFenceLines = ({
 				runPiecesOf(runs, line.offset, endOf(line)).map((piece) => {
 					const from = line.offset + piece.from
 					const to = line.offset + piece.to
+					const key = `${from}:${to}:${piece.ids}`
 					return piece.ids.reduceRight<ReactNode>(
 						(children, id) => (
-							<MarkdownRunSpan
-								id={id}
-								isEnd={runEnds.get(id) === to}
-								key={from}
-							>
+							<MarkdownRunSpan id={id} isEnd={runEnds.get(id) === to} key={key}>
 								{children}
 							</MarkdownRunSpan>
 						),
-						<CodeLine key={from} {...partOf(line, from, to)} />,
+						<CodeLine key={key} {...partOf(line, from, to)} />,
 					)
 				})
 			)}
@@ -234,7 +235,7 @@ export const MarkdownFence = ({
 					</span>
 				)}
 			</pre>
-			<span className="absolute top-2 right-2">
+			<span className="absolute top-2 right-2" data-slot="markdown-fence-copy">
 				<TooltipButton
 					variant="ghost"
 					size="icon-xs"

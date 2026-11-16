@@ -4,6 +4,10 @@ type MarkdownRun = {
 	end: number
 }
 
+type MarkdownFenceRun = MarkdownRun & {
+	isContinued?: boolean
+}
+
 type RemarkRunsOptions = {
 	runs: MarkdownRun[]
 }
@@ -28,6 +32,10 @@ type Cut = { from: number; to: number; id: string }
 
 type RunPiece = { from: number; to: number; ids: string[] }
 
+type CodeLineSpan = { from: number; to: number; at: number }
+
+const FENCE_OPENING = /^(?:`{3,}|~{3,})/
+
 const runNodeOf = (id: string, child: MdastNode): MdastNode => ({
 	type: "markdownRun",
 	data: { hName: "span", hProperties: { [MARKDOWN_RUN_ATTRIBUTE]: id } },
@@ -36,16 +44,43 @@ const runNodeOf = (id: string, child: MdastNode): MdastNode => ({
 
 const isCaret = ({ start, end }: MarkdownRun) => start === end
 
-const textSpansOf = (node: MdastNode): [number, number][] => {
+const codeLinesOf = (node: MdastNode, source: string): CodeLineSpan[] => {
+	const from = node.position?.start.offset
+	const to = node.position?.end.offset
+	if (from === undefined || to === undefined || !node.value) return []
+	const [opening = "", ...below] = source.slice(from, to).split("\n")
+	const isFenced = FENCE_OPENING.test(opening)
+	const written = isFenced ? below : [opening, ...below]
+	const shown = node.value.split("\n")
+	if (shown.some((line, index) => !written[index]?.endsWith(line))) return []
+
+	const lines: CodeLineSpan[] = []
+	let writtenEnd = isFenced ? from + opening.length : from - 1
+	let at = 0
+	for (const [index, line] of shown.entries()) {
+		writtenEnd += 1 + (written[index]?.length ?? 0)
+		lines.push({ from: writtenEnd - line.length, to: writtenEnd, at })
+		at += line.length + 1
+	}
+	return lines
+}
+
+const caretSpansOf = (node: MdastNode, source: string): [number, number][] => {
 	const from = node.position?.start.offset
 	const to = node.position?.end.offset
 	if (node.type === "text")
 		return from === undefined || to === undefined ? [] : [[from, to]]
-	return (node.children ?? []).flatMap(textSpansOf)
+	if (node.type === "code")
+		return codeLinesOf(node, source).map((line) => [line.from, line.to])
+	return (node.children ?? []).flatMap((child) => caretSpansOf(child, source))
 }
 
-const caretsSnappedToText = (runs: MarkdownRun[], tree: MdastNode) => {
-	const spans = textSpansOf(tree)
+const caretsSnappedToText = (
+	runs: MarkdownRun[],
+	tree: MdastNode,
+	source: string,
+) => {
+	const spans = caretSpansOf(tree, source)
 	const last = spans.at(-1)
 	if (!last) return runs
 	return runs.map((run) => {
@@ -120,25 +155,22 @@ const splitRuns = (node: MdastNode, runs: MarkdownRun[]) => {
 	)
 }
 
-const codeRunsOf = (
-	node: MdastNode,
-	runs: MarkdownRun[],
-	source: string,
-): MarkdownRun[] => {
-	const from = node.position?.start.offset
-	const to = node.position?.end.offset
-	if (from === undefined || to === undefined) return []
-	const bodyFrom = from + source.slice(from, to).indexOf("\n") + 1
-	const bodyTo = bodyFrom + (node.value ?? "").length
-	if (source.slice(bodyFrom, bodyTo) !== node.value) return []
-	return cutsWithin(runs, bodyFrom, bodyTo).flatMap((cut) =>
-		cut.from < cut.to ? [{ id: cut.id, start: cut.from, end: cut.to }] : [],
-	)
-}
+const codeRunsOf = (lines: CodeLineSpan[], runs: MarkdownRun[]) =>
+	runs.flatMap((run): MarkdownRun[] => {
+		const parts = lines.flatMap(({ from, to, at }) =>
+			cutsWithin([run], from, to).map((cut) => ({
+				start: at + cut.from,
+				end: at + cut.to,
+			})),
+		)
+		const first = parts[0]
+		const last = parts.at(-1)
+		return first && last
+			? [{ id: run.id, start: first.start, end: last.end }]
+			: []
+	})
 
-const markCodeRuns = (node: MdastNode, runs: MarkdownRun[], source: string) => {
-	const codeRuns = codeRunsOf(node, runs, source)
-	if (codeRuns.length === 0) return
+const markCodeRuns = (node: MdastNode, codeRuns: MarkdownFenceRun[]) => {
 	node.data = {
 		...node.data,
 		hProperties: {
@@ -152,8 +184,9 @@ const remarkRuns =
 	({ runs: received }: RemarkRunsOptions) =>
 	(tree: MdastNode, file: MarkedFile) => {
 		const source = String(file.value ?? "")
-		const runs = caretsSnappedToText(received, tree)
+		const runs = caretsSnappedToText(received, tree, source)
 		const lastPieces = new Map<string, MdastNode>()
+		const fences = new Map<MdastNode, MarkdownRun[]>()
 
 		const noteLastPieces = (node: MdastNode) => {
 			if (node.type !== "markdownRun") return
@@ -162,6 +195,13 @@ const remarkRuns =
 				node,
 			)
 			node.children?.forEach(noteLastPieces)
+		}
+
+		const noteFence = (node: MdastNode) => {
+			const codeRuns = codeRunsOf(codeLinesOf(node, source), runs)
+			if (codeRuns.length === 0) return
+			fences.set(node, codeRuns)
+			for (const { id } of codeRuns) lastPieces.set(id, node)
 		}
 
 		const rewrite = (node: MdastNode) => {
@@ -173,7 +213,7 @@ const remarkRuns =
 
 			for (const child of node.children) {
 				if (child.type === "markdownRun") noteLastPieces(child)
-				else if (child.type === "code") markCodeRuns(child, runs, source)
+				else if (child.type === "code") noteFence(child)
 				else rewrite(child)
 			}
 		}
@@ -181,14 +221,25 @@ const remarkRuns =
 		rewrite(tree)
 
 		for (const piece of lastPieces.values())
-			if (piece.data?.hProperties)
+			if (piece.type === "markdownRun" && piece.data?.hProperties)
 				piece.data.hProperties[MARKDOWN_RUN_END_ATTRIBUTE] = "true"
+
+		for (const [fence, codeRuns] of fences)
+			markCodeRuns(
+				fence,
+				codeRuns.map((run) =>
+					lastPieces.get(run.id) === fence
+						? run
+						: { ...run, isContinued: true },
+				),
+			)
 	}
 
 export {
 	MARKDOWN_CODE_RUNS_ATTRIBUTE,
 	MARKDOWN_RUN_ATTRIBUTE,
 	MARKDOWN_RUN_END_ATTRIBUTE,
+	type MarkdownFenceRun,
 	type MarkdownRun,
 	remarkRuns,
 	runPiecesOf,

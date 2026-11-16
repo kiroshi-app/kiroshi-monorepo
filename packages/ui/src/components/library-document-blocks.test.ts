@@ -13,6 +13,7 @@ import {
 	checklistRowsOf,
 	checklistSourceOf,
 	codeLanguageOf,
+	codeSpansOf,
 	conversionsOf,
 	convertSource,
 	foundAnchorIn,
@@ -336,6 +337,33 @@ describe("library rich block sources", () => {
 			"```web-page\nurl: https://example.org/a\ntitle: A\nsite: Example\n```",
 		)
 		expect(webPageFieldsOf("```web-page\n```")).toEqual({})
+	})
+})
+
+describe("codeSpansOf", () => {
+	const spanOf = (source: string, from: string, to: string) => ({
+		from: source.indexOf(from),
+		to: source.lastIndexOf(to) + to.length,
+	})
+
+	it("spans a block that is a fence, from its opening to its closing", () => {
+		const source = "```ts\nship()\n```"
+
+		expect(codeSpansOf(source)).toEqual([{ from: 0, to: source.length }])
+	})
+
+	it("spans a fence indented under a list item, and none of the item text", () => {
+		const source = "- Run it:\n\n  ```\n  ship()\n  ```\n\n  Then rest."
+
+		expect(codeSpansOf(source)).toEqual([spanOf(source, "```", "```")])
+	})
+
+	it("spans nothing in a block that holds no code", () => {
+		expect(codeSpansOf("- Run `ship()` first")).toEqual([])
+	})
+
+	it("leaves out a fence drawn as a gallery", () => {
+		expect(codeSpansOf("```gallery\n- src: a.jpg\n```")).toEqual([])
 	})
 })
 
