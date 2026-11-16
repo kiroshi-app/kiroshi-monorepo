@@ -391,6 +391,9 @@ const chat = {
 		counted_many: "Tableau · {{count}} lignes",
 		counted_other: "Tableau · {{count}} lignes",
 		downloadCsv: "Télécharger en CSV",
+		saved: "Tableau enregistré sous {{name}}",
+		saveFailed:
+			"Impossible d’enregistrer le tableau. Appuyez sur Télécharger en CSV pour réessayer.",
 	},
 	diagram: {
 		label: "Diagramme",

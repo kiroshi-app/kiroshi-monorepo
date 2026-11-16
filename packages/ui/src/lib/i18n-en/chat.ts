@@ -360,6 +360,8 @@ const chat = {
 		counted_one: "Table · {{count}} row",
 		counted_other: "Table · {{count}} rows",
 		downloadCsv: "Download CSV",
+		saved: "Table saved as {{name}}",
+		saveFailed: "Couldn’t save the table. Press Download CSV to try again.",
 	},
 	diagram: {
 		label: "Diagram",
