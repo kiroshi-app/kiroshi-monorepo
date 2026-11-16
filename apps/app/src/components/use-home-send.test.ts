@@ -164,7 +164,7 @@ const createMemberWorkspace = async () => {
 			discardConversation: host.deleteConversation,
 		},
 		openConversation: vi.fn(),
-		startedIds: () => startedIds,
+		startedIds,
 		listedIds: async () =>
 			(await host.conversations(HOST_SPACE_ID)).map(({ id }) => id),
 		pageReadIds: () => loadPage.mock.calls.map(([id]) => id),
@@ -398,7 +398,7 @@ describe("a Home send on a member device", () => {
 		await waitFor(() =>
 			expect(noticeTitles()).toEqual(["Couldn’t send that request"]),
 		)
-		const [discardedId] = member.startedIds()
+		const [discardedId] = member.startedIds
 		expect(member.pageReadIds()).toContain(discardedId)
 		member.forgetPageReads()
 
