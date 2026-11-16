@@ -37,11 +37,8 @@
 					cookie: document.cookie,
 				})
 
-			let sequence = 0
-
 			const beat = () => {
-				const payload = { instance, secret, sequence, snapshot: integritySnapshot() }
-				sequence += 1
+				const payload = { instance, secret, snapshot: integritySnapshot() }
 				invoke("plugin:event|emit", { event: "spike-heartbeat", payload }).catch(
 					(cause) => {
 						document.title = `heartbeat failed: ${cause}`
