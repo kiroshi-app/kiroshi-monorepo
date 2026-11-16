@@ -1570,8 +1570,8 @@ const paintedFillOf = (control: HTMLElement) => {
 	if (!context) throw new Error("Nothing here can paint a colour")
 	context.fillStyle = getComputedStyle(control).backgroundColor
 	context.fillRect(0, 0, 1, 1)
-	const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data
-	const channels = [red, green, blue].map((channel) =>
+	const { data } = context.getImageData(0, 0, 1, 1)
+	const channels = Array.from(data.slice(0, 3), (channel) =>
 		channel.toString(16).padStart(2, "0"),
 	)
 	return `#${channels.join("")}`
