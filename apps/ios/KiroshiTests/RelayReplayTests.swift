@@ -623,4 +623,121 @@ struct RelayReplayTests {
 
         #expect(afterTheRefusal == [.event(1), .reread, .event(9), .event(99)])
     }
+
+    static func unstamped(_ payload: Int) -> String {
+        #"{"event":{"event":"test://unstamped","payload":\#(payload)}}"#
+    }
+
+    func sharedSpaceCall(on socket: ScriptedRelaySocket) async throws -> SentCall {
+        for await text in socket.sent {
+            guard let call = try? JSONDecoder().decode(SentCall.self, from: Data(text.utf8))
+            else { continue }
+            if call.command == "relay_shared_space" {
+                return call
+            }
+        }
+        throw CancellationError()
+    }
+
+    static func stored(_ seq: Int, stamp: String?) -> String {
+        guard let stamp else {
+            return
+                #"{"event":{"event":"conversation://message-stored","payload":\#(RelayResyncTests.message(seq))}}"#
+        }
+        return frame(
+            event: "conversation://message-stored", payload: RelayResyncTests.message(seq),
+            stamp: stamp)
+    }
+
+    @Test func socketsThatCloseBeforeTheyAreOnlineLeaveNothingHeldAndEachSubscriberRereadsOnce()
+        async throws
+    {
+        let pageCalls = RelayResyncTests.CallCount()
+        let juniper = Companion(id: "juniper", name: "Juniper")
+        let store = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let connection = makeConnection()
+        let heard = Listener(await connection.updates())
+        let following = Task { await store.follow(connection) }
+        while await connection.subscriberCount < 2 {
+            await Task.yield()
+        }
+        await connection.start()
+        var joining: Listener?
+        for seq in 3...5 {
+            if seq > 3 {
+                await clock.wakeNextSleep(of: .seconds(1))
+            }
+            let silent = ScriptedRelaySocket()
+            await transport.nextOpening().accept(silent)
+            let sharedSpace = try await sharedSpaceCall(on: silent)
+            silent.push(.frame(Self.stored(seq, stamp: seq == 3 ? #""epoch":"e-1","seq":1"# : nil)))
+            silent.push(
+                .frame(#"{"id":\#(sharedSpace.id),"status":503,"body":"the host is restarting"}"#))
+            await heard.dropped()
+            let held = await connection.heldEventCount
+
+            #expect(held == 0)
+            if seq == 4 {
+                joining = Listener(await connection.updates())
+            }
+        }
+
+        let back = TestHost(
+            messages: ["chat-juniper": (1...5).map(RelayResyncTests.message)],
+            answer: { call in
+                if call.command == "conversation_message_page" {
+                    _ = pageCalls.next()
+                }
+                return nil
+            })
+        await clock.wakeNextSleep(of: .seconds(1))
+        await transport.nextOpening().accept(back.socket)
+        let (call, args) = try await resumed(on: back)
+        back.reply(Self.resumeAnswer(call, token: args.token, #""replayed":0"#))
+        await waitUntil { store.phase == .loaded && store.entries.count == 5 }
+        back.reply(Self.unstamped(99))
+        let heardOnline = await heard.next(through: .event(99))
+        let joiningOnline = await joining?.next(through: .event(99))
+
+        #expect(args.since == 1)
+        #expect(heardOnline == [.reread, .event(99)])
+        #expect(joiningOnline == [.reread, .event(99)])
+        #expect(store.entries.map(\.id) == (1...5).map { "m\($0)" })
+        #expect(pageCalls.value == 1)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func eventsPastTheBoundBeforeTheSocketIsOnlineAreDroppedForOneRereadEach() async throws {
+        let bound = RelayConnection.heldEventsBound
+        let connection = makeConnection()
+        let first = Listener(await connection.updates())
+        let second = Listener(await connection.updates())
+        await connection.start()
+        let socket = ScriptedRelaySocket()
+        await transport.nextOpening().accept(socket)
+        for payload in 1...bound {
+            socket.push(.frame(Self.unstamped(payload)))
+        }
+        while await connection.heldEventCount < bound {
+            await Task.yield()
+        }
+
+        socket.push(.frame(Self.unstamped(bound + 1)))
+        while await connection.heldEventCount == bound {
+            await Task.yield()
+        }
+        let held = await connection.heldEventCount
+        #expect(held == 0)
+        let sharedSpace = try await sharedSpaceCall(on: socket)
+        socket.push(.frame(#"{"id":\#(sharedSpace.id),"status":200,"body":{"spaceId":"s-1"}}"#))
+        socket.push(.frame(Self.unstamped(99)))
+
+        let firstOnline = await first.next(through: .event(99))
+        let secondOnline = await second.next(through: .event(99))
+
+        #expect(firstOnline == [.reread, .event(99)])
+        #expect(secondOnline == [.reread, .event(99)])
+        await connection.stop()
+    }
 }
