@@ -199,7 +199,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The main-area Agents page of a space, artboards A1 to A4. A header carries the title, how many agents the space holds and Create an agent; under it a caption names the space, then one card per agent, three to a row. A card picks its agent anywhere but on its actions button, which opens Open settings, Open in a new tab, Duplicate, Spaces and Delete. Every story draws the page inside the main card, 992 wide as the artboards do.",
+					"The main-area Agents page of a space, artboards A1 to A4. A header carries the title, how many agents the space holds and Create an agent; under it a caption names the space, then one card per agent, three to a row. A card picks its agent anywhere but on its actions button, which opens Open settings, Open in a new tab, Duplicate, Spaces and Delete. Every story draws the page inside the main card, 992 wide as the artboards do, `Narrow` aside.",
 			},
 		},
 	},

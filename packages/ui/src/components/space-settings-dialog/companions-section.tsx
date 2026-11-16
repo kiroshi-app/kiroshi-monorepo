@@ -13,10 +13,10 @@ import { cn } from "@workspace/ui/lib/utils"
 const CARD =
 	"flex w-full min-w-0 cursor-pointer flex-col gap-3.5 rounded-xl border border-border bg-muted/40 p-4 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
 
+const HEAD_BESIDE_ACTIONS = "pe-10"
+
 const CARD_ACTIONS =
 	"pointer-events-none absolute end-4 top-4 m-px flex h-10 items-center *:pointer-events-auto"
-
-const HEAD_BESIDE_ACTIONS = "pe-10"
 
 type CompanionSummary = {
 	id: string
@@ -71,7 +71,7 @@ const CompanionCard = ({
 				<span
 					className={cn(
 						"flex w-full min-w-0 items-center gap-3",
-						actions ? HEAD_BESIDE_ACTIONS : undefined,
+						actions && HEAD_BESIDE_ACTIONS,
 					)}
 				>
 					<BotIdentityAvatar
