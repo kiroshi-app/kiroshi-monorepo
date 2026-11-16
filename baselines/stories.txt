@@ -1319,6 +1319,8 @@ layout-threadlayout--loading-older-messages
 layout-threadlayout--long-agent-message-above-the-prompt
 layout-threadlayout--long-content
 layout-threadlayout--older-messages
+layout-threadlayout--opening
+layout-threadlayout--opening-held-back-by-skeleton
 layout-threadlayout--outside-content-card
 layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
