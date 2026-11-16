@@ -4,6 +4,7 @@ const settings = {
 	},
 	screen: {
 		back: "Retour aux conversations",
+		close: "Fermer les réglages",
 		backToAgents: "Retour aux agents",
 		menu: "Réglages",
 		subtitle: {

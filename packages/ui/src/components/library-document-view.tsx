@@ -32,7 +32,10 @@ import {
 } from "@workspace/ui/components/library-item-menu"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
-import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	ScreenLayout,
+	ScreenLayoutFloatingHeader,
+} from "@workspace/ui/components/screen-layout"
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { cn } from "@workspace/ui/lib/utils"
@@ -146,40 +149,42 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	const shownName = libraryDisplayName(item.name, t)
 
 	return (
-		<div className={BAR_ROW} data-slot="library-document-bar">
-			<HeaderIsland className={LIBRARY_ISLAND_CONTEXT}>
-				<nav className="flex min-w-0 items-center gap-0.5">
-					<LibraryIslandButton
-						aria-label={t("library.document.back")}
-						onClick={onBack}
-					>
-						<Icons.Previous aria-hidden="true" />
-					</LibraryIslandButton>
-					<span
-						aria-current="page"
-						className={LIBRARY_ISLAND_TITLE}
-						title={shownName}
-					>
-						{shownName}
-					</span>
-				</nav>
-			</HeaderIsland>
-			<LibraryItemBarActions
-				actions={handlersFor(actions, item)}
-				item={item}
-				leading={
-					<>
-						<LibraryPresenceInIsland value={true}>
-							{presence}
-						</LibraryPresenceInIsland>
-						{isReadOnly ? <LibraryDocumentReadOnly /> : null}
-					</>
-				}
-				menuFinalFocus={menuFinalFocus}
-				onClose={onBack}
-				surface="document"
-			/>
-		</div>
+		<ScreenLayoutFloatingHeader>
+			<div className={BAR_ROW} data-slot="library-document-bar">
+				<HeaderIsland className={LIBRARY_ISLAND_CONTEXT}>
+					<nav className="flex min-w-0 items-center gap-0.5">
+						<LibraryIslandButton
+							aria-label={t("library.document.back")}
+							onClick={onBack}
+						>
+							<Icons.Previous aria-hidden="true" />
+						</LibraryIslandButton>
+						<span
+							aria-current="page"
+							className={LIBRARY_ISLAND_TITLE}
+							title={shownName}
+						>
+							{shownName}
+						</span>
+					</nav>
+				</HeaderIsland>
+				<LibraryItemBarActions
+					actions={handlersFor(actions, item)}
+					item={item}
+					leading={
+						<>
+							<LibraryPresenceInIsland value={true}>
+								{presence}
+							</LibraryPresenceInIsland>
+							{isReadOnly ? <LibraryDocumentReadOnly /> : null}
+						</>
+					}
+					menuFinalFocus={menuFinalFocus}
+					onClose={onBack}
+					surface="document"
+				/>
+			</div>
+		</ScreenLayoutFloatingHeader>
 	)
 }
 

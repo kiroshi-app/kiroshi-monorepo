@@ -23,7 +23,10 @@ import {
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
-import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	ScreenLayout,
+	ScreenLayoutFloatingHeader,
+} from "@workspace/ui/components/screen-layout"
 import {
 	SlidingTab,
 	SlidingTabCount,
@@ -194,34 +197,36 @@ const LibraryHeader = ({ actions, filters, layout }: LibraryHeaderProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<header
-			className="flex w-full min-w-0 flex-col gap-2"
-			data-slot="library-header"
-		>
-			<div className="flex justify-between gap-2">
-				<HeaderIsland className="gap-1">
-					<h1 className="flex h-8 items-center px-2 font-medium text-sm leading-4">
-						{t("library.title")}
-					</h1>
-					{filters ? (
-						<div className={cn("contents", layout.filtersBesideTitle)}>
-							{filters}
-						</div>
-					) : null}
-				</HeaderIsland>
-				{actions}
-			</div>
-			{filters ? (
-				<HeaderIsland
-					className={cn(
-						"scrollbar-hide max-w-full self-start overflow-x-auto",
-						layout.filtersRow,
-					)}
-				>
-					{filters}
-				</HeaderIsland>
-			) : null}
-		</header>
+		<ScreenLayoutFloatingHeader>
+			<header
+				className="flex w-full min-w-0 flex-col gap-2"
+				data-slot="library-header"
+			>
+				<div className="flex justify-between gap-2">
+					<HeaderIsland className="gap-1">
+						<h1 className="flex h-8 items-center px-2 font-medium text-sm leading-4">
+							{t("library.title")}
+						</h1>
+						{filters ? (
+							<div className={cn("contents", layout.filtersBesideTitle)}>
+								{filters}
+							</div>
+						) : null}
+					</HeaderIsland>
+					{actions}
+				</div>
+				{filters ? (
+					<HeaderIsland
+						className={cn(
+							"scrollbar-hide max-w-full self-start overflow-x-auto",
+							layout.filtersRow,
+						)}
+					>
+						{filters}
+					</HeaderIsland>
+				) : null}
+			</header>
+		</ScreenLayoutFloatingHeader>
 	)
 }
 

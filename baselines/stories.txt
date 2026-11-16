@@ -1279,10 +1279,11 @@ foundations-token-contrast--tinted-primary-dark
 foundations-token-contrast--tinted-primary-light
 foundations-token-contrast--tinted-user-bubble-meets-aa-text
 foundations-token-contrast--warning-meets-aa-non-text
+layout-appheader--control-states
+layout-appheader--control-states-dark
 layout-appheader--default
 layout-appheader--trailing-inset
 layout-appheader--windows-caption
-layout-appheader--with-action
 layout-contentcard--default
 layout-contentcard--with-nested-card
 layout-fullwindowlayout--default
@@ -1299,6 +1300,7 @@ layout-screenlayout--floating-header-late-fade-stop
 layout-screenlayout--floating-header-with-custom-scroller
 layout-screenlayout--full-width-in-wide-card
 layout-screenlayout--header-and-content
+layout-screenlayout--header-bar-under-the-floating-props
 layout-screenlayout--header-content-and-footer
 layout-screenlayout--header-only
 layout-threadlayout--default
@@ -1946,7 +1948,6 @@ navigation-headerconversationbutton--themes-group-free-hue
 navigation-headerconversationbutton--themes-group-picked-icon
 navigation-headeridentitybutton--default
 navigation-headeridentitybutton--expanded
-navigation-headeridentitybutton--expanded-in-island
 navigation-headeridentitybutton--free-hue
 navigation-headeridentitybutton--in-layout
 navigation-headeridentitybutton--long-content
@@ -2210,6 +2211,7 @@ navigation-missionspage--long-text
 navigation-missionspage--menu-on-a-row
 navigation-missionspage--missions-4-a
 navigation-missionspage--missions-dark-4-b
+navigation-missionspage--missions-narrow-4-d
 navigation-missionspage--missions-scrolled-4-c
 navigation-missionspage--narrow
 navigation-missionspage--unfolded
@@ -2676,6 +2678,7 @@ settings-bot-companionsettingsscreen--runtime
 settings-bot-companionsettingsscreen--secrets
 settings-bot-companionsettingsscreen--settings-8-a
 settings-bot-companionsettingsscreen--settings-dark-8-b
+settings-bot-companionsettingsscreen--settings-narrow-8-d
 settings-bot-companionsettingsscreen--settings-scrolled-8-c
 settings-bot-companionsettingsscreen--skills
 settings-bot-dangerzone--cancelled

@@ -15,7 +15,10 @@ import {
 	HeaderIslandButton,
 } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
-import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	ScreenLayout,
+	ScreenLayoutFloatingHeader,
+} from "@workspace/ui/components/screen-layout"
 
 const STATE_CONTROL_ID = "header-island-state-control"
 const STATE_CONTROL = `#${STATE_CONTROL_ID}`
@@ -203,17 +206,19 @@ const meta = preview.meta({
 			<ContentCard isLandmark={false}>
 				<ScreenLayout
 					header={
-						<HeaderIsland>
-							<HeaderIslandButton
-								aria-label="Pinned messages"
-								id={STATE_CONTROL_ID}
-							>
-								<Icons.Pin />
-							</HeaderIslandButton>
-							<HeaderIslandButton aria-label="Routines">
-								<Icons.Switch />
-							</HeaderIslandButton>
-						</HeaderIsland>
+						<ScreenLayoutFloatingHeader>
+							<HeaderIsland>
+								<HeaderIslandButton
+									aria-label="Pinned messages"
+									id={STATE_CONTROL_ID}
+								>
+									<Icons.Pin />
+								</HeaderIslandButton>
+								<HeaderIslandButton aria-label="Routines">
+									<Icons.Switch />
+								</HeaderIslandButton>
+							</HeaderIsland>
+						</ScreenLayoutFloatingHeader>
 					}
 					isHeaderFloating
 				/>

@@ -4,6 +4,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	COLUMN_WIDTH_CAP,
+	expectStaticHeaderBar,
 	probedStyleOf,
 	slotIn,
 	slotsIn,
@@ -16,7 +17,10 @@ import {
 	HeaderIslandButton,
 } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
-import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	ScreenLayout,
+	ScreenLayoutFloatingHeader,
+} from "@workspace/ui/components/screen-layout"
 import { Button } from "@workspace/ui/components/ui/button"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 
@@ -64,7 +68,7 @@ export const HeaderOnly = meta.story({
 		const header = canvas.getByRole("banner")
 
 		await expect(header.parentElement).toBe(layout)
-		await expect(header.getBoundingClientRect().height).toBe(48)
+		await expect(header.getBoundingClientRect().height).toBe(56)
 		await expect(layout.children).toHaveLength(2)
 		await expect(layout.lastElementChild).toBe(
 			slotIn(canvasElement, "screen-layout-scroller"),
@@ -200,8 +204,9 @@ const RELEASE_NOTES = Array.from(
 
 const FLOATING = {
 	isHeaderFloating: true,
+	contentClassName: "pt-20",
 	header: (
-		<>
+		<ScreenLayoutFloatingHeader>
 			<HeaderIsland>
 				<HeaderIslandButton aria-label="Sidebar">
 					<Icons.Sidebar />
@@ -218,7 +223,7 @@ const FLOATING = {
 					<Icons.More />
 				</HeaderIslandButton>
 			</HeaderIsland>
-		</>
+		</ScreenLayoutFloatingHeader>
 	),
 	children: (
 		<>
@@ -299,6 +304,43 @@ const expectFloatingHeader = async (
 	scroller.scrollTo({ top: SCROLLED_AWAY })
 	await waitFor(() => expect(fadesIn(canvasElement)).toHaveLength(1))
 }
+
+export const HeaderBarUnderTheFloatingProps = meta.story({
+	args: {
+		isHeaderFloating: true,
+		header: <AppHeader isFloating leading="Release notes" />,
+		children: FLOATING.children,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the app still passes `isHeaderFloating` to the layout and `isFloating` to the header bar. Check that neither changes anything: the bar stays in the flow above the scroller, full width, with its rule, and the column starts under it at its usual 32px; once scrolled the notes leave at the edge of the bar, which keeps its place with no fade and no shadow. Only a header made of islands, wrapped in `ScreenLayoutFloatingHeader`, still floats: pick `FloatingHeader` for that one.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = layoutIn(canvasElement)
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const bar = await expectStaticHeaderBar(layout)
+		const firstLine = within(canvasElement).getByText(RELEASE_NOTES[0])
+
+		await expect(scroller.getBoundingClientRect().top).toBe(
+			bar.getBoundingClientRect().bottom,
+		)
+		await expect(
+			firstLine.getBoundingClientRect().top -
+				bar.getBoundingClientRect().bottom,
+		).toBe(32)
+
+		scroller.scrollTo({ top: SCROLLED_AWAY })
+		await waitFor(() => expect(scroller.scrollTop).toBe(SCROLLED_AWAY))
+		await expect(firstLine.getBoundingClientRect().bottom).toBeLessThan(
+			bar.getBoundingClientRect().bottom,
+		)
+		await expectStaticHeaderBar(layout)
+	},
+})
 
 export const FloatingHeader = meta.story({
 	args: FLOATING,

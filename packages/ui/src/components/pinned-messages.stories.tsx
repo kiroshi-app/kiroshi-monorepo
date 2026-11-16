@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	opaque,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
@@ -60,10 +61,10 @@ const isReachable = (element: Element) => {
 }
 
 const expectHeaderRestColour = async (trigger: HTMLElement) => {
-	const header = trigger.closest("[data-slot='app-header']")
 	const icon = trigger.querySelector("svg")
-	if (!header || !icon) throw new Error("The trigger sits outside a header")
-	const restColour = getComputedStyle(header).color
+	if (!trigger.closest("[data-slot='app-header-capsule']") || !icon)
+		throw new Error("The trigger sits outside a header capsule")
+	const restColour = tokenStyleIn(trigger, "text-soft-foreground", "color")
 
 	await expect(getComputedStyle(trigger).color).toBe(restColour)
 	await expect(getComputedStyle(icon).color).toBe(restColour)
@@ -158,7 +159,7 @@ export const OnePinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"One message pinned, the button at rest. Check that the pin and the number wear the same colour as the button with nothing pinned and as every other ghost button of the header, with no muted tone and no fade, and that the number keeps tabular figures and the count in the button's name. `apps/app/src/components/thread-screen.tsx` mounts it in the header of every thread.",
+					"One message pinned, the button at rest. Check that the pin and the number wear the same colour as the button with nothing pinned, the soft foreground every capsule button of the header rests in, with no fade, and that the number keeps tabular figures and the count in the button's name. `apps/app/src/components/thread-screen.tsx` mounts it in the header of every thread.",
 			},
 		},
 	},

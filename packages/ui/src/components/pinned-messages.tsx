@@ -4,9 +4,9 @@ import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	HeaderIslandButton,
-	useIsInHeaderIsland,
-} from "@workspace/ui/components/header-island"
+	AppHeaderButton,
+	useIsInAppHeader,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	PopoverPanel,
@@ -92,7 +92,7 @@ const PinnedMessages = ({
 }: PinnedMessagesProps) => {
 	const { t } = useTranslation("chat")
 	const [isOpen, setIsOpen] = useState(false)
-	const isInIsland = useIsInHeaderIsland()
+	const isInHeader = useIsInAppHeader()
 	const title = t("pinned.title")
 	const count = messages.length
 	const hasPins = count > 0
@@ -117,16 +117,14 @@ const PinnedMessages = ({
 			className={className}
 		>
 			<PopoverPanelTrigger>
-				{isInIsland ? (
-					<HeaderIslandButton
+				{isInHeader ? (
+					<AppHeaderButton
 						data-slot="pinned-messages-trigger"
 						aria-label={triggerLabel}
-						className={
-							hasPins ? "w-auto gap-1 px-2 text-xs tabular-nums" : undefined
-						}
+						className={hasPins ? "gap-1 px-2 text-xs tabular-nums" : undefined}
 					>
 						{triggerMark}
-					</HeaderIslandButton>
+					</AppHeaderButton>
 				) : (
 					<Button
 						data-slot="pinned-messages-trigger"

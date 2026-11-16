@@ -19,13 +19,13 @@ import {
 	ActivityGroup,
 	OPEN_MISSION_GROUPS,
 } from "@workspace/ui/components/activity-group"
+import {
+	AppHeaderButton,
+	useIsInAppHeader,
+} from "@workspace/ui/components/app-header"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
-import {
-	HeaderIslandButton,
-	useIsInHeaderIsland,
-} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ListSkeleton,
@@ -89,7 +89,7 @@ const ROUTINE_SKELETON_LIST =
 	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const PANEL_HEADER =
-	"h-12 shrink-0 flex-row items-center ps-[calc(var(--shell-inset)+--spacing(2.5))] pe-[calc(var(--shell-inset)+--spacing(0.5))] py-0"
+	"h-14 shrink-0 flex-row items-center ps-[calc(var(--shell-inset)+--spacing(2.5))] pe-[calc(var(--shell-inset)+--spacing(0.5))] py-0"
 
 type PanelWidthStyle = CSSProperties & { "--sidebar-width": string }
 
@@ -696,7 +696,7 @@ type RoutinesPanelTriggerProps = ButtonHTMLAttributes<HTMLButtonElement>
 const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 	const { t } = useTranslation("chat")
 	const { isOpen, onOpenChange, triggerRef } = useRoutinesPanel()
-	const isInIsland = useIsInHeaderIsland()
+	const isInHeader = useIsInAppHeader()
 
 	if (isOpen) return null
 
@@ -706,15 +706,15 @@ const RoutinesPanelTrigger = (props: RoutinesPanelTriggerProps) => {
 		"aria-label": t("activity.panel.toggle"),
 		onClick: () => onOpenChange(true),
 		ref: triggerRef,
-		children: isInIsland ? (
+		children: isInHeader ? (
 			<Icons.Switch aria-hidden="true" />
 		) : (
 			<Icons.SidePanel aria-hidden="true" />
 		),
 	}
 
-	return isInIsland ? (
-		<HeaderIslandButton {...trigger} />
+	return isInHeader ? (
+		<AppHeaderButton {...trigger} />
 	) : (
 		<Button {...trigger} size="icon" variant="ghost" />
 	)

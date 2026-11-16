@@ -32,7 +32,10 @@ const THREAD_COLUMN =
 	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
 
 const BELOW_FLOATING_HEADER =
-	"pt-[var(--screen-layout-header-height,--spacing(14))]"
+	"pt-[var(--screen-layout-header-height,--spacing(8))]"
+
+const SKELETON_BELOW_FLOATING_HEADER =
+	"pt-[var(--screen-layout-header-height,0px)] pb-0"
 
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
@@ -180,7 +183,7 @@ function ThreadLayout({
 									className={cn(
 										columnClassName,
 										"h-full",
-										isHeaderFloating ? "pb-0" : "py-0",
+										isHeaderFloating ? SKELETON_BELOW_FLOATING_HEADER : "py-0",
 									)}
 									data-slot="thread-skeleton-column"
 								>

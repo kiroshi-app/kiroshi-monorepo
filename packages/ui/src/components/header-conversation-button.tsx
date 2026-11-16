@@ -3,13 +3,16 @@
 import { useTranslation } from "react-i18next"
 
 import {
+	APP_HEADER_TITLE,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
+import {
 	ConversationSubjectIcon,
 	type ConversationSubjectIconProps,
 } from "@workspace/ui/components/conversation-subject-icon"
 import { HeaderSubjectButton } from "@workspace/ui/components/header-identity-button"
-import { useIsInHeaderIsland } from "@workspace/ui/components/header-island"
 
-const AVATAR_SIZE = 24
+const AVATAR_SIZE = 32
 
 type HeaderConversationButtonProps = Pick<
 	ConversationSubjectIconProps,
@@ -31,7 +34,6 @@ const HeaderConversationButton = ({
 	className,
 }: HeaderConversationButtonProps) => {
 	const { t } = useTranslation("chat")
-	const isInIsland = useIsInHeaderIsland()
 
 	return (
 		<HeaderSubjectButton
@@ -44,10 +46,12 @@ const HeaderConversationButton = ({
 			<ConversationSubjectIcon
 				hue={color}
 				icon={icon}
-				isSquare={isInIsland}
+				isSquare
 				side={AVATAR_SIZE}
 			/>
-			<span className="min-w-0 truncate">{name}</span>
+			<AppHeaderText>
+				<span className={APP_HEADER_TITLE}>{name}</span>
+			</AppHeaderText>
 		</HeaderSubjectButton>
 	)
 }

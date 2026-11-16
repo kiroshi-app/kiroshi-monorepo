@@ -14,7 +14,7 @@ const PICTOGRAM = "relative"
 
 const BARE_PICTOGRAM = "size-full stroke-[1.75]!"
 
-const SQUARE_TILE = "absolute inset-0 rounded-sm bg-(--conversation-icon)"
+const SQUARE_TILE = "absolute inset-0 rounded-md bg-(--conversation-icon)"
 
 const SQUARE_PICTOGRAM_SHARE = 7 / 12
 
