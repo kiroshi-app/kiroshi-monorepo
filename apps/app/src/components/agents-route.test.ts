@@ -22,6 +22,7 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { invoke, isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { isJoinedRowId } from "@/lib/spaces/joined-spaces-controller"
 import type { WorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
 
@@ -104,7 +105,7 @@ const workspaceOn = (
 		rosterView: { bots: ROSTERS[rosteredSpaceId], hasLoaded, rosteredSpaceId },
 		scopes: {
 			openRowId: space.id,
-			selectedSpace: space === GARAGE ? undefined : space,
+			selectedSpace: isJoinedRowId(space.id) ? undefined : space,
 		},
 		switcher: { selectedSpace: space, ownedSpaces: [HOME, OFFICE] },
 	} as unknown as WorkspaceAssembly

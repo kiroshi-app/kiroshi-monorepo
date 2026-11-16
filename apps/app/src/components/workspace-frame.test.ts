@@ -3,6 +3,7 @@
 import { RouterProvider } from "@tanstack/react-router"
 import {
 	act,
+	type ByRoleOptions,
 	cleanup,
 	fireEvent,
 	render,
@@ -272,6 +273,9 @@ const titleBarSearchButton = () =>
 		name: SEARCH,
 	})
 
+const titleBarTab = (options: ByRoleOptions) =>
+	within(slotOf("app-title-bar") as HTMLElement).getByRole("tab", options)
+
 describe("the workspace frame", () => {
 	it("keeps one navigation sidebar and one title bar mounted across every page, and no rail", async () => {
 		const { router } = await mountApp()
@@ -361,12 +365,7 @@ describe("the workspace frame", () => {
 			}),
 		).toBeTruthy()
 		expect(slotsOf("companion-card").length).toBeGreaterThan(0)
-		expect(
-			within(slotOf("app-title-bar") as HTMLElement).getByRole("tab", {
-				name: AGENTS,
-				selected: true,
-			}),
-		).toBeTruthy()
+		expect(titleBarTab({ name: AGENTS, selected: true })).toBeTruthy()
 	})
 
 	it("opens the Agents page in a background tab on a new-tab click and stays on the page", async () => {
@@ -380,12 +379,7 @@ describe("the workspace frame", () => {
 
 		expect(router.state.location.pathname).toBe("/")
 		expect(screen.getAllByRole("tab").length).toBe(tabsBefore + 1)
-		expect(
-			within(slotOf("app-title-bar") as HTMLElement).getByRole("tab", {
-				name: AGENTS,
-				selected: false,
-			}),
-		).toBeTruthy()
+		expect(titleBarTab({ name: AGENTS, selected: false })).toBeTruthy()
 	})
 
 	it("walks back and forward through the Agents page", async () => {

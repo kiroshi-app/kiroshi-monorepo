@@ -512,6 +512,14 @@ describe("SpaceSettingsScreen on a local space", () => {
 
 const OPEN_LABEL = new RegExp(`^${i18n.t("settings:space.open")}`)
 
+const otherSpaceOf = (gear: Gear, spaceId: string) => {
+	const other = gear.spaces
+		.getState()
+		.spaces.find((space) => space.id !== spaceId)
+	if (!other) throw new Error("no other space")
+	return other
+}
+
 const openOtherSpaceOf = async () => {
 	const gear = await gearWithGarage()
 	await gear.spaces.create()
@@ -1532,11 +1540,3 @@ describe("SpaceSettingsScreen members on the desktop", () => {
 		expect(within(dialog).getByText("Steve Puget")).toBeTruthy()
 	})
 })
-
-const otherSpaceOf = (gear: Gear, spaceId: string) => {
-	const other = gear.spaces
-		.getState()
-		.spaces.find((space) => space.id !== spaceId)
-	if (!other) throw new Error("no other space")
-	return other
-}
