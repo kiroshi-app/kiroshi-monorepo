@@ -91,6 +91,7 @@ const bots = {
 		label: "Navigation",
 		home: "Accueil",
 		newConversation: "Nouveau",
+		agents: "Agents",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",

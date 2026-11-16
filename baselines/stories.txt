@@ -1355,6 +1355,15 @@ layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
 layout-workspaceshell--toggle-during-drag-swaps-at-once
 layout-workspaceshell--toggle-during-slide-turns-back
+navigation-agentspage--actions-menu-open
+navigation-agentspage--default
+navigation-agentspage--empty
+navigation-agentspage--keyboard-focus
+navigation-agentspage--light
+navigation-agentspage--loading
+navigation-agentspage--long-name-and-title
+navigation-agentspage--narrow
+navigation-agentspage--single-agent
 navigation-appframe--connecting-space
 navigation-appframe--holding-companion-settings
 navigation-appframe--holding-conversation-settings
@@ -1895,6 +1904,8 @@ navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
 navigation-expandedsidebar--a-1-slots-composed-as-the-app-expanded
 navigation-expandedsidebar--active-row-hovered-expanded
 navigation-expandedsidebar--active-row-hovered-light-expanded
+navigation-expandedsidebar--agents-at-rest-expanded
+navigation-expandedsidebar--agents-selected-expanded
 navigation-expandedsidebar--compact-coloured-icons-expanded
 navigation-expandedsidebar--compact-focus-expanded
 navigation-expandedsidebar--compact-hover-expanded
@@ -3183,6 +3194,7 @@ settings-space-spacesettingsdialog--members-signed-out
 settings-space-spacesettingsdialog--members-with-invitations
 settings-space-spacesettingsdialog--members-withdraw-failed
 settings-space-spacesettingsdialog--members-withdraw-pending
+settings-space-spacesettingsdialog--no-agents-entry
 settings-space-spacesettingsdialog--opens-on-an-application
 settings-space-spacesettingsdialog--skills
 settings-space-spacesettingsdialog--transfer
