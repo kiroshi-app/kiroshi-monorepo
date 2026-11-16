@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
-import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 import { WorkspaceShellRoot } from "@workspace/ui/components/workspace-shell"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/lib/click-modifiers"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -23,7 +22,6 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
 import {
 	type AccountState,
-	type CompanionCounts,
 	commands,
 	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	type JoinedSpace,
@@ -35,8 +33,6 @@ import {
 	type SpaceInvitation,
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
-import type { Bot } from "@/lib/conversations/store-contract"
-import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -62,7 +58,6 @@ import type { Invitations } from "@/lib/spaces/use-invitations"
 import { useControllerState } from "@/lib/use-controller"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
@@ -187,7 +182,6 @@ type SpaceSettingsHarnessProps = Gear & {
 	hostBySpaceId?: Record<string, SpaceHost>
 	openedTab?: string
 	openAccountSettings?: () => void
-	bots?: Bot[]
 	showEntry?: SettingsNavigation["showEntry"]
 }
 
@@ -199,7 +193,6 @@ const SpaceSettingsHarness = ({
 	hostBySpaceId = {},
 	openedTab,
 	openAccountSettings,
-	bots = [],
 	showEntry,
 }: SpaceSettingsHarnessProps) => {
 	const [isOpen, setIsOpen] = useState(true)
@@ -264,7 +257,6 @@ const SpaceSettingsHarness = ({
 								onSelectSpace: joined.selectSpace,
 							},
 						} as unknown as RosterLines,
-						rosterView: { bots } as unknown as RosterView,
 						scopes,
 						search,
 						spaceId,
@@ -633,7 +625,6 @@ const SESSION_BOUND_ENTRIES = [
 const SESSION_FREE_ENTRIES = [
 	i18n.t("settings:rail.space"),
 	i18n.t("settings:rail.members"),
-	i18n.t("settings:rail.agents"),
 ]
 
 const EVERY_ENTRY = [...SESSION_BOUND_ENTRIES, ...SESSION_FREE_ENTRIES]
@@ -693,6 +684,45 @@ describe("SpaceSettingsScreen entries bound to the current space session", () =>
 			expect(await isMenuEntryDisabled(label), label).toBe(false)
 		}
 	})
+})
+
+type GearWithGarage = Awaited<ReturnType<typeof gearWithGarage>>
+
+const agentsEntryOf = (menu: HTMLElement) =>
+	within(menu).queryByRole("button", {
+		name: new RegExp(`^${i18n.t("settings:rail.agents")}`),
+		hidden: true,
+	})
+
+describe("SpaceSettingsScreen without the agents of the Space", () => {
+	it.each<{ state: string; rowIdOf: (gear: GearWithGarage) => string }>([
+		{ state: "yours", rowIdOf: (gear) => gear.home.id },
+		{ state: "joined", rowIdOf: () => GARAGE_ROW },
+		{ state: "invitation", rowIdOf: () => ATELIER_INVITATION.id },
+	])(
+		"shows no Agents entry on a Space in the $state state",
+		async ({ rowIdOf }) => {
+			const gear = await gearWithGarage()
+
+			render(
+				createElement(SpaceSettingsHarness, {
+					...gear,
+					invitations: atelierInvitations(),
+					spaceId: rowIdOf(gear),
+				}),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+
+			const menu = await screen.findByRole("navigation", {
+				name: SETTINGS_MENU,
+				hidden: true,
+			})
+			expect(
+				within(menu).getAllByRole("button", { hidden: true }).length,
+			).toBeGreaterThan(0)
+			expect(agentsEntryOf(menu)).toBeNull()
+		},
+	)
 })
 
 describe("SpaceSettingsScreen on a joined space removed while shown", () => {
@@ -1503,69 +1533,6 @@ describe("SpaceSettingsScreen members on the desktop", () => {
 	})
 })
 
-const companionOf = (id: string, name: string): Bot => ({
-	...botIdentity({ name, instructions: `${name} reads the diff.` }),
-	id,
-	createdAt: 1,
-	memory: "",
-	sectionId: null,
-	pinPosition: null,
-	changesNothing: true,
-})
-
-const ADA = companionOf("b-ada", "Ada")
-const BO = companionOf("b-bo", "Bo")
-const CY = companionOf("b-cy", "Cy")
-const COMPANIONS = [ADA, BO, CY]
-
-const COUNTS_LINE = /skill|application/
-
-const readCounts = vi.fn<(spaceId: string) => Promise<CompanionCounts[]>>()
-
-const routeCountsRead = () =>
-	vi
-		.mocked(invoke)
-		.mockImplementation(async (command: string, args) =>
-			command === "space_companion_counts"
-				? readCounts((args as { spaceId: string }).spaceId)
-				: [],
-		)
-
-const deferredCounts = () => {
-	let answer: (value: CompanionCounts[]) => void = () => undefined
-	const pending = new Promise<CompanionCounts[]>((resolve) => {
-		answer = resolve
-	})
-	return { pending, answer }
-}
-
-const buttonStartingWith = (label: string) => {
-	const [button] = screen.getAllByRole("button", {
-		name: new RegExp(`^${label}`),
-	})
-	return button
-}
-
-const companionCardOf = (bot: Bot) => buttonStartingWith(bot.name)
-
-const countsLineOf = (bot: Bot) =>
-	within(companionCardOf(bot)).queryByText(COUNTS_LINE)?.textContent ?? null
-
-const openCompanionsOf = async (gear: Gear, rowId: string) => {
-	gear.joined.selectSpace(rowId)
-	const rendered = render(
-		createElement(SpaceSettingsHarness, {
-			...gear,
-			spaceId: rowId,
-			openedTab: COMPANIONS_ENTRY,
-			bots: COMPANIONS,
-		}),
-		{ wrapper: createQueryTestWrapper().wrapper },
-	)
-	await waitFor(() => companionCardOf(ADA))
-	return rendered
-}
-
 const otherSpaceOf = (gear: Gear, spaceId: string) => {
 	const other = gear.spaces
 		.getState()
@@ -1573,126 +1540,3 @@ const otherSpaceOf = (gear: Gear, spaceId: string) => {
 	if (!other) throw new Error("no other space")
 	return other
 }
-
-describe("SpaceSettingsScreen companion counts", () => {
-	beforeEach(routeCountsRead)
-	afterEach(() => readCounts.mockReset())
-
-	it("gives each card the counts of its botId, once across re-renders", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		readCounts.mockResolvedValue([
-			{ botId: BO.id, skillsCount: 5, applicationsCount: 1 },
-			{ botId: ADA.id, skillsCount: 0, applicationsCount: 2 },
-		])
-		const gear = await gearWithGarage()
-
-		const { rerender } = await openCompanionsOf(gear, gear.home.id)
-
-		await waitFor(() =>
-			expect(countsLineOf(BO)).toBe("5 skills · 1 application"),
-		)
-		expect(countsLineOf(ADA)).toBe("no skills · 2 applications")
-		expect(countsLineOf(CY)).toBeNull()
-		rerender(
-			createElement(SpaceSettingsHarness, {
-				...gear,
-				spaceId: gear.home.id,
-				openedTab: COMPANIONS_ENTRY,
-				bots: [...COMPANIONS],
-			}),
-		)
-		await settle()
-		expect(readCounts.mock.calls).toEqual([[gear.home.id]])
-	})
-
-	it("renders every card without its counts line until the call answers", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		readCounts.mockReturnValue(deferredCounts().pending)
-		const gear = await gearWithGarage()
-
-		await openCompanionsOf(gear, gear.home.id)
-		await settle()
-
-		expect(COMPANIONS.map(countsLineOf)).toEqual([null, null, null])
-	})
-
-	it("keeps every card without its counts line and raises one notice when the call fails", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		readCounts.mockRejectedValue({ kind: "unknownSpace", id: "home" })
-		const gear = await gearWithGarage()
-
-		await openCompanionsOf(gear, gear.home.id)
-
-		const notice = i18n.t("settings:space.agents.countsUnreadable")
-		expect(
-			await screen.findAllByRole("heading", { name: notice, hidden: true }),
-		).toHaveLength(1)
-		await settle()
-		expect(
-			screen.getAllByRole("heading", { name: notice, hidden: true }),
-		).toHaveLength(1)
-		expect(COMPANIONS.map(countsLineOf)).toEqual([null, null, null])
-	})
-
-	it("drops an answer for a space other than the one shown", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		const homeCounts = deferredCounts()
-		const officeCounts = deferredCounts()
-		readCounts
-			.mockReturnValueOnce(homeCounts.pending)
-			.mockReturnValueOnce(officeCounts.pending)
-		const gear = await gearWithGarage()
-		await gear.spaces.create()
-		const office = otherSpaceOf(gear, gear.home.id)
-		const { rerender } = await openCompanionsOf(gear, gear.home.id)
-
-		act(() => {
-			gear.joined.selectSpace(office.id)
-			rerender(
-				createElement(SpaceSettingsHarness, {
-					...gear,
-					spaceId: office.id,
-					openedTab: COMPANIONS_ENTRY,
-					bots: COMPANIONS,
-				}),
-			)
-		})
-		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
-		await act(async () => {
-			homeCounts.answer([
-				{ botId: ADA.id, skillsCount: 9, applicationsCount: 9 },
-			])
-		})
-		await settle()
-
-		expect(countsLineOf(ADA)).toBeNull()
-		await act(async () => {
-			officeCounts.answer([
-				{ botId: ADA.id, skillsCount: 1, applicationsCount: 0 },
-			])
-		})
-		await waitFor(() =>
-			expect(countsLineOf(ADA)).toBe("1 skill · no applications"),
-		)
-		expect(readCounts.mock.calls).toEqual([[gear.home.id], [office.id]])
-	})
-
-	it("calls again when the Companions entry opens again", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		readCounts.mockResolvedValue([
-			{ botId: ADA.id, skillsCount: 2, applicationsCount: 3 },
-		])
-		const gear = await gearWithGarage()
-		await openCompanionsOf(gear, gear.home.id)
-		await waitFor(() =>
-			expect(countsLineOf(ADA)).toBe("2 skills · 3 applications"),
-		)
-
-		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.space")))
-		await settle()
-		fireEvent.click(buttonStartingWith(i18n.t("settings:rail.agents")))
-
-		await waitFor(() => expect(readCounts.mock.calls).toHaveLength(2))
-		expect(readCounts.mock.calls).toEqual([[gear.home.id], [gear.home.id]])
-	})
-})

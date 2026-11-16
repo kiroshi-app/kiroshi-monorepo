@@ -7,6 +7,7 @@ import {
 } from "@/components/expanded-sidebar-rows"
 import { expandedSpaceListOf } from "@/components/space-neighbour-lists"
 import {
+	isAgentsPage,
 	isHomePage,
 	isLibraryPage,
 	isMissionsPage,
@@ -21,10 +22,12 @@ const useShownDestination = (
 	tabs: WorkspaceTabs,
 ): ExpandedSidebarDestination | undefined => {
 	const isHomeShown = usePageShown(tabs, isHomePage)
+	const isAgentsShown = usePageShown(tabs, isAgentsPage)
 	const isMissionsShown = usePageShown(tabs, isMissionsPage)
 	const isLibraryShown = usePageShown(tabs, isLibraryPage)
 
 	if (isHomeShown) return "newConversation"
+	if (isAgentsShown) return "agents"
 	if (isMissionsShown) return "missions"
 	if (isLibraryShown) return "library"
 	return undefined

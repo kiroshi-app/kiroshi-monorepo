@@ -58,6 +58,10 @@ export const CompanionScreenHost = ({
 		return null
 	}
 
+	const leave = search.isFromAgentsPage
+		? navigation.backToAgents
+		: navigation.back
+
 	const refuseDeletion = (reason: unknown) => {
 		void reportFailure(
 			{ title: i18n.t("bots:danger.failed") },
@@ -69,12 +73,12 @@ export const CompanionScreenHost = ({
 		<CompanionSettingsScreenBody
 			guardLeave={guardLeave}
 			backLabel={
-				search.isFromSpaceSettings
+				search.isFromAgentsPage
 					? i18n.t("settings:screen.backToAgents")
 					: undefined
 			}
 			entry={search.entry ?? GENERAL_ENTRY}
-			onBack={navigation.back}
+			onBack={leave}
 			onEntryChange={navigation.showEntry}
 			onOpenApplication={navigation.openApplication}
 			history={botHistory}
@@ -113,7 +117,7 @@ export const CompanionScreenHost = ({
 				void roster.controller.uploadAvatar(settingsBot.id, file)
 			}}
 			onDelete={() => {
-				void deleteBot(settingsBot.id).then(navigation.back, refuseDeletion)
+				void deleteBot(settingsBot.id).then(leave, refuseDeletion)
 			}}
 			onOutputStyleChange={(outputStyle) => {
 				if (outputStyle === settingsBot.outputStyle) {
