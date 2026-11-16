@@ -276,7 +276,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell. `opening` is handed to the transcript as it is, to stand at the top of the thread over the first row, and is not drawn while `skeleton` stands in for the transcript.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell. `opening` is handed to the transcript as it is, to stand at the top of the thread over the first row, takes no room when it renders nothing, and is not drawn while `skeleton` stands in for the transcript.",
 			},
 		},
 	},
@@ -1353,6 +1353,59 @@ export const Opening = meta.story({
 			block.top - boxOf(slotIn(layout, "app-header")).bottom,
 			boxOf(firstTurn).top - block.bottom,
 		]).toEqual([OPENING_UNDER_THE_BAR, OPENING_OVER_THE_FIRST_TURN])
+	},
+})
+
+const EMPTY_MISSION_OPENING = (
+	<MissionProperties
+		now={MISSION_NOW}
+		openedAt={MISSION_NOW - 7_200_000}
+		ticket={{ externalId: "", title: "", platform: "", url: "" }}
+	/>
+)
+
+const ThreadWithDroppedOpening = (props: ThreadLayoutProps) => {
+	const [isDropped, setDropped] = useState(false)
+
+	return (
+		<ThreadLayout
+			{...props}
+			notice={
+				<Button onClick={() => setDropped(true)}>Drop the opening</Button>
+			}
+			opening={isDropped ? undefined : props.opening}
+		/>
+	)
+}
+
+const firstTurnUnderTheBar = (layout: HTMLElement) => {
+	const [firstTurn] = slotsIn(layout, "message-scroller-item")
+	return boxOf(firstTurn).top - boxOf(slotIn(layout, "app-header")).bottom
+}
+
+export const OpeningThatRendersNothing = meta.story({
+	tags: ["test-only"],
+	args: { ...THREAD_UNDER_THE_BAR, opening: EMPTY_MISSION_OPENING },
+	render: (args) => <ThreadWithDroppedOpening {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread under the static bar given the properties of a mission with no ticket, no status and no pull request, which render nothing. Check that no properties block is drawn and that the first turn stands as far under the bar as once *Drop the opening* leaves the thread with no opening at all, the two turns resting against the composer.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		await expect(slotsIn(layout, "mission-properties")).toHaveLength(0)
+		const withEmptyOpening = firstTurnUnderTheBar(layout)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Drop the opening" }),
+		)
+
+		await expect(slotsIn(layout, "transcript-opening")).toHaveLength(0)
+		await expect(firstTurnUnderTheBar(layout)).toBe(withEmptyOpening)
 	},
 })
 

@@ -615,6 +615,8 @@ conversation-message-transcript--lands-at-end
 conversation-message-transcript--loads-newer-messages
 conversation-message-transcript--marks-new-messages
 conversation-message-transcript--opening
+conversation-message-transcript--opening-starts-rendering
+conversation-message-transcript--opening-that-renders-nothing
 conversation-message-transcript--opening-waits-for-the-start-of-history
 conversation-message-transcript--prepends-older-messages
 conversation-message-transcript--rests-after-a-resize
@@ -1321,6 +1323,7 @@ layout-threadlayout--long-content
 layout-threadlayout--older-messages
 layout-threadlayout--opening
 layout-threadlayout--opening-held-back-by-skeleton
+layout-threadlayout--opening-that-renders-nothing
 layout-threadlayout--outside-content-card
 layout-threadlayout--pending
 layout-threadlayout--prompt-overhangs-the-thread
