@@ -37,8 +37,8 @@ final class MissionThreadStore {
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var seeding: Task<Void, Never>?
-    @ObservationIgnored private var isRereadingAfterResync = false
-    @ObservationIgnored private var hasTrailingResync = false
+    @ObservationIgnored private var isRelayRereading = false
+    @ObservationIgnored private var hasTrailingRelayReread = false
 
     init(
         mission: Mission,
@@ -88,16 +88,12 @@ final class MissionThreadStore {
             group.addTask { await self.reread(signals, through: relay) }
             for await update in updates {
                 apply(update)
-                if case .state(.online) = update {
-                    seeding?.cancel()
-                    seeding = Task { await seedPendingQuestions(through: relay) }
-                }
             }
             rereads.finish()
         }
         self.rereads = nil
-        isRereadingAfterResync = false
-        hasTrailingResync = false
+        isRelayRereading = false
+        hasTrailingRelayReread = false
         isOnline = false
         isHostOffline = false
         seeding?.cancel()
@@ -180,20 +176,22 @@ final class MissionThreadStore {
         case .state(.online):
             isOnline = true
             isHostOffline = false
-            rereads?.yield()
+            if hasFailed {
+                rereads?.yield()
+            }
         case .state(.connecting):
             isOnline = false
         case .state(let state):
             isOnline = false
             isHostOffline = state == .hostOffline
-        case .resynced:
+        case .reread:
             guard relay != nil else { return }
-            guard !isRereadingAfterResync else {
-                hasTrailingResync = true
+            guard !isRelayRereading else {
+                hasTrailingRelayReread = true
                 return
             }
-            isRereadingAfterResync = true
-            rereadAfterResync()
+            isRelayRereading = true
+            relayReread()
         case .event(let event):
             switch MissionThreadFrame(event, conversationId: mission.threadConversationId) {
             case .stored(let message):
@@ -204,7 +202,7 @@ final class MissionThreadStore {
         }
     }
 
-    private func rereadAfterResync() {
+    private func relayReread() {
         guard let relay else { return }
         rereads?.yield()
         seeding?.cancel()
@@ -222,7 +220,7 @@ final class MissionThreadStore {
 
     private func reread(_ signals: AsyncStream<Void>, through relay: MissionsRelay) async {
         for await _ in signals {
-            let answersResync = isRereadingAfterResync
+            let answersResync = isRelayRereading
             do {
                 let page = try await relay.thread(conversationId: mission.threadConversationId)
                 for message in page.messages {
@@ -235,11 +233,11 @@ final class MissionThreadStore {
                 hasFailed = !hasLoaded
             }
             guard answersResync else { continue }
-            if hasTrailingResync {
-                hasTrailingResync = false
-                rereadAfterResync()
+            if hasTrailingRelayReread {
+                hasTrailingRelayReread = false
+                relayReread()
             } else {
-                isRereadingAfterResync = false
+                isRelayRereading = false
             }
         }
     }

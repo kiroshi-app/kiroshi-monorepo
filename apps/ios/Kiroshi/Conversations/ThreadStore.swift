@@ -196,11 +196,15 @@ final class ThreadStore {
             case .state(.online(let sharedSpaceId)):
                 isReachable = true
                 spaceId = sharedSpaceId
-                reload()
+                if phase == .failed {
+                    reload()
+                }
             case .state:
                 isReachable = false
-            case .resynced:
+            case .reread where phase == .loaded:
                 resyncReread.start { [weak self] in self?.reload() }
+            case .reread:
+                reload()
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)

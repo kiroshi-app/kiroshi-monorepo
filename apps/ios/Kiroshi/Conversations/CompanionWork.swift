@@ -55,9 +55,9 @@ final class CompanionWork {
 
     func apply(_ update: RelayUpdate) {
         switch update {
-        case .state(.online), .resynced:
+        case .state(.online), .state(.connecting), .state(.unreachable), .state(.hostOffline):
             break
-        case .state:
+        case .state, .reread:
             forget()
         case .event(let event):
             guard case .agent(let agent)? = ConversationEvent(event) else { return }
