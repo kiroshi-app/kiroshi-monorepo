@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
-import { useRosterLists } from "./use-roster-lists"
+import {
+	hasRosterFailedWithNothingHeld,
+	useRosterLists,
+} from "./use-roster-lists"
 
 import {
 	commands,
@@ -25,7 +28,11 @@ import { createConversationController } from "../conversations/conversation-cont
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { createScriptedDriver } from "../conversations/scripted-driver"
-import type { ObservedState } from "../conversations/store-contract"
+import type {
+	Bot,
+	Conversation,
+	ObservedState,
+} from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -544,5 +551,42 @@ describe("the preview author of each panel", () => {
 		membersChangeAnnounced()
 
 		await waitFor(() => expect(authors().joined).toBe("Léa Martin"))
+	})
+})
+
+describe("the failed verdict the sidebar list and the Agents page share", () => {
+	const AGENT = { id: "b-ada" } as Bot
+	const ROOM = { id: "c-room" } as Conversation
+	const NOTHING = { bots: [], conversations: [] }
+
+	it.each([
+		{
+			read: "failed with nothing held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			isFailed: true,
+		},
+		{
+			read: "failed with an agent held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			bots: [AGENT],
+			isFailed: false,
+		},
+		{
+			read: "failed with a conversation held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			conversations: [ROOM],
+			isFailed: false,
+		},
+		{
+			read: "succeeded with nothing held",
+			hasFailedToLoad: false,
+			...NOTHING,
+			isFailed: false,
+		},
+	])("is $isFailed when the read $read", ({ isFailed, ...roster }) => {
+		expect(hasRosterFailedWithNothingHeld(roster)).toBe(isFailed)
 	})
 })
