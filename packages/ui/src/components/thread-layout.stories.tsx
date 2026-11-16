@@ -1323,7 +1323,6 @@ const OPENING_OVER_THE_FIRST_TURN = 16
 const MISSION_OPENING = (
 	<MissionProperties
 		now={MISSION_NOW}
-		onEdit={fn()}
 		onOpenCodingSession={fn()}
 		openedAt={MISSION_NOW - 7_200_000}
 		pullRequest={MISSION_PULL_REQUEST}

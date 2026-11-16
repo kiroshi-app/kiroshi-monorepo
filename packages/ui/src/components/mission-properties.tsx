@@ -59,7 +59,6 @@ type MissionPropertiesProps = {
 	commitsAhead?: number
 	pullRequest?: MissionPullRequest
 	onOpenCodingSession?: () => void
-	onEdit?: () => void
 	className?: string
 }
 
@@ -71,7 +70,6 @@ const MissionProperties = ({
 	commitsAhead = 0,
 	pullRequest,
 	onOpenCodingSession,
-	onEdit,
 	className,
 }: MissionPropertiesProps) => {
 	const { t } = useTranslation("chat")
@@ -96,27 +94,17 @@ const MissionProperties = ({
 					<dt className={PROPERTY_LABEL}>{t("missions.properties.ticket")}</dt>
 					<dd className={cn(PROPERTY_VALUE, "@max-[40rem]:items-start")}>
 						<MissionTicketLine layout="line" ticket={ticket} />
-						{onOpenCodingSession || onEdit ? (
+						{onOpenCodingSession ? (
 							<span
-								className="flex shrink-0 items-center gap-2 @max-[40rem]:ms-auto"
+								className="flex shrink-0 items-center @max-[40rem]:ms-auto"
 								data-slot="mission-ticket-actions"
 							>
-								{onOpenCodingSession ? (
-									<MissionPropertyAction
-										aria-label={t("missions.properties.openCodingSession")}
-										onClick={onOpenCodingSession}
-									>
-										<Icons.Command aria-hidden="true" />
-									</MissionPropertyAction>
-								) : null}
-								{onEdit ? (
-									<MissionPropertyAction
-										aria-label={t("missions.properties.edit")}
-										onClick={onEdit}
-									>
-										<Icons.Edit aria-hidden="true" />
-									</MissionPropertyAction>
-								) : null}
+								<MissionPropertyAction
+									aria-label={t("missions.properties.openCodingSession")}
+									onClick={onOpenCodingSession}
+								>
+									<Icons.Command aria-hidden="true" />
+								</MissionPropertyAction>
 							</span>
 						) : null}
 					</dd>
