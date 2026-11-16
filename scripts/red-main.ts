@@ -288,7 +288,7 @@ const readSinceGreen = async (
 	}
 }
 
-const rerunRefusal = async (github: GitHub, runId: string) => {
+const refusalOfTheRerun = async (github: GitHub, runId: string) => {
 	try {
 		await github.rerunFailedJobs(runId)
 		return undefined
@@ -309,14 +309,16 @@ export const reportRedMain = async (
 	const hasRunnerFailuresOnly =
 		redJobs.length === 0 && runnerFailures.length > 0
 	const mustRerun = hasRunnerFailuresOnly && run.attempt === 1
-	const refusal = mustRerun ? await rerunRefusal(github, runId) : undefined
-	if (mustRerun && refusal === undefined)
+	const rerunRefusal = mustRerun
+		? await refusalOfTheRerun(github, runId)
+		: undefined
+	if (mustRerun && rerunRefusal === undefined)
 		return `no issue: reran the failed jobs of run ${run.id}, each a runner failure (${runnerFailures.join(", ")})`
 	const existing = await issueReportingRun(linear, run.url)
 	if (existing) return `no issue: ${existing} already reports ${run.url}`
 	const pullRequests = await github.readPullRequests(run.headSha)
 	const input = hasRunnerFailuresOnly
-		? runnerFailureIssue({ run, jobs, pullRequests, rerunRefusal: refusal })
+		? runnerFailureIssue({ run, jobs, pullRequests, rerunRefusal })
 		: redMainIssue({
 				run,
 				jobs,

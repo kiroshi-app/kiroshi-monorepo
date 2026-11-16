@@ -1160,47 +1160,32 @@ describe("the jobs of ci.yml", () => {
 	})
 
 	it.each([
-		["its setup failed and the gate was skipped", "skipped", undefined, true],
-		["the gate reported no test started", "failure", "true", true],
-		["the gate failed on a test", "failure", undefined, false],
+		["ios", "its setup failed and the gate was skipped", "skipped", "", true],
+		["ios", "the gate reported no test started", "failure", "true", true],
+		["ios", "the gate failed on a test", "failure", "", false],
+		[
+			IOS_BUILD_JOB,
+			"its setup failed and the gate was skipped",
+			"skipped",
+			"",
+			true,
+		],
+		[IOS_BUILD_JOB, "its gate failed", "failure", "", false],
 	])(
-		"fails the Runner failure step of ios when %s: %s %s",
-		(_, conclusion, reported, runs) => {
-			const runnerFailure = stepNamed("ios", "Runner failure")
-			const gate = {
-				conclusion,
-				outputs: { "runner-failure": reported },
-			}
+		"decides the Runner failure step of %s when %s",
+		(job, _, conclusion, reported, runs) => {
+			const steps = runStepsOf(job).map((step) => step.name)
+			const runnerFailure = stepNamed(job, "Runner failure")
+			const gate = { conclusion, outputs: { "runner-failure": reported } }
 
-			expect(stepNamed("ios", "Gate")?.id).toBe("gate")
-			expect(runnerFailure?.if).toStartWith("failure() && ")
-			expect(evaluate(runnerFailure?.if ?? "false", { steps: { gate } })).toBe(
-				runs,
-			)
-			expect(runnerFailure?.run).toContain("::error title=Runner failure::")
-			expect(runnerFailure?.run?.trim()).toEndWith("exit 1")
-		},
-	)
-
-	it.each([
-		["a step before its gate failed and the gate was skipped", "skipped", true],
-		["its gate failed", "failure", false],
-	])(
-		"fails the Runner failure step of ios-build only when %s",
-		(_, conclusion, runs) => {
-			const steps = runStepsOf(IOS_BUILD_JOB).map((step) => step.name)
-			const runnerFailure = stepNamed(IOS_BUILD_JOB, "Runner failure")
-
-			expect(stepNamed(IOS_BUILD_JOB, "Gate")?.id).toBe("gate")
+			expect(stepNamed(job, "Gate")?.id).toBe("gate")
 			expect(steps.indexOf("Runner failure")).toBeGreaterThan(
 				steps.indexOf("Gate"),
 			)
 			expect(runnerFailure?.if).toStartWith("failure() && ")
-			expect(
-				evaluate(runnerFailure?.if ?? "false", {
-					steps: { gate: { conclusion } },
-				}),
-			).toBe(runs)
+			expect(evaluate(runnerFailure?.if ?? "false", { steps: { gate } })).toBe(
+				runs,
+			)
 			expect(runnerFailure?.run).toContain("::error title=Runner failure::")
 			expect(runnerFailure?.run?.trim()).toEndWith("exit 1")
 		},
