@@ -234,7 +234,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Library tab of a Space: every image, document and board the Space holds, read-only. A static bar tops the panel: a muted line over the Library title on one side, Import, New board and New document on the other, each drawn only when its callback is passed, Import and New board dropping to their glyph and a tooltip once the panel is too narrow for their label. The filters and the search open the content under the bar and scroll away with the grid, the search moving under the filters once the row is too narrow for both. The filters are one single-selection toggle group whose pressed segment wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
+					"The Library tab of a Space: every image, document and board the Space holds, read-only. A static bar tops the panel: a muted line over the Library title on one side, Import, New board and New document on the other, each drawn only when its callback is passed, Import and New board dropping to their glyph and a tooltip once the panel is too narrow for their label, New document following once its label would cut the title. The filters and the search open the content under the bar and scroll away with the grid, the search moving under the filters once the row is too narrow for both. The filters are one single-selection toggle group whose pressed segment wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
 			},
 		},
 	},
@@ -2290,8 +2290,8 @@ const nextLayout = () =>
 
 const expectFrenchNarrowFits = async (canvasElement: HTMLElement) => {
 	const { heading, topLine, actions } = barIn(canvasElement)
-	const [newBoard, newDocument] = actions
-	if (!(newBoard && newDocument)) throw new Error("The bar lost an action")
+	const [newBoard] = actions
+	if (!newBoard) throw new Error("The bar lost New board")
 
 	await waitFor(() => expect(boxOf(newBoard).width).toBe(32))
 	await expect(heading).toHaveTextContent("Bibliothèque")
@@ -2300,12 +2300,14 @@ const expectFrenchNarrowFits = async (canvasElement: HTMLElement) => {
 	)
 	await expect(boxOf(topLine).height).toBe(16)
 	await expect(newBoard).toHaveAccessibleName("Nouveau tableau")
-	await expect(within(newDocument).getByText("Nouveau document")).toBeVisible()
-	await expect(newDocument.scrollWidth).toBeLessThanOrEqual(
-		newDocument.clientWidth,
-	)
 	await expectNoHorizontalOverflow(canvasElement)
 	await expectSearchOnItsOwnLine(canvasElement)
+}
+
+const newDocumentIn = (canvasElement: HTMLElement) => {
+	const newDocument = barActionsIn(canvasElement).at(-1)
+	if (!newDocument) throw new Error("The bar lost New document")
+	return newDocument
 }
 
 export const BarFrenchNarrow = meta.story({
@@ -2327,9 +2329,14 @@ export const BarFrenchNarrow = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const { heading } = barIn(canvasElement)
+		const newDocument = newDocumentIn(canvasElement)
 
 		await expectFrenchNarrowFits(canvasElement)
 		await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+		await expect(boxOf(newDocument).width).toBeGreaterThan(100)
+		await expect(newDocument.scrollWidth).toBeLessThanOrEqual(
+			newDocument.clientWidth,
+		)
 	},
 })
 
@@ -2343,23 +2350,39 @@ export const BarFrenchAt320 = BarFrenchNarrow.extend({
 		docs: {
 			description: {
 				story:
-					"The French Library in a 320 px panel, the narrowest it reflows to, without Import. Check that Nouveau document keeps its label, that the title gives way with an ellipsis instead of pushing a button out, that the filters scroll sideways inside the row when they are wider than it, and that nothing crosses the panel edge.",
+					"The French Library in a 320 px panel, the narrowest it reflows to, without Import. Check that Bibliothèque reads in full, that Nouveau document has become a round glyph button on the Space colour, still named by its label and showing it in a tooltip under the pointer, that the filters scroll sideways inside the row when they are wider than it, and that nothing crosses the panel edge.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const { heading } = barIn(canvasElement)
 		const { controls, filters } = controlsIn(canvasElement)
+		const newDocument = newDocumentIn(canvasElement)
 		const strip = filters.parentElement
 		if (!strip) throw new Error("The filters lost their strip")
 
+		await waitFor(() => expect(boxOf(newDocument).width).toBe(32))
 		await expectFrenchNarrowFits(canvasElement)
-		await expect(getComputedStyle(heading).textOverflow).toBe("ellipsis")
+		await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+		await expect([
+			boxOf(newDocument).height,
+			boxOf(glyphOf(newDocument)).width,
+		]).toEqual([32, 14])
+		await expect(newDocument).toHaveAccessibleName("Nouveau document")
+		await expectPrimaryAtRest(newDocument)
 		await expect(boxOf(filters).width).toBeGreaterThan(boxOf(controls).width)
 		await expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth)
 		await expect(boxOf(strip).right).toBeLessThanOrEqual(
 			boxOf(controls).right + 2,
 		)
+
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		await pointer.hover(newDocument)
+		await waitFor(() =>
+			expect(screen.getByRole("tooltip")).toHaveTextContent("Nouveau document"),
+		)
+		await pointer.unhover(newDocument)
 	},
 })
 
@@ -2378,15 +2401,16 @@ export const BarFrenchWithImport = meta.story({
 		docs: {
 			description: {
 				story:
-					"The widest bar the Library draws: French, with Import, New board and New document. Reach for this when a label, a locale or an action changes. Check that the three labels read in full at 960 px, that the title is never cut while Importer and Nouveau tableau keep their label, down to the 672 px panel where they become glyph buttons, and that nothing crosses the panel edge at any width down to 320 px.",
+					"The widest bar the Library draws: French, with Import, New board and New document. Reach for this when a label, a locale or an action changes. Check that the three labels read in full at 960 px, that Importer and Nouveau tableau become glyph buttons under a 672 px panel, that Nouveau document keeps its label at 480 px and becomes a glyph button too at 320 px, and that at every width down to 320 px Bibliothèque reads in full and nothing crosses the panel edge.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const frame = slotIn(canvasElement, "library-artboard-frame")
 		const { panel, heading, actions } = barIn(canvasElement)
-		const [importAction, newBoard] = actions
-		if (!(importAction && newBoard)) throw new Error("The bar lost an action")
+		const [importAction, newBoard, newDocument] = actions
+		if (!(importAction && newBoard && newDocument))
+			throw new Error("The bar lost an action")
 		const frameEdges = boxOf(frame).width - boxOf(panel).width
 		const setPanelWidth = async (width: number) => {
 			frame.style.width = `${width + frameEdges}px`
@@ -2416,10 +2440,21 @@ export const BarFrenchWithImport = meta.story({
 			await expect(newBoard).toHaveAccessibleName("Nouveau tableau")
 			await expectNoHorizontalOverflow(canvasElement)
 
+			await setPanelWidth(480)
+			await expect(boxOf(newDocument).width).toBeGreaterThan(100)
+
 			for (let width = 960; width >= 320; width -= 16) {
 				await setPanelWidth(width)
+				await waitFor(() =>
+					expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth),
+				)
 				await expectNoHorizontalOverflow(canvasElement)
 			}
+
+			await waitFor(() => expect(boxOf(newDocument).width).toBe(32))
+			await expect(newDocument).toHaveAccessibleName("Nouveau document")
+			await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+			await expectNoHorizontalOverflow(canvasElement)
 		} finally {
 			frame.style.width = ""
 		}

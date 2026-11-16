@@ -162,7 +162,10 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 const FILTERS_STRIP_WITH_FOCUS_RING_ROOM =
 	"scrollbar-hide -m-0.5 max-w-[calc(100%+--spacing(1))] overflow-x-auto p-0.5"
 
-const SECONDARY_LABELS_MIN_WIDTH = { withoutImport: 512, withImport: 672 }
+const LABELS_MIN_WIDTH = {
+	withoutImport: { secondary: 512, primary: 340 },
+	withImport: { secondary: 672, primary: 380 },
+}
 
 const BAR_ACTION =
 	"flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 font-medium text-compact leading-4 outline-ring transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background in-data-content-card:focus-visible:ring-card [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
@@ -260,11 +263,16 @@ const LibraryPanel = ({
 		boards: items.filter((item) => item.kind === "board").length,
 	}
 
+	const labelsMinWidth = onImport
+		? LABELS_MIN_WIDTH.withImport
+		: LABELS_MIN_WIDTH.withoutImport
 	const hasSecondaryIconsOnly = useIsNarrowerThan(
 		overlayElement,
-		onImport
-			? SECONDARY_LABELS_MIN_WIDTH.withImport
-			: SECONDARY_LABELS_MIN_WIDTH.withoutImport,
+		labelsMinWidth.secondary,
+	)
+	const hasPrimaryIconOnly = useIsNarrowerThan(
+		overlayElement,
+		labelsMinWidth.primary,
 	)
 
 	const actions =
@@ -294,6 +302,7 @@ const LibraryPanel = ({
 				{onNewDocument ? (
 					<BarAction
 						icon={<Icons.Add aria-hidden="true" />}
+						isIconOnly={hasPrimaryIconOnly}
 						kind="primary"
 						label={t("library.newDocument")}
 						onClick={onNewDocument}
