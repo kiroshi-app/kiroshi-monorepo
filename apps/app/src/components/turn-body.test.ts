@@ -242,7 +242,7 @@ const TABLE_CSV = 'City,Nights\r\nLisbon,3\r\n"Porto, north",2'
 const TABLE_NOT_SAVED =
 	"Couldn’t save the table. Press Download CSV to try again."
 
-const renderBubblelessAnswer = (text: string, agentName: string) =>
+const renderBubblelessTableOf = (agentName: string) =>
 	render(
 		createElement(
 			MarkdownSizeContext,
@@ -252,7 +252,7 @@ const renderBubblelessAnswer = (text: string, agentName: string) =>
 				{ value: actionsSpy() },
 				createElement(AnswerBody, {
 					attachments: [],
-					text,
+					text: TABLE,
 					agentName,
 					isWriting: false,
 				}),
@@ -261,7 +261,7 @@ const renderBubblelessAnswer = (text: string, agentName: string) =>
 	)
 
 const downloadTableOf = async (agentName = "Ada") => {
-	renderBubblelessAnswer(TABLE, agentName)
+	renderBubblelessTableOf(agentName)
 	const download = await screen.findByRole("button", { name: "Download CSV" })
 	await act(async () => {
 		fireEvent.click(download)

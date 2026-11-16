@@ -6,7 +6,7 @@ import { failureReporterIn } from "@/lib/failure-report"
 
 const reportFailure = failureReporterIn("save-answer-table")
 
-const FALLBACK_FILE_NAME = "table.csv"
+const TABLE_FILE_NAME = "table.csv"
 
 const fileSlugOf = (agentName: string): string =>
 	agentName
@@ -16,7 +16,7 @@ const fileSlugOf = (agentName: string): string =>
 
 const tableFileNameOf = (agentName: string): string => {
 	const slug = fileSlugOf(agentName)
-	return slug ? `${slug}-${FALLBACK_FILE_NAME}` : FALLBACK_FILE_NAME
+	return slug ? `${slug}-${TABLE_FILE_NAME}` : TABLE_FILE_NAME
 }
 
 const fileNameOf = (path: string): string => path.split(/[\\/]/).at(-1) ?? path
