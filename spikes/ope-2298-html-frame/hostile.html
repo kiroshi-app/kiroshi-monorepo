@@ -148,18 +148,19 @@
 				return "submitted";
 			};
 
-			const tryTripwire = (name, host) => {
-				const ids = ["fetch", "img", "websocket", "form-post"].map((kind) => `tripwire-${name}-${kind}`);
-				if (!host) {
-					return Promise.all(ids.map((id) => signal(id, "no-address")));
-				}
-				return Promise.all([
-					attempt(ids[0], () => fetch(`http://${host}/fetch`, { mode: "no-cors" }).then(() => "ok")),
-					attempt(ids[1], () => loadImage(`http://${host}/img`)),
-					attempt(ids[2], () => openSocket(`ws://${host}/websocket`)),
-					attempt(ids[3], () => postForm(`http://${host}/form-post`)),
-				]);
-			};
+			const tripwireAttempts = (name, host) => ({
+				[`tripwire-${name}-fetch`]: () => fetch(`http://${host}/fetch`, { mode: "no-cors" }).then(() => "ok"),
+				[`tripwire-${name}-img`]: () => loadImage(`http://${host}/img`),
+				[`tripwire-${name}-websocket`]: () => openSocket(`ws://${host}/websocket`),
+				[`tripwire-${name}-form-post`]: () => postForm(`http://${host}/form-post`),
+			});
+
+			const tryTripwire = (name, host) =>
+				Promise.all(
+					Object.entries(tripwireAttempts(name, host)).map(([id, action]) =>
+						host ? attempt(id, action) : signal(id, "no-address"),
+					),
+				);
 
 			const tryEgress = () =>
 				Promise.all([
@@ -304,6 +305,13 @@
 				}
 				if (TARGETS.role in departures) {
 					return leave(TARGETS.role, departures[TARGETS.role]);
+				}
+				const tripwires = {
+					...tripwireAttempts("loopback", TARGETS.loopbackTripwire),
+					...tripwireAttempts("lan", TARGETS.lanTripwire),
+				};
+				if (TARGETS.role in tripwires) {
+					return attempt(TARGETS.role, tripwires[TARGETS.role]);
 				}
 				return write();
 			};

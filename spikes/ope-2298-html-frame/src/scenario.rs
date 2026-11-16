@@ -10,7 +10,8 @@ use tauri::{AppHandle, Listener as _, WebviewWindow};
 use crate::host::{HostState, Tick, ViewAddress};
 use crate::probe::{self, HostReading};
 use crate::proofs::{
-	HostReadings, NavigationAlone, Observations, ViewObservation, WindowUrl, NAVIGATION_ATTEMPTS,
+	AttemptAlone, HostReadings, Observations, ViewObservation, WindowUrl, LAN_TRIPWIRE_ATTEMPTS,
+	LOOPBACK_TRIPWIRE_ATTEMPTS, NAVIGATION_ATTEMPTS,
 };
 use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewServer, READER_ROLE, WRITER_ROLE};
 use crate::windows::{open_main_window, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL};
@@ -27,9 +28,11 @@ const FIRST_VIEW_TIMEOUT: Duration = Duration::from_secs(38);
 const SECOND_VIEW_TIMEOUT: Duration = Duration::from_secs(6);
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(10);
 const SETTLE: Duration = Duration::from_millis(1500);
-const ALONE_TIMEOUT: Duration = Duration::from_secs(4);
+const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
+const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(95);
 const RUN_LIMIT: Duration = Duration::from_secs(115);
+const RESIDUAL_EXPOSURE: &str = "no mitigation is applied: Chromium 156, which WebView2 embeds, opens one socket to the target of every http or https navigation when the navigation request is created, before the CSP check and before a host handler is asked. The only gate is the embedder hook ShouldPreconnectNavigation: there is no command line switch, no WebView2 setting and no Tauri 2.12.2 builder option for it, so a view can still make the webview open a connection without request bytes to any host and port it names";
 const HARNESS_FAILURE: i32 = 1;
 
 type Failure = Box<dyn Error>;
@@ -140,6 +143,11 @@ struct OpenView {
 	settled_at: Instant,
 }
 
+struct AloneReplays {
+	played: Vec<(&'static str, PlayedView)>,
+	not_played: Vec<&'static str>,
+}
+
 struct PlayedView {
 	label: String,
 	observation: ViewObservation,
@@ -172,18 +180,16 @@ impl Run {
 		let writer = self.close_view(first)?;
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
-		let (reader, second_reading) = match self.open_second_view()? {
+		let second = self.open_later_view("view-2", READER_ROLE, SECOND_VIEW_TIMEOUT, SETTLE)?;
+		let (reader, second_reading) = match second {
 			Some(second) => {
 				let reading = self.host_reading(&second);
 				(Some(self.close_view(second)?), reading)
 			}
 			None => (None, None),
 		};
-		let alone = if self.mode.decides_from_host_observations() {
-			self.play_navigation_attempts_alone()?
-		} else {
-			Vec::new()
-		};
+		let AloneReplays { played: alone, not_played: not_played_alone } =
+			self.play_attempts_alone()?;
 
 		let mut window_urls = vec![WindowUrl {
 			window: MAIN_WINDOW_LABEL.to_owned(),
@@ -202,19 +208,17 @@ impl Run {
 			"first_view": view_summary(&writer),
 			"second_view": reader.as_ref().map(view_summary),
 		});
-		let host_readings = first_reading.map(|first_view| HostReadings {
-			first_view,
-			second_view: second_reading,
-			navigations_alone: alone
-				.iter()
-				.map(|(attempt, view)| NavigationAlone {
-					attempt,
-					window: view.label.clone(),
-					open: view.open,
-					csp_reports: view.observation.record.csp_reports.clone(),
-				})
-				.collect(),
-		});
+		let host_readings = first_reading
+			.map(|first_view| HostReadings { first_view, second_view: second_reading });
+		let attempts_alone = alone
+			.iter()
+			.map(|(attempt, view)| AttemptAlone {
+				attempt,
+				window: view.label.clone(),
+				open: view.open,
+				csp_reports: view.observation.record.csp_reports.clone(),
+			})
+			.collect();
 		let observations = Observations {
 			secret_calls: self.host.secret_calls(),
 			heartbeat: self.host.heartbeat(),
@@ -228,8 +232,9 @@ impl Run {
 			writer: writer.observation,
 			reader: reader.map(|view| view.observation),
 			host_readings,
+			attempts_alone,
 		};
-		let results = json!({
+		let mut results = json!({
 			"ticket": "OPE-2298",
 			"os": std::env::consts::OS,
 			"mode": self.mode.name(),
@@ -243,8 +248,12 @@ impl Run {
 			"main_window_csp_served": self.host.main_window_csps(),
 			"views": views,
 			"proofs": observations.proofs(),
+			"attempts_not_played_alone": not_played_alone,
 			"page_claims_never_used_alone_for_a_verdict": observations.page_claims(),
 		});
+		if cfg!(windows) {
+			results["residual_exposure"] = json!(RESIDUAL_EXPOSURE);
+		}
 		let rendered = serde_json::to_string_pretty(&results)?;
 		std::fs::write(
 			format!("results-{}-{}.json", std::env::consts::OS, self.mode.name()),
@@ -254,33 +263,71 @@ impl Run {
 		Ok(())
 	}
 
-	fn open_second_view(&self) -> Result<Option<OpenView>, Failure> {
-		let second_view =
-			ViewServer::open(&self.sensors.targets(READER_ROLE), self.mode.view_csp_directives())?;
-		point_at(&self.host, &second_view, self.mode);
+	fn open_later_view(
+		&self,
+		label: &str,
+		role: &'static str,
+		timeout: Duration,
+		settle: Duration,
+	) -> Result<Option<OpenView>, Failure> {
+		let server =
+			ViewServer::open(&self.sensors.targets(role), self.mode.view_csp_directives())?;
+		point_at(&self.host, &server, self.mode);
 		if self.mode == Mode::Frame && !self.reload_main_window()? {
-			eprintln!(
-				"the main window did not come back after its reload, the second view stays closed"
-			);
+			eprintln!("the main window did not come back after its reload, {label} stays closed");
 			return Ok(None);
 		}
-		self.open_view("view-2", second_view, SECOND_VIEW_TIMEOUT, SETTLE).map(Some)
+		self.open_view(label, server, timeout, settle).map(Some)
 	}
 
-	fn play_navigation_attempts_alone(&self) -> Result<Vec<(&'static str, PlayedView)>, Failure> {
-		NAVIGATION_ATTEMPTS
-			.iter()
-			.map(|attempt| {
-				let server = ViewServer::open(
-					&self.sensors.targets(attempt),
-					self.mode.view_csp_directives(),
-				)?;
-				point_at(&self.host, &server, self.mode);
-				let label = format!("alone-{attempt}");
-				let view = self.open_view(&label, server, ALONE_TIMEOUT, ALONE_SETTLE)?;
-				Ok((*attempt, self.close_view(view)?))
-			})
-			.collect()
+	fn attempts_to_play_alone(&self) -> Vec<&'static str> {
+		let has_a_connection_without_a_request = |listener: &Tripwire| {
+			listener
+				.reading()
+				.view_connections()
+				.iter()
+				.any(|connection| connection.target.is_none())
+		};
+		let mut attempts = Vec::new();
+		if self.mode.decides_from_host_observations()
+			|| has_a_connection_without_a_request(&self.sensors.navigation_sink)
+		{
+			attempts.extend(NAVIGATION_ATTEMPTS);
+		}
+		if has_a_connection_without_a_request(&self.sensors.loopback) {
+			attempts.extend(LOOPBACK_TRIPWIRE_ATTEMPTS);
+		}
+		if self.sensors.lan.as_ref().is_ok_and(has_a_connection_without_a_request) {
+			attempts.extend(LAN_TRIPWIRE_ATTEMPTS);
+		}
+		attempts
+	}
+
+	fn play_attempts_alone(&self) -> Result<AloneReplays, Failure> {
+		let mut played = Vec::new();
+		let mut not_played = Vec::new();
+		for attempt in self.attempts_to_play_alone() {
+			let is_navigation = NAVIGATION_ATTEMPTS.contains(&attempt);
+			let decides_a_verdict = is_navigation && self.mode.decides_from_host_observations();
+			if !decides_a_verdict && self.started.elapsed() > ATTRIBUTION_DEADLINE {
+				not_played.push(attempt);
+				continue;
+			}
+			let settle = if is_navigation { ALONE_SETTLE } else { SETTLE };
+			match self.open_later_view(
+				&format!("alone-{attempt}"),
+				attempt,
+				ALONE_TIMEOUT,
+				settle,
+			)? {
+				Some(view) => played.push((attempt, self.close_view(view)?)),
+				None => not_played.push(attempt),
+			}
+		}
+		if played.last().is_some_and(|(attempt, _)| !NAVIGATION_ATTEMPTS.contains(attempt)) {
+			thread::sleep(ALONE_SETTLE.saturating_sub(SETTLE));
+		}
+		Ok(AloneReplays { played, not_played })
 	}
 
 	fn reload_main_window(&self) -> Result<bool, Failure> {
@@ -337,6 +384,7 @@ impl Run {
 		let window_url_after = view.window.as_ref().map(|window| {
 			window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string())
 		});
+		let reached = probe::reached_attempts(view.window.as_ref().unwrap_or(&self.main_window));
 		match view.window {
 			Some(window) => window.destroy()?,
 			None => self.main_window.eval("window.__spikeCloseView()")?,
@@ -347,6 +395,7 @@ impl Run {
 			observation: ViewObservation {
 				token: view.server.token().to_owned(),
 				record: view.server.record(),
+				reached,
 			},
 			url: window_url(&view.server, self.mode),
 			csp: view.server.csp().to_owned(),
@@ -362,5 +411,9 @@ fn view_summary(view: &PlayedView) -> serde_json::Value {
 		"response_csp": view.csp,
 		"document_requests": view.observation.record.document_requests,
 		"requests_outside_the_routes": view.observation.record.unrouted_requests,
+		"attempts_the_page_script_reached_read_by_the_host": match &view.observation.reached {
+			Ok(reached) => json!(reached),
+			Err(cause) => json!({ "unavailable": cause }),
+		},
 	})
 }

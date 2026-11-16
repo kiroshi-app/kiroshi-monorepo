@@ -5,8 +5,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::host::{Gap, HandlerEvent, Heartbeat, SecretCall};
-use crate::probe::{self, HostReading};
-use crate::sensors::{CspReport, TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
+use crate::probe::{self, HostReading, HostTrace};
+use crate::sensors::{Connection, CspReport, TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
 use crate::windows::FIRST_VIEW_LABEL;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
@@ -29,16 +29,14 @@ const PARENT_ATTEMPTS: [&str; 8] = [
 	"parent-storage-read",
 	"parent-storage-write",
 ];
-const TRIPWIRE_ATTEMPTS: [&str; 8] = [
+pub const LOOPBACK_TRIPWIRE_ATTEMPTS: [&str; 4] = [
 	"tripwire-loopback-fetch",
 	"tripwire-loopback-img",
 	"tripwire-loopback-websocket",
 	"tripwire-loopback-form-post",
-	"tripwire-lan-fetch",
-	"tripwire-lan-img",
-	"tripwire-lan-websocket",
-	"tripwire-lan-form-post",
 ];
+pub const LAN_TRIPWIRE_ATTEMPTS: [&str; 4] =
+	["tripwire-lan-fetch", "tripwire-lan-img", "tripwire-lan-websocket", "tripwire-lan-form-post"];
 const ALLOWED_FETCH_ATTEMPT: &str = "allowlist-fetch-cdn-jsdelivr";
 const BLOCKED_FETCH_ATTEMPT: &str = "allowlist-fetch-example-com";
 pub const NAVIGATION_ATTEMPTS: [&str; 5] = [
@@ -105,13 +103,44 @@ pub struct WindowUrl {
 pub struct ViewObservation {
 	pub token: String,
 	pub record: ViewRecord,
+	pub reached: HostTrace,
 }
 
-pub struct NavigationAlone {
+pub struct AttemptAlone {
 	pub attempt: &'static str,
 	pub window: String,
 	pub open: (Instant, Instant),
 	pub csp_reports: Vec<CspReport>,
+}
+
+impl AttemptAlone {
+	fn was_open_at(&self, instant: Instant) -> bool {
+		self.open.0 <= instant && instant <= self.open.1
+	}
+
+	fn connections<'a>(&self, listener: &'a TripwireReading) -> Vec<&'a Connection> {
+		listener
+			.view_connections()
+			.iter()
+			.filter(|connection| self.was_open_at(connection.accepted_at))
+			.collect()
+	}
+
+	fn csp_reports_about(&self, listener: &TripwireReading) -> Vec<&CspReport> {
+		self.csp_reports
+			.iter()
+			.filter(|report| report.blocked_uri.contains(&listener.address))
+			.collect()
+	}
+}
+
+#[derive(Serialize)]
+struct TripwireAloneReading<'a> {
+	attempt: &'static str,
+	window: &'a str,
+	tripwire_connections: usize,
+	request_bytes_received: usize,
+	browser_csp_reports_about_the_tripwire: Vec<&'a CspReport>,
 }
 
 #[derive(Serialize)]
@@ -128,7 +157,6 @@ struct NavigationAloneReading<'a> {
 pub struct HostReadings {
 	pub first_view: HostReading,
 	pub second_view: Option<HostReading>,
-	pub navigations_alone: Vec<NavigationAlone>,
 }
 
 pub struct Observations {
@@ -144,6 +172,11 @@ pub struct Observations {
 	pub writer: ViewObservation,
 	pub reader: Option<ViewObservation>,
 	pub host_readings: Option<HostReadings>,
+	pub attempts_alone: Vec<AttemptAlone>,
+}
+
+fn tripwire_attempts() -> Vec<&'static str> {
+	[LOOPBACK_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_ATTEMPTS].concat()
 }
 
 impl Observations {
@@ -215,6 +248,19 @@ impl Observations {
 		attempts.iter().copied().filter(|attempt| record.outcome(attempt).is_none()).collect()
 	}
 
+	fn reach(view: &ViewObservation, never_signalled: &[&'static str]) -> Vec<Value> {
+		never_signalled
+			.iter()
+			.map(|attempt| {
+				let reached = match &view.reached {
+					Ok(reached) => json!(reached.iter().any(|seen| seen == attempt)),
+					Err(cause) => json!(format!("unreadable: {cause}")),
+				};
+				json!({ "attempt": attempt, "page_script_reached_it": reached })
+			})
+			.collect()
+	}
+
 	fn outcomes<'a>(
 		record: &'a ViewRecord,
 		attempts: &[&'static str],
@@ -248,14 +294,91 @@ impl Observations {
 			&& self.lan_tripwire.as_ref().is_ok_and(TripwireReading::is_silent)
 	}
 
-	fn tripwire_evidence(&self) -> Value {
+	fn opened_by(
+		&self,
+		listener: &TripwireReading,
+		connection: &Connection,
+		attempts: &[&'static str],
+	) -> (Vec<&'static str>, &'static str) {
+		let alone = || self.attempts_alone.iter().filter(|view| attempts.contains(&view.attempt));
+		if let Some(view) = alone().find(|view| view.was_open_at(connection.accepted_at)) {
+			return (vec![view.attempt], "the view that played this attempt alone");
+		}
+		if let Some(target) = &connection.target {
+			let named = target.trim_start_matches('/');
+			let suffix = format!("-{named}");
+			let is_named = |attempt: &&str| *attempt == named || attempt.ends_with(&suffix);
+			return (attempts.iter().copied().filter(is_named).collect(), "the request path");
+		}
+		let without_a_request = |view: &&AttemptAlone| {
+			view.connections(listener).iter().any(|connection| connection.target.is_none())
+		};
+		(
+			alone().filter(without_a_request).map(|view| view.attempt).collect(),
+			"the attempts that opened a connection without a request when played alone",
+		)
+	}
+
+	fn listener_evidence(&self, listener: &TripwireReading, attempts: &[&'static str]) -> Value {
+		let connections: Vec<Value> = listener
+			.view_connections()
+			.iter()
+			.map(|connection| {
+				let (opened_by, attributed_from) = self.opened_by(listener, connection, attempts);
+				json!({
+					"request": connection.summary,
+					"request_bytes_received": connection.bytes_received,
+					"opened_by": opened_by,
+					"attributed_from": attributed_from,
+				})
+			})
+			.collect();
 		json!({
-			"loopback_tripwire": self.loopback_tripwire.evidence(),
+			"address": listener.address,
+			"control_connections_from_the_harness": listener.control_connections,
+			"connections_from_views": connections,
+		})
+	}
+
+	fn tripwire_attempts_alone(&self) -> Vec<TripwireAloneReading<'_>> {
+		let tripwires = [
+			(LOOPBACK_TRIPWIRE_ATTEMPTS, Some(&self.loopback_tripwire)),
+			(LAN_TRIPWIRE_ATTEMPTS, self.lan_tripwire.as_ref().ok()),
+		];
+		self.attempts_alone
+			.iter()
+			.filter_map(|view| {
+				let (_, tripwire) =
+					tripwires.iter().find(|(attempts, _)| attempts.contains(&view.attempt))?;
+				let tripwire = (*tripwire)?;
+				let connections = view.connections(tripwire);
+				Some(TripwireAloneReading {
+					attempt: view.attempt,
+					window: &view.window,
+					tripwire_connections: connections.len(),
+					request_bytes_received: connections
+						.iter()
+						.map(|connection| connection.bytes_received)
+						.sum(),
+					browser_csp_reports_about_the_tripwire: view.csp_reports_about(tripwire),
+				})
+			})
+			.collect()
+	}
+
+	fn tripwire_evidence(&self) -> Value {
+		let mut evidence = json!({
+			"loopback_tripwire": self.listener_evidence(&self.loopback_tripwire, &LOOPBACK_TRIPWIRE_ATTEMPTS),
 			"lan_tripwire": match &self.lan_tripwire {
-				Ok(tripwire) => tripwire.evidence(),
+				Ok(tripwire) => self.listener_evidence(tripwire, &LAN_TRIPWIRE_ATTEMPTS),
 				Err(cause) => json!({ "unavailable": cause }),
 			},
-		})
+		});
+		let alone = self.tripwire_attempts_alone();
+		if !alone.is_empty() {
+			evidence["tripwire_attempts_played_alone"] = json!(alone);
+		}
+		evidence
 	}
 
 	fn host_commands_unreachable(&self) -> Proof {
@@ -273,6 +396,7 @@ impl Observations {
 				"control_calls_before_a_view_opened": control,
 				"calls_while_a_view_was_open": from_views,
 				"attempts_never_signalled": unobserved,
+				"never_signalled_attempts_read_by_the_host": Self::reach(&self.writer, &unobserved),
 			}),
 		}
 	}
@@ -302,19 +426,23 @@ impl Observations {
 				"altered_snapshots": self.heartbeat.altered_snapshots,
 				"requests_carrying_a_main_window_secret": leaked,
 				"attempts_never_signalled": unobserved,
+				"never_signalled_attempts_read_by_the_host": Self::reach(&self.writer, &unobserved),
 			}),
 		}
 	}
 
 	fn local_services_unreachable(&self) -> Proof {
-		let unobserved = Self::unobserved(&self.writer.record, &TRIPWIRE_ATTEMPTS);
+		let attempts = tripwire_attempts();
+		let unobserved = Self::unobserved(&self.writer.record, &attempts);
 		let mut evidence = self.tripwire_evidence();
 		evidence["attempts_never_signalled"] = json!(unobserved);
+		evidence["never_signalled_attempts_read_by_the_host"] =
+			json!(Self::reach(&self.writer, &unobserved));
 		Proof {
 			proof: 3,
 			name: "The view reaches no local service",
 			result: (self.are_tripwires_silent() && self.is_played(&unobserved)).into(),
-			attempts: TRIPWIRE_ATTEMPTS.to_vec(),
+			attempts,
 			evidence,
 		}
 	}
@@ -332,7 +460,7 @@ impl Observations {
 				.collect::<Vec<_>>()
 		};
 		let mut attempts = vec![ALLOWED_FETCH_ATTEMPT, BLOCKED_FETCH_ATTEMPT];
-		attempts.extend(TRIPWIRE_ATTEMPTS);
+		attempts.extend(tripwire_attempts());
 		let mut evidence = self.tripwire_evidence();
 		evidence["allowlisted_fetch_beacon"] = json!(allowed_fetch);
 		evidence["other_host_fetch_beacon"] = json!(blocked_fetch);
@@ -343,6 +471,36 @@ impl Observations {
 		let is_allowlist_followed = match &self.host_readings {
 			Some(host) => {
 				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
+				if let Ok(view) = &host.first_view {
+					evidence["fetches_where_the_host_read_and_the_page_beacon_disagree"] = [
+						(
+							ALLOWED_FETCH_ATTEMPT,
+							&view.allowlisted_fetch,
+							view.allowlisted_fetch_status,
+							allowed_fetch,
+						),
+						(
+							BLOCKED_FETCH_ATTEMPT,
+							&view.other_host_fetch,
+							view.other_host_fetch_status,
+							blocked_fetch,
+						),
+					]
+					.into_iter()
+					.filter(|(_, host_read, _, page_beacon)| {
+						*page_beacon != Some(host_read.as_str())
+					})
+					.map(|(fetch, host_read, status, page_beacon)| {
+						json!({
+							"fetch": fetch,
+							"host_read": host_read,
+							"page_beacon": page_beacon,
+							"host_read_document_url": view.document_url,
+							"host_read_response_status": status,
+						})
+					})
+					.collect();
+				}
 				self.has_first_view_reached_its_navigation_attempts()
 					&& host.first_view.as_ref().is_ok_and(|view| {
 						view.allowlisted_fetch == "ok"
@@ -372,15 +530,20 @@ impl Observations {
 			.collect();
 		let unobserved = Self::unobserved(&self.writer.record, &NAVIGATION_ATTEMPTS);
 		let mut evidence = json!({
-			"navigation_sink": self.navigation_sink.evidence(),
+			"navigation_sink": self.listener_evidence(&self.navigation_sink, &NAVIGATION_ATTEMPTS),
 			"windows_whose_url_changed": moved,
 			"windows_checked": self.window_urls.iter().map(|url| &url.window).collect::<Vec<_>>(),
 			"handler_events": self.handler_events,
 			"attempts_never_signalled": unobserved,
+			"never_signalled_attempts_read_by_the_host": Self::reach(&self.writer, &unobserved),
 		});
-		if let Some(host) = &self.host_readings {
-			let alone: Vec<_> =
-				host.navigations_alone.iter().map(|view| self.navigation_alone(view)).collect();
+		let alone: Vec<_> = self
+			.attempts_alone
+			.iter()
+			.filter(|view| NAVIGATION_ATTEMPTS.contains(&view.attempt))
+			.map(|view| self.navigation_alone(view))
+			.collect();
+		if !alone.is_empty() {
 			evidence["attempts_whose_connection_reached_the_sink"] = alone
 				.iter()
 				.filter(|view| view.sink_connections > 0)
@@ -408,15 +571,8 @@ impl Observations {
 		}
 	}
 
-	fn navigation_alone<'a>(&'a self, view: &'a NavigationAlone) -> NavigationAloneReading<'a> {
-		let connections: Vec<_> = self
-			.navigation_sink
-			.view_connections()
-			.iter()
-			.filter(|connection| {
-				connection.accepted_at >= view.open.0 && connection.accepted_at <= view.open.1
-			})
-			.collect();
+	fn navigation_alone<'a>(&'a self, view: &'a AttemptAlone) -> NavigationAloneReading<'a> {
+		let connections = view.connections(&self.navigation_sink);
 		let answers: Vec<_> = self
 			.handler_events
 			.iter()
@@ -432,11 +588,7 @@ impl Observations {
 				.sum(),
 			handler_denied_it: answers.iter().any(|event| !event.allowed),
 			handler_answers: answers,
-			browser_csp_reports_about_the_sink: view
-				.csp_reports
-				.iter()
-				.filter(|report| report.blocked_uri.contains(&self.navigation_sink.address))
-				.collect(),
+			browser_csp_reports_about_the_sink: view.csp_reports_about(&self.navigation_sink),
 		}
 	}
 
@@ -525,8 +677,11 @@ impl Observations {
 			.iter()
 			.filter(|cookie| cookie.contains(first_view_value.as_str()))
 			.collect();
-		let mut unobserved = Self::unobserved(&self.writer.record, &STORAGE_WRITE_ATTEMPTS);
-		unobserved.extend(Self::unobserved(&reader.record, &STORAGE_READ_ATTEMPTS));
+		let never_written = Self::unobserved(&self.writer.record, &STORAGE_WRITE_ATTEMPTS);
+		let never_read = Self::unobserved(&reader.record, &STORAGE_READ_ATTEMPTS);
+		let reach =
+			[Self::reach(&self.writer, &never_written), Self::reach(reader, &never_read)].concat();
+		let unobserved = [never_written, never_read].concat();
 		let mut evidence = json!({
 			"value_the_first_view_stored": first_view_value,
 			"first_view_write_beacons": Self::outcomes(&self.writer.record, &STORAGE_WRITE_ATTEMPTS),
@@ -535,6 +690,7 @@ impl Observations {
 			"cookie_headers_received_from_the_second_view": reader.record.cookie_headers,
 			"cookie_headers_carrying_the_first_view_value": leaked_cookies,
 			"attempts_never_signalled": unobserved,
+			"never_signalled_attempts_read_by_the_host": reach,
 		});
 		let is_isolated = match &self.host_readings {
 			Some(host) => {

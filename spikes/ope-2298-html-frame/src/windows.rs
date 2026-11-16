@@ -89,6 +89,7 @@ pub fn open_main_window(app: &AppHandle, host: &Arc<HostState>) -> tauri::Result
 			.position(MAIN_WINDOW_LEFT, WINDOW_TOP)
 			.inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
 			.always_on_top(true)
+			.initialization_script_for_all_frames(probe::TRACER)
 			.on_web_resource_request(move |_request, response| {
 				let Some(header) = response.headers_mut().get_mut(CONTENT_SECURITY_POLICY) else {
 					return;
@@ -120,6 +121,7 @@ pub fn open_view_window(
 		.position(VIEW_WINDOW_LEFT, WINDOW_TOP)
 		.inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
 		.always_on_top(true)
+		.initialization_script_for_all_frames(probe::TRACER)
 		.incognito(mode.isolates_view_storage());
 	let builder = if mode.frames_view_documents() {
 		builder.initialization_script_for_all_frames(probe::frame_responder())

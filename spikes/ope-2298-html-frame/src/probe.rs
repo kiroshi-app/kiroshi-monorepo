@@ -10,12 +10,47 @@ const POLL: Duration = Duration::from_millis(100);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
 const READING_TIMEOUT: Duration = Duration::from_secs(8);
 const TRIGGER: &str = "spike-host-probe";
+const TRACE_READING: &str = "JSON.stringify(window.__spikeHostTrace ?? null)";
+pub const TRACER: &str = r#"(() => {
+	const BEACON = /\/beacon\/([^/]+)\//;
+	const source = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+	const reached = [];
+	const note =
+		window === top
+			? (attempt) => reached.push(attempt)
+			: (attempt) => top.postMessage({ spikeHostTrace: attempt }, "*");
+	if (window === top) {
+		window.__spikeHostTrace = reached;
+		addEventListener("message", (event) => {
+			if (typeof event.data?.spikeHostTrace === "string") {
+				reached.push(event.data.spikeHostTrace);
+			}
+		});
+	}
+	Object.defineProperty(HTMLImageElement.prototype, "src", {
+		...source,
+		set(url) {
+			const [, attempt] = BEACON.exec(String(url)) ?? [];
+			if (attempt) {
+				note(attempt);
+			}
+			source.set.call(this, url);
+		},
+	});
+})();"#;
 const READING: &str = r#"(() => {
 	const KEY = "spike-view-value";
 	const STORE = "spike-view";
 	const failure = (cause) => `blocked-${cause?.name ?? cause}`;
 	const found = (value) => (value ? `read-${value}` : "none");
 	const outcome = (work) => Promise.resolve().then(work).catch(failure);
+	const fetched = (url, options, describe) =>
+		Promise.resolve()
+			.then(() => fetch(url, options))
+			.then(
+				(response) => ({ outcome: describe(response), status: response.status }),
+				(cause) => ({ outcome: failure(cause), status: null }),
+			);
 	const settled = (request) =>
 		new Promise((resolve, reject) => {
 			request.onsuccess = () => resolve(request.result);
@@ -42,20 +77,21 @@ const READING: &str = r#"(() => {
 		outcome(readDatabase),
 		outcome(() => found(document.cookie)),
 		outcome(readCache),
-		outcome(() =>
-			fetch("https://cdn.jsdelivr.net/npm/lodash@4.17.21/package.json").then((response) =>
-				response.ok ? "ok" : `status-${response.status}`,
-			),
+		fetched("https://cdn.jsdelivr.net/npm/lodash@4.17.21/package.json", undefined, (response) =>
+			response.ok ? "ok" : `status-${response.status}`,
 		),
-		outcome(() => fetch("https://example.com/", { mode: "no-cors" }).then(() => "ok")),
-	]).then(([localStorage, indexedDb, cookie, cache, allowlistedFetch, otherHostFetch]) => {
+		fetched("https://example.com/", { mode: "no-cors" }, () => "ok"),
+	]).then(([localStorage, indexedDb, cookie, cache, allowlisted, otherHost]) => {
 		return JSON.stringify({
+			documentUrl: location.href,
 			localStorage,
 			indexedDb,
 			cookie,
 			cache,
-			allowlistedFetch,
-			otherHostFetch,
+			allowlistedFetch: allowlisted.outcome,
+			allowlistedFetchStatus: allowlisted.status,
+			otherHostFetch: otherHost.outcome,
+			otherHostFetchStatus: otherHost.status,
 		});
 	});
 })()"#;
@@ -63,12 +99,15 @@ const READING: &str = r#"(() => {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all(deserialize = "camelCase"))]
 pub struct ViewReading {
+	pub document_url: String,
 	pub local_storage: String,
 	pub indexed_db: String,
 	pub cookie: String,
 	pub cache: String,
 	pub allowlisted_fetch: String,
+	pub allowlisted_fetch_status: Option<u16>,
 	pub other_host_fetch: String,
+	pub other_host_fetch_status: Option<u16>,
 }
 
 impl ViewReading {
@@ -87,6 +126,7 @@ impl ViewReading {
 }
 
 pub type HostReading = Result<ViewReading, String>;
+pub type HostTrace = Result<Vec<String>, String>;
 
 pub fn evidence(reading: &HostReading) -> Value {
 	match reading {
@@ -132,7 +172,7 @@ pub fn read(window: &WebviewWindow, target: Target) -> HostReading {
 	let deadline = Instant::now() + READING_TIMEOUT;
 	while Instant::now() < deadline {
 		thread::sleep(POLL);
-		let reading = poll(window, &slot)?;
+		let reading = answer(window, &format!("window.{slot} ?? \"\""))?;
 		if !reading.is_empty() {
 			return serde_json::from_str(&reading)
 				.map_err(|cause| format!("unreadable host probe reading: {cause}"));
@@ -141,10 +181,17 @@ pub fn read(window: &WebviewWindow, target: Target) -> HostReading {
 	Err(format!("the host probe gave no reading within {} seconds", READING_TIMEOUT.as_secs()))
 }
 
-fn poll(window: &WebviewWindow, slot: &str) -> Result<String, String> {
+pub fn reached_attempts(window: &WebviewWindow) -> HostTrace {
+	let trace = answer(window, TRACE_READING)?;
+	serde_json::from_str::<Option<Vec<String>>>(&trace)
+		.map_err(|cause| format!("unreadable host trace: {cause}"))?
+		.ok_or_else(|| "the document the host read holds no host trace".to_owned())
+}
+
+fn answer(window: &WebviewWindow, expression: &str) -> Result<String, String> {
 	let (sender, receiver) = mpsc::channel();
 	window
-		.eval_with_callback(format!("window.{slot} ?? \"\""), move |answer| {
+		.eval_with_callback(expression, move |answer| {
 			if sender.send(answer).is_err() {
 				eprintln!("a host probe answer arrived after its deadline");
 			}

@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use serde_json::{json, Value};
 
 use crate::http::{Listener, Request, Response};
 
@@ -59,6 +58,7 @@ fn summary(request: Option<&Request>) -> String {
 pub struct Connection {
 	pub accepted_at: Instant,
 	pub bytes_received: usize,
+	pub target: Option<String>,
 	pub summary: String,
 }
 
@@ -82,14 +82,6 @@ impl TripwireReading {
 	pub fn is_silent(&self) -> bool {
 		self.control_connections > 0 && self.view_connections().is_empty()
 	}
-
-	pub fn evidence(&self) -> Value {
-		json!({
-			"address": self.address,
-			"control_connections_from_the_harness": self.control_connections,
-			"connections_from_views": self.view_connections().iter().map(|connection| &connection.summary).collect::<Vec<_>>(),
-		})
-	}
 }
 
 impl Tripwire {
@@ -100,6 +92,7 @@ impl Tripwire {
 			locked(&recorded).push(Connection {
 				accepted_at: incoming.accepted_at,
 				bytes_received: incoming.bytes_received,
+				target: incoming.request.as_ref().map(|request| request.target.clone()),
 				summary: summary(incoming.request.as_ref()),
 			});
 			Response {
