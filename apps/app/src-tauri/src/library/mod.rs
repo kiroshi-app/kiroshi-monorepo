@@ -1,6 +1,7 @@
 mod blocks;
 mod canvas;
 pub mod commands;
+mod comments;
 pub mod contract;
 mod documents;
 pub mod host;
@@ -30,6 +31,14 @@ use contract::{
 use documents::Documents;
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
+use comments::{board_written, written_boards_followed};
+pub(crate) use comments::{
+	briefed_comment_thread, comment_agent_turns, comment_threads, fail_comment_turns_cut_by_a_quit,
+	listed_comment_threads, open_comment_thread, person_calling, raised_for, reopen_comment_thread,
+	reply_to_comment_thread, resolve_comment_thread, PersonHere, Said,
+};
+#[cfg(test)]
+pub(crate) use comments::{CommentTurn, CommentTurns};
 
 use crate::attachments::{self, attached_content, Attachments};
 use crate::db;
@@ -491,8 +500,8 @@ pub(crate) async fn rename_linked_document<R: Runtime>(
 	let renamed = rename_document(app, root, space_id, name, new_name)?;
 	if renamed.name != name {
 		database
-			.messages()
-			.rename_document_links(space_id.to_owned(), name.to_owned(), renamed.name.clone())
+			.library()
+			.item_renamed(space_id.to_owned(), name.to_owned(), renamed.name.clone())
 			.await?;
 	}
 	Ok(renamed)
@@ -659,14 +668,16 @@ fn name_safe(title: &str) -> String {
 	cut.trim_end().trim_end_matches('.').to_owned()
 }
 
-pub(crate) fn delete_item<R: Runtime>(
+pub(crate) async fn delete_item<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &db::Database,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
 	documents(app).delete(root, space_id, name)?;
 	announce_change(app, space_id);
+	database.library().item_deleted(space_id.to_owned(), name.to_owned()).await?;
 	Ok(())
 }
 
@@ -723,10 +734,11 @@ fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, 
 
 fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 	if app.try_state::<Documents>().is_none() {
-		let announcing = app.clone();
-		app.manage(Documents::new(move |space_id, name| {
-			announce_board_file_replaced(&announcing, space_id, name);
-		}));
+		let (announcing, commented) = (app.clone(), app.clone());
+		app.manage(Documents::new(
+			move |space_id, name| announce_board_file_replaced(&announcing, space_id, name),
+			move |space_id, name, board| board_written(&commented, space_id, name, board),
+		));
 	}
 	app.state::<Documents>()
 }
@@ -734,6 +746,7 @@ fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
 	if let Some(documents) = app.try_state::<Documents>() {
 		documents.write_pending_boards();
+		tauri::async_runtime::block_on(written_boards_followed(app));
 	}
 }
 
