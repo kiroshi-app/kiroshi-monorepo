@@ -76,8 +76,7 @@ const pathsNamedIn = (rust: string) =>
 
 const isRepositoryPathOutsideSrcTauri = (path: string) =>
 	path.startsWith(REPO) &&
-	path !== SRC_TAURI &&
-	!path.startsWith(`${SRC_TAURI}/`) &&
+	relative(SRC_TAURI, path).startsWith("..") &&
 	existsSync(path)
 
 const pathsReachedOutsideSrcTauriBy = (source: string) => {
