@@ -12,6 +12,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	isAgentsPage,
 	isHomePage,
 	isLibraryPage,
 	isListPage,
@@ -62,6 +63,11 @@ const SETTINGS_SUBTITLE_KEY = {
 const homeFace = (): TabFace => ({
 	title: i18n.t("bots:rail.newConversation"),
 	icon: <Icons.Add />,
+})
+
+const agentsFace = (): TabFace => ({
+	title: i18n.t("bots:rail.agents"),
+	icon: <Icons.Companions />,
 })
 
 const missionsFace = (): TabFace => ({
@@ -149,6 +155,9 @@ export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	}
 	if (isHomePage(page)) {
 		return homeFace()
+	}
+	if (isAgentsPage(page)) {
+		return agentsFace()
 	}
 	if (isMissionsPage(page)) {
 		return missionsFace()

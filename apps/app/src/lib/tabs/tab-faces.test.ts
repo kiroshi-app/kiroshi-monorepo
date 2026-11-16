@@ -166,6 +166,15 @@ describe("the face of a tab", () => {
 		expect(markupOf(face.icon)).toBe(plusGlyph)
 	})
 
+	it("draws the Companions icon and the Agents name for the Agents page", () => {
+		const face = tabFaceOf("/agents", SOURCES)
+		const companionsGlyph = markupOf(createElement(Icons.Companions))
+		cleanup()
+
+		expect(face.title).toBe(i18n.t("bots:rail.agents"))
+		expect(markupOf(face.icon)).toBe(companionsGlyph)
+	})
+
 	it("draws the Library icon and the Library name for the Library page", () => {
 		const face = tabFaceOf("/library", SOURCES)
 		const libraryGlyph = markupOf(createElement(Icons.Library))
