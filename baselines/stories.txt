@@ -2190,7 +2190,8 @@ navigation-librarydocumenteditor--resolved-pin-kept-while-block-focused
 navigation-librarydocumenteditor--resolved-thread-in-place-card-closed
 navigation-librarydocumenteditor--round-trip-fixture
 navigation-librarydocumenteditor--save-failure
-navigation-librarydocumenteditor--shortcut-keycap-off-mac
+navigation-librarydocumenteditor--shortcut-keycap-on-linux
+navigation-librarydocumenteditor--shortcut-keycap-on-windows
 navigation-librarydocumenteditor--shortcut-starts-comment
 navigation-librarydocumenteditor--strikethrough-shortcut
 navigation-librarydocumenteditor--task-toggle

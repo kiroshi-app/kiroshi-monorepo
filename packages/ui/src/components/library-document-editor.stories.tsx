@@ -2998,6 +2998,9 @@ const MAC_AGENT =
 const WINDOWS_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
 
+const LINUX_AGENT =
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
 const onPlatform = (agent: string) => () => {
 	const spy = spyOn(navigator, "userAgent", "get").mockReturnValue(agent)
 	return () => spy.mockRestore()
@@ -3034,16 +3037,20 @@ export const Doc5ShortcutDraft = meta.story({ ...doc5, globals: LIGHT })
 
 export const Doc5ShortcutDraftDark = meta.story({ ...doc5, globals: DARK })
 
-export const ShortcutKeycapOffMac = meta.story({
+const keycapOffMac = (agent: string) => ({
 	tags: ["test-only"],
-	beforeEach: onPlatform(WINDOWS_AGENT),
+	beforeEach: onPlatform(agent),
 	args: doc5.args,
-	play: async ({ canvasElement }) => {
-		await expect(
-			slotIn(canvasElement, "library-comment-composer-shortcut"),
-		).toHaveTextContent("Ctrl+Alt+M")
+	play: async ({ canvasElement }: CommentPlay) => {
+		const keycap = slotIn(canvasElement, "library-comment-composer-shortcut")
+		await expect(keycap).toHaveTextContent("Ctrl+Shift+M")
+		await expect(keycap).not.toHaveTextContent("Ctrl+Alt+M")
 	},
 })
+
+export const ShortcutKeycapOnWindows = meta.story(keycapOffMac(WINDOWS_AGENT))
+
+export const ShortcutKeycapOnLinux = meta.story(keycapOffMac(LINUX_AGENT))
 
 const threadOpen = (selectedWash: number) => ({
 	args: {
