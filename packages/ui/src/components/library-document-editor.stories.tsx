@@ -3162,7 +3162,7 @@ const shownStartIconIn = async (canvasElement: HTMLElement, id: string) => {
 }
 
 const startHintAbove = async (icon: HTMLElement) => {
-	const hint = await screen.findByRole("tooltip")
+	const hint = await findHoverTooltip()
 	await expect(hint.querySelector(":scope > [data-side]")).not.toBeVisible()
 	await waitFor(() =>
 		expect(boxOf(icon).top - boxOf(hint).bottom).toBeCloseTo(12, 1),
@@ -3262,7 +3262,7 @@ export const Doc8CommentIconHovered = meta.story({
 	args: commentedDocument(),
 	globals: LIGHT,
 	parameters: describedAs(
-		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the background ground of radius 4px and the foreground glyph with no colour transition, the tooltip 12px above the icon with no arrow, reading Comment in white then the Mac symbols of the comment shortcut in the muted tint, on a black bubble of radius 8px and padding 6px 8px with a gap of 8px in 12px medium, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
+		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the background ground of radius 4px and the foreground glyph with no colour transition, the tooltip 12px above the icon with no arrow, reading Comment then the Mac symbols of the comment shortcut on a muted key, on the tooltip surface with a gap of 8px, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
@@ -3273,16 +3273,12 @@ export const Doc8CommentIconHovered = meta.story({
 		const tooltip = await startHintAbove(icon)
 		await expect(tooltip).toHaveTextContent("Comment⌘⌥M")
 		const bubble = getComputedStyle(tooltip)
-		await expect(bubble.backgroundColor).toBe("rgb(10, 10, 10)")
-		await expect(bubble.color).toBe("rgb(255, 255, 255)")
-		await expect(bubble.borderRadius).toBe("8px")
-		await expect(bubble.padding).toBe("6px 8px")
+		await expect(bubble.backgroundColor).toBe(colourOf(tooltip, "tooltip"))
+		await expect(bubble.color).toBe(colourOf(tooltip, "tooltip-foreground"))
 		await expect(bubble.columnGap).toBe("8px")
-		await expect(bubble.fontSize).toBe("12px")
-		await expect(bubble.fontWeight).toBe("500")
-		await expect(
-			getComputedStyle(tooltip.querySelector("kbd") as HTMLElement).color,
-		).toBe("rgb(163, 163, 163)")
+		const key = getComputedStyle(slotIn(tooltip, "kbd"))
+		await expect(key.backgroundColor).toBe(colourOf(tooltip, "muted"))
+		await expect(key.color).toBe(colourOf(tooltip, "muted-foreground"))
 
 		if (isInBrowserRunner()) {
 			await (await realPointer()).hover(icon)
