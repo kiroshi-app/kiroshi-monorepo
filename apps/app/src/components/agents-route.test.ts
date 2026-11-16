@@ -83,22 +83,16 @@ type Roster = {
 	hasFailedToLoad: boolean
 }
 
-const ROSTER_SHOWN = {
-	hasLoaded: true,
-	isRosterPending: false,
-	hasFailedToLoad: false,
-}
-
 const workspaceOn = (
 	space: Space,
-	roster: Partial<Roster> = {},
-): WorkspaceAssembly => {
-	const { hasLoaded, rosteredSpaceId, isRosterPending, hasFailedToLoad } = {
-		...ROSTER_SHOWN,
-		rosteredSpaceId: space.id,
-		...roster,
-	}
-	return {
+	{
+		hasLoaded = true,
+		rosteredSpaceId = space.id,
+		isRosterPending = false,
+		hasFailedToLoad = false,
+	}: Partial<Roster> = {},
+) =>
+	({
 		core: {
 			roster: { state: { rosters: ROSTERS, isRosterPending, hasFailedToLoad } },
 		},
@@ -110,8 +104,7 @@ const workspaceOn = (
 			selectedSpace: isJoinedRowId(space.id) ? undefined : space,
 		},
 		switcher: { selectedSpace: space, ownedSpaces: [HOME, OFFICE] },
-	} as unknown as WorkspaceAssembly
-}
+	}) as unknown as WorkspaceAssembly
 
 const agentsRouteIn = (workspace: WorkspaceAssembly) =>
 	createElement(
