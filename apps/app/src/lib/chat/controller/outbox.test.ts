@@ -463,15 +463,17 @@ describe("prompts the session cannot take yet", () => {
 				await harness.controller.open(BOT, null)
 				await vi.runAllTimersAsync()
 			}
-			const reconnected = async () => {
-				answer = "accepted"
+			const reconnect = async () => {
 				relay.reconnect()
 				await vi.runAllTimersAsync()
 			}
+			const reconnected = async () => {
+				answer = "accepted"
+				await reconnect()
+			}
 			const readsRefusedOnReconnection = async () => {
 				isReadRefused = true
-				relay.reconnect()
-				await vi.runAllTimersAsync()
+				await reconnect()
 				isReadRefused = false
 			}
 			return {
