@@ -24,7 +24,7 @@ struct RelayReplayTests {
             while let update = await nextUpdate() {
                 switch update {
                 case .state: continue
-                case .event(let event): return .event((try? event.payload(as: Int.self)) ?? -1)
+                case .event(let event): return Self.heard(event)
                 default: return .reread
                 }
             }
@@ -54,6 +54,28 @@ struct RelayReplayTests {
                     return
                 }
             }
+        }
+
+        func state(atTheRereadAfter last: Heard) async -> RelayState? {
+            var state: RelayState?
+            var isPastLast = false
+            while let update = await nextUpdate() {
+                switch update {
+                case .state(let next):
+                    state = next
+                case .event(let event):
+                    isPastLast = isPastLast || Self.heard(event) == last
+                case .reread where isPastLast:
+                    return state
+                case .reread:
+                    continue
+                }
+            }
+            return nil
+        }
+
+        private static func heard(_ event: RelayEvent) -> Heard {
+            .event((try? event.payload(as: Int.self)) ?? -1)
         }
 
         private func nextUpdate() async -> RelayUpdate? {
@@ -534,5 +556,22 @@ struct RelayReplayTests {
 
         #expect(await heard.next(3) == [.event(1), .reread, .event(9)])
         await connection.stop()
+    }
+
+    @Test func aSubscriberThatFallsBehindHearsItsStateAgainBeforeItsReread() async {
+        let host = TestHost()
+        let connection = makeConnection()
+        let laggard = Listener(await connection.updates())
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+
+        for seq in 1...70 {
+            host.reply(Self.stamped(seq))
+        }
+        #expect(await heard.next(70) == (1...70).map(Heard.event))
+        await connection.stop()
+        let stateAtTheReread = await laggard.state(atTheRereadAfter: .event(70))
+
+        #expect(stateAtTheReread == .online(sharedSpaceId: "s-1"))
     }
 }

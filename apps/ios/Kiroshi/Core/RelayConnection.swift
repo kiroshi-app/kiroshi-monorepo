@@ -117,13 +117,13 @@ actor RelayConnection {
         endResumeCall()
         isRereadDue = false
         eventsAfterTheReread = []
-        owedRereads = []
-        laggingSubscribers = []
         publish(.paused)
         for subscriber in subscribers.values {
             subscriber.finish()
         }
         subscribers = [:]
+        owedRereads = []
+        laggingSubscribers = []
     }
 
     func call(_ command: String) async throws -> RelayAnswer {
@@ -623,6 +623,7 @@ actor RelayConnection {
             return
         }
         for id in lagging {
+            subscribers[id]?.yield(.state(state))
             subscribers[id]?.yield(.reread)
         }
     }
@@ -772,7 +773,7 @@ actor RelayConnection {
 
     private func broadcast(_ update: RelayUpdate) {
         for (id, subscriber) in subscribers {
-            guard case .dropped = subscriber.yield(update), case .event = update else { continue }
+            guard case .dropped = subscriber.yield(update) else { continue }
             laggingSubscribers.insert(id)
         }
     }
