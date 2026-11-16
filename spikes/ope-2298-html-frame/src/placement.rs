@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -43,6 +44,28 @@ impl Rectangle {
 	}
 }
 
+impl fmt::Display for Rectangle {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let Self { x, y, width, height } = self;
+		write!(formatter, "{width} x {height} at {x}, {y}")
+	}
+}
+
+impl From<Rectangle> for Rect {
+	fn from(rectangle: Rectangle) -> Self {
+		Self {
+			position: LogicalPosition::new(rectangle.x, rectangle.y).into(),
+			size: LogicalSize::new(rectangle.width, rectangle.height).into(),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub struct Extent {
+	pub width: f64,
+	pub height: f64,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Overlay {
 	pub kind: String,
@@ -55,6 +78,7 @@ pub struct PlacementReport {
 	pub sequence: u64,
 	pub cause: String,
 	pub caused_at_epoch_ms: u64,
+	pub viewport: Extent,
 	pub placeholder: Rectangle,
 	pub column: Rectangle,
 	pub overlays: Vec<Overlay>,
@@ -120,9 +144,9 @@ impl Placement {
 	}
 }
 
-fn bounds_of(child: &Webview) -> tauri::Result<Rectangle> {
-	let scale = child.window().scale_factor()?;
-	let bounds = child.bounds()?;
+pub fn bounds_of(webview: &Webview) -> tauri::Result<Rectangle> {
+	let scale = webview.window().scale_factor()?;
+	let bounds = webview.bounds()?;
 	let position = bounds.position.to_logical::<f64>(scale);
 	let size = bounds.size.to_logical::<f64>(scale);
 	Ok(Rectangle { x: position.x, y: position.y, width: size.width, height: size.height })
@@ -132,10 +156,7 @@ fn apply(child: &Webview, report: &PlacementReport) -> tauri::Result<Applied> {
 	let target = report.target();
 	match target {
 		Some(target) => {
-			child.set_bounds(Rect {
-				position: LogicalPosition::new(target.x, target.y).into(),
-				size: LogicalSize::new(target.width, target.height).into(),
-			})?;
+			child.set_bounds(target.into())?;
 			child.show()?;
 		}
 		None => child.hide()?,
@@ -212,6 +233,7 @@ mod tests {
 			sequence: 1,
 			cause: "scroll".to_owned(),
 			caused_at_epoch_ms: 0,
+			viewport: Extent { width: 560.0, height: 420.0 },
 			placeholder,
 			column: COLUMN,
 			overlays,

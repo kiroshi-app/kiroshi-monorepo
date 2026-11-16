@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use serde_json::json;
 use tauri::{AppHandle, Listener as _, Url, Webview, WebviewWindow};
 
-use crate::behaviours::{self, Behaviour, Stage};
+use crate::behaviours::{self, Behaviour, Stage, ThreadPlay};
 use crate::host::{HostState, Tick, ViewAddress};
 use crate::placement::{PlacementReport, ThreadView, PLACEMENT_EVENT};
 use crate::probe::{self, HostReading};
@@ -49,13 +49,14 @@ const DECISIONS: [&str; 4] = [
 	"each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
 	"the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
 ];
-const IN_THREAD_DECISIONS: [&str; 7] = [
+const IN_THREAD_DECISIONS: [&str; 8] = [
+	"the child webview is placed in window coordinates from rectangles the main page gives in its own viewport coordinates, with no correction: where main_page_viewport is smaller than main_webview_bounds in child_webview_mount, the two do not share an origin and a green behaviour says the numbers match, not that the view is drawn over its placeholder",
 	"the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
 	"child_webview_bounds is read back from the webview after the host set it; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
 	"the delay runs from Date.now() in the main page handler that reported the placement to the host clock once the bounds were read back",
 	"cutting the view to the column only shrinks the child webview: its document keeps its own origin and is not shifted by the hidden part",
 	"enlarged means the placeholder takes the height of the visible column",
-	"the five behaviours are played on the second view, once its document has settled",
+	"the five behaviours are played on the second view, once its document has settled, and only when the main webview bounds read back fill the window inner size, after at most one refit of the main webview to that size",
 	"the capability names the webview main where it named the window main, so a child webview of the main window receives none",
 ];
 const RESIDUAL_EXPOSURE: &str = "no mitigation is applied: Chromium 156, which WebView2 embeds, opens one socket to the target of every http or https navigation when the navigation request is created, before the CSP check and before a host handler is asked. The only gate is the embedder hook ShouldPreconnectNavigation: there is no command line switch, no WebView2 setting and no Tauri 2.12.2 builder option for it, so a view can still make the webview open a connection without request bytes to any host and port it names";
@@ -249,13 +250,13 @@ impl Run {
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
 		let second = self.open_later_view("view-2", READER_ROLE, SECOND_VIEW_TIMEOUT, SETTLE)?;
-		let (reader, second_reading, behaviours) = match second {
+		let (reader, second_reading, thread) = match second {
 			Some(second) => {
 				let reading = self.host_reading(&second);
-				let behaviours = self.thread_behaviours(&second);
-				(Some(self.close_view(second)?), reading, behaviours)
+				let thread = self.thread_play(&second);
+				(Some(self.close_view(second)?), reading, thread)
 			}
-			None => (None, None, Vec::new()),
+			None => (None, None, None),
 		};
 		let AloneReplays { played: alone, not_played: not_played_alone } =
 			self.play_attempts_alone()?;
@@ -331,7 +332,7 @@ impl Run {
 			"attempts_not_played_alone": not_played_alone,
 			"page_claims_never_used_alone_for_a_verdict": observations.page_claims(),
 		});
-		if self.mode.places_views_in_the_thread() {
+		if let Some(ThreadPlay { mount, behaviours }) = thread {
 			let is_shown_in_the_thread = child_webview_errors.is_empty()
 				&& proofs.iter().all(Proof::is_green)
 				&& behaviours.iter().all(Behaviour::is_green);
@@ -340,6 +341,7 @@ impl Run {
 			} else {
 				SEPARATE_WINDOW_VERDICT
 			});
+			results["child_webview_mount"] = probe::evidence(&mount);
 			results["behaviours"] = json!(behaviours);
 			results["child_webview_errors"] = json!(child_webview_errors);
 		}
@@ -362,14 +364,18 @@ impl Run {
 		DECISIONS.iter().chain(in_thread).copied().collect()
 	}
 
-	fn thread_behaviours(&self, view: &OpenView) -> Vec<Behaviour> {
+	fn thread_play(&self, view: &OpenView) -> Option<ThreadPlay> {
 		match &view.shown {
-			Shown::Child(_) => {
-				Stage { main_window: &self.main_window, thread_view: &self.thread_view }
-					.play(|| view.server.record().document_requests)
+			Shown::Child(child) => {
+				let stage =
+					Stage { main_window: &self.main_window, thread_view: &self.thread_view, child };
+				Some(stage.play(|| view.server.record().document_requests))
 			}
-			Shown::Nowhere(cause) => behaviours::not_played(cause),
-			Shown::Frame | Shown::Window(_) => Vec::new(),
+			Shown::Nowhere(cause) => Some(ThreadPlay {
+				mount: Err(cause.clone()),
+				behaviours: behaviours::not_played(cause),
+			}),
+			Shown::Frame | Shown::Window(_) => None,
 		}
 	}
 

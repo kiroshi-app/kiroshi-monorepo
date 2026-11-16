@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::{LogicalSize, WebviewWindow};
+use tauri::{LogicalSize, Webview, WebviewWindow};
 
-use crate::placement::{Placement, Rectangle, ThreadView, PIXEL_TOLERANCE};
+use crate::placement::{bounds_of, Extent, Placement, Rectangle, ThreadView, PIXEL_TOLERANCE};
 use crate::proofs::Verdict;
 use crate::scenario::wait_until;
 use crate::windows::{WINDOW_HEIGHT, WINDOW_WIDTH};
@@ -210,17 +210,84 @@ impl Observed {
 	}
 }
 
+#[derive(Serialize)]
+pub struct Mount {
+	window_inner_size: Extent,
+	main_webview_bounds: Rectangle,
+	child_webview_bounds: Rectangle,
+	main_webview_bounds_after_one_refit: Option<Rectangle>,
+	main_webview_fills_the_window: bool,
+	main_page_viewport: Option<Extent>,
+}
+
+impl Mount {
+	fn refusal(&self) -> String {
+		let Extent { width, height } = self.window_inner_size;
+		let after_one_refit = match self.main_webview_bounds_after_one_refit {
+			Some(bounds) => format!("{bounds} after one refit to the window inner size"),
+			None => "no refit".to_owned(),
+		};
+		format!(
+			"the main webview does not fill the window: window inner size {width} x {height}, main webview bounds {}, then {after_one_refit}, child webview bounds {}",
+			self.main_webview_bounds, self.child_webview_bounds
+		)
+	}
+}
+
+pub struct ThreadPlay {
+	pub mount: Result<Mount, String>,
+	pub behaviours: Vec<Behaviour>,
+}
+
 pub struct Stage<'a> {
 	pub main_window: &'a WebviewWindow,
 	pub thread_view: &'a ThreadView,
+	pub child: &'a Webview,
 }
 
 impl Stage<'_> {
-	pub fn play(&self, document_requests: impl Fn() -> usize) -> Vec<Behaviour> {
-		match self.observe(document_requests) {
+	pub fn play(&self, document_requests: impl Fn() -> usize) -> ThreadPlay {
+		let mount = self.mount().map_err(|cause| format!("the mount could not be read: {cause}"));
+		let observed = match &mount {
+			Ok(mount) if mount.main_webview_fills_the_window => self.observe(document_requests),
+			Ok(mount) => Err(mount.refusal()),
+			Err(cause) => Err(cause.clone()),
+		};
+		let behaviours = match observed {
 			Ok(observed) => observed.behaviours(),
 			Err(reason) => not_played(&reason),
-		}
+		};
+		ThreadPlay { mount, behaviours }
+	}
+
+	fn mount(&self) -> tauri::Result<Mount> {
+		let main_webview: &Webview = self.main_window.as_ref();
+		let scale = self.main_window.scale_factor()?;
+		let inner = self.main_window.inner_size()?.to_logical::<f64>(scale);
+		let window = Rectangle { x: 0.0, y: 0.0, width: inner.width, height: inner.height };
+		let main_webview_bounds = bounds_of(main_webview)?;
+		let child_webview_bounds = bounds_of(self.child)?;
+		let main_webview_bounds_after_one_refit = if main_webview_bounds.matches(window) {
+			None
+		} else {
+			let known = self.thread_view.placements().len();
+			main_webview.set_bounds(window.into())?;
+			let refitted = bounds_of(main_webview)?;
+			if let Err(stillness) = self.settled_placement(known) {
+				eprintln!("the refit of the main webview moved no placement: {stillness}");
+			}
+			Some(refitted)
+		};
+		Ok(Mount {
+			window_inner_size: Extent { width: inner.width, height: inner.height },
+			main_webview_bounds,
+			child_webview_bounds,
+			main_webview_fills_the_window: main_webview_bounds_after_one_refit
+				.unwrap_or(main_webview_bounds)
+				.matches(window),
+			main_webview_bounds_after_one_refit,
+			main_page_viewport: self.thread_view.latest_report().map(|report| report.viewport),
+		})
 	}
 
 	fn settled_placement(&self, known: usize) -> Result<Placement, String> {
