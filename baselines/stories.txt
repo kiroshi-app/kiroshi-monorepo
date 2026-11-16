@@ -2145,6 +2145,7 @@ navigation-librarypanel--bar-french-with-import
 navigation-librarypanel--bar-narrow
 navigation-librarypanel--bar-scrolled
 navigation-librarypanel--bar-with-import
+navigation-librarypanel--bar-with-import-dark
 navigation-librarypanel--dropping-files
 navigation-librarypanel--dropping-one-file
 navigation-librarypanel--empty-with-every-callback

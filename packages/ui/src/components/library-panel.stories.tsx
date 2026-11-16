@@ -1547,11 +1547,35 @@ const SECONDARY_HOVER_FILL = "bg-foreground/5"
 
 const SECONDARY_PRESSED_FILL = "bg-foreground/10"
 
-const PRIMARY_HOVER_FILL =
-	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_15%)]"
+const SECONDARY_REST_FILL = { light: "bg-card", dark: "bg-foreground/4" }
 
-const PRIMARY_PRESSED_FILL =
-	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_30%)]"
+const PRIMARY_AT_REST = {
+	light: { fill: "bg-primary", ink: "text-primary-foreground" },
+	dark: {
+		fill: "bg-(--hue-dark-bubble)",
+		ink: "text-(--hue-dark-bubble-foreground)",
+	},
+}
+
+const BLUE_NEW_DOCUMENT_FILL = {
+	light: { rest: "#2d62ac", hover: "#27579a", pressed: "#214b86" },
+	dark: { rest: "#2b5288", hover: "#254879", pressed: "#1f3e69" },
+}
+
+const themeAround = (element: Element) =>
+	isDarkAround(element) ? "dark" : "light"
+
+const paintedFillOf = (control: HTMLElement) => {
+	const context = document.createElement("canvas").getContext("2d")
+	if (!context) throw new Error("Nothing here can paint a colour")
+	context.fillStyle = getComputedStyle(control).backgroundColor
+	context.fillRect(0, 0, 1, 1)
+	const { data } = context.getImageData(0, 0, 1, 1)
+	const channels = Array.from(data.slice(0, 3), (channel) =>
+		channel.toString(16).padStart(2, "0"),
+	)
+	return `#${channels.join("")}`
+}
 
 const barIn = (canvasElement: HTMLElement) => {
 	const bar = slotIn(canvasElement, "app-header")
@@ -1620,7 +1644,7 @@ const expectNoHorizontalOverflow = async (canvasElement: HTMLElement) => {
 }
 
 const expectSecondaryAtRest = async (action: HTMLElement) => {
-	await expect(getComputedStyle(action).backgroundColor).toBe(TRANSPARENT)
+	await expectFill(action, SECONDARY_REST_FILL[themeAround(action)])
 	await expect(getComputedStyle(action).borderTopWidth).toBe("1px")
 	await expect(getComputedStyle(action).borderTopColor).toBe(
 		tokenStyleIn(action, "border border-foreground/12", "borderTopColor"),
@@ -1634,9 +1658,13 @@ const expectSecondaryAtRest = async (action: HTMLElement) => {
 }
 
 const expectPrimaryAtRest = async (action: HTMLElement) => {
-	await expectFill(action, "bg-primary")
+	const { fill, ink } = PRIMARY_AT_REST[themeAround(action)]
+	await expectFill(action, fill)
 	await expect(getComputedStyle(action).color).toBe(
-		tokenStyleIn(action, "text-primary-foreground", "color"),
+		tokenStyleIn(action, ink, "color"),
+	)
+	await expect(getComputedStyle(glyphOf(action)).color).toBe(
+		getComputedStyle(action).color,
 	)
 	await expect(getComputedStyle(action).borderTopWidth).toBe("0px")
 }
@@ -1847,7 +1875,7 @@ export const BarDark = Bar.extend({
 		docs: {
 			description: {
 				story:
-					"The Library as artboard I5b draws it, 960 wide, dark theme. Check the same bar, buttons and content row as the light theme, each on the dark value of the same token.",
+					"The Library as artboard I5b draws it without its Import button, 960 wide, dark theme. Check the same bar and content row as the light theme, each on the dark value of the same token, that New board sits on a 4 percent foreground fill under its hairline border, and that New document wears the dark bubble colour of the Space with its label and plus in the bubble ink.",
 			},
 		},
 	},
@@ -1859,7 +1887,7 @@ export const BarWithImport = Bar.extend({
 		docs: {
 			description: {
 				story:
-					"The Library as artboard I5a draws it, Import included, which the app does not pass yet. Check that Import comes first, wears the same hairline border as New board, and reports `onImport`.",
+					"The Library as artboard I5a draws it, Import included, which the app does not pass yet. Check that Import comes first, wears the same hairline border as New board over the surface colour, and reports `onImport`, that its glyph is an arrow landing on a baseline, and that the New board glyph is a rounded frame holding a short line over a long one.",
 			},
 		},
 	},
@@ -1874,6 +1902,18 @@ export const BarWithImport = Bar.extend({
 
 		await userEvent.click(importAction)
 		await expect(args.onImport).toHaveBeenCalledOnce()
+	},
+})
+
+export const BarWithImportDark = BarWithImport.extend({
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Library as artboard I5b draws it, Import included, 960 wide, dark theme. Check that Import and New board sit on a 4 percent foreground fill under their hairline border, their label in the foreground and their glyph in the soft ink, and that New document wears the dark bubble colour of the Space with its label and plus in the bubble ink.",
+			},
+		},
 	},
 })
 
@@ -2062,7 +2102,7 @@ export const BarButtonStates = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three bar buttons as artboard I5e draws them, one bar per state: at rest, hovered, pressed, focused from the keyboard. Check that Import and New board take a 5 percent foreground fill under the pointer and 10 percent while held, their glyph going from the soft ink to the full ink, that New document goes one step darker than the Space colour under the pointer and two steps while held, that no button moves, that all three wear a 2 px ring in the surface colour then a 2 px ring in the Space colour, and that no fill animates. The play drives the real pointer and keyboard on the bar at rest, in the Vitest browser runner only.",
+					"The three bar buttons as artboard I5e draws them, one bar per state: at rest, hovered, pressed, focused from the keyboard. Check that Import and New board rest on the surface colour, take a 5 percent foreground fill under the pointer and 10 percent while held, their glyph going from the soft ink to the full ink, that New document goes from the blue Space colour #2D62AC to #27579A under the pointer and #214B86 while held, that no button moves, that all three wear a 2 px ring in the surface colour then a 2 px ring in the Space colour, and that no fill animates. The play drives the real pointer and keyboard on the bar at rest, in the Vitest browser runner only.",
 			},
 		},
 	},
@@ -2077,8 +2117,11 @@ export const BarButtonStates = meta.story({
 			throw new Error("The bar lost an action")
 		const secondaries = [importAction, newBoard]
 
+		const newDocumentFill = BLUE_NEW_DOCUMENT_FILL[themeAround(atRest)]
+
 		for (const secondary of secondaries) await expectSecondaryAtRest(secondary)
 		await expectPrimaryAtRest(newDocument)
+		await expect(paintedFillOf(newDocument)).toBe(newDocumentFill.rest)
 		for (const action of actions)
 			await expect([
 				getComputedStyle(action).outlineStyle,
@@ -2107,15 +2150,9 @@ export const BarButtonStates = meta.story({
 		}
 
 		await pointer.hover(newDocument)
-		await expectFill(newDocument, PRIMARY_HOVER_FILL)
-		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-			tokenStyleIn(newDocument, "bg-primary", "backgroundColor"),
-		)
+		await expect(paintedFillOf(newDocument)).toBe(newDocumentFill.hover)
 		await holdDown(pointer, newDocument, async () => {
-			await expectFill(newDocument, PRIMARY_PRESSED_FILL)
-			await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-				tokenStyleIn(newDocument, PRIMARY_HOVER_FILL, "backgroundColor"),
-			)
+			await expect(paintedFillOf(newDocument)).toBe(newDocumentFill.pressed)
 			await expect(getComputedStyle(newDocument).translate).toBe("none")
 		})
 		await expectPrimaryAtRest(newDocument)
@@ -2125,7 +2162,7 @@ export const BarButtonStates = meta.story({
 			await tabTo(pointer, action)
 			await expectBarFocusRing(action)
 		}
-		await expectFill(newDocument, "bg-primary")
+		await expect(paintedFillOf(newDocument)).toBe(newDocumentFill.rest)
 	},
 })
 
@@ -2135,7 +2172,7 @@ export const BarButtonStatesDark = BarButtonStates.extend({
 		docs: {
 			description: {
 				story:
-					"The three bar buttons of artboard I5e in the dark theme: the same four bars. Check the same fills, inks and rings as the light theme, each on the dark value of the same token.",
+					"The three bar buttons of artboard I5e in the dark theme: the same four bars. Check that Import and New board rest on a 4 percent foreground fill, then take the same hover and pressed fills, inks and rings as the light theme on their dark values, and that New document starts from the dark bubble colour of the blue Space #2B5288 and darkens by the same two steps as the light theme.",
 			},
 		},
 	},

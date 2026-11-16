@@ -172,9 +172,9 @@ const BAR_ACTION =
 
 const BAR_ACTION_KIND = {
 	secondary:
-		"border border-foreground/12 text-foreground hover:bg-foreground/5 active:bg-foreground/10 [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground active:[&_svg]:text-foreground",
+		"border border-foreground/12 bg-background text-foreground in-data-content-card:bg-card dark:bg-foreground/4 hover:bg-foreground/5 dark:hover:bg-foreground/5 active:bg-foreground/10 dark:active:bg-foreground/10 [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground active:[&_svg]:text-foreground",
 	primary:
-		"bg-primary text-primary-foreground hover:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_15%)] active:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_30%)]",
+		"bg-(--fill) text-primary-foreground [--fill:var(--primary)] hover:bg-[color-mix(in_oklab,var(--fill),var(--color-black)_8%)] active:bg-[color-mix(in_oklab,var(--fill),var(--color-black)_16.7%)] dark:text-[var(--hue-dark-bubble-foreground,var(--foreground))] dark:[--fill:var(--hue-dark-bubble,var(--hue-blue-bubble))]",
 }
 
 type BarActionProps = {
@@ -283,7 +283,7 @@ const LibraryPanel = ({
 			>
 				{onImport ? (
 					<BarAction
-						icon={<Icons.Import aria-hidden="true" />}
+						icon={<Icons.LibraryImport aria-hidden="true" />}
 						isIconOnly={hasSecondaryIconsOnly}
 						kind="secondary"
 						label={t("library.import")}
@@ -292,7 +292,7 @@ const LibraryPanel = ({
 				) : null}
 				{onNewBoard ? (
 					<BarAction
-						icon={<Icons.Board aria-hidden="true" />}
+						icon={<Icons.NewBoard aria-hidden="true" />}
 						isIconOnly={hasSecondaryIconsOnly}
 						kind="secondary"
 						label={t("library.newBoard")}
