@@ -5,7 +5,7 @@ import {
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 
-import { readFailureLog, writeFailureLine } from "./failure-log"
+import { readFailureLogAfterWriting } from "./failure-log"
 import { readFailureSpecs } from "./failure-specs"
 import { scrubFailureText } from "./failure-text-scrubber"
 
@@ -184,11 +184,6 @@ const failureLineOf = ({ raisedIn, command, errorKind }: FailureContext) =>
 		.filter(Boolean)
 		.join(" ")
 
-const readLogAfterWriting = async (line: string) => {
-	await writeFailureLine(line)
-	return readFailureLog()
-}
-
 const specsOn = (
 	specs: FailureSpecs | undefined,
 	side: FailureFacts["side"],
@@ -201,7 +196,7 @@ export const buildFailureReport = async (
 	const context = contextOf(facts)
 	const [specs, log] = await Promise.all([
 		readOrLeaveOut(readFailureSpecs),
-		readOrLeaveOut(() => readLogAfterWriting(failureLineOf(context))),
+		readOrLeaveOut(() => readFailureLogAfterWriting(failureLineOf(context))),
 	])
 	return { specs: specsOn(specs, facts.side), context, log }
 }

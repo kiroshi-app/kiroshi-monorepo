@@ -21,7 +21,7 @@ const readLogTail = async () => {
 	return tail.data
 }
 
-export const readFailureLog = async (): Promise<FailureLog> => {
+const readFailureLog = async (): Promise<FailureLog> => {
 	const [lines, path] = await Promise.all([readLogTail(), logPath()])
 	return {
 		lines: lines.map(scrubFailureText),
@@ -30,4 +30,9 @@ export const readFailureLog = async (): Promise<FailureLog> => {
 	}
 }
 
-export const writeFailureLine = (line: string) => writeToLogFile("error", line)
+export const readFailureLogAfterWriting = async (
+	line: string,
+): Promise<FailureLog> => {
+	await writeToLogFile("error", line)
+	return readFailureLog()
+}
