@@ -226,8 +226,7 @@ fn activities(
 	))?;
 	let live_sessions = serde_json::to_string(live_sessions)
 		.map_err(|failure| rusqlite::Error::ToSqlConversionFailure(failure.into()))?;
-	let mut bound: Vec<Value> = ids.iter().cloned().map(Value::Text).collect();
-	bound.push(Value::Text(live_sessions));
+	let bound = ids.iter().cloned().chain([live_sessions]).map(Value::Text);
 	let rows = statement.query_map(params_from_iter(bound), |row| {
 		Ok(Activity {
 			conversation_id: row.get(0)?,
