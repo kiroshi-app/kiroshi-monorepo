@@ -281,7 +281,6 @@ const ARTBOARD_PROPERTIES: MissionPropertiesProps = {
 	openedAt: MISSION_NOW - 7_200_000,
 	now: MISSION_NOW,
 	onOpenCodingSession: fn(),
-	onEdit: fn(),
 }
 
 const TWO_MESSAGES = ["Where does the mission stand?", "Is the queue moving?"]
@@ -424,7 +423,7 @@ export const Mission3a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session and Edit icon buttons, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
+					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session icon button, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},

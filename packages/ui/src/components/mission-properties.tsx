@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -29,28 +28,6 @@ const PROPERTY_VALUE =
 
 const PROPERTY_PART = cn("whitespace-nowrap", DOT_CLASS)
 
-type MissionPropertyActionProps = Omit<
-	ComponentProps<typeof Button>,
-	"size" | "variant"
-> & {
-	"aria-label": string
-}
-
-const MissionPropertyAction = ({
-	className,
-	...props
-}: MissionPropertyActionProps) => (
-	<Button
-		className={cn(
-			"rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5",
-			className,
-		)}
-		size="icon-xs"
-		variant="ghost"
-		{...props}
-	/>
-)
-
 type MissionPropertiesProps = {
 	ticket: MissionTicketLink
 	openedAt: number
@@ -59,7 +36,6 @@ type MissionPropertiesProps = {
 	commitsAhead?: number
 	pullRequest?: MissionPullRequest
 	onOpenCodingSession?: () => void
-	onEdit?: () => void
 	className?: string
 }
 
@@ -71,7 +47,6 @@ const MissionProperties = ({
 	commitsAhead = 0,
 	pullRequest,
 	onOpenCodingSession,
-	onEdit,
 	className,
 }: MissionPropertiesProps) => {
 	const { t } = useTranslation("chat")
@@ -96,27 +71,20 @@ const MissionProperties = ({
 					<dt className={PROPERTY_LABEL}>{t("missions.properties.ticket")}</dt>
 					<dd className={cn(PROPERTY_VALUE, "@max-[40rem]:items-start")}>
 						<MissionTicketLine layout="line" ticket={ticket} />
-						{onOpenCodingSession || onEdit ? (
+						{onOpenCodingSession ? (
 							<span
-								className="flex shrink-0 items-center gap-2 @max-[40rem]:ms-auto"
+								className="flex shrink-0 items-center @max-[40rem]:ms-auto"
 								data-slot="mission-ticket-actions"
 							>
-								{onOpenCodingSession ? (
-									<MissionPropertyAction
-										aria-label={t("missions.properties.openCodingSession")}
-										onClick={onOpenCodingSession}
-									>
-										<Icons.Command aria-hidden="true" />
-									</MissionPropertyAction>
-								) : null}
-								{onEdit ? (
-									<MissionPropertyAction
-										aria-label={t("missions.properties.edit")}
-										onClick={onEdit}
-									>
-										<Icons.Edit aria-hidden="true" />
-									</MissionPropertyAction>
-								) : null}
+								<Button
+									aria-label={t("missions.properties.openCodingSession")}
+									className="rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5"
+									onClick={onOpenCodingSession}
+									size="icon-xs"
+									variant="ghost"
+								>
+									<Icons.Command aria-hidden="true" />
+								</Button>
 							</span>
 						) : null}
 					</dd>

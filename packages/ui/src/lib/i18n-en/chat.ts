@@ -1070,7 +1070,6 @@ const chat = {
 			pullRequest: "Pull request",
 			openedAt: "opened {{time}}",
 			openCodingSession: "Open the coding session",
-			edit: "Edit",
 		},
 		feed: {
 			label: "Mission conversation",

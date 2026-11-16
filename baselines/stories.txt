@@ -736,8 +736,7 @@ conversation-missions-missionproperties--default
 conversation-missions-missionproperties--empty
 conversation-missions-missionproperties--long-content
 conversation-missions-missionproperties--ticket-link
-conversation-missions-missionproperties--with-one-ticket-action
-conversation-missions-missionproperties--with-ticket-actions
+conversation-missions-missionproperties--with-ticket-action
 conversation-missions-missionproperties--without-pull-request
 conversation-missions-missionproperties--without-status
 conversation-missions-missionproperties--without-ticket
