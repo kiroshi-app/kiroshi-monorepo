@@ -23,12 +23,13 @@ use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
+use blocks::backfill;
 use contract::{
 	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
 	LibraryDocumentRenamed, LibraryDocumentState, LibraryDocumentUpdated, LibraryError,
 	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
 };
-use documents::Documents;
+use documents::{text_of_state, Documents};
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
 use comments::{board_written, written_boards_followed};
@@ -47,6 +48,8 @@ use crate::file_store::FileStore;
 use crate::{events, private_files};
 
 const DIR_NAME: &str = "library";
+
+const MARKER_WRITER: u64 = 0x4b49_524f;
 
 const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
@@ -455,11 +458,47 @@ pub(crate) fn open_document<R: Runtime>(
 	space_id: &str,
 	name: &str,
 ) -> Result<LibraryDocumentState, LibraryError> {
+	let mut state = opened_state(app, root, space_id, name)?;
+	let is_markdown = matches!(
+		accepted_type(name),
+		Some(AcceptedType::Document(LibraryDocumentFormat::Markdown))
+	);
+	if is_markdown
+		&& !host::is_agent_on(app, space_id, name)
+		&& marked(app, root, space_id, name, MARKER_WRITER, &text_of_state(&state, name)?)?
+	{
+		state = opened_state(app, root, space_id, name)?;
+	}
+	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(state) })
+}
+
+pub(crate) fn opened_state<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<Vec<u8>, LibraryError> {
 	let opened = documents(app).open(root, space_id, name)?;
 	if let Some(host_edit) = opened.host_edit {
 		announce(app, space_id, name, &host_edit);
 	}
-	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(opened.state) })
+	Ok(opened.state)
+}
+
+pub(crate) fn marked<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	writer: u64,
+	text: &str,
+) -> Result<bool, LibraryError> {
+	if backfill(text).is_empty() {
+		return Ok(false);
+	}
+	let applied = documents(app).spliced(root, space_id, name, writer, backfill)?;
+	announce(app, space_id, &applied.name, &applied.change);
+	Ok(true)
 }
 
 pub(crate) fn apply_update<R: Runtime>(
