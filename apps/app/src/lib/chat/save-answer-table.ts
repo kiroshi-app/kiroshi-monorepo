@@ -12,7 +12,7 @@ const fileSlugOf = (agentName: string): string =>
 	agentName
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
+		.replace(/^-|-$/g, "")
 
 const tableFileNameOf = (agentName: string): string => {
 	const slug = fileSlugOf(agentName)
