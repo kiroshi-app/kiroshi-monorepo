@@ -20,6 +20,12 @@ const CONTROL_ALT = { ctrlKey: true, altKey: true }
 
 const CONTROL_SHIFT = { ctrlKey: true, shiftKey: true }
 
+const SHIFTED_M_KEYS = [
+	{ layout: "QWERTY", key: "M", code: "KeyM", keyCode: 77 },
+	{ layout: "AZERTY", key: "M", code: "Semicolon", keyCode: 77 },
+	{ layout: "German QWERTZ", key: "M", code: "KeyM", keyCode: 77 },
+]
+
 const ALT_GRAPH = {
 	getModifierState: (modifier: string) => modifier === "AltGraph",
 }
@@ -163,11 +169,7 @@ describe("isCommandAltLetter", () => {
 })
 
 describe("isControlShiftLetterOffMac", () => {
-	it.each([
-		{ layout: "QWERTY", key: "M", code: "KeyM", keyCode: 77 },
-		{ layout: "AZERTY", key: "M", code: "Semicolon", keyCode: 77 },
-		{ layout: "German QWERTZ", key: "M", code: "KeyM", keyCode: 77 },
-	])(
+	it.each(SHIFTED_M_KEYS)(
 		"hears the M key of a $layout keyboard on Windows, where Chromium drops Ctrl and keeps Shift to name the key in ui/events/keycodes/platform_key_map_win.cc",
 		({ layout: _, ...key }) => {
 			expect(
@@ -176,11 +178,7 @@ describe("isControlShiftLetterOffMac", () => {
 		},
 	)
 
-	it.each([
-		{ layout: "QWERTY", key: "M", code: "KeyM", keyCode: 77 },
-		{ layout: "AZERTY", key: "M", code: "Semicolon", keyCode: 77 },
-		{ layout: "German QWERTZ", key: "M", code: "KeyM", keyCode: 77 },
-	])(
+	it.each(SHIFTED_M_KEYS)(
 		"hears the M key of a $layout keyboard on Linux, where WebKitGTK maps the keyval in Source/WebKit/Shared/gtk/WebKeyboardEventGtk.cpp",
 		({ layout: _, ...key }) => {
 			expect(pressedWithShift(LINUX_AGENT, { ...CONTROL_SHIFT, ...key })).toBe(
