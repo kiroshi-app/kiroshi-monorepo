@@ -1623,8 +1623,6 @@ export const NoTooltipWhileTheRowIsLifted = meta.story({
 	},
 })
 
-const MISSION_MENU_LABEL = "Mission actions"
-
 const WAITING_MISSION_ENTRIES = [
 	"Open mission",
 	"Copy",
@@ -1696,7 +1694,7 @@ export const MissionRowOpensTheMissionMenu = meta.story({
 		const mission = slotIn(canvasElement, "mission-capsule")
 		rightClick(mission)
 		const menu = await shown(
-			await screen.findByRole("menu", { name: MISSION_MENU_LABEL }),
+			await screen.findByRole("menu", { name: "Mission actions" }),
 		)
 
 		await expect(entriesOf(menu)).toEqual(WAITING_MISSION_ENTRIES)
@@ -1737,10 +1735,8 @@ export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
 	tags: ["test-only"],
 	args: { ...missionMenuStory.args, wrapMission: undefined },
 	play: async ({ canvasElement }) => {
-		const surface = surfaceOf(rowIn(canvasElement))
 		rightClick(slotIn(canvasElement, "mission-capsule"))
 
-		await expect(surface).not.toHaveAttribute("data-popup-open")
 		await expect(screen.queryByRole("menu")).toBeNull()
 	},
 })

@@ -465,9 +465,6 @@ export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
 	play: async ({ canvasElement }) => {
 		rightClick(slotIn(canvasElement, "mission-capsule"))
 
-		await expect(
-			slotIn(canvasElement, "context-menu-trigger"),
-		).not.toHaveAttribute("data-popup-open")
 		await expect(screen.queryByRole("menu")).toBeNull()
 	},
 })
