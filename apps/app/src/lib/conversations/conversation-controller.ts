@@ -1705,17 +1705,18 @@ export const createConversationController = (
 		startRun(recorded.conversationId, recorded, run)
 	}
 
+	const recordedRefusal = ({ message }: RefusedSend) =>
+		readTranscript().messages.find(({ id }) => id === message.id)
+
 	const syncRecordedRefusal = () => {
-		const run = refused?.run
-		const recorded = readTranscript().messages.find(
-			({ id }) => id === refused?.message.id,
-		)
-		if (!run || !recorded) {
+		const held = refused
+		const recorded = held?.run && recordedRefusal(held)
+		if (!held?.run || !recorded) {
 			sync()
 			return
 		}
 		refused = null
-		continueRecorded(recorded, run)
+		continueRecorded(recorded, held.run)
 	}
 
 	const sendAgain = async (messageId: string) => {
