@@ -14,7 +14,19 @@ import type { HostSocket } from "../host/http"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 import { joinedRowIdOf } from "../spaces/joined-spaces-controller"
 
-const wire = vi.hoisted(() => ({ sockets: [] as HostSocket[] }))
+const wire = vi.hoisted(() => ({
+	sockets: [] as HostSocket[],
+	raised: [] as unknown[],
+	hostFailures: [] as unknown[],
+}))
+
+vi.mock("../failure-report", async (original) => ({
+	...(await original<object>()),
+	raiseReportedFailure: (notice: unknown) => {
+		wire.raised.push(notice)
+		return `notice-${wire.raised.length}`
+	},
+}))
 
 vi.mock("@/lib/host", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/host")>()
@@ -47,7 +59,9 @@ vi.mock("@/lib/host", async (importOriginal) => {
 			wire.sockets.push(socket)
 			return socket
 		},
-		reportFailure: () => undefined,
+		reportFailure: (failure) => {
+			wire.hostFailures.push(failure)
+		},
 	})
 	return {
 		...actual,
@@ -103,7 +117,12 @@ const joinedMember = async () => {
 	await act(() => joinedHosts.activate(SHED_HOST))
 	await openLastSocket()
 	const { queryClient, wrapper } = createQueryTestWrapper()
-	const roster = createRosterController(shared.store, { queryClient })
+	const roster = createRosterController(shared.store, {
+		queryClient,
+		reportFailure: (notice) => {
+			wire.raised.push(notice)
+		},
+	})
 	renderHook(() => useRosterReads(roster, useControllerState(roster)), {
 		wrapper,
 	})
@@ -132,6 +151,8 @@ const joinedMember = async () => {
 }
 
 afterEach(async () => {
+	wire.raised = []
+	wire.hostFailures = []
 	detachChat()
 	cleanup()
 	await joinedHosts.activate(null)
@@ -151,6 +172,10 @@ it("rereads the shared agents before any main chat, and never the chat of an age
 
 	expect(roster.getState().bots.map(({ id }) => id)).toEqual([kept.id])
 	expect(pageReads.mock.calls.map(([id]) => id)).toEqual([keptChatId])
+	expect(wire.raised).toEqual([])
+	expect(wire.hostFailures).toEqual([])
+	expect(chat.controller.stateFor(kept.id).errors).toEqual([])
+	expect(chat.controller.stateFor(unshared.id).errors).toEqual([])
 })
 
 it("reads no main chat on a reconnection whose reread of the shared agents fails, and shows the roster failure", async () => {

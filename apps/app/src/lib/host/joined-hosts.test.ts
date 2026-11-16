@@ -1694,6 +1694,21 @@ describe("a reopened member relay", () => {
 
 		expect(reread).not.toHaveBeenCalled()
 	})
+
+	it("re-reads nothing and reports the failure when the first catch-up of the reconnection rejects", async () => {
+		const { hosts, reread, reopen, reportFailure } = await followingGarage()
+		hosts.onReconnectedFirst(async () => {
+			throw new Error("the roster could not be reread")
+		})
+
+		reopen("garage")
+		await announced()
+
+		expect(reread).not.toHaveBeenCalled()
+		expect(reportFailure).toHaveBeenCalledWith({
+			message: expect.stringContaining("the roster could not be reread"),
+		})
+	})
 })
 
 describe("forgetting a joined host", () => {

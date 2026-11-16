@@ -20,6 +20,7 @@ type JoinedHostsDownOptions = {
 	local: LocalHost
 	record: RecordJoinedHost
 	reportListenFailure: (reason: unknown) => UnlistenFn
+	reportCatchUpFailure: (reason: unknown) => void
 }
 
 export const createJoinedHostsDown = ({
@@ -28,6 +29,7 @@ export const createJoinedHostsDown = ({
 	local,
 	record,
 	reportListenFailure,
+	reportCatchUpFailure,
 }: JoinedHostsDownOptions) => {
 	const reconnectionCatchUps = new Set<ReconnectionCatchUp>()
 	const reconnectionListeners = new Set<ReconnectionListener>()
@@ -39,12 +41,16 @@ export const createJoinedHostsDown = ({
 
 	const isActive = (id: string) => store.getState().active === id
 
-	const hasCaughtUpWith = async (id: string) => {
-		const caughtUp = await Promise.all(
-			[...reconnectionCatchUps].map((catchUp) => catchUp(id)),
-		)
-		return caughtUp.every(Boolean)
+	const hasNotCaughtUp = (reason: unknown) => {
+		reportCatchUpFailure(reason)
+		return false
 	}
+
+	const hasCaughtUpWith = (id: string) =>
+		Promise.all([...reconnectionCatchUps].map((catchUp) => catchUp(id))).then(
+			(caughtUp) => caughtUp.every(Boolean),
+			hasNotCaughtUp,
+		)
 
 	const tellListenersOf = (id: string) => {
 		for (const listener of [...reconnectionListeners]) {
