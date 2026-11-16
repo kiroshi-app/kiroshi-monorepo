@@ -12,6 +12,8 @@ import type { Store } from "../store"
 
 type ReconnectionListener = (hostId: string) => void
 
+type ReconnectionCatchUp = (hostId: string) => Promise<boolean>
+
 type JoinedHostsDownOptions = {
 	store: Store<JoinedHostsState>
 	hosts: Map<string, HttpHost>
@@ -27,6 +29,7 @@ export const createJoinedHostsDown = ({
 	record,
 	reportListenFailure,
 }: JoinedHostsDownOptions) => {
+	const reconnectionCatchUps = new Set<ReconnectionCatchUp>()
 	const reconnectionListeners = new Set<ReconnectionListener>()
 	const rereadsAwaitingUp = new Set<string>()
 	let isHearingRelayReopens = false
@@ -34,12 +37,27 @@ export const createJoinedHostsDown = ({
 	const isDown = (id: string) =>
 		store.getState().connections[id]?.status === "down"
 
-	const announceReconnectionOf = (id: string) => {
-		if (store.getState().active !== id) {
-			return
-		}
+	const isActive = (id: string) => store.getState().active === id
+
+	const hasCaughtUpWith = async (id: string) => {
+		const caughtUp = await Promise.all(
+			[...reconnectionCatchUps].map((catchUp) => catchUp(id)),
+		)
+		return caughtUp.every(Boolean)
+	}
+
+	const tellListenersOf = (id: string) => {
 		for (const listener of [...reconnectionListeners]) {
 			listener(id)
+		}
+	}
+
+	const announceReconnectionOf = async (id: string) => {
+		if (!isActive(id)) {
+			return
+		}
+		if ((await hasCaughtUpWith(id)) && isActive(id)) {
+			tellListenersOf(id)
 		}
 	}
 
@@ -50,7 +68,7 @@ export const createJoinedHostsDown = ({
 			return
 		}
 		if (status === "up") {
-			announceReconnectionOf(id)
+			void announceReconnectionOf(id)
 		}
 	}
 
@@ -61,7 +79,7 @@ export const createJoinedHostsDown = ({
 	const markUp = (id: string) => {
 		record(id, { status: "up" })
 		if (rereadsAwaitingUp.delete(id)) {
-			announceReconnectionOf(id)
+			void announceReconnectionOf(id)
 		}
 	}
 
@@ -91,6 +109,13 @@ export const createJoinedHostsDown = ({
 		}
 	}
 
+	const onReconnectedFirst = (catchUp: ReconnectionCatchUp) => {
+		reconnectionCatchUps.add(catchUp)
+		return () => {
+			reconnectionCatchUps.delete(catchUp)
+		}
+	}
+
 	const forgetDown = (id: string) => {
 		rereadsAwaitingUp.delete(id)
 	}
@@ -102,6 +127,7 @@ export const createJoinedHostsDown = ({
 		markReopened: rereadOnceUp,
 		hearRelayReopens,
 		onReconnected,
+		onReconnectedFirst,
 		forgetDown,
 	}
 }

@@ -192,6 +192,7 @@ export const createJoinedHosts = ({
 		listen,
 		listenToActiveHost,
 		onReconnected: down.onReconnected,
+		onReconnectedFirst: down.onReconnectedFirst,
 		fileSrc,
 	}
 }

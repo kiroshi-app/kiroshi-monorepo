@@ -41,10 +41,13 @@ const concernsShownSpace = (event: string, hostId: string | null) =>
 export const invalidateOnHostReconnect = (queryClient: QueryClient) =>
 	onHostReconnected((hostId) => {
 		const namesAnotherHost = namesAnotherHostThan(hostId)
-		queryClient.invalidateQueries({
-			predicate: ({ meta, queryKey }) =>
-				!meta?.rereadsItselfOnReconnect && !namesAnotherHost(queryKey),
-		})
+		queryClient.invalidateQueries(
+			{
+				predicate: ({ meta, queryKey }) =>
+					!meta?.rereadsItselfOnReconnect && !namesAnotherHost(queryKey),
+			},
+			{ cancelRefetch: false },
+		)
 	})
 
 export const useInvalidateOnHostEvent = (
