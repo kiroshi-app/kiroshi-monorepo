@@ -7,6 +7,7 @@ use super::contract::{
 	state_in, AgentRoomsChanged, ConversationState, ConversationStateChanged, ObservedState,
 	PendingPrompt, States, TranscriptStoreError,
 };
+use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::conversations::{Activity, StoredPrompt};
 use crate::events::{self, AGENT_ROOMS_CHANGED, CONVERSATION_STATE_CHANGED};
@@ -40,12 +41,12 @@ pub(crate) async fn observe<R: Runtime>(
 ) -> Result<ObservedState, TranscriptStoreError> {
 	let held = observed(app);
 	let mut observed = held.0.lock().await;
-	let activity = database.conversations().activity_of(vec![conversation_id.to_owned()]).await?;
+	let activity = activities_of(app, database, vec![conversation_id.to_owned()]).await?;
 	let Some(activity) = activity.into_iter().next() else {
 		return Err(TranscriptStoreError::UnknownConversation { id: conversation_id.to_owned() });
 	};
 	let space_id = activity.space_id.clone();
-	let state = observed_state(activity, &origins_needing_you(app, database).await?);
+	let state = observed_state(app, activity, &origins_needing_you(app, database).await?);
 	if state_in(&observed, conversation_id) != state {
 		let changed = ConversationStateChanged {
 			conversation_id: conversation_id.to_owned(),
@@ -144,12 +145,28 @@ async fn states_of<R: Runtime>(
 	database: &db::Database,
 	ids: Vec<String>,
 ) -> Result<States, TranscriptStoreError> {
-	let activities = database.conversations().activity_of(ids).await?;
+	let activities = activities_of(app, database, ids).await?;
 	let needing_you = origins_needing_you(app, database).await?;
 	Ok(activities
 		.into_iter()
-		.map(|activity| (activity.conversation_id.clone(), observed_state(activity, &needing_you)))
+		.map(|activity| {
+			(activity.conversation_id.clone(), observed_state(app, activity, &needing_you))
+		})
 		.collect())
+}
+
+async fn activities_of<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	ids: Vec<String>,
+) -> Result<Vec<Activity>, TranscriptStoreError> {
+	let live_sessions =
+		app.try_state::<AgentState>().map_or_else(Vec::new, |agent| agent.live_sessions());
+	Ok(database.conversations().activity_of(ids, live_sessions).await?)
+}
+
+fn asked_question<R: Runtime>(app: &AppHandle<R>, conversation_id: &str) -> Option<PendingPrompt> {
+	app.try_state::<AgentState>().and_then(|agent| agent.thread_question(conversation_id))
 }
 
 async fn origins_needing_you<R: Runtime>(
@@ -165,12 +182,19 @@ async fn origins_needing_you<R: Runtime>(
 		.collect())
 }
 
-fn observed_state(activity: Activity, origins_needing_you: &HashSet<String>) -> ObservedState {
+fn observed_state<R: Runtime>(
+	app: &AppHandle<R>,
+	activity: Activity,
+	origins_needing_you: &HashSet<String>,
+) -> ObservedState {
+	let question = asked_question(app, &activity.conversation_id);
 	ObservedState {
-		state: ranked(&activity, origins_needing_you),
-		pending_prompt: activity
-			.pending_prompt
-			.and_then(|stored| shown_prompt(&activity.conversation_id, stored)),
+		state: ranked(&activity, question.is_some(), origins_needing_you),
+		pending_prompt: question.or_else(|| {
+			activity
+				.pending_prompt
+				.and_then(|stored| shown_prompt(&activity.conversation_id, stored))
+		}),
 		working_bot_ids: activity.working_bot_ids,
 	}
 }
@@ -187,8 +211,14 @@ fn shown_prompt(conversation_id: &str, stored: StoredPrompt) -> Option<PendingPr
 	}
 }
 
-fn ranked(activity: &Activity, origins_needing_you: &HashSet<String>) -> ConversationState {
-	if activity.pending_prompt.is_some() || origins_needing_you.contains(&activity.conversation_id)
+fn ranked(
+	activity: &Activity,
+	is_asking: bool,
+	origins_needing_you: &HashSet<String>,
+) -> ConversationState {
+	if is_asking
+		|| activity.pending_prompt.is_some()
+		|| origins_needing_you.contains(&activity.conversation_id)
 	{
 		return ConversationState::NeedsYou;
 	}
@@ -235,7 +265,9 @@ mod tests {
 	};
 	use crate::conversations::contract::Chat;
 	use crate::conversations::contract::{AGENT_ROOMS_CHANGED_EVENT, STATE_CHANGED_EVENT};
-	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
+	use crate::db::repositories::conversations::{
+		a_pending_prompt, PendingPrompt as StoredPendingPrompt, PromptKind,
+	};
 	use crate::db::repositories::messages::NewTurn;
 	use crate::missions::contract::{
 		Mission, MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
@@ -295,15 +327,37 @@ mod tests {
 		row.expect("the room is on the page").observed
 	}
 
-	async fn ask(app: &App<MockRuntime>, kind: PromptKind) {
-		database(app)
-			.conversations()
-			.hold_prompt(a_pending_prompt("c1", kind))
-			.await
-			.expect("the prompt is held");
+	fn a_run_in(conversation_id: &str, runtime_session_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: "b1".to_owned(),
+			runtime_session_id: runtime_session_id.to_owned(),
+			epoch: 1,
+		}
 	}
 
-	async fn answer(app: &App<MockRuntime>) {
+	async fn hold_live(app: &App<MockRuntime>, prompt: StoredPendingPrompt) -> impl TurnSink {
+		let scope = a_run_in(&prompt.conversation_id, &prompt.runtime_session_id);
+		let run = a_run_held_by_the_app(app.handle(), scope);
+		match prompt.kind {
+			PromptKind::Question => {
+				let request = serde_json::from_str(&prompt.request).expect("a question decodes");
+				run.emit(AgentEvent::QuestionRequested { request }, None);
+			}
+			PromptKind::Permission => {
+				database(app).conversations().hold_prompt(prompt).await.expect("the prompt is held")
+			}
+		}
+		run
+	}
+
+	async fn ask(app: &App<MockRuntime>, kind: PromptKind) -> impl TurnSink {
+		hold_live(app, a_pending_prompt("c1", kind)).await
+	}
+
+	async fn answer(app: &App<MockRuntime>, run: &impl TurnSink) {
+		let decision = PermissionDecision::AllowOnce;
+		run.emit(AgentEvent::PermissionResolved { id: "p1".to_owned(), decision }, None);
 		database(app)
 			.conversations()
 			.release_prompt("rs1".to_owned(), "p1".to_owned())
@@ -566,10 +620,10 @@ mod tests {
 	async fn a_pending_prompt_outranks_an_open_turn() {
 		let app = a_host("precedence").await;
 		open_a_turn(&app).await;
-		ask(&app, PromptKind::Question).await;
+		let run = ask(&app, PromptKind::Question).await;
 
 		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
-		answer(&app).await;
+		answer(&app, &run).await;
 		assert_eq!(listed_state(&app).await, Ok(ConversationState::Working));
 	}
 
@@ -584,9 +638,9 @@ mod tests {
 		observed_state(&app).await;
 		ask(&app, PromptKind::Question).await;
 		observed_state(&app).await;
-		ask(&app, PromptKind::Question).await;
+		let run = ask(&app, PromptKind::Question).await;
 		observed_state(&app).await;
-		answer(&app).await;
+		answer(&app, &run).await;
 		observed_state(&app).await;
 		complete_the_turn(&app).await;
 		observed_state(&app).await;
@@ -636,9 +690,9 @@ mod tests {
 		relaunched.manage(Ok::<_, db::DatabaseError>(db::open(&file)));
 		assert_eq!(listed_state(&relaunched).await, Ok(ConversationState::Idle));
 
-		ask(&relaunched, PromptKind::Question).await;
+		let run = ask(&relaunched, PromptKind::Question).await;
 		let open = listed_state(&relaunched).await;
-		answer(&relaunched).await;
+		answer(&relaunched, &run).await;
 		let answered = listed_state(&relaunched).await;
 
 		assert_eq!(open, Ok(ConversationState::NeedsYou));
@@ -648,7 +702,7 @@ mod tests {
 	#[tokio::test]
 	async fn deleting_a_conversation_deletes_its_prompts() {
 		let app = a_host("deleted").await;
-		ask(&app, PromptKind::Question).await;
+		ask(&app, PromptKind::Permission).await;
 
 		conversation_delete(app.handle().clone(), app.state(), "c1".to_owned())
 			.await
@@ -713,11 +767,7 @@ mod tests {
 		let app = a_host("main-conversation").await;
 		let main = the_main_chat(&app).await;
 		let heard = heard_states(&app);
-		database(&app)
-			.conversations()
-			.hold_prompt(a_pending_prompt(&main.id, PromptKind::Question))
-			.await
-			.expect("the prompt is held");
+		hold_live(&app, a_pending_prompt(&main.id, PromptKind::Question)).await;
 
 		let read = the_main_chat(&app).await;
 		observed_in(&app, &main.id).await;
@@ -736,9 +786,9 @@ mod tests {
 	async fn a_pending_prompt_carries_its_text_in_the_state_and_in_its_event() {
 		let app = a_host("prompt-text").await;
 		let heard = heard_states(&app);
-		ask(&app, PromptKind::Question).await;
+		let run = ask(&app, PromptKind::Question).await;
 		let asked = observed_in(&app, "c1").await;
-		answer(&app).await;
+		answer(&app, &run).await;
 		observed_in(&app, "c1").await;
 		ask(&app, PromptKind::Permission).await;
 
@@ -793,10 +843,7 @@ mod tests {
 			.ensure_chat("b1".to_owned(), Some("personal".to_owned()), ChatOwner::Host)
 			.await
 			.expect("the solo thread is opened");
-		conversations
-			.hold_prompt(a_pending_prompt(&solo.id, PromptKind::Permission))
-			.await
-			.expect("the prompt is held");
+		hold_live(&app, a_pending_prompt(&solo.id, PromptKind::Permission)).await;
 
 		let read = the_main_chat(&app).await;
 
@@ -844,11 +891,7 @@ mod tests {
 			.expect("the companions are planted");
 		let asking = a_solo_thread_of(&app, "b1").await;
 		let working = a_solo_thread_of(&app, "b2").await;
-		database(&app)
-			.conversations()
-			.hold_prompt(a_pending_prompt(&asking, PromptKind::Question))
-			.await
-			.expect("the prompt is held");
+		hold_live(&app, a_pending_prompt(&asking, PromptKind::Question)).await;
 		a_run_of(&app, ("t1", &working, 1), "b2").await;
 		let held_before = conversations_held(&app).await;
 
@@ -916,6 +959,8 @@ mod tests {
 			.call_mut(|connection| Ok(connection.execute_batch(MALFORMED_PROMPTS)?))
 			.await
 			.expect("the malformed prompts are planted");
+		a_run_held_by_the_app(app.handle(), a_run_in("c2", "rs2"));
+		a_run_held_by_the_app(app.handle(), a_run_in("c3", "rs3"));
 
 		let page = conversation_page(
 			app.handle().clone(),
@@ -1038,9 +1083,9 @@ mod tests {
 		let heard = heard_rooms(&app);
 		let states = heard_states(&app);
 
-		ask(&app, PromptKind::Question).await;
+		let run = ask(&app, PromptKind::Question).await;
 		observed_in(&app, "c1").await;
-		answer(&app).await;
+		answer(&app, &run).await;
 		observed_in(&app, "c1").await;
 		observed_in(&app, "c3").await;
 

@@ -176,9 +176,13 @@ impl ConversationsRepository {
 			.at("release_orphan_prompts", "pending_prompts")?)
 	}
 
-	pub async fn activity_of(&self, ids: Vec<String>) -> Result<Vec<Activity>, ConversationError> {
+	pub async fn activity_of(
+		&self,
+		ids: Vec<String>,
+		live_sessions: Vec<String>,
+	) -> Result<Vec<Activity>, ConversationError> {
 		Ok(self
-			.call(move |connection| activities(connection, &ids))
+			.call(move |connection| activities(connection, &ids, &live_sessions))
 			.await
 			.at("activity_of", "pending_prompts")?)
 	}
@@ -198,23 +202,32 @@ pub(in crate::db) fn release_every_prompt(connection: &Connection) -> rusqlite::
 	connection.prepare_cached(RELEASE_EVERY_PROMPT)?.execute([])
 }
 
-fn activities(connection: &Connection, ids: &[String]) -> Result<Vec<Activity>, DatabaseError> {
+fn activities(
+	connection: &Connection,
+	ids: &[String],
+	live_sessions: &[String],
+) -> Result<Vec<Activity>, DatabaseError> {
 	if ids.is_empty() {
 		return Ok(Vec::new());
 	}
-	let slots: Vec<String> = (1..=ids.len()).map(|slot| format!("?{slot}")).collect();
+	let live_slot = ids.len() + 1;
+	let slots: Vec<String> = (1..live_slot).map(|slot| format!("?{slot}")).collect();
 	let mut statement = connection.prepare(&format!(
 		"SELECT conversations.id, conversations.space_id, {HAS_OPEN_TURN},
 			first_prompt.prompt_id, first_prompt.kind, first_prompt.request, {OPEN_TURN_BOTS}
 		FROM conversations
 		LEFT JOIN pending_prompts AS first_prompt ON first_prompt.rowid = (
 			SELECT asked.rowid FROM pending_prompts AS asked
-				WHERE asked.conversation_id = conversations.id
+				WHERE asked.conversation_id = conversations.id AND asked.kind <> 'question'
+					AND asked.runtime_session_id IN (SELECT value FROM json_each(?{live_slot}))
 				ORDER BY asked.asked_at, asked.prompt_id LIMIT 1)
 		WHERE conversations.id IN ({})",
 		slots.join(", ")
 	))?;
-	let rows = statement.query_map(params_from_iter(ids), |row| {
+	let live_sessions = serde_json::to_string(live_sessions)
+		.map_err(|failure| rusqlite::Error::ToSqlConversionFailure(failure.into()))?;
+	let bound = ids.iter().cloned().chain([live_sessions]).map(Value::Text);
+	let rows = statement.query_map(params_from_iter(bound), |row| {
 		Ok(Activity {
 			conversation_id: row.get(0)?,
 			space_id: row.get(1)?,
