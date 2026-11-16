@@ -260,7 +260,7 @@ impl Summary {
 	}
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq)]
 pub struct Verdict {
 	pub distinguishable: bool,
 	pub signal: Option<String>,
