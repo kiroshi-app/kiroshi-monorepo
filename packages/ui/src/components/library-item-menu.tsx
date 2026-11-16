@@ -338,7 +338,7 @@ const LIBRARY_BAR_DIVIDER = "bg-foreground/12 data-vertical:self-center"
 const LIBRARY_ISLAND_CONTEXT = "min-w-0 shrink"
 
 const LIBRARY_OVERLAY_ISLAND =
-	"bg-header-island-overlay backdrop-blur-lg dark:bg-header-island-overlay"
+	"bg-lightbox-control backdrop-blur-lg dark:bg-lightbox-control"
 
 const LibraryBarButton = ({
 	"aria-label": label,

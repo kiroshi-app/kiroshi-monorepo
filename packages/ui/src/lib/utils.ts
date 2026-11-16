@@ -10,12 +10,7 @@ const twMerge = extendTailwindMerge({
 			px: ["left-column-inset"],
 			rounded: [
 				{
-					rounded: [
-						"control",
-						"header-island",
-						"header-island-control",
-						"header-island-segment",
-					],
+					rounded: ["control", "compact-control", "compact-segment"],
 				},
 			],
 			shadow: [{ shadow: ["popover"] }],

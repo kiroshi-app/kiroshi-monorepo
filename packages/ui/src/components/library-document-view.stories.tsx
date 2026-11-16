@@ -255,7 +255,6 @@ const expectBarControls = async (canvasElement: HTMLElement) => {
 const expectBarAtRest = async (canvasElement: HTMLElement, surface: string) => {
 	const page = slotIn(canvasElement, "library-document-view")
 	const bar = await expectStaticHeaderBar(page)
-	await expect(slotsIn(page, "header-island")).toHaveLength(0)
 	await expect(getComputedStyle(bar).backgroundColor).toBe(TRANSPARENT)
 	await expect(getComputedStyle(page).backgroundColor).toBe(surface)
 
@@ -314,7 +313,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent and no island, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Copy drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
+					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Copy drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
@@ -382,7 +381,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule and no island, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 24 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
+					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 24 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
 			},
 		},
 	},
@@ -546,7 +545,7 @@ export const BoardBarAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bar of a board at rest, given what the board screen gives it: a name, `onBack` and Delete, inside a layout that still asks for a floating header. It follows artboard I6a with no details: check that the bar sits in the flow, 56 tall with its rule and no island or fade, that its top line reads the Library path link alone, with no separator, over the board name, that the right group holds the capsule with More alone then Close, and that the canvas starts at the rule.",
+					"The bar of a board at rest, given what the board screen gives it: a name, `onBack` and Delete. It follows artboard I6a with no details: check that the bar sits in the flow, 56 tall with its rule, that its top line reads the Library path link alone, with no separator, over the board name, that the right group holds the capsule with More alone then Close, and that the canvas starts at the rule.",
 			},
 		},
 	},
@@ -566,7 +565,6 @@ export const BoardBarAtRest = meta.story({
 							onDelete={fn()}
 						/>
 					}
-					isHeaderFloating
 					scroller={() => <div className="min-h-0 flex-1" data-slot="canvas" />}
 				/>
 			</ContentCard>
@@ -575,7 +573,6 @@ export const BoardBarAtRest = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const screenLayout = slotIn(canvasElement, "board-screen")
 		const bar = await expectStaticHeaderBar(screenLayout)
-		await expect(slotsIn(screenLayout, "header-island")).toHaveLength(0)
 		await expectBarLeavesTheWindowInPlace(bar)
 
 		const topLine = slotIn(bar, "app-header-top-line")

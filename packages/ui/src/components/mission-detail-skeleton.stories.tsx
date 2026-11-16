@@ -39,7 +39,6 @@ const meta = preview.meta({
 					state="waiting_human"
 				/>
 			}
-			isHeaderFloating
 			skeleton={<MissionDetailSkeleton />}
 		>
 			{null}

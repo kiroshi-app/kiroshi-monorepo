@@ -953,7 +953,6 @@ const CAPSULE_CONTROLS = (
 
 const SOLO_BAR = (
 	<AppHeader
-		isFloating
 		leading={
 			<HeaderIdentityButton
 				blot={BOT.blot}
@@ -971,7 +970,6 @@ const SOLO_BAR = (
 
 const groupBar = (name: string) => (
 	<AppHeader
-		isFloating
 		leading={
 			<HeaderConversationButton
 				color={BLOT_HUES.blue}
@@ -994,7 +992,6 @@ const LONG_CONVERSATION_ROWS: TranscriptItem[] = [
 }))
 
 const THREAD_UNDER_THE_BAR = {
-	isHeaderFloating: true,
 	rows: CONVERSATION_ROWS,
 	children: null,
 }
@@ -1150,7 +1147,7 @@ const expectTurnsLeaveAtTheBarEdge = async (
 }
 
 const WORN_BY_THE_APP =
-	"`apps/app/src/components/thread-screen.tsx:477` assembles it and still passes `isFloating` to the header and `isHeaderFloating` to the layout, which change nothing here."
+	"`apps/app/src/components/thread-screen.tsx:477` assembles it."
 
 export const Solo1a = meta.story({
 	args: { ...THREAD_UNDER_THE_BAR, header: SOLO_BAR },
@@ -1336,7 +1333,7 @@ export const Opening = meta.story({
 		docs: {
 			description: {
 				story:
-					"A thread given an `opening`, here the properties of a mission, under the static bar and with `isHeaderFloating` as the app still passes it. Check that the properties block stands 24px under the bar, not the 32px a thread without an opening keeps, that the first turn follows 16px under its rule, and that the two turns read from the top of the thread instead of resting against the composer. Pick `Default` for a thread without an opening. Nothing in `apps/app` passes `opening` yet.",
+					"A thread given an `opening`, here the properties of a mission, under the static bar. Check that the properties block stands 24px under the bar, not the 32px a thread without an opening keeps, that the first turn follows 16px under its rule, and that the two turns read from the top of the thread instead of resting against the composer. Pick `Default` for a thread without an opening. Nothing in `apps/app` passes `opening` yet.",
 			},
 		},
 	},

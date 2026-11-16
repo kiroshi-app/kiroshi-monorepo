@@ -415,20 +415,8 @@ const screenSlot = (slot: string) => framedSlot("screen-layout", slot)
 
 const threadSlot = (slot: string) => framedSlot("chat-layout", slot)
 
-const floatingHeader = () =>
-	document.querySelector(
-		'[data-slot="screen-layout-floating-header"]',
-	) as HTMLElement
-
-const islandsIn = (surface: Element) => [
-	...surface.querySelectorAll<HTMLElement>('[data-slot="header-island"]'),
-]
-
 const barOf = (header: Element | null) =>
 	header?.querySelector('[data-slot="app-header"]') as HTMLElement
-
-const islandOf = (control: HTMLElement) =>
-	control.closest('[data-slot="header-island"]') as HTMLElement
 
 const missionChanges = () => {
 	const listeners = new Set<(changed: MissionChanged) => void>()
@@ -664,8 +652,6 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 		const back = screen.getByRole("button", { name: BACK })
 
-		expect(floatingHeader()).toBeNull()
-		expect(islandsIn(document.body)).toHaveLength(0)
 		expect(startsWindowDrag(barOf(missionHeaderSkeleton()))).toBe(true)
 		expect(startsWindowDrag(back)).toBe(false)
 	})
@@ -681,8 +667,6 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 		const back = screen.getByRole("button", { name: BACK })
 
-		expect(floatingHeader()).toBeNull()
-		expect(islandsIn(document.body)).toHaveLength(0)
 		expect(startsWindowDrag(barOf(missionHeader()))).toBe(true)
 		expect(startsWindowDrag(back)).toBe(false)
 	})
@@ -877,10 +861,6 @@ describe("WorkspaceBody frame", () => {
 		const bar = threadSlot("app-header") as HTMLElement
 
 		expect(thread().firstElementChild).toBe(bar)
-		expect(
-			bar.closest('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
-		expect(islandsIn(thread())).toHaveLength(0)
 		expect(takesPress(bar)).toBe(true)
 
 		return bar
@@ -1164,7 +1144,6 @@ describe("WorkspaceBody Home", () => {
 
 		expect(homeSlot("home-layout")).not.toBeNull()
 		expect(homeSlot("app-header")).toBeNull()
-		expect(homeSlot("header-island")).toBeNull()
 	})
 
 	it("shows the normal thread of an agent opened outside the Home, never a Home view", async () => {
@@ -1869,7 +1848,7 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("tops the Library with the static bar instead of floating islands", async () => {
+	it("tops the Library with the static bar dragging the window", async () => {
 		await openLibrary()
 		const layout = document.querySelector(
 			'[data-slot="library-panel"] [data-slot="screen-layout"]',
@@ -1878,15 +1857,11 @@ describe("WorkspaceBody library", () => {
 
 		expect(layout.firstElementChild).toBe(bar)
 		expect(bar.querySelector("h1")?.textContent).toBe("Library")
-		expect(
-			layout.querySelector('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
-		expect(islandsIn(layout)).toEqual([])
 		expect(takesPress(bar)).toBe(true)
 		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
-	it("wears the static bar above an opened document, outside any island", async () => {
+	it("wears the static bar above an opened document, dragging the window, Back excepted", async () => {
 		await openLibrary()
 
 		await open("Spring launch brief")
@@ -1894,16 +1869,12 @@ describe("WorkspaceBody library", () => {
 		const bar = back.closest('[data-slot="app-header"]')
 
 		expect(bar).not.toBeNull()
-		expect(islandOf(back)).toBeNull()
-		expect(
-			bar?.closest('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
 		expect(takesPress(back)).toBe(true)
 		expect(startsWindowDrag(bar as HTMLElement)).toBe(true)
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
-	it("wears the static bar above an opened image, outside any island", async () => {
+	it("wears the static bar above an opened image, dragging the window", async () => {
 		await openLibrary()
 
 		await open("hero-dunes.png")
@@ -1912,7 +1883,6 @@ describe("WorkspaceBody library", () => {
 			'[data-slot="app-header"]',
 		) as HTMLElement
 
-		expect(islandsIn(lightbox)).toHaveLength(0)
 		expect(startsWindowDrag(bar)).toBe(true)
 	})
 

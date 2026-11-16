@@ -41,10 +41,9 @@
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.08), 0 8px 20px rgb(0 0 0 / 0.12);
-	--header-island-control-hover: var(--muted);
-	--header-island-control-pressed: #e6e6e6;
-	--header-island-rule: var(--border);
-	--header-island-overlay: rgb(24 24 26 / 0.85);
+	--control-hover: var(--muted);
+	--control-pressed: #e6e6e6;
+	--lightbox-control: rgb(24 24 26 / 0.85);
 	--lightbox-surface: rgb(11 11 12 / 0.92);
 	--lightbox-bar: rgb(11 11 12);
 	--icon-stroke: 0.09em;
@@ -77,9 +76,8 @@
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.35);
-	--header-island-control-hover: #1f1f21;
-	--header-island-control-pressed: var(--muted);
-	--header-island-rule: rgb(255 255 255 / 0.12);
+	--control-hover: #1f1f21;
+	--control-pressed: var(--muted);
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -100,10 +98,9 @@
 	--shadow-sidebar-peek: var(--sidebar-peek-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
-	--color-header-island-control-hover: var(--header-island-control-hover);
-	--color-header-island-control-pressed: var(--header-island-control-pressed);
-	--color-header-island-rule: var(--header-island-rule);
-	--color-header-island-overlay: var(--header-island-overlay);
+	--color-control-hover: var(--control-hover);
+	--color-control-pressed: var(--control-pressed);
+	--color-lightbox-control: var(--lightbox-control);
 	--color-lightbox-surface: var(--lightbox-surface);
 	--color-lightbox-bar: var(--lightbox-bar);
 	--color-primary: var(--primary);
@@ -250,31 +247,25 @@
 	--radius-4xl: calc(var(--radius-root) * 2.6);
 	--radius-bubble: calc(var(--radius-root) * 1.6);
 	--radius-control: calc(var(--radius-root) * 1.2);
-	--radius-header-island: calc(
+	--radius-compact-control-inline: max(
+		0px,
 		var(--radius-control) -
-		1px -
+		2px -
 		var(--spacing) *
-		2
+		3
 	);
-	--radius-header-island-control-inline: max(
+	--radius-compact-control-block: max(
 		0px,
-		var(--radius-header-island) -
-		1px -
-		var(--spacing)
-	);
-	--radius-header-island-control-block: max(
-		0px,
-		var(--radius-header-island) -
-		1px -
+		var(--radius-control) -
+		2px -
 		var(--spacing) *
-		0.75
+		2.75
 	);
-	--radius-header-island-control:
-		var(--radius-header-island-control-inline) /
-		var(--radius-header-island-control-block);
-	--radius-header-island-segment:
-		max(0px, var(--radius-header-island-control-inline) - var(--spacing) * 0.5)
-		/ max(0px, var(--radius-header-island-control-block) - var(--spacing) * 0.5);
+	--radius-compact-control:
+		var(--radius-compact-control-inline) / var(--radius-compact-control-block);
+	--radius-compact-segment:
+		max(0px, var(--radius-compact-control-inline) - var(--spacing) * 0.5) /
+		max(0px, var(--radius-compact-control-block) - var(--spacing) * 0.5);
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
 	--text-reading--line-height: 1.375rem;

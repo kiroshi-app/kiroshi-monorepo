@@ -348,7 +348,7 @@ export const OverlayFitted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #0B0B0C at 92 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent and no island, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
+					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #0B0B0C at 92 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
 			},
 		},
 	},
@@ -361,7 +361,6 @@ export const OverlayFitted = meta.story({
 
 		const bar = await expectStaticHeaderBar(popup)
 		const rule = bar.getBoundingClientRect().bottom
-		await expect(slotsIn(popup, "header-island")).toHaveLength(0)
 		await expect(getComputedStyle(bar).backgroundColor).toBe("rgb(11, 11, 12)")
 
 		const name = within(popup).getByRole("heading", {
@@ -461,7 +460,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #0B0B0C at 92 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule and no island, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
+					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #0B0B0C at 92 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
 			},
 		},
 	},

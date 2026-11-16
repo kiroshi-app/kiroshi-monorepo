@@ -106,7 +106,6 @@ type AppHeaderProps = Omit<ComponentProps<"header">, "children"> & {
 	leading?: ReactNode
 	trailing?: ReactNode
 	close?: ReactNode
-	isFloating?: boolean
 	insetWindowControls?: boolean
 	windowControls?: ReactNode
 }
@@ -115,7 +114,6 @@ const AppHeader = ({
 	leading,
 	trailing,
 	close,
-	isFloating: _isFloating,
 	insetWindowControls = false,
 	windowControls,
 	className,

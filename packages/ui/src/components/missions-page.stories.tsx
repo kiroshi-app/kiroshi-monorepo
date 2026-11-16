@@ -661,7 +661,6 @@ const expectMissionsBar = async (canvasElement: HTMLElement) => {
 	await expect(within(bar).queryAllByRole("button")).toHaveLength(0)
 	await expect(slotsIn(bar, "app-header-top-line")).toHaveLength(0)
 	await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
-	await expect(slotsIn(bar, "header-island")).toHaveLength(0)
 	await expectHeaderTitleStep(title)
 	await expect([
 		titleBox.left - frame.left,

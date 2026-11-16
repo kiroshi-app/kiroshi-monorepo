@@ -31,12 +31,6 @@ const THREAD_WIDTHS =
 const THREAD_COLUMN =
 	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
 
-const BELOW_FLOATING_HEADER =
-	"pt-[var(--screen-layout-header-height,--spacing(8))]"
-
-const SKELETON_BELOW_FLOATING_HEADER =
-	"pt-[var(--screen-layout-header-height,0px)] pb-0"
-
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
 const ASIDE_RESIZING =
@@ -79,7 +73,6 @@ const HoldTranscriptWidthWhileSidebarResizes = ({
 
 interface ThreadLayoutProps {
 	header?: ReactNode
-	isHeaderFloating?: boolean
 	notice?: ReactNode
 	pending?: ReactNode
 	queue?: ReactNode
@@ -109,7 +102,6 @@ interface ThreadLayoutProps {
 
 function ThreadLayout({
 	header,
-	isHeaderFloating = false,
 	notice,
 	pending,
 	queue,
@@ -168,13 +160,8 @@ function ThreadLayout({
 						aside && "min-w-0 flex-1",
 						className,
 					)}
-					contentClassName={cn(
-						THREAD_COLUMN,
-						isHeaderFloating && BELOW_FLOATING_HEADER,
-						contentClassName,
-					)}
+					contentClassName={cn(THREAD_COLUMN, contentClassName)}
 					header={header}
-					isHeaderFloating={isHeaderFloating}
 					scroller={(columnClassName) =>
 						skeleton ? (
 							<div
@@ -182,11 +169,7 @@ function ThreadLayout({
 								data-slot="thread-skeleton"
 							>
 								<div
-									className={cn(
-										columnClassName,
-										"h-full",
-										isHeaderFloating ? SKELETON_BELOW_FLOATING_HEADER : "py-0",
-									)}
+									className={cn(columnClassName, "h-full py-0")}
 									data-slot="thread-skeleton-column"
 								>
 									{skeleton}

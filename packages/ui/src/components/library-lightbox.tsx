@@ -52,7 +52,7 @@ const ZOOM_STEPS = [MIN_ZOOM, 0.5, 0.75, 1, 1.5, 2, 3, MAX_ZOOM]
 const STEP = cn(
 	LIBRARY_BAR_ROUND,
 	LIBRARY_OVERLAY_ISLAND,
-	"size-10 border border-selection-toolbar-border hover:bg-header-island-control-hover dark:hover:bg-header-island-control-hover",
+	"size-10 border border-selection-toolbar-border hover:bg-control-hover dark:hover:bg-control-hover",
 )
 
 const STEP_OVER_STAGE = "absolute top-1/2 flex -translate-y-1/2"
