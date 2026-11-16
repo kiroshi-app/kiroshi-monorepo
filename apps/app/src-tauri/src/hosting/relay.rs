@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use tauri::http::{header, HeaderValue};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpStream;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{watch, Mutex, Notify};
 use tokio::task::JoinSet;
 use tokio::time::{interval_at, sleep, sleep_until, timeout, Instant};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -267,9 +267,11 @@ pub(super) async fn hosted<R: Runtime>(
 		describing.spawn(async move { super::described(&app, &instance_id, &name, colour).await });
 	}
 	let serving = Serving { local: &local, keys: &keys };
+	let member_resumed = Notify::new();
+	let relaying = Relaying::from_the_start_of(&ring, &member_resumed);
 	tokio::select! {
-		() = attempts(&app, &mut hosted, serving, &mut stop, &ring) => return,
-		() = replay::recorded(&app, &space_id, &ring) => {}
+		() = attempts(&app, &mut hosted, serving, &mut stop, relaying) => return,
+		() = replay::recorded(&app, &space_id, &ring, &member_resumed) => {}
 	}
 	let closed = HostingState::Failed {
 		failure: HostingFailureKind::LocalEventStreamClosed,
@@ -283,11 +285,10 @@ async fn attempts<R: Runtime>(
 	hosted: &mut Hosted,
 	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
-	ring: &watch::Sender<Ring>,
+	mut relaying: Relaying<'_>,
 ) {
 	let mut backoff = Backoff::first();
 	let mut replaced = None;
-	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
 		let next =
 			attempted(app, hosted, serving, stop, &mut backoff, &mut replaced, &mut relaying).await;
@@ -707,6 +708,7 @@ async fn online<R: Runtime>(
 						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
 							return ended;
 						}
+						relaying.member_resumed.notify_one();
 						Outgoing::Answer(sender, resumed.answer)
 					}
 				}
