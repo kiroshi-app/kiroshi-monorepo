@@ -1563,7 +1563,6 @@ const LONG_TITLED_MISSION_ROOM: AppSidebarConversation = {
 }
 
 const longMissionTooltipStory = (isSidebarCollapsed: boolean) => ({
-	...missionTooltipStory(isSidebarCollapsed),
 	args: { conversation: LONG_TITLED_MISSION_ROOM },
 	parameters: {
 		isSidebarCollapsed,
@@ -1573,6 +1572,7 @@ const longMissionTooltipStory = (isSidebarCollapsed: boolean) => ({
 			},
 		},
 	},
+	render: missionTooltipStory(isSidebarCollapsed).render,
 	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 		const mission = slotIn(canvasElement, "mission-capsule")
 		const title = slotIn(mission, "mission-capsule-title")
