@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ComponentProps, ReactNode } from "react"
 
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
@@ -6,8 +6,11 @@ import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-type AnswerCardProps = {
+type AnswerCardFill = "container" | "viewport"
+
+type AnswerCardProps = Omit<ComponentProps<"div">, "className" | "slot"> & {
 	slot: string
+	fill?: AnswerCardFill
 	children: ReactNode
 }
 
@@ -28,7 +31,15 @@ type AnswerCardActionProps = {
 	children: string
 }
 
-const ANSWER_CARD_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-4 overflow-hidden rounded-[1rem] ring-1 ring-border`
+const ANSWER_CARD_FRAME_CLASS =
+	"overflow-hidden rounded-[1rem] ring-1 ring-border"
+
+const ANSWER_CARD_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-4 ${ANSWER_CARD_FRAME_CLASS}`
+
+const ANSWER_CARD_FILL_CLASS: Record<AnswerCardFill, string> = {
+	container: `absolute inset-0 z-10 flex flex-col bg-background ${ANSWER_CARD_FRAME_CLASS}`,
+	viewport: `fixed inset-0 z-50 flex flex-col bg-background ${ANSWER_CARD_FRAME_CLASS}`,
+}
 
 const ANSWER_CARD_HEADER_CLASS =
 	"flex h-10 items-center justify-between gap-2 border-answer-card-divider border-b ps-1.5 pe-1"
@@ -36,8 +47,12 @@ const ANSWER_CARD_HEADER_CLASS =
 const ANSWER_CARD_LABEL_CLASS =
 	"min-w-0 truncate ps-2 text-muted-foreground text-xs"
 
-const AnswerCard = ({ slot, children }: AnswerCardProps) => (
-	<div data-slot={slot} className={ANSWER_CARD_CLASS}>
+const AnswerCard = ({ slot, fill, children, ...props }: AnswerCardProps) => (
+	<div
+		{...props}
+		data-slot={slot}
+		className={fill ? ANSWER_CARD_FILL_CLASS[fill] : ANSWER_CARD_CLASS}
+	>
 		{children}
 	</div>
 )
@@ -89,4 +104,5 @@ const AnswerCardAction = ({
 	</>
 )
 
+export type { AnswerCardFill }
 export { AnswerCard, AnswerCardAction, AnswerCardHeader }

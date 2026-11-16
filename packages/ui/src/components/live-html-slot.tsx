@@ -1,12 +1,23 @@
 "use client"
 
-import { useEffect, useEffectEvent, useId, useRef, useState } from "react"
+import {
+	type CSSProperties,
+	useCallback,
+	useEffect,
+	useEffectEvent,
+	useRef,
+	useState,
+} from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	AnswerCard,
+	type AnswerCardFill,
+	AnswerCardHeader,
+} from "@workspace/ui/components/markdown/answer-card"
 import { AnswerFence } from "@workspace/ui/components/markdown/code"
-import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { cn } from "@workspace/ui/lib/utils"
@@ -41,18 +52,6 @@ type Edges = {
 type FocusTarget = "enlarge" | "shrink"
 
 const DEFAULT_HEIGHT = 320
-
-const FRAME_CLASS =
-	"flex flex-col overflow-hidden rounded-2xl ring-1 ring-border"
-
-const IN_PLACE_FRAME_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-4`
-
-const ENLARGED_FRAME_CLASS = "absolute inset-0 z-10 bg-background"
-
-const HEADER_CLASS =
-	"flex items-center justify-between gap-2 border-answer-card-divider border-b p-2"
-
-const LABEL_CLASS = "min-w-0 truncate text-muted-foreground text-xs"
 
 const isClipping = (element: Element) => {
 	const { overflowX, overflowY } = getComputedStyle(element)
@@ -125,10 +124,10 @@ const LiveHtmlSlot = ({
 	enlargedContainer,
 }: LiveHtmlSlotProps) => {
 	const { t } = useTranslation("chat")
-	const labelId = useId()
 	const [uncontrolledEnlarged, setUncontrolledEnlarged] =
 		useState(defaultEnlarged)
 	const [reserved, setReserved] = useState<HTMLDivElement | null>(null)
+	const [inPlaceBox, setInPlaceBox] = useState<CSSProperties>()
 	const lastReported = useRef<LiveHtmlRect | null>(null)
 	const pendingFocus = useRef<FocusTarget | null>(null)
 	const isUnavailable = status === "unavailable"
@@ -147,7 +146,7 @@ const LiveHtmlSlot = ({
 	}
 
 	const shrinkOnEscape = useEffectEvent((event: KeyboardEvent) => {
-		if (event.key === "Escape") changeEnlarged(false)
+		if (event.key === "Escape" && !event.defaultPrevented) changeEnlarged(false)
 	})
 
 	useEffect(() => {
@@ -181,6 +180,17 @@ const LiveHtmlSlot = ({
 		return () => document.removeEventListener("keydown", shrinkOnEscape)
 	}, [isEnlarged])
 
+	const measureInPlace = useCallback((frame: HTMLDivElement) => {
+		const record = () => {
+			const { marginTop, marginBottom } = getComputedStyle(frame)
+			setInPlaceBox({ height: frame.offsetHeight, marginTop, marginBottom })
+		}
+		record()
+		const resizes = new ResizeObserver(record)
+		resizes.observe(frame)
+		return () => resizes.disconnect()
+	}, [])
+
 	const focusWhenPending =
 		(target: FocusTarget) => (button: HTMLButtonElement | null) => {
 			if (!button || pendingFocus.current !== target) return
@@ -191,24 +201,22 @@ const LiveHtmlSlot = ({
 	if (isUnavailable) return <AnswerFence code={html} language="html" />
 
 	const isLoading = status === "loading"
+	const enlargedFill: AnswerCardFill = enlargedContainer
+		? "container"
+		: "viewport"
 
 	const frame = (
-		<div
-			data-slot="live-html-slot"
+		<AnswerCard
+			slot="live-html-slot"
+			ref={isEnlarged ? undefined : measureInPlace}
+			fill={isEnlarged ? enlargedFill : undefined}
 			data-status={status}
 			data-enlarged={isEnlarged}
 			role="group"
-			aria-labelledby={labelId}
+			aria-label={t("liveHtml.label")}
 			aria-busy={isLoading}
-			className={cn(
-				FRAME_CLASS,
-				isEnlarged ? ENLARGED_FRAME_CLASS : IN_PLACE_FRAME_CLASS,
-			)}
 		>
-			<div data-slot="live-html-slot-header" className={HEADER_CLASS}>
-				<span id={labelId} className={LABEL_CLASS}>
-					{t("liveHtml.label")}
-				</span>
+			<AnswerCardHeader label={t("liveHtml.label")}>
 				<Button
 					ref={focusWhenPending(isEnlarged ? "shrink" : "enlarge")}
 					variant="ghost"
@@ -226,7 +234,7 @@ const LiveHtmlSlot = ({
 					)}
 					{t(isEnlarged ? "liveHtml.shrink" : "liveHtml.enlarge")}
 				</Button>
-			</div>
+			</AnswerCardHeader>
 			<div className={cn("flex p-2", isEnlarged && "min-h-0 flex-1")}>
 				<div
 					ref={setReserved}
@@ -235,16 +243,25 @@ const LiveHtmlSlot = ({
 					style={isEnlarged ? undefined : { height }}
 				>
 					{isLoading ? (
-						<Skeleton aria-hidden className="size-full rounded-lg" />
+						<Skeleton aria-hidden className="size-full rounded-md" />
 					) : null}
 				</div>
 			</div>
-		</div>
+		</AnswerCard>
 	)
 
-	return isEnlarged
-		? createPortal(frame, enlargedContainer ?? document.body)
-		: frame
+	if (!isEnlarged) return frame
+
+	return (
+		<>
+			<div
+				aria-hidden
+				data-slot="live-html-slot-placeholder"
+				style={inPlaceBox}
+			/>
+			{createPortal(frame, enlargedContainer ?? document.body)}
+		</>
+	)
 }
 
 export type { LiveHtmlRect, LiveHtmlSlotProps, LiveHtmlStatus }
