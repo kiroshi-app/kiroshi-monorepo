@@ -11,7 +11,7 @@ const TABLE_FILE_NAME = "table.csv"
 const fileSlugOf = (agentName: string): string =>
 	agentName
 		.toLowerCase()
-		.replace(/[^a-z0-9-]+/g, "-")
+		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "")
 
 const tableFileNameOf = (agentName: string): string => {

@@ -272,6 +272,8 @@ describe("the Download CSV button of a table in an answer", () => {
 	it.each([
 		["Ada", "ada-table.csv"],
 		["Ada Lovelace!", "ada-lovelace-table.csv"],
+		["Ada - Lovelace", "ada-lovelace-table.csv"],
+		["--Ada--", "ada-table.csv"],
 		["R2-D2", "r2-d2-table.csv"],
 		["日本 ✦", "table.csv"],
 	])("saves the table of %s as %s", async (agentName, name) => {
