@@ -196,7 +196,6 @@ const BarAction = ({
 				BAR_ACTION_KIND[kind],
 				isIconOnly && "w-8 px-0",
 			)}
-			data-kind={kind}
 			data-slot="library-action"
 			onClick={onClick}
 			type="button"
@@ -323,10 +322,7 @@ const LibraryPanel = ({
 				<ScreenLayout
 					aria-busy={isAwaiting}
 					className="@container isolate min-h-0 flex-1"
-					contentClassName={cn(
-						"gap-4 pt-6 pb-6",
-						isSkeletonShown && "h-full pb-0",
-					)}
+					contentClassName={cn("gap-4 py-6", isSkeletonShown && "h-full pb-0")}
 					header={
 						<AppHeader
 							close={actions}
