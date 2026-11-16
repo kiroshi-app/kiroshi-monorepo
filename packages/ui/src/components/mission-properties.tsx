@@ -1,4 +1,3 @@
-import type { ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -28,28 +27,6 @@ const PROPERTY_VALUE =
 	"flex min-w-0 flex-1 items-center gap-2 text-compact text-soft-foreground leading-5"
 
 const PROPERTY_PART = cn("whitespace-nowrap", DOT_CLASS)
-
-type MissionPropertyActionProps = Omit<
-	ComponentProps<typeof Button>,
-	"size" | "variant"
-> & {
-	"aria-label": string
-}
-
-const MissionPropertyAction = ({
-	className,
-	...props
-}: MissionPropertyActionProps) => (
-	<Button
-		className={cn(
-			"rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5",
-			className,
-		)}
-		size="icon-xs"
-		variant="ghost"
-		{...props}
-	/>
-)
 
 type MissionPropertiesProps = {
 	ticket: MissionTicketLink
@@ -99,12 +76,15 @@ const MissionProperties = ({
 								className="flex shrink-0 items-center @max-[40rem]:ms-auto"
 								data-slot="mission-ticket-actions"
 							>
-								<MissionPropertyAction
+								<Button
 									aria-label={t("missions.properties.openCodingSession")}
+									className="rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5"
 									onClick={onOpenCodingSession}
+									size="icon-xs"
+									variant="ghost"
 								>
 									<Icons.Command aria-hidden="true" />
-								</MissionPropertyAction>
+								</Button>
 							</span>
 						) : null}
 					</dd>
