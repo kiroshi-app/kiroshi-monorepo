@@ -386,7 +386,10 @@ type LibraryBarSkin = {
 
 const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
 	document: {},
-	lightbox: { fill: "dark:bg-white/8", ink: "text-[#e5e5e5]" },
+	lightbox: {
+		fill: "dark:bg-white/8",
+		ink: "text-[#e5e5e5] focus-visible:ring-lightbox-bar in-data-content-card:focus-visible:ring-lightbox-bar",
+	},
 }
 
 type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {

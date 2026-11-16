@@ -286,6 +286,14 @@ const expectBarAtRest = async (canvasElement: HTMLElement, surface: string) => {
 	).toBe(TITLE_BELOW_BAR)
 	const column = slotIn(canvasElement, "library-document-column")
 	await expect(within(column).queryByText(SPRING_BRIEF.detail)).toBe(null)
+	await expect(
+		slotIn(column, "markdown").getBoundingClientRect().top -
+			heading.getBoundingClientRect().bottom,
+	).toBe(
+		Number.parseFloat(
+			getComputedStyle(heading.closest("article") as HTMLElement).rowGap,
+		),
+	)
 	await expect(column).not.toHaveAttribute("tabindex")
 	await expect(column).not.toHaveAttribute("role")
 	await expect(column).not.toHaveAttribute("aria-labelledby")
@@ -298,7 +306,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent and no island, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Copy drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it, and that the column, fitting its card, is neither a Tab stop nor a region.",
+					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent and no island, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Copy drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},

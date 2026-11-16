@@ -779,6 +779,10 @@ const expectRingOnEachBarControl = async (bar: HTMLElement) => {
 		await expect(ring.outlineColor).toBe(
 			tokenStyleIn(control, "border border-ring", "borderTopColor"),
 		)
+		if (control.hasAttribute("data-kind"))
+			await expect(ring.boxShadow).toBe(
+				tokenStyleIn(control, "ring-2 ring-lightbox-bar", "boxShadow"),
+			)
 	}
 }
 
@@ -787,7 +791,7 @@ export const BarKeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image bar walked with Tab from the open lightbox. Check that the Library path link, Download, Copy, More then Close each take focus in that order and wear a 2 px ring in the Space colour on the dark bar while they hold it. The play drives the real keyboard, in the Vitest browser runner only.",
+					"The image bar walked with Tab from the open lightbox. Check that the Library path link, Download, Copy, More then Close each take focus in that order and wear a 2 px ring in the Space colour on the dark bar while they hold it, the four round controls over a 2 px halo in the #0B0B0C of the bar, never the card colour. The play drives the real keyboard, in the Vitest browser runner only.",
 			},
 		},
 	},

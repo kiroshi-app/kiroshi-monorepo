@@ -252,7 +252,7 @@ const LibraryDocumentColumn = ({
 						DOCUMENT_COLUMN_MEASURE,
 					)}
 				>
-					<header className="pb-1.5">{heading}</header>
+					<header>{heading}</header>
 					{children}
 				</article>
 			</div>
