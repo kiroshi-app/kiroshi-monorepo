@@ -2352,9 +2352,9 @@ fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
 
 const KEPT_OFF: &str = "c-kept-off-the-relay";
 
-const A_CONVERSATION_KEPT_OFF: &str = "
+const A_CONVERSATION_ELSEWHERE: &str = "
 	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
-		VALUES ('c-kept-off-the-relay', 'topic', 'elsewhere', 'Kept off', 1, 1);";
+		VALUES (?1, 'topic', 'elsewhere', 'Kept off', 1, 1)";
 
 #[test]
 fn a_question_asked_outside_the_shared_space_is_kept_off_its_relay_with_a_warning() {
@@ -2362,7 +2362,7 @@ fn a_question_asked_outside_the_shared_space_is_kept_off_its_relay_with_a_warnin
 		crate::test_log::capturing();
 		let mut guest = Guest::of_two_spaces("question-kept-off").await;
 		db::open(&guest.effects.database)
-			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION_KEPT_OFF)?))
+			.call_mut(|connection| Ok(connection.execute(A_CONVERSATION_ELSEWHERE, [KEPT_OFF])?))
 			.await
 			.expect("the conversation of the other space is planted");
 		let scope = a_held_scope_in(KEPT_OFF, "b-theirs");
