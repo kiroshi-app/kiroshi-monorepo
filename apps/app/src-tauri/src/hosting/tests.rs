@@ -2293,6 +2293,63 @@ fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
 	});
 }
 
+fn is_the_question(id: &str) -> impl Fn(&Value) -> bool + '_ {
+	move |frame| {
+		let payload = &frame["event"]["payload"];
+		payload["event"]["type"] == "questionRequested" && payload["event"]["request"]["id"] == id
+	}
+}
+
+async fn asked_then_pushed_out_of_the_ring(guest: &mut Guest, id: &str) -> (Value, String, u64) {
+	let scope = a_held_scope_in("c-mine", "b-mine");
+	commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+		.emit(a_question(id), a_turn_in("c-mine"));
+	let asked = next_stamped(&mut guest.member, is_the_question(id)).await;
+	let (epoch, seq) = stamp_of(&asked);
+	for n in 1..=RING_FRAMES + 2 {
+		numbered_through(&guest.harness, &mut guest.member, n).await;
+	}
+	(asked, epoch, seq - 1)
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_the_question_still_waiting() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-question").await;
+		let (asked, epoch, since) =
+			asked_then_pushed_out_of_the_ring(&mut guest, "q-waiting").await;
+
+		let (replayed, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let asked_again = tokio::time::timeout(
+			PATIENCE,
+			next_stamped(&mut guest.member, is_the_question("q-waiting")),
+		)
+		.await
+		.expect("the question still waiting is replayed in time");
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert_eq!(unstamped(asked_again), unstamped(asked));
+	});
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-answered").await;
+		let (_, epoch, since) = asked_then_pushed_out_of_the_ring(&mut guest, "q-answered").await;
+		let scope = a_held_scope_in("c-mine", "b-mine");
+		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+			.emit(its_answer("q-answered"), a_turn_in("c-mine"));
+
+		let (_, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert!(!heard.iter().any(is_the_question("q-answered")), "{heard:?}");
+	});
+}
+
 #[test]
 fn a_reopened_host_socket_first_sends_the_frames_recorded_while_it_was_down_in_seq_order() {
 	run(async {
