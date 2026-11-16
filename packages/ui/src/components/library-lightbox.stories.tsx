@@ -487,14 +487,13 @@ export const Loading = meta.story({
 		if (!previous || !next || !zoomPill)
 			throw new Error("The skeleton does not draw its steps and its zoom pill")
 		await expect(others).toEqual([])
+		const stageFill = getComputedStyle(stagePlaceholder).backgroundColor
 		for (const control of [previous, next, zoomPill]) {
 			const fill = getComputedStyle(control).backgroundColor
 			await expect(fill).toBe(
 				tokenStyleIn(control, "bg-input", "backgroundColor"),
 			)
-			await expect(fill).not.toBe(
-				getComputedStyle(stagePlaceholder).backgroundColor,
-			)
+			await expect(fill).not.toBe(stageFill)
 		}
 
 		const stageMiddle = (rule + surface.bottom) / 2
