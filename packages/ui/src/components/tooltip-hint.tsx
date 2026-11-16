@@ -18,7 +18,9 @@ import {
 } from "@workspace/ui/components/ui/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const HOVER_INTENT_DELAY_MS = 120
+const TOOLTIP_OPEN_DELAY_MS = 600
+
+const TOOLTIP_GROUPING_WINDOW_MS = 400
 
 const HINT_CLOSE_GRACE_MS = 80
 
@@ -70,7 +72,7 @@ const TooltipHint = ({
 			<TooltipPrimitive.Trigger
 				closeDelay={HINT_CLOSE_GRACE_MS}
 				data-slot="tooltip-trigger"
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				disabled={!content}
 				handle={sharedBubble}
 				payload={{ content, side, sideOffset, variant }}
@@ -81,7 +83,7 @@ const TooltipHint = ({
 
 	return (
 		<Tooltip>
-			<TooltipTrigger delay={HOVER_INTENT_DELAY_MS} render={children} />
+			<TooltipTrigger delay={TOOLTIP_OPEN_DELAY_MS} render={children} />
 			{content ? (
 				<TooltipContent
 					className={BUBBLE[variant]}
@@ -106,7 +108,10 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 	)
 
 	return (
-		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
+		<TooltipProvider
+			delay={TOOLTIP_OPEN_DELAY_MS}
+			timeout={TOOLTIP_GROUPING_WINDOW_MS}
+		>
 			<SharedBubbleContext.Provider value={sharedBubble}>
 				{children}
 			</SharedBubbleContext.Provider>
@@ -127,7 +132,8 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 }
 
 export {
-	HOVER_INTENT_DELAY_MS,
+	TOOLTIP_GROUPING_WINDOW_MS,
+	TOOLTIP_OPEN_DELAY_MS,
 	TooltipHint,
 	TooltipHintProvider,
 	type TooltipHintSide,

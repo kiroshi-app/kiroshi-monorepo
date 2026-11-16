@@ -1,7 +1,7 @@
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Row } from "@workspace/storybook/story-utils"
+import { HOVER_TOOLTIP_WAIT, Row } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 
@@ -112,7 +112,7 @@ export const LongContent = meta.story({
 			await expect(label?.getBoundingClientRect().right).toBeLessThanOrEqual(
 				window.innerWidth,
 			)
-		})
+		}, HOVER_TOOLTIP_WAIT)
 	},
 })
 
@@ -144,6 +144,6 @@ export const WithSide = meta.story({
 			await expect(label?.getBoundingClientRect().top).toBeGreaterThanOrEqual(
 				button.getBoundingClientRect().bottom,
 			)
-		})
+		}, HOVER_TOOLTIP_WAIT)
 	},
 })
