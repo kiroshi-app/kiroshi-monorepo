@@ -41,6 +41,8 @@ export type FailedRun = {
 
 export type RunReport = FailedRun & { sinceGreen: SinceGreen }
 
+export type RunnerFailureReport = FailedRun & { rerunRefusal?: string }
+
 export type IssueInput = {
 	teamId: string
 	projectId: string
@@ -197,7 +199,14 @@ export const redMainIssue = (report: RunReport): IssueInput => {
 	}
 }
 
-export const runnerFailureIssue = (report: FailedRun): IssueInput => {
+const rerunLine = ({ run, rerunRefusal }: RunnerFailureReport) => {
+	const ended = `Attempt ${run.attempt}: every failed job ended before its first test started`
+	return rerunRefusal === undefined
+		? `${ended}, after the failed jobs were rerun once`
+		: `${ended}. Rerun refused: ${rerunRefusal}`
+}
+
+export const runnerFailureIssue = (report: RunnerFailureReport): IssueInput => {
 	const { run, jobs } = report
 	const { runnerFailures } = classifiedFailures(jobs)
 	return {
@@ -206,7 +215,7 @@ export const runnerFailureIssue = (report: FailedRun): IssueInput => {
 		description: [
 			`Run: ${run.url}`,
 			...commitLines(report),
-			`Attempt ${run.attempt}: every failed job ended before its first test started, after the failed jobs were rerun once`,
+			rerunLine(report),
 		].join("\n\n"),
 	}
 }
@@ -279,6 +288,15 @@ const readSinceGreen = async (
 	}
 }
 
+const rerunRefusal = async (github: GitHub, runId: string) => {
+	try {
+		await github.rerunFailedJobs(runId)
+		return undefined
+	} catch (failure) {
+		return (failure as Error).message
+	}
+}
+
 export const reportRedMain = async (
 	runId: string,
 	{ github, linear }: Ports,
@@ -290,15 +308,15 @@ export const reportRedMain = async (
 	const { redJobs, runnerFailures } = classifiedFailures(jobs)
 	const hasRunnerFailuresOnly =
 		redJobs.length === 0 && runnerFailures.length > 0
-	if (hasRunnerFailuresOnly && run.attempt === 1) {
-		await github.rerunFailedJobs(runId)
+	const mustRerun = hasRunnerFailuresOnly && run.attempt === 1
+	const refusal = mustRerun ? await rerunRefusal(github, runId) : undefined
+	if (mustRerun && refusal === undefined)
 		return `no issue: reran the failed jobs of run ${run.id}, each a runner failure (${runnerFailures.join(", ")})`
-	}
 	const existing = await issueReportingRun(linear, run.url)
 	if (existing) return `no issue: ${existing} already reports ${run.url}`
 	const pullRequests = await github.readPullRequests(run.headSha)
 	const input = hasRunnerFailuresOnly
-		? runnerFailureIssue({ run, jobs, pullRequests })
+		? runnerFailureIssue({ run, jobs, pullRequests, rerunRefusal: refusal })
 		: redMainIssue({
 				run,
 				jobs,

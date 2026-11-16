@@ -540,8 +540,15 @@ describe("reporting a run", () => {
 		expect(asked).not.toContain("rerun the failed jobs of 101")
 	})
 
-	it("fails naming the step when GitHub refuses the rerun", async () => {
-		const { linear } = linearAnswering()
+	it("opens the Runner failure issue carrying the refusal, without throwing, when GitHub refuses the rerun", async () => {
+		const { linear, requests } = linearAnswering(noIssueYet, {
+			data: {
+				issueCreate: {
+					success: true,
+					issue: { identifier: "KIR-11", url: "https://linear.app/i/KIR-11" },
+				},
+			},
+		})
 		const { github } = fakeGitHub(redRun, [], RUNNER_FAILURES_ONLY)
 		const refusing: GitHub = {
 			...github,
@@ -550,9 +557,15 @@ describe("reporting a run", () => {
 			},
 		}
 
-		await expect(
-			reportRedMain("101", { github: refusing, linear }),
-		).rejects.toThrow("rerun the failed jobs of the run: GitHub answered 403")
+		const outcome = await reportRedMain("101", { github: refusing, linear })
+
+		expect(outcome).toBe("created KIR-11 https://linear.app/i/KIR-11")
+		expect(requests[1]?.variables.input).toMatchObject({
+			title: "Runner failure: ios (2), ios (3) at 8a7919a",
+		})
+		expect(descriptionSent(requests[1])).toEndWith(
+			"Attempt 1: every failed job ended before its first test started. Rerun refused: rerun the failed jobs of the run: GitHub answered 403",
+		)
 	})
 
 	it("creates one issue for a red main run", async () => {
