@@ -136,7 +136,7 @@ struct OpenView {
 	label: String,
 	server: ViewServer,
 	window: Option<WebviewWindow>,
-	opened_at: Instant,
+	creation_began: Instant,
 	settled_at: Instant,
 }
 
@@ -205,7 +205,6 @@ impl Run {
 		let host_readings = first_reading.map(|first_view| HostReadings {
 			first_view,
 			second_view: second_reading,
-			first_view_open: writer.open,
 			navigations_alone: alone
 				.iter()
 				.map(|(attempt, view)| NavigationAlone {
@@ -225,6 +224,7 @@ impl Run {
 			navigation_sink: self.sensors.navigation_sink.reading(),
 			handler_events: self.host.handler_events(),
 			window_urls,
+			first_view_open: writer.open,
 			writer: writer.observation,
 			reader: reader.map(|view| view.observation),
 			host_readings,
@@ -312,6 +312,7 @@ impl Run {
 	) -> Result<OpenView, Failure> {
 		let url = window_url(&server, self.mode);
 		self.host.mark_view_open(true);
+		let creation_began = Instant::now();
 		let window = if self.mode.shows_views_in_windows() {
 			Some(open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?)
 		} else {
@@ -319,7 +320,6 @@ impl Run {
 				.eval(format!("window.__spikeOpenView({})", serde_json::to_string(&url)?))?;
 			None
 		};
-		let opened_at = Instant::now();
 		if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
 			eprintln!("{label} never signalled the end of its run");
 		}
@@ -328,7 +328,7 @@ impl Run {
 			label: label.to_owned(),
 			server,
 			window,
-			opened_at,
+			creation_began,
 			settled_at: Instant::now(),
 		})
 	}
@@ -351,7 +351,7 @@ impl Run {
 			url: window_url(&view.server, self.mode),
 			csp: view.server.csp().to_owned(),
 			window_url_after,
-			open: (view.opened_at, view.settled_at),
+			open: (view.creation_began, view.settled_at),
 		})
 	}
 }

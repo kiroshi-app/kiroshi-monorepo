@@ -160,6 +160,7 @@ pub struct CspReport {
 #[derive(Clone, Default)]
 pub struct ViewRecord {
 	pub document_requests: usize,
+	pub first_document_request: Option<Instant>,
 	pub beacons: Vec<Beacon>,
 	pub csp_reports: Vec<CspReport>,
 	pub cookie_headers: Vec<String>,
@@ -270,6 +271,7 @@ fn answer_view_request(
 	match (request.method.as_str(), route) {
 		("GET", Some(DOCUMENT_NAME)) => {
 			record.document_requests += 1;
+			record.first_document_request.get_or_insert_with(Instant::now);
 			Response {
 				status: "200 OK",
 				headers: vec![

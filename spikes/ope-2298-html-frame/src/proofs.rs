@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::host::{HandlerEvent, Heartbeat, SecretCall};
+use crate::host::{Gap, HandlerEvent, Heartbeat, SecretCall};
 use crate::probe::{self, HostReading};
 use crate::sensors::{CspReport, TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
 use crate::windows::FIRST_VIEW_LABEL;
@@ -88,6 +88,14 @@ pub struct Proof {
 	evidence: Value,
 }
 
+fn signed_ms(reference: Instant, instant: Instant) -> i128 {
+	if instant >= reference {
+		instant.duration_since(reference).as_millis() as i128
+	} else {
+		-(reference.duration_since(instant).as_millis() as i128)
+	}
+}
+
 pub struct WindowUrl {
 	pub window: String,
 	pub before_the_view: String,
@@ -120,7 +128,6 @@ struct NavigationAloneReading<'a> {
 pub struct HostReadings {
 	pub first_view: HostReading,
 	pub second_view: Option<HostReading>,
-	pub first_view_open: (Instant, Instant),
 	pub navigations_alone: Vec<NavigationAlone>,
 }
 
@@ -133,6 +140,7 @@ pub struct Observations {
 	pub navigation_sink: TripwireReading,
 	pub handler_events: Vec<HandlerEvent>,
 	pub window_urls: Vec<WindowUrl>,
+	pub first_view_open: (Instant, Instant),
 	pub writer: ViewObservation,
 	pub reader: Option<ViewObservation>,
 	pub host_readings: Option<HostReadings>,
@@ -434,36 +442,60 @@ impl Observations {
 
 	fn main_window_stays_responsive(&self) -> Proof {
 		let record = &self.writer.record;
-		let busy_loop = record
-			.beacon_at(BUSY_LOOP_ATTEMPT, "started")
-			.zip(record.beacon_at(BUSY_LOOP_ATTEMPT, "finished"));
+		let (creation_began, settled) = self.first_view_open;
+		let requested = record.first_document_request;
+		let busy_started = record.beacon_at(BUSY_LOOP_ATTEMPT, "started");
+		let busy_loop = busy_started.zip(record.beacon_at(BUSY_LOOP_ATTEMPT, "finished"));
 		let busy_gap =
 			busy_loop.map(|(started, finished)| self.heartbeat.longest_gap(started, finished));
-		let baseline_gap = self.heartbeat.longest_gap(self.baseline.0, self.baseline.1);
-		let mut evidence = json!({
-			"heartbeat_gap_limit_ms": HEARTBEAT_GAP_LIMIT.as_millis(),
-			"longest_heartbeat_gap_during_the_busy_loop_ms": busy_gap.map(|gap| gap.as_millis()),
-			"busy_loop_observed_ms": busy_loop.map(|(started, finished)| finished.duration_since(started).as_millis()),
-			"longest_heartbeat_gap_before_any_view_ms": baseline_gap.as_millis(),
-			"heartbeats_received": self.heartbeat.arrivals.len(),
-		});
-		let is_responsive = match &self.host_readings {
-			Some(host) => {
-				let (opened, settled) = host.first_view_open;
-				let gap = self.heartbeat.longest_gap(opened, settled);
-				evidence["first_view_open_ms"] = json!(settled.duration_since(opened).as_millis());
-				evidence["longest_heartbeat_gap_while_the_first_view_was_open_ms"] =
-					json!(gap.as_millis());
-				gap <= HEARTBEAT_GAP_LIMIT && self.has_first_view_reached_its_navigation_attempts()
+		let build_gap =
+			requested.map(|requested| self.heartbeat.longest_gap(creation_began, requested));
+		let run_gap = requested.map(|requested| self.heartbeat.longest_gap(requested, settled));
+		let baseline_gap = self.heartbeat.longest_gap(self.baseline.0, self.baseline.1).length;
+		let is_within_the_limit =
+			|gap: Option<Gap>| gap.is_some_and(|gap| gap.length <= HEARTBEAT_GAP_LIMIT);
+		let gaps_above_the_limit: Vec<Value> = [
+			("while the view window was built", build_gap),
+			("while the hostile view ran", run_gap),
+			("during the busy loop", busy_gap),
+		]
+		.into_iter()
+		.filter_map(|(measured, gap)| gap.map(|gap| (measured, gap)))
+		.filter(|(_, gap)| gap.length > HEARTBEAT_GAP_LIMIT)
+		.map(|(measured, gap)| {
+			json!({
+				"measured": measured,
+				"gap_ms": gap.length.as_millis(),
+				"started_ms_after_the_view_window_creation_began": signed_ms(creation_began, gap.started),
+				"started_ms_relative_to_the_busy_loop_start": busy_started.map(|busy| signed_ms(busy, gap.started)),
+			})
+		})
+		.collect();
+		let length_ms = |gap: Option<Gap>| gap.map(|gap| gap.length.as_millis());
+		let is_responsive = match self.host_readings {
+			Some(_) => {
+				is_within_the_limit(run_gap)
+					&& self.has_first_view_reached_its_navigation_attempts()
 			}
-			None => busy_gap.is_some_and(|gap| gap <= HEARTBEAT_GAP_LIMIT),
+			None => is_within_the_limit(busy_gap),
 		};
 		Proof {
 			proof: 6,
 			name: "The main window stays responsive while the view spins",
 			result: (baseline_gap <= HEARTBEAT_GAP_LIMIT && is_responsive).into(),
 			attempts: vec![BUSY_LOOP_ATTEMPT],
-			evidence,
+			evidence: json!({
+				"heartbeat_gap_limit_ms": HEARTBEAT_GAP_LIMIT.as_millis(),
+				"longest_heartbeat_gap_during_the_busy_loop_ms": length_ms(busy_gap),
+				"busy_loop_observed_ms": busy_loop.map(|(started, finished)| finished.duration_since(started).as_millis()),
+				"longest_heartbeat_gap_before_any_view_ms": baseline_gap.as_millis(),
+				"heartbeats_received": self.heartbeat.arrivals.len(),
+				"view_window_build_ms": requested.map(|requested| requested.duration_since(creation_began).as_millis()),
+				"longest_heartbeat_gap_while_the_view_window_was_built_ms": length_ms(build_gap),
+				"hostile_view_ran_ms": requested.map(|requested| settled.duration_since(requested).as_millis()),
+				"longest_heartbeat_gap_while_the_hostile_view_ran_ms": length_ms(run_gap),
+				"gaps_above_the_limit": gaps_above_the_limit,
+			}),
 		}
 	}
 

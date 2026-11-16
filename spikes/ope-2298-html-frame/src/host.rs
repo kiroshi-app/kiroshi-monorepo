@@ -41,14 +41,23 @@ pub struct MainDocument {
 	pub first_snapshot: String,
 }
 
+#[derive(Clone, Copy)]
+pub struct Gap {
+	pub started: Instant,
+	pub length: Duration,
+}
+
 impl Heartbeat {
-	pub fn longest_gap(&self, from: Instant, to: Instant) -> Duration {
+	pub fn longest_gap(&self, from: Instant, to: Instant) -> Gap {
 		let inside =
 			self.arrivals.iter().copied().filter(|arrival| *arrival > from && *arrival < to);
 		let mut previous = from;
-		let mut longest = Duration::ZERO;
+		let mut longest = Gap { started: from, length: Duration::ZERO };
 		for instant in inside.chain(std::iter::once(to)) {
-			longest = longest.max(instant.duration_since(previous));
+			let length = instant.duration_since(previous);
+			if length > longest.length {
+				longest = Gap { started: previous, length };
+			}
 			previous = instant;
 		}
 		longest
