@@ -103,6 +103,7 @@ export type ChatAction =
 	| { type: "promptRetried"; id: string }
 	| { type: "stopRejected"; error: TransportError }
 	| { type: "errorDismissed"; id: string }
+	| { type: "errorWithdrawn"; id: string }
 	| { type: "binaryVersion"; version: string | null }
 	| { type: "questionPosted"; request: QuestionRequest }
 	| { type: "questionWithdrawn"; id: string }
@@ -343,6 +344,11 @@ function applyErrorDismissed(state: ChatState, id: string): ChatState {
 		return state
 	}
 	return { ...state, errors: [] }
+}
+
+function applyErrorWithdrawn(state: ChatState, id: string): ChatState {
+	const errors = state.errors.filter((entry) => entry.id !== id)
+	return errors.length === state.errors.length ? state : { ...state, errors }
 }
 
 function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
@@ -647,6 +653,8 @@ function reducedChat(state: ChatState, action: ChatAction): ChatState {
 			return applyStopRejected(state, action.error)
 		case "errorDismissed":
 			return applyErrorDismissed(state, action.id)
+		case "errorWithdrawn":
+			return applyErrorWithdrawn(state, action.id)
 		case "binaryVersion":
 			return { ...state, binaryVersion: action.version }
 		case "questionPosted":

@@ -18,6 +18,7 @@ type EventRoutingParts = {
 	persist: EventPersistence["persist"]
 	reloadPage: OpenThread["reloadPage"]
 	pump: (bot: BotChat) => void
+	settleRecorded: (bot: BotChat) => void
 }
 
 export type EventRouting = ReturnType<typeof createEventRouting>
@@ -36,7 +37,7 @@ export const createEventRouting = (
 		reportRead,
 		enqueue,
 	}: ChatContext,
-	{ persist, reloadPage, pump }: EventRoutingParts,
+	{ persist, reloadPage, pump, settleRecorded }: EventRoutingParts,
 ) => {
 	let detach: Promise<() => void> | null = null
 	let stopStoredMessages: Promise<() => void> | null = null
@@ -152,7 +153,7 @@ export const createEventRouting = (
 	}
 
 	const catchUp = (bot: BotChat) => {
-		reloadPage(bot)
+		void reloadPage(bot).then(() => settleRecorded(bot))
 		const conversationId = bot.state.conversationId
 		if (conversationId) {
 			void routePendingQuestions(bot, conversationId)

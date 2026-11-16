@@ -133,6 +133,7 @@ export function createChatController(
 		persist,
 		reloadPage: thread.reloadPage,
 		pump,
+		settleRecorded: (bot) => outbox.settleRecorded(bot),
 	})
 	const session = createSessionRunner(context, {
 		settleOpenReplies: replies.settleOpenReplies,

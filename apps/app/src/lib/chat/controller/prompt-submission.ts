@@ -115,14 +115,18 @@ export const createPromptSubmission = (
 			? bot.state.messages.find(({ id }) => id === refusal.messageId)
 			: undefined
 
+	const withdrawRefusal = (bot: BotChat, refusal?: StoreRefusal) => {
+		if (refusal?.errorId) {
+			dispatch(bot, { type: "errorWithdrawn", id: refusal.errorId })
+		}
+	}
+
 	const submitRecorded = async (
 		bot: BotChat,
 		recorded: TranscriptMessage,
 		{ text, refusal }: HeldPrompt,
 	) => {
-		if (refusal?.errorId) {
-			dispatch(bot, { type: "errorDismissed", id: refusal.errorId })
-		}
+		withdrawRefusal(bot, refusal)
 		bot.activeTurn = {
 			id: recorded.turnId,
 			promptId: recorded.id,
@@ -165,6 +169,7 @@ export const createPromptSubmission = (
 		try {
 			await enqueue(() => storePrompt(said, [bot.id]))
 		} catch (reason) {
+			withdrawRefusal(bot, prompt.refusal)
 			dispatch(bot, {
 				type: "promptRejected",
 				id: null,
@@ -220,6 +225,7 @@ export const createPromptSubmission = (
 		admit,
 		claim,
 		runInOpenThread,
+		recordedPromptOf,
 		sendPrompt,
 		retryPrompt,
 		storeAttachments,

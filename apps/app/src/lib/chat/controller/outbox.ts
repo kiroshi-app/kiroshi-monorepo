@@ -34,7 +34,7 @@ export const createOutbox = (
 	{
 		openedFor,
 		promptRows: { promptRow, storePrompt, showPrompt },
-		prompts: { claim, sendPrompt, runInOpenThread },
+		prompts: { claim, sendPrompt, runInOpenThread, recordedPromptOf },
 		answer,
 	}: OutboxParts,
 ) => {
@@ -114,8 +114,17 @@ export const createOutbox = (
 				type: "promptHeld",
 				entry: { id: newId(), ...prompt, refusal: outcome.refusal },
 			})
+			if (outcome.refusal) {
+				return
+			}
 		}
 		pump(bot)
+	}
+
+	const settleRecorded = (bot: BotChat) => {
+		if (canSend(bot) && recordedPromptOf(bot, bot.state.outbox[0]?.refusal)) {
+			pump(bot)
+		}
 	}
 
 	const recordHeld = (bot: BotChat) => {
@@ -218,5 +227,5 @@ export const createOutbox = (
 		pump(bot)
 	}
 
-	return { pump, send, stop, sendNow }
+	return { pump, settleRecorded, send, stop, sendNow }
 }
