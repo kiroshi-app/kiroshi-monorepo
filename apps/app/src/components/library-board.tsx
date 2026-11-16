@@ -182,7 +182,6 @@ export const LibraryBoard = ({
 					}
 				/>
 			}
-			isHeaderFloating
 			scroller={() => (
 				<LibraryBoardCanvas
 					board={board}

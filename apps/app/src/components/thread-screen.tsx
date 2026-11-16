@@ -27,6 +27,7 @@ import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
 import {
 	PINNED_AVATAR_SIZE,
@@ -228,6 +229,7 @@ import {
 	type MissionCardRead,
 	missionFaceOf,
 	toMissionCard,
+	toMissionProperties,
 } from "@/lib/missions/missions-model"
 import { useLiveMissions } from "@/lib/missions/use-live-missions"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
@@ -401,6 +403,23 @@ const useReplyChips = (
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
 
+const MISSION_PROPERTIES_ROW_KEY = "mission-properties"
+
+const missionPropertiesRowOf = ({
+	mission,
+	now,
+}: ThreadMission): TranscriptItem => ({
+	key: MISSION_PROPERTIES_ROW_KEY,
+	render: () => (
+		<MissionProperties {...toMissionProperties(mission)} now={now} />
+	),
+})
+
+const rowsUnderMissionProperties = (
+	rows: TranscriptItem[],
+	seat: ThreadMission | null,
+): TranscriptItem[] => (seat ? [missionPropertiesRowOf(seat), ...rows] : rows)
+
 const missionsSeatedIn = (
 	missions: Mission[],
 	seat: ThreadMission | null,
@@ -469,7 +488,6 @@ const ThreadHeader = ({
 	return (
 		<AppHeader
 			data-tauri-drag-region="deep"
-			isFloating
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
@@ -1915,7 +1933,7 @@ function ThreadView(props: ThreadViewProps) {
 		}),
 		older: view.state.messages.length > 0 ? view.older : undefined,
 		onFollowChange: view.controller.follow,
-		rows: view.transcriptRows,
+		rows: rowsUnderMissionProperties(view.transcriptRows, view.missionSeat),
 		scrollerRef: view.scrollerRef,
 		transcriptKey: view.facts.id,
 	}
@@ -2007,7 +2025,6 @@ function ThreadView(props: ThreadViewProps) {
 						))
 			}
 			header={header}
-			isHeaderFloating
 			notice={notice}
 			overlay={overlay}
 			pending={departure ? undefined : approval}

@@ -687,6 +687,63 @@ describe("WorkspaceBody missions", () => {
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
+	const openReportedMission = async (held: Partial<Mission> = {}) => {
+		const { workspace } = await seed((mission) => ({
+			mission: { ...mission, ...held },
+			events: [eventOf("opened", 0)],
+		}))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+		await openMission()
+	}
+
+	it("opens the mission thread on its properties, ahead of every row of the thread", async () => {
+		const openedAt = Date.now() - 2 * 60 * 60 * 1000
+		await openReportedMission({
+			openedAt,
+			status: { text: "Parsing the 2.0 entries", writtenAt: openedAt },
+			commitsAhead: 3,
+			pullRequestUrl: "https://github.com/vocca/kiroshi/pull/4172",
+		})
+
+		const properties = within(threadSlot("mission-properties") as HTMLElement)
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+		const [firstRow] = feed.querySelectorAll(
+			'[data-slot="message-scroller-item"]',
+		)
+
+		expect(firstRow.firstElementChild).toBe(threadSlot("mission-properties"))
+		expect(properties.getByText("OPE-42")).toBeTruthy()
+		expect(properties.getByText("Changelog parser")).toBeTruthy()
+		expect(properties.getByText("Parsing the 2.0 entries")).toBeTruthy()
+		expect(properties.getByText("#4172")).toBeTruthy()
+		expect(properties.getByText("3 commits ahead")).toBeTruthy()
+		expect(properties.getByText("opened 2 hr. ago")).toBeTruthy()
+	})
+
+	it("scrolls the properties of the mission with its thread, under the bar that stays above it", async () => {
+		await openReportedMission()
+
+		const bar = barOf(missionHeader())
+		const properties = threadSlot("mission-properties") as HTMLElement
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+
+		expect(feed.contains(properties)).toBe(true)
+		expect(feed.contains(bar)).toBe(false)
+		expect(
+			bar.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
+	it("draws no button after the ticket of the mission, the app opening no coding session and editing no mission", async () => {
+		await openReportedMission()
+
+		const properties = threadSlot("mission-properties") as HTMLElement
+
+		expect(within(properties).getByText("OPE-42")).toBeTruthy()
+		expect(within(properties).queryAllByRole("button")).toHaveLength(0)
+	})
+
 	it("returns to the origin conversation from Back while the mission loads", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))

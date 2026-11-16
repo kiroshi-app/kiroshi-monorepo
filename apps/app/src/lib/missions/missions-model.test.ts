@@ -28,6 +28,7 @@ import {
 	toMissionCard,
 	toMissionEventModels,
 	toMissionHeaderActivity,
+	toMissionProperties,
 	toSpaceMissionGroups,
 	withMissions,
 } from "./missions-model"
@@ -680,6 +681,41 @@ describe("toMissionHeaderActivity", () => {
 			toMissionHeaderActivity({ ...missionIn("working"), pullRequestUrl })
 				.pullRequest,
 		).toBeUndefined()
+	})
+})
+
+describe("toMissionProperties", () => {
+	it("lists the ticket, the last status, the pull request, the commits ahead and the opening time of the mission", () => {
+		const url = "https://github.com/vocca/kiroshi/pull/4172"
+		const status = { text: "Parsing the 2.0 entries", writtenAt: READ_AT }
+		const mission = {
+			...missionIn("working"),
+			openedAt: READ_AT,
+			status,
+			commitsAhead: 2,
+			pullRequestUrl: url,
+		}
+
+		expect(toMissionProperties(mission)).toStrictEqual({
+			ticket: mission.ticket,
+			openedAt: READ_AT,
+			status,
+			commitsAhead: 2,
+			pullRequest: { url, number: 4172 },
+		})
+	})
+
+	it("leaves out the status, the commits ahead and the pull request a mission does not hold yet", () => {
+		const properties = toMissionProperties({
+			...missionIn("working"),
+			status: null,
+			commitsAhead: null,
+			pullRequestUrl: null,
+		})
+
+		expect(properties.status).toBeUndefined()
+		expect(properties.commitsAhead).toBeUndefined()
+		expect(properties.pullRequest).toBeUndefined()
 	})
 })
 
