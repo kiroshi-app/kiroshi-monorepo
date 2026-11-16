@@ -73,24 +73,53 @@ struct RelayResyncTests {
         await connection.stop()
     }
 
-    @Test func aThreadHoldsTheMessagesItMissedOnceAndInOrderAfterAResync() async throws {
-        let pageCalls = Mutex(0)
-        let host = TestHost(
-            messages: ["chat-juniper": [Self.message(1), Self.message(2)]]
-        ) { call in
-            guard call.command == "conversation_message_page" else { return nil }
-            let count = pageCalls.withLock { calls in
-                calls += 1
-                return calls
-            }
-            return count == 1 ? nil : Self.unanswered
+    final class CallCount: Sendable {
+        private let count = Mutex(0)
+
+        var value: Int {
+            count.withLock { $0 }
         }
+
+        func next() -> Int {
+            count.withLock { count in
+                count += 1
+                return count
+            }
+        }
+    }
+
+    nonisolated static func counting(_ command: String, in calls: CallCount, first: String?)
+        -> TestHost.Answer
+    {
+        { call in
+            guard call.command == command else { return nil }
+            guard calls.next() == 1 else { return unanswered }
+            return first.map { TestHost.ok(call, $0) }
+        }
+    }
+
+    func followThread(_ host: TestHost) async -> (ThreadStore, RelayConnection, Task<Void, Never>) {
         let store = ThreadStore(
             subject: .companion(Companion(id: "juniper", name: "Juniper")), work: CompanionWork())
         let connection = makeConnection()
         let following = Task { await store.follow(connection) }
         await connect(connection, to: host)
         await waitUntil { store.phase == .loaded && store.entries.count == 2 }
+        return (store, connection, following)
+    }
+
+    func threadPage(_ seqs: ClosedRange<Int>) -> String {
+        TestHost.messagePage("chat-juniper", seqs.map(Self.message), hasMore: false)
+    }
+
+    @Test func aSecondResyncDuringAThreadRereadGivesOneMoreAndTheMissedMessagesLandOnceInOrder()
+        async throws
+    {
+        let pageCalls = CallCount()
+        let host = TestHost(
+            messages: ["chat-juniper": [Self.message(1), Self.message(2)]],
+            answer: Self.counting("conversation_message_page", in: pageCalls, first: nil))
+        let (store, connection, following) = await followThread(host)
 
         host.reply(Self.resync(""))
         host.reply(Self.resync(""))
@@ -98,19 +127,41 @@ struct RelayResyncTests {
         await waitUntil { store.entries.map(\.id) == ["m1", "m2", "m5"] }
         _ = await host.nextCall("conversation_message_page")
         let reread = try #require(await host.nextCall("conversation_message_page"))
-        let missed = (1...5).map(Self.message)
-        host.reply(
-            TestHost.ok(reread, TestHost.messagePage("chat-juniper", missed, hasMore: false)))
+        host.reply(TestHost.ok(reread, threadPage(1...5)))
         await waitUntil { store.entries.count == 5 }
+        let trailing = try #require(await host.nextCall("conversation_message_page"))
+        host.reply(TestHost.ok(trailing, threadPage(1...6)))
+        await waitUntil { store.entries.count == 6 }
 
-        #expect(store.entries.map(\.id) == ["m1", "m2", "m3", "m4", "m5"])
-        #expect(store.entries.map(\.text) == (1...5).map { "Message \($0)" })
-        #expect(pageCalls.withLock { $0 } == 2)
+        #expect(store.entries.map(\.id) == ["m1", "m2", "m3", "m4", "m5", "m6"])
+        #expect(store.entries.map(\.text) == (1...6).map { "Message \($0)" })
+        #expect(pageCalls.value == 3)
         following.cancel()
         await connection.stop()
     }
 
-    @Test func theConversationsListHoldsAGroupItMissedOnceAfterAResync() async throws {
+    @Test func aThreadRereadWhoseOwnAnswerTheRelayRefusedIsFollowedByOneMore() async throws {
+        let pageCalls = CallCount()
+        let host = TestHost(
+            messages: ["chat-juniper": [Self.message(1), Self.message(2)]],
+            answer: Self.counting("conversation_message_page", in: pageCalls, first: nil))
+        let (store, connection, following) = await followThread(host)
+
+        host.reply(Self.resync(""))
+        _ = await host.nextCall("conversation_message_page")
+        let refused = try #require(await host.nextCall("conversation_message_page"))
+        host.reply(Self.resync("\(refused.id)"))
+        let next = try #require(await host.nextCall("conversation_message_page"))
+        host.reply(TestHost.ok(next, threadPage(1...4)))
+        await waitUntil { store.phase == .loaded && store.entries.count == 4 }
+
+        #expect(store.entries.map(\.id) == ["m1", "m2", "m3", "m4"])
+        #expect(pageCalls.value == 3)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func theConversationsListHoldsTheGroupsItMissedOnceAfterResyncs() async throws {
         let juniper = Companion(id: "juniper", name: "Juniper")
         let release = FixtureHost.Group(
             id: "group-release", title: "Release crew", members: [juniper], createdAt: 1)
@@ -118,15 +169,16 @@ struct RelayResyncTests {
             id: "group-release", title: "Release 0.42", members: [juniper], createdAt: 1)
         let launch = FixtureHost.Group(
             id: "group-launch", title: "Launch plan", members: [juniper], createdAt: 2)
-        let pageCalls = Mutex(0)
-        let host = TestHost(companions: [juniper], groups: [release]) { call in
-            guard call.command == "conversation_page" else { return nil }
-            let count = pageCalls.withLock { calls in
-                calls += 1
-                return calls
-            }
-            return count == 1 ? nil : Self.unanswered
+        let hotfix = FixtureHost.Group(
+            id: "group-hotfix", title: "Hotfix", members: [juniper], createdAt: 3)
+        func page(_ groups: [FixtureHost.Group]) -> String {
+            FixtureHost.conversationPage(
+                groups.map { TestHost.pageRow($0, last: nil) }, cursor: nil, limit: 30)
         }
+        let pageCalls = CallCount()
+        let host = TestHost(
+            companions: [juniper], groups: [release],
+            answer: Self.counting("conversation_page", in: pageCalls, first: nil))
         let store = ConversationsStore()
         let connection = makeConnection()
         let following = Task { await store.follow(connection) }
@@ -141,24 +193,27 @@ struct RelayResyncTests {
         await waitUntil { store.summaries.contains { $0.subject.title == "Release 0.42" } }
         _ = await host.nextCall("conversation_page")
         let reread = try #require(await host.nextCall("conversation_page"))
-        let rows = [renamed, launch].map { TestHost.pageRow($0, last: nil) }
-        host.reply(
-            TestHost.ok(reread, FixtureHost.conversationPage(rows, cursor: nil, limit: 30)))
+        host.reply(TestHost.ok(reread, page([renamed, launch])))
         await waitUntil { store.summaries.contains { $0.subject.title == "Launch plan" } }
+        let trailing = try #require(await host.nextCall("conversation_page"))
+        host.reply(TestHost.ok(trailing, page([renamed, launch, hotfix])))
+        await waitUntil { store.summaries.contains { $0.subject.title == "Hotfix" } }
 
         #expect(
             store.summaries.map(\.subject.title).sorted() == [
-                "Juniper", "Launch plan", "Release 0.42",
+                "Hotfix", "Juniper", "Launch plan", "Release 0.42",
             ])
-        #expect(pageCalls.withLock { $0 } == 2)
+        #expect(pageCalls.value == 3)
         following.cancel()
         await connection.stop()
     }
 
-    @Test func aMissionThreadHoldsTheMessagesItMissedOnceAndInOrderAfterAResync() async throws {
-        let pageCalls = Mutex(0)
-        func page(_ messages: [String]) -> String {
-            TestHost.messagePage("thread-mission-1", messages, hasMore: false)
+    @Test func threeResyncsDuringAMissionRereadGiveOneTrailingRereadAndTheMissedMessagesOnce()
+        async throws
+    {
+        let pageCalls = CallCount()
+        func page(_ seqs: ClosedRange<Int>) -> String {
+            TestHost.messagePage("thread-mission-1", seqs.map(message), hasMore: false)
         }
         func message(_ seq: Int) -> String {
             MissionTesting.message(
@@ -166,15 +221,8 @@ struct RelayResyncTests {
                 content: "Message \(seq)", createdAt: seq,
                 botId: seq.isMultiple(of: 2) ? "bot-1" : nil)
         }
-        let firstPage = page([message(1), message(2)])
-        let host = TestHost { call in
-            guard call.command == "conversation_message_page" else { return nil }
-            let count = pageCalls.withLock { calls in
-                calls += 1
-                return calls
-            }
-            return count == 1 ? TestHost.ok(call, firstPage) : Self.unanswered
-        }
+        let host = TestHost(
+            answer: Self.counting("conversation_message_page", in: pageCalls, first: page(1...2)))
         let store = MissionThreadStore(
             mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
         let connection = makeConnection()
@@ -182,17 +230,21 @@ struct RelayResyncTests {
         await connect(connection, to: host)
         await waitUntil { store.hasLoaded && store.transcript.entries.count == 2 }
 
-        host.reply(Self.resync(""))
-        host.reply(Self.resync(""))
+        for _ in 1...4 {
+            host.reply(Self.resync(""))
+        }
         host.push(event: "conversation://message-stored", payload: message(5))
         await waitUntil { store.transcript.entries.count == 3 }
         _ = await host.nextCall("conversation_message_page")
         let reread = try #require(await host.nextCall("conversation_message_page"))
-        host.reply(TestHost.ok(reread, page((1...5).map(message))))
+        host.reply(TestHost.ok(reread, page(1...5)))
         await waitUntil { store.transcript.entries.count == 5 }
+        let trailing = try #require(await host.nextCall("conversation_message_page"))
+        host.reply(TestHost.ok(trailing, page(1...6)))
+        await waitUntil { store.transcript.entries.count == 6 }
 
-        #expect(store.transcript.entries.map(\.id) == ["m1", "m2", "m3", "m4", "m5"])
-        #expect(pageCalls.withLock { $0 } == 2)
+        #expect(store.transcript.entries.map(\.id) == ["m1", "m2", "m3", "m4", "m5", "m6"])
+        #expect(pageCalls.value == 3)
         following.cancel()
         await connection.stop()
     }
