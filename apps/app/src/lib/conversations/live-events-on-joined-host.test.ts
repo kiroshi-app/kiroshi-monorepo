@@ -136,6 +136,7 @@ vi.mock("../host", async (importOriginal) => {
 		listenToActiveHost: joinedHosts.listenToActiveHost,
 		activeJoinedSpaceId: joinedHosts.activeSpaceId,
 		onHostReconnected: joinedHosts.onReconnected,
+		onHostReconnectedFirst: joinedHosts.onReconnectedFirst,
 		drivesRealHost: () => true,
 	}
 })

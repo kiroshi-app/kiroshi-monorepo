@@ -68,6 +68,7 @@ export const fakeHostModule = {
 	listenToActiveHost: fakeJoinedHosts.listenToActiveHost,
 	activeJoinedSpaceId: fakeJoinedHosts.activeSpaceId,
 	onHostReconnected: fakeJoinedHosts.onReconnected,
+	onHostReconnectedFirst: fakeJoinedHosts.onReconnectedFirst,
 }
 
 export const joinFakeHost = async (id: string) => {
