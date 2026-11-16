@@ -759,7 +759,7 @@ const OpeningLine = ({ isDrawn }: OpeningLineProps) =>
 	isDrawn ? OPENING : null
 
 type OpeningSwitchDemoProps = DemoProps & {
-	switchedOpening: ReactNode
+	switchedOpening?: ReactNode
 	switchLabel: string
 }
 
@@ -808,7 +808,6 @@ export const OpeningThatRendersNothing = meta.story({
 		<OpeningSwitchDemo
 			{...args}
 			opening={<OpeningLine isDrawn={false} />}
-			switchedOpening={undefined}
 			switchLabel="Drop the opening"
 		/>
 	),
