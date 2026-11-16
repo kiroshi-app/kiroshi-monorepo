@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-router"
 import { act, cleanup, render } from "@testing-library/react"
 import { createElement, StrictMode, useState } from "react"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { runReplayCommand } from "./replay-commands"
 import type { ReplayCommand, ReplayOutcome } from "./replay-protocol"
@@ -61,6 +61,28 @@ const run = async (command: ReplayCommand) => {
 	return outcome
 }
 
+const transitionOf = (element: Element) =>
+	getComputedStyle(element).getPropertyValue("transition")
+
+const holdAnimationFrames = () => {
+	const held: FrameRequestCallback[] = []
+	vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) =>
+		held.push(frame),
+	)
+	return {
+		passNext: () => {
+			for (const frame of held.splice(0)) {
+				frame(performance.now())
+			}
+		},
+	}
+}
+
+const untilTimersRan = () =>
+	new Promise((resolve) => {
+		setTimeout(resolve, 0)
+	})
+
 const addElement = (tag: string, style = "") => {
 	const element = document.createElement(tag)
 	element.setAttribute("style", style)
@@ -74,9 +96,12 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
+	document.head.replaceChildren()
 	document.body.replaceChildren()
 	document.documentElement.className = ""
 	Reflect.deleteProperty(window, "__TSR_ROUTER__")
+	vi.restoreAllMocks()
+	vi.unstubAllGlobals()
 })
 
 describe("the navigate command", () => {
@@ -174,6 +199,44 @@ describe("the theme command", () => {
 		await run({ name: "theme", scheme: "light" })
 
 		expect([...document.documentElement.classList]).toEqual(["light"])
+	})
+
+	it("swaps the class while every transition is suppressed", async () => {
+		const animated = addElement("p", "transition: color 1s")
+		const transitionsAtSwap: string[] = []
+		const rootClasses = document.documentElement.classList
+		const addClass = rootClasses.add.bind(rootClasses)
+		vi.spyOn(rootClasses, "add").mockImplementation((...classes) => {
+			transitionsAtSwap.push(transitionOf(animated))
+			addClass(...classes)
+		})
+		expect(transitionOf(animated)).toBe("color 1s")
+
+		await run({ name: "theme", scheme: "dark" })
+
+		expect(transitionsAtSwap).toEqual(["none"])
+	})
+
+	it("answers once the next animation frame has passed", async () => {
+		const frames = holdAnimationFrames()
+		let outcome: ReplayOutcome | undefined
+		const answering = runReplayCommand(
+			{ name: "theme", scheme: "dark" },
+			findRenderedRouter,
+		).then((answered) => {
+			outcome = answered
+		})
+
+		await untilTimersRan()
+		expect([...document.documentElement.classList]).toEqual(["dark"])
+		expect(outcome).toBeUndefined()
+
+		frames.passNext()
+		await answering
+		expect(outcome).toEqual({
+			ok: true,
+			result: { scheme: "dark", rootClass: "dark" },
+		})
 	})
 })
 

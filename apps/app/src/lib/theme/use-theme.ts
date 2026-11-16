@@ -16,7 +16,7 @@ const systemScheme = (): ResolvedScheme =>
 const resolvedSchemeOf = (colorScheme: ColorScheme): ResolvedScheme =>
 	colorScheme === "system" ? systemScheme() : colorScheme
 
-const disableTransitionsTemporarily = () => {
+export const disableTransitionsTemporarily = () => {
 	const style = document.createElement("style")
 	style.appendChild(
 		document.createTextNode(

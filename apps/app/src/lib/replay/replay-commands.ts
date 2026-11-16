@@ -7,6 +7,8 @@ import {
 	type ReplayOutcome,
 } from "./replay-protocol"
 
+import { disableTransitionsTemporarily } from "@/lib/theme/use-theme"
+
 type CommandNamed<Name extends ReplayCommandName> = Extract<
 	ReplayCommand,
 	{ name: Name }
@@ -42,10 +44,13 @@ const navigate = async (
 	return succeeded({ href, pathname, search: resolvedSearch })
 }
 
-const applyTheme = ({ scheme }: CommandNamed<"theme">) => {
+const applyTheme = async ({ scheme }: CommandNamed<"theme">) => {
 	const root = document.documentElement
+	const restoreTransitions = disableTransitionsTemporarily()
 	root.classList.remove("light", "dark")
 	root.classList.add(scheme)
+	restoreTransitions()
+	await nextAnimationFrame()
 	return succeeded({ scheme, rootClass: root.className })
 }
 
