@@ -339,8 +339,12 @@ const usePlaceInBlock = (placeIn: PlaceIn) => {
 	const place = useEffectEvent(() => {
 		const placed = frame.current
 		const block = placed?.parentElement
-		const next = placed && block ? placeIn(block, placed) : undefined
-		if (!placed || !next) return
+		if (!placed || !block) return
+		const next = placeIn(block, placed)
+		if (!next) {
+			delete placed.dataset.placed
+			return
+		}
 		placed.style.left = `${next.left}px`
 		placed.style.top = `${next.top}px`
 		placed.dataset.placed = ""
@@ -351,10 +355,15 @@ const usePlaceInBlock = (placeIn: PlaceIn) => {
 	useEffect(() => {
 		const block = frame.current?.parentElement
 		if (!block) return
-		const observer = new ResizeObserver(() => place())
+		const follow = () => place()
+		const observer = new ResizeObserver(follow)
 		observer.observe(block)
 		observer.observe(clippingBoxOf(block))
-		return () => observer.disconnect()
+		block.addEventListener("scroll", follow, { capture: true, passive: true })
+		return () => {
+			observer.disconnect()
+			block.removeEventListener("scroll", follow, { capture: true })
+		}
 	}, [])
 
 	return frame
@@ -384,7 +393,13 @@ const onPassageEnd =
 			-1,
 		)
 		const line = [...(end?.getClientRects() ?? [])].at(-1)
-		if (!line) return undefined
+		if (!end || !line) return undefined
+		const clip = clippingBoxOf(end)
+		if (
+			line.right < clip.getBoundingClientRect().left ||
+			line.right > innerRightOf(clip)
+		)
+			return undefined
 		const from = block.getBoundingClientRect()
 		return {
 			left: line.right - from.left,
@@ -564,14 +579,14 @@ type LibraryDocumentBlockCommentsProps = {
 	layer: LibraryDocumentCommentLayer
 	blockId: string
 	source: string
-	isWriting: boolean
+	hasPlacedPins: boolean
 }
 
 const LibraryDocumentBlockComments = ({
 	layer,
 	blockId,
 	source,
-	isWriting,
+	hasPlacedPins,
 }: LibraryDocumentBlockCommentsProps) => {
 	const { t } = useTranslation("common")
 	const mentionNameOf = useMentionNameOf()
@@ -588,7 +603,7 @@ const LibraryDocumentBlockComments = ({
 		({ thread, anchor }) => anchor.passage && thread.id === openThread?.id,
 	)
 	const isBlockDraft = draft !== undefined && !draft.anchor.passage
-	const fieldPins = isWriting
+	const placedPins = hasPlacedPins
 		? [
 				...threads.flatMap(({ thread, anchor }) =>
 					anchor.passage
@@ -666,7 +681,7 @@ const LibraryDocumentBlockComments = ({
 			{isBlockDraft && isFromShortcut ? (
 				<CardFrame className="-end-2 top-full mt-3">{draftCard}</CardFrame>
 			) : null}
-			{fieldPins.map(({ run, isAboveLine, pin }) => (
+			{placedPins.map(({ run, isAboveLine, pin }) => (
 				<PinOnPassageEnd isAboveLine={isAboveLine} key={run} pin={run}>
 					{pin}
 				</PinOnPassageEnd>

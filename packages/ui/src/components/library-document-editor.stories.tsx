@@ -3714,6 +3714,287 @@ export const PassageAcrossTableCellsPinnedOnLastCell = meta.story({
 	},
 })
 
+const SNIPPET_BLOCK = "snip01"
+
+const SNIPPET_PASSAGE = "await ship()"
+
+const SNIPPET_LINE = `const launch = ${SNIPPET_PASSAGE}`
+
+const SNIPPET_COLUMN = SNIPPET_LINE.indexOf(SNIPPET_PASSAGE)
+
+const SNIPPET_SOURCE = `\`\`\`ts\n${SNIPPET_LINE}\nawait announce(launch)\n\`\`\``
+
+const LONG_SNIPPET_SOURCE = `\`\`\`ts\nconst launch = ${"withRetries(".repeat(12)}${SNIPPET_PASSAGE}${")".repeat(12)}\n\`\`\``
+
+const CODE_FIELD = "Code"
+
+const snippetDocument = (source = SNIPPET_SOURCE, thread = BUDGET_THREAD) => ({
+	...commentedDocument(),
+	body: `${source}\n\n^${SNIPPET_BLOCK}`,
+	threads: [
+		{
+			...thread,
+			anchor: {
+				blockId: SNIPPET_BLOCK,
+				passage: passageIn(source, SNIPPET_PASSAGE),
+			},
+		},
+	],
+})
+
+const clippersOf = (element: Element): Element[] => {
+	const parent = element.parentElement
+	if (!parent) return []
+	const { overflowX, overflowY } = getComputedStyle(parent)
+	return [
+		...(overflowX === "visible" && overflowY === "visible" ? [] : [parent]),
+		...clippersOf(parent),
+	]
+}
+
+const expectDrawnWhole = async (pin: HTMLElement) => {
+	const box = boxOf(pin)
+	for (const clipper of clippersOf(pin)) {
+		const around = boxOf(clipper)
+		await expect(box.top).toBeGreaterThanOrEqual(around.top)
+		await expect(box.bottom).toBeLessThanOrEqual(around.bottom)
+		await expect(box.left).toBeGreaterThanOrEqual(around.left)
+		await expect(box.right).toBeLessThanOrEqual(around.right)
+	}
+	const centre = (box.left + box.right) / 2
+	for (const edge of [box.top + 1, box.bottom - 1])
+		await expect(pin.contains(document.elementFromPoint(centre, edge))).toBe(
+			true,
+		)
+}
+
+const paintOf = (pin: HTMLElement) =>
+	[pin, ...pin.querySelectorAll("*")].map((part) => {
+		const { color, backgroundColor, opacity } = getComputedStyle(part)
+		return { color, backgroundColor, opacity }
+	})
+
+const snippetScrollerIn = (block: HTMLElement) =>
+	within(block).getByRole("group", { name: "Code snippet, ts" })
+
+const expectPassageOnColumn = async (
+	passage: HTMLElement,
+	line: Element,
+	column: number,
+) => {
+	const { left, width } = boxOf(passage)
+	const characterWidth = width / (passage.textContent?.length ?? 1)
+	await expectClose(left, boxOf(line).left + column * characterWidth)
+}
+
+const codePassageAtRest = {
+	args: snippetDocument(),
+	parameters: describedAs(
+		"A commented passage on a code block at rest, drawn as the passage of artboard Doc 1. Check the wash at 8 percent over a 2px underline on exactly the commented characters, their syntax colours kept, the pin starting on the end of the passage and centred on its line, drawn whole over the block, and that pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expect(piecesIn(canvasElement, SNIPPET_BLOCK)).toHaveLength(1)
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		const look = getComputedStyle(passage)
+		await expect(look.backgroundColor).toBe(washOf(passage, 8))
+		await expect(look.borderBottomWidth).toBe("2px")
+		await expect(look.borderBottomColor).toBe(washOf(passage, 50))
+		const code = block.querySelector("code") as HTMLElement
+		await expectPassageOnColumn(passage, code, SNIPPET_COLUMN)
+		await waitFor(() =>
+			expect(passage.querySelector('[style*="--code-token"]')).not.toBeNull(),
+		)
+		await expect(passage).toHaveTextContent(SNIPPET_PASSAGE)
+
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expectPassagePin(pin, passage)
+		await expectDrawnWhole(pin)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+	},
+}
+
+export const CodePassageAtRest = meta.story({
+	...codePassageAtRest,
+	globals: LIGHT,
+})
+
+export const CodePassageAtRestDark = meta.story({
+	...codePassageAtRest,
+	globals: DARK,
+})
+
+const codePassageFocused = {
+	args: snippetDocument(),
+	parameters: describedAs(
+		"A commented passage on a code block whose field has focus. Check the passage keeps its wash and its underline under exactly the commented characters of the field, the text under the field stays invisible, the pin stays whole on the end of the passage, painted as at rest, pressing it raises `onOpenThread` with its thread and leaves the focus in the field, and after one character typed before the passage the highlight is still on the same characters, one column further, with its pin.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const paintAtRest = paintOf(threadPinIn(canvasElement, BUDGET_THREAD.id))
+		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expect(passage).toBeVisible()
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		await expect(getComputedStyle(passage).backgroundColor).toBe(
+			washOf(passage, 8),
+		)
+		await expect(getComputedStyle(passage).font).toBe(
+			getComputedStyle(field).font,
+		)
+		await expectPassageOnColumn(passage, field, SNIPPET_COLUMN)
+		const underField = passage.parentElement as HTMLElement
+		await expect(boxOf(underField)).toEqual(boxOf(field))
+		await expect(underField).toHaveTextContent(field.value, {
+			normalizeWhitespace: false,
+		})
+		for (const part of [underField, ...underField.querySelectorAll("*")])
+			await expect(getComputedStyle(part).color).toBe("rgba(0, 0, 0, 0)")
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(underField.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+		await expectDrawnWhole(pin)
+		await expect(paintOf(pin)).toEqual(paintAtRest)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+		await expect(field).toHaveFocus()
+
+		field.setSelectionRange(0, 0)
+		await userEvent.keyboard("x")
+		await expect(lastBodyOf(args)).toContain(`x${SNIPPET_LINE}`)
+		await expect(field).toHaveFocus()
+		const kept = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expectPassageOnColumn(kept, field, SNIPPET_COLUMN + 1)
+		await waitFor(() =>
+			expectPassagePin(threadPinIn(canvasElement, BUDGET_THREAD.id), kept),
+		)
+	},
+}
+
+export const CodePassageFocused = meta.story({
+	...codePassageFocused,
+	globals: LIGHT,
+})
+
+export const CodePassageFocusedDark = meta.story({
+	...codePassageFocused,
+	globals: DARK,
+})
+
+export const CodePassageScrolledOnLongLine = meta.story({
+	tags: ["test-only"],
+	args: snippetDocument(LONG_SNIPPET_SOURCE),
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const scroller = snippetScrollerIn(block)
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const atRest = boxOf(passage)
+		await expect(getComputedStyle(scroller).overflowX).toBe("auto")
+		await expect(boxOf(scroller).right).toBeLessThanOrEqual(boxOf(block).right)
+		await expect(atRest.left).toBeGreaterThan(boxOf(scroller).right)
+		await expect(pin).not.toBeVisible()
+
+		scroller.scrollLeft = scroller.scrollWidth
+		await expect(scroller.scrollLeft).toBeGreaterThan(0)
+		await expect(passage).toHaveTextContent(SNIPPET_PASSAGE)
+		await expectClose(boxOf(passage).left, atRest.left - scroller.scrollLeft)
+		await expect(boxOf(passage).left).toBeGreaterThanOrEqual(
+			boxOf(scroller).left,
+		)
+		await expect(boxOf(passage).right).toBeLessThanOrEqual(
+			boxOf(scroller).right,
+		)
+		await waitFor(() => expect(pin).toBeVisible())
+		await expectPassagePin(pin, passage)
+	},
+})
+
+const resolvedSnippet = snippetDocument(SNIPPET_SOURCE, RESOLVED_SESSION_THREAD)
+
+const expectResolvedPinWholeAbove = async (
+	canvasElement: HTMLElement,
+	line: Element,
+) => {
+	const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+	await expect(pin).toHaveAttribute("data-state", "resolved")
+	await expect(pin).toBeVisible()
+	await expectPinAbovePassageEnd(
+		pin,
+		shownPassageOf(blockOf(canvasElement, SNIPPET_BLOCK), SNIPPET_PASSAGE),
+	)
+	await expect(boxOf(pin).top).toBeLessThan(boxOf(line).top)
+	await expectDrawnWhole(pin)
+}
+
+export const CodeResolvedPinWholeAtRest = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			snippetScrollerIn(blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
+})
+
+export const CodeResolvedPinWholeWhileFocused = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: async ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			await openBlock(canvasElement, blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
+})
+
+export const CodeFieldTypedSelectedAndTabbed = meta.story({
+	tags: ["test-only"],
+	args: snippetDocument(),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
+		await expect(within(block).getByRole("textbox", { name: CODE_FIELD })).toBe(
+			field,
+		)
+
+		field.setSelectionRange(field.value.length, field.value.length)
+		await userEvent.keyboard("!")
+		await expect(lastBodyOf(args)).toContain("await announce(launch)!")
+
+		if (!isInBrowserRunner()) return
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		const { left, width } = boxOf(passage)
+		const overShip =
+			left +
+			(width * (SNIPPET_PASSAGE.indexOf("ship") + 2)) / SNIPPET_PASSAGE.length
+		await (await realPointer()).dblClick(field, {
+			position: {
+				x: overShip - boxOf(field).left,
+				y: middleOf(boxOf(passage)) - boxOf(field).top,
+			},
+		})
+		await expect(
+			field.value.slice(field.selectionStart, field.selectionEnd),
+		).toBe("ship")
+
+		const typed = lastBodyOf(args)
+		await keyboard("{Tab}")
+		await expect(
+			within(block).getByRole("button", { name: "Copy code" }),
+		).toHaveFocus()
+		await expect(lastBodyOf(args)).toBe(typed)
+		await expect(shownPassageOf(block, SNIPPET_PASSAGE)).toBeVisible()
+		await keyboard("{Shift>}{Tab}{/Shift}")
+		await expect(field).toHaveFocus()
+	},
+})
+
 export const PassageDraftOnBlockBeingWritten = meta.story({
 	args: {
 		...commentedDocument(),

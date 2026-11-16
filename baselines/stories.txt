@@ -2116,6 +2116,14 @@ navigation-librarydocumenteditor--caret-inside-commented-passage
 navigation-librarydocumenteditor--caret-moves
 navigation-librarydocumenteditor--caret-share-failure
 navigation-librarydocumenteditor--click-below-the-last-line
+navigation-librarydocumenteditor--code-field-typed-selected-and-tabbed
+navigation-librarydocumenteditor--code-passage-at-rest
+navigation-librarydocumenteditor--code-passage-at-rest-dark
+navigation-librarydocumenteditor--code-passage-focused
+navigation-librarydocumenteditor--code-passage-focused-dark
+navigation-librarydocumenteditor--code-passage-scrolled-on-long-line
+navigation-librarydocumenteditor--code-resolved-pin-whole-at-rest
+navigation-librarydocumenteditor--code-resolved-pin-whole-while-focused
 navigation-librarydocumenteditor--code-shortcut
 navigation-librarydocumenteditor--column-at-maximum-width
 navigation-librarydocumenteditor--comment-draft-above-view-scrolls-into-view

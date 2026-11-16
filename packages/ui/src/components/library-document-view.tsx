@@ -48,6 +48,7 @@ type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 	value: string
 	placeholder?: string
 	hint?: string
+	passages?: ReactNode
 	className: string
 	fieldClassName: string
 	fieldRef?: Ref<HTMLTextAreaElement>
@@ -57,6 +58,7 @@ const GrowingField = ({
 	value,
 	placeholder,
 	hint,
+	passages,
 	className,
 	fieldClassName,
 	fieldRef,
@@ -80,6 +82,14 @@ const GrowingField = ({
 					data-placeholder={hint}
 					data-slot="library-document-placeholder"
 				/>
+			</span>
+		) : null}
+		{passages ? (
+			<span
+				aria-hidden="true"
+				className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap text-transparent"
+			>
+				{passages}
 			</span>
 		) : null}
 		<textarea
