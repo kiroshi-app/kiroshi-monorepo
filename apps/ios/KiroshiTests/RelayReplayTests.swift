@@ -40,6 +40,17 @@ struct RelayReplayTests {
             return heard
         }
 
+        func next(through last: Heard) async -> [Heard] {
+            var heard: [Heard] = []
+            while let next = await next() {
+                heard.append(next)
+                if next == last {
+                    break
+                }
+            }
+            return heard
+        }
+
         func online() async {
             while let update = await nextUpdate() {
                 if case .state(.online) = update {
@@ -573,5 +584,43 @@ struct RelayReplayTests {
         let stateAtTheReread = await laggard.state(atTheRereadAfter: .event(70))
 
         #expect(stateAtTheReread == .online(sharedSpaceId: "s-1"))
+    }
+
+    @Test func aResumeWhoseCallIsRefusedUnderTwoStaleChallengesRereadsAtOnce() async throws {
+        let keys = try VectorKeys()
+        let host = VectorHost(
+            keys: keys,
+            draws: [
+                keys.challenge, Data(repeating: 0xc2, count: 32), Data(repeating: 0xc3, count: 32),
+            ])
+        let connection = RelayConnection(
+            baseURL: KiroshiCloud.productionURL, instanceId: keys.instance,
+            bearer: "fixture-bearer", device: keys.device, spaceKeys: keys.spaceKeys,
+            environment: RelayEnvironment(
+                transport: transport, clock: clock, keychain: InMemoryKeychain(),
+                spaceKeys: FixtureSpaceKeys()),
+            backoff: Backoff(jitter: { $0 }))
+        let heard = Listener(await connection.updates())
+        await connection.start()
+        await transport.nextOpening().accept(host)
+        await heard.online()
+        #expect(await heard.next() == .reread)
+        try await host.event(Self.stamped(1))
+        await host.restarts(beforeTheNext: 2)
+        try await host.event(Self.stamped(3))
+        var resumesSent = 0
+        for await frame in host.heard where frame.command == RelayConnection.resumeCommand {
+            resumesSent += 1
+            if resumesSent == 2 {
+                break
+            }
+        }
+
+        try await host.event(Self.stamped(9))
+        try await host.event(#"{"event":{"event":"test://unstamped","payload":99}}"#)
+        let afterTheRefusal = await heard.next(through: .event(99))
+        await connection.stop()
+
+        #expect(afterTheRefusal == [.event(1), .reread, .event(9), .event(99)])
     }
 }

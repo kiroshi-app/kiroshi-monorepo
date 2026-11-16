@@ -560,13 +560,6 @@ actor RelayConnection {
             guard resume.token == sequence.pendingToken else { return }
             follow(sequence.answered(token: resume.token, isTooOld: resume.tooOld == true))
         } else if let id = head.id, let status = head.status {
-            if let resumeCall, id == resumeCall.id, status != 200 {
-                relayLog.notice(
-                    "The host refused the relay resume of Space \(self.instanceId, privacy: .public) with \(status, privacy: .public)"
-                )
-                follow(sequence.abandoned(token: resumeCall.token))
-                return
-            }
             settle(id, with: .success(RelayAnswer(status: status, frame: frame)))
         }
     }
@@ -754,6 +747,13 @@ actor RelayConnection {
     }
 
     private func settle(_ id: Int, with result: Result<RelayAnswer, any Error>) {
+        if let resumeCall, resumeCall.id == id {
+            relayLog.notice(
+                "The relay resume of Space \(self.instanceId, privacy: .public) ended without its answer"
+            )
+            follow(sequence.abandoned(token: resumeCall.token))
+            return
+        }
         callTasks.removeValue(forKey: id)?.cancel()
         flights[id] = nil
         pendingCalls.removeValue(forKey: id)?.resume(with: result)
