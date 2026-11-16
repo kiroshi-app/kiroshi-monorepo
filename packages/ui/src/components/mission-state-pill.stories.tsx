@@ -102,10 +102,11 @@ export const InAppHeader = meta.story({
 		</div>
 	),
 	play: async ({ canvasElement }) => {
-		for (const state of PILL_STATES) {
-			const pill = slotIn(holderOf(canvasElement, state), "mission-state-pill")
-			const dot = pill.firstElementChild as HTMLElement
+		const dotOf = (pill: HTMLElement) => pill.firstElementChild as HTMLElement
+
+		for (const pill of slotsIn(canvasElement, "mission-state-pill")) {
 			const box = pill.getBoundingClientRect()
+			const dot = dotOf(pill).getBoundingClientRect()
 			const style = getComputedStyle(pill)
 
 			await expect(box.height).toBe(28)
@@ -113,9 +114,9 @@ export const InAppHeader = meta.story({
 				Number.parseFloat(style.borderTopLeftRadius),
 			).toBeGreaterThanOrEqual(14)
 			await expect([
-				dot.getBoundingClientRect().left - box.left,
-				dot.getBoundingClientRect().width,
-				dot.getBoundingClientRect().height,
+				dot.left - box.left,
+				dot.width,
+				dot.height,
 				style.columnGap,
 				style.paddingRight,
 				style.fontSize,
@@ -129,10 +130,17 @@ export const InAppHeader = meta.story({
 				tokenStyleIn(pill, "text-foreground", "color"),
 			)
 		}
+		await expect(slotsIn(canvasElement, "mission-state-pill")).toHaveLength(
+			PILL_STATES.length,
+		)
 		await expect(
 			getComputedStyle(
-				slotIn(holderOf(canvasElement, "ready_to_merge"), "mission-state-pill")
-					.firstElementChild as HTMLElement,
+				dotOf(
+					slotIn(
+						holderOf(canvasElement, "ready_to_merge"),
+						"mission-state-pill",
+					),
+				),
 			).backgroundColor,
 		).toBe(tokenStyleIn(canvasElement, "bg-success", "backgroundColor"))
 	},
