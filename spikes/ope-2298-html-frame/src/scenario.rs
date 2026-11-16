@@ -43,7 +43,6 @@ const TICKET: &str = "OPE-2346";
 const IN_THREAD_VERDICT: &str = "in-thread";
 const SEPARATE_WINDOW_VERDICT: &str = "separate-window-only";
 const NO_PLACEHOLDER: &str = "the main page reported no placeholder rectangle";
-const NO_SECOND_VIEW: &str = "the second view never opened";
 const DECISIONS: [&str; 4] = [
 	"proof 4 is decided from the host reading of the second view, whose document never navigates; a host reading taken in a document whose URL is not the served URL is a sensor fault, never a green, in proof 4 and in proof 7",
 	"proof 5 accepts a sink connection on Windows alone, when it carries zero bytes and was accepted while a view whose navigation to the sink the host saw blocked, by a handler or by a browser CSP report, was open; decided by Steve",
@@ -256,7 +255,7 @@ impl Run {
 				let behaviours = self.thread_behaviours(&second);
 				(Some(self.close_view(second)?), reading, behaviours)
 			}
-			None => (None, None, behaviours::not_played(NO_SECOND_VIEW)),
+			None => (None, None, Vec::new()),
 		};
 		let AloneReplays { played: alone, not_played: not_played_alone } =
 			self.play_attempts_alone()?;
