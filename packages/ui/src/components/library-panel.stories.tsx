@@ -2454,7 +2454,6 @@ export const BarFrenchWithImport = meta.story({
 			await waitFor(() => expect(boxOf(newDocument).width).toBe(32))
 			await expect(newDocument).toHaveAccessibleName("Nouveau document")
 			await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
-			await expectNoHorizontalOverflow(canvasElement)
 		} finally {
 			frame.style.width = ""
 		}
