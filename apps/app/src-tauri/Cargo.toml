@@ -27,6 +27,11 @@ name = "fake_sidecar"
 path = "src/bin/fake_sidecar.rs"
 required-features = ["fake-claude"]
 
+# A real AppKit event loop has to own the main thread, which the libtest harness keeps.
+[[test]]
+name = "capture_appearance"
+harness = false
+
 [features]
 fake-claude = []
 
@@ -138,6 +143,8 @@ mac-usernotifications = "0.3"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
 	"std",
+	"NSAppearance",
+	"NSApplication",
 	"NSButton",
 	"NSControl",
 	"NSEvent",
