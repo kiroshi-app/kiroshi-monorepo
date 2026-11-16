@@ -113,6 +113,7 @@ import {
 	isWorthKeeping,
 } from "../chat/reply-endings"
 import { needsFreshSession, shownTextOf } from "../chat/screen-model"
+import { waitingQuestionIdsIn } from "../chat/waiting-questions"
 import {
 	heldWorkFor,
 	type WorkingState,
@@ -1112,16 +1113,52 @@ export const createConversationController = (
 		}
 	}
 
-	const routeOpen = (conversationId: string, pending: ScopedEvent[]) => {
-		if (isOpenConversation(conversationId)) {
-			pending.forEach(route)
+	const questionIdsShownIn = (conversationId: string) => [
+		...runningSpeakers().flatMap(({ pending }) =>
+			pending?.kind === "question" ? [pending.request.id] : [],
+		),
+		...foreignTurns
+			.speakersIn(conversationId)
+			.flatMap(({ question }) => (question ? [question.id] : [])),
+	]
+
+	const withdrawQuestion = (id: string) => {
+		const held = speakerAsked(id)
+		if (held) {
+			settlePrompt(held, id)
+			return
+		}
+		const foreign = foreignTurns.scopeAsking(id)
+		if (foreign) {
+			foreignTurns.release(foreign, id)
+			sync()
 		}
 	}
 
+	const withdrawUnheld = (shownIds: string[], pending: ScopedEvent[]) => {
+		const heldIds = waitingQuestionIdsIn(pending)
+		shownIds.filter((id) => !heldIds.has(id)).forEach(withdrawQuestion)
+	}
+
+	const routeOpen = (
+		conversationId: string,
+		shownIds: string[],
+		pending: ScopedEvent[],
+	) => {
+		if (!isOpenConversation(conversationId)) {
+			return
+		}
+		withdrawUnheld(shownIds, pending)
+		pending.forEach(route)
+	}
+
 	const routePendingQuestions = async (conversationId: string) => {
+		const shownIds = isOpenConversation(conversationId)
+			? questionIdsShownIn(conversationId)
+			: []
 		try {
 			const pending = await driver.pendingQuestions(conversationId)
-			await enqueue(async () => routeOpen(conversationId, pending))
+			await enqueue(async () => routeOpen(conversationId, shownIds, pending))
 		} catch (reason) {
 			noteFailure(toReadError(reason))
 			sync()
@@ -1179,6 +1216,9 @@ export const createConversationController = (
 	const catchUpAfterReconnection = () => {
 		shouldRebuildForeignTurns = true
 		void reloadOpenPage()
+		if (conversation) {
+			void routePendingQuestions(conversation.id)
+		}
 	}
 
 	const rebuildForeignTurns = (shown: StoredConversation) => {

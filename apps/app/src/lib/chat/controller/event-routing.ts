@@ -1,6 +1,7 @@
 import {
 	type BotChat,
 	isMutedFailure,
+	isRunOutsideOpenThread,
 	noteEvolution,
 	noteFailure,
 } from "./bot-chat"
@@ -9,6 +10,8 @@ import type { EventPersistence } from "./event-persistence"
 import type { OpenThread } from "./open-thread"
 
 import { isSameRuntimeScope } from "../chat-state"
+import { isPostedRequest } from "../posted-question"
+import { waitingQuestionIdsIn } from "../waiting-questions"
 import type { ScopedEvent } from "../../agent/contract"
 
 type EventRoutingParts = {
@@ -80,32 +83,86 @@ export const createEventRouting = (
 		}
 	}
 
-	const routeShown = (
+	const ownQuestionIdShownBy = (bot: BotChat) => {
+		const { question } = bot.state
+		return question &&
+			!isPostedRequest(question) &&
+			!isRunOutsideOpenThread(bot)
+			? question.id
+			: null
+	}
+
+	const agentQuestionIdsShownBy = (bot: BotChat) =>
+		[
+			ownQuestionIdShownBy(bot),
+			bot.state.foreignTurn?.question?.id ?? null,
+		].filter((id) => id !== null)
+
+	const withdrawQuestion = (bot: BotChat, id: string) => {
+		if (bot.state.question?.id === id) {
+			dispatch(bot, { type: "questionWithdrawn", id })
+		}
+		const foreign = bot.state.foreignTurn
+		if (foreign?.question?.id === id) {
+			foreignTurns.release(foreign.scope, id)
+			showForeignTurn(bot)
+		}
+	}
+
+	const withdrawUnheld = (
 		bot: BotChat,
-		conversationId: string,
+		shownIds: string[],
 		pending: ScopedEvent[],
 	) => {
-		if (bot.state.conversationId === conversationId) {
-			pending.forEach(route)
+		const heldIds = waitingQuestionIdsIn(pending)
+		for (const id of shownIds.filter((shown) => !heldIds.has(shown))) {
+			withdrawQuestion(bot, id)
 		}
+	}
+
+	const settleShown = (
+		bot: BotChat,
+		conversationId: string,
+		shownIds: string[],
+		pending: ScopedEvent[],
+	) => {
+		if (bot.state.conversationId !== conversationId) {
+			return
+		}
+		withdrawUnheld(bot, shownIds, pending)
+		pending.forEach(route)
 	}
 
 	const routePendingQuestions = async (
 		bot: BotChat,
 		conversationId: string,
 	) => {
+		const shownIds =
+			bot.state.conversationId === conversationId
+				? agentQuestionIdsShownBy(bot)
+				: []
 		try {
 			const pending = await driver.pendingQuestions(conversationId)
-			await enqueue(async () => routeShown(bot, conversationId, pending))
+			await enqueue(async () =>
+				settleShown(bot, conversationId, shownIds, pending),
+			)
 		} catch (reason) {
 			reportRead(bot, reason)
+		}
+	}
+
+	const catchUp = (bot: BotChat) => {
+		reloadPage(bot)
+		const conversationId = bot.state.conversationId
+		if (conversationId) {
+			void routePendingQuestions(bot, conversationId)
 		}
 	}
 
 	const reloadListedBots = () => {
 		for (const bot of bots.values()) {
 			if (isListedInOpenSpace(bot.id)) {
-				reloadPage(bot)
+				catchUp(bot)
 			}
 		}
 	}
