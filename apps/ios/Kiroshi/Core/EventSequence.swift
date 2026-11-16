@@ -117,7 +117,7 @@ struct EventSequence: Sendable {
         return SequenceOutcome(applied: held.map(\.value))
     }
 
-    mutating func lapsed(token: String) -> SequenceOutcome {
+    mutating func abandoned(token: String) -> SequenceOutcome {
         guard pendingToken == token else { return SequenceOutcome() }
         return forgotten()
     }

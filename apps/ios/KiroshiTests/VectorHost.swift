@@ -107,6 +107,10 @@ actor VectorHost: RelaySocket {
         try push(RelayConnection.hello, challenge: challenge, wireChallenge: wireChallenge)
     }
 
+    func event(_ frame: String) throws {
+        try push(Data(frame.utf8), challenge: nil)
+    }
+
     nonisolated func drop(_ code: Int) {
         inboundContinuation.yield(.close(code))
     }

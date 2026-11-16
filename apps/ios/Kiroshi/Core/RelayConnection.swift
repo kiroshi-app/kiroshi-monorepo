@@ -49,6 +49,8 @@ actor RelayConnection {
     private var resumeCall: RelayResumeCall?
     private var isRereadDue = false
     private var eventsAfterTheReread: [RelayEvent] = []
+    private var owedRereads: Set<UUID> = []
+    private var laggingSubscribers: Set<UUID> = []
 
     init(
         baseURL: URL,
@@ -85,8 +87,10 @@ actor RelayConnection {
             Task { await self?.drop(id) }
         }
         continuation.yield(.state(state))
-        if case .online = state {
+        if isOnline {
             continuation.yield(.reread)
+        } else {
+            owedRereads.insert(id)
         }
         subscribers[id] = continuation
         return stream
@@ -118,6 +122,8 @@ actor RelayConnection {
             subscriber.finish()
         }
         subscribers = [:]
+        owedRereads = []
+        laggingSubscribers = []
     }
 
     func call(_ command: String) async throws -> RelayAnswer {
@@ -513,6 +519,8 @@ actor RelayConnection {
 
     private func drop(_ id: UUID) {
         subscribers[id] = nil
+        owedRereads.remove(id)
+        laggingSubscribers.remove(id)
     }
 
     private func heardPong() {
@@ -544,7 +552,7 @@ actor RelayConnection {
         } else if let event = head.event {
             let heard = RelayEvent(name: event.event, frame: frame)
             guard let stamped = head.stamped(heard, at: accountId) else {
-                deliver(heard)
+                follow(SequenceOutcome(applied: [heard]))
                 return
             }
             follow(sequence.heard(stamped))
@@ -569,6 +577,7 @@ actor RelayConnection {
         if let resume = outcome.resume {
             send(resume)
         }
+        rereadLagging()
     }
 
     private func reread() {
@@ -578,17 +587,47 @@ actor RelayConnection {
     }
 
     private func rereadIfDue() {
-        guard isRereadDue else { return }
+        if isRereadDue {
+            broadcast(.reread)
+        } else {
+            for id in owedRereads {
+                subscribers[id]?.yield(.reread)
+            }
+        }
         isRereadDue = false
-        broadcast(.reread)
-        for event in eventsAfterTheReread {
+        owedRereads = []
+        let held = eventsAfterTheReread
+        eventsAfterTheReread = []
+        for event in held {
             broadcast(.event(event))
         }
-        eventsAfterTheReread = []
+        rereadLagging()
+    }
+
+    private func rereadLagging() {
+        guard !laggingSubscribers.isEmpty else { return }
+        relayLog.notice(
+            "\(self.laggingSubscribers.count, privacy: .public) subscribers of Space \(self.instanceId, privacy: .public) fell behind its events"
+        )
+        let lagging = laggingSubscribers
+        laggingSubscribers = []
+        guard isOnline else {
+            owedRereads.formUnion(lagging)
+            return
+        }
+        for id in lagging {
+            subscribers[id]?.yield(.state(state))
+            subscribers[id]?.yield(.reread)
+        }
+    }
+
+    private var isOnline: Bool {
+        guard case .online = state else { return false }
+        return true
     }
 
     private func deliver(_ event: RelayEvent) {
-        guard !isRereadDue else {
+        guard !isRereadDue, isOnline || owedRereads.isEmpty else {
             eventsAfterTheReread.append(event)
             return
         }
@@ -621,7 +660,7 @@ actor RelayConnection {
     private func resumeLapsed(_ token: String) {
         relayLog.notice(
             "No answer to the relay resume of Space \(self.instanceId, privacy: .public)")
-        follow(sequence.lapsed(token: token))
+        follow(sequence.abandoned(token: token))
     }
 
     private func endResumeCall() {
@@ -708,6 +747,13 @@ actor RelayConnection {
     }
 
     private func settle(_ id: Int, with result: Result<RelayAnswer, any Error>) {
+        if let resumeCall, resumeCall.id == id {
+            relayLog.notice(
+                "The relay resume of Space \(self.instanceId, privacy: .public) ended without its answer"
+            )
+            follow(sequence.abandoned(token: resumeCall.token))
+            return
+        }
         callTasks.removeValue(forKey: id)?.cancel()
         flights[id] = nil
         pendingCalls.removeValue(forKey: id)?.resume(with: result)
@@ -726,8 +772,9 @@ actor RelayConnection {
     }
 
     private func broadcast(_ update: RelayUpdate) {
-        for subscriber in subscribers.values {
-            subscriber.yield(update)
+        for (id, subscriber) in subscribers {
+            guard case .dropped = subscriber.yield(update) else { continue }
+            laggingSubscribers.insert(id)
         }
     }
 

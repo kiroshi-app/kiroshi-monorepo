@@ -24,7 +24,7 @@ struct RelayReplayTests {
             while let update = await nextUpdate() {
                 switch update {
                 case .state: continue
-                case .event(let event): return .event((try? event.payload(as: Int.self)) ?? -1)
+                case .event(let event): return Self.heard(event)
                 default: return .reread
                 }
             }
@@ -40,12 +40,53 @@ struct RelayReplayTests {
             return heard
         }
 
+        func next(through last: Heard) async -> [Heard] {
+            var heard: [Heard] = []
+            while let next = await next() {
+                heard.append(next)
+                if next == last {
+                    break
+                }
+            }
+            return heard
+        }
+
         func online() async {
             while let update = await nextUpdate() {
                 if case .state(.online) = update {
                     return
                 }
             }
+        }
+
+        func dropped() async {
+            while let update = await nextUpdate() {
+                if case .state(.unreachable) = update {
+                    return
+                }
+            }
+        }
+
+        func state(atTheRereadAfter last: Heard) async -> RelayState? {
+            var state: RelayState?
+            var isPastLast = false
+            while let update = await nextUpdate() {
+                switch update {
+                case .state(let next):
+                    state = next
+                case .event(let event):
+                    isPastLast = isPastLast || Self.heard(event) == last
+                case .reread where isPastLast:
+                    return state
+                case .reread:
+                    continue
+                }
+            }
+            return nil
+        }
+
+        private static func heard(_ event: RelayEvent) -> Heard {
+            .event((try? event.payload(as: Int.self)) ?? -1)
         }
 
         private func nextUpdate() async -> RelayUpdate? {
@@ -413,5 +454,173 @@ struct RelayReplayTests {
         #expect(callsAfterTheDrop.value == 0)
         following.cancel()
         await connection.stop()
+    }
+
+    func replayedBatch(after applied: Int, through last: Int, on host: TestHost) async throws {
+        for seq in applied + 2...last {
+            host.reply(Self.stamped(seq))
+        }
+        let (call, args) = try await resumed(on: host)
+        host.reply(Self.stamped(applied + 1, token: args.token))
+        host.reply(Self.resumeAnswer(call, token: args.token, #""replayed":1"#))
+    }
+
+    @Test func aStoreThatJoinsWhileTheSocketIsBackReadsOnceAndTheLoadedOnesReadNothing()
+        async throws
+    {
+        let threadReads = RelayResyncTests.CallCount()
+        let missionReads = RelayResyncTests.CallCount()
+        let missionPage = TestHost.messagePage(
+            "thread-mission-1", [MissionTesting.message(id: "t1", seq: 1, content: "Go")],
+            hasMore: false)
+        let juniper = Companion(id: "juniper", name: "Juniper")
+        let messages = [
+            "chat-juniper": [RelayResyncTests.message(1), RelayResyncTests.message(2)]
+        ]
+        let host = TestHost(messages: messages)
+        let loaded = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let connection = makeConnection()
+        let followingLoaded = Task { await loaded.follow(connection) }
+        let heard = await connect(connection, to: host)
+        await waitUntil { loaded.phase == .loaded && loaded.entries.count == 2 }
+        host.reply(Self.stamped(1))
+        #expect(await heard.next(2) == [.reread, .event(1)])
+
+        host.socket.push(.close(1006))
+        await heard.dropped()
+        let joining = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let mission = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
+        let followingJoining = Task { await joining.follow(connection) }
+        let followingMission = Task { await mission.follow(connection) }
+        while await connection.subscriberCount < 4 {
+            await Task.yield()
+        }
+        let back = TestHost(
+            messages: messages,
+            answer: { call in
+                guard call.command == "conversation_message_page" else { return nil }
+                guard call.text.contains("thread-mission-1") else {
+                    _ = threadReads.next()
+                    return nil
+                }
+                _ = missionReads.next()
+                return TestHost.ok(call, missionPage)
+            })
+        await clock.wakeNextSleep(of: .seconds(1))
+        await transport.nextOpening().accept(back.socket)
+        let (call, args) = try await resumed(on: back)
+        back.reply(Self.resumeAnswer(call, token: args.token, #""replayed":0"#))
+        await waitUntil { joining.phase == .loaded && mission.hasLoaded }
+        back.reply(Self.stamped(2))
+
+        #expect(args.since == 1)
+        #expect(await heard.next() == .event(2))
+        #expect(joining.entries.count == 2)
+        #expect(threadReads.value == 1)
+        #expect(missionReads.value == 1)
+        for following in [followingLoaded, followingJoining, followingMission] {
+            following.cancel()
+        }
+        await connection.stop()
+    }
+
+    @Test func aSubscriberThatFallsBehindAReplayHearsARereadAndOneThatKeptUpDoesNot()
+        async throws
+    {
+        let host = TestHost()
+        let connection = makeConnection()
+        let laggard = Listener(await connection.updates())
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+        host.reply(Self.stamped(1))
+
+        try await replayedBatch(after: 1, through: 52, on: host)
+        #expect(await heard.next(52) == (1...52).map(Heard.event))
+        try await replayedBatch(after: 52, through: 103, on: host)
+        host.reply(Self.stamped(104))
+        #expect(await heard.next(52) == (53...104).map(Heard.event))
+        var fromLaggard: [Heard] = []
+        while let next = await laggard.next() {
+            fromLaggard.append(next)
+            if next == .event(104) {
+                break
+            }
+        }
+
+        #expect(fromLaggard.suffix(2) == [.reread, .event(104)])
+        #expect(fromLaggard.count < 104)
+        await connection.stop()
+    }
+
+    @Test func aResumeRefusedByTheHostRereadsAtOnceAndAdoptsTheNextFrame() async throws {
+        let host = TestHost()
+        let connection = makeConnection()
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+        host.reply(Self.stamped(1))
+        host.reply(Self.stamped(3))
+        let (call, _) = try await resumed(on: host)
+
+        host.reply(TestHost.refused(call, status: 400, #""the host refused the resume""#))
+        host.reply(Self.stamped(9))
+
+        #expect(await heard.next(3) == [.event(1), .reread, .event(9)])
+        await connection.stop()
+    }
+
+    @Test func aSubscriberThatFallsBehindHearsItsStateAgainBeforeItsReread() async {
+        let host = TestHost()
+        let connection = makeConnection()
+        let laggard = Listener(await connection.updates())
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+
+        for seq in 1...70 {
+            host.reply(Self.stamped(seq))
+        }
+        #expect(await heard.next(70) == (1...70).map(Heard.event))
+        await connection.stop()
+        let stateAtTheReread = await laggard.state(atTheRereadAfter: .event(70))
+
+        #expect(stateAtTheReread == .online(sharedSpaceId: "s-1"))
+    }
+
+    @Test func aResumeWhoseCallIsRefusedUnderTwoStaleChallengesRereadsAtOnce() async throws {
+        let keys = try VectorKeys()
+        let host = VectorHost(
+            keys: keys,
+            draws: [
+                keys.challenge, Data(repeating: 0xc2, count: 32), Data(repeating: 0xc3, count: 32),
+            ])
+        let connection = RelayConnection(
+            baseURL: KiroshiCloud.productionURL, instanceId: keys.instance,
+            bearer: "fixture-bearer", device: keys.device, spaceKeys: keys.spaceKeys,
+            environment: RelayEnvironment(
+                transport: transport, clock: clock, keychain: InMemoryKeychain(),
+                spaceKeys: FixtureSpaceKeys()),
+            backoff: Backoff(jitter: { $0 }))
+        let heard = Listener(await connection.updates())
+        await connection.start()
+        await transport.nextOpening().accept(host)
+        await heard.online()
+        #expect(await heard.next() == .reread)
+        try await host.event(Self.stamped(1))
+        await host.restarts(beforeTheNext: 2)
+        try await host.event(Self.stamped(3))
+        var resumesSent = 0
+        for await frame in host.heard where frame.command == RelayConnection.resumeCommand {
+            resumesSent += 1
+            if resumesSent == 2 {
+                break
+            }
+        }
+
+        try await host.event(Self.stamped(9))
+        try await host.event(#"{"event":{"event":"test://unstamped","payload":99}}"#)
+        let afterTheRefusal = await heard.next(through: .event(99))
+        await connection.stop()
+
+        #expect(afterTheRefusal == [.event(1), .reread, .event(9), .event(99)])
     }
 }
