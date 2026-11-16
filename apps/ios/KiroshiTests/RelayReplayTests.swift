@@ -48,6 +48,14 @@ struct RelayReplayTests {
             }
         }
 
+        func dropped() async {
+            while let update = await nextUpdate() {
+                if case .state(.unreachable) = update {
+                    return
+                }
+            }
+        }
+
         private func nextUpdate() async -> RelayUpdate? {
             var iterator = iterator
             defer { self.iterator = iterator }
@@ -412,6 +420,119 @@ struct RelayReplayTests {
         #expect(pageCalls.value == 1)
         #expect(callsAfterTheDrop.value == 0)
         following.cancel()
+        await connection.stop()
+    }
+
+    func replayedBatch(after applied: Int, through last: Int, on host: TestHost) async throws {
+        for seq in applied + 2...last {
+            host.reply(Self.stamped(seq))
+        }
+        let (call, args) = try await resumed(on: host)
+        host.reply(Self.stamped(applied + 1, token: args.token))
+        host.reply(Self.resumeAnswer(call, token: args.token, #""replayed":1"#))
+    }
+
+    @Test func aStoreThatJoinsWhileTheSocketIsBackReadsOnceAndTheLoadedOnesReadNothing()
+        async throws
+    {
+        let threadReads = RelayResyncTests.CallCount()
+        let missionReads = RelayResyncTests.CallCount()
+        let missionPage = TestHost.messagePage(
+            "thread-mission-1", [MissionTesting.message(id: "t1", seq: 1, content: "Go")],
+            hasMore: false)
+        let juniper = Companion(id: "juniper", name: "Juniper")
+        let messages = [
+            "chat-juniper": [RelayResyncTests.message(1), RelayResyncTests.message(2)]
+        ]
+        let host = TestHost(messages: messages)
+        let loaded = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let connection = makeConnection()
+        let followingLoaded = Task { await loaded.follow(connection) }
+        let heard = await connect(connection, to: host)
+        await waitUntil { loaded.phase == .loaded && loaded.entries.count == 2 }
+        host.reply(Self.stamped(1))
+        #expect(await heard.next(2) == [.reread, .event(1)])
+
+        host.socket.push(.close(1006))
+        await heard.dropped()
+        let joining = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let mission = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
+        let followingJoining = Task { await joining.follow(connection) }
+        let followingMission = Task { await mission.follow(connection) }
+        while await connection.subscriberCount < 4 {
+            await Task.yield()
+        }
+        let back = TestHost(
+            messages: messages,
+            answer: { call in
+                guard call.command == "conversation_message_page" else { return nil }
+                guard call.text.contains("thread-mission-1") else {
+                    _ = threadReads.next()
+                    return nil
+                }
+                _ = missionReads.next()
+                return TestHost.ok(call, missionPage)
+            })
+        await clock.wakeNextSleep(of: .seconds(1))
+        await transport.nextOpening().accept(back.socket)
+        let (call, args) = try await resumed(on: back)
+        back.reply(Self.resumeAnswer(call, token: args.token, #""replayed":0"#))
+        await waitUntil { joining.phase == .loaded && mission.hasLoaded }
+        back.reply(Self.stamped(2))
+
+        #expect(args.since == 1)
+        #expect(await heard.next() == .event(2))
+        #expect(joining.entries.count == 2)
+        #expect(threadReads.value == 1)
+        #expect(missionReads.value == 1)
+        for following in [followingLoaded, followingJoining, followingMission] {
+            following.cancel()
+        }
+        await connection.stop()
+    }
+
+    @Test func aSubscriberThatFallsBehindAReplayHearsARereadAndOneThatKeptUpDoesNot()
+        async throws
+    {
+        let host = TestHost()
+        let connection = makeConnection()
+        let laggard = Listener(await connection.updates())
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+        host.reply(Self.stamped(1))
+
+        try await replayedBatch(after: 1, through: 52, on: host)
+        #expect(await heard.next(52) == (1...52).map(Heard.event))
+        try await replayedBatch(after: 52, through: 103, on: host)
+        host.reply(Self.stamped(104))
+        #expect(await heard.next(52) == (53...104).map(Heard.event))
+        var fromLaggard: [Heard] = []
+        while let next = await laggard.next() {
+            fromLaggard.append(next)
+            if next == .event(104) {
+                break
+            }
+        }
+
+        #expect(fromLaggard.suffix(2) == [.reread, .event(104)])
+        #expect(fromLaggard.count < 104)
+        await connection.stop()
+    }
+
+    @Test func aResumeRefusedByTheHostRereadsAtOnceAndAdoptsTheNextFrame() async throws {
+        let host = TestHost()
+        let connection = makeConnection()
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+        host.reply(Self.stamped(1))
+        host.reply(Self.stamped(3))
+        let (call, _) = try await resumed(on: host)
+
+        host.reply(TestHost.refused(call, status: 400, #""the host refused the resume""#))
+        host.reply(Self.stamped(9))
+
+        #expect(await heard.next(3) == [.event(1), .reread, .event(9)])
         await connection.stop()
     }
 }
