@@ -584,11 +584,6 @@ const LibraryDocumentCommentRun = ({
 
 const UNDER_PIN = "end-0 top-full mt-2"
 
-const START_BUTTON = cn(
-	HANDLE_BUTTON,
-	"w-6 rounded-[4px] hover:bg-background dark:hover:bg-accent",
-)
-
 const START_HINT_GAP = 12
 
 const START_HINT = cn(
@@ -615,7 +610,8 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 					<button
 						aria-label={name}
 						className={cn(
-							START_BUTTON,
+							HANDLE_BUTTON,
+							"w-6 rounded-[4px] hover:bg-background dark:hover:bg-accent",
 							!isShown && "opacity-0 focus-visible:opacity-100",
 						)}
 						data-slot="library-document-comment-start"
