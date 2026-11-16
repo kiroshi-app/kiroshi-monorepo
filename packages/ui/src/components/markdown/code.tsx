@@ -276,7 +276,11 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 		if (block) return <MarkdownAnswerBlock block={block} />
 	}
 
-	return <MarkdownFence code={source} language={language} runs={runsOf(code)} />
+	const runs = runsOf(code)
+	if (runs.length > 0)
+		return <MarkdownFence code={source} language={language} runs={runs} />
+
+	return <MarkdownFence code={source} language={language} />
 }
 
 export const MarkdownStaticPre = ({
