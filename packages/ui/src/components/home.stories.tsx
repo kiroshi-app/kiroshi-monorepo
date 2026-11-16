@@ -45,6 +45,7 @@ import {
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -273,6 +274,7 @@ type EmptyHomeProps = {
 	attachments?: PromptAttachment[]
 	isSending?: boolean
 	arrivalKey?: string
+	notice?: ReactNode
 	after?: ReactNode
 	today?: HomeTodayRow[]
 }
@@ -286,11 +288,17 @@ const EmptyHome = ({
 	attachments,
 	isSending,
 	arrivalKey,
+	notice,
 	after,
 	today,
 }: EmptyHomeProps) => (
 	<EmptyStage
-		above={<HomeGreeting agent={agent} firstName={firstName} period={period} />}
+		above={
+			<>
+				<HomeGreeting agent={agent} firstName={firstName} period={period} />
+				{notice}
+			</>
+		}
 		below={
 			today ? (
 				<HomeTodayList
@@ -811,6 +819,40 @@ export const TwoLineGreeting = meta.story({
 			Math.abs(greeting.bottom - restingGreeting.bottom),
 		).toBeLessThanOrEqual(1)
 		await expectRestingCardInTheMiddle(canvasElement)
+	},
+})
+
+export const SpaceAccessNoticeAboveTheCard = meta.story({
+	name: "Space access notice grows upward above the card",
+	render: () =>
+		besideARestingHome(
+			<EmptyHome
+				notice={
+					<SpaceAccessBanner
+						host="Sam's MacBook"
+						reason="offline"
+						space="Lisbon offsite"
+					/>
+				}
+			/>,
+		),
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"A joined Space whose host is offline: the space access notice hangs under the greeting, above the card. Check that the notice ends above the card, that it pushed the greeting upward, and that the card starts at the pixel where the resting card starts.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const { card, greeting, restingGreeting } = emptyStageBoxesOf(canvasElement)
+		const banner = slotIn(
+			canvasElement,
+			"space-access-banner",
+		).getBoundingClientRect()
+
+		await expectRestingCardInTheMiddle(canvasElement)
+		await expect(banner.bottom).toBeLessThan(card.top)
+		await expect(greeting.top).toBeLessThan(restingGreeting.top)
 	},
 })
 
