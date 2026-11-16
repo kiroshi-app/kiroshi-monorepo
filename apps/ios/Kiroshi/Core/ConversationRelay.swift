@@ -2,6 +2,7 @@ enum ConversationCallError: Error, Equatable {
     case refused(status: Int, kind: String?)
     case unreadable
     case unknownToTheHost
+    case refusedByTheRelay
 
     var isUnreadableCursor: Bool {
         guard case .refused(_, let kind) = self else { return false }
@@ -117,6 +118,7 @@ struct ConversationRelay: Sendable {
 
     private static func refusal(of answer: RelayAnswer) -> ConversationCallError {
         guard !answer.isUnknownToTheHost else { return .unknownToTheHost }
+        guard !answer.isRefusedByTheRelay else { return .refusedByTheRelay }
         let kind = (try? answer.body(as: StoreError.self))?.kind
         return .refused(status: answer.status, kind: kind)
     }
