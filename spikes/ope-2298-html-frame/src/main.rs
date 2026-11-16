@@ -5,8 +5,11 @@ mod cocoa;
 mod host;
 mod http;
 #[cfg(target_os = "linux")]
+mod input;
+#[cfg(target_os = "linux")]
 mod layer;
 mod native;
+mod open_points;
 mod placement;
 mod probe;
 mod proofs;

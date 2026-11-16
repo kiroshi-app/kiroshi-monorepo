@@ -33,6 +33,45 @@ pub const TRACER: &str = r#"(() => {
 		},
 	});
 })();"#;
+pub const INPUT_RECORDER: &str = r#"(() => {
+	const seen = { clicks: [], keyDowns: 0 };
+	addEventListener(
+		"click",
+		(event) => {
+			if (event.isTrusted) {
+				seen.clicks.push({ x: event.clientX, y: event.clientY, target: event.target.id ?? "" });
+			}
+		},
+		true,
+	);
+	addEventListener(
+		"keydown",
+		(event) => {
+			if (event.isTrusted) {
+				seen.keyDowns += 1;
+			}
+		},
+		true,
+	);
+	const reading = () => ({
+		...seen,
+		fields: Object.fromEntries(
+			Array.from(document.querySelectorAll("input"), (field) => {
+				const box = field.getBoundingClientRect();
+				return [field.id, { value: field.value, x: box.x + box.width / 2, y: box.y + box.height / 2 }];
+			}),
+		),
+	});
+	if (window === top) {
+		window.__spikeInputSeen = reading;
+		return;
+	}
+	addEventListener("message", (event) => {
+		if (event.data === "spike-input-probe") {
+			event.source.postMessage({ spikeInputSeen: reading() }, "*");
+		}
+	});
+})();"#;
 const READING: &str = r#"(() => {
 	const KEY = "spike-view-value";
 	const STORE = "spike-view";
@@ -194,7 +233,7 @@ pub fn reached_attempts(webview: &Webview) -> HostTrace {
 		.ok_or_else(|| "the document the host read holds no host trace".to_owned())
 }
 
-fn answer(webview: &Webview, expression: &str) -> Result<String, String> {
+pub fn answer(webview: &Webview, expression: &str) -> Result<String, String> {
 	let (sender, receiver) = mpsc::channel();
 	webview
 		.eval_with_callback(expression, move |answer| {

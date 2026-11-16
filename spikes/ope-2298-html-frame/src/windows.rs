@@ -116,6 +116,7 @@ pub fn open_main_window(app: &AppHandle, host: &Arc<HostState>) -> tauri::Result
 			.inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
 			.always_on_top(true)
 			.initialization_script_for_all_frames(probe::TRACER)
+			.initialization_script_for_all_frames(probe::INPUT_RECORDER)
 			.on_web_resource_request(move |_request, response| {
 				let Some(header) = response.headers_mut().get_mut(CONTENT_SECURITY_POLICY) else {
 					return;
@@ -168,6 +169,7 @@ pub fn open_view_child(
 	let builder = WebviewBuilder::new(label, WebviewUrl::External(url))
 		.initialization_script_for_all_frames(probe::TRACER)
 		.initialization_script_for_all_frames(probe::frame_responder())
+		.initialization_script_for_all_frames(probe::INPUT_RECORDER)
 		.incognito(mode.isolates_view_storage());
 	let main_webview: &Webview = main_window.as_ref();
 	main_webview.window().add_child(

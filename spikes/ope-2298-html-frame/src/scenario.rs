@@ -8,8 +8,9 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Listener as _, Url, Webview, WebviewWindow};
 
-use crate::behaviours::{self, Behaviour, Stage, ThreadPlay, NO_REPORT};
+use crate::behaviours::{Behaviour, Stage, ThreadPlay, NO_REPORT};
 use crate::host::{HostState, Tick, ViewAddress};
+use crate::open_points::{self, Facts};
 use crate::placement::{PlacementReport, Seat, Seating, ThreadView, PLACEMENT_EVENT};
 use crate::probe::{self, HostReading};
 use crate::proofs::{
@@ -39,7 +40,7 @@ const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(150);
 const RUN_LIMIT: Duration = Duration::from_secs(180);
-const TICKET: &str = "OPE-2355";
+const TICKET: &str = "OPE-2364";
 #[cfg(target_os = "linux")]
 const DISPLAY_SETUP_VARIABLE: &str = "SPIKE_DISPLAY_SETUP";
 #[cfg(target_os = "linux")]
@@ -52,10 +53,10 @@ const DECISIONS: [&str; 4] = [
 	"each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
 	"the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
 ];
-const IN_THREAD_DECISIONS: [&str; 17] = [
+const IN_THREAD_DECISIONS: [&str; 27] = [
 	"the child webview is first placed from the rectangles the main page gives in its own viewport coordinates, with no correction, and the window is captured; where the view is drawn more than 1 px from its placeholder, every later placement adds the page origin read from that capture, the placeholder drawn minus the placeholder reported, rounded to the point; the five behaviours are played once per run, after that correction, and a second capture follows them",
 	"the placeholder is painted rgb(0, 255, 255) and the view rgb(255, 0, 255), the placeholder captured with the view hidden, the view captured once shown again; a pixel counts for a paint when each of its leading channels exceeds the others by more than 100, since the display profile shifts the values a capture holds, and a box painted on less than 98 percent of its area is a fault; green was dropped because the zoom button of the title bar is green",
-	"on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland no capture is taken and the drawn position stays not proven",
+	"on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland it is a capture of the whole compositor output, by grim then by weston-screenshooter, the first that answers, and the two painted boxes are compared in that capture since a Wayland client is not told where its window is",
 	"on macOS the correction a product would apply is the safeAreaInsets.top of the main webview, which native_geometry records beside the origin read from the pixels; the harness places from the pixels so that the two agreeing is a measurement and not an assumption",
 	"the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
 	"child_webview_bounds is read back from the webview after the host set it, through tauri::Webview::bounds on macOS and Windows and through the GTK allocation translated to the main webview on Linux, where tauri::Webview::bounds never reads a position; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
@@ -66,10 +67,20 @@ const IN_THREAD_DECISIONS: [&str; 17] = [
 	"the capability names the webview main where it named the window main, so a child webview of the main window receives none",
 	"on Linux every placement is tried on a blank child webview before the first view, each asked for the rectangle of the placeholder; a placement holds when the GTK allocations give the main webview the whole window content and the view its rectangle within 1 px",
 	"on Linux each view is mounted by tauri::Window::add_child, then its widget is moved by GTK calls into the first placement that held on a webview Tauri manages, the GtkFixed tried before the overlay margins; the two placements of wry alone are measured on a blank webview outside the Tauri runtime, where no guard, no capability and no proof applies",
-	"on Linux the input a view and the main page receive through the GtkOverlay was not exercised: the GtkFixed is set pass-through, no click was sent",
+	"on Linux the four input lines are played once per run, after the five behaviours, on the mount the seven proofs ran on, the GtkFixed over the main webview: a sighting named before-input is taken first, and each click is aimed from the boxes that sighting found on the screen, never from a position the harness computed",
+	"every click and every key is sent by a command the harness starts as a process of its own: xdotool through XTEST under X11; under Wayland swaymsg seat cursor with wtype, then wlrctl, the first route whose own probe command answers; a setup where no probe answers is not provable and each answer is kept in input.routes_tried",
+	"a click or a key counts only when its isTrusted is true, which no script dispatch can set; the recorder is an initialization script of every frame of the main webview and of the view webview, so the wrapper page of the view and hostile.html are both read, and a click in the view means a click in hostile.html",
+	"the view is clicked on a field hostile.html now holds and the main page on a field index.html now holds, fixed in the top right corner so that no rectangle the page reported in OPE-2355 moves; the texts typed are view2364 and main2364, without a space since a space scrolls a page that holds no focused field",
+	"the paint of the view gained pointer-events none, which changes no pixel: without it the paint itself, laid over the wrapper page, would take every click aimed at hostile.html",
+	"the scrollbars are measured once per run, before the first paint: when the scrollbars of the view document take space, the view is painted as in OPE-2355 and captured (viewport-paint), and only when the paint is short of the child webview bounds by exactly that space on each axis are the scrollbars of the view document hidden, by overflow hidden on its root element, for every later paint; otherwise the paint is left as it was",
+	"view_drawn_over_its_placeholder is the rule of OPE-2355, unchanged: offset within 1 px and size within 1 px, read from the last sighting; view_edges_minus_placeholder_edges_in_points states the same sighting edge by edge",
+	"each result file holds the four open points of OPE-2355 with a status of its own run; a point another platform or another display setup decides is not-proven here with that reason, and not-provable is kept for a route that does not exist",
+	"a desktop session is a window manager that names itself to wmctrl with xfce4-session, xfce4-panel and xfdesktop running; XDG_SESSION_ID and XDG_CURRENT_DESKTOP no longer decide it, since no session started without a login has the first",
+	"the Wayland setup that can receive input is sway with the X11 backend of wlroots on Xvfb: the harness is a Wayland client of sway alone, with DISPLAY unset; weston headless refuses every route, and in Docker sway with the headless backend of wlroots answered swaymsg and wtype while no click and no key reached the harness, its seat holding no pointer and no keyboard device",
+	"the real session is Xfce started by startxfce4 under dbus-run-session on Xvfb, the only desktop shell with a window manager of its own that OPE-2364 started on the runner; what it lacks next to a session on a physical display is in display_setup.desktop_session.lacks",
 	"gtk and wry on Linux, objc2 and objc2-foundation on macOS are direct dependencies of the harness at the versions the lock already held: no package entered the lock",
 	"results-linux-in-thread.json is the Xvfb alone setup, the setup of the OPE-2346 file of that name; every other display setup carries its name in the file name",
-	"the OPE-2355 workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched",
+	"the workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched",
 ];
 const RESIDUAL_EXPOSURE: &str = "no mitigation is applied: Chromium 156, which WebView2 embeds, opens one socket to the target of every http or https navigation when the navigation request is created, before the CSP check and before a host handler is asked. The only gate is the embedder hook ShouldPreconnectNavigation: there is no command line switch, no WebView2 setting and no Tauri 2.12.2 builder option for it, so a view can still make the webview open a connection without request bytes to any host and port it names";
 const HARNESS_FAILURE: i32 = 1;
@@ -364,9 +375,33 @@ impl Run {
 				results[finding] = evidence;
 			}
 		}
+		let is_placed = results["placement_verdict"]["verdict"] != json!(NOT_POSSIBLE);
+		results["open_points"] = json!(open_points::judged(&Facts {
+			#[cfg(target_os = "linux")]
+			input: thread.as_ref().map(|thread| thread.input.outcome()),
+			#[cfg(not(target_os = "linux"))]
+			input: None,
+			sighting: thread.as_ref().and_then(ThreadPlay::last_sighting),
+			edges: thread.as_ref().and_then(ThreadPlay::edges),
+			is_in_ci: std::env::var_os("GITHUB_RUN_ID").is_some(),
+			wayland_capture: wayland_capture(thread.as_ref()),
+			desktop_session: desktop_session(),
+			is_played_green: is_placed
+				&& child_webview_errors.is_empty()
+				&& proofs.iter().all(Proof::is_green)
+				&& thread
+					.as_ref()
+					.is_some_and(|thread| thread.behaviours.iter().all(Behaviour::is_green)),
+		}));
 		if let Some(thread) = thread {
 			let drawn_over_its_placeholder = thread.is_drawn_over_its_placeholder();
-			let ThreadPlay { mount, native_geometry, sightings, behaviours } = thread;
+			#[cfg(target_os = "linux")]
+			{
+				results["input"] = json!(thread.input);
+			}
+			let ThreadPlay { mount, native_geometry, scrollbars, sightings, behaviours, .. } =
+				thread;
+			results["scrollbars"] = scrollbars;
 			let is_shown_in_the_thread = child_webview_errors.is_empty()
 				&& proofs.iter().all(Proof::is_green)
 				&& behaviours.iter().all(Behaviour::is_green)
@@ -451,12 +486,9 @@ impl Run {
 					Stage { main_window: &self.main_window, thread_view: &self.thread_view, seat };
 				Some(stage.play(|| view.server.record().document_requests))
 			}
-			Shown::Nowhere(cause) => Some(ThreadPlay {
-				mount: Err(cause.clone()),
-				native_geometry: Value::Null,
-				sightings: Vec::new(),
-				behaviours: behaviours::not_played(cause),
-			}),
+			Shown::Nowhere(cause) => {
+				Some(ThreadPlay::not_played(Err(cause.clone()), Value::Null, cause))
+			}
 			Shown::Frame | Shown::Window(_) => None,
 		}
 	}
@@ -671,22 +703,117 @@ impl Run {
 	}
 }
 
-#[cfg(target_os = "linux")]
 const NOT_POSSIBLE: &str = "not possible in the thread";
 #[cfg(target_os = "linux")]
-const NO_DESKTOP_SESSION: &str = "not proven: this run has no desktop session, XDG_SESSION_ID and XDG_CURRENT_DESKTOP are not both set; OPE-2355 reached Linux only through Docker linux/arm64 on a macOS host and through the GitHub-hosted ubuntu-latest runner, each under Xvfb alone, Xvfb with the openbox window manager and the headless backend of the weston Wayland compositor: no login session, no GPU compositor, no physical output";
+const DESKTOP_SESSION_SETUP: &str = "xfce-on-xvfb";
+#[cfg(target_os = "linux")]
+const SESSION_PROCESSES: [&str; 3] = ["xfce4-session", "xfce4-panel", "xfdesktop"];
+#[cfg(target_os = "linux")]
+const SESSION_START: &str = "startxfce4 under dbus-run-session inside xvfb-run, then up to 60 seconds for wmctrl -m to name a window manager and for xfce4-session, xfce4-panel and xfdesktop to run";
+#[cfg(target_os = "linux")]
+const SESSION_LACKS: [&str; 5] = [
+	"a login: the session is started by startxfce4 under dbus-run-session, not by a display manager, so it has no logind session and no seat, and XDG_SESSION_ID is unset",
+	"a physical output and a GPU: the X server is Xvfb, a framebuffer in memory that software draws",
+	"physical input devices: the pointer and the keys come from xdotool through XTEST",
+	"Wayland: the session is X11, while the default Ubuntu session is GNOME on Wayland",
+	"its own launcher: the harness is started beside the session, on its display and its session bus, not from its panel or its menu",
+];
+
+#[cfg(target_os = "linux")]
+fn display_setup_name() -> String {
+	std::env::var(DISPLAY_SETUP_VARIABLE).unwrap_or_else(|_| "unnamed".to_owned())
+}
+
+#[cfg(target_os = "linux")]
+fn window_manager() -> Result<String, String> {
+	let mut command = std::process::Command::new("wmctrl");
+	command.arg("-m");
+	let answer = crate::capture::answered(command)?;
+	answer
+		.lines()
+		.find_map(|line| line.strip_prefix("Name: "))
+		.map(str::to_owned)
+		.ok_or_else(|| format!("wmctrl -m named no window manager: {answer}"))
+}
+
+#[cfg(target_os = "linux")]
+fn session_processes() -> Vec<&'static str> {
+	let is_running = |name: &&str| {
+		let mut command = std::process::Command::new("pgrep");
+		command.args(["-x", name]);
+		crate::capture::answered(command).is_ok()
+	};
+	SESSION_PROCESSES.into_iter().filter(is_running).collect()
+}
+
+#[cfg(target_os = "linux")]
+fn desktop_session() -> Option<Result<String, open_points::Unproven>> {
+	let (window_manager, processes) = (window_manager(), session_processes());
+	Some(match window_manager {
+		Ok(window_manager) if processes == SESSION_PROCESSES => Ok(format!(
+			"an Xfce session: {window_manager} as its window manager, {} running",
+			processes.join(", ")
+		)),
+		window_manager => {
+			let window_manager =
+				window_manager.unwrap_or_else(|refusal| format!("none ({refusal})"));
+			let found = format!(
+				"window manager: {window_manager}; of {}, running: {}",
+				SESSION_PROCESSES.join(", "),
+				if processes.is_empty() { "none".to_owned() } else { processes.join(", ") }
+			);
+			Err(if display_setup_name() == DESKTOP_SESSION_SETUP {
+				open_points::Unproven {
+					status: open_points::Status::NotProvable,
+					reason: format!(
+						"no desktop session started. Tried: {SESSION_START}. Found: {found}"
+					),
+				}
+			} else {
+				open_points::Unproven {
+					status: open_points::Status::NotProven,
+					reason: format!("this display setup starts no desktop session. Found: {found}"),
+				}
+			})
+		}
+	})
+}
+
+#[cfg(not(target_os = "linux"))]
+fn desktop_session() -> Option<Result<String, open_points::Unproven>> {
+	None
+}
+
+#[cfg(target_os = "linux")]
+fn wayland_capture(thread: Option<&ThreadPlay>) -> Option<bool> {
+	let has_no_route = thread
+		.and_then(ThreadPlay::last_sighting)
+		.and_then(Result::err)
+		.is_some_and(|fault| fault.starts_with(crate::capture::NO_OUTPUT_CAPTURE));
+	crate::capture::is_under_wayland().then_some(!has_no_route)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wayland_capture(_thread: Option<&ThreadPlay>) -> Option<bool> {
+	None
+}
 
 #[cfg(target_os = "linux")]
 fn display_setup() -> Value {
 	let is_set = |variable| std::env::var_os(variable).is_some();
-	let has_a_desktop_session = is_set("XDG_SESSION_ID") && is_set("XDG_CURRENT_DESKTOP");
+	let session = desktop_session().and_then(Result::ok);
 	json!({
-		"real_desktop_session": if has_a_desktop_session {
-			json!("XDG_SESSION_ID and XDG_CURRENT_DESKTOP are set: this run has a desktop session")
-		} else {
-			json!(NO_DESKTOP_SESSION)
+		"desktop_session": {
+			"is_a_desktop_session": session.is_some(),
+			"what_it_is": session,
+			"lacks": if session.is_some() { json!(SESSION_LACKS) } else { Value::Null },
+			"window_manager": probe::evidence(&window_manager()),
+			"session_processes_running": session_processes(),
+			"session_id": std::env::var("XDG_SESSION_ID").ok(),
+			"current_desktop": std::env::var("XDG_CURRENT_DESKTOP").ok(),
+			"session_bus_set": is_set("DBUS_SESSION_BUS_ADDRESS"),
 		},
-		"name": std::env::var(DISPLAY_SETUP_VARIABLE).unwrap_or_else(|_| "unnamed".to_owned()),
+		"name": display_setup_name(),
 		"x_display_set": is_set("DISPLAY"),
 		"wayland_display_set": is_set("WAYLAND_DISPLAY"),
 		"gdk_backend_asked": std::env::var("GDK_BACKEND").ok(),

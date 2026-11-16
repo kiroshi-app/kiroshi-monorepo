@@ -2,14 +2,17 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{LogicalSize, Webview, WebviewWindow};
 
 use crate::capture::{self, Bitmap, Paint, PaintedBox, Shot, PLACEHOLDER_PAINT, VIEW_PAINT};
+#[cfg(target_os = "linux")]
+use crate::input::{self, Aim, InputPlay};
 use crate::placement::{
 	bounds_of, Extent, Placement, Rectangle, Seat, Shift, ThreadView, PIXEL_TOLERANCE,
 };
+use crate::probe;
 use crate::proofs::Verdict;
 use crate::run_name;
 use crate::scenario::wait_until;
@@ -25,8 +28,67 @@ const VIEW_PAINT_SCRIPT: &str = r#"(() => {
 	cover.style.inset = "0";
 	cover.style.zIndex = "2147483647";
 	cover.style.background = "PAINT";
+	cover.style.pointerEvents = "none";
 	document.documentElement.append(cover);
 })()"#;
+const HIDE_THE_SCROLLBARS_SCRIPT: &str = "document.documentElement.style.overflow = \"hidden\"";
+const SCROLL_READING: &str = r#"JSON.stringify((() => {
+	const root = document.documentElement;
+	const pixels = (length) => Number.parseFloat(length) || 0;
+	const scrolls = (overflow) => overflow === "auto" || overflow === "scroll";
+	const gutterOf = (element) => {
+		const style = getComputedStyle(element);
+		if (!scrolls(style.overflowX) && !scrolls(style.overflowY)) {
+			return { element: "", width: 0, height: 0 };
+		}
+		return {
+			element: element.id || element.nodeName.toLowerCase(),
+			width:
+				element.offsetWidth -
+				element.clientWidth -
+				pixels(style.borderLeftWidth) -
+				pixels(style.borderRightWidth),
+			height:
+				element.offsetHeight -
+				element.clientHeight -
+				pixels(style.borderTopWidth) -
+				pixels(style.borderBottomWidth),
+		};
+	};
+	const gauge = document.createElement("div");
+	gauge.style.cssText =
+		"position:fixed;top:0;left:0;width:100px;height:100px;overflow:scroll;visibility:hidden";
+	root.append(gauge);
+	const widthOfAScrollbarThatTakesSpace = gauge.offsetWidth - gauge.clientWidth;
+	gauge.remove();
+	const rootStyle = getComputedStyle(root);
+	const bodyStyle = getComputedStyle(document.body);
+	return {
+		innerSize: { width: innerWidth, height: innerHeight },
+		rootClientSize: { width: root.clientWidth, height: root.clientHeight },
+		rootScrollSize: { width: root.scrollWidth, height: root.scrollHeight },
+		spaceTakenByTheScrollbars: {
+			width: innerWidth - root.clientWidth,
+			height: innerHeight - root.clientHeight,
+		},
+		widthOfAScrollbarThatTakesSpace,
+		overflow: {
+			rootX: rootStyle.overflowX,
+			rootY: rootStyle.overflowY,
+			bodyX: bodyStyle.overflowX,
+			bodyY: bodyStyle.overflowY,
+			contentIsWiderThanTheRoot: root.scrollWidth > root.clientWidth,
+			contentIsTallerThanTheRoot: root.scrollHeight > root.clientHeight,
+		},
+		elementsWhoseScrollbarsTakeSpace: Array.from(document.querySelectorAll("body *"), gutterOf).filter(
+			(gutter) => gutter.width > 0 || gutter.height > 0,
+		),
+	};
+})())"#;
+const SCROLLBARS_TAKE_NO_SPACE: &str = "the scrollbars of the view document take no space: its inner size equals the client size of its root element, so the paint already covers the whole rectangle of the view and is left unchanged";
+const SCROLLBARS_ARE_THE_CAUSE: &str = "scrollbars: the paint laid in the viewport of the view document is short of the child webview bounds by exactly the space its scrollbars take on each axis, so the scrollbars of the view document are hidden and the paint then covers the whole rectangle of the view";
+const WINDOW_CONTENT: &str = "the window content";
+const COMPOSITOR_OUTPUT: &str = "the compositor output: a Wayland client is not told where its window is, so the two boxes are compared in the capture and no page origin is read";
 const OUTSIDE_MARGIN: f64 = 24.0;
 const WINDOW_SIZES: [(f64, f64); 2] =
 	[(WINDOW_WIDTH + 140.0, WINDOW_HEIGHT + 120.0), (WINDOW_WIDTH, WINDOW_HEIGHT)];
@@ -260,8 +322,49 @@ struct Drawn {
 	capture: String,
 	paint: &'static str,
 	rectangle_in_window_points: Rectangle,
+	box_on_the_screen_in_pixels: Rectangle,
 	painted_box_in_capture_pixels: PaintedBox,
 	share_of_the_box_painted: f64,
+	#[serde(skip)]
+	is_placed_in_the_window: bool,
+}
+
+#[derive(Serialize)]
+struct Edges {
+	left: f64,
+	top: f64,
+	right: f64,
+	bottom: f64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct Overflow {
+	root_x: String,
+	root_y: String,
+	body_x: String,
+	body_y: String,
+	content_is_wider_than_the_root: bool,
+	content_is_taller_than_the_root: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+struct Gutter {
+	element: String,
+	width: f64,
+	height: f64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct ScrollState {
+	inner_size: Extent,
+	root_client_size: Extent,
+	root_scroll_size: Extent,
+	space_taken_by_the_scrollbars: Extent,
+	width_of_a_scrollbar_that_takes_space: f64,
+	overflow: Overflow,
+	elements_whose_scrollbars_take_space: Vec<Gutter>,
 }
 
 #[derive(Serialize)]
@@ -272,14 +375,32 @@ pub struct Sighting {
 	rectangle_asked: Rectangle,
 	child_webview_bounds_read_back: Rectangle,
 	pixels_per_point: f64,
+	rectangles_measured_from: &'static str,
 	placeholder_drawn: Drawn,
 	view_drawn: Drawn,
 	view_offset_from_its_placeholder: Shift,
 	view_size_minus_placeholder_size: Extent,
-	page_origin_drawn_in_the_main_webview: Shift,
+	view_edges_minus_placeholder_edges_in_points: Edges,
+	page_origin_drawn_in_the_main_webview: Option<Shift>,
 }
 
 impl Sighting {
+	#[cfg(target_os = "linux")]
+	fn aim(&self) -> Aim {
+		let (placeholder, reported) = (
+			self.placeholder_drawn.box_on_the_screen_in_pixels,
+			self.placeholder_reported_by_the_page,
+		);
+		Aim {
+			view_on_the_screen: self.view_drawn.box_on_the_screen_in_pixels,
+			main_page_on_the_screen: Shift {
+				x: placeholder.x - reported.x * self.pixels_per_point,
+				y: placeholder.y - reported.y * self.pixels_per_point,
+			},
+			pixels_per_point: self.pixels_per_point,
+		}
+	}
+
 	pub fn is_drawn_over_its_placeholder(&self) -> bool {
 		let Extent { width, height } = self.view_size_minus_placeholder_size;
 		!self.view_offset_from_its_placeholder.exceeds_the_tolerance()
@@ -295,14 +416,41 @@ struct Frame {
 pub struct ThreadPlay {
 	pub mount: Result<Mount, String>,
 	pub native_geometry: Value,
+	pub scrollbars: Value,
 	pub sightings: Vec<Result<Sighting, String>>,
 	pub behaviours: Vec<Behaviour>,
+	#[cfg(target_os = "linux")]
+	pub input: InputPlay,
 }
 
 impl ThreadPlay {
+	pub fn not_played(mount: Result<Mount, String>, native_geometry: Value, reason: &str) -> Self {
+		Self {
+			mount,
+			native_geometry,
+			scrollbars: Value::Null,
+			sightings: Vec::new(),
+			behaviours: not_played(reason),
+			#[cfg(target_os = "linux")]
+			input: InputPlay::not_played(reason),
+		}
+	}
+
 	pub fn is_drawn_over_its_placeholder(&self) -> Option<bool> {
+		self.last_sighting()?.ok()
+	}
+
+	pub fn last_sighting(&self) -> Option<Result<bool, &str>> {
+		let last = self.sightings.last()?.as_ref();
+		Some(last.map(Sighting::is_drawn_over_its_placeholder).map_err(String::as_str))
+	}
+
+	pub fn edges(&self) -> Option<String> {
 		let last = self.sightings.last()?.as_ref().ok()?;
-		Some(last.is_drawn_over_its_placeholder())
+		let Edges { left, top, right, bottom } = last.view_edges_minus_placeholder_edges_in_points;
+		Some(format!(
+			"view edge minus placeholder edge in points: left {left}, top {top}, right {right}, bottom {bottom}"
+		))
 	}
 }
 
@@ -322,15 +470,16 @@ impl Stage<'_> {
 			Err(cause) => Some(cause.clone()),
 		};
 		if let Some(refusal) = refusal {
-			let behaviours = not_played(&refusal);
-			return ThreadPlay { mount, native_geometry, sightings: Vec::new(), behaviours };
+			return ThreadPlay::not_played(mount, native_geometry, &refusal);
 		}
+		let scrollbars = self.scrollbars();
 		let mut sightings = vec![self.sight("as-mounted")];
 		let correction = sightings[0].as_ref().ok().and_then(|sighting| {
 			sighting
 				.view_offset_from_its_placeholder
 				.exceeds_the_tolerance()
 				.then_some(sighting.page_origin_drawn_in_the_main_webview)
+				.flatten()
 		});
 		if let Some(page_origin) = correction {
 			self.thread_view.place_from(page_origin);
@@ -342,7 +491,96 @@ impl Stage<'_> {
 		if correction.is_some() {
 			sightings.push(self.sight("corrected"));
 		}
-		ThreadPlay { mount, native_geometry, sightings, behaviours }
+		#[cfg(target_os = "linux")]
+		let input = {
+			let sighting = self.sight("before-input");
+			let aim = sighting.as_ref().map(Sighting::aim).map_err(Clone::clone);
+			sightings.push(sighting);
+			input::play(self.main_window, self.seat.webview(), aim)
+		};
+		ThreadPlay {
+			mount,
+			native_geometry,
+			scrollbars,
+			sightings,
+			behaviours,
+			#[cfg(target_os = "linux")]
+			input,
+		}
+	}
+
+	fn scroll_state(webview: &Webview) -> Result<ScrollState, String> {
+		let reading = probe::answer(webview, SCROLL_READING)?;
+		serde_json::from_str(&reading)
+			.map_err(|cause| format!("unreadable scroll reading {reading:?}: {cause}"))
+	}
+
+	fn viewport_paint_shortfall(
+		&self,
+		bounds: &Result<Rectangle, String>,
+	) -> Result<(Drawn, Extent), String> {
+		let bounds = bounds.as_ref().map_err(Clone::clone)?;
+		self.seat
+			.webview()
+			.eval(VIEW_PAINT_SCRIPT.replace("PAINT", VIEW_PAINT.css))
+			.map_err(|cause| cause.to_string())?;
+		let drawn = self.drawn("viewport-paint", VIEW_PAINT)?;
+		let shortfall = Extent {
+			width: bounds.width - drawn.rectangle_in_window_points.width,
+			height: bounds.height - drawn.rectangle_in_window_points.height,
+		};
+		Ok((drawn, shortfall))
+	}
+
+	fn scrollbars(&self) -> Value {
+		let view_document = Self::scroll_state(self.seat.webview());
+		let bounds = self.seat.rectangle();
+		let mut measured = json!({
+			"read": "before any paint and before any change to the scrollbars, by one script evaluated in the main page and in the document of the view webview",
+			"main_page": probe::evidence(&Self::scroll_state(self.main_window.as_ref())),
+			"view_document": probe::evidence(&view_document),
+			"child_webview_bounds_read_back": probe::evidence(&bounds),
+			"paint": "unchanged",
+		});
+		let taken = match view_document {
+			Ok(state) => state.space_taken_by_the_scrollbars,
+			Err(fault) => {
+				measured["cause"] = json!(format!("not measured: {fault}"));
+				return measured;
+			}
+		};
+		if taken.width <= 0.0 && taken.height <= 0.0 {
+			measured["cause"] = json!(SCROLLBARS_TAKE_NO_SPACE);
+			return measured;
+		}
+		let (drawn, shortfall) = match self.viewport_paint_shortfall(&bounds) {
+			Ok(short) => short,
+			Err(fault) => {
+				measured["cause"] = json!(format!("not measured: {fault}"));
+				return measured;
+			}
+		};
+		measured["view_drawn_by_the_viewport_paint"] = json!(drawn);
+		measured["child_webview_bounds_minus_the_viewport_paint"] = json!(shortfall);
+		if shortfall.width != taken.width || shortfall.height != taken.height {
+			measured["cause"] = json!(format!(
+				"not the scrollbars alone: the viewport paint is short by {} x {} points while the scrollbars of the view document take {} x {}",
+				shortfall.width, shortfall.height, taken.width, taken.height
+			));
+			return measured;
+		}
+		match self.seat.webview().eval(HIDE_THE_SCROLLBARS_SCRIPT) {
+			Ok(()) => {
+				measured["cause"] = json!(SCROLLBARS_ARE_THE_CAUSE);
+				measured["paint"] = json!(HIDE_THE_SCROLLBARS_SCRIPT);
+			}
+			Err(fault) => {
+				measured["cause"] = json!(format!(
+					"scrollbars, and they could not be hidden for the paint: {fault}"
+				));
+			}
+		}
+		measured
 	}
 
 	#[cfg(target_os = "macos")]
@@ -411,7 +649,12 @@ impl Stage<'_> {
 		crate::cocoa::window_number(self.main_window.as_ref()).map(Shot::Window)
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(target_os = "linux")]
+	fn shot(&self, frame: &Frame) -> Result<Shot, String> {
+		Ok(if capture::is_under_wayland() { Shot::Output } else { Shot::Region(frame.region) })
+	}
+
+	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 	fn shot(&self, frame: &Frame) -> Result<Shot, String> {
 		Ok(Shot::Region(frame.region))
 	}
@@ -421,7 +664,8 @@ impl Stage<'_> {
 		let frame = self.frame().map_err(|cause| cause.to_string())?;
 		let bitmap_file =
 			PathBuf::from(format!("capture-{}-in-thread-{name}-{}.bmp", run_name(), paint.name));
-		let bitmap: Bitmap = capture::grab(&self.shot(&frame)?, &bitmap_file)?;
+		let shot = self.shot(&frame)?;
+		let bitmap: Bitmap = capture::grab(&shot, &bitmap_file)?;
 		let file = capture::kept_as_a_picture(&bitmap_file)?.display().to_string();
 		let painted = bitmap.painted_box(paint).ok_or_else(|| {
 			format!(
@@ -435,15 +679,27 @@ impl Stage<'_> {
 				paint.name, painted.painted_pixels, painted.width, painted.height, painted.left, painted.top
 			));
 		}
-		let pixels_per_point = bitmap.width as f64 / frame.region.width;
+		let is_placed_in_the_window = !shot.is_the_whole_output();
+		let (pixels_per_point, capture_origin, inner_origin) = if is_placed_in_the_window {
+			let Rectangle { x, y, width, .. } = frame.region;
+			(bitmap.width as f64 / width, Shift { x, y }, frame.inner_origin)
+		} else {
+			let scale = self.main_window.scale_factor().map_err(|cause| cause.to_string())?;
+			(scale, Shift::default(), Shift::default())
+		};
 		Ok(Drawn {
 			capture: file,
 			paint: paint.css,
 			rectangle_in_window_points: painted
 				.in_points(pixels_per_point)
-				.moved_by(frame.inner_origin.reversed()),
+				.moved_by(inner_origin.reversed()),
+			box_on_the_screen_in_pixels: painted.in_points(1.0).moved_by(Shift {
+				x: capture_origin.x * pixels_per_point,
+				y: capture_origin.y * pixels_per_point,
+			}),
 			painted_box_in_capture_pixels: painted,
 			share_of_the_box_painted: painted.painted_share(),
+			is_placed_in_the_window,
 		})
 	}
 
@@ -481,10 +737,23 @@ impl Stage<'_> {
 				width: view.width - placeholder.width,
 				height: view.height - placeholder.height,
 			},
-			page_origin_drawn_in_the_main_webview: Shift {
-				x: (placeholder.x - target.x).round(),
-				y: (placeholder.y - target.y).round(),
+			view_edges_minus_placeholder_edges_in_points: Edges {
+				left: view.x - placeholder.x,
+				top: view.y - placeholder.y,
+				right: view.x + view.width - placeholder.x - placeholder.width,
+				bottom: view.y + view.height - placeholder.y - placeholder.height,
 			},
+			rectangles_measured_from: if placeholder_drawn.is_placed_in_the_window {
+				WINDOW_CONTENT
+			} else {
+				COMPOSITOR_OUTPUT
+			},
+			page_origin_drawn_in_the_main_webview: placeholder_drawn.is_placed_in_the_window.then(
+				|| Shift {
+					x: (placeholder.x - target.x).round(),
+					y: (placeholder.y - target.y).round(),
+				},
+			),
 			placeholder_drawn,
 			view_drawn,
 		})
