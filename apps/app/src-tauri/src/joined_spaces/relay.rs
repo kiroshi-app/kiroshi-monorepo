@@ -1238,7 +1238,7 @@ async fn sealed_session<R: Runtime>(
 		if is_hello {
 			hello_deadline = Instant::now() + answer_bound;
 		}
-		if let Err(reason) = delivered(&mut sink, wire, link, outgoing).await {
+		if let Err(reason) = delivered(app, linked, &mut sink, wire, outgoing).await {
 			return Ended::Dropped(reason);
 		}
 		if is_hello {
@@ -1285,10 +1285,11 @@ async fn sealed_session<R: Runtime>(
 	}
 }
 
-async fn delivered(
+async fn delivered<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
 	sink: &mut MeasuredSocket<'_>,
 	wire: &mut MemberWire<'_>,
-	link: &MemberLink,
 	outgoing: Outgoing,
 ) -> Result<(), String> {
 	let message = match outgoing {
@@ -1297,7 +1298,9 @@ async fn delivered(
 		Outgoing::Sealed(plaintext) => {
 			let sealed = wire.sealed(&plaintext).await?;
 			if let Some(refusal) = over_the_frame_ceiling(&sealed) {
-				link.refused_as_too_large(&plaintext, refusal);
+				if linked.link.refused_as_too_large(&plaintext, refusal) == Resync::Reread {
+					reread_announced(app, &linked.id, &linked.instance_id);
+				}
 				return Ok(());
 			}
 			Message::text(sealed)
