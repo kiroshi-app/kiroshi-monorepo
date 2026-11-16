@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react"
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -12,7 +12,9 @@ import {
 	expectTooltipPastTheSidebarEdge,
 	expectTooltipWrappedWhole,
 	openTooltipOf,
+	rightClick,
 	SidebarFrame,
+	shown,
 	slotIn,
 	slotsIn,
 	tokenStyleIn,
@@ -29,6 +31,8 @@ import {
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
+import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -356,3 +360,114 @@ export const TooltipWrapsALongAgentName = meta.story(
 export const TooltipWrapsALongAgentNameOnTheCollapsedSidebar = meta.story(
 	longAgentNameTooltipStory(true),
 )
+
+const WORKING_MISSION = {
+	id: "m-working",
+	state: "working",
+	ticket: {
+		platform: "linear",
+		externalId: "OPE-513",
+		title: "Rebuild the bundle",
+	},
+} as const
+
+const MISSION_AGENT: AppSidebarBot = { ...ATLAS, missions: [WORKING_MISSION] }
+
+const WORKING_MISSION_ENTRIES = [
+	"Open mission",
+	"Open PR",
+	"Copy",
+	"Message the coding session",
+	"Stop the coding session",
+	"Close",
+]
+
+const menuOnAWorkingMission: MissionTreeRowWrap = (row) => (
+	<MissionMenu
+		hasBranch
+		hasPullRequest
+		hasWorkspacePath
+		onAnswer={fn()}
+		onClose={fn()}
+		onCopy={fn()}
+		onMessageAgent={fn()}
+		onOpen={fn()}
+		onOpenPullRequest={fn()}
+		onReopen={fn()}
+		onStopAgent={fn()}
+		state="working"
+	>
+		{row}
+	</MissionMenu>
+)
+
+const renderCompactRow = (args: ComponentProps<typeof BotRosterRow>) => (
+	<CompactRowsContext.Provider value>
+		<BotRosterRow {...args} />
+	</CompactRowsContext.Provider>
+)
+
+const closeMenu = async () => {
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+}
+
+export const MissionRowOpensTheMissionMenu = meta.story({
+	args: {
+		bot: MISSION_AGENT,
+		isSelected: false,
+		wrapMission: menuOnAWorkingMission,
+		onOpenMission: fn(),
+		onDelete: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission under its agent in the expanded sidebar, right clicked. Check the menu that opens is the mission menu, with the entries of a mission the agent is working on, that no agent entry is drawn beside it, that the agent row keeps its resting look while the mission menu is open, that a plain click on the mission still opens it, and that a right click on the agent row itself still opens the agent menu.",
+			},
+		},
+	},
+	render: renderCompactRow,
+	play: async ({ args, canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const surface = slotIn(canvasElement, "context-menu-trigger")
+		const mission = slotIn(canvasElement, "mission-capsule")
+		rightClick(mission)
+		const missionMenu = await shown(
+			await screen.findByRole("menu", { name: "Mission actions" }),
+		)
+
+		await expect(
+			within(missionMenu)
+				.getAllByRole("menuitem")
+				.map((item) => item.textContent),
+		).toEqual(WORKING_MISSION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([missionMenu])
+		await expect(surface).not.toHaveAttribute("data-popup-open")
+		await closeMenu()
+		await userEvent.click(mission)
+		await expect(args.onOpenMission).toHaveBeenCalledWith(WORKING_MISSION.id)
+
+		rightClick(row)
+		const agentMenu = await shown(
+			await screen.findByRole("menu", { name: `Actions for ${ATLAS.name}` }),
+		)
+		await expect(screen.getAllByRole("menu")).toEqual([agentMenu])
+		await closeMenu()
+	},
+})
+
+export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
+	tags: ["test-only"],
+	args: { bot: MISSION_AGENT, isSelected: false },
+	render: renderCompactRow,
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(canvasElement, "mission-capsule"))
+
+		await expect(
+			slotIn(canvasElement, "context-menu-trigger"),
+		).not.toHaveAttribute("data-popup-open")
+		await expect(screen.queryByRole("menu")).toBeNull()
+	},
+})

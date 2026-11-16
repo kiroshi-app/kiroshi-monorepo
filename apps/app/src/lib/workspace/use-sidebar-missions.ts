@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react"
 
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import type { MissionsPageProps } from "@workspace/ui/components/missions-page"
 
 import {
@@ -55,6 +56,7 @@ type MissionsPageFeed = Pick<
 export type SidebarMissions = {
 	openCount: number
 	openMissionId: string | undefined
+	wrapSidebarRow: MissionTreeRowWrap
 	page: MissionsPageFeed
 }
 
@@ -183,7 +185,7 @@ export const useSidebarMissions = ({
 		[missionRowOf, navigation],
 	)
 
-	const { wrapPageRow } = useMissionMenus({
+	const { wrapPageRow, wrapSidebarRow } = useMissionMenus({
 		missions,
 		runtimes: conversationRuntimes,
 		onOpenMission: openMission,
@@ -203,6 +205,7 @@ export const useSidebarMissions = ({
 	return {
 		openCount: feed.openCount,
 		openMissionId: opened?.missionId,
+		wrapSidebarRow,
 		page: {
 			missions: pageMissions,
 			status: missionsPageStatusOf(feed),
