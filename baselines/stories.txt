@@ -2471,10 +2471,15 @@ overlays-tooltip--surface-dark
 overlays-tooltip--surface-follows-the-theme-switch
 overlays-tooltiphint--adjacent-hints
 overlays-tooltiphint--default
+overlays-tooltiphint--hands-off-just-after-closing
+overlays-tooltiphint--hands-off-without-delay
 overlays-tooltiphint--in-row
 overlays-tooltiphint--long-content
 overlays-tooltiphint--on-focus
+overlays-tooltiphint--opens-after-the-delay
 overlays-tooltiphint--reduced-motion
+overlays-tooltiphint--sweep-opens-nothing
+overlays-tooltiphint--waits-again-after-the-grouping-window
 overlays-tooltiphint--with-side
 overlays-tooltiphint--without-content
 overlays-whatsnewdialog--beta-channel
