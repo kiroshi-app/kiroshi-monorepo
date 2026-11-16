@@ -2759,8 +2759,8 @@ primitives-sharedmark--default
 primitives-sharedmark--plain
 primitives-sharedmark--stable-box
 primitives-shimmertext--default
-primitives-shimmertext--reduced-motion
 primitives-shimmertext--long-content
+primitives-shimmertext--reduced-motion
 primitives-tooltipbutton--default
 primitives-tooltipbutton--long-content
 primitives-tooltipbutton--states
