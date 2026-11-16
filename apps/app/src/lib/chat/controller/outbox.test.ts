@@ -421,7 +421,6 @@ describe("prompts the session cannot take yet", () => {
 			let answer = first
 			let isReadRefused = false
 			const storedIds: string[] = []
-			const sent: Parameters<TranscriptStore["sendUserMessage"]>[0][] = []
 			const store: TranscriptStore = {
 				...base,
 				loadPage: (conversationId, cursor) =>
@@ -430,7 +429,6 @@ describe("prompts the session cannot take yet", () => {
 						: base.loadPage(conversationId, cursor),
 				sendUserMessage: async (message, summoned) => {
 					storedIds.push(message.id)
-					sent.push(message)
 					if (answer === "accepted") {
 						return base.sendUserMessage(message, summoned)
 					}
@@ -485,12 +483,12 @@ describe("prompts the session cannot take yet", () => {
 				isReadRefused = false
 			}
 			const reportedStored = async () => {
-				const recorded = sent.at(0)
-				if (recorded) {
+				const { conversationId } = harness.controller.getState()
+				if (conversationId) {
 					events.deliver(
 						transcriptMessage({
-							id: recorded.id,
-							conversationId: recorded.conversationId,
+							id: storedIds[0],
+							conversationId,
 							role: "user",
 						}),
 					)
