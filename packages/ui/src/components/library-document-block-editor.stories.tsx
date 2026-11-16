@@ -2779,6 +2779,8 @@ const LINUX_AGENT =
 
 const COMMENT_COMPOSER_SLOT = "library-comment-composer"
 
+const CONTROL_SHIFT = { ctrlKey: true, shiftKey: true }
+
 const leaveDraftAlone = () => {}
 
 type CommentShortcutFrameProps = BodyArgs & { body: string }
@@ -2905,5 +2907,71 @@ export const CommentShortcutOnTheLinuxMKey = meta.story(
 		code: "KeyM",
 		keyCode: 77,
 		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShiftShortcutOnTheWindowsGermanMKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: CONTROL_SHIFT,
+		key: "M",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShiftShortcutOnTheWindowsQwertyMKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: CONTROL_SHIFT,
+		key: "M",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShiftShortcutOnTheWindowsAzertyMKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: CONTROL_SHIFT,
+		key: "M",
+		code: "Semicolon",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShiftShortcutOnTheLinuxMKey = meta.story(
+	commentShortcutStory({
+		userAgent: LINUX_AGENT,
+		held: CONTROL_SHIFT,
+		key: "M",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: true,
+	}),
+)
+
+export const CommentShiftShortcutNotOnTheWindowsAzertyCommaKey = meta.story(
+	commentShortcutStory({
+		userAgent: WINDOWS_AGENT,
+		held: CONTROL_SHIFT,
+		key: "?",
+		code: "KeyM",
+		keyCode: 188,
+		isOpeningTheDraft: false,
+	}),
+)
+
+export const CommentShiftShortcutNotOnMac = meta.story(
+	commentShortcutStory({
+		userAgent: MAC_AGENT,
+		held: { metaKey: true, shiftKey: true },
+		key: "M",
+		code: "KeyM",
+		keyCode: 77,
+		isOpeningTheDraft: false,
 	}),
 )

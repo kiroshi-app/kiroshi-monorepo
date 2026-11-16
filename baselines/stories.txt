@@ -2025,6 +2025,12 @@ navigation-librarydocumentblockeditor--click-places-the-caret
 navigation-librarydocumentblockeditor--click-puts-the-caret-on-the-character
 navigation-librarydocumentblockeditor--code-body-edited
 navigation-librarydocumentblockeditor--code-language-chosen
+navigation-librarydocumentblockeditor--comment-shift-shortcut-not-on-mac
+navigation-librarydocumentblockeditor--comment-shift-shortcut-not-on-the-windows-azerty-comma-key
+navigation-librarydocumentblockeditor--comment-shift-shortcut-on-the-linux-m-key
+navigation-librarydocumentblockeditor--comment-shift-shortcut-on-the-windows-azerty-m-key
+navigation-librarydocumentblockeditor--comment-shift-shortcut-on-the-windows-german-m-key
+navigation-librarydocumentblockeditor--comment-shift-shortcut-on-the-windows-qwerty-m-key
 navigation-librarydocumentblockeditor--comment-shortcut-not-on-the-azerty-comma-key
 navigation-librarydocumentblockeditor--comment-shortcut-not-on-the-windows-german-m-key
 navigation-librarydocumentblockeditor--comment-shortcut-on-the-azerty-m-key

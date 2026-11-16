@@ -134,7 +134,10 @@ import {
 	type SelectionToolbarFormat,
 } from "@workspace/ui/components/selection-toolbar"
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
-import { isCommandAltLetter } from "@workspace/ui/lib/letter-shortcut"
+import {
+	isCommandAltLetter,
+	isControlShiftLetterOffMac,
+} from "@workspace/ui/lib/letter-shortcut"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -1056,7 +1059,11 @@ const LibraryDocumentBlockEditor = ({
 				event.currentTarget.contains(event.target as Node)
 			)
 				run(() => focusHandle(id))
-			else if (isCommandAltLetter(event.nativeEvent, "m") && onStartComment)
+			else if (
+				(isCommandAltLetter(event.nativeEvent, "m") ||
+					isControlShiftLetterOffMac(event.nativeEvent, "m")) &&
+				onStartComment
+			)
 				run(() => startComment(id, "shortcut"))
 			else if (isCommand && event.key.toLowerCase() === "d")
 				run(actions.onDuplicate)

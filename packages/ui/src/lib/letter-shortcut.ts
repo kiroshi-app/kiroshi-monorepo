@@ -24,3 +24,13 @@ export const isCommandAltLetter = (event: KeyboardEvent, letter: string) =>
 	(isMacPlatform() ? event.metaKey : event.ctrlKey) &&
 	event.altKey &&
 	printsLetter(event, letter)
+
+export const isControlShiftLetterOffMac = (
+	event: KeyboardEvent,
+	letter: string,
+) =>
+	!isComposing(event) &&
+	!isMacPlatform() &&
+	event.ctrlKey &&
+	event.shiftKey &&
+	printsLetter(event, letter)
