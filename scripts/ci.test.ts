@@ -21,6 +21,8 @@ import {
 	GATE,
 	GROUP_ORDER,
 	type Group,
+	IOS_BUILD_STEPS,
+	IOS_SHARD_STEPS,
 	loggedCargoStep,
 	offPullRequestNote,
 	parsedShard,
@@ -37,6 +39,7 @@ import {
 	shardTests,
 	skipReason,
 	spawnedCommand,
+	startedATest,
 	type UnitTestScope,
 	uiTestClasses,
 	unitTestScope,
@@ -69,6 +72,7 @@ type Workflow = {
 			outputs?: Record<string, string>
 			needs?: string | string[]
 			permissions?: Record<string, string>
+			"runs-on"?: string
 			"timeout-minutes"?: number
 			strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }
 			steps?: WorkflowStep[]
@@ -94,11 +98,16 @@ const SETUP_STEPS = new Set([
 	"Select the Xcode pinned in .xcode-version",
 	"Read the Rust version pinned in rust-toolchain.toml",
 	"Install XcodeGen",
-	"Boot the simulator while the app builds",
+	"Pack the build products",
+	"Boot the simulator while the build products download",
+	"Unpack the build products",
+	"Runner failure",
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
+
+const IOS_BUILD_JOB = "ios-build"
 
 const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
 
@@ -157,6 +166,7 @@ const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 				(path) => JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
+			.replace("failure()", "true")
 			.replace(
 				/startsWith\(/g,
 				"((value, prefix) => String(value).startsWith(prefix))(",
@@ -263,6 +273,11 @@ const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
 	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
 }
 
+const A_PULL_REQUEST_OPTED_INTO_IOS: GitHubContext = {
+	...pullRequest(10, 14),
+	event: { pull_request: { labels: [{ name: "ci:ios" }] } },
+}
+
 const storybookEnvOn = (github: GitHubContext) =>
 	Object.fromEntries(
 		Object.entries(workflow.jobs.storybook?.env ?? {}).map(
@@ -275,6 +290,7 @@ const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
 	"ios",
+	"ios-build",
 	"lint",
 	"rust",
 	"storybook",
@@ -413,7 +429,7 @@ describe("the gate", () => {
 			"storybook skips a pull_request, CI runs it on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
 		)
 		expect(offPullRequestNote("ios")).toBe(
-			"ios skips a pull_request, CI runs it on a push to main only",
+			"ios skips a pull_request, CI runs it on a push to main and on a pull_request labelled ci:ios",
 		)
 	})
 
@@ -798,6 +814,8 @@ describe("the push to main retry", () => {
 		...new Set([
 			...GROUP_ORDER.flatMap((group) => GATE[group]),
 			...RUST_PULL_REQUEST_STEPS,
+			...IOS_BUILD_STEPS,
+			...IOS_SHARD_STEPS,
 			CHANGED_UNIT_TESTS,
 			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
 		]),
@@ -974,9 +992,9 @@ Caused by:
 })
 
 describe("the jobs of ci.yml", () => {
-	it("gate every group of scripts/ci.ts but the local rust-check, one job per group", () => {
+	it("gate every group of scripts/ci.ts but the local rust-check, one job per group, ios-build beside them", () => {
 		const gatedJobs = Object.keys(workflow.jobs).filter(
-			(job) => !UNGATED_JOBS.has(job),
+			(job) => !UNGATED_JOBS.has(job) && job !== IOS_BUILD_JOB,
 		)
 
 		expect(gatedJobs.sort()).toEqual([...CI_JOBS].sort())
@@ -1090,10 +1108,84 @@ describe("the jobs of ci.yml", () => {
 		expect(stepNamed("ios", "Gate")?.["timeout-minutes"]).toBe(45)
 	})
 
-	it("splits ios over three jobs, each told its shard out of the matrix size", () => {
+	it("builds ios once in ios-build, selected like ios, and uploads the products packed in one archive", () => {
+		const build = workflow.jobs[IOS_BUILD_JOB]
+		const gateSteps = runStepsOf(IOS_BUILD_JOB).filter(
+			(step) => !SETUP_STEPS.has(step.name ?? ""),
+		)
+		const upload = (build?.steps ?? []).find(
+			(step) => step.name === "Upload the build products",
+		)
+
+		expect(build?.if).toBe(workflow.jobs.ios?.if)
+		expect(build?.["runs-on"]).toBe("xcode-27")
+		expect(build?.["timeout-minutes"]).toBe(45)
+		expect(gateSteps.map((step) => step.run?.trim())).toEqual([
+			"bun scripts/ci.ts ios-build",
+		])
+		expect(stepNamed(IOS_BUILD_JOB, "Pack the build products")?.run).toBe(
+			'tar -czf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build Build/Products',
+		)
+		expect(upload?.with).toMatchObject({
+			name: "ios-build-products",
+			"if-no-files-found": "error",
+			overwrite: true,
+		})
+	})
+
+	it("has ios wait on ios-build, download its products and unpack them where the shard reads them", () => {
+		const steps = [
+			...(workflow.jobs[IOS_BUILD_JOB]?.steps ?? []),
+			...(workflow.jobs.ios?.steps ?? []),
+		]
+		const upload = steps.find(
+			(step) => step.name === "Upload the build products",
+		)
+		const download = steps.find(
+			(step) => step.name === "Download the build products",
+		)
+
+		expect(workflow.jobs.ios?.needs).toEqual(["changes", IOS_BUILD_JOB])
+		expect(workflow.jobs.ios?.["runs-on"]).toBe("xcode-27")
+		expect(download?.with?.name).toBe(upload?.with?.name)
+		expect(upload?.with?.path).toBe(
+			`${download?.with?.path}/ios-build-products.tar.gz`,
+		)
+		expect(stepNamed("ios", "Unpack the build products")?.run).toBe(
+			'mkdir -p apps/ios/build && tar -xzf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build',
+		)
+		expect(IOS_SHARD_STEPS[0]?.command).toContain(
+			"-xctestrun apps/ios/build/Build/Products/*.xctestrun",
+		)
+	})
+
+	it.each([
+		["its setup failed and the gate was skipped", "skipped", undefined, true],
+		["the gate reported no test started", "failure", "true", true],
+		["the gate failed on a test", "failure", undefined, false],
+	])(
+		"fails the Runner failure step of ios when %s: %s %s",
+		(_, conclusion, reported, runs) => {
+			const runnerFailure = stepNamed("ios", "Runner failure")
+			const gate = {
+				conclusion,
+				outputs: { "runner-failure": reported },
+			}
+
+			expect(stepNamed("ios", "Gate")?.id).toBe("gate")
+			expect(runnerFailure?.if).toStartWith("failure() && ")
+			expect(evaluate(runnerFailure?.if ?? "false", { steps: { gate } })).toBe(
+				runs,
+			)
+			expect(runnerFailure?.run).toContain("::error title=Runner failure::")
+			expect(runnerFailure?.run?.trim()).toEndWith("exit 1")
+		},
+	)
+
+	it("splits ios over four jobs, each told its shard out of the matrix size", () => {
 		expect(workflow.jobs.ios?.strategy).toEqual({
 			"fail-fast": false,
-			matrix: { shard: [1, 2, 3] },
+			matrix: { shard: [1, 2, 3, 4] },
 		})
 		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
 
@@ -1104,7 +1196,7 @@ describe("the jobs of ci.yml", () => {
 					strategy: { "job-total": shards.length },
 				}),
 			),
-		).toEqual(["1/3", "2/3", "3/3"])
+		).toEqual(["1/4", "2/4", "3/4", "4/4"])
 	})
 
 	it.each([
@@ -1159,6 +1251,21 @@ describe("the jobs of ci.yml", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)).toEqual(
 			[...PULL_REQUEST_JOB_SET, "storybook"].sort(),
 		)
+	})
+
+	it("adds ios-build and ios on a pull_request labelled ci:ios, and has verify require them", () => {
+		const github = A_PULL_REQUEST_OPTED_INTO_IOS
+		const passed = resultsByRule(github)
+
+		expect(jobsRunningOn(github)).toEqual(
+			[...PULL_REQUEST_JOB_SET, "ios", IOS_BUILD_JOB].sort(),
+		)
+		expect(failingVerifySteps(github, passed)).toEqual([])
+		for (const job of ["ios", IOS_BUILD_JOB]) {
+			expect(
+				failingVerifySteps(github, { ...passed, [job]: "failure" }),
+			).not.toEqual([])
+		}
 	})
 
 	it("has verify require storybook to succeed on a pull_request labelled ci:storybook", () => {
@@ -1428,6 +1535,7 @@ describe("the jobs of ci.yml", () => {
 			"website",
 			"rust",
 			"storybook",
+			"ios-build",
 			"ios",
 		])
 	})
@@ -1495,7 +1603,8 @@ describe("the jobs of ci.yml", () => {
 
 	it("boots the simulator bun run ci looks up", () => {
 		expect(
-			stepNamed("ios", "Boot the simulator while the app builds")?.run,
+			stepNamed("ios", "Boot the simulator while the build products download")
+				?.run,
 		).toContain(SIMULATOR_LOOKUP)
 	})
 })
@@ -1512,7 +1621,7 @@ describe("the ios shards", () => {
 		}
 	})
 
-	it("gives the unit tests to the first shard and deals the UI classes in turn", () => {
+	it("gives the unit tests to the first shard and deals unmeasured UI classes in turn", () => {
 		expect(shardTests({ index: 1, count: 2 }, CLASSES)).toEqual([
 			"KiroshiTests",
 			"KiroshiUITests/Alpha",
@@ -1525,16 +1634,86 @@ describe("the ios shards", () => {
 		])
 	})
 
-	it("runs every UI class once over the three shards", () => {
+	it("gives each measured UI class to the lightest shard, longest class first", () => {
+		const measured = [
+			"ConversationsAccessibilityTests",
+			"InvitationAccessibilityTests",
+			"QuestionPanelTests",
+			"SoloConversationTests",
+		]
+
+		expect(shardTests({ index: 1, count: 2 }, measured)).toEqual([
+			"KiroshiTests",
+			"KiroshiUITests/QuestionPanelTests",
+			"KiroshiUITests/SoloConversationTests",
+		])
+		expect(shardTests({ index: 2, count: 2 }, measured)).toEqual([
+			"KiroshiUITests/ConversationsAccessibilityTests",
+			"KiroshiUITests/InvitationAccessibilityTests",
+		])
+	})
+
+	it("runs KiroshiTests and every UI class of the directory in exactly one shard of the workflow", () => {
 		const classes = uiTestClasses()
-		const dealt = [1, 2, 3].flatMap((index) =>
-			shardTests({ index, count: 3 }, classes),
+		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
+		const dealt = shards.flatMap((_, position) =>
+			shardTests({ index: position + 1, count: shards.length }, classes),
 		)
 
-		expect(dealt.filter((test) => test === "KiroshiTests")).toHaveLength(1)
-		expect(dealt.filter((test) => test !== "KiroshiTests").sort()).toEqual(
-			classes.map((name) => `KiroshiUITests/${name}`).sort(),
+		expect(classes.length).toBeGreaterThan(0)
+		expect(dealt.sort()).toEqual(
+			[
+				"KiroshiTests",
+				...classes.map((name) => `KiroshiUITests/${name}`),
+			].sort(),
 		)
+	})
+
+	it("tests a shard from the built products alone, keeping the log that tells whether a test started", () => {
+		expect(IOS_BUILD_STEPS.map((step) => step.name)).toEqual([
+			"Generate",
+			"Build for testing",
+			"Swift format",
+		])
+		expect(IOS_SHARD_STEPS.map((step) => step.name)).toEqual([
+			"Test on the simulator",
+		])
+		expect(IOS_SHARD_STEPS[0]?.heavy).toBe(true)
+		expect(IOS_SHARD_STEPS[0]?.command).toStartWith("set -o pipefail; ")
+		expect(IOS_SHARD_STEPS[0]?.command).toEndWith(
+			"test-without-building $IOS_ONLY_TESTING | tee apps/ios/build/shard-test.log",
+		)
+	})
+
+	it.each([
+		[
+			"an XCTest case",
+			"Test Case '-[KiroshiUITests.PagingTests testPaging]' started.",
+		],
+		[
+			"a Swift Testing test",
+			"◇ Test deleteAccountAsksForConfirmationFirst() started.",
+		],
+	])("reads %s as a started test", (_, line) => {
+		expect(startedATest(`Testing started\n${line}\n`)).toBe(true)
+	})
+
+	it.each([
+		["an empty log", ""],
+		[
+			"a simulator runtime that is not available",
+			"Testing failed:\n\tKiroshiUITests-Runner encountered an error (Failed to prepare device 'iPhone 17' for impending launch. (Underlying Error: The iOS 27.0 simulator runtime is not available.))\n** TEST EXECUTE FAILED **\nTesting started\n",
+		],
+		[
+			"a launch server that died",
+			"Testing failed:\n\tThe operation couldn’t be completed. (Mach error -308 - (ipc/mig) server died)\n** TEST EXECUTE FAILED **\n",
+		],
+		[
+			"a test run that started no test",
+			"Test Suite 'All tests' started at 2026-11-16 10:07:27.842.\n◇ Test run started.\n",
+		],
+	])("reads %s as no started test", (_, log) => {
+		expect(startedATest(log)).toBe(false)
 	})
 
 	it("names each UI class after its file, every other test class being skipped by the plan", () => {
