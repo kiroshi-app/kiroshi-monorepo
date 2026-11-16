@@ -3897,6 +3897,207 @@ export const CaretInsideCommentedPassage = meta.story({
 	},
 })
 
+const MIDWAY_BLOCK = "midway"
+
+const MIDWAY_PASSAGE = "Halfway through"
+
+const MIDWAY_PARAGRAPH = `${MIDWAY_PASSAGE}, the team meets again at the house. Everyone writes down one thing to keep and one thing to change for the next offsite. The notes go to the shared folder before Monday, and the photos follow once they are sorted. Whoever kept the receipts hands them in on the same day, so the budget closes that week.`
+
+const LAST_BLOCK = "train1"
+
+const weeksFrom = (first: number) =>
+	Array.from(
+		{ length: 20 },
+		(_, index) =>
+			`Week ${first + index} brings the next round of notes from the offsite.`,
+	)
+
+const longDocument = {
+	...commentedDocument(true),
+	threads: [],
+	body: [
+		OFFSITE_DOCUMENT.body,
+		...weeksFrom(1),
+		`${MIDWAY_PARAGRAPH} ^${MIDWAY_BLOCK}`,
+		...weeksFrom(21),
+		`The train home leaves on Saturday at 17:10. ^${LAST_BLOCK}`,
+	].join("\n\n"),
+	commentDraft: draftOn({ blockId: LAST_BLOCK, origin: "pointer" }),
+}
+
+const DraftOpenedByClick = ({
+	commentDraft,
+	onStartComment,
+	...args
+}: LibraryDocumentEditorProps) => {
+	const [target, setTarget] = useState<Parameters<typeof draftOn>[0]>()
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				commentDraft={
+					commentDraft && target ? { ...commentDraft, target } : undefined
+				}
+				onStartComment={(next) => {
+					setTarget(next)
+					onStartComment?.(next)
+				}}
+			/>
+		</EditorFrame>
+	)
+}
+
+const columnIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-column")
+
+const expectComposerInsideColumn = async (canvasElement: HTMLElement) => {
+	const column = boxOf(columnIn(canvasElement))
+	const composer = boxOf(composerIn(canvasElement))
+	await expect(composer.top).toBeGreaterThanOrEqual(column.top - 1)
+	await expect(composer.bottom).toBeLessThanOrEqual(column.bottom + 1)
+	await expect(composer.left).toBeGreaterThanOrEqual(column.left - 1)
+	await expect(composer.right).toBeLessThanOrEqual(column.right + 1)
+}
+
+const expectColumnAloneScrolledDown = async (canvasElement: HTMLElement) => {
+	const column = columnIn(canvasElement)
+	const offsets: number[] = [column.scrollLeft]
+	for (
+		let box = column.parentElement;
+		box && canvasElement.contains(box);
+		box = box.parentElement
+	)
+		offsets.push(box.scrollLeft, box.scrollTop)
+	await expect(column.scrollTop).toBeGreaterThan(0)
+	await expect(offsets.some(Boolean)).toBe(false)
+}
+
+export const CommentDraftBelowViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document at the top of its scroll, then a comment started on its last paragraph, far below the visible area, with no key typed. Check the paragraph starting below the column, then the document scrolled until the whole composer sits inside the column, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const last = bodyOf(canvasElement, LAST_BLOCK)
+		await expect(boxOf(last).top).toBeGreaterThan(boxOf(column).bottom)
+		await fireEvent.click(last)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentPassageDraftBelowViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document at the top of its scroll, then a comment started on the first words of a paragraph of several lines, far below the visible area, with more paragraphs after it and no key typed. Check the draft pin on the end of the passage with the paragraph running on under it, the composer 8px right of the pin with its top on the pin top, the document scrolled until the whole composer sits inside the column with its bottom edge on the bottom edge of the column, so the scroll aimed at the placed composer and never at the foot of the paragraph where it sits before it is placed, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const midway = bodyOf(canvasElement, MIDWAY_BLOCK)
+		await expect(boxOf(midway).top).toBeGreaterThan(boxOf(column).bottom)
+		selectIn(midway, MIDWAY_PASSAGE)
+		await fireEvent.click(midway)
+		await expectDraftFieldFocused(canvas)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expectPassagePin(pin, shownPassageOf(canvasElement, MIDWAY_PASSAGE))
+		await expect(boxOf(midway).bottom).toBeGreaterThan(
+			boxOf(pin).bottom + boxOf(pin).height,
+		)
+		const composer = boxOf(composerIn(canvasElement))
+		await expectClose(composer.left, boxOf(pin).right + 8)
+		await expectClose(composer.top, boxOf(pin).top)
+		await expectComposerInsideColumn(canvasElement)
+		await expectClose(composer.bottom, boxOf(column).bottom)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentDraftInClippedShellScrollsColumnAlone = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => (
+		<div className="h-160 overflow-hidden">
+			<DraftOpenedByClick {...args} />
+		</div>
+	),
+	parameters: describedAs(
+		"The long document inside a shell shorter than the editor, which cuts the foot of the column and shows no scrollbar, then a comment started on the last paragraph, far below the visible area. Check the document scrolled until the whole composer sits inside the column, and the shell left where it was: nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await fireEvent.click(bodyOf(canvasElement, LAST_BLOCK))
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentDraftAboveViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document scrolled to its end, then a comment started on a paragraph far above the visible area. Check the paragraph ending above the column, then the document scrolled back until the whole composer sits inside the column, and its field holding the focus.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const first = bodyOf(canvasElement, SESSION_BLOCK)
+		column.scrollTop = column.scrollHeight
+		const atEnd = column.scrollTop
+		await expect(boxOf(first).bottom).toBeLessThan(boxOf(column).top)
+		await fireEvent.click(first)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expect(column.scrollTop).toBeLessThan(atEnd)
+	},
+})
+
+export const CommentDraftInViewKeepsScroll = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document scrolled until a paragraph sits at mid-height of the column, then a comment started on that paragraph. Check the whole composer inside the column, its field holding the focus, and the scroll position of the document exactly where it was.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const midway = bodyOf(canvasElement, MIDWAY_BLOCK)
+		column.scrollTop += boxOf(midway).top - middleOf(boxOf(column))
+		const resting = column.scrollTop
+		await expect(resting).toBeGreaterThan(0)
+		await fireEvent.click(midway)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expect(column.scrollTop).toBe(resting)
+	},
+})
+
+export const CommentDraftScrollNeverAnimates = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => (
+		<div className="**:data-[slot=library-document-column]:scroll-smooth">
+			<DraftOpenedByClick {...args} />
+		</div>
+	),
+	parameters: describedAs(
+		"The long document inside a column asked to scroll smoothly, then a comment started on its last paragraph, far below the visible area. Check the whole composer inside the column as soon as its field holds the focus, with no scroll still under way: the draft is brought into view in one step whatever the motion preference.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		await expect(getComputedStyle(column).scrollBehavior).toBe("smooth")
+		await fireEvent.click(bodyOf(canvasElement, LAST_BLOCK))
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+	},
+})
+
 const EscapeLadderDocument = ({
 	commentDraft,
 	openThread,
