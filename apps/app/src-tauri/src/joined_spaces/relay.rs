@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use futures_util::StreamExt;
 use serde_json::{json, Value};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -36,8 +35,8 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	dropped_reason, opened_unpaused, until_stopped, Backoff, Departure, LastFrames, MeasuredSink,
-	Opened, Socket, PING_EVERY, SILENCE_BOUND,
+	dropped_reason, opened_unpaused, over_the_frame_ceiling, until_stopped, Backoff, Departure,
+	LastFrames, MeasuredSocket, Opened, Socket, PING_EVERY, SILENCE_BOUND,
 };
 use crate::spaces::contract::SpaceDescribed;
 
@@ -1218,21 +1217,18 @@ async fn sealed_session<R: Runtime>(
 ) -> Ended {
 	let link = &linked.link;
 	let answer_bound = app.state::<RelayGuests>().answer_bound();
-	let (sink, mut stream) = socket.split();
-	let mut sink = MeasuredSink::new(sink, frames);
+	let mut sink = MeasuredSocket::over(socket, frames);
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
 	let mut unopened = Some(calls_in);
 	let mut hello_deadline = Instant::now() + answer_bound;
 	let mut outgoing = Outgoing::Hello;
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
-	let silence = sleep(SILENCE_BOUND);
-	tokio::pin!(silence);
 	loop {
 		let is_hello = matches!(outgoing, Outgoing::Hello);
 		if is_hello {
 			hello_deadline = Instant::now() + answer_bound;
 		}
-		if let Err(reason) = delivered(&mut sink, wire, outgoing).await {
+		if let Err(reason) = delivered(&mut sink, wire, link, outgoing).await {
 			return Ended::Dropped(reason);
 		}
 		if is_hello {
@@ -1243,6 +1239,7 @@ async fn sealed_session<R: Runtime>(
 		}
 		let is_greeted = wire.is_greeted();
 		let resume_deadline = link.resume_deadline();
+		let silent_at = sink.silent_at();
 		outgoing = tokio::select! {
 			_ = stop.changed() => {
 				let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
@@ -1254,19 +1251,13 @@ async fn sealed_session<R: Runtime>(
 				}
 				return Ended::Stopped;
 			}
-			frame = stream.next() => {
-				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
-				if let Some(Ok(heard)) = &frame {
-					sink.heard(heard);
-				}
-				match frame {
-					Some(Ok(Message::Text(text))) => heard(app, linked, wire, text.as_str(), &mut unopened).await,
-					Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
-					Some(Ok(_)) => Outgoing::Nothing,
-					Some(Err(error)) => return Ended::Dropped(format!("the member relay socket failed: {error}")),
-					None => return Ended::Dropped("the member relay socket ended".to_owned()),
-				}
-			}
+			frame = sink.next() => match frame {
+				Some(Ok(Message::Text(text))) => heard(app, linked, wire, text.as_str(), &mut unopened).await,
+				Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
+				Some(Ok(_)) => Outgoing::Nothing,
+				Some(Err(error)) => return Ended::Dropped(format!("the member relay socket failed: {error}")),
+				None => return Ended::Dropped("the member relay socket ended".to_owned()),
+			},
 			Some(call) = calls.recv(), if is_greeted => Outgoing::Sealed(call),
 			_ = sleep_until(hello_deadline), if !is_greeted => return Ended::Removed,
 			_ = sleep_until(resume_deadline.unwrap_or_else(Instant::now)), if resume_deadline.is_some() => {
@@ -1277,7 +1268,7 @@ async fn sealed_session<R: Runtime>(
 				resynced(app, linked, link.resume_lapsed())
 			}
 			_ = pings.tick() => Outgoing::Ping,
-			_ = &mut silence => {
+			_ = sleep_until(silent_at) => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
 			}
 		};
@@ -1285,14 +1276,22 @@ async fn sealed_session<R: Runtime>(
 }
 
 async fn delivered(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
 	wire: &mut MemberWire<'_>,
+	link: &MemberLink,
 	outgoing: Outgoing,
 ) -> Result<(), String> {
 	let message = match outgoing {
 		Outgoing::Nothing => return Ok(()),
 		Outgoing::Hello => Message::text(wire.hello().await?),
-		Outgoing::Sealed(plaintext) => Message::text(wire.sealed(&plaintext).await?),
+		Outgoing::Sealed(plaintext) => {
+			let sealed = wire.sealed(&plaintext).await?;
+			if let Some(refusal) = over_the_frame_ceiling(&sealed) {
+				link.refused_as_too_large(&plaintext, refusal);
+				return Ok(());
+			}
+			Message::text(sealed)
+		}
 		Outgoing::Ping => Message::Ping(Vec::new().into()),
 	};
 	sink.sent(message).await
