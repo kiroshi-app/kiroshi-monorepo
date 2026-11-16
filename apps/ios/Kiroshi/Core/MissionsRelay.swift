@@ -4,6 +4,7 @@ enum MissionsCallError: Error, Equatable {
     case refused(status: Int)
     case unreadableCursor
     case unknownToTheHost
+    case refusedByTheRelay
 }
 
 struct MissionsRelay: Sendable {
@@ -55,6 +56,7 @@ struct MissionsRelay: Sendable {
 
     private static func refusal(of answer: RelayAnswer) -> MissionsCallError {
         if answer.isUnknownToTheHost { return .unknownToTheHost }
+        if answer.isRefusedByTheRelay { return .refusedByTheRelay }
         if (try? answer.body(as: Refusal.self))?.kind == "unreadableCursor" {
             return .unreadableCursor
         }

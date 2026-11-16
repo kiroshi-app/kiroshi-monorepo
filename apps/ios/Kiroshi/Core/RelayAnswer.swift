@@ -12,6 +12,11 @@ struct RelayAnswer: Sendable {
         }
     }
 
+    var isRefusedByTheRelay: Bool {
+        status == 413
+            && (try? body(as: String.self)) == RelayConnection.answerRefusedByTheRelay
+    }
+
     func body<Body: Decodable>(as type: Body.Type) throws -> Body {
         try JSONDecoder().decode(Envelope<Body>.self, from: frame).body
     }

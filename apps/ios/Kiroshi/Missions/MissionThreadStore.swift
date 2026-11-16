@@ -23,6 +23,7 @@ final class MissionThreadStore {
     private(set) var hasLoaded = false
     private(set) var hasFailed = false
     private(set) var isOnline = false
+    private(set) var isHostOffline = false
     private(set) var isSending = false
     private(set) var sendProblem: MissionSendProblem?
     private(set) var lastSentId: ThreadMessage.ID?
@@ -98,6 +99,7 @@ final class MissionThreadStore {
         isRereadingAfterResync = false
         hasTrailingResync = false
         isOnline = false
+        isHostOffline = false
         seeding?.cancel()
     }
 
@@ -177,9 +179,13 @@ final class MissionThreadStore {
         switch update {
         case .state(.online):
             isOnline = true
+            isHostOffline = false
             rereads?.yield()
-        case .state:
+        case .state(.connecting):
             isOnline = false
+        case .state(let state):
+            isOnline = false
+            isHostOffline = state == .hostOffline
         case .resynced:
             guard relay != nil else { return }
             guard !isRereadingAfterResync else {
@@ -264,7 +270,7 @@ extension MissionThreadStore: ThreadModel {
     }
 
     var problem: String? {
-        if !isOnline, hasLoaded {
+        if isHostOffline, hasLoaded {
             return String(
                 localized: "The host’s computer is offline. You can send again once it’s back.")
         }
