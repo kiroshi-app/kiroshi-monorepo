@@ -390,7 +390,7 @@ describe("a Library board on its live session", () => {
 		).toBeInstanceOf(HTMLElement)
 	})
 
-	it("wears the static bar above its canvas, outside any island, the Library path link staying clickable", async () => {
+	it("wears the static bar above its canvas, dragging the window, the Library path link staying clickable", async () => {
 		const { onBack } = mountBoardOpening(async () => openedState())
 		await screen.findByRole("option", { name: textNamed("First") })
 		const header = document.querySelector(

@@ -877,7 +877,7 @@ export const BarAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule and no island or fade, that its top line reads the Library path link, a separator and the details over the document name, that Download, Copy, More then Close follow, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
+					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule, that its top line reads the Library path link, a separator and the details over the document name, that Download, Copy, More then Close follow, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
 			},
 		},
 	},

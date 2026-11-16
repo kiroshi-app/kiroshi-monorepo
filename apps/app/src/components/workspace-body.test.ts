@@ -1848,7 +1848,7 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("tops the Library with the static bar instead of floating islands", async () => {
+	it("tops the Library with the static bar dragging the window", async () => {
 		await openLibrary()
 		const layout = document.querySelector(
 			'[data-slot="library-panel"] [data-slot="screen-layout"]',
@@ -1861,7 +1861,7 @@ describe("WorkspaceBody library", () => {
 		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
-	it("wears the static bar above an opened document, outside any island", async () => {
+	it("wears the static bar above an opened document, dragging the window, Back excepted", async () => {
 		await openLibrary()
 
 		await open("Spring launch brief")
@@ -1874,7 +1874,7 @@ describe("WorkspaceBody library", () => {
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
-	it("wears the static bar above an opened image, outside any island", async () => {
+	it("wears the static bar above an opened image, dragging the window", async () => {
 		await openLibrary()
 
 		await open("hero-dunes.png")
