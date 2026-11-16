@@ -1069,15 +1069,14 @@ fn fragments(message: Message) -> Vec<Message> {
 		return vec![message];
 	}
 	let payload = message.into_data();
-	let last = (payload.len() - 1) / FRAGMENT_BYTES;
-	(0..=last)
+	let count = payload.len().div_ceil(FRAGMENT_BYTES);
+	(0..count)
 		.map(|index| {
 			let start = index * FRAGMENT_BYTES;
 			let end = payload.len().min(start + FRAGMENT_BYTES);
 			let opcode = if index == 0 { opcode } else { Data::Continue };
-			let frame =
-				Frame::message(payload.slice(start..end), OpCode::Data(opcode), index == last);
-			Message::Frame(frame)
+			let is_last = index + 1 == count;
+			Message::Frame(Frame::message(payload.slice(start..end), OpCode::Data(opcode), is_last))
 		})
 		.collect()
 }
