@@ -600,6 +600,19 @@ export const expectStaticHeaderBar = async (layout: Element) => {
 	return bar
 }
 
+const WINDOW_DRAG_REGION = "data-tauri-drag-region"
+
+export const expectBarDragsTheWindow = async (bar: HTMLElement) => {
+	await expect(bar).toHaveAttribute(WINDOW_DRAG_REGION, "deep")
+	for (const control of within(bar).queryAllByRole("button")) {
+		await expect(control.tagName).toBe("BUTTON")
+		await expect(control).not.toHaveAttribute(WINDOW_DRAG_REGION)
+	}
+}
+
+export const expectBarLeavesTheWindowInPlace = (bar: HTMLElement) =>
+	expect(bar).not.toHaveAttribute(WINDOW_DRAG_REGION)
+
 export const expectHeaderTitleStep = async (title: Element) => {
 	const style = getComputedStyle(title)
 

@@ -119,6 +119,7 @@ type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 		presence?: ReactNode
 		isReadOnly?: boolean
 		menuFinalFocus?: () => HTMLElement | boolean
+		dragRegion?: "deep"
 	}
 
 const LibraryDocumentReadOnly = () => {
@@ -142,6 +143,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	presence,
 	isReadOnly = false,
 	menuFinalFocus,
+	dragRegion,
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
 	const { t } = useTranslation("common")
@@ -166,6 +168,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 					surface="document"
 				/>
 			}
+			data-tauri-drag-region={dragRegion}
 			leading={
 				<nav className="min-w-0">
 					<AppHeaderText
@@ -314,6 +317,7 @@ type LibraryDocumentViewProps = WriterActions &
 		people?: ComponentProps<typeof LibraryDocumentPresence>["people"]
 		onStopAll?: () => void
 		resolveImage?: ResolveImage
+		dragRegion?: "deep"
 	}
 
 const LibraryDocumentView = ({
@@ -325,6 +329,7 @@ const LibraryDocumentView = ({
 	onStop,
 	onOpenConversation,
 	resolveImage,
+	dragRegion,
 	...actions
 }: LibraryDocumentViewProps) => {
 	const { t } = useTranslation("common")
@@ -338,6 +343,7 @@ const LibraryDocumentView = ({
 			header={
 				<LibraryDocumentBar
 					{...actions}
+					dragRegion={dragRegion}
 					item={document}
 					meta={document.detail}
 					onBack={onBack}

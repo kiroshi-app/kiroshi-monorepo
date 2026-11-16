@@ -108,6 +108,7 @@ type MissionsPageProps = {
 	status?: MissionsPageStatus
 	defaultFoldedGroups?: MissionsPageGroupKey[]
 	wrap?: MissionsPageRowWrap
+	dragRegion?: "deep"
 }
 
 type MissionGlyphProps = Pick<MissionsPageGroupShape, "mark">
@@ -552,7 +553,7 @@ const MissionsPageBody = ({
 	)
 }
 
-const MissionsPage = (props: MissionsPageProps) => {
+const MissionsPage = ({ dragRegion, ...body }: MissionsPageProps) => {
 	const { t } = useTranslation("chat")
 	const titleId = useId()
 
@@ -565,6 +566,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 			<ScreenLayout
 				header={
 					<AppHeader
+						data-tauri-drag-region={dragRegion}
 						leading={
 							<AppHeaderText>
 								<h1 className={APP_HEADER_TITLE} id={titleId}>
@@ -574,7 +576,7 @@ const MissionsPage = (props: MissionsPageProps) => {
 						}
 					/>
 				}
-				scroller={() => <MissionsPageBody {...props} />}
+				scroller={() => <MissionsPageBody {...body} />}
 			/>
 		</section>
 	)

@@ -9,6 +9,8 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
 	expectHeaderTitleStep,
 	expectLibrarySkeletonBar,
 	expectSkeletonFilledTo,
@@ -161,6 +163,8 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expectBarLeavesTheWindowInPlace(barIn(canvasElement))
+
 		await userEvent.click(canvas.getByRole("button", { name: "Library" }))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 
@@ -546,7 +550,7 @@ export const BoardBarAtRest = meta.story({
 			},
 		},
 	},
-	render: ({ onBack }) => (
+	render: ({ onBack, dragRegion }) => (
 		<div
 			className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
 			{...hueScopeOf("blue")}
@@ -556,6 +560,7 @@ export const BoardBarAtRest = meta.story({
 					data-slot="board-screen"
 					header={
 						<LibraryDocumentBar
+							dragRegion={dragRegion}
 							item={LAUNCH_BOARD}
 							onBack={onBack}
 							onDelete={fn()}
@@ -571,6 +576,7 @@ export const BoardBarAtRest = meta.story({
 		const screenLayout = slotIn(canvasElement, "board-screen")
 		const bar = await expectStaticHeaderBar(screenLayout)
 		await expect(slotsIn(screenLayout, "header-island")).toHaveLength(0)
+		await expectBarLeavesTheWindowInPlace(bar)
 
 		const topLine = slotIn(bar, "app-header-top-line")
 		await expect(topLine.textContent).toBe("Library")
@@ -588,6 +594,26 @@ export const BoardBarAtRest = meta.story({
 
 		await userEvent.click(within(bar).getByRole("button", { name: "Library" }))
 		await expect(args.onBack).toHaveBeenCalledOnce()
+	},
+})
+
+export const BoardBarDragsTheWindow = BoardBarAtRest.extend({
+	args: { dragRegion: "deep" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar of a board given `dragRegion`, as the board screen mounts it in the frameless window. Check that the bar is the bar of `BoardBarAtRest` and carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = await expectStaticHeaderBar(
+			slotIn(canvasElement, "board-screen"),
+		)
+
+		await expect(barButtonNames(bar)).toEqual(["Library", "More", "Close"])
+		await expectBarDragsTheWindow(bar)
 	},
 })
 
@@ -1105,5 +1131,37 @@ export const GalleryOfStoredImages = meta.story({
 		await expect(args.resolveImage).toHaveBeenCalledTimes(STORED_IMAGES.length)
 		for (const { src } of STORED_IMAGES)
 			await expect(args.resolveImage).toHaveBeenCalledWith(src)
+	},
+})
+
+export const BarDragsTheWindow = meta.story({
+	args: {
+		...AGENT_CALLBACKS,
+		document: LIBRARY_AGENT_DOCUMENT,
+		writers: LIBRARY_WRITERS,
+		dragRegion: "deep",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = await expectStaticHeaderBar(
+			slotIn(canvasElement, "library-document-view"),
+		)
+
+		await expect(barButtonNames(bar)).toEqual([
+			"Library",
+			"Stop all",
+			"Download",
+			"Copy",
+			"More",
+			"Close",
+		])
+		await expectBarDragsTheWindow(bar)
 	},
 })
