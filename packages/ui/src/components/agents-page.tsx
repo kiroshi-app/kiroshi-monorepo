@@ -249,7 +249,7 @@ const AgentsPageBody = ({
 			<div className="p-3" data-slot="agents-page-failure">
 				<Notice
 					description={t("space.agents.failure.description")}
-					retry={onRetry ? { onRetry } : undefined}
+					retry={onRetry && { onRetry }}
 					title={t("space.agents.failure.title")}
 				/>
 			</div>
