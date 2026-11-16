@@ -517,7 +517,7 @@ const common = {
 				send: "Send",
 				shortcut: {
 					mac: "⌘⌥M",
-					other: "Ctrl+Alt+M",
+					other: "Ctrl+Shift+M",
 				},
 			},
 			mentions: {
