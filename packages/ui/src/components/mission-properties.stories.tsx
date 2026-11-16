@@ -19,6 +19,8 @@ import {
 	MISSION_TICKET,
 } from "@workspace/ui/components/missions.fixtures"
 
+const TICKET_CALLBACKS = { onOpenCodingSession: fn(), onEdit: fn() }
+
 const expectTicketAction = async (button: HTMLElement) => {
 	const icon = button.querySelector("svg") as SVGElement
 	const style = getComputedStyle(button)
@@ -323,7 +325,7 @@ export const TicketLink = meta.story({
 })
 
 export const WithTicketActions = meta.story({
-	args: { onOpenCodingSession: fn(), onEdit: fn() },
+	args: TICKET_CALLBACKS,
 	parameters: {
 		docs: {
 			description: {
@@ -370,7 +372,7 @@ export const WithTicketActions = meta.story({
 })
 
 export const WithOneTicketAction = meta.story({
-	args: { onOpenCodingSession: fn(), onEdit: fn() },
+	args: TICKET_CALLBACKS,
 	parameters: {
 		docs: {
 			description: {
@@ -422,8 +424,7 @@ export const LongContent = meta.story({
 	args: {
 		ticket: { ...MISSION_TICKET, title: LONG_MISSION_TICKET_TITLE },
 		status: LONG_MISSION_STATUS,
-		onOpenCodingSession: fn(),
-		onEdit: fn(),
+		...TICKET_CALLBACKS,
 	},
 	parameters: {
 		docs: {

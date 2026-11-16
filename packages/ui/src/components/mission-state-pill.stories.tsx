@@ -121,9 +121,6 @@ export const InAppHeader = meta.story({
 				style.lineHeight,
 				style.fontWeight,
 			]).toEqual([36, "16px", 10, 6, 6, "6px", "10px", "12px", "16px", "500"])
-			await expect(
-				slotIn(pill.closest("section") as Element, "app-header").offsetHeight,
-			).toBe(56)
 			await expect(style.backgroundColor).toBe(
 				tokenStyleIn(pill, "bg-foreground/5", "backgroundColor"),
 			)
@@ -134,6 +131,9 @@ export const InAppHeader = meta.story({
 		await expect(slotsIn(canvasElement, "mission-state-pill")).toHaveLength(
 			PILL_STATES.length,
 		)
+		for (const bar of slotsIn(canvasElement, "app-header")) {
+			await expect(bar.offsetHeight).toBe(56)
+		}
 		await expect(
 			getComputedStyle(
 				dotOf(
