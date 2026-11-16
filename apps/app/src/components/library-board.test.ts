@@ -390,11 +390,11 @@ describe("a Library board on its live session", () => {
 		).toBeInstanceOf(HTMLElement)
 	})
 
-	it("floats its bar as islands over a canvas starting at the top edge, Back staying clickable", async () => {
+	it("wears the static bar above its canvas, outside any island, the Library path link staying clickable", async () => {
 		const { onBack } = mountBoardOpening(async () => openedState())
 		await screen.findByRole("option", { name: textNamed("First") })
 		const header = document.querySelector(
-			'[data-slot="screen-layout-floating-header"]',
+			'[data-slot="app-header"]',
 		) as HTMLElement
 		const canvas = document.querySelector(
 			'[data-slot="board-canvas"]',
@@ -403,9 +403,11 @@ describe("a Library board on its live session", () => {
 			name: common("library.document.back"),
 		})
 
-		expect(back.closest('[data-slot="header-island"]')).not.toBeNull()
+		expect(back.closest('[data-slot="header-island"]')).toBeNull()
+		expect(
+			header.closest('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
 		expect(canvas.closest('[data-slot="screen-layout-column"]')).toBeNull()
-		expect(takesPress(header)).toBe(false)
 		expect(takesPress(canvas)).toBe(true)
 		expect(takesPress(back)).toBe(true)
 

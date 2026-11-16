@@ -46,6 +46,7 @@
 	--header-island-rule: var(--border);
 	--header-island-overlay: rgb(24 24 26 / 0.85);
 	--lightbox-surface: rgb(11 11 12 / 0.92);
+	--lightbox-bar: rgb(11 11 12);
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
 		in oklab,
@@ -104,6 +105,7 @@
 	--color-header-island-rule: var(--header-island-rule);
 	--color-header-island-overlay: var(--header-island-overlay);
 	--color-lightbox-surface: var(--lightbox-surface);
+	--color-lightbox-bar: var(--lightbox-bar);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);

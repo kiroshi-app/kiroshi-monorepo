@@ -341,6 +341,7 @@ const LibraryDocumentEditor = ({
 					{...actions}
 					item={barItem}
 					menuFinalFocus={menuFinalFocus}
+					meta={detail}
 					onBack={onBack}
 					presence={
 						writers.length > 0 || (people?.length ?? 0) > 0 ? (
@@ -353,10 +354,8 @@ const LibraryDocumentEditor = ({
 					}
 				/>
 			}
-			isHeaderFloating
 			scroller={() => (
 				<LibraryDocumentColumn
-					detail={detail}
 					onColumnMouseDown={writeFromColumn}
 					heading={
 						<GrowingField

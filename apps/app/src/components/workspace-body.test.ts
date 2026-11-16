@@ -1799,24 +1799,29 @@ describe("WorkspaceBody library", () => {
 		expect(takesPress(floatingHeader())).toBe(false)
 	})
 
-	it("floats the bar of an opened document as islands over its text", async () => {
+	it("wears the static bar above an opened document, outside any island", async () => {
 		await openLibrary()
 
 		await open("Spring launch brief")
 		const back = screen.getByRole("button", { name: "Library" })
+		const bar = back.closest('[data-slot="app-header"]')
 
-		expect(floatingHeader().contains(islandOf(back))).toBe(true)
+		expect(bar).not.toBeNull()
+		expect(islandOf(back)).toBeNull()
+		expect(
+			bar?.closest('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
 		expect(takesPress(back)).toBe(true)
-		expect(takesPress(floatingHeader())).toBe(false)
 	})
 
-	it("floats the bar of an opened image as islands over the image", async () => {
+	it("wears the static bar above an opened image, outside any island", async () => {
 		await openLibrary()
 
 		await open("hero-dunes.png")
 		const lightbox = screen.getByRole("dialog", { name: "hero-dunes.png" })
 
-		expect(islandsIn(lightbox).length).toBeGreaterThan(0)
+		expect(lightbox.querySelector('[data-slot="app-header"]')).not.toBeNull()
+		expect(islandsIn(lightbox)).toHaveLength(0)
 	})
 
 	it("shows an empty Library with its header actions, a new document and its templates", async () => {

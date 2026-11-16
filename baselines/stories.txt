@@ -2052,6 +2052,7 @@ navigation-librarydocumenteditor--a-5-toolbar-link-field
 navigation-librarydocumenteditor--a-6-toolbar-flipped-below
 navigation-librarydocumenteditor--agent-run-held-then-fades
 navigation-librarydocumenteditor--agents-writing
+navigation-librarydocumenteditor--bar-at-rest
 navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--blocks-rendered
 navigation-librarydocumenteditor--blocks-rendered-light
@@ -2111,7 +2112,10 @@ navigation-librarydocumentstates--failed-import
 navigation-librarydocumentstates--files-dropped-in
 navigation-librarydocumentstates--read-only
 navigation-librarydocumentview--agents-writing
+navigation-librarydocumentview--bar-keyboard-focus
+navigation-librarydocumentview--bar-keyboard-focus-dark
 navigation-librarydocumentview--bar-matches-image-bar
+navigation-librarydocumentview--board-bar-at-rest
 navigation-librarydocumentview--dark
 navigation-librarydocumentview--default
 navigation-librarydocumentview--gallery-of-stored-images
@@ -2439,8 +2443,8 @@ overlays-imagemenu--in-viewer
 overlays-imagemenu--saving-to-library
 overlays-imagemenu--without-callbacks
 overlays-librarylightbox--at-the-first-image
-overlays-librarylightbox--back-button
 overlays-librarylightbox--backdrop-click
+overlays-librarylightbox--bar-keyboard-focus
 overlays-librarylightbox--copy-check
 overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default
@@ -2450,8 +2454,9 @@ overlays-librarylightbox--host-more-menu
 overlays-librarylightbox--image-menu-open
 overlays-librarylightbox--image-menu-saving
 overlays-librarylightbox--image-without-rename
+overlays-librarylightbox--library-path-link
 overlays-librarylightbox--member-more-menu
-overlays-librarylightbox--narrow-meta-hidden-long-name
+overlays-librarylightbox--narrow-long-name
 overlays-librarylightbox--only-bar-actions-given
 overlays-librarylightbox--only-delete-shown
 overlays-librarylightbox--opened-with-the-panel
@@ -2459,7 +2464,7 @@ overlays-librarylightbox--overlay-fitted
 overlays-librarylightbox--overlay-scrollbar-press
 overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed
-overlays-librarylightbox--zoomed-under-the-islands
+overlays-librarylightbox--zoomed-cut-at-the-bar
 overlays-missionmenu--answer-the-question-leaves-the-card
 overlays-missionmenu--close-at-once
 overlays-missionmenu--closed
