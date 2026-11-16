@@ -34,19 +34,23 @@ const mountMissions = () =>
 afterEach(cleanup)
 
 describe("MissionsRoute with nothing selected", () => {
-	it("floats the Missions header as an island over the list", () => {
+	it("wears the Missions header as the static bar above the list", () => {
 		mountMissions()
-		const header = document.querySelector(
-			'[data-slot="screen-layout-floating-header"]',
+		const layout = document.querySelector(
+			'[data-slot="missions-page"] [data-slot="screen-layout"]',
 		) as HTMLElement
+		const bar = layout.querySelector('[data-slot="app-header"]') as HTMLElement
 		const title = screen.getByRole("heading", {
 			name: i18n.t("chat:missions.page.title"),
 		})
 
-		expect(header.contains(title.closest('[data-slot="header-island"]'))).toBe(
-			true,
-		)
+		expect(layout.firstElementChild).toBe(bar)
+		expect(bar.contains(title)).toBe(true)
+		expect(
+			document.querySelector('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
+		expect(document.querySelector('[data-slot="header-island"]')).toBeNull()
 		expect(takesPress(title)).toBe(true)
-		expect(takesPress(header)).toBe(false)
+		expect(takesPress(bar)).toBe(true)
 	})
 })

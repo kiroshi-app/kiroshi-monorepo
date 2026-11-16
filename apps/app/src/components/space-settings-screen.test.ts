@@ -463,24 +463,29 @@ describe("SpaceSettingsScreen on a joined space", () => {
 })
 
 describe("SpaceSettingsScreen on a local space", () => {
-	it("floats the header of the shown entry as an island dragging the window, over the page", async () => {
+	it("wears the header of the shown entry as the static bar dragging the window, above the page", async () => {
 		const gear = await gearWithGarage()
 
 		const dialog = openSettingsOf(gear, gear.home.id)
-		const header = dialog.querySelector(
-			'[data-slot="screen-layout-floating-header"]',
-		) as HTMLElement
-		const island = header.querySelector(
-			'[data-slot="header-island"]',
-		) as HTMLElement
 		const page = dialog.querySelector(
 			'[data-slot="settings-screen-page"]',
 		) as HTMLElement
+		const bar = page.querySelector('[data-slot="app-header"]') as HTMLElement
+		const scroller = page.querySelector(
+			'[data-slot="screen-layout-scroller"]',
+		) as HTMLElement
 
-		expect(within(island).getByRole("heading")).toBeTruthy()
-		expect(startsWindowDrag(island)).toBe(true)
-		expect(takesPress(header)).toBe(false)
-		expect(startsWindowDrag(page)).toBe(false)
+		expect(page.firstElementChild).toBe(bar)
+		expect(
+			dialog.querySelector('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
+		expect(dialog.querySelector('[data-slot="header-island"]')).toBeNull()
+		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
+		expect(startsWindowDrag(within(bar).getByRole("heading"))).toBe(true)
+		for (const control of within(bar).queryAllByRole("button"))
+			expect(startsWindowDrag(control)).toBe(false)
+		expect(startsWindowDrag(scroller)).toBe(false)
 	})
 
 	it("opens the local mode with its editable Name field, its transfer actions and Danger zone pinned", async () => {

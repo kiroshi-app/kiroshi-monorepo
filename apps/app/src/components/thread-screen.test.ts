@@ -3448,6 +3448,23 @@ describe("ThreadScreen", () => {
 
 const HEADER_OF_WALLS = "Walls · conversation settings"
 
+const headerSubjectOfWalls = () => {
+	const settings = screen.getByRole("button", { name: HEADER_OF_WALLS })
+	const subject = settings.closest<HTMLElement>(
+		'[data-slot="header-conversation-button"]',
+	)
+
+	expect(settings.getAttribute("aria-expanded")).toBe("false")
+	expect(
+		settings.querySelector('[data-slot="conversation-subject-icon"]'),
+	).toBeNull()
+	expect(
+		subject?.querySelector('[data-slot="conversation-subject-icon-tile"]'),
+	).not.toBeNull()
+
+	return subject
+}
+
 const subjectIconIn = (surface: HTMLElement | null) =>
 	surface?.querySelector<HTMLElement>('[data-slot="conversation-subject-icon"]')
 
@@ -3598,16 +3615,16 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		layout.restore()
 	})
 
-	it("redraws the header with the icon and the colour of a conversation updated while open", async () => {
+	it("redraws the subject tile of the header bar with the icon and the colour of a conversation updated while open", async () => {
 		const room = await roomOf({ names: ["Ada", "Zoe"] })
 		const { rerender } = render(
 			screenOf(wearing(room.thread, { icon: null, color: null }), room.bots),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
-		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
-		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
-		expect(subjectColourIn(header)).toEqual(UNCOLOURED_SUBJECT)
+		const subject = headerSubjectOfWalls()
+		expect(pictogramIn(subject)).toBe(drawnPictogramOf("MessageSquare"))
+		expect(subjectColourIn(subject)).toEqual(UNCOLOURED_SUBJECT)
 
 		for (const color of [BLOT_HUES.cyan, FREE_HUE]) {
 			rerender(
@@ -3615,13 +3632,13 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 			)
 			await settle()
 
-			const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
+			const redrawn = headerSubjectOfWalls()
 			expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
 			expect(subjectColourIn(redrawn)).toEqual(subjectColouredAt(color))
 		}
 	})
 
-	it("leads the header of a room with one agent seated with the conversation avatar", async () => {
+	it("leads the header bar of a room with one agent seated with the conversation avatar in its subject tile", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(
 			screenOf(
@@ -3632,8 +3649,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		)
 		await settle()
 
-		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
-		expect(pictogramIn(header)).toBe(drawnPictogramOf("Rocket"))
+		expect(pictogramIn(headerSubjectOfWalls())).toBe(drawnPictogramOf("Rocket"))
 	})
 
 	it.each([BLOT_HUES.cyan, FREE_HUE, null])(

@@ -805,20 +805,28 @@ describe("WorkspaceBody frame", () => {
 	const thread = () =>
 		document.querySelector('[data-slot="chat-layout"]') as HTMLElement
 
-	const expectIslandsFloatingOverThread = () => {
-		expect(floatingHeader().contains(threadSlot("app-header"))).toBe(true)
-		expect(islandsIn(floatingHeader()).length).toBeGreaterThan(0)
+	const staticBarAboveThread = () => {
+		const bar = threadSlot("app-header") as HTMLElement
+
+		expect(thread().firstElementChild).toBe(bar)
+		expect(
+			bar.closest('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
+		expect(islandsIn(thread())).toHaveLength(0)
+		expect(takesPress(bar)).toBe(true)
+
+		return bar
 	}
 
-	it("floats the header of a solo conversation as islands over the thread", async () => {
+	it("wears the header of a solo conversation as the static bar above the thread", async () => {
 		const workspace = await workspaceOf()
 		render(workspace.body())
 		await settle()
 
-		expectIslandsFloatingOverThread()
+		staticBarAboveThread()
 	})
 
-	it("floats the header of a group conversation as islands over the thread", async () => {
+	it("wears the header of a group conversation as the static bar above the thread", async () => {
 		const store = createFakeTranscriptStore()
 		const workspace = await workspaceOf(store)
 		const [ada] = await seatBots(store, SPACE, ["Ada"])
@@ -836,32 +844,41 @@ describe("WorkspaceBody frame", () => {
 		)
 		await settle()
 
-		expect(within(floatingHeader()).getByText("Garden")).toBeTruthy()
-		expectIslandsFloatingOverThread()
+		expect(within(staticBarAboveThread()).getByText("Garden")).toBeTruthy()
 	})
 
-	it("drags the window from an island, never from its control", async () => {
+	it("drags the window from the leading side of the bar, never from one of its controls", async () => {
 		const workspace = await workspaceOf()
 		render(workspace.body())
 		await settle()
-		const [island] = islandsIn(floatingHeader())
-		const [control] = within(island).getAllByRole("button")
+		const bar = staticBarAboveThread()
+		const leading = bar.querySelector(
+			'[data-slot="app-header-leading"]',
+		) as HTMLElement
+		const title = bar.querySelector(
+			'[data-slot="app-header-text"]',
+		) as HTMLElement
+		const controls = within(bar).getAllByRole("button")
 
-		expect(startsWindowDrag(island)).toBe(true)
-		expect(startsWindowDrag(control)).toBe(false)
+		expect(startsWindowDrag(leading)).toBe(true)
+		expect(startsWindowDrag(title)).toBe(true)
+		expect(controls.length).toBeGreaterThan(1)
+		for (const control of controls)
+			expect(startsWindowDrag(control)).toBe(false)
 	})
 
-	it("hands a press on the gap between islands or on the thread to the thread, dragging nothing", async () => {
+	it("drags the window from the room the bar leaves between its two sides, and nothing from the thread under it", async () => {
 		const workspace = await workspaceOf()
 		render(workspace.body())
 		await settle()
-		const gap = threadSlot("app-header") as HTMLElement
+		const bar = staticBarAboveThread()
+		const scroller = bar.nextElementSibling as HTMLElement
 
-		expect(takesPress(gap)).toBe(false)
-		expect(takesPress(floatingHeader())).toBe(false)
-		expect(startsWindowDrag(gap)).toBe(false)
+		expect(startsWindowDrag(bar)).toBe(true)
 		expect(takesPress(thread())).toBe(true)
 		expect(startsWindowDrag(thread())).toBe(false)
+		expect(takesPress(scroller)).toBe(true)
+		expect(startsWindowDrag(scroller)).toBe(false)
 	})
 })
 
