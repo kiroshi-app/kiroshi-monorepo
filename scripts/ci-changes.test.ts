@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "bun:test"
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -7,10 +8,14 @@ import {
 	writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join, relative } from "node:path"
+import { basename, dirname, join, normalize, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { decideJobs, touchedJobs } from "./ci-changes"
+import {
+	decideJobs,
+	PATHS_RUST_READS_OUTSIDE_SRC_TAURI,
+	touchedJobs,
+} from "./ci-changes"
 
 const none = {
 	rust: false,
@@ -49,19 +54,50 @@ const REPO = fileURLToPath(new URL("..", import.meta.url))
 
 const SRC_TAURI = join(REPO, "apps/app/src-tauri")
 
-const EMBEDDED_PATH = /include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)/g
+const PARENT_PATH_LITERAL = /"([^"\n]*\.\.\/[^"\n]*)"/g
 
-const embeddedPathsOf = (source: string) => {
+const JOIN_CHAIN = /(?:\.join\(\s*"[^"\n]*"\s*\)\s*)+/g
+
+const JOINED_SEGMENT = /"([^"\n]*)"/g
+
+const pathsNamedIn = (rust: string) =>
+	[
+		...new Set([
+			...[...rust.matchAll(PARENT_PATH_LITERAL)].map(
+				([, literal]) => literal ?? "",
+			),
+			...[...rust.matchAll(JOIN_CHAIN)].map(([chain]) =>
+				[...chain.matchAll(JOINED_SEGMENT)]
+					.map(([, segment]) => segment)
+					.join("/"),
+			),
+		]),
+	].filter((named) => basename(normalize(named)) !== "..")
+
+const isRepositoryPathOutsideSrcTauri = (path: string) =>
+	path.startsWith(REPO) &&
+	path !== SRC_TAURI &&
+	!path.startsWith(`${SRC_TAURI}/`) &&
+	existsSync(path)
+
+const pathsReachedOutsideSrcTauriBy = (source: string) => {
 	const file = join(SRC_TAURI, source)
-	return [...readFileSync(file, "utf8").matchAll(EMBEDDED_PATH)].map(
-		([, embedded]) => relative(REPO, join(dirname(file), embedded ?? "")),
-	)
+	return pathsNamedIn(readFileSync(file, "utf8"))
+		.flatMap((named) => [join(dirname(file), named), join(SRC_TAURI, named)])
+		.filter(isRepositoryPathOutsideSrcTauri)
+		.map((reached) => ({
+			source: relative(REPO, file),
+			reached: relative(REPO, reached),
+		}))
 }
 
-const filesSrcTauriEmbeds = () =>
-	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })].flatMap(
-		embeddedPathsOf,
-	)
+const pathsRustReachesOutsideSrcTauri = () =>
+	git(SRC_TAURI, "ls-files", "*.rs")
+		.split("\n")
+		.flatMap(pathsReachedOutsideSrcTauriBy)
+
+const firstTrackedFileAt = (path: string) =>
+	git(REPO, "ls-files", "--", path).split("\n")[0] ?? ""
 
 const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
 	Bun.spawnSync(
@@ -350,11 +386,58 @@ describe("the paths each job watches", () => {
 		})
 	})
 
-	it("runs rust on every file src-tauri embeds with include_str! or include_bytes!", () => {
-		const embedded = filesSrcTauriEmbeds()
+	it("lists every repository path a Rust source of src-tauri reaches outside src-tauri", () => {
+		const reached = pathsRustReachesOutsideSrcTauri()
+		const unlisted = reached.filter(
+			(read) => !PATHS_RUST_READS_OUTSIDE_SRC_TAURI.includes(read.reached),
+		)
 
-		expect(embedded).toContain(".claude/settings.json")
-		expect(embedded.filter((path) => !touching(path).rust)).toEqual([])
+		expect(reached).toContainEqual({
+			source: "apps/app/src-tauri/src/bundles/system.rs",
+			reached: "packages/ui/src/components/markdown",
+		})
+		expect(
+			unlisted.map(({ source, reached }) => `${reached}, read by ${source}`),
+		).toEqual([])
+	})
+
+	it.each(PATHS_RUST_READS_OUTSIDE_SRC_TAURI)(
+		"runs rust on a pull_request changing only a file at %s, since a Rust source reads it",
+		(path) => {
+			const changed = firstTrackedFileAt(path)
+
+			expect(`${changed}/`).toStartWith(`${path}/`)
+			expect(decideJobs({ event: "pull_request", paths: [changed] }).rust).toBe(
+				true,
+			)
+		},
+	)
+
+	it("runs rust and vitest on a pull_request changing only a file under packages/ui/src/components/markdown, since a bundles::system test reads the renderer", () => {
+		expect(
+			decideJobs({
+				event: "pull_request",
+				paths: ["packages/ui/src/components/markdown/answer-block.tsx"],
+			}),
+		).toEqual({ ...none, rust: true, vitest: true })
+	})
+
+	it("leaves rust unselected on a pull_request changing only paths no Rust source reads", () => {
+		expect(
+			decideJobs({
+				event: "pull_request",
+				paths: [
+					"packages/ui/src/components/button.tsx",
+					"packages/ui/src/components/markdown-toolbar/toolbar.tsx",
+					"apps/app/vite.config.ts",
+					"apps/app/contracts.md",
+					"apps/website/src/page.tsx",
+					"apps/ios/Kiroshi/App.swift",
+					"docs/relay/README.md",
+					"scripts/baseline.ts",
+				],
+			}).rust,
+		).toBe(false)
 	})
 
 	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {
@@ -380,9 +463,17 @@ describe("the paths each job watches", () => {
 		})
 	})
 
-	it("runs only vitest on an app file outside src-tauri", () => {
+	it("runs only vitest on an app file outside src-tauri and the app source", () => {
+		expect(touching("apps/app/vite.config.ts")).toEqual({
+			...none,
+			vitest: true,
+		})
+	})
+
+	it("runs rust and vitest on an app source file, since a hosting::bridge test reads every one", () => {
 		expect(touching("apps/app/src/main.tsx")).toEqual({
 			...none,
+			rust: true,
 			vitest: true,
 		})
 	})

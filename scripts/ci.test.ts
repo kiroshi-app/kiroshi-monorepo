@@ -1254,7 +1254,7 @@ describe("the jobs of ci.yml", () => {
 				rust: { result: "skipped" },
 				changes: {
 					result: "success",
-					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/src/main.tsx"]),
+					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/vite.config.ts"]),
 				},
 			},
 		}
