@@ -2302,8 +2302,11 @@ async fn relay_refused(member: &mut MemberWire, refusal: String) {
 	member.send(Message::Text(refusal.into())).await.expect("the refusal reaches the host");
 }
 
-fn is_a_resync(frame: &Value) -> bool {
-	frame.get("resync").is_some()
+async fn resynced(member: &mut MemberWire) -> Value {
+	let resync = next_text(member, |frame| frame.get("resync").is_some());
+	tokio::time::timeout(PATIENCE, resync)
+		.await
+		.expect("the host resyncs the refused device in time")
 }
 
 fn numbers_heard(heard: &mut tokio::sync::broadcast::Receiver<crate::events::Frame>) -> Vec<u64> {
@@ -2336,7 +2339,7 @@ fn a_device_socket_full_refusal_is_logged_and_the_member_link_hears_what_it_miss
 		assert_eq!(answer(&mut member).await["id"], 41);
 
 		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
-		let resync = next_text(&mut member, is_a_resync).await;
+		let resync = resynced(&mut member).await;
 		let Resync::Resume(resume) = link.received(&resync.to_string()) else {
 			panic!("the resync resumes the member link");
 		};
@@ -2403,9 +2406,9 @@ fn a_resync_the_relay_refuses_again_is_sent_again_on_the_next_interval() {
 		assert_eq!(answer(&mut member).await["id"], 43);
 
 		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
-		let first = next_text(&mut member, is_a_resync).await;
+		let first = resynced(&mut member).await;
 		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
-		let again = next_text(&mut member, is_a_resync).await;
+		let again = resynced(&mut member).await;
 
 		assert_eq!(first, json!({ "resync": { "answered": [43] } }));
 		assert_eq!(again, first);

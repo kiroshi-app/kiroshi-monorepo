@@ -991,10 +991,13 @@ async fn resyncs_sent(
 async fn resync_sent(
 	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
-	deliveries: &Deliveries,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	to: &Rostered,
 ) -> Result<(), Ended> {
+	if deliveries.has_unconfirmed_rekeys(&to.relay_device_id) {
+		rekeys_sent(sink, deliveries, hosted, Recipients::Device(&to.relay_device_id)).await?;
+	}
 	let resync = deliveries.resync_frame(&to.relay_device_id);
 	sealed_sent(sink, wire, &resync, Some(to)).await?;
 	resync_logged(hosted, &to.relay_device_id, "was sent a resync");

@@ -154,6 +154,10 @@ impl Deliveries {
 		)
 	}
 
+	pub(super) fn has_unconfirmed_rekeys(&self, relay_device_id: &str) -> bool {
+		self.unconfirmed.get(relay_device_id).is_some_and(|held| held.rekeys > 0)
+	}
+
 	pub(super) fn refused(&mut self, relay_device_id: &str) -> bool {
 		if let Some(behind) = self.behind.get_mut(relay_device_id) {
 			behind.is_refused_again = true;
@@ -283,6 +287,8 @@ mod tests {
 			deliveries.resync_frame(DEVICE),
 			json!({ "resync": { "answered": [7, 8] } }).to_string()
 		);
+		assert!(deliveries.has_unconfirmed_rekeys(DEVICE));
+		assert!(!deliveries.has_unconfirmed_rekeys("a device sent nothing"));
 	}
 
 	#[test]
