@@ -411,9 +411,6 @@ fn view_summary(view: &PlayedView) -> serde_json::Value {
 		"response_csp": view.csp,
 		"document_requests": view.observation.record.document_requests,
 		"requests_outside_the_routes": view.observation.record.unrouted_requests,
-		"attempts_the_page_script_reached_read_by_the_host": match &view.observation.reached {
-			Ok(reached) => json!(reached),
-			Err(cause) => json!({ "unavailable": cause }),
-		},
+		"attempts_the_page_script_reached_read_by_the_host": probe::evidence(&view.observation.reached),
 	})
 }

@@ -14,16 +14,11 @@ const TRACE_READING: &str = "JSON.stringify(window.__spikeHostTrace ?? null)";
 pub const TRACER: &str = r#"(() => {
 	const BEACON = /\/beacon\/([^/]+)\//;
 	const source = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
-	const reached = [];
-	const note =
-		window === top
-			? (attempt) => reached.push(attempt)
-			: (attempt) => top.postMessage({ spikeHostTrace: attempt }, "*");
 	if (window === top) {
-		window.__spikeHostTrace = reached;
+		window.__spikeHostTrace = [];
 		addEventListener("message", (event) => {
 			if (typeof event.data?.spikeHostTrace === "string") {
-				reached.push(event.data.spikeHostTrace);
+				window.__spikeHostTrace.push(event.data.spikeHostTrace);
 			}
 		});
 	}
@@ -32,7 +27,7 @@ pub const TRACER: &str = r#"(() => {
 		set(url) {
 			const [, attempt] = BEACON.exec(String(url)) ?? [];
 			if (attempt) {
-				note(attempt);
+				top.postMessage({ spikeHostTrace: attempt }, "*");
 			}
 			source.set.call(this, url);
 		},
@@ -128,9 +123,9 @@ impl ViewReading {
 pub type HostReading = Result<ViewReading, String>;
 pub type HostTrace = Result<Vec<String>, String>;
 
-pub fn evidence(reading: &HostReading) -> Value {
+pub fn evidence<T: Serialize>(reading: &Result<T, String>) -> Value {
 	match reading {
-		Ok(view) => json!(view),
+		Ok(read) => json!(read),
 		Err(cause) => json!({ "unavailable": cause }),
 	}
 }

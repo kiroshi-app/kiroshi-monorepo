@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::host::{Gap, HandlerEvent, Heartbeat, SecretCall};
-use crate::probe::{self, HostReading, HostTrace};
+use crate::probe::{self, HostReading, HostTrace, ViewReading};
 use crate::sensors::{Connection, CspReport, TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
 use crate::windows::FIRST_VIEW_LABEL;
 
@@ -447,6 +447,39 @@ impl Observations {
 		}
 	}
 
+	fn fetch_disagreements(
+		view: &ViewReading,
+		allowed_beacon: Option<&str>,
+		blocked_beacon: Option<&str>,
+	) -> Vec<Value> {
+		[
+			(
+				ALLOWED_FETCH_ATTEMPT,
+				&view.allowlisted_fetch,
+				view.allowlisted_fetch_status,
+				allowed_beacon,
+			),
+			(
+				BLOCKED_FETCH_ATTEMPT,
+				&view.other_host_fetch,
+				view.other_host_fetch_status,
+				blocked_beacon,
+			),
+		]
+		.into_iter()
+		.filter(|(_, host_read, _, page_beacon)| *page_beacon != Some(host_read.as_str()))
+		.map(|(fetch, host_read, status, page_beacon)| {
+			json!({
+				"fetch": fetch,
+				"host_read": host_read,
+				"page_beacon": page_beacon,
+				"host_read_document_url": view.document_url,
+				"host_read_response_status": status,
+			})
+		})
+		.collect()
+	}
+
 	fn egress_follows_the_allowlist(&self) -> Proof {
 		let record = &self.writer.record;
 		let allowed_fetch = record.outcome(ALLOWED_FETCH_ATTEMPT);
@@ -472,34 +505,8 @@ impl Observations {
 			Some(host) => {
 				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
 				if let Ok(view) = &host.first_view {
-					evidence["fetches_where_the_host_read_and_the_page_beacon_disagree"] = [
-						(
-							ALLOWED_FETCH_ATTEMPT,
-							&view.allowlisted_fetch,
-							view.allowlisted_fetch_status,
-							allowed_fetch,
-						),
-						(
-							BLOCKED_FETCH_ATTEMPT,
-							&view.other_host_fetch,
-							view.other_host_fetch_status,
-							blocked_fetch,
-						),
-					]
-					.into_iter()
-					.filter(|(_, host_read, _, page_beacon)| {
-						*page_beacon != Some(host_read.as_str())
-					})
-					.map(|(fetch, host_read, status, page_beacon)| {
-						json!({
-							"fetch": fetch,
-							"host_read": host_read,
-							"page_beacon": page_beacon,
-							"host_read_document_url": view.document_url,
-							"host_read_response_status": status,
-						})
-					})
-					.collect();
+					evidence["fetches_where_the_host_read_and_the_page_beacon_disagree"] =
+						json!(Self::fetch_disagreements(view, allowed_fetch, blocked_fetch));
 				}
 				self.has_first_view_reached_its_navigation_attempts()
 					&& host.first_view.as_ref().is_ok_and(|view| {
