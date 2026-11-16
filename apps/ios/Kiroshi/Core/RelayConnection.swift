@@ -20,6 +20,8 @@ actor RelayConnection {
     static let resumeCommand = "relay_resume"
     static let hello = Data(#"{"hello":{}}"#.utf8)
     static let noKeyId: UInt32 = 0
+    static let subscriberBuffer = 64
+    static let heldEventsBound = subscriberBuffer
     static let answerRefusedByTheRelay =
         "the relay refused the host's answer: Device socket is full"
 
@@ -81,7 +83,7 @@ actor RelayConnection {
 
     func updates() -> AsyncStream<RelayUpdate> {
         let (stream, continuation) = AsyncStream.makeStream(
-            of: RelayUpdate.self, bufferingPolicy: .bufferingNewest(64))
+            of: RelayUpdate.self, bufferingPolicy: .bufferingNewest(Self.subscriberBuffer))
         let id = UUID()
         continuation.onTermination = { [weak self] _ in
             Task { await self?.drop(id) }
@@ -100,6 +102,10 @@ actor RelayConnection {
         subscribers.count
     }
 
+    var heldEventCount: Int {
+        eventsAfterTheReread.count
+    }
+
     func start() {
         guard run == nil else { return }
         backoff.reset()
@@ -110,13 +116,8 @@ actor RelayConnection {
         run?.cancel()
         run = nil
         socket?.close()
-        socket = nil
-        challenge = nil
-        failPendingCalls()
-        sequence.closed()
-        endResumeCall()
+        endSocket(failing: .connectionClosed)
         isRereadDue = false
-        eventsAfterTheReread = []
         publish(.paused)
         for subscriber in subscribers.values {
             subscriber.finish()
@@ -229,14 +230,19 @@ actor RelayConnection {
         }
         outbox.finish()
         if !Task.isCancelled {
-            socket = nil
-            self.outbox = nil
-            challenge = nil
-            failPendingCalls(with: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
-            sequence.closed()
-            endResumeCall()
+            endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
         }
         return ending
+    }
+
+    private func endSocket(failing failure: RelayCallError) {
+        socket = nil
+        outbox = nil
+        challenge = nil
+        failPendingCalls(with: failure)
+        sequence.closed()
+        endResumeCall()
+        dropHeldEvents()
     }
 
     private func awaitKey(on socket: any RelaySocket) async -> KeyWait {
@@ -628,10 +634,24 @@ actor RelayConnection {
 
     private func deliver(_ event: RelayEvent) {
         guard !isRereadDue, isOnline || owedRereads.isEmpty else {
-            eventsAfterTheReread.append(event)
+            hold(event)
             return
         }
         broadcast(.event(event))
+    }
+
+    private func hold(_ event: RelayEvent) {
+        guard eventsAfterTheReread.count < Self.heldEventsBound else {
+            dropHeldEvents()
+            return
+        }
+        eventsAfterTheReread.append(event)
+    }
+
+    private func dropHeldEvents() {
+        guard !eventsAfterTheReread.isEmpty else { return }
+        eventsAfterTheReread = []
+        isRereadDue = true
     }
 
     private func send(_ resume: RelayResume) {
