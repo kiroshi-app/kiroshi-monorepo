@@ -233,6 +233,7 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		onPrevious: () => void
 		onNext: () => void
 		isSavingToLibrary?: boolean
+		dragRegion?: "deep"
 	}
 
 const LibraryLightbox = ({
@@ -245,6 +246,7 @@ const LibraryLightbox = ({
 	onSaveToLibrary,
 	onCopyImage,
 	isSavingToLibrary,
+	dragRegion,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -314,6 +316,7 @@ const LibraryLightbox = ({
 									surface="lightbox"
 								/>
 							}
+							data-tauri-drag-region={dragRegion}
 							leading={
 								<AppHeaderText
 									topLine={

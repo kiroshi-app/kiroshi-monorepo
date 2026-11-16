@@ -13,6 +13,8 @@ import { decorators as pseudoStateDecorators } from "storybook-addon-pseudo-stat
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
 	hueScopeOf,
 	isInBrowserRunner,
 	middleClick,
@@ -1865,8 +1867,13 @@ export const Bar = meta.story({
 			},
 		},
 	},
-	play: ({ args, canvasElement }) =>
-		expectBarAsDrawn(canvasElement, args.items, ["New board", "New document"]),
+	play: async ({ args, canvasElement }) => {
+		await expectBarAsDrawn(canvasElement, args.items, [
+			"New board",
+			"New document",
+		])
+		await expectBarLeavesTheWindowInPlace(barIn(canvasElement).bar)
+	},
 })
 
 export const BarDark = Bar.extend({
@@ -1914,6 +1921,26 @@ export const BarWithImportDark = BarWithImport.extend({
 					"The Library as artboard I5b draws it, Import included, 960 wide, dark theme. Check that Import and New board sit on a 4 percent foreground fill under their hairline border, their label in the foreground and their glyph in the soft ink, and that New document wears the dark bubble colour of the Space with its label and plus in the bubble ink.",
 			},
 		},
+	},
+})
+
+export const BarDragsTheWindow = BarWithImport.extend({
+	args: { dragRegion: "deep" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Library given `dragRegion`, as the frameless window mounts it, Import included so the bar holds its three actions. Check that the bar is drawn as in `BarWithImport` and carries the deep drag region, so a press on its empty stretch moves the window, and that Import, New board and New document are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectBarAsDrawn(canvasElement, args.items, [
+			"Import",
+			"New board",
+			"New document",
+		])
+		await expectBarDragsTheWindow(barIn(canvasElement).bar)
 	},
 })
 

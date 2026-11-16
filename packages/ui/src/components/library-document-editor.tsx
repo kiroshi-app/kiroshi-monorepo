@@ -200,6 +200,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		>["resolveImage"]
 		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 		menuFinalFocus?: () => HTMLElement | boolean
+		dragRegion?: "deep"
 		ref?: Ref<LibraryDocumentEditorHandle>
 	}
 
@@ -230,6 +231,7 @@ const LibraryDocumentEditor = ({
 	onHeading,
 	onList,
 	menuFinalFocus,
+	dragRegion,
 	ref,
 	...actions
 }: LibraryDocumentEditorProps) => {
@@ -339,6 +341,7 @@ const LibraryDocumentEditor = ({
 			header={
 				<LibraryDocumentBar
 					{...actions}
+					dragRegion={dragRegion}
 					item={barItem}
 					menuFinalFocus={menuFinalFocus}
 					meta={detail}

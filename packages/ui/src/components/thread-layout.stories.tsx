@@ -27,7 +27,13 @@ import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-b
 import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
 import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
-import { NO_EARLIER_TODAY } from "@workspace/ui/components/missions.fixtures"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
+import {
+	MISSION_NOW,
+	MISSION_PULL_REQUEST,
+	MISSION_TICKET,
+	NO_EARLIER_TODAY,
+} from "@workspace/ui/components/missions.fixtures"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
@@ -270,7 +276,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell. `opening` is handed to the transcript as it is, to stand at the top of the thread over the first row, and is not drawn while `skeleton` stands in for the transcript.",
 			},
 		},
 	},
@@ -1307,5 +1313,62 @@ export const GroupNarrow2d = meta.story({
 		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
 		await expect(boxOf(gear).right).toBeLessThan(boxOf(capsule).left)
+	},
+})
+
+const OPENING_UNDER_THE_BAR = 24
+
+const OPENING_OVER_THE_FIRST_TURN = 16
+
+const MISSION_OPENING = (
+	<MissionProperties
+		now={MISSION_NOW}
+		onEdit={fn()}
+		onOpenCodingSession={fn()}
+		openedAt={MISSION_NOW - 7_200_000}
+		pullRequest={MISSION_PULL_REQUEST}
+		ticket={MISSION_TICKET}
+	/>
+)
+
+export const Opening = meta.story({
+	args: { ...THREAD_UNDER_THE_BAR, opening: MISSION_OPENING },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread given an `opening`, here the properties of a mission, under the static bar and with `isHeaderFloating` as the app still passes it. Check that the properties block stands 24px under the bar, not the 32px a thread without an opening keeps, that the first turn follows 16px under its rule, and that the two turns read from the top of the thread instead of resting against the composer. Pick `Default` for a thread without an opening. Nothing in `apps/app` passes `opening` yet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		const content = slotIn(layout, "message-scroller-content")
+		const opening = slotIn(content, "transcript-opening")
+		const block = boxOf(slotIn(opening, "mission-properties"))
+		const [firstTurn] = slotsIn(content, "message-scroller-item")
+
+		await expect(content.firstElementChild).toBe(opening)
+		await expect([
+			block.top - boxOf(slotIn(layout, "app-header")).bottom,
+			boxOf(firstTurn).top - block.bottom,
+		]).toEqual([OPENING_UNDER_THE_BAR, OPENING_OVER_THE_FIRST_TURN])
+	},
+})
+
+export const OpeningHeldBackBySkeleton = meta.story({
+	args: { ...Opening.input.args, skeleton: <MissionDetailSkeleton /> },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread given an `opening` while its `skeleton` still stands in for the transcript. Check that the skeleton holds the surface alone and that the opening is not drawn over it: it comes with the transcript, as `Opening` shows. Nothing in `apps/app` passes `opening` yet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(slotsIn(canvasElement, "thread-skeleton")).toHaveLength(1)
+		await expect(slotsIn(canvasElement, "transcript-opening")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "mission-properties")).toHaveLength(0)
 	},
 })

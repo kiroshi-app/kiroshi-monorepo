@@ -10,6 +10,8 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
 	expectHeaderTitleStep,
 	expectLibrarySkeletonBar,
 	expectStaticHeaderBar,
@@ -44,7 +46,7 @@ type LibraryWithLightboxProps = LibraryItemActions<
 > &
 	Pick<
 		LibraryLightboxProps,
-		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary"
+		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary" | "dragRegion"
 	> & {
 		openedAt: number | null
 		images?: LibraryLightboxImage[]
@@ -64,6 +66,7 @@ const LibraryWithLightbox = ({
 	onSaveToLibrary,
 	onCopyImage,
 	isSavingToLibrary,
+	dragRegion,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -89,6 +92,7 @@ const LibraryWithLightbox = ({
 						<LibraryLightbox
 							{...actions}
 							count={images.length}
+							dragRegion={dragRegion}
 							isSavingToLibrary={isSavingToLibrary}
 							onCopyImage={onCopyImage}
 							onSaveToLibrary={onSaveToLibrary}
@@ -263,6 +267,7 @@ export const Default = meta.story({
 		const popup = await lightbox()
 		await expect(popup).toHaveTextContent("dashboard-redesign.png")
 		await expect(popup).toHaveTextContent("2 of 8")
+		await expectBarLeavesTheWindowInPlace(barIn(popup))
 
 		await userEvent.keyboard("{ArrowRight}")
 		await expect(args.onNext).toHaveBeenCalledOnce()
@@ -1519,5 +1524,29 @@ export const ImageMenuSaving = meta.story({
 		await expect(
 			within(menu).getByRole("menuitem", { name: "Copy image" }),
 		).not.toHaveAttribute("aria-disabled")
+	},
+})
+
+export const BarDragsTheWindow = meta.story({
+	args: { dragRegion: "deep" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An image given `dragRegion`, as the frameless window mounts it. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window instead of closing the image, and that the Library path link, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
+			},
+		},
+	},
+	play: async () => {
+		const bar = barIn(await lightbox())
+
+		await expect(
+			within(bar)
+				.getAllByRole("button")
+				.map(
+					(button) => button.getAttribute("aria-label") ?? button.textContent,
+				),
+		).toEqual(["Library", "Download", "Copy", "More", "Close"])
+		await expectBarDragsTheWindow(bar)
 	},
 })

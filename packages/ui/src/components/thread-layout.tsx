@@ -95,6 +95,7 @@ interface ThreadLayoutProps {
 	marksNewMessages?: boolean
 	older?: ListEnd
 	newer?: TranscriptNewer
+	opening?: ReactNode
 	rows?: TranscriptItem[]
 	onFollowChange?: (following: boolean) => void
 	children: ReactNode
@@ -124,6 +125,7 @@ function ThreadLayout({
 	marksNewMessages,
 	older,
 	newer,
+	opening,
 	rows,
 	onFollowChange,
 	children,
@@ -203,6 +205,7 @@ function ThreadLayout({
 									marksNewMessages={marksNewMessages}
 									older={older}
 									newer={newer}
+									opening={opening}
 									rows={rows}
 									onFollowChange={onFollowChange}
 									highlightedMessageId={highlightedMessageId}

@@ -223,6 +223,7 @@ type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 		onNewBoard?: () => void
 		onStartTemplate?: (template: LibraryTemplate) => void
 		overlay?: ReactNode
+		dragRegion?: "deep"
 	}
 
 const LibraryPanel = ({
@@ -238,6 +239,7 @@ const LibraryPanel = ({
 	onNewBoard,
 	onStartTemplate,
 	overlay,
+	dragRegion,
 	...itemActions
 }: LibraryPanelProps) => {
 	const { t } = useTranslation("common")
@@ -335,6 +337,7 @@ const LibraryPanel = ({
 					header={
 						<AppHeader
 							close={actions}
+							data-tauri-drag-region={dragRegion}
 							leading={
 								<AppHeaderText
 									topLine={

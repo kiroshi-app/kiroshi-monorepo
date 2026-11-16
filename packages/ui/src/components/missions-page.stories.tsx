@@ -14,6 +14,8 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	A11Y_FLOATING_FOCUS_GUARDS,
 	A11Y_SUBMENU_PORTAL_GUARD,
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
 	expectHeaderTitleStep,
 	expectSkeletonFilledTo,
 	expectStaticHeaderBar,
@@ -692,7 +694,9 @@ export const Missions4a = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectMissionsBar(canvasElement)
+		const { bar } = await expectMissionsBar(canvasElement)
+
+		await expectBarLeavesTheWindowInPlace(bar)
 	},
 })
 
@@ -762,5 +766,23 @@ export const MissionsNarrow4d = meta.story({
 
 		await expect(page.getBoundingClientRect().width).toBe(NARROW_MISSIONS_WIDTH)
 		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
+	},
+})
+
+export const BarDragsTheWindow = meta.story({
+	args: { dragRegion: "deep" },
+	decorators: [onTheContentCard],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story: `Missions given \`dragRegion\`, as the frameless window mounts it. Check that the bar is the bar of \`Missions4a\` and carries the deep drag region, so a press anywhere on it moves the window, and that it still holds no control to take that press. Leave \`dragRegion\` out wherever a title bar already moves the window. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { bar } = await expectMissionsBar(canvasElement)
+
+		await expectBarDragsTheWindow(bar)
 	},
 })
