@@ -221,6 +221,7 @@ final class QuestionPanelTests: XCTestCase {
         let summary = option("Summary", in: app)
         let deadline = Date.now.addingTimeInterval(10)
         while !summary.exists, Date.now < deadline {}
+        XCTAssertTrue(summary.exists)
 
         assertThePanelSitsOnTheArtboard(app, "4.1")
     }
