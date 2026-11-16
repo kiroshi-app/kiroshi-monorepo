@@ -3,7 +3,7 @@ import { useMemo } from "react"
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { failureReporterIn } from "../failure-report"
+import { type FailureCorrelation, failureReporterIn } from "../failure-report"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
@@ -90,6 +90,12 @@ const openSpaceRowId = (
 
 const reportFailure = failureReporterIn("use-sidebar-actions")
 
+const reportRefusal =
+	(title: string, facts: FailureCorrelation = {}) =>
+	(reason: unknown) => {
+		void reportFailure({ title }, { ...facts, reason })
+	}
+
 export const useSidebarActions = ({
 	attachments,
 	collapsedSections,
@@ -112,12 +118,9 @@ export const useSidebarActions = ({
 				}
 			},
 			onCreateBot: () => {
-				void roster.create().catch((reason: unknown) => {
-					void reportFailure(
-						{ title: i18n.t("bots:roster.createFailed") },
-						{ reason },
-					)
-				})
+				void roster
+					.create()
+					.catch(reportRefusal(i18n.t("bots:roster.createFailed")))
 			},
 			onCreateSection: (name, rowId) => {
 				const { rosters, conversationRosters, spaceRowId } = roster.getState()
@@ -135,14 +138,11 @@ export const useSidebarActions = ({
 					if (!created || !conversation) {
 						return
 					}
-					void roster
-						.moveConversationToSection(conversation, created.id)
-						.catch((reason: unknown) => {
-							void reportFailure(
-								{ title: i18n.t("bots:roster.conversationUnsaved") },
-								{ conversation, reason },
-							)
-						})
+					void roster.moveConversationToSection(conversation, created.id).catch(
+						reportRefusal(i18n.t("bots:roster.conversationUnsaved"), {
+							conversation,
+						}),
+					)
 				})
 			},
 			onCreateSpace: () => {
@@ -169,20 +169,19 @@ export const useSidebarActions = ({
 				void sections.remove(id)
 			},
 			onDuplicateBot: (id) => {
-				void roster.duplicate(id).catch((reason: unknown) => {
-					void reportFailure(
-						{ title: i18n.t("bots:roster.duplicateFailed") },
-						{ botId: id, reason },
+				void roster
+					.duplicate(id)
+					.catch(
+						reportRefusal(i18n.t("bots:roster.duplicateFailed"), { botId: id }),
 					)
-				})
 			},
 			onAddBotToSpace: (botId, spaceId) => {
-				void roster.addToSpace(botId, spaceId).catch((reason: unknown) => {
-					void reportFailure(
-						{ title: i18n.t("bots:spaces.add.failed") },
-						{ botId, space: spaceId, reason },
-					)
-				})
+				void roster.addToSpace(botId, spaceId).catch(
+					reportRefusal(i18n.t("bots:spaces.add.failed"), {
+						botId,
+						space: spaceId,
+					}),
+				)
 			},
 			onRemoveBotFromSpace: (botId, spaceId) => {
 				void roster.removeFromSpace(botId, spaceId)
