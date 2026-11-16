@@ -27,6 +27,7 @@ use super::bridge::{self, LocalApi};
 use super::contract::{HostingFailureKind, HostingState};
 use super::devices::Revocation;
 use super::handover::{self, Handover};
+use super::refusals::{self, Deliveries, RelayRefusal, Resync, SentKind};
 use super::replay::{self, Addressee, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
@@ -625,10 +626,13 @@ async fn online<R: Runtime>(
 		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 	}
 	let mut sink = MeasuredSocket::over(socket, frames);
+	let mut deliveries = Deliveries::default();
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
 	let unsent = recorded.borrow_and_update().rejoined(last_sent);
-	if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
+	let sending =
+		all_recorded_sent(&mut sink, &mut wire, &mut deliveries, &hosted, unsent, last_sent);
+	if let Err(ended) = sending.await {
 		return ended;
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
@@ -642,6 +646,7 @@ async fn online<R: Runtime>(
 	loop {
 		let mut held_turn = None;
 		let silent_at = sink.silent_at();
+		let resync_at = deliveries.next_resync_at();
 		let outgoing = tokio::select! {
 			_ = stop.changed() => return closed(&mut sink, ids).await,
 			frame = sink.next() => {
@@ -663,13 +668,19 @@ async fn online<R: Runtime>(
 						}
 						continue;
 					}
+					Some(RelayEvent::Refused(refusal)) => {
+						if let Err(ended) = refusal_handled(&mut sink, &mut wire, &mut deliveries, &hosted, &refusal).await {
+							return ended;
+						}
+						continue;
+					}
 					None => {}
 				}
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
 						log::warn!("{}", wire::dropped_line(ids.space_id, ids.instance_id, &refusal));
-						if let Err(ended) = rekey_answered(&mut sink, &hosted, &refusal).await {
+						if let Err(ended) = rekey_answered(&mut sink, &mut deliveries, &hosted, &refusal).await {
 							return ended;
 						}
 						continue;
@@ -697,7 +708,7 @@ async fn online<R: Runtime>(
 							"hosted space {} (instance {}) heard a hello from relay device {}",
 							ids.space_id, ids.instance_id, sender.relay_device_id
 						);
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Device(&sender.relay_device_id)).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Device(&sender.relay_device_id)).await {
 							return ended;
 						}
 						Outgoing::Hello(sender)
@@ -705,7 +716,7 @@ async fn online<R: Runtime>(
 					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
 						let resumed = recorded.borrow().resumed(&call, last_sent.position, &sender.account_id);
-						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
+						if let Err(ended) = all_sent(&mut sink, &mut wire, &mut deliveries, &sender, resumed.frames).await {
 							return ended;
 						}
 						relaying.member_resumed.notify_one();
@@ -723,7 +734,7 @@ async fn online<R: Runtime>(
 			Some(admitted) = admissions.join_next(), if !admissions.is_empty() => {
 				match admitted {
 					Ok(Ok(admitted)) if !admitted.is_empty() => {
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Everyone).await {
 							return ended;
 						}
 					}
@@ -740,7 +751,7 @@ async fn online<R: Runtime>(
 			Some(answer) = files.join_next(), if !files.is_empty() => match answer {
 				Ok((sender, answer)) => {
 					held_turn = Some(answer.turn);
-					Outgoing::Answer(sender, answer.frame)
+					Outgoing::FileAnswer(sender, answer.frame)
 				}
 				Err(failure) => {
 					log::error!("a relayed file of space {} ended abnormally: {failure}", ids.space_id);
@@ -756,14 +767,21 @@ async fn online<R: Runtime>(
 					Ok(unsent) => unsent,
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
-				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
+				let sending = all_recorded_sent(&mut sink, &mut wire, &mut deliveries, &hosted, unsent, last_sent);
+				if let Err(ended) = sending.await {
 					return ended;
 				}
 				continue;
 			}
 			Ok(()) = rotations.changed() => {
 				rotations.borrow_and_update();
-				if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
+				if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Everyone).await {
+					return ended;
+				}
+				continue;
+			}
+			_ = sleep_until(resync_at.unwrap_or_else(Instant::now)), if resync_at.is_some() => {
+				if let Err(ended) = resyncs_sent(&mut sink, &mut wire, &mut deliveries, &hosted).await {
 					return ended;
 				}
 				continue;
@@ -773,7 +791,7 @@ async fn online<R: Runtime>(
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
 			}
 		};
-		if let Err(ended) = delivered(&mut sink, &mut wire, outgoing).await {
+		if let Err(ended) = delivered(&mut sink, &mut wire, &mut deliveries, outgoing).await {
 			return ended;
 		}
 		drop(held_turn);
@@ -792,6 +810,7 @@ enum Received {
 
 enum Outgoing {
 	Answer(Rostered, String),
+	FileAnswer(Rostered, String),
 	Hello(Rostered),
 	Rechallenge(Rostered),
 	Ping,
@@ -886,6 +905,8 @@ enum RelayEvent {
 	DeviceRevoked { device_id: String, user_id: String },
 	#[serde(rename = "device.approved")]
 	DeviceApproved,
+	#[serde(skip)]
+	Refused(RelayRefusal),
 }
 
 fn relay_event_of(text: &str) -> Option<RelayEvent> {
@@ -893,7 +914,109 @@ fn relay_event_of(text: &str) -> Option<RelayEvent> {
 	if envelope.get("from").is_some() {
 		return None;
 	}
+	if let Some(refusal) = refusals::refusal_of(&envelope) {
+		return Some(RelayEvent::Refused(refusal));
+	}
 	serde_json::from_value(envelope).ok()
+}
+
+async fn refusal_handled(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	hosted: &HostedSpace<'_>,
+	refusal: &RelayRefusal,
+) -> Result<(), Ended> {
+	let line =
+		|sequel: &str| refusals::refusal_line(hosted.space_id, hosted.instance_id, refusal, sequel);
+	let Some(relay_device_id) = refusal.backlogged_device() else {
+		log::warn!("{}", line(""));
+		return Ok(());
+	};
+	let unconfirmed = deliveries.unconfirmed_line(relay_device_id);
+	let device = match rostered_device(hosted, relay_device_id).await {
+		Ok(Some(device)) => device,
+		Ok(None) => {
+			log::warn!(
+				"{}",
+				line(&format!("{unconfirmed}; no device of the roster, nothing changed"))
+			);
+			return Ok(());
+		}
+		Err(reason) => {
+			log::warn!("{}", line(&format!("{unconfirmed}; nothing changed: {reason}")));
+			return Ok(());
+		}
+	};
+	log::warn!("{}", line(&format!("{unconfirmed}; the device is behind")));
+	if deliveries.refused(relay_device_id) {
+		resync_sent(sink, wire, deliveries, hosted, &device).await?;
+	}
+	Ok(())
+}
+
+async fn resyncs_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	hosted: &HostedSpace<'_>,
+) -> Result<(), Ended> {
+	for resync in deliveries.resyncs_due(Instant::now()) {
+		let relay_device_id = match resync {
+			Resync::Due(relay_device_id) => relay_device_id,
+			Resync::Settled(relay_device_id) => {
+				resync_logged(hosted, &relay_device_id, "took its resync and is no longer behind");
+				continue;
+			}
+		};
+		match rostered_device(hosted, &relay_device_id).await {
+			Ok(Some(device)) => resync_sent(sink, wire, deliveries, hosted, &device).await?,
+			Ok(None) => {
+				deliveries.left(&relay_device_id);
+				resync_logged(
+					hosted,
+					&relay_device_id,
+					"left the roster and is no longer resynced",
+				);
+			}
+			Err(reason) => {
+				deliveries.refused(&relay_device_id);
+				resync_logged(hosted, &relay_device_id, &format!("was sent no resync: {reason}"));
+			}
+		}
+	}
+	Ok(())
+}
+
+async fn resync_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &Deliveries,
+	hosted: &HostedSpace<'_>,
+	to: &Rostered,
+) -> Result<(), Ended> {
+	let resync = deliveries.resync_frame(&to.relay_device_id);
+	sealed_sent(sink, wire, &resync, Some(to)).await?;
+	resync_logged(hosted, &to.relay_device_id, "was sent a resync");
+	Ok(())
+}
+
+fn resync_logged(hosted: &HostedSpace<'_>, relay_device_id: &str, what: &str) {
+	log::info!(
+		"hosted space {} (instance {}): relay device {} {what}",
+		hosted.space_id,
+		hosted.instance_id,
+		json!(relay_device_id)
+	);
+}
+
+async fn rostered_device(
+	hosted: &HostedSpace<'_>,
+	relay_device_id: &str,
+) -> Result<Option<Rostered>, String> {
+	roster::sender_of(hosted.database, hosted.space_id, &hosted.keys.device, relay_device_id)
+		.await
+		.map_err(|failure| format!("the roster did not read: {failure:?}"))
 }
 
 async fn revocation_handled<R: Runtime>(
@@ -916,6 +1039,7 @@ async fn revocation_handled<R: Runtime>(
 
 async fn rekey_answered(
 	sink: &mut MeasuredSocket<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	refusal: &Refusal,
 ) -> Result<(), Ended> {
@@ -923,7 +1047,9 @@ async fn rekey_answered(
 		return Ok(());
 	};
 	match refusal.cause {
-		Dropped::StaleKey(_) => rekeys_sent(sink, hosted, Recipients::Device(from)).await,
+		Dropped::StaleKey(_) => {
+			rekeys_sent(sink, deliveries, hosted, Recipients::Device(from)).await
+		}
 		Dropped::NotAdmitted => {
 			let refused = handover::not_admitted_frame(hosted.instance_id, from);
 			sink.sent(Message::text(refused)).await.map_err(Ended::Dropped)
@@ -975,6 +1101,7 @@ fn recipients_of<'a>(
 
 async fn rekeys_sent(
 	sink: &mut MeasuredSocket<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	recipients: Recipients<'_>,
 ) -> Result<(), Ended> {
@@ -989,6 +1116,7 @@ async fn rekeys_sent(
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => {
 				sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?;
+				deliveries.sent(&member.relay_device_id, SentKind::Rekey);
 				log::info!(
 					"hosted space {} (instance {}) sent a rekey to relay device {}: space key_id {}",
 					hosted.space_id,
@@ -1019,12 +1147,16 @@ async fn fell_behind(sink: &mut MeasuredSocket<'_>, missed: u64) -> Ended {
 async fn delivered(
 	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	outgoing: Outgoing,
 ) -> Result<(), Ended> {
 	let message = match outgoing {
 		Outgoing::Ping => Message::Ping(Vec::new().into()),
 		Outgoing::Answer(to, answer) => {
-			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(sealing_failed)?)
+			return answer_sent(sink, wire, deliveries, &to, &answer, SentKind::CallAnswer).await
+		}
+		Outgoing::FileAnswer(to, answer) => {
+			return answer_sent(sink, wire, deliveries, &to, &answer, SentKind::FileAnswer).await
 		}
 		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(sealing_failed)?),
 		Outgoing::Rechallenge(to) => {
@@ -1032,6 +1164,19 @@ async fn delivered(
 		}
 	};
 	sink.sent(message).await.map_err(Ended::Dropped)
+}
+
+async fn answer_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	to: &Rostered,
+	answer: &str,
+	kind: SentKind,
+) -> Result<(), Ended> {
+	sealed_sent(sink, wire, answer, Some(to)).await?;
+	deliveries.answered(&to.relay_device_id, kind, answer);
+	Ok(())
 }
 
 async fn sealed_sent(
@@ -1047,11 +1192,13 @@ async fn sealed_sent(
 async fn all_sent(
 	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	to: &Rostered,
 	frames: Vec<String>,
 ) -> Result<(), Ended> {
 	for frame in frames {
 		sealed_sent(sink, wire, &frame, Some(to)).await?;
+		deliveries.sent(&to.relay_device_id, SentKind::Event);
 	}
 	Ok(())
 }
@@ -1059,17 +1206,22 @@ async fn all_sent(
 async fn all_recorded_sent(
 	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	unsent: Vec<Stamped>,
 	last_sent: &mut LastSent,
 ) -> Result<(), Ended> {
 	for stamped in unsent {
 		match &stamped.addressee {
-			Addressee::Everyone => sealed_sent(sink, wire, &stamped.to_everyone(), None).await?,
+			Addressee::Everyone => {
+				sealed_sent(sink, wire, &stamped.to_everyone(), None).await?;
+				deliveries.sent_to_everyone();
+			}
 			addressee => {
 				for device in devices_of(hosted, addressee).await? {
 					let frame = stamped.to_account(&device.account_id);
 					sealed_sent(sink, wire, &frame, Some(&device)).await?;
+					deliveries.sent(&device.relay_device_id, SentKind::Event);
 				}
 			}
 		}

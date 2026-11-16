@@ -402,6 +402,24 @@ re-reads with calls the state it shows (for example `conversation_list`,
 `conversation_message_page`, `mission_list`). A client with no epoch yet re-reads
 on each socket open. Neither the epoch nor the seq survives an app restart.
 
+## Resync after a refused frame
+
+The relay drops a host frame that one member socket cannot take, because 64 MiB
+already wait unread for it, and tells the host alone. The host then sends that
+device a resync frame, again every 5 seconds while the relay keeps refusing
+frames to it:
+
+```json
+{ "resync": { "answered": [9, 12] } }
+```
+
+`answered` lists the ids of the calls the host answered to that device since it
+was last in step, the last 1024 at most. Every frame sent before the resync
+reached the device before it or was refused, so a call in `answered` still
+awaiting its answer lost it: the client ends it with an error. Then the client
+resumes from the last event it applied, as on a `seq` jump, dropping a resume
+already pending; a client with no epoch yet re-reads.
+
 ## Reading the schema
 
 - `commands.<name>.args` is the object schema of the call's `args`.

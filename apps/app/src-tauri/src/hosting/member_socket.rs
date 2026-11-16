@@ -50,7 +50,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::SPACE_DESCRIBED),
 ];
 
-const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];
+const FRAME_NAMES: [&str; 4] = ["CallFrame", "AnswerFrame", "EventFrame", "ResyncFrame"];
 
 const HUE_NAME: &str = "Hue";
 
@@ -198,6 +198,23 @@ fn frames() -> BTreeMap<String, Value> {
 					},
 				},
 				"required": ["event"],
+			}),
+		),
+		(
+			"ResyncFrame".to_owned(),
+			json!({
+				"description": "The host tells one member device that the relay refused a frame sent to it. answered lists the ids of the calls the host answered to that device since it was last in step: a call among them still awaiting its answer lost it and ends. The device then resumes as on a seq jump, or re-reads when it holds no epoch.",
+				"type": "object",
+				"properties": {
+					"resync": {
+						"type": "object",
+						"properties": {
+							"answered": { "type": "array", "items": id },
+						},
+						"required": ["answered"],
+					},
+				},
+				"required": ["resync"],
 			}),
 		),
 		(

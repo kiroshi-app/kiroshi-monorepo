@@ -6890,6 +6890,32 @@
       ],
       "type": "object"
     },
+    "ResyncFrame": {
+      "description": "The host tells one member device that the relay refused a frame sent to it. answered lists the ids of the calls the host answered to that device since it was last in step: a call among them still awaiting its answer lost it and ends. The device then resumes as on a seq jump, or re-reads when it holds no epoch.",
+      "properties": {
+        "resync": {
+          "properties": {
+            "answered": {
+              "items": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "answered"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "resync"
+      ],
+      "type": "object"
+    },
     "RosterDevice": {
       "properties": {
         "addedAt": {
@@ -14017,6 +14043,9 @@
     },
     {
       "$ref": "#/$defs/EventFrame"
+    },
+    {
+      "$ref": "#/$defs/ResyncFrame"
     }
   ],
   "title": "Kiroshi relay member socket"
