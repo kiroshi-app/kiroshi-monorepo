@@ -557,40 +557,36 @@ describe("the preview author of each panel", () => {
 describe("the failed verdict the sidebar list and the Agents page share", () => {
 	const AGENT = { id: "b-ada" } as Bot
 	const ROOM = { id: "c-room" } as Conversation
-
-	it("is failed when the read failed and the roster holds nothing", () => {
-		expect(
-			hasRosterFailedWithNothingHeld({
-				hasFailedToLoad: true,
-				bots: [],
-				conversations: [],
-			}),
-		).toBe(true)
-	})
+	const NOTHING = { bots: [], conversations: [] }
 
 	it.each([
-		{ held: "an agent", bots: [AGENT], conversations: [] },
-		{ held: "a conversation", bots: [], conversations: [ROOM] },
-	])(
-		"is not failed when the read failed with $held held",
-		({ bots, conversations }) => {
-			expect(
-				hasRosterFailedWithNothingHeld({
-					hasFailedToLoad: true,
-					bots,
-					conversations,
-				}),
-			).toBe(false)
+		{
+			read: "failed with nothing held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			isFailed: true,
 		},
-	)
-
-	it("is not failed when the read of a roster holding nothing succeeded", () => {
-		expect(
-			hasRosterFailedWithNothingHeld({
-				hasFailedToLoad: false,
-				bots: [],
-				conversations: [],
-			}),
-		).toBe(false)
+		{
+			read: "failed with an agent held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			bots: [AGENT],
+			isFailed: false,
+		},
+		{
+			read: "failed with a conversation held",
+			hasFailedToLoad: true,
+			...NOTHING,
+			conversations: [ROOM],
+			isFailed: false,
+		},
+		{
+			read: "succeeded with nothing held",
+			hasFailedToLoad: false,
+			...NOTHING,
+			isFailed: false,
+		},
+	])("is $isFailed when the read $read", ({ isFailed, ...roster }) => {
+		expect(hasRosterFailedWithNothingHeld(roster)).toBe(isFailed)
 	})
 })
