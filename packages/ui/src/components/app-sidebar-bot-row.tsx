@@ -23,6 +23,7 @@ import { CompanionMenuContent } from "@workspace/ui/components/companion-menu"
 import {
 	MissionCapsuleList,
 	type MissionOpening,
+	type MissionTreeRowWrap,
 } from "@workspace/ui/components/mission-capsule"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
@@ -68,6 +69,7 @@ interface BotRosterRowProps
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	wrapMission?: MissionTreeRowWrap
 	lift: Lifter
 }
 
@@ -98,6 +100,7 @@ const BotRosterRow = ({
 	onCreateSectionFor,
 	openMissionId,
 	onOpenMission,
+	wrapMission,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
@@ -172,6 +175,7 @@ const BotRosterRow = ({
 							missions={bot.missions}
 							onOpenMission={onOpenMission}
 							openMissionId={openMissionId}
+							wrapMission={wrapMission}
 						/>
 					) : null}
 				</ContextMenuTrigger>

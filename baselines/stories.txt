@@ -1531,6 +1531,8 @@ navigation-appsidebarbotrow--bot-own-row-keeps-its-avatar-and-no-pile
 navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active
 navigation-appsidebarbotrow--compact-row-at-rest-hovered-and-active-dark
 navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks
+navigation-appsidebarbotrow--mission-row-opens-the-mission-menu
+navigation-appsidebarbotrow--mission-row-without-a-menu-opens-no-menu
 navigation-appsidebarbotrow--selected-bot
 navigation-appsidebarbotrow--tooltip-carries-the-agent-name-alone
 navigation-appsidebarbotrow--tooltip-on-the-collapsed-sidebar
@@ -1549,6 +1551,7 @@ navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
 navigation-appsidebarconversationrow--conversation-on-the-icon-rail
 navigation-appsidebarconversationrow--conversation-on-the-icon-rail-dark
+navigation-appsidebarconversationrow--conversation-title-keeps-the-conversation-menu
 navigation-appsidebarconversationrow--icon-at-the-height-of-its-two-lines
 navigation-appsidebarconversationrow--idle-conversation-ignores-background-tasks
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
@@ -1562,6 +1565,8 @@ navigation-appsidebarconversationrow--mission-group-hovered
 navigation-appsidebarconversationrow--mission-group-hovered-dark
 navigation-appsidebarconversationrow--mission-group-menu-open
 navigation-appsidebarconversationrow--mission-group-menu-open-dark
+navigation-appsidebarconversationrow--mission-row-opens-the-mission-menu
+navigation-appsidebarconversationrow--mission-row-without-a-menu-opens-no-menu
 navigation-appsidebarconversationrow--mission-tooltip-carries-the-title-alone
 navigation-appsidebarconversationrow--mission-tooltip-on-the-collapsed-sidebar
 navigation-appsidebarconversationrow--mission-tooltip-wraps-a-long-title
