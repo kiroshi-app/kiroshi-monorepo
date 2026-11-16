@@ -1,6 +1,6 @@
 "use client"
 
-import { type ReactNode, useState } from "react"
+import { type ReactNode, type Ref, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -79,10 +79,31 @@ const HeaderButton = ({ label, onClick, children }: HeaderButtonProps) => (
 	</TooltipButton>
 )
 
-type CommentRowProps = { comment: LibraryComment; names: string[] }
+const SCROLLER_SLOT = "library-comment-scroller"
 
-const CommentRow = ({ comment, names }: CommentRowProps) => (
-	<li className={ROW} data-slot="library-comment">
+const showLatest = (latest: HTMLElement | null) => {
+	const scroller = latest?.closest(`[data-slot="${SCROLLER_SLOT}"]`)
+	if (scroller) scroller.scrollTop = scroller.scrollHeight
+}
+
+const keepWheelOffHost = (scroller: HTMLElement | null) => {
+	if (!scroller) return undefined
+	const keepWheel = (wheel: WheelEvent) => {
+		if (!wheel.ctrlKey && scroller.scrollHeight > scroller.clientHeight)
+			wheel.stopPropagation()
+	}
+	scroller.addEventListener("wheel", keepWheel, { passive: true })
+	return () => scroller.removeEventListener("wheel", keepWheel)
+}
+
+type CommentRowProps = {
+	comment: LibraryComment
+	names: string[]
+	ref?: Ref<HTMLLIElement>
+}
+
+const CommentRow = ({ comment, names, ref }: CommentRowProps) => (
+	<li className={ROW} data-slot="library-comment" ref={ref}>
 		<LibraryCommentAvatar author={comment.author} />
 		<div className="flex min-w-0 flex-col gap-0.5">
 			<p className={AUTHOR_LINE}>
@@ -127,7 +148,7 @@ const AgentsAtWorkRow = ({ agents }: AgentsAtWorkRowProps) => {
 	const [isDetailOpen, setDetailOpen] = useState(false)
 
 	return (
-		<div className="p-3" data-slot="library-comment-working">
+		<div className="p-3" data-slot="library-comment-working" ref={showLatest}>
 			<ThreadWorkLine
 				agents={agents}
 				className="not-data-open:ps-0"
@@ -185,7 +206,7 @@ const LibraryCommentThread = ({
 		>
 			<section
 				aria-label={anchorLine}
-				className="overflow-clip rounded-control bg-comment-card text-foreground shadow-comment-card"
+				className="flex max-h-[60dvh] flex-col overflow-clip rounded-control bg-comment-card text-foreground shadow-comment-card"
 				data-resolved={isResolved || undefined}
 				data-slot="library-comment-thread"
 			>
@@ -226,29 +247,40 @@ const LibraryCommentThread = ({
 						</HeaderButton>
 					</div>
 				</header>
-				<ul>
-					{shown.map((comment) => (
-						<CommentRow
-							comment={comment}
-							key={comment.id}
-							names={draft.names}
-						/>
-					))}
-				</ul>
-				{isResolved && replies.length > 0 ? (
-					<p
-						className="break-words ps-11 pe-3 pb-3 font-medium text-compact text-primary leading-4.5"
-						data-slot="library-comment-replies"
-					>
-						{t("library.comments.thread.replies", {
-							count: replies.length,
-							names: joinNames(i18n.language, repliersOf(replies)),
-						})}
-					</p>
-				) : null}
-				{agentsAtWork.length > 0 && !isResolved ? (
-					<AgentsAtWorkRow agents={agentsAtWork} />
-				) : null}
+				<div
+					aria-label={t("library.comments.thread.comments")}
+					className="overflow-y-auto overscroll-contain outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
+					data-slot={SCROLLER_SLOT}
+					ref={keepWheelOffHost}
+					role="group"
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: a thread taller than its card must be keyboard scrollable
+					tabIndex={0}
+				>
+					<ul>
+						{shown.map((comment) => (
+							<CommentRow
+								comment={comment}
+								key={comment.id}
+								names={draft.names}
+								ref={comment === shown.at(-1) ? showLatest : undefined}
+							/>
+						))}
+					</ul>
+					{isResolved && replies.length > 0 ? (
+						<p
+							className="break-words ps-11 pe-3 pb-3 font-medium text-compact text-primary leading-4.5"
+							data-slot="library-comment-replies"
+						>
+							{t("library.comments.thread.replies", {
+								count: replies.length,
+								names: joinNames(i18n.language, repliersOf(replies)),
+							})}
+						</p>
+					) : null}
+					{agentsAtWork.length > 0 && !isResolved ? (
+						<AgentsAtWorkRow agents={agentsAtWork} />
+					) : null}
+				</div>
 				{resolution ? (
 					<footer
 						className={cn(

@@ -1737,6 +1737,7 @@ navigation-boardcanvas--comment-on-gone-shape-dark
 navigation-boardcanvas--comment-pin-follows-moved-node
 navigation-boardcanvas--comment-pins
 navigation-boardcanvas--comment-pins-dark
+navigation-boardcanvas--comment-thread-long
 navigation-boardcanvas--comment-thread-open
 navigation-boardcanvas--comment-thread-open-dark
 navigation-boardcanvas--commented-node-across-zoom
@@ -1992,6 +1993,9 @@ navigation-librarycommentthread--first-comment-dark
 navigation-librarycommentthread--handover-to-reply
 navigation-librarycommentthread--long-content
 navigation-librarycommentthread--long-content-dark
+navigation-librarycommentthread--long-thread
+navigation-librarycommentthread--long-thread-dark
+navigation-librarycommentthread--long-thread-resolved
 navigation-librarycommentthread--replies
 navigation-librarycommentthread--replies-dark
 navigation-librarycommentthread--resolved
@@ -2139,6 +2143,7 @@ navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-over-mention
 navigation-librarydocumenteditor--comment-mode-selection-starts-passage-comment
 navigation-librarydocumenteditor--comment-passage-draft-below-view-scrolls-into-view
+navigation-librarydocumenteditor--comment-thread-long
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--doc-1-pins-at-rest
 navigation-librarydocumenteditor--doc-1-pins-at-rest-dark
@@ -2515,6 +2520,7 @@ overlays-libraryimagecomments--comment-mode
 overlays-libraryimagecomments--comment-mode-light
 overlays-libraryimagecomments--escape-after-comment-button-leaves-mode
 overlays-libraryimagecomments--escape-closes-innermost
+overlays-libraryimagecomments--long-thread-open
 overlays-libraryimagecomments--point-draft
 overlays-libraryimagecomments--resolved-thread-in-place
 overlays-libraryimagecomments--zone-draft

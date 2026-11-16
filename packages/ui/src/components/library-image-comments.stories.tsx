@@ -3,13 +3,17 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectCommentThreadCapped,
 	hueScopeOf,
 	slotIn,
 	slotsIn,
 	withStoryProps,
 } from "@workspace/storybook/story-utils"
 import { LIBRARY_ITEMS } from "@workspace/ui/components/library.fixtures"
-import type { LibraryCommentResolution } from "@workspace/ui/components/library-comment-thread"
+import type {
+	LibraryCommentResolution,
+	LibraryCommentThreadProps,
+} from "@workspace/ui/components/library-comment-thread"
 import {
 	AGENT_REPLY,
 	COMMENT_COUNTS,
@@ -17,6 +21,7 @@ import {
 	FIRST_COMMENT,
 	JUNIPER,
 	LENA,
+	LONG_THREAD_COMMENTS,
 	OPEN_THREADS,
 	STEVE,
 } from "@workspace/ui/components/library-comments.fixtures"
@@ -79,6 +84,7 @@ type ViewerWithCommentsProps = {
 	threads: LibraryImageThread[]
 	isCommentMode: boolean
 	openThreadId?: string
+	comments: LibraryCommentThreadProps["comments"]
 	resolution?: LibraryCommentResolution
 	draftAnchor?: LibraryImageAnchor
 	onCommentModeChange: (isCommentMode: boolean) => void
@@ -93,6 +99,7 @@ const ViewerWithComments = ({
 	threads,
 	isCommentMode,
 	openThreadId,
+	comments,
 	resolution,
 	draftAnchor,
 	onCommentModeChange,
@@ -137,7 +144,7 @@ const ViewerWithComments = ({
 									? undefined
 									: {
 											id: openThreadId,
-											comments: [FIRST_COMMENT, AGENT_REPLY],
+											comments,
 											participants: COMMENT_PARTICIPANTS,
 											resolution,
 											reply,
@@ -222,6 +229,7 @@ const LiveViewer = ({
 const VIEWER_ARGS: ViewerWithCommentsProps = {
 	threads: IMAGE_THREADS,
 	isCommentMode: false,
+	comments: [FIRST_COMMENT, AGENT_REPLY],
 	onCommentModeChange: fn(),
 	onOpenThread: fn(),
 	onStartComment: fn(),
@@ -644,6 +652,24 @@ export const ZoneThreadOpenLight = meta.story({
 		await expect(
 			getComputedStyle(slotIn(popup, "library-comment-thread")).backgroundColor,
 		).toBe("rgb(31, 31, 31)")
+	},
+})
+
+export const LongThreadOpen = meta.story({
+	args: { openThreadId: BOAT_THREAD, comments: LONG_THREAD_COMMENTS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The thread of a zone holding thirty one comments. Check the card stops at 60 percent of the window height with its header and its reply field whole, the comments scroll between them with the latest one in view, and the capped card stays inside the stage.",
+			},
+		},
+	},
+	play: async () => {
+		const { popup } = await viewer()
+		const card = slotIn(popup, "library-comment-thread")
+		await expectCommentThreadCapped(card)
+		await waitFor(() => expectInsideStage(card, popup))
 	},
 })
 
