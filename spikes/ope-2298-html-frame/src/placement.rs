@@ -233,19 +233,24 @@ impl Seat {
 		}
 	}
 
-	pub fn show(&self, is_shown: bool) -> Result<(), String> {
-		let webview = self.webview();
-		let shown = if is_shown { webview.show() } else { webview.hide() };
-		shown.map_err(|cause| cause.to_string())
+	fn show(&self) -> Result<(), String> {
+		self.webview().show().map_err(|cause| cause.to_string())
+	}
+
+	pub fn hide(&self) -> Result<(), String> {
+		self.webview().hide().map_err(|cause| cause.to_string())
 	}
 }
 
 fn apply(seat: &Seat, report: &PlacementReport, page_origin: Shift) -> Result<Applied, String> {
 	let target = report.target();
-	if let Some(target) = target {
-		seat.move_to(target.moved_by(page_origin))?;
+	match target {
+		Some(target) => {
+			seat.move_to(target.moved_by(page_origin))?;
+			seat.show()?;
+		}
+		None => seat.hide()?,
 	}
-	seat.show(target.is_some())?;
 	let bounds = seat.rectangle()?;
 	let applied_at_epoch_ms = SystemTime::now()
 		.duration_since(UNIX_EPOCH)

@@ -406,17 +406,10 @@ impl Run {
 	fn placements(&self) -> Vec<(&'static str, Value)> {
 		use crate::trials::{self, Tried};
 		let rest = || self.thread_view.latest_report();
-		if !wait_until(PLACEHOLDER_TIMEOUT, || rest().is_some()) {
-			return vec![(
-				"placement_verdict",
-				json!({ "verdict": NOT_POSSIBLE, "reason": NO_REPORT }),
-			)];
-		}
+		wait_until(PLACEHOLDER_TIMEOUT, || rest().is_some());
 		let Some(asked) = rest().and_then(|report| report.target()) else {
-			return vec![(
-				"placement_verdict",
-				json!({ "verdict": NOT_POSSIBLE, "reason": NO_REPORT }),
-			)];
+			let verdict = json!({ "verdict": NOT_POSSIBLE, "reason": NO_REPORT });
+			return vec![("display_setup", display_setup()), ("placement_verdict", verdict)];
 		};
 		let Tried { cause, trials, holder } = trials::run(&self.main_window, asked);
 		let held: Vec<_> =

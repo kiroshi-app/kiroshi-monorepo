@@ -456,11 +456,11 @@ impl Stage<'_> {
 		through_tauri(
 			self.seat.webview().eval(VIEW_PAINT_SCRIPT.replace("PAINT", VIEW_PAINT.css)),
 		)?;
-		self.seat.show(false)?;
-		let placeholder_drawn = self.drawn(name, PLACEHOLDER_PAINT);
+		self.seat.hide()?;
+		let placeholder_capture = self.drawn(name, PLACEHOLDER_PAINT);
 		let page_origin = self.thread_view.page_origin();
 		self.thread_view.place_from(page_origin);
-		let placeholder_drawn = placeholder_drawn?;
+		let placeholder_drawn = placeholder_capture?;
 		let view_drawn = self.drawn(name, VIEW_PAINT)?;
 		let report = self.thread_view.latest_report().ok_or(NO_REPORT)?;
 		let target = report.target().ok_or("the placeholder is hidden or under an overlay")?;

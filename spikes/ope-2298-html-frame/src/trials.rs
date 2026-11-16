@@ -16,6 +16,10 @@ use crate::windows::open_blank_child;
 const PROBE_LABEL: &str = "placement-probe";
 const PROBE_URL: &str = "about:blank";
 const LAYOUT_SETTLE: Duration = Duration::from_millis(500);
+const GTK_ALLOCATION: &str =
+	"the GTK allocation of the webview widget, translated to the window content";
+const X11_ATTRIBUTES: &str =
+	"XGetWindowAttributes on the X11 child window, through the bounds getter of wry";
 const HOLDS: &str = "holds";
 const FAILS: &str = "fails";
 const PACKING_SOURCE: &str = "tauri-runtime-wry 2.12.1 src/lib.rs:5171-5174 builds every webview of a window with build_gtk on the default vbox of the window, and wry 0.57.0 src/webkitgtk/mod.rs:690-694 adds it to that GtkBox with pack_start(webview, true, true, 0)";
@@ -25,7 +29,7 @@ thread_local! {
 	static WRY_PROBE: RefCell<Option<wry::WebView>> = const { RefCell::new(None) };
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Default, Serialize)]
 struct Reading {
 	rectangle_read_back: Option<Rectangle>,
 	rectangle_read_back_from: &'static str,
@@ -37,11 +41,27 @@ struct Reading {
 	widget_tree: Value,
 }
 
-#[derive(Serialize)]
-pub struct Trial {
+#[derive(Clone, Copy, Serialize)]
+struct Way {
 	name: &'static str,
 	calls: &'static str,
 	is_a_webview_tauri_manages: bool,
+}
+
+impl Way {
+	const fn of_tauri(name: &'static str, calls: &'static str) -> Self {
+		Self { name, calls, is_a_webview_tauri_manages: true }
+	}
+
+	const fn of_wry_alone(name: &'static str, calls: &'static str) -> Self {
+		Self { name, calls, is_a_webview_tauri_manages: false }
+	}
+}
+
+#[derive(Serialize)]
+pub struct Trial {
+	#[serde(flatten)]
+	way: Way,
 	rectangle_asked: Rectangle,
 	#[serde(flatten)]
 	reading: Reading,
@@ -50,18 +70,10 @@ pub struct Trial {
 }
 
 impl Trial {
-	fn judged(
-		name: &'static str,
-		calls: &'static str,
-		is_a_webview_tauri_manages: bool,
-		rectangle_asked: Rectangle,
-		reading: Reading,
-	) -> Self {
+	fn judged(way: Way, rectangle_asked: Rectangle, reading: Reading) -> Self {
 		let verdict = verdict_of(rectangle_asked, &reading);
 		Self {
-			name,
-			calls,
-			is_a_webview_tauri_manages,
+			way,
 			rectangle_asked,
 			reading,
 			result: if verdict.is_ok() { HOLDS } else { FAILS },
@@ -69,27 +81,13 @@ impl Trial {
 		}
 	}
 
-	fn not_mounted(
-		name: &'static str,
-		calls: &'static str,
-		is_a_webview_tauri_manages: bool,
-		rectangle_asked: Rectangle,
-		cause: String,
-	) -> Self {
+	fn not_mounted(way: Way, rectangle_asked: Rectangle, cause: String) -> Self {
 		Self {
-			name,
-			calls,
-			is_a_webview_tauri_manages,
+			way,
 			rectangle_asked,
 			reading: Reading {
-				rectangle_read_back: None,
 				rectangle_read_back_from: "nothing: the view was not mounted",
-				rectangle_read_back_through_the_bounds_getter: None,
-				main_webview_bounds_read_back: None,
-				main_webview_bounds_read_back_through_tauri: None,
-				window_content: None,
-				faults: Vec::new(),
-				widget_tree: Value::Null,
+				..Reading::default()
 			},
 			result: FAILS,
 			reason: format!("the view could not be mounted this way: {cause}"),
@@ -101,7 +99,7 @@ impl Trial {
 	}
 
 	pub fn name(&self) -> &'static str {
-		self.name
+		self.way.name
 	}
 }
 
@@ -146,95 +144,75 @@ impl Bench<'_> {
 		self.main_window.as_ref()
 	}
 
-	fn shared_reading(
+	fn reading(
 		&self,
-		faults: &mut Vec<String>,
-	) -> (Option<Rectangle>, Option<Rectangle>, Option<Rectangle>, Value) {
+		view: Result<Rectangle, String>,
+		view_read_from: &'static str,
+		view_through_the_getter: Result<Rectangle, String>,
+	) -> Reading {
 		let main_webview = self.main_webview();
-		let by_gtk = kept(layer::rectangle_read_by_gtk(main_webview), faults);
-		let by_tauri = kept(bounds_of(main_webview).map_err(|cause| cause.to_string()), faults);
-		let content = kept(layer::window_content(main_webview), faults);
-		let tree = layer::widget_tree(main_webview)
-			.unwrap_or_else(|fault| json!({ "unavailable": fault }));
-		(by_gtk, by_tauri, content, tree)
+		let mut faults = Vec::new();
+		Reading {
+			rectangle_read_back: kept(view, &mut faults),
+			rectangle_read_back_from: view_read_from,
+			rectangle_read_back_through_the_bounds_getter: kept(
+				view_through_the_getter,
+				&mut faults,
+			),
+			main_webview_bounds_read_back: kept(
+				layer::rectangle_read_by_gtk(main_webview),
+				&mut faults,
+			),
+			main_webview_bounds_read_back_through_tauri: kept(
+				bounds_of(main_webview).map_err(|cause| cause.to_string()),
+				&mut faults,
+			),
+			window_content: kept(layer::window_content(main_webview), &mut faults),
+			widget_tree: layer::widget_tree(main_webview)
+				.unwrap_or_else(|fault| json!({ "unavailable": fault })),
+			faults,
+		}
 	}
 
 	fn reading_of(&self, probe: &Webview) -> Reading {
 		thread::sleep(LAYOUT_SETTLE);
-		let mut faults = Vec::new();
-		let rectangle_read_back = kept(layer::rectangle_read_by_gtk(probe), &mut faults);
-		let through_the_getter =
-			kept(bounds_of(probe).map_err(|cause| cause.to_string()), &mut faults);
-		let (main_by_gtk, main_by_tauri, window_content, widget_tree) =
-			self.shared_reading(&mut faults);
-		Reading {
-			rectangle_read_back,
-			rectangle_read_back_from:
-				"the GTK allocation of the webview widget, translated to the window content",
-			rectangle_read_back_through_the_bounds_getter: through_the_getter,
-			main_webview_bounds_read_back: main_by_gtk,
-			main_webview_bounds_read_back_through_tauri: main_by_tauri,
-			window_content,
-			faults,
-			widget_tree,
-		}
+		self.reading(
+			layer::rectangle_read_by_gtk(probe),
+			GTK_ALLOCATION,
+			bounds_of(probe).map_err(|cause| cause.to_string()),
+		)
 	}
 
 	fn reading_of_the_wry_probe(&self, is_in_the_window_content: bool) -> Reading {
 		thread::sleep(LAYOUT_SETTLE);
-		let mut faults = Vec::new();
 		let read = native::read(self.main_webview(), move |_| {
 			WRY_PROBE.with_borrow(|probe| {
 				let probe = probe.as_ref().ok_or("the wry webview is gone")?;
-				let by_wry = probe.bounds().map_err(|cause| cause.to_string()).map(|bounds| {
-					let scale = f64::from(probe.webview().scale_factor());
-					let position = bounds.position.to_logical::<f64>(scale);
-					let size = bounds.size.to_logical::<f64>(scale);
-					Rectangle {
-						x: position.x,
-						y: position.y,
-						width: size.width,
-						height: size.height,
-					}
-				});
+				let bounds = probe.bounds().map_err(|cause| cause.to_string())?;
+				let scale = f64::from(probe.webview().scale_factor());
+				let position = bounds.position.to_logical::<f64>(scale);
+				let size = bounds.size.to_logical::<f64>(scale);
+				let by_wry = Rectangle {
+					x: position.x,
+					y: position.y,
+					width: size.width,
+					height: size.height,
+				};
 				let by_gtk = is_in_the_window_content
-					.then(|| layer::rectangle_in_the_window_content(probe.webview().upcast_ref()));
+					.then(|| layer::rectangle_in_the_window_content(probe.webview().upcast_ref()))
+					.transpose()?;
 				Ok::<_, String>((by_wry, by_gtk))
 			})
 		});
-		let (by_wry, by_gtk) = match read.and_then(|read| read) {
-			Ok((by_wry, by_gtk)) => (kept(by_wry, &mut faults), by_gtk),
-			Err(fault) => {
-				faults.push(fault);
-				(None, None)
-			}
-		};
-		let (rectangle_read_back, rectangle_read_back_from) = match by_gtk {
-			Some(by_gtk) => (
-				kept(by_gtk, &mut faults),
-				"the GTK allocation of the webview widget, translated to the window content",
-			),
-			None => (
-				by_wry,
-				"XGetWindowAttributes on the X11 child window, through the bounds getter of wry",
-			),
-		};
-		let (main_by_gtk, main_by_tauri, window_content, widget_tree) =
-			self.shared_reading(&mut faults);
-		Reading {
-			rectangle_read_back,
-			rectangle_read_back_from,
-			rectangle_read_back_through_the_bounds_getter: by_wry,
-			main_webview_bounds_read_back: main_by_gtk,
-			main_webview_bounds_read_back_through_tauri: main_by_tauri,
-			window_content,
-			faults,
-			widget_tree,
+		match read.and_then(|read| read) {
+			Ok((by_wry, Some(by_gtk))) => self.reading(Ok(by_gtk), GTK_ALLOCATION, Ok(by_wry)),
+			Ok((by_wry, None)) => self.reading(Ok(by_wry), X11_ATTRIBUTES, Ok(by_wry)),
+			Err(fault) => self.reading(Err(fault.clone()), X11_ATTRIBUTES, Err(fault)),
 		}
 	}
 
 	fn tauri_trials(&self, trials: &mut Vec<Trial>) -> Option<Holder> {
-		const ADD_CHILD: (&str, &str) = (
+		const ADD_CHILD: Way = Way::of_tauri(
 			"tauri-window-add-child",
 			"tauri::Window::add_child(builder, position, size) with the rectangle asked for",
 		);
@@ -242,30 +220,33 @@ impl Bench<'_> {
 		let probe = match open_blank_child(self.main_window, PROBE_LABEL, PROBE_URL, asked) {
 			Ok(probe) => probe,
 			Err(cause) => {
-				let (name, calls) = ADD_CHILD;
-				trials.push(Trial::not_mounted(name, calls, true, asked, cause.to_string()));
+				trials.push(Trial::not_mounted(ADD_CHILD, asked, cause.to_string()));
 				return None;
 			}
 		};
-		let mut record = |name, calls, moved: Result<(), String>| {
+		let mut record = |way: Way, moved: Result<(), String>| {
 			let trial = match moved {
-				Ok(()) => Trial::judged(name, calls, true, asked, self.reading_of(&probe)),
-				Err(cause) => Trial::not_mounted(name, calls, true, asked, cause),
+				Ok(()) => Trial::judged(way, asked, self.reading_of(&probe)),
+				Err(cause) => Trial::not_mounted(way, asked, cause),
 			};
 			let holds = trial.holds();
 			trials.push(trial);
 			holds
 		};
 		let through_tauri = |moved: tauri::Result<()>| moved.map_err(|cause| cause.to_string());
-		record(ADD_CHILD.0, ADD_CHILD.1, Ok(()));
+		record(ADD_CHILD, Ok(()));
 		record(
-			"tauri-webview-set-bounds",
-			"tauri::Webview::set_bounds(rectangle) on the child webview add_child mounted",
+			Way::of_tauri(
+				"tauri-webview-set-bounds",
+				"tauri::Webview::set_bounds(rectangle) on the child webview add_child mounted",
+			),
 			through_tauri(probe.set_bounds(asked.into())),
 		);
 		record(
-			"tauri-webview-set-position-and-size",
-			"tauri::Webview::set_position(position) then tauri::Webview::set_size(size) on the same child webview",
+			Way::of_tauri(
+				"tauri-webview-set-position-and-size",
+				"tauri::Webview::set_position(position) then tauri::Webview::set_size(size) on the same child webview",
+			),
 			through_tauri(
 				probe
 					.set_position(LogicalPosition::new(asked.x, asked.y))
@@ -286,7 +267,7 @@ impl Bench<'_> {
 		]
 		.map(|(holder, name, calls)| {
 			let moved = layer::raise(&probe, holder).and_then(|()| layer::show_at(&probe, asked));
-			record(name, calls, moved).then_some(holder)
+			record(Way::of_tauri(name, calls), moved).then_some(holder)
 		});
 		if let Err(cause) = probe.close() {
 			eprintln!("the placement probe could not be closed: {cause}");
@@ -297,8 +278,7 @@ impl Bench<'_> {
 
 	fn wry_trial(
 		&self,
-		name: &'static str,
-		calls: &'static str,
+		way: Way,
 		is_in_the_window_content: bool,
 		build: impl FnOnce(WebViewBuilder<'_>, &gtk::Widget) -> Result<wry::WebView, String>
 			+ Send
@@ -317,14 +297,10 @@ impl Bench<'_> {
 			Ok::<_, String>(())
 		});
 		let trial = match built.and_then(|built| built) {
-			Ok(()) => Trial::judged(
-				name,
-				calls,
-				false,
-				asked,
-				self.reading_of_the_wry_probe(is_in_the_window_content),
-			),
-			Err(cause) => Trial::not_mounted(name, calls, false, asked, cause),
+			Ok(()) => {
+				Trial::judged(way, asked, self.reading_of_the_wry_probe(is_in_the_window_content))
+			}
+			Err(cause) => Trial::not_mounted(way, asked, cause),
 		};
 		if let Err(cause) = native::read(self.main_webview(), |_| WRY_PROBE.set(None)) {
 			eprintln!("the wry probe could not be dropped: {cause}");
@@ -385,8 +361,10 @@ pub fn run(main_window: &WebviewWindow, asked: Rectangle) -> Tried {
 	let holder = bench.tauri_trials(&mut trials);
 	let cause = trials.first().map(cause_of);
 	trials.push(bench.wry_trial(
-		"wry-build-gtk-in-a-fixed",
-		"wry::WebViewBuilder::with_bounds(rectangle).build_gtk(&fixed) on the GtkFixed laid over the main webview, then wry::WebView::set_bounds(rectangle): a webview of wry alone, outside the Tauri runtime",
+		Way::of_wry_alone(
+			"wry-build-gtk-in-a-fixed",
+			"wry::WebViewBuilder::with_bounds(rectangle).build_gtk(&fixed) on the GtkFixed laid over the main webview, then wry::WebView::set_bounds(rectangle): a webview of wry alone, outside the Tauri runtime",
+		),
 		true,
 		|builder, main_webview| {
 			let board = layer::board_under(main_webview)?;
@@ -395,8 +373,10 @@ pub fn run(main_window: &WebviewWindow, asked: Rectangle) -> Tried {
 	));
 	let parent = main_window.clone();
 	trials.push(bench.wry_trial(
-		"wry-build-as-child",
-		"wry::WebViewBuilder::with_bounds(rectangle).build_as_child(&main_window), then wry::WebView::set_bounds(rectangle): an X11 child window of the main window holding a webview of wry alone, outside the Tauri runtime",
+		Way::of_wry_alone(
+			"wry-build-as-child",
+			"wry::WebViewBuilder::with_bounds(rectangle).build_as_child(&main_window), then wry::WebView::set_bounds(rectangle): an X11 child window of the main window holding a webview of wry alone, outside the Tauri runtime",
+		),
 		false,
 		move |builder, _| builder.build_as_child(&parent).map_err(|cause| cause.to_string()),
 	));
