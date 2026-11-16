@@ -1,0 +1,306 @@
+{
+  "duration_ms": 19080,
+  "main_window_csp_served": [
+    "base-uri 'self'; script-src 'self' 'self' 'sha256-62iTz8fLBb8Km2H+hWi5i/TCp+hjlYuATJOkFgxc3a0='; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; default-src 'self'; object-src 'none'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; frame-src http://127.0.0.1:53866",
+    "base-uri 'self'; script-src 'self' 'self' 'sha256-62iTz8fLBb8Km2H+hWi5i/TCp+hjlYuATJOkFgxc3a0='; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; default-src 'self'; object-src 'none'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; frame-src http://127.0.0.1:53941"
+  ],
+  "mode": "frame",
+  "os": "macos",
+  "page_claims_never_used_alone_for_a_verdict": {
+    "first_view": {
+      "allowlist-fetch-cdn-jsdelivr": "ok",
+      "allowlist-fetch-example-com": "blocked-TypeError",
+      "busy-loop": "finished",
+      "ipc-forged-custom-protocol": "blocked-TypeError",
+      "ipc-forged-fetch-ipc-localhost": "blocked-TypeError",
+      "ipc-forged-postmessage": "sent-webkit-parent-top",
+      "ipc-tauri-global": "blocked-TypeError",
+      "ipc-tauri-internals": "blocked-TypeError",
+      "navigation-anchor-download": "attempted",
+      "navigation-meta-refresh": "attempted",
+      "navigation-self": "attempted",
+      "navigation-top": "blocked-SecurityError",
+      "navigation-window-open": "attempted",
+      "parent-cookie-read": "blocked-SecurityError",
+      "parent-cookie-write": "blocked-SecurityError",
+      "parent-dom-read": "blocked-SecurityError",
+      "parent-dom-write": "blocked-SecurityError",
+      "parent-storage-read": "blocked-SecurityError",
+      "parent-storage-write": "blocked-SecurityError",
+      "run": "done",
+      "storage-write-cache": "ok",
+      "storage-write-cookie": "not-stored",
+      "storage-write-indexeddb": "ok",
+      "storage-write-localstorage": "ok",
+      "top-dom-read": "blocked-SecurityError",
+      "top-dom-write": "blocked-SecurityError",
+      "tripwire-lan-fetch": "blocked-TypeError",
+      "tripwire-lan-form-post": "submitted",
+      "tripwire-lan-img": "blocked-error",
+      "tripwire-lan-websocket": "blocked-SecurityError",
+      "tripwire-loopback-fetch": "blocked-TypeError",
+      "tripwire-loopback-form-post": "submitted",
+      "tripwire-loopback-img": "blocked-error",
+      "tripwire-loopback-websocket": "blocked-SecurityError"
+    },
+    "second_view": {
+      "run": "done",
+      "storage-read-cache": "none",
+      "storage-read-cookie": "none",
+      "storage-read-indexeddb": "none",
+      "storage-read-localstorage": "none"
+    }
+  },
+  "proofs": [
+    {
+      "attempts": [
+        "ipc-tauri-global",
+        "ipc-tauri-internals",
+        "ipc-forged-postmessage",
+        "ipc-forged-fetch-ipc-localhost",
+        "ipc-forged-custom-protocol"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "calls_while_a_view_was_open": [],
+        "control_calls_before_a_view_opened": [
+          {
+            "webview": "main",
+            "while_view_open": false
+          },
+          {
+            "webview": "main",
+            "while_view_open": false
+          }
+        ],
+        "spike_secret_calls_counted": 2
+      },
+      "name": "The view reaches no host command",
+      "proof": 1,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "parent-dom-read",
+        "parent-dom-write",
+        "top-dom-read",
+        "top-dom-write",
+        "parent-cookie-read",
+        "parent-cookie-write",
+        "parent-storage-read",
+        "parent-storage-write"
+      ],
+      "evidence": {
+        "altered_snapshots": [],
+        "attempts_never_signalled": [],
+        "integrity_snapshots_compared": 178,
+        "main_documents_checked": 2,
+        "requests_carrying_a_main_window_secret": []
+      },
+      "name": "The view neither reads nor alters the main window",
+      "proof": 2,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "tripwire-loopback-fetch",
+        "tripwire-loopback-img",
+        "tripwire-loopback-websocket",
+        "tripwire-loopback-form-post",
+        "tripwire-lan-fetch",
+        "tripwire-lan-img",
+        "tripwire-lan-websocket",
+        "tripwire-lan-form-post"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "lan_tripwire": {
+          "address": "192.0.0.3:53862",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "loopback_tripwire": {
+          "address": "127.0.0.1:53860",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        }
+      },
+      "name": "The view reaches no local service",
+      "proof": 3,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "allowlist-fetch-cdn-jsdelivr",
+        "allowlist-fetch-example-com",
+        "tripwire-loopback-fetch",
+        "tripwire-loopback-img",
+        "tripwire-loopback-websocket",
+        "tripwire-loopback-form-post",
+        "tripwire-lan-fetch",
+        "tripwire-lan-img",
+        "tripwire-lan-websocket",
+        "tripwire-lan-form-post"
+      ],
+      "evidence": {
+        "allowlisted_fetch_beacon": "ok",
+        "browser_csp_reports_about_allowlist_hosts": [],
+        "browser_csp_reports_about_the_other_host": [
+          {
+            "blocked_uri": "https://example.com/",
+            "directive": "connect-src"
+          }
+        ],
+        "lan_tripwire": {
+          "address": "192.0.0.3:53862",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "loopback_tripwire": {
+          "address": "127.0.0.1:53860",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "other_host_fetch_beacon": "blocked-TypeError",
+        "view_csp_reports_received": 11
+      },
+      "name": "Network egress follows the allowlist",
+      "proof": 4,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "navigation-window-open",
+        "navigation-anchor-download",
+        "navigation-top",
+        "navigation-self",
+        "navigation-meta-refresh"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "handler_events": [
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "tauri://localhost",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:53866/bbb0a64f9321469894b219ed1c8ad1cc/hostile.html",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "main"
+          },
+          {
+            "allowed": false,
+            "handler": "on_new_window",
+            "url": "http://127.0.0.1:53864/navigation-window-open",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "tauri://localhost",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:53941/3539fcc39860463f9f079be189a36830/hostile.html",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "main"
+          }
+        ],
+        "navigation_sink": {
+          "address": "127.0.0.1:53864",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "windows_checked": [
+          "main"
+        ],
+        "windows_whose_url_changed": []
+      },
+      "name": "The view cannot navigate, open a window or download",
+      "proof": 5,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "busy-loop"
+      ],
+      "evidence": {
+        "busy_loop_observed_ms": 10009,
+        "heartbeat_gap_limit_ms": 500,
+        "heartbeats_received": 178,
+        "longest_heartbeat_gap_before_any_view_ms": 110,
+        "longest_heartbeat_gap_during_the_busy_loop_ms": 10000
+      },
+      "name": "The main window stays responsive while the view spins",
+      "proof": 6,
+      "result": "red"
+    },
+    {
+      "attempts": [
+        "storage-write-localstorage",
+        "storage-write-indexeddb",
+        "storage-write-cookie",
+        "storage-write-cache",
+        "storage-read-localstorage",
+        "storage-read-indexeddb",
+        "storage-read-cookie",
+        "storage-read-cache"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "cookie_headers_carrying_the_first_view_value": [],
+        "cookie_headers_received_from_the_second_view": [],
+        "first_view_write_beacons": {
+          "storage-write-cache": "ok",
+          "storage-write-cookie": "not-stored",
+          "storage-write-indexeddb": "ok",
+          "storage-write-localstorage": "ok"
+        },
+        "reads_returning_the_first_view_value": [],
+        "second_view_read_beacons": {
+          "storage-read-cache": "none",
+          "storage-read-cookie": "none",
+          "storage-read-indexeddb": "none",
+          "storage-read-localstorage": "none"
+        },
+        "value_the_first_view_stored": "bbb0a64f9321469894b219ed1c8ad1cc"
+      },
+      "name": "A second view reads nothing the first view stored",
+      "proof": 7,
+      "result": "green"
+    }
+  ],
+  "tauri": "2.12.2",
+  "ticket": "OPE-2298",
+  "views": {
+    "first_view": {
+      "document_requests": 1,
+      "requests_outside_the_routes": [],
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /bbb0a64f9321469894b219ed1c8ad1cc/csp-report",
+      "url": "http://127.0.0.1:53866/bbb0a64f9321469894b219ed1c8ad1cc/hostile.html"
+    },
+    "second_view": {
+      "document_requests": 1,
+      "requests_outside_the_routes": [],
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /3539fcc39860463f9f079be189a36830/csp-report",
+      "url": "http://127.0.0.1:53941/3539fcc39860463f9f079be189a36830/hostile.html"
+    }
+  },
+  "webview": "22625.1.29.11.28"
+}
