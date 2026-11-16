@@ -16,7 +16,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -51,7 +51,7 @@
               "y": 243.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -131,7 +131,7 @@
               "y": 323.0
             },
             "child_webview_visible": false,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": null,
             "page_origin_in_the_main_webview": {
               "x": 0.0,
@@ -161,7 +161,7 @@
               "y": 323.0
             },
             "child_webview_visible": false,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": null,
             "page_origin_in_the_main_webview": {
               "x": 0.0,
@@ -193,7 +193,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
             "intersection": {
               "height": 80.0,
               "width": 502.0,
@@ -228,7 +228,7 @@
               "y": 323.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 80.0,
               "width": 502.0,
@@ -352,7 +352,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -433,7 +433,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -514,7 +514,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -560,7 +560,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 642.0,
@@ -595,7 +595,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -675,7 +675,7 @@
             "y": 33.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
           "intersection": {
             "height": 370.0,
             "width": 502.0,
@@ -750,7 +750,7 @@
     "the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
     "the child webview is first placed from the rectangles the main page gives in its own viewport coordinates, with no correction, and the window is captured; where the view is drawn more than 1 px from its placeholder, every later placement adds the page origin read from that capture, the placeholder drawn minus the placeholder reported, rounded to the point; the five behaviours are played once per run, after that correction, and a second capture follows them",
     "the placeholder is painted rgb(0, 255, 255) and the view rgb(255, 0, 255), the placeholder captured with the view hidden, the view captured once shown again; a pixel counts for a paint when each of its leading channels exceeds the others by more than 100, since the display profile shifts the values a capture holds, and a box painted on less than 98 percent of its area is a fault; green was dropped because the zoom button of the title bar is green",
-    "on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland no capture is taken and the drawn position stays not proven",
+    "on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland it is a capture of the whole compositor output, by grim then by weston-screenshooter, the first that answers, and the two painted boxes are compared in that capture since a Wayland client is not told where its window is",
     "on macOS the correction a product would apply is the safeAreaInsets.top of the main webview, which native_geometry records beside the origin read from the pixels; the harness places from the pixels so that the two agreeing is a measurement and not an assumption",
     "the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
     "child_webview_bounds is read back from the webview after the host set it, through tauri::Webview::bounds on macOS and Windows and through the GTK allocation translated to the main webview on Linux, where tauri::Webview::bounds never reads a position; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
@@ -761,20 +761,39 @@
     "the capability names the webview main where it named the window main, so a child webview of the main window receives none",
     "on Linux every placement is tried on a blank child webview before the first view, each asked for the rectangle of the placeholder; a placement holds when the GTK allocations give the main webview the whole window content and the view its rectangle within 1 px",
     "on Linux each view is mounted by tauri::Window::add_child, then its widget is moved by GTK calls into the first placement that held on a webview Tauri manages, the GtkFixed tried before the overlay margins; the two placements of wry alone are measured on a blank webview outside the Tauri runtime, where no guard, no capability and no proof applies",
-    "on Linux the input a view and the main page receive through the GtkOverlay was not exercised: the GtkFixed is set pass-through, no click was sent",
+    "on Linux the four input lines are played once per run, after the five behaviours, on the mount the seven proofs ran on, the GtkFixed over the main webview: a sighting named before-input is taken first, and each click is aimed from the boxes that sighting found on the screen, never from a position the harness computed",
+    "every click and every key is sent by a command the harness starts as a process of its own: xdotool through XTEST under X11; under Wayland swaymsg seat cursor with wtype, then wlrctl, the first route whose own probe command answers; a setup where no probe answers is not provable and each answer is kept in input.routes_tried",
+    "a click or a key counts only when its isTrusted is true, which no script dispatch can set; the recorder is an initialization script of every frame of the main webview and of the view webview, so the wrapper page of the view and hostile.html are both read, and a click in the view means a click in hostile.html",
+    "the view is clicked on a field hostile.html now holds and the main page on a field index.html now holds, fixed in the top right corner so that no rectangle the page reported in OPE-2355 moves; the texts typed are view2364 and main2364, without a space since a space scrolls a page that holds no focused field",
+    "the paint of the view gained pointer-events none, which changes no pixel: without it the paint itself, laid over the wrapper page, would take every click aimed at hostile.html",
+    "the scrollbars are measured once per run, before the first paint: when the scrollbars of the view document take space, the view is painted as in OPE-2355 and captured (viewport-paint), and only when the paint is short of the child webview bounds by exactly that space on each axis are the scrollbars of the view document hidden, by overflow hidden on its root element, for every later paint; otherwise the paint is left as it was",
+    "view_drawn_over_its_placeholder is the rule of OPE-2355, unchanged: offset within 1 px and size within 1 px, read from the last sighting; view_edges_minus_placeholder_edges_in_points states the same sighting edge by edge",
+    "each result file holds the four open points of OPE-2355 with a status of its own run; a point another platform or another display setup decides is not-proven here with that reason, and not-provable is kept for a route that does not exist",
+    "a desktop session is a window manager that names itself to wmctrl with xfce4-session, xfce4-panel and xfdesktop running; XDG_SESSION_ID and XDG_CURRENT_DESKTOP no longer decide it, since no session started without a login has the first",
+    "the Wayland setup that can receive input is sway with the X11 backend of wlroots on Xvfb: the harness is a Wayland client of sway alone, with DISPLAY unset; weston headless refuses every route, and in Docker sway with the headless backend of wlroots answered swaymsg and wtype while no click and no key reached the harness, its seat holding no pointer and no keyboard device",
+    "the real session is Xfce started by startxfce4 under dbus-run-session on Xvfb, the only desktop shell with a window manager of its own that OPE-2364 started on the runner; what it lacks next to a session on a physical display is in display_setup.desktop_session.lacks",
     "gtk and wry on Linux, objc2 and objc2-foundation on macOS are direct dependencies of the harness at the versions the lock already held: no package entered the lock",
     "results-linux-in-thread.json is the Xvfb alone setup, the setup of the OPE-2346 file of that name; every other display setup carries its name in the file name",
-    "the OPE-2355 workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched"
+    "the workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched"
   ],
   "display_setup": {
+    "desktop_session": {
+      "current_desktop": null,
+      "is_a_desktop_session": false,
+      "lacks": null,
+      "session_bus_set": false,
+      "session_id": null,
+      "session_processes_running": [],
+      "what_it_is": null,
+      "window_manager": "Openbox"
+    },
     "gdk_backend_asked": null,
     "name": "xvfb-openbox",
-    "real_desktop_session": "not proven: this run has no desktop session, XDG_SESSION_ID and XDG_CURRENT_DESKTOP are not both set; OPE-2355 reached Linux only through Docker linux/arm64 on a macOS host and through the GitHub-hosted ubuntu-latest runner, each under Xvfb alone, Xvfb with the openbox window manager and the headless backend of the weston Wayland compositor: no login session, no GPU compositor, no physical output",
     "session_type": null,
     "wayland_display_set": false,
     "x_display_set": true
   },
-  "duration_ms": 71906,
+  "duration_ms": 82828,
   "halved_views_cause": {
     "halved_views": "the default vbox of the main window, a vertical GtkBox, holds the main webview and the child webview as two children packed with expand and fill, so GTK gives each half of its height: main webview 560 x 210 at 0, 0, child webview 560 x 210 at 0, 210, window content 560 x 420 at 0, 0",
     "measurement": {
@@ -919,8 +938,388 @@
       "wry 0.57.0 src/webkitgtk/mod.rs:957-958 reads only allocated_size outside an X11 child window, so the position is always 0, 0, and src/webkitgtk/mod.rs:963-984 set_bounds acts only on an X11 child window or on a webview built in a GtkFixed"
     ]
   },
+  "input": {
+    "lines": [
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "point_is_inside_the_rectangle_of_the_view": true,
+            "point_on_the_screen_in_pixels": {
+              "x": 173.5,
+              "y": 246.5
+            },
+            "view_on_the_screen_in_pixels": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 70.0,
+              "y": 218.0
+            }
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"xdotool\" \"mousemove\" \"174\" \"247\" \"click\" \"1\""
+          ]
+        },
+        "line": 1,
+        "reason": null,
+        "statement": "A click sent through the display server inside the rectangle of the view reaches the document of the view and not the main page",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "text": "view2364"
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"xdotool\" \"type\" \"--delay\" \"60\" \"view2364\""
+          ]
+        },
+        "line": 2,
+        "reason": null,
+        "statement": "Text typed through the display server after that click is held by a field of the view and changes no field of the main page",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "point_is_inside_the_rectangle_of_the_view": false,
+            "point_on_the_screen_in_pixels": {
+              "x": 502.0,
+              "y": 96.0
+            },
+            "view_on_the_screen_in_pixels": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 70.0,
+              "y": 218.0
+            }
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"xdotool\" \"mousemove\" \"502\" \"96\" \"click\" \"1\""
+          ]
+        },
+        "line": 3,
+        "reason": null,
+        "statement": "A click sent through the display server on the main page outside the rectangle reaches the main page and not the view",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "main2364",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "text": "main2364"
+          },
+          "before": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 94.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 93.5,
+                  "y": 18.5
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"xdotool\" \"type\" \"--delay\" \"60\" \"main2364\""
+          ]
+        },
+        "line": 4,
+        "reason": null,
+        "statement": "Text typed through the display server after a click on a field of the main page is held by that field and gives the view no key event",
+        "status": "proven"
+      }
+    ],
+    "route": "xdotool, through the XTEST extension of the X server",
+    "routes_tried": [
+      {
+        "answer": "answered",
+        "route": "xdotool, through the XTEST extension of the X server"
+      }
+    ],
+    "sent_by": "a command the harness starts as a process of its own, which speaks to the display server: no event is dispatched by a script in a page and no GTK call of the harness sends input"
+  },
   "main_window_csp_served": [
-    "base-uri 'self'; object-src 'none'; script-src 'self' 'self' 'sha256-RRV/vP3tbzqodv9MXQ8jeJ3vWshbb4fP+uDKcRsp5MU='; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; default-src 'self'; style-src 'self' 'unsafe-inline'; frame-src http://127.0.0.1:38401"
+    "base-uri 'self'; script-src 'self' 'self' 'sha256-RRV/vP3tbzqodv9MXQ8jeJ3vWshbb4fP+uDKcRsp5MU='; style-src 'self' 'unsafe-inline'; font-src 'self' data:; default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; object-src 'none'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; frame-src http://127.0.0.1:44625"
   ],
   "mitigations": [
     "each view webview is built with incognito(true), so every view has its own storage",
@@ -1069,6 +1468,42 @@
       }
     }
   },
+  "open_points": [
+    {
+      "evidence_keys": [
+        "input"
+      ],
+      "point": "input-through-the-gtk-overlay-on-linux",
+      "reason": null,
+      "status": "proven"
+    },
+    {
+      "evidence_keys": [
+        "os",
+        "display_setup"
+      ],
+      "point": "right-and-bottom-edges-on-macos-in-ci",
+      "reason": "this run is on linux: the macOS CI file decides the point",
+      "status": "not-proven"
+    },
+    {
+      "evidence_keys": [
+        "os",
+        "display_setup"
+      ],
+      "point": "drawn-position-under-wayland",
+      "reason": "this run is not under a Wayland compositor: the Wayland files decide the point",
+      "status": "not-proven"
+    },
+    {
+      "evidence_keys": [
+        "display_setup"
+      ],
+      "point": "real-linux-desktop-session",
+      "reason": "this display setup starts no desktop session. Found: window manager: Openbox; of xfce4-session, xfce4-panel, xfdesktop, running: none",
+      "status": "not-proven"
+    }
+  ],
   "os": "linux",
   "page_claims_never_used_alone_for_a_verdict": {
     "first_view": {
@@ -2300,7 +2735,7 @@
       "evidence": {
         "altered_snapshots": [],
         "attempts_never_signalled": [],
-        "integrity_snapshots_compared": 712,
+        "integrity_snapshots_compared": 821,
         "main_documents_checked": 1,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
@@ -2335,12 +2770,12 @@
       "evidence": {
         "attempts_never_signalled": [],
         "lan_tripwire": {
-          "address": "10.0.130.121:35373",
+          "address": "10.1.0.11:40061",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:35737",
+          "address": "127.0.0.1:36943",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2371,7 +2806,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:35737",
+                "blocked_uri": "http://127.0.0.1:36943",
                 "directive": "frame-src"
               }
             ],
@@ -2384,7 +2819,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:35737",
+                "blocked_uri": "http://127.0.0.1:36943",
                 "directive": "frame-src"
               }
             ],
@@ -2413,7 +2848,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.130.121:35373",
+                "blocked_uri": "http://10.1.0.11:40061",
                 "directive": "frame-src"
               }
             ],
@@ -2426,7 +2861,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.130.121:35373",
+                "blocked_uri": "http://10.1.0.11:40061",
                 "directive": "frame-src"
               }
             ],
@@ -2477,12 +2912,12 @@
         ],
         "fetches_where_the_host_read_and_the_page_beacon_disagree": [],
         "lan_tripwire": {
-          "address": "10.0.130.121:35373",
+          "address": "10.1.0.11:40061",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:35737",
+          "address": "127.0.0.1:36943",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2496,7 +2931,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:35813/ef2a6fc0ca7d46f4b721a2b163e84354/hostile.html",
+          "document_url": "http://127.0.0.1:36187/3ea845c2afc348bf8baeede9d9350652/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -2523,7 +2958,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:35737",
+                "blocked_uri": "http://127.0.0.1:36943",
                 "directive": "frame-src"
               }
             ],
@@ -2536,7 +2971,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:35737",
+                "blocked_uri": "http://127.0.0.1:36943",
                 "directive": "frame-src"
               }
             ],
@@ -2565,7 +3000,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.130.121:35373",
+                "blocked_uri": "http://10.1.0.11:40061",
                 "directive": "frame-src"
               }
             ],
@@ -2578,7 +3013,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.130.121:35373",
+                "blocked_uri": "http://10.1.0.11:40061",
                 "directive": "frame-src"
               }
             ],
@@ -2615,13 +3050,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38401/c97742c5447f4144bea9f90092196ccc/view.html",
+            "url": "http://127.0.0.1:44625/0880ea2931de464f98641c8da6c36570/view.html",
             "window": "view-1"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38401/c97742c5447f4144bea9f90092196ccc/hostile.html",
+            "url": "http://127.0.0.1:44625/0880ea2931de464f98641c8da6c36570/hostile.html",
             "window": "view-1"
           },
           {
@@ -2633,13 +3068,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35813/ef2a6fc0ca7d46f4b721a2b163e84354/view.html",
+            "url": "http://127.0.0.1:36187/3ea845c2afc348bf8baeede9d9350652/view.html",
             "window": "view-2"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35813/ef2a6fc0ca7d46f4b721a2b163e84354/hostile.html",
+            "url": "http://127.0.0.1:36187/3ea845c2afc348bf8baeede9d9350652/hostile.html",
             "window": "view-2"
           },
           {
@@ -2651,13 +3086,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39599/98020aafaeea47aeb23a52c934882780/view.html",
+            "url": "http://127.0.0.1:34501/f192d15f3b224c63b1b0364c647e638b/view.html",
             "window": "alone-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39599/98020aafaeea47aeb23a52c934882780/hostile.html",
+            "url": "http://127.0.0.1:34501/f192d15f3b224c63b1b0364c647e638b/hostile.html",
             "window": "alone-navigation-window-open"
           },
           {
@@ -2669,13 +3104,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33763/5f624f42495040de86f4200850fe786c/view.html",
+            "url": "http://127.0.0.1:36667/f6cc2d3e983e4283a042457b64a8b3dd/view.html",
             "window": "alone-navigation-anchor-download"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33763/5f624f42495040de86f4200850fe786c/hostile.html",
+            "url": "http://127.0.0.1:36667/f6cc2d3e983e4283a042457b64a8b3dd/hostile.html",
             "window": "alone-navigation-anchor-download"
           },
           {
@@ -2687,13 +3122,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42383/279840fb6edf4591945c58486d4ac234/view.html",
+            "url": "http://127.0.0.1:38373/98c7f6661cc6441e9b549f4436a5904b/view.html",
             "window": "alone-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42383/279840fb6edf4591945c58486d4ac234/hostile.html",
+            "url": "http://127.0.0.1:38373/98c7f6661cc6441e9b549f4436a5904b/hostile.html",
             "window": "alone-navigation-top"
           },
           {
@@ -2705,13 +3140,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39311/d27474b4d53644a3a21a2d2648908d39/view.html",
+            "url": "http://127.0.0.1:42119/6ff0bfae92c34d2896c87b3cf5e8cd3f/view.html",
             "window": "alone-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39311/d27474b4d53644a3a21a2d2648908d39/hostile.html",
+            "url": "http://127.0.0.1:42119/6ff0bfae92c34d2896c87b3cf5e8cd3f/hostile.html",
             "window": "alone-navigation-self"
           },
           {
@@ -2723,13 +3158,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:40249/1098ad9429ee457d919dbef80209f614/view.html",
+            "url": "http://127.0.0.1:39453/6d78ca8a10b044319a3cea496e4ac5a9/view.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:40249/1098ad9429ee457d919dbef80209f614/hostile.html",
+            "url": "http://127.0.0.1:39453/6d78ca8a10b044319a3cea496e4ac5a9/hostile.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
@@ -2741,13 +3176,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41717/79d0fa567ba1475091b8e711ca267668/view.html",
+            "url": "http://127.0.0.1:44495/6b4aabc6ddc84573831d8e6b8330a569/view.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41717/79d0fa567ba1475091b8e711ca267668/hostile.html",
+            "url": "http://127.0.0.1:44495/6b4aabc6ddc84573831d8e6b8330a569/hostile.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
@@ -2759,13 +3194,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45487/1c66c4cad4414794babddebc53818fb2/view.html",
+            "url": "http://127.0.0.1:33551/2f64f69fb48241d9a564fa42b1571cb4/view.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45487/1c66c4cad4414794babddebc53818fb2/hostile.html",
+            "url": "http://127.0.0.1:33551/2f64f69fb48241d9a564fa42b1571cb4/hostile.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
@@ -2777,13 +3212,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35033/ba91fb8d937545d88fec950d7c41cf00/view.html",
+            "url": "http://127.0.0.1:40953/128d230eab42454a979f5ea745e4b858/view.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35033/ba91fb8d937545d88fec950d7c41cf00/hostile.html",
+            "url": "http://127.0.0.1:40953/128d230eab42454a979f5ea745e4b858/hostile.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
@@ -2795,13 +3230,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41797/e040baa9c6844c1b9078a59bdebb118d/view.html",
+            "url": "http://127.0.0.1:44463/a8a871f8957544acb37d7c1410491637/view.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41797/e040baa9c6844c1b9078a59bdebb118d/hostile.html",
+            "url": "http://127.0.0.1:44463/a8a871f8957544acb37d7c1410491637/hostile.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
@@ -2813,13 +3248,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35619/3d4fdbe5f0894d14b13edd85c5b4ed39/view.html",
+            "url": "http://127.0.0.1:33773/106c22ef62804833b93d0f3fcf49c184/view.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35619/3d4fdbe5f0894d14b13edd85c5b4ed39/hostile.html",
+            "url": "http://127.0.0.1:33773/106c22ef62804833b93d0f3fcf49c184/hostile.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
@@ -2831,13 +3266,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35321/285c6021add74db88c657a0d9f581466/view.html",
+            "url": "http://127.0.0.1:37737/88a15ce5b15944349ef45c4d0731504f/view.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:35321/285c6021add74db88c657a0d9f581466/hostile.html",
+            "url": "http://127.0.0.1:37737/88a15ce5b15944349ef45c4d0731504f/hostile.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
@@ -2849,13 +3284,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45023/b05b75d793a0463daf7b737ee7301383/view.html",
+            "url": "http://127.0.0.1:32785/dae06a10a01f46589344b0892959017a/view.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45023/b05b75d793a0463daf7b737ee7301383/hostile.html",
+            "url": "http://127.0.0.1:32785/dae06a10a01f46589344b0892959017a/hostile.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
@@ -2867,13 +3302,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41447/e932bd53ca76453a96ef7aa8f8098e95/view.html",
+            "url": "http://127.0.0.1:35149/dbbc9bddfa30457cbd14d156cd03d92a/view.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41447/e932bd53ca76453a96ef7aa8f8098e95/hostile.html",
+            "url": "http://127.0.0.1:35149/dbbc9bddfa30457cbd14d156cd03d92a/hostile.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
@@ -2901,7 +3336,7 @@
             "attempt": "navigation-anchor-download",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:37779",
+                "blocked_uri": "http://127.0.0.1:39095",
                 "directive": "frame-src"
               }
             ],
@@ -2924,7 +3359,7 @@
             "attempt": "navigation-self",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:37779",
+                "blocked_uri": "http://127.0.0.1:39095",
                 "directive": "frame-src"
               }
             ],
@@ -2938,7 +3373,7 @@
             "attempt": "navigation-meta-refresh",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:37779",
+                "blocked_uri": "http://127.0.0.1:39095",
                 "directive": "frame-src"
               }
             ],
@@ -2950,7 +3385,7 @@
           }
         ],
         "navigation_sink": {
-          "address": "127.0.0.1:37779",
+          "address": "127.0.0.1:39095",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2984,20 +3419,20 @@
         "busy-loop"
       ],
       "evidence": {
-        "busy_loop_observed_ms": 10002,
+        "busy_loop_observed_ms": 10004,
         "gaps_above_the_limit": [],
         "heartbeat_gap_limit_ms": 500,
-        "heartbeats_received": 712,
-        "hostile_view_ran_ms": 15144,
+        "heartbeats_received": 821,
+        "hostile_view_ran_ms": 15225,
         "longest_heartbeat_gap_before_any_view_ms": 100,
         "longest_heartbeat_gap_during_the_busy_loop_ms": 100,
-        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 100,
-        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 42,
+        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 101,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 99,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
           "by_the_handlers": 0
         },
-        "view_window_build_ms": 83
+        "view_window_build_ms": 108
       },
       "name": "The main window stays responsive while the view spins",
       "proof": 6,
@@ -3023,7 +3458,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:38401/c97742c5447f4144bea9f90092196ccc/hostile.html",
+          "document_url": "http://127.0.0.1:44625/0880ea2931de464f98641c8da6c36570/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -3052,14 +3487,14 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:35813/ef2a6fc0ca7d46f4b721a2b163e84354/hostile.html",
+          "document_url": "http://127.0.0.1:36187/3ea845c2afc348bf8baeede9d9350652/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
           "other_host_fetch_status": null
         },
         "stores_where_the_host_found_the_first_view_value": [],
-        "value_the_first_view_stored": "c97742c5447f4144bea9f90092196ccc"
+        "value_the_first_view_stored": "0880ea2931de464f98641c8da6c36570"
       },
       "name": "A second view reads nothing the first view stored",
       "proof": 7,
@@ -3067,8 +3502,75 @@
     }
   ],
   "run": {
-    "github_run_id": "43949657800",
+    "github_run_id": "43962464137",
     "name": "linux-xvfb-openbox"
+  },
+  "scrollbars": {
+    "cause": "the scrollbars of the view document take no space: its inner size equals the client size of its root element, so the paint already covers the whole rectangle of the view and is left unchanged",
+    "child_webview_bounds_read_back": {
+      "height": 160.0,
+      "width": 502.0,
+      "x": 29.0,
+      "y": 57.0
+    },
+    "main_page": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": false,
+        "content_is_wider_than_the_root": false,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "root_scroll_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    },
+    "paint": "unchanged",
+    "read": "before any paint and before any change to the scrollbars, by one script evaluated in the main page and in the document of the view webview",
+    "view_document": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": true,
+        "content_is_wider_than_the_root": true,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "root_scroll_size": {
+        "height": 384.0,
+        "width": 532.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    }
   },
   "sightings": [
     {
@@ -3089,6 +3591,12 @@
       },
       "pixels_per_point": 1.0,
       "placeholder_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 70.0,
+          "y": 137.0
+        },
         "capture": "capture-linux-xvfb-openbox-in-thread-as-mounted-cyan.png",
         "paint": "rgb(0, 255, 255)",
         "painted_box_in_capture_pixels": {
@@ -3118,7 +3626,14 @@
         "x": 29.0,
         "y": 57.0
       },
+      "rectangles_measured_from": "the window content",
       "view_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 70.0,
+          "y": 137.0
+        },
         "capture": "capture-linux-xvfb-openbox-in-thread-as-mounted-magenta.png",
         "paint": "rgb(255, 0, 255)",
         "painted_box_in_capture_pixels": {
@@ -3136,6 +3651,105 @@
         },
         "share_of_the_box_painted": 1.0
       },
+      "view_edges_minus_placeholder_edges_in_points": {
+        "bottom": 0.0,
+        "left": 0.0,
+        "right": 0.0,
+        "top": 0.0
+      },
+      "view_offset_from_its_placeholder": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "view_size_minus_placeholder_size": {
+        "height": 0.0,
+        "width": 0.0
+      }
+    },
+    {
+      "child_webview_bounds_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "name": "before-input",
+      "page_origin_drawn_in_the_main_webview": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "page_origin_the_host_placed_from": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "pixels_per_point": 1.0,
+      "placeholder_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 70.0,
+          "y": 218.0
+        },
+        "capture": "capture-linux-xvfb-openbox-in-thread-before-input-cyan.png",
+        "paint": "rgb(0, 255, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 30,
+          "painted_pixels": 80320,
+          "top": 158,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 29.0,
+          "y": 138.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "placeholder_reported_by_the_page": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "rectangles_measured_from": "the window content",
+      "view_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 70.0,
+          "y": 218.0
+        },
+        "capture": "capture-linux-xvfb-openbox-in-thread-before-input-magenta.png",
+        "paint": "rgb(255, 0, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 30,
+          "painted_pixels": 80320,
+          "top": 158,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 29.0,
+          "y": 138.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "view_edges_minus_placeholder_edges_in_points": {
+        "bottom": 0.0,
+        "left": 0.0,
+        "right": 0.0,
+        "top": 0.0
+      },
       "view_offset_from_its_placeholder": {
         "x": 0.0,
         "y": 0.0
@@ -3147,7 +3761,7 @@
     }
   ],
   "tauri": "2.12.2",
-  "ticket": "OPE-2355",
+  "ticket": "OPE-2364",
   "verdict": "in-thread",
   "view_drawn_over_its_placeholder": true,
   "views": {
@@ -3192,8 +3806,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /c97742c5447f4144bea9f90092196ccc/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:38401/c97742c5447f4144bea9f90092196ccc/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /0880ea2931de464f98641c8da6c36570/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:44625/0880ea2931de464f98641c8da6c36570/view.html"
     },
     "second_view": {
       "attempts_the_page_script_reached_read_by_the_host": [
@@ -3205,8 +3819,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /ef2a6fc0ca7d46f4b721a2b163e84354/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:35813/ef2a6fc0ca7d46f4b721a2b163e84354/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /3ea845c2afc348bf8baeede9d9350652/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:36187/3ea845c2afc348bf8baeede9d9350652/view.html"
     }
   },
   "webview": "2.52.6"

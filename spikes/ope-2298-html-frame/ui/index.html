@@ -20,6 +20,14 @@
 				margin: 8px 16px;
 			}
 
+			#main-field {
+				position: fixed;
+				top: 5px;
+				right: 16px;
+				width: 160px;
+				height: 16px;
+			}
+
 			#thread {
 				flex: 1;
 				min-height: 0;
@@ -66,6 +74,7 @@
 	</head>
 	<body>
 		<p id="sentinel"></p>
+		<input id="main-field" autocomplete="off" />
 		<div id="view"></div>
 		<main id="thread">
 			<article class="reply">Reply 1</article>

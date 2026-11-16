@@ -1,0 +1,3689 @@
+{
+  "attempts_not_played_alone": [],
+  "behaviours": [
+    {
+      "behaviour": 1,
+      "evidence": {
+        "pixel_tolerance": 1.0,
+        "scrolls": [
+          {
+            "action": "scrollPlaceholderTo(0)",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 33.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+            "intersection": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 33.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 33.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          },
+          {
+            "action": "scrollPlaceholderTo(210)",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 243.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "intersection": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 243.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 243.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          },
+          {
+            "action": "scrollPlaceholderTo(105)",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "intersection": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          }
+        ]
+      },
+      "name": "The view follows its placeholder when the thread column scrolls",
+      "result": "green"
+    },
+    {
+      "behaviour": 2,
+      "evidence": {
+        "pixel_tolerance": 1.0,
+        "placeholder_fully_outside": [
+          {
+            "action": "scrollPlaceholderTo(-184)",
+            "bounds_differ_from_the_intersection_by_px": null,
+            "child_webview_bounds": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 323.0
+            },
+            "child_webview_visible": false,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 0,
+            "intersection": null,
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": -151.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          },
+          {
+            "action": "scrollPlaceholderTo(394)",
+            "bounds_differ_from_the_intersection_by_px": null,
+            "child_webview_bounds": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 323.0
+            },
+            "child_webview_visible": false,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 0,
+            "intersection": null,
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 427.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          }
+        ],
+        "placeholder_partly_outside": [
+          {
+            "action": "scrollPlaceholderTo(-80)",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 33.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+            "intersection": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 33.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": -47.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          },
+          {
+            "action": "scrollPlaceholderTo(290)",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 323.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
+            "intersection": {
+              "height": 80.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 323.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 323.0
+            },
+            "reported_on": "scroll",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          }
+        ]
+      },
+      "name": "The view is cut to the visible area of the column and hidden outside it",
+      "result": "green"
+    },
+    {
+      "behaviour": 3,
+      "evidence": {
+        "before_any_overlay": {
+          "action": "scrollPlaceholderTo(105)",
+          "bounds_differ_from_the_intersection_by_px": 0.0,
+          "child_webview_bounds": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "child_webview_visible": true,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+          "intersection": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "page_origin_in_the_main_webview": {
+            "x": 0.0,
+            "y": 0.0
+          },
+          "placeholder": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "reported_on": "scroll",
+          "visible_column": {
+            "height": 370.0,
+            "width": 526.0,
+            "x": 17.0,
+            "y": 33.0
+          }
+        },
+        "overlays": [
+          {
+            "after_close": {
+              "action": "closeOverlay(\"menu\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": true,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-closed",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            },
+            "overlaps_the_placeholder": true,
+            "overlay": "menu",
+            "overlay_area_under_the_child_webview_px2": 0.0,
+            "overlay_rectangle": {
+              "height": 122.0,
+              "width": 162.0,
+              "x": 53.0,
+              "y": 162.0
+            },
+            "while_open": {
+              "action": "openOverlay(\"menu\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": false,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-opened",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            }
+          },
+          {
+            "after_close": {
+              "action": "closeOverlay(\"popover\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": true,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-closed",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            },
+            "overlaps_the_placeholder": true,
+            "overlay": "popover",
+            "overlay_area_under_the_child_webview_px2": 0.0,
+            "overlay_rectangle": {
+              "height": 112.0,
+              "width": 182.0,
+              "x": 441.0,
+              "y": 98.0
+            },
+            "while_open": {
+              "action": "openOverlay(\"popover\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": false,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-opened",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            }
+          },
+          {
+            "after_close": {
+              "action": "closeOverlay(\"sheet\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": true,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-closed",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            },
+            "overlaps_the_placeholder": true,
+            "overlay": "sheet",
+            "overlay_area_under_the_child_webview_px2": 0.0,
+            "overlay_rectangle": {
+              "height": 254.0,
+              "width": 560.0,
+              "x": 0.0,
+              "y": 166.0
+            },
+            "while_open": {
+              "action": "openOverlay(\"sheet\")",
+              "bounds_differ_from_the_intersection_by_px": 0.0,
+              "child_webview_bounds": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "child_webview_visible": false,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "intersection": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "page_origin_in_the_main_webview": {
+                "x": 0.0,
+                "y": 0.0
+              },
+              "placeholder": {
+                "height": 160.0,
+                "width": 502.0,
+                "x": 29.0,
+                "y": 138.0
+              },
+              "reported_on": "overlay-opened",
+              "visible_column": {
+                "height": 370.0,
+                "width": 526.0,
+                "x": 17.0,
+                "y": 33.0
+              }
+            }
+          }
+        ]
+      },
+      "name": "The view covers no menu, popover or sheet of the main page",
+      "result": "green"
+    },
+    {
+      "behaviour": 4,
+      "evidence": {
+        "pixel_tolerance": 1.0,
+        "resizes": [
+          {
+            "action": "resize the main window to 700 x 540",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 160.0,
+              "width": 642.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
+            "intersection": {
+              "height": 160.0,
+              "width": 642.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 642.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "reported_on": "resize",
+            "visible_column": {
+              "height": 490.0,
+              "width": 666.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          },
+          {
+            "action": "resize the main window to 560 x 420",
+            "bounds_differ_from_the_intersection_by_px": 0.0,
+            "child_webview_bounds": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "child_webview_visible": true,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+            "intersection": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "page_origin_in_the_main_webview": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "placeholder": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 29.0,
+              "y": 138.0
+            },
+            "reported_on": "resize",
+            "visible_column": {
+              "height": 370.0,
+              "width": 526.0,
+              "x": 17.0,
+              "y": 33.0
+            }
+          }
+        ]
+      },
+      "name": "The view follows its placeholder when the main window is resized",
+      "result": "green"
+    },
+    {
+      "behaviour": 5,
+      "evidence": {
+        "brought_back": {
+          "action": "bringBack()",
+          "bounds_differ_from_the_intersection_by_px": 0.0,
+          "child_webview_bounds": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "child_webview_visible": true,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+          "intersection": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "page_origin_in_the_main_webview": {
+            "x": 0.0,
+            "y": 0.0
+          },
+          "placeholder": {
+            "height": 160.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 138.0
+          },
+          "reported_on": "resize",
+          "visible_column": {
+            "height": 370.0,
+            "width": 526.0,
+            "x": 17.0,
+            "y": 33.0
+          }
+        },
+        "document_requests_after": 1,
+        "document_requests_before": 1,
+        "enlarged": {
+          "action": "enlarge()",
+          "bounds_differ_from_the_intersection_by_px": 0.0,
+          "child_webview_bounds": {
+            "height": 370.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 33.0
+          },
+          "child_webview_visible": true,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+          "intersection": {
+            "height": 370.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 33.0
+          },
+          "page_origin_in_the_main_webview": {
+            "x": 0.0,
+            "y": 0.0
+          },
+          "placeholder": {
+            "height": 370.0,
+            "width": 502.0,
+            "x": 29.0,
+            "y": 33.0
+          },
+          "reported_on": "resize",
+          "visible_column": {
+            "height": 370.0,
+            "width": 526.0,
+            "x": 17.0,
+            "y": 33.0
+          }
+        },
+        "pixel_tolerance": 1.0,
+        "target_before_enlarging": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 29.0,
+          "y": 138.0
+        }
+      },
+      "name": "The view is enlarged then brought back without a reload",
+      "result": "green"
+    }
+  ],
+  "child_webview_errors": [],
+  "child_webview_mount": {
+    "child_webview_bounds": {
+      "height": 160.0,
+      "width": 502.0,
+      "x": 29.0,
+      "y": 57.0
+    },
+    "main_page_viewport": {
+      "height": 420.0,
+      "width": 560.0
+    },
+    "main_webview_bounds": {
+      "height": 420.0,
+      "width": 560.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "main_webview_bounds_after_one_refit": null,
+    "main_webview_fills_the_window": true,
+    "window_content": {
+      "height": 420.0,
+      "width": 560.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "window_inner_size": {
+      "height": 420.0,
+      "width": 560.0
+    }
+  },
+  "decisions": [
+    "proof 4 is decided from the host reading of the second view, whose document never navigates; a host reading taken in a document whose URL is not the served URL is a sensor fault, never a green, in proof 4 and in proof 7",
+    "proof 5 accepts a sink connection on Windows alone, when it carries zero bytes and was accepted while a view whose navigation to the sink the host saw blocked, by a handler or by a browser CSP report, was open; decided by Steve",
+    "each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
+    "the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
+    "the child webview is first placed from the rectangles the main page gives in its own viewport coordinates, with no correction, and the window is captured; where the view is drawn more than 1 px from its placeholder, every later placement adds the page origin read from that capture, the placeholder drawn minus the placeholder reported, rounded to the point; the five behaviours are played once per run, after that correction, and a second capture follows them",
+    "the placeholder is painted rgb(0, 255, 255) and the view rgb(255, 0, 255), the placeholder captured with the view hidden, the view captured once shown again; a pixel counts for a paint when each of its leading channels exceeds the others by more than 100, since the display profile shifts the values a capture holds, and a box painted on less than 98 percent of its area is a fault; green was dropped because the zoom button of the title bar is green",
+    "on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland it is a capture of the whole compositor output, by grim then by weston-screenshooter, the first that answers, and the two painted boxes are compared in that capture since a Wayland client is not told where its window is",
+    "on macOS the correction a product would apply is the safeAreaInsets.top of the main webview, which native_geometry records beside the origin read from the pixels; the harness places from the pixels so that the two agreeing is a measurement and not an assumption",
+    "the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
+    "child_webview_bounds is read back from the webview after the host set it, through tauri::Webview::bounds on macOS and Windows and through the GTK allocation translated to the main webview on Linux, where tauri::Webview::bounds never reads a position; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
+    "the delay runs from Date.now() in the main page handler that reported the placement to the host clock once the bounds were read back",
+    "cutting the view to the column only shrinks the child webview: its document keeps its own origin and is not shifted by the hidden part",
+    "enlarged means the placeholder takes the height of the visible column",
+    "the five behaviours are played on the second view, once its document has settled, and only when the main webview bounds read back fill the window content, after at most one refit of the main webview to that size; the window content is the inner size of the window, and on Linux the allocation of the default vbox, since tao counts the client-side decorations in the inner size under Wayland",
+    "the capability names the webview main where it named the window main, so a child webview of the main window receives none",
+    "on Linux every placement is tried on a blank child webview before the first view, each asked for the rectangle of the placeholder; a placement holds when the GTK allocations give the main webview the whole window content and the view its rectangle within 1 px",
+    "on Linux each view is mounted by tauri::Window::add_child, then its widget is moved by GTK calls into the first placement that held on a webview Tauri manages, the GtkFixed tried before the overlay margins; the two placements of wry alone are measured on a blank webview outside the Tauri runtime, where no guard, no capability and no proof applies",
+    "on Linux the four input lines are played once per run, after the five behaviours, on the mount the seven proofs ran on, the GtkFixed over the main webview: a sighting named before-input is taken first, and each click is aimed from the boxes that sighting found on the screen, never from a position the harness computed",
+    "every click and every key is sent by a command the harness starts as a process of its own: xdotool through XTEST under X11; under Wayland swaymsg seat cursor with wtype, then wlrctl, the first route whose own probe command answers; a setup where no probe answers is not provable and each answer is kept in input.routes_tried",
+    "a click or a key counts only when its isTrusted is true, which no script dispatch can set; the recorder is an initialization script of every frame of the main webview and of the view webview, so the wrapper page of the view and hostile.html are both read, and a click in the view means a click in hostile.html",
+    "the view is clicked on a field hostile.html now holds and the main page on a field index.html now holds, fixed in the top right corner so that no rectangle the page reported in OPE-2355 moves; the texts typed are view2364 and main2364, without a space since a space scrolls a page that holds no focused field",
+    "the paint of the view gained pointer-events none, which changes no pixel: without it the paint itself, laid over the wrapper page, would take every click aimed at hostile.html",
+    "the scrollbars are measured once per run, before the first paint: when the scrollbars of the view document take space, the view is painted as in OPE-2355 and captured (viewport-paint), and only when the paint is short of the child webview bounds by exactly that space on each axis are the scrollbars of the view document hidden, by overflow hidden on its root element, for every later paint; otherwise the paint is left as it was",
+    "view_drawn_over_its_placeholder is the rule of OPE-2355, unchanged: offset within 1 px and size within 1 px, read from the last sighting; view_edges_minus_placeholder_edges_in_points states the same sighting edge by edge",
+    "each result file holds the four open points of OPE-2355 with a status of its own run; a point another platform or another display setup decides is not-proven here with that reason, and not-provable is kept for a route that does not exist",
+    "a desktop session is a window manager that names itself to wmctrl with xfce4-session, xfce4-panel and xfdesktop running; XDG_SESSION_ID and XDG_CURRENT_DESKTOP no longer decide it, since no session started without a login has the first",
+    "the Wayland setup that can receive input is sway with the X11 backend of wlroots on Xvfb: the harness is a Wayland client of sway alone, with DISPLAY unset; weston headless refuses every route, and in Docker sway with the headless backend of wlroots answered swaymsg and wtype while no click and no key reached the harness, its seat holding no pointer and no keyboard device",
+    "the real session is Xfce started by startxfce4 under dbus-run-session on Xvfb, the only desktop shell with a window manager of its own that OPE-2364 started on the runner; what it lacks next to a session on a physical display is in display_setup.desktop_session.lacks",
+    "gtk and wry on Linux, objc2 and objc2-foundation on macOS are direct dependencies of the harness at the versions the lock already held: no package entered the lock",
+    "results-linux-in-thread.json is the Xvfb alone setup, the setup of the OPE-2346 file of that name; every other display setup carries its name in the file name",
+    "the workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched"
+  ],
+  "display_setup": {
+    "desktop_session": {
+      "current_desktop": null,
+      "is_a_desktop_session": false,
+      "lacks": null,
+      "session_bus_set": false,
+      "session_id": null,
+      "session_processes_running": [],
+      "what_it_is": null,
+      "window_manager": {
+        "unavailable": "\"wmctrl\" \"-m\" ended with exit status: 1: Cannot open display."
+      }
+    },
+    "gdk_backend_asked": "wayland",
+    "name": "sway-on-xvfb",
+    "session_type": null,
+    "wayland_display_set": true,
+    "x_display_set": false
+  },
+  "duration_ms": 84600,
+  "halved_views_cause": {
+    "halved_views": "the default vbox of the main window, a vertical GtkBox, holds the main webview and the child webview as two children packed with expand and fill, so GTK gives each half of its height: main webview 560 x 210 at 0, 0, child webview 560 x 210 at 0, 210, window content 560 x 420 at 0, 0",
+    "measurement": {
+      "child_webview_allocation_in_the_window_content": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 210.0
+      },
+      "child_webview_bounds_through_tauri": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_allocation_in_the_window_content": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_through_tauri": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "taken": "after tauri::Window::add_child, before any other call",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                },
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 210
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 210.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    "position_read_as_zero": "the child webview is not at 0, 0: GTK allocates it at 560 x 210 at 0, 210, below the main webview, while tauri::Webview::bounds answers 560 x 210 at 0, 0",
+    "upstream_sources": [
+      "tauri-runtime-wry 2.12.1 src/lib.rs:5171-5174 builds every webview of a window with build_gtk on the default vbox of the window, and wry 0.57.0 src/webkitgtk/mod.rs:690-694 adds it to that GtkBox with pack_start(webview, true, true, 0)",
+      "wry 0.57.0 src/webkitgtk/mod.rs:957-958 reads only allocated_size outside an X11 child window, so the position is always 0, 0, and src/webkitgtk/mod.rs:963-984 set_bounds acts only on an X11 child window or on a webview built in a GtkFixed"
+    ]
+  },
+  "input": {
+    "lines": [
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "point_is_inside_the_rectangle_of_the_view": true,
+            "point_on_the_screen_in_pixels": {
+              "x": 374.5,
+              "y": 341.0
+            },
+            "view_on_the_screen_in_pixels": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 261.0,
+              "y": 312.0
+            }
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"set\" \"375\" \"341\"",
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"press\" \"button1\"",
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"release\" \"button1\""
+          ]
+        },
+        "line": 1,
+        "reason": null,
+        "statement": "A click sent through the display server inside the rectangle of the view reaches the document of the view and not the main page",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "text": "view2364"
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"wtype\" \"-d\" \"60\" \"view2364\""
+          ]
+        },
+        "line": 2,
+        "reason": null,
+        "statement": "Text typed through the display server after that click is held by a field of the view and changes no field of the main page",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "point_is_inside_the_rectangle_of_the_view": false,
+            "point_on_the_screen_in_pixels": {
+              "x": 693.0,
+              "y": 190.0
+            },
+            "view_on_the_screen_in_pixels": {
+              "height": 160.0,
+              "width": 502.0,
+              "x": 261.0,
+              "y": 312.0
+            }
+          },
+          "before": {
+            "main_page": {
+              "clicks": [],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"set\" \"693\" \"190\"",
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"press\" \"button1\"",
+            "\"swaymsg\" \"seat\" \"seat0\" \"cursor\" \"release\" \"button1\""
+          ]
+        },
+        "line": 3,
+        "reason": null,
+        "statement": "A click sent through the display server on the main page outside the rectangle reaches the main page and not the view",
+        "status": "proven"
+      },
+      {
+        "evidence": {
+          "after": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "main2364",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "aimed_at": {
+            "text": "main2364"
+          },
+          "before": {
+            "main_page": {
+              "clicks": [
+                {
+                  "target": "main-field",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              ],
+              "fields": {
+                "main-field": {
+                  "value": "",
+                  "x": 461.0,
+                  "y": 16.0
+                }
+              },
+              "key_downs": 0
+            },
+            "view_document": {
+              "clicks": [
+                {
+                  "target": "view-field",
+                  "x": 104.0,
+                  "y": 19.0
+                }
+              ],
+              "fields": {
+                "view-field": {
+                  "value": "view2364",
+                  "x": 103.5,
+                  "y": 19.0
+                }
+              },
+              "key_downs": 8
+            },
+            "view_wrapper": {
+              "clicks": [],
+              "fields": {},
+              "key_downs": 0
+            }
+          },
+          "commands": [
+            "\"wtype\" \"-d\" \"60\" \"main2364\""
+          ]
+        },
+        "line": 4,
+        "reason": null,
+        "statement": "Text typed through the display server after a click on a field of the main page is held by that field and gives the view no key event",
+        "status": "proven"
+      }
+    ],
+    "route": "swaymsg seat cursor for the pointer, wtype through virtual-keyboard-unstable-v1 for the keys",
+    "routes_tried": [
+      {
+        "answer": "answered",
+        "route": "swaymsg seat cursor for the pointer, wtype through virtual-keyboard-unstable-v1 for the keys"
+      }
+    ],
+    "sent_by": "a command the harness starts as a process of its own, which speaks to the display server: no event is dispatched by a script in a page and no GTK call of the harness sends input"
+  },
+  "main_window_csp_served": [
+    "style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; script-src 'self' 'self' 'sha256-RRV/vP3tbzqodv9MXQ8jeJ3vWshbb4fP+uDKcRsp5MU='; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; default-src 'self'; base-uri 'self'; font-src 'self' data:; frame-src http://127.0.0.1:36473"
+  ],
+  "mitigations": [
+    "each view webview is built with incognito(true), so every view has its own storage",
+    "hostile.html is served with the CSP directive sandbox allow-scripts",
+    "the view webview loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP default-src 'none'; frame-src 'self', the containment the main window frame-src gives in frame mode",
+    "each view is a child webview of the main window, without a window of its own and without a capability, behind the navigation, new-window and download guards of the view windows"
+  ],
+  "mode": "in-thread",
+  "native_geometry": {
+    "read_from": "GTK, on the main thread, after the mount",
+    "widget_tree": {
+      "display": "GdkWaylandDisplay",
+      "window": {
+        "allocation": {
+          "height": 420,
+          "width": 560,
+          "x": 0,
+          "y": 0
+        },
+        "children": [
+          {
+            "allocation": {
+              "height": 420,
+              "width": 560,
+              "x": 0,
+              "y": 0
+            },
+            "children": [
+              {
+                "allocation": {
+                  "height": 420,
+                  "width": 560,
+                  "x": 0,
+                  "y": 0
+                },
+                "children": [
+                  {
+                    "allocation": {
+                      "height": 420,
+                      "width": 560,
+                      "x": 0,
+                      "y": 0
+                    },
+                    "children": [],
+                    "is_visible": true,
+                    "name": "WebKitWebView",
+                    "rectangle_in_the_window_content": {
+                      "height": 420.0,
+                      "width": 560.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "size_request": {
+                      "height": -1,
+                      "width": -1
+                    },
+                    "type": "WebKitWebView"
+                  },
+                  {
+                    "allocation": {
+                      "height": 420,
+                      "width": 560,
+                      "x": 0,
+                      "y": 0
+                    },
+                    "children": [
+                      {
+                        "allocation": {
+                          "height": 160,
+                          "width": 502,
+                          "x": 29,
+                          "y": 57
+                        },
+                        "children": [],
+                        "is_visible": true,
+                        "name": "WebKitWebView",
+                        "rectangle_in_the_window_content": {
+                          "height": 160.0,
+                          "width": 502.0,
+                          "x": 29.0,
+                          "y": 57.0
+                        },
+                        "size_request": {
+                          "height": 160,
+                          "width": 502
+                        },
+                        "type": "WebKitWebView"
+                      }
+                    ],
+                    "is_visible": true,
+                    "name": "spike-view-board",
+                    "rectangle_in_the_window_content": {
+                      "height": 420.0,
+                      "width": 560.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "size_request": {
+                      "height": -1,
+                      "width": -1
+                    },
+                    "type": "GtkFixed"
+                  }
+                ],
+                "is_visible": true,
+                "name": "spike-view-layer",
+                "packing_in_its_box": {
+                  "expand": true,
+                  "fill": true,
+                  "pack_type": "Start",
+                  "padding": 0
+                },
+                "rectangle_in_the_window_content": {
+                  "height": 420.0,
+                  "width": 560.0,
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "size_request": {
+                  "height": -1,
+                  "width": -1
+                },
+                "type": "GtkOverlay"
+              }
+            ],
+            "homogeneous": false,
+            "is_visible": true,
+            "name": "GtkBox",
+            "orientation": "Vertical",
+            "rectangle_in_the_window_content": null,
+            "size_request": {
+              "height": -1,
+              "width": -1
+            },
+            "type": "GtkBox"
+          }
+        ],
+        "is_visible": true,
+        "name": "GtkApplicationWindow",
+        "rectangle_in_the_window_content": null,
+        "size_request": {
+          "height": -1,
+          "width": -1
+        },
+        "type": "GtkApplicationWindow"
+      }
+    }
+  },
+  "open_points": [
+    {
+      "evidence_keys": [
+        "input"
+      ],
+      "point": "input-through-the-gtk-overlay-on-linux",
+      "reason": null,
+      "status": "proven"
+    },
+    {
+      "evidence_keys": [
+        "os",
+        "display_setup"
+      ],
+      "point": "right-and-bottom-edges-on-macos-in-ci",
+      "reason": "this run is on linux: the macOS CI file decides the point",
+      "status": "not-proven"
+    },
+    {
+      "evidence_keys": [
+        "scrollbars",
+        "sightings",
+        "view_drawn_over_its_placeholder"
+      ],
+      "point": "drawn-position-under-wayland",
+      "reason": null,
+      "status": "proven"
+    },
+    {
+      "evidence_keys": [
+        "display_setup"
+      ],
+      "point": "real-linux-desktop-session",
+      "reason": "this display setup starts no desktop session. Found: window manager: none (\"wmctrl\" \"-m\" ended with exit status: 1: Cannot open display.); of xfce4-session, xfce4-panel, xfdesktop, running: none",
+      "status": "not-proven"
+    }
+  ],
+  "os": "linux",
+  "page_claims_never_used_alone_for_a_verdict": {
+    "first_view": {
+      "allowlist-fetch-cdn-jsdelivr": "ok",
+      "allowlist-fetch-example-com": "blocked-TypeError",
+      "busy-loop": "finished",
+      "ipc-forged-custom-protocol": "blocked-TypeError",
+      "ipc-forged-fetch-ipc-localhost": "blocked-TypeError",
+      "ipc-forged-postmessage": "sent-webkit-parent-top",
+      "ipc-tauri-global": "blocked-TypeError",
+      "ipc-tauri-internals": "blocked-TypeError",
+      "navigation-anchor-download": "attempted",
+      "navigation-meta-refresh": "attempted",
+      "navigation-self": "attempted",
+      "navigation-top": "blocked-SecurityError",
+      "navigation-window-open": "attempted",
+      "parent-cookie-read": "blocked-SecurityError",
+      "parent-cookie-write": "blocked-SecurityError",
+      "parent-dom-read": "blocked-SecurityError",
+      "parent-dom-write": "blocked-SecurityError",
+      "parent-storage-read": "blocked-SecurityError",
+      "parent-storage-write": "blocked-SecurityError",
+      "run": "done",
+      "storage-write-cache": "blocked-SecurityError",
+      "storage-write-cookie": "blocked-SecurityError",
+      "storage-write-indexeddb": "blocked-SecurityError",
+      "storage-write-localstorage": "blocked-SecurityError",
+      "top-dom-read": "blocked-SecurityError",
+      "top-dom-write": "blocked-SecurityError",
+      "tripwire-lan-fetch": "blocked-TypeError",
+      "tripwire-lan-form-post": "submitted",
+      "tripwire-lan-img": "blocked-error",
+      "tripwire-lan-websocket": "blocked-SecurityError",
+      "tripwire-loopback-fetch": "blocked-TypeError",
+      "tripwire-loopback-form-post": "submitted",
+      "tripwire-loopback-img": "blocked-error",
+      "tripwire-loopback-websocket": "blocked-SecurityError"
+    },
+    "second_view": {
+      "run": "done",
+      "storage-read-cache": "blocked-SecurityError",
+      "storage-read-cookie": "blocked-SecurityError",
+      "storage-read-indexeddb": "blocked-SecurityError",
+      "storage-read-localstorage": "blocked-SecurityError"
+    }
+  },
+  "placement_verdict": {
+    "placement_the_views_are_mounted_with": "fixed-board",
+    "placements_that_hold": [
+      "gtk-fixed-over-the-main-webview",
+      "gtk-overlay-margins",
+      "wry-build-gtk-in-a-fixed"
+    ],
+    "verdict": "possible in the thread"
+  },
+  "placements_tried": [
+    {
+      "calls": "tauri::Window::add_child(builder, position, size) with the rectangle asked for",
+      "faults": [],
+      "is_a_webview_tauri_manages": true,
+      "main_webview_bounds_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "tauri-window-add-child",
+      "reason": "the main webview is at 560 x 210 at 0, 0 where the window content is 560 x 420 at 0, 0, and the view is at 560 x 210 at 0, 210 where 502 x 160 at 29, 57 was asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 210.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "fails",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                },
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 210
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 210.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "tauri::Webview::set_bounds(rectangle) on the child webview add_child mounted",
+      "faults": [],
+      "is_a_webview_tauri_manages": true,
+      "main_webview_bounds_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "tauri-webview-set-bounds",
+      "reason": "the main webview is at 560 x 210 at 0, 0 where the window content is 560 x 420 at 0, 0, and the view is at 560 x 210 at 0, 210 where 502 x 160 at 29, 57 was asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 210.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "fails",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                },
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 210
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 210.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "tauri::Webview::set_position(position) then tauri::Webview::set_size(size) on the same child webview",
+      "faults": [],
+      "is_a_webview_tauri_manages": true,
+      "main_webview_bounds_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "tauri-webview-set-position-and-size",
+      "reason": "the main webview is at 560 x 210 at 0, 0 where the window content is 560 x 420 at 0, 0, and the view is at 560 x 210 at 0, 210 where 502 x 160 at 29, 57 was asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 210.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 210.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "fails",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                },
+                {
+                  "allocation": {
+                    "height": 210,
+                    "width": 560,
+                    "x": 0,
+                    "y": 210
+                  },
+                  "children": [],
+                  "is_visible": true,
+                  "name": "WebKitWebView",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 210.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 210.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "WebKitWebView"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "GTK on the widget tauri::Webview::with_webview gives: the main webview moves from the default vbox into a GtkOverlay packed in its place, a pass-through GtkFixed is added with gtk_overlay_add_overlay, the view widget moves into it with gtk_fixed_put, then gtk_widget_set_size_request and gtk_fixed_move",
+      "faults": [],
+      "is_a_webview_tauri_manages": true,
+      "main_webview_bounds_read_back": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "gtk-fixed-over-the-main-webview",
+      "reason": "the main webview fills the window content, 560 x 420 at 0, 0, and the view sits at 502 x 160 at 29, 57, within 1 px of the 502 x 160 at 29, 57 asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "holds",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 420,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [],
+                      "is_visible": true,
+                      "name": "WebKitWebView",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "WebKitWebView"
+                    },
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [
+                        {
+                          "allocation": {
+                            "height": 160,
+                            "width": 502,
+                            "x": 29,
+                            "y": 57
+                          },
+                          "children": [],
+                          "is_visible": true,
+                          "name": "WebKitWebView",
+                          "rectangle_in_the_window_content": {
+                            "height": 160.0,
+                            "width": 502.0,
+                            "x": 29.0,
+                            "y": 57.0
+                          },
+                          "size_request": {
+                            "height": 160,
+                            "width": 502
+                          },
+                          "type": "WebKitWebView"
+                        }
+                      ],
+                      "is_visible": true,
+                      "name": "spike-view-board",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "GtkFixed"
+                    }
+                  ],
+                  "is_visible": true,
+                  "name": "spike-view-layer",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 420.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "GtkOverlay"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "GTK on the same widget: the view is added to the GtkOverlay with gtk_overlay_add_overlay, aligned to the start on both axes, then placed with gtk_widget_set_margin_start, gtk_widget_set_margin_top and gtk_widget_set_size_request",
+      "faults": [],
+      "is_a_webview_tauri_manages": true,
+      "main_webview_bounds_read_back": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "gtk-overlay-margins",
+      "reason": "the main webview fills the window content, 560 x 420 at 0, 0, and the view sits at 502 x 160 at 29, 57, within 1 px of the 502 x 160 at 29, 57 asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 217.0,
+        "width": 531.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "holds",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 420,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [],
+                      "is_visible": true,
+                      "name": "WebKitWebView",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "WebKitWebView"
+                    },
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [],
+                      "is_visible": true,
+                      "name": "spike-view-board",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "GtkFixed"
+                    },
+                    {
+                      "allocation": {
+                        "height": 160,
+                        "width": 502,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [],
+                      "is_visible": true,
+                      "name": "WebKitWebView",
+                      "rectangle_in_the_window_content": {
+                        "height": 160.0,
+                        "width": 502.0,
+                        "x": 29.0,
+                        "y": 57.0
+                      },
+                      "size_request": {
+                        "height": 160,
+                        "width": 502
+                      },
+                      "type": "WebKitWebView"
+                    }
+                  ],
+                  "is_visible": true,
+                  "name": "spike-view-layer",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 420.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "GtkOverlay"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "wry::WebViewBuilder::with_bounds(rectangle).build_gtk(&fixed) on the GtkFixed laid over the main webview, then wry::WebView::set_bounds(rectangle): a webview of wry alone, outside the Tauri runtime",
+      "faults": [],
+      "is_a_webview_tauri_manages": false,
+      "main_webview_bounds_read_back": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "main_webview_bounds_read_back_through_tauri": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "name": "wry-build-gtk-in-a-fixed",
+      "reason": "the main webview fills the window content, 560 x 420 at 0, 0, and the view sits at 502 x 160 at 29, 57, within 1 px of the 502 x 160 at 29, 57 asked for",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back_from": "the GTK allocation of the webview widget, translated to the window content",
+      "rectangle_read_back_through_the_bounds_getter": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "result": "holds",
+      "widget_tree": {
+        "display": "GdkWaylandDisplay",
+        "window": {
+          "allocation": {
+            "height": 420,
+            "width": 560,
+            "x": 0,
+            "y": 0
+          },
+          "children": [
+            {
+              "allocation": {
+                "height": 420,
+                "width": 560,
+                "x": 0,
+                "y": 0
+              },
+              "children": [
+                {
+                  "allocation": {
+                    "height": 420,
+                    "width": 560,
+                    "x": 0,
+                    "y": 0
+                  },
+                  "children": [
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [],
+                      "is_visible": true,
+                      "name": "WebKitWebView",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "WebKitWebView"
+                    },
+                    {
+                      "allocation": {
+                        "height": 420,
+                        "width": 560,
+                        "x": 0,
+                        "y": 0
+                      },
+                      "children": [
+                        {
+                          "allocation": {
+                            "height": 160,
+                            "width": 502,
+                            "x": 29,
+                            "y": 57
+                          },
+                          "children": [],
+                          "is_visible": true,
+                          "name": "WebKitWebView",
+                          "rectangle_in_the_window_content": {
+                            "height": 160.0,
+                            "width": 502.0,
+                            "x": 29.0,
+                            "y": 57.0
+                          },
+                          "size_request": {
+                            "height": 160,
+                            "width": 502
+                          },
+                          "type": "WebKitWebView"
+                        }
+                      ],
+                      "is_visible": true,
+                      "name": "spike-view-board",
+                      "rectangle_in_the_window_content": {
+                        "height": 420.0,
+                        "width": 560.0,
+                        "x": 0.0,
+                        "y": 0.0
+                      },
+                      "size_request": {
+                        "height": -1,
+                        "width": -1
+                      },
+                      "type": "GtkFixed"
+                    }
+                  ],
+                  "is_visible": true,
+                  "name": "spike-view-layer",
+                  "packing_in_its_box": {
+                    "expand": true,
+                    "fill": true,
+                    "pack_type": "Start",
+                    "padding": 0
+                  },
+                  "rectangle_in_the_window_content": {
+                    "height": 420.0,
+                    "width": 560.0,
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "size_request": {
+                    "height": -1,
+                    "width": -1
+                  },
+                  "type": "GtkOverlay"
+                }
+              ],
+              "homogeneous": false,
+              "is_visible": true,
+              "name": "GtkBox",
+              "orientation": "Vertical",
+              "rectangle_in_the_window_content": null,
+              "size_request": {
+                "height": -1,
+                "width": -1
+              },
+              "type": "GtkBox"
+            }
+          ],
+          "is_visible": true,
+          "name": "GtkApplicationWindow",
+          "rectangle_in_the_window_content": null,
+          "size_request": {
+            "height": -1,
+            "width": -1
+          },
+          "type": "GtkApplicationWindow"
+        }
+      },
+      "window_content": {
+        "height": 420.0,
+        "width": 560.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "calls": "wry::WebViewBuilder::with_bounds(rectangle).build_as_child(&main_window), then wry::WebView::set_bounds(rectangle): an X11 child window of the main window holding a webview of wry alone, outside the Tauri runtime",
+      "faults": [],
+      "is_a_webview_tauri_manages": false,
+      "main_webview_bounds_read_back": null,
+      "main_webview_bounds_read_back_through_tauri": null,
+      "name": "wry-build-as-child",
+      "reason": "the view could not be mounted this way: the window handle kind is not supported",
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_read_back": null,
+      "rectangle_read_back_from": "nothing: the view was not mounted",
+      "rectangle_read_back_through_the_bounds_getter": null,
+      "result": "fails",
+      "widget_tree": null,
+      "window_content": null
+    }
+  ],
+  "proofs": [
+    {
+      "attempts": [
+        "ipc-tauri-global",
+        "ipc-tauri-internals",
+        "ipc-forged-postmessage",
+        "ipc-forged-fetch-ipc-localhost",
+        "ipc-forged-custom-protocol"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "calls_while_a_view_was_open": [],
+        "control_calls_before_a_view_opened": [
+          {
+            "webview": "main",
+            "while_view_open": false
+          }
+        ],
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "never_signalled_attempts_read_by_the_host": [],
+        "spike_secret_calls_counted": 1
+      },
+      "name": "The view reaches no host command",
+      "proof": 1,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "parent-dom-read",
+        "parent-dom-write",
+        "top-dom-read",
+        "top-dom-write",
+        "parent-cookie-read",
+        "parent-cookie-write",
+        "parent-storage-read",
+        "parent-storage-write"
+      ],
+      "evidence": {
+        "altered_snapshots": [],
+        "attempts_never_signalled": [],
+        "integrity_snapshots_compared": 843,
+        "main_documents_checked": 1,
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "never_signalled_attempts_read_by_the_host": [],
+        "requests_carrying_a_main_window_secret": []
+      },
+      "name": "The view neither reads nor alters the main window",
+      "proof": 2,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "tripwire-loopback-fetch",
+        "tripwire-loopback-img",
+        "tripwire-loopback-websocket",
+        "tripwire-loopback-form-post",
+        "tripwire-loopback-navigation-window-open",
+        "tripwire-loopback-navigation-top",
+        "tripwire-loopback-navigation-self",
+        "tripwire-loopback-navigation-meta-refresh",
+        "tripwire-lan-fetch",
+        "tripwire-lan-img",
+        "tripwire-lan-websocket",
+        "tripwire-lan-form-post",
+        "tripwire-lan-navigation-window-open",
+        "tripwire-lan-navigation-top",
+        "tripwire-lan-navigation-self",
+        "tripwire-lan-navigation-meta-refresh"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "lan_tripwire": {
+          "address": "10.1.1.151:43793",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "loopback_tripwire": {
+          "address": "127.0.0.1:34931",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "navigation_attempts_never_played_alone": [],
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "never_signalled_attempts_read_by_the_host": [],
+        "tripwire_attempts_played_alone": [
+          {
+            "attempt": "tripwire-loopback-navigation-window-open",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-window-open"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-top",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "blocked-SecurityError",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-top"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-self",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://127.0.0.1:34931",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-self"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-meta-refresh",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://127.0.0.1:34931",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-meta-refresh"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-window-open",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-window-open"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-top",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "blocked-SecurityError",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-top"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-self",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://10.1.1.151:43793",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-self"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-meta-refresh",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://10.1.1.151:43793",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-meta-refresh"
+          }
+        ]
+      },
+      "name": "The view reaches no local service",
+      "proof": 3,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "allowlist-fetch-cdn-jsdelivr",
+        "allowlist-fetch-example-com",
+        "tripwire-loopback-fetch",
+        "tripwire-loopback-img",
+        "tripwire-loopback-websocket",
+        "tripwire-loopback-form-post",
+        "tripwire-loopback-navigation-window-open",
+        "tripwire-loopback-navigation-top",
+        "tripwire-loopback-navigation-self",
+        "tripwire-loopback-navigation-meta-refresh",
+        "tripwire-lan-fetch",
+        "tripwire-lan-img",
+        "tripwire-lan-websocket",
+        "tripwire-lan-form-post",
+        "tripwire-lan-navigation-window-open",
+        "tripwire-lan-navigation-top",
+        "tripwire-lan-navigation-self",
+        "tripwire-lan-navigation-meta-refresh"
+      ],
+      "evidence": {
+        "allowlisted_fetch_beacon": "ok",
+        "browser_csp_reports_about_allowlist_hosts": [],
+        "browser_csp_reports_about_the_other_host": [
+          {
+            "blocked_uri": "https://example.com/",
+            "directive": "connect-src"
+          },
+          {
+            "blocked_uri": "https://example.com/",
+            "directive": "connect-src"
+          }
+        ],
+        "fetches_where_the_host_read_and_the_page_beacon_disagree": [],
+        "lan_tripwire": {
+          "address": "10.1.1.151:43793",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "loopback_tripwire": {
+          "address": "127.0.0.1:34931",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "other_host_fetch_beacon": "blocked-TypeError",
+        "second_view_read_by_the_host": {
+          "allowlisted_fetch": "ok",
+          "allowlisted_fetch_status": 200,
+          "cache": "blocked-SecurityError",
+          "cookie": "blocked-SecurityError",
+          "document_url": "http://127.0.0.1:39189/a278ffb1e06248718f96dd72184100b9/hostile.html",
+          "indexed_db": "blocked-SecurityError",
+          "local_storage": "blocked-SecurityError",
+          "other_host_fetch": "blocked-TypeError",
+          "other_host_fetch_status": null
+        },
+        "tripwire_attempts_played_alone": [
+          {
+            "attempt": "tripwire-loopback-navigation-window-open",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-window-open"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-top",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "blocked-SecurityError",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-top"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-self",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://127.0.0.1:34931",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-self"
+          },
+          {
+            "attempt": "tripwire-loopback-navigation-meta-refresh",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://127.0.0.1:34931",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-loopback-navigation-meta-refresh"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-window-open",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-window-open"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-top",
+            "browser_csp_reports_about_the_tripwire": [],
+            "page_signal": "blocked-SecurityError",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-top"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-self",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://10.1.1.151:43793",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-self"
+          },
+          {
+            "attempt": "tripwire-lan-navigation-meta-refresh",
+            "browser_csp_reports_about_the_tripwire": [
+              {
+                "blocked_uri": "http://10.1.1.151:43793",
+                "directive": "frame-src"
+              }
+            ],
+            "page_signal": "attempted",
+            "request_bytes_received": 0,
+            "tripwire_connections": 0,
+            "window": "alone-tripwire-lan-navigation-meta-refresh"
+          }
+        ],
+        "view_csp_reports_received": 13
+      },
+      "name": "Network egress follows the allowlist",
+      "proof": 4,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "navigation-window-open",
+        "navigation-anchor-download",
+        "navigation-top",
+        "navigation-self",
+        "navigation-meta-refresh"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "attempts_whose_connection_reached_the_sink": [],
+        "handler_events": [
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "tauri://localhost",
+            "window": "main"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:36473/1ed14073432549f6a7e974e7b75d67e8/view.html",
+            "window": "view-1"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:36473/1ed14073432549f6a7e974e7b75d67e8/hostile.html",
+            "window": "view-1"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "view-1"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:39189/a278ffb1e06248718f96dd72184100b9/view.html",
+            "window": "view-2"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:39189/a278ffb1e06248718f96dd72184100b9/hostile.html",
+            "window": "view-2"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "view-2"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:45137/061fccc86ce3440c9ab2c472b72aea57/view.html",
+            "window": "alone-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:45137/061fccc86ce3440c9ab2c472b72aea57/hostile.html",
+            "window": "alone-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46487/eb5d719e4675494ab7f820728f018aa7/view.html",
+            "window": "alone-navigation-anchor-download"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46487/eb5d719e4675494ab7f820728f018aa7/hostile.html",
+            "window": "alone-navigation-anchor-download"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-navigation-anchor-download"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:43299/2662ef75c18b452fa0476139212a6e08/view.html",
+            "window": "alone-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:43299/2662ef75c18b452fa0476139212a6e08/hostile.html",
+            "window": "alone-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46081/688e370e5acc4a83b8b315c13f44440b/view.html",
+            "window": "alone-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46081/688e370e5acc4a83b8b315c13f44440b/hostile.html",
+            "window": "alone-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:34419/249c20563254431a89016cd24e590127/view.html",
+            "window": "alone-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:34419/249c20563254431a89016cd24e590127/hostile.html",
+            "window": "alone-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:42021/02eacf9d52f14147b746fcc705221bf6/view.html",
+            "window": "alone-tripwire-loopback-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:42021/02eacf9d52f14147b746fcc705221bf6/hostile.html",
+            "window": "alone-tripwire-loopback-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-loopback-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46283/e8e81208f58b436c96ffcd6b5a266b25/view.html",
+            "window": "alone-tripwire-loopback-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46283/e8e81208f58b436c96ffcd6b5a266b25/hostile.html",
+            "window": "alone-tripwire-loopback-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-loopback-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:33193/806855dcc5294f0faf0a3a24f7e94e7b/view.html",
+            "window": "alone-tripwire-loopback-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:33193/806855dcc5294f0faf0a3a24f7e94e7b/hostile.html",
+            "window": "alone-tripwire-loopback-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-loopback-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:37599/00c8aed9d2df4580b96c9c7b9a3a0695/view.html",
+            "window": "alone-tripwire-loopback-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:37599/00c8aed9d2df4580b96c9c7b9a3a0695/hostile.html",
+            "window": "alone-tripwire-loopback-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-loopback-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46281/47ba9793acc343b1b52f567e23800a62/view.html",
+            "window": "alone-tripwire-lan-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:46281/47ba9793acc343b1b52f567e23800a62/hostile.html",
+            "window": "alone-tripwire-lan-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-lan-navigation-window-open"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:33813/875d28fe18bb467389af4bc6fb7abce7/view.html",
+            "window": "alone-tripwire-lan-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:33813/875d28fe18bb467389af4bc6fb7abce7/hostile.html",
+            "window": "alone-tripwire-lan-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-lan-navigation-top"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:35579/c4b6f3d35a6749878a6388b2ee4f7465/view.html",
+            "window": "alone-tripwire-lan-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:35579/c4b6f3d35a6749878a6388b2ee4f7465/hostile.html",
+            "window": "alone-tripwire-lan-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-lan-navigation-self"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:35469/0046e5d6fd4b4c9abc3a7fd46929ba39/view.html",
+            "window": "alone-tripwire-lan-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "http://127.0.0.1:35469/0046e5d6fd4b4c9abc3a7fd46929ba39/hostile.html",
+            "window": "alone-tripwire-lan-navigation-meta-refresh"
+          },
+          {
+            "allowed": true,
+            "handler": "on_navigation",
+            "url": "about:blank",
+            "window": "alone-tripwire-lan-navigation-meta-refresh"
+          }
+        ],
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "navigation_attempts_played_alone": [
+          {
+            "attempt": "navigation-window-open",
+            "browser_csp_reports_about_the_sink": [],
+            "handler_answers": [],
+            "handler_denied_it": false,
+            "request_bytes_received": 0,
+            "sink_connections": 0,
+            "window": "alone-navigation-window-open"
+          },
+          {
+            "attempt": "navigation-anchor-download",
+            "browser_csp_reports_about_the_sink": [
+              {
+                "blocked_uri": "http://127.0.0.1:33661",
+                "directive": "frame-src"
+              }
+            ],
+            "handler_answers": [],
+            "handler_denied_it": false,
+            "request_bytes_received": 0,
+            "sink_connections": 0,
+            "window": "alone-navigation-anchor-download"
+          },
+          {
+            "attempt": "navigation-top",
+            "browser_csp_reports_about_the_sink": [],
+            "handler_answers": [],
+            "handler_denied_it": false,
+            "request_bytes_received": 0,
+            "sink_connections": 0,
+            "window": "alone-navigation-top"
+          },
+          {
+            "attempt": "navigation-self",
+            "browser_csp_reports_about_the_sink": [
+              {
+                "blocked_uri": "http://127.0.0.1:33661",
+                "directive": "frame-src"
+              }
+            ],
+            "handler_answers": [],
+            "handler_denied_it": false,
+            "request_bytes_received": 0,
+            "sink_connections": 0,
+            "window": "alone-navigation-self"
+          },
+          {
+            "attempt": "navigation-meta-refresh",
+            "browser_csp_reports_about_the_sink": [
+              {
+                "blocked_uri": "http://127.0.0.1:33661",
+                "directive": "frame-src"
+              }
+            ],
+            "handler_answers": [],
+            "handler_denied_it": false,
+            "request_bytes_received": 0,
+            "sink_connections": 0,
+            "window": "alone-navigation-meta-refresh"
+          }
+        ],
+        "navigation_sink": {
+          "address": "127.0.0.1:33661",
+          "connections_from_views": [],
+          "control_connections_from_the_harness": 1
+        },
+        "never_signalled_attempts_read_by_the_host": [],
+        "stray_connections_at_the_sink": [],
+        "windows_checked": [
+          "main",
+          "view-1",
+          "alone-navigation-window-open",
+          "alone-navigation-anchor-download",
+          "alone-navigation-top",
+          "alone-navigation-self",
+          "alone-navigation-meta-refresh",
+          "alone-tripwire-loopback-navigation-window-open",
+          "alone-tripwire-loopback-navigation-top",
+          "alone-tripwire-loopback-navigation-self",
+          "alone-tripwire-loopback-navigation-meta-refresh",
+          "alone-tripwire-lan-navigation-window-open",
+          "alone-tripwire-lan-navigation-top",
+          "alone-tripwire-lan-navigation-self",
+          "alone-tripwire-lan-navigation-meta-refresh"
+        ],
+        "windows_whose_url_changed": []
+      },
+      "name": "The view cannot navigate, open a window or download",
+      "proof": 5,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "busy-loop"
+      ],
+      "evidence": {
+        "busy_loop_observed_ms": 10002,
+        "gaps_above_the_limit": [],
+        "heartbeat_gap_limit_ms": 500,
+        "heartbeats_received": 843,
+        "hostile_view_ran_ms": 15265,
+        "longest_heartbeat_gap_before_any_view_ms": 100,
+        "longest_heartbeat_gap_during_the_busy_loop_ms": 100,
+        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 100,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 60,
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "view_window_build_ms": 110
+      },
+      "name": "The main window stays responsive while the view spins",
+      "proof": 6,
+      "result": "green"
+    },
+    {
+      "attempts": [
+        "storage-write-localstorage",
+        "storage-write-indexeddb",
+        "storage-write-cookie",
+        "storage-write-cache",
+        "storage-read-localstorage",
+        "storage-read-indexeddb",
+        "storage-read-cookie",
+        "storage-read-cache"
+      ],
+      "evidence": {
+        "attempts_never_signalled": [],
+        "cookie_headers_carrying_the_first_view_value": [],
+        "cookie_headers_received_from_the_second_view": [],
+        "first_view_read_by_the_host": {
+          "allowlisted_fetch": "ok",
+          "allowlisted_fetch_status": 200,
+          "cache": "blocked-SecurityError",
+          "cookie": "blocked-SecurityError",
+          "document_url": "http://127.0.0.1:36473/1ed14073432549f6a7e974e7b75d67e8/hostile.html",
+          "indexed_db": "blocked-SecurityError",
+          "local_storage": "blocked-SecurityError",
+          "other_host_fetch": "blocked-TypeError",
+          "other_host_fetch_status": null
+        },
+        "first_view_write_beacons": {
+          "storage-write-cache": "blocked-SecurityError",
+          "storage-write-cookie": "blocked-SecurityError",
+          "storage-write-indexeddb": "blocked-SecurityError",
+          "storage-write-localstorage": "blocked-SecurityError"
+        },
+        "navigation_attempts_of_the_first_view_seen_by_the_host": {
+          "by_browser_csp_reports": 3,
+          "by_the_handlers": 0
+        },
+        "never_signalled_attempts_read_by_the_host": [],
+        "reads_returning_the_first_view_value": [],
+        "second_view_read_beacons": {
+          "storage-read-cache": "blocked-SecurityError",
+          "storage-read-cookie": "blocked-SecurityError",
+          "storage-read-indexeddb": "blocked-SecurityError",
+          "storage-read-localstorage": "blocked-SecurityError"
+        },
+        "second_view_read_by_the_host": {
+          "allowlisted_fetch": "ok",
+          "allowlisted_fetch_status": 200,
+          "cache": "blocked-SecurityError",
+          "cookie": "blocked-SecurityError",
+          "document_url": "http://127.0.0.1:39189/a278ffb1e06248718f96dd72184100b9/hostile.html",
+          "indexed_db": "blocked-SecurityError",
+          "local_storage": "blocked-SecurityError",
+          "other_host_fetch": "blocked-TypeError",
+          "other_host_fetch_status": null
+        },
+        "stores_where_the_host_found_the_first_view_value": [],
+        "value_the_first_view_stored": "1ed14073432549f6a7e974e7b75d67e8"
+      },
+      "name": "A second view reads nothing the first view stored",
+      "proof": 7,
+      "result": "green"
+    }
+  ],
+  "run": {
+    "github_run_id": "43962464137",
+    "name": "linux-sway-on-xvfb"
+  },
+  "scrollbars": {
+    "cause": "the scrollbars of the view document take no space: its inner size equals the client size of its root element, so the paint already covers the whole rectangle of the view and is left unchanged",
+    "child_webview_bounds_read_back": {
+      "height": 160.0,
+      "width": 502.0,
+      "x": 29.0,
+      "y": 57.0
+    },
+    "main_page": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": false,
+        "content_is_wider_than_the_root": false,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "root_scroll_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    },
+    "paint": "unchanged",
+    "read": "before any paint and before any change to the scrollbars, by one script evaluated in the main page and in the document of the view webview",
+    "view_document": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": true,
+        "content_is_wider_than_the_root": true,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "root_scroll_size": {
+        "height": 384.0,
+        "width": 532.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    }
+  },
+  "sightings": [
+    {
+      "child_webview_bounds_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "name": "as-mounted",
+      "page_origin_drawn_in_the_main_webview": null,
+      "page_origin_the_host_placed_from": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "pixels_per_point": 1.0,
+      "placeholder_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 231.0
+        },
+        "capture": "capture-linux-sway-on-xvfb-in-thread-as-mounted-cyan.png",
+        "paint": "rgb(0, 255, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 261,
+          "painted_pixels": 80320,
+          "top": 231,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 231.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "placeholder_reported_by_the_page": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 57.0
+      },
+      "rectangles_measured_from": "the compositor output: a Wayland client is not told where its window is, so the two boxes are compared in the capture and no page origin is read",
+      "view_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 231.0
+        },
+        "capture": "capture-linux-sway-on-xvfb-in-thread-as-mounted-magenta.png",
+        "paint": "rgb(255, 0, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 261,
+          "painted_pixels": 80320,
+          "top": 231,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 231.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "view_edges_minus_placeholder_edges_in_points": {
+        "bottom": 0.0,
+        "left": 0.0,
+        "right": 0.0,
+        "top": 0.0
+      },
+      "view_offset_from_its_placeholder": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "view_size_minus_placeholder_size": {
+        "height": 0.0,
+        "width": 0.0
+      }
+    },
+    {
+      "child_webview_bounds_read_back": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "name": "before-input",
+      "page_origin_drawn_in_the_main_webview": null,
+      "page_origin_the_host_placed_from": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "pixels_per_point": 1.0,
+      "placeholder_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 312.0
+        },
+        "capture": "capture-linux-sway-on-xvfb-in-thread-before-input-cyan.png",
+        "paint": "rgb(0, 255, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 261,
+          "painted_pixels": 80320,
+          "top": 312,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 312.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "placeholder_reported_by_the_page": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "rectangle_asked": {
+        "height": 160.0,
+        "width": 502.0,
+        "x": 29.0,
+        "y": 138.0
+      },
+      "rectangles_measured_from": "the compositor output: a Wayland client is not told where its window is, so the two boxes are compared in the capture and no page origin is read",
+      "view_drawn": {
+        "box_on_the_screen_in_pixels": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 312.0
+        },
+        "capture": "capture-linux-sway-on-xvfb-in-thread-before-input-magenta.png",
+        "paint": "rgb(255, 0, 255)",
+        "painted_box_in_capture_pixels": {
+          "height": 160,
+          "left": 261,
+          "painted_pixels": 80320,
+          "top": 312,
+          "width": 502
+        },
+        "rectangle_in_window_points": {
+          "height": 160.0,
+          "width": 502.0,
+          "x": 261.0,
+          "y": 312.0
+        },
+        "share_of_the_box_painted": 1.0
+      },
+      "view_edges_minus_placeholder_edges_in_points": {
+        "bottom": 0.0,
+        "left": 0.0,
+        "right": 0.0,
+        "top": 0.0
+      },
+      "view_offset_from_its_placeholder": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "view_size_minus_placeholder_size": {
+        "height": 0.0,
+        "width": 0.0
+      }
+    }
+  ],
+  "tauri": "2.12.2",
+  "ticket": "OPE-2364",
+  "verdict": "in-thread",
+  "view_drawn_over_its_placeholder": true,
+  "views": {
+    "first_view": {
+      "attempts_the_page_script_reached_read_by_the_host": [
+        "storage-write-localstorage",
+        "storage-write-cookie",
+        "storage-write-indexeddb",
+        "storage-write-cache",
+        "ipc-tauri-global",
+        "ipc-tauri-internals",
+        "ipc-forged-postmessage",
+        "ipc-forged-fetch-ipc-localhost",
+        "ipc-forged-custom-protocol",
+        "parent-dom-read",
+        "parent-dom-write",
+        "top-dom-read",
+        "top-dom-write",
+        "parent-cookie-read",
+        "parent-cookie-write",
+        "parent-storage-read",
+        "parent-storage-write",
+        "tripwire-loopback-form-post",
+        "tripwire-loopback-websocket",
+        "tripwire-loopback-fetch",
+        "tripwire-loopback-img",
+        "tripwire-lan-form-post",
+        "tripwire-lan-websocket",
+        "tripwire-lan-fetch",
+        "tripwire-lan-img",
+        "allowlist-fetch-example-com",
+        "allowlist-fetch-cdn-jsdelivr",
+        "busy-loop",
+        "busy-loop",
+        "navigation-window-open",
+        "navigation-anchor-download",
+        "navigation-top",
+        "navigation-top",
+        "navigation-self",
+        "navigation-meta-refresh",
+        "run"
+      ],
+      "document_requests": 1,
+      "requests_outside_the_routes": [],
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /1ed14073432549f6a7e974e7b75d67e8/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:36473/1ed14073432549f6a7e974e7b75d67e8/view.html"
+    },
+    "second_view": {
+      "attempts_the_page_script_reached_read_by_the_host": [
+        "storage-read-localstorage",
+        "storage-read-cookie",
+        "storage-read-indexeddb",
+        "storage-read-cache",
+        "run"
+      ],
+      "document_requests": 1,
+      "requests_outside_the_routes": [],
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /a278ffb1e06248718f96dd72184100b9/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:39189/a278ffb1e06248718f96dd72184100b9/view.html"
+    }
+  },
+  "webview": "2.52.6"
+}

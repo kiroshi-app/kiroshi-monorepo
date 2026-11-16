@@ -16,7 +16,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -86,7 +86,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 0,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -161,7 +161,7 @@
               "y": 323.0
             },
             "child_webview_visible": false,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 0,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
             "intersection": null,
             "page_origin_in_the_main_webview": {
               "x": 0.0,
@@ -193,7 +193,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 0,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 80.0,
               "width": 502.0,
@@ -308,7 +308,7 @@
                 "y": 138.0
               },
               "child_webview_visible": true,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -352,7 +352,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -389,7 +389,7 @@
                 "y": 138.0
               },
               "child_webview_visible": true,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -433,7 +433,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -514,7 +514,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
               "intersection": {
                 "height": 160.0,
                 "width": 502.0,
@@ -560,7 +560,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
             "intersection": {
               "height": 160.0,
               "width": 642.0,
@@ -595,7 +595,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
             "intersection": {
               "height": 160.0,
               "width": 502.0,
@@ -638,7 +638,7 @@
             "y": 138.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
           "intersection": {
             "height": 160.0,
             "width": 502.0,
@@ -675,7 +675,7 @@
             "y": 33.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 1,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
           "intersection": {
             "height": 370.0,
             "width": 502.0,
@@ -750,7 +750,7 @@
     "the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
     "the child webview is first placed from the rectangles the main page gives in its own viewport coordinates, with no correction, and the window is captured; where the view is drawn more than 1 px from its placeholder, every later placement adds the page origin read from that capture, the placeholder drawn minus the placeholder reported, rounded to the point; the five behaviours are played once per run, after that correction, and a second capture follows them",
     "the placeholder is painted rgb(0, 255, 255) and the view rgb(255, 0, 255), the placeholder captured with the view hidden, the view captured once shown again; a pixel counts for a paint when each of its leading channels exceeds the others by more than 100, since the display profile shifts the values a capture holds, and a box painted on less than 98 percent of its area is a fault; green was dropped because the zoom button of the title bar is green",
-    "on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland no capture is taken and the drawn position stays not proven",
+    "on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland it is a capture of the whole compositor output, by grim then by weston-screenshooter, the first that answers, and the two painted boxes are compared in that capture since a Wayland client is not told where its window is",
     "on macOS the correction a product would apply is the safeAreaInsets.top of the main webview, which native_geometry records beside the origin read from the pixels; the harness places from the pixels so that the two agreeing is a measurement and not an assumption",
     "the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
     "child_webview_bounds is read back from the webview after the host set it, through tauri::Webview::bounds on macOS and Windows and through the GTK allocation translated to the main webview on Linux, where tauri::Webview::bounds never reads a position; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
@@ -761,20 +761,41 @@
     "the capability names the webview main where it named the window main, so a child webview of the main window receives none",
     "on Linux every placement is tried on a blank child webview before the first view, each asked for the rectangle of the placeholder; a placement holds when the GTK allocations give the main webview the whole window content and the view its rectangle within 1 px",
     "on Linux each view is mounted by tauri::Window::add_child, then its widget is moved by GTK calls into the first placement that held on a webview Tauri manages, the GtkFixed tried before the overlay margins; the two placements of wry alone are measured on a blank webview outside the Tauri runtime, where no guard, no capability and no proof applies",
-    "on Linux the input a view and the main page receive through the GtkOverlay was not exercised: the GtkFixed is set pass-through, no click was sent",
+    "on Linux the four input lines are played once per run, after the five behaviours, on the mount the seven proofs ran on, the GtkFixed over the main webview: a sighting named before-input is taken first, and each click is aimed from the boxes that sighting found on the screen, never from a position the harness computed",
+    "every click and every key is sent by a command the harness starts as a process of its own: xdotool through XTEST under X11; under Wayland swaymsg seat cursor with wtype, then wlrctl, the first route whose own probe command answers; a setup where no probe answers is not provable and each answer is kept in input.routes_tried",
+    "a click or a key counts only when its isTrusted is true, which no script dispatch can set; the recorder is an initialization script of every frame of the main webview and of the view webview, so the wrapper page of the view and hostile.html are both read, and a click in the view means a click in hostile.html",
+    "the view is clicked on a field hostile.html now holds and the main page on a field index.html now holds, fixed in the top right corner so that no rectangle the page reported in OPE-2355 moves; the texts typed are view2364 and main2364, without a space since a space scrolls a page that holds no focused field",
+    "the paint of the view gained pointer-events none, which changes no pixel: without it the paint itself, laid over the wrapper page, would take every click aimed at hostile.html",
+    "the scrollbars are measured once per run, before the first paint: when the scrollbars of the view document take space, the view is painted as in OPE-2355 and captured (viewport-paint), and only when the paint is short of the child webview bounds by exactly that space on each axis are the scrollbars of the view document hidden, by overflow hidden on its root element, for every later paint; otherwise the paint is left as it was",
+    "view_drawn_over_its_placeholder is the rule of OPE-2355, unchanged: offset within 1 px and size within 1 px, read from the last sighting; view_edges_minus_placeholder_edges_in_points states the same sighting edge by edge",
+    "each result file holds the four open points of OPE-2355 with a status of its own run; a point another platform or another display setup decides is not-proven here with that reason, and not-provable is kept for a route that does not exist",
+    "a desktop session is a window manager that names itself to wmctrl with xfce4-session, xfce4-panel and xfdesktop running; XDG_SESSION_ID and XDG_CURRENT_DESKTOP no longer decide it, since no session started without a login has the first",
+    "the Wayland setup that can receive input is sway with the X11 backend of wlroots on Xvfb: the harness is a Wayland client of sway alone, with DISPLAY unset; weston headless refuses every route, and in Docker sway with the headless backend of wlroots answered swaymsg and wtype while no click and no key reached the harness, its seat holding no pointer and no keyboard device",
+    "the real session is Xfce started by startxfce4 under dbus-run-session on Xvfb, the only desktop shell with a window manager of its own that OPE-2364 started on the runner; what it lacks next to a session on a physical display is in display_setup.desktop_session.lacks",
     "gtk and wry on Linux, objc2 and objc2-foundation on macOS are direct dependencies of the harness at the versions the lock already held: no package entered the lock",
     "results-linux-in-thread.json is the Xvfb alone setup, the setup of the OPE-2346 file of that name; every other display setup carries its name in the file name",
-    "the OPE-2355 workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched"
+    "the workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched"
   ],
   "display_setup": {
+    "desktop_session": {
+      "current_desktop": null,
+      "is_a_desktop_session": false,
+      "lacks": null,
+      "session_bus_set": false,
+      "session_id": null,
+      "session_processes_running": [],
+      "what_it_is": null,
+      "window_manager": {
+        "unavailable": "\"wmctrl\" \"-m\" ended with exit status: 1: Cannot open display."
+      }
+    },
     "gdk_backend_asked": "wayland",
     "name": "weston-headless",
-    "real_desktop_session": "not proven: this run has no desktop session, XDG_SESSION_ID and XDG_CURRENT_DESKTOP are not both set; OPE-2355 reached Linux only through Docker linux/arm64 on a macOS host and through the GitHub-hosted ubuntu-latest runner, each under Xvfb alone, Xvfb with the openbox window manager and the headless backend of the weston Wayland compositor: no login session, no GPU compositor, no physical output",
     "session_type": null,
     "wayland_display_set": true,
     "x_display_set": false
   },
-  "duration_ms": 69739,
+  "duration_ms": 74231,
   "halved_views_cause": {
     "halved_views": "the default vbox of the main window, a vertical GtkBox, holds the main webview and the child webview as two children packed with expand and fill, so GTK gives each half of its height: main webview 560 x 210 at 0, 0, child webview 560 x 210 at 0, 210, window content 560 x 420 at 0, 0",
     "measurement": {
@@ -919,8 +940,52 @@
       "wry 0.57.0 src/webkitgtk/mod.rs:957-958 reads only allocated_size outside an X11 child window, so the position is always 0, 0, and src/webkitgtk/mod.rs:963-984 set_bounds acts only on an X11 child window or on a webview built in a GtkFixed"
     ]
   },
+  "input": {
+    "lines": [
+      {
+        "evidence": null,
+        "line": 1,
+        "reason": "this display setup offers no route to send a click or a key from outside the harness",
+        "statement": "A click sent through the display server inside the rectangle of the view reaches the document of the view and not the main page",
+        "status": "not-provable"
+      },
+      {
+        "evidence": null,
+        "line": 2,
+        "reason": "this display setup offers no route to send a click or a key from outside the harness",
+        "statement": "Text typed through the display server after that click is held by a field of the view and changes no field of the main page",
+        "status": "not-provable"
+      },
+      {
+        "evidence": null,
+        "line": 3,
+        "reason": "this display setup offers no route to send a click or a key from outside the harness",
+        "statement": "A click sent through the display server on the main page outside the rectangle reaches the main page and not the view",
+        "status": "not-provable"
+      },
+      {
+        "evidence": null,
+        "line": 4,
+        "reason": "this display setup offers no route to send a click or a key from outside the harness",
+        "statement": "Text typed through the display server after a click on a field of the main page is held by that field and gives the view no key event",
+        "status": "not-provable"
+      }
+    ],
+    "route": null,
+    "routes_tried": [
+      {
+        "answer": "\"swaymsg\" \"-t\" \"get_seats\" ended with exit status: 1: 00:00:00.013 [ERROR] [swaymsg/main.c:509] Unable to retrieve socket path",
+        "route": "swaymsg seat cursor for the pointer, wtype through virtual-keyboard-unstable-v1 for the keys"
+      },
+      {
+        "answer": "\"wlrctl\" \"pointer\" \"move\" \"0\" \"0\" ended with exit status: 1: Virtual Pointer interface not found!",
+        "route": "wlrctl, through wlr-virtual-pointer-unstable-v1 and virtual-keyboard-unstable-v1"
+      }
+    ],
+    "sent_by": "a command the harness starts as a process of its own, which speaks to the display server: no event is dispatched by a script in a page and no GTK call of the harness sends input"
+  },
   "main_window_csp_served": [
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; font-src 'self' data:; script-src 'self' 'self' 'sha256-RRV/vP3tbzqodv9MXQ8jeJ3vWshbb4fP+uDKcRsp5MU='; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-src http://127.0.0.1:44253"
+    "img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; base-uri 'self'; default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; script-src 'self' 'self' 'sha256-RRV/vP3tbzqodv9MXQ8jeJ3vWshbb4fP+uDKcRsp5MU='; frame-src http://127.0.0.1:37573"
   ],
   "mitigations": [
     "each view webview is built with incognito(true), so every view has its own storage",
@@ -1069,6 +1134,43 @@
       }
     }
   },
+  "open_points": [
+    {
+      "evidence_keys": [
+        "input"
+      ],
+      "point": "input-through-the-gtk-overlay-on-linux",
+      "reason": "line 1: this display setup offers no route to send a click or a key from outside the harness",
+      "status": "not-provable"
+    },
+    {
+      "evidence_keys": [
+        "os",
+        "display_setup"
+      ],
+      "point": "right-and-bottom-edges-on-macos-in-ci",
+      "reason": "this run is on linux: the macOS CI file decides the point",
+      "status": "not-proven"
+    },
+    {
+      "evidence_keys": [
+        "scrollbars",
+        "sightings",
+        "view_drawn_over_its_placeholder"
+      ],
+      "point": "drawn-position-under-wayland",
+      "reason": "no capture route of the Wayland compositor answered: grim answered: \"grim\" \"-t\" \"ppm\" \"capture-linux-weston-headless-in-thread-before-input-cyan.ppm\" ended with exit status: 1: compositor doesn't support wlr-screencopy-unstable-v1; weston-screenshooter answered: cd \"capture-linux-weston-headless-in-thread-before-input-cyan.shots\" && \"weston-screenshooter\" ended with signal: 6 (SIGABRT) (core dumped): weston-screenshooter: ../clients/screenshot.c:101: screenshot_create_shm_buffer: Assertion `width > 0' failed.",
+      "status": "not-provable"
+    },
+    {
+      "evidence_keys": [
+        "display_setup"
+      ],
+      "point": "real-linux-desktop-session",
+      "reason": "this display setup starts no desktop session. Found: window manager: none (\"wmctrl\" \"-m\" ended with exit status: 1: Cannot open display.); of xfce4-session, xfce4-panel, xfdesktop, running: none",
+      "status": "not-proven"
+    }
+  ],
   "os": "linux",
   "page_claims_never_used_alone_for_a_verdict": {
     "first_view": {
@@ -2161,7 +2263,7 @@
       "evidence": {
         "altered_snapshots": [],
         "attempts_never_signalled": [],
-        "integrity_snapshots_compared": 696,
+        "integrity_snapshots_compared": 741,
         "main_documents_checked": 1,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
@@ -2196,12 +2298,12 @@
       "evidence": {
         "attempts_never_signalled": [],
         "lan_tripwire": {
-          "address": "10.0.134.112:34043",
+          "address": "10.1.0.131:46839",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:43985",
+          "address": "127.0.0.1:46505",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2232,7 +2334,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:43985",
+                "blocked_uri": "http://127.0.0.1:46505",
                 "directive": "frame-src"
               }
             ],
@@ -2245,7 +2347,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:43985",
+                "blocked_uri": "http://127.0.0.1:46505",
                 "directive": "frame-src"
               }
             ],
@@ -2274,7 +2376,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.134.112:34043",
+                "blocked_uri": "http://10.1.0.131:46839",
                 "directive": "frame-src"
               }
             ],
@@ -2287,7 +2389,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.134.112:34043",
+                "blocked_uri": "http://10.1.0.131:46839",
                 "directive": "frame-src"
               }
             ],
@@ -2338,12 +2440,12 @@
         ],
         "fetches_where_the_host_read_and_the_page_beacon_disagree": [],
         "lan_tripwire": {
-          "address": "10.0.134.112:34043",
+          "address": "10.1.0.131:46839",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:43985",
+          "address": "127.0.0.1:46505",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2357,7 +2459,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:43853/4efd28ecb78e44b38f5686a8375c9c6c/hostile.html",
+          "document_url": "http://127.0.0.1:45021/9c67530cf55648e78183a94a5a783625/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -2384,7 +2486,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:43985",
+                "blocked_uri": "http://127.0.0.1:46505",
                 "directive": "frame-src"
               }
             ],
@@ -2397,7 +2499,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:43985",
+                "blocked_uri": "http://127.0.0.1:46505",
                 "directive": "frame-src"
               }
             ],
@@ -2426,7 +2528,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.134.112:34043",
+                "blocked_uri": "http://10.1.0.131:46839",
                 "directive": "frame-src"
               }
             ],
@@ -2439,7 +2541,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.0.134.112:34043",
+                "blocked_uri": "http://10.1.0.131:46839",
                 "directive": "frame-src"
               }
             ],
@@ -2476,13 +2578,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44253/b7495c42f511491d997dffb2b359f40d/view.html",
+            "url": "http://127.0.0.1:37573/a14ba4e9336349bb806c5332774342e6/view.html",
             "window": "view-1"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44253/b7495c42f511491d997dffb2b359f40d/hostile.html",
+            "url": "http://127.0.0.1:37573/a14ba4e9336349bb806c5332774342e6/hostile.html",
             "window": "view-1"
           },
           {
@@ -2494,13 +2596,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:43853/4efd28ecb78e44b38f5686a8375c9c6c/view.html",
+            "url": "http://127.0.0.1:45021/9c67530cf55648e78183a94a5a783625/view.html",
             "window": "view-2"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:43853/4efd28ecb78e44b38f5686a8375c9c6c/hostile.html",
+            "url": "http://127.0.0.1:45021/9c67530cf55648e78183a94a5a783625/hostile.html",
             "window": "view-2"
           },
           {
@@ -2512,13 +2614,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38353/f7da2eed9e9146ecb3452a82fcf1ae89/view.html",
+            "url": "http://127.0.0.1:36763/793f4813a709418194314e4c9aac3456/view.html",
             "window": "alone-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38353/f7da2eed9e9146ecb3452a82fcf1ae89/hostile.html",
+            "url": "http://127.0.0.1:36763/793f4813a709418194314e4c9aac3456/hostile.html",
             "window": "alone-navigation-window-open"
           },
           {
@@ -2530,13 +2632,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42697/e8d50d1f317a4a1396bb528acfe8cafa/view.html",
+            "url": "http://127.0.0.1:43589/62efcf590120439181155d95e3c8d4f1/view.html",
             "window": "alone-navigation-anchor-download"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42697/e8d50d1f317a4a1396bb528acfe8cafa/hostile.html",
+            "url": "http://127.0.0.1:43589/62efcf590120439181155d95e3c8d4f1/hostile.html",
             "window": "alone-navigation-anchor-download"
           },
           {
@@ -2548,13 +2650,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:43695/ee3f305fc4f642b2a3c5f257e9ce59cf/view.html",
+            "url": "http://127.0.0.1:43719/cf63d4ab100241d6837c4082d757a68d/view.html",
             "window": "alone-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:43695/ee3f305fc4f642b2a3c5f257e9ce59cf/hostile.html",
+            "url": "http://127.0.0.1:43719/cf63d4ab100241d6837c4082d757a68d/hostile.html",
             "window": "alone-navigation-top"
           },
           {
@@ -2566,13 +2668,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:40001/4b2cd53b67dd4e4dbb1657db858abf6c/view.html",
+            "url": "http://127.0.0.1:39167/7df19cf340594f1d912153832cad5ba1/view.html",
             "window": "alone-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:40001/4b2cd53b67dd4e4dbb1657db858abf6c/hostile.html",
+            "url": "http://127.0.0.1:39167/7df19cf340594f1d912153832cad5ba1/hostile.html",
             "window": "alone-navigation-self"
           },
           {
@@ -2584,13 +2686,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44461/14dd234dc5984761a54e057c502a6e99/view.html",
+            "url": "http://127.0.0.1:38689/cc0b6be7d6d748d3be5eda4bda7a7680/view.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44461/14dd234dc5984761a54e057c502a6e99/hostile.html",
+            "url": "http://127.0.0.1:38689/cc0b6be7d6d748d3be5eda4bda7a7680/hostile.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
@@ -2602,13 +2704,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44927/3fa1a373c3424be182e90b827d24e4d1/view.html",
+            "url": "http://127.0.0.1:40623/b19efdcd286547f9a6f4ebb77674ae5d/view.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44927/3fa1a373c3424be182e90b827d24e4d1/hostile.html",
+            "url": "http://127.0.0.1:40623/b19efdcd286547f9a6f4ebb77674ae5d/hostile.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
@@ -2620,13 +2722,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38131/08c28aae808c45acae69bce7fdc69d28/view.html",
+            "url": "http://127.0.0.1:38927/ca343b68fffa4d0797d6d86acd85a0c0/view.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38131/08c28aae808c45acae69bce7fdc69d28/hostile.html",
+            "url": "http://127.0.0.1:38927/ca343b68fffa4d0797d6d86acd85a0c0/hostile.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
@@ -2638,13 +2740,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:36783/aac9d14c58774f22a8197735ed3fc2b8/view.html",
+            "url": "http://127.0.0.1:43349/15bdac5c394946bd81b8b4ccabdaf3a1/view.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:36783/aac9d14c58774f22a8197735ed3fc2b8/hostile.html",
+            "url": "http://127.0.0.1:43349/15bdac5c394946bd81b8b4ccabdaf3a1/hostile.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
@@ -2656,13 +2758,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46033/7239b5a38e9b4b8eb10ef7b51ba7714c/view.html",
+            "url": "http://127.0.0.1:40199/4f95379e6c664f0c94d488326e29cdbc/view.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46033/7239b5a38e9b4b8eb10ef7b51ba7714c/hostile.html",
+            "url": "http://127.0.0.1:40199/4f95379e6c664f0c94d488326e29cdbc/hostile.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
@@ -2674,13 +2776,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38431/b231cf6c0008445fb984ce0c8c9fe0d2/view.html",
+            "url": "http://127.0.0.1:46531/61189eb330b04681b3cb378ea124cf64/view.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38431/b231cf6c0008445fb984ce0c8c9fe0d2/hostile.html",
+            "url": "http://127.0.0.1:46531/61189eb330b04681b3cb378ea124cf64/hostile.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
@@ -2692,13 +2794,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44099/d58dad581ffc42e08c49a4fb4f1ac5bc/view.html",
+            "url": "http://127.0.0.1:44663/378e159d0e0b45faad835181a669af58/view.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:44099/d58dad581ffc42e08c49a4fb4f1ac5bc/hostile.html",
+            "url": "http://127.0.0.1:44663/378e159d0e0b45faad835181a669af58/hostile.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
@@ -2710,13 +2812,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39319/f205a1470b6941da9894552e840fce99/view.html",
+            "url": "http://127.0.0.1:42853/cd20fce14a3c4e4192031bfac2e94d07/view.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39319/f205a1470b6941da9894552e840fce99/hostile.html",
+            "url": "http://127.0.0.1:42853/cd20fce14a3c4e4192031bfac2e94d07/hostile.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
@@ -2728,13 +2830,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33825/2471eaffa86d417dac30c59bd2f28ef6/view.html",
+            "url": "http://127.0.0.1:34153/9a88e274cdb4445ca2e04fb89121849c/view.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33825/2471eaffa86d417dac30c59bd2f28ef6/hostile.html",
+            "url": "http://127.0.0.1:34153/9a88e274cdb4445ca2e04fb89121849c/hostile.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
@@ -2762,7 +2864,7 @@
             "attempt": "navigation-anchor-download",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:38827",
+                "blocked_uri": "http://127.0.0.1:38039",
                 "directive": "frame-src"
               }
             ],
@@ -2785,7 +2887,7 @@
             "attempt": "navigation-self",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:38827",
+                "blocked_uri": "http://127.0.0.1:38039",
                 "directive": "frame-src"
               }
             ],
@@ -2799,7 +2901,7 @@
             "attempt": "navigation-meta-refresh",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:38827",
+                "blocked_uri": "http://127.0.0.1:38039",
                 "directive": "frame-src"
               }
             ],
@@ -2811,7 +2913,7 @@
           }
         ],
         "navigation_sink": {
-          "address": "127.0.0.1:38827",
+          "address": "127.0.0.1:38039",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -2845,20 +2947,20 @@
         "busy-loop"
       ],
       "evidence": {
-        "busy_loop_observed_ms": 10001,
+        "busy_loop_observed_ms": 10004,
         "gaps_above_the_limit": [],
         "heartbeat_gap_limit_ms": 500,
-        "heartbeats_received": 696,
-        "hostile_view_ran_ms": 15195,
+        "heartbeats_received": 741,
+        "hostile_view_ran_ms": 15166,
         "longest_heartbeat_gap_before_any_view_ms": 100,
         "longest_heartbeat_gap_during_the_busy_loop_ms": 100,
         "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 100,
-        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 45,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 75,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
           "by_the_handlers": 0
         },
-        "view_window_build_ms": 80
+        "view_window_build_ms": 117
       },
       "name": "The main window stays responsive while the view spins",
       "proof": 6,
@@ -2884,7 +2986,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:44253/b7495c42f511491d997dffb2b359f40d/hostile.html",
+          "document_url": "http://127.0.0.1:37573/a14ba4e9336349bb806c5332774342e6/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -2913,14 +3015,14 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:43853/4efd28ecb78e44b38f5686a8375c9c6c/hostile.html",
+          "document_url": "http://127.0.0.1:45021/9c67530cf55648e78183a94a5a783625/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
           "other_host_fetch_status": null
         },
         "stores_where_the_host_found_the_first_view_value": [],
-        "value_the_first_view_stored": "b7495c42f511491d997dffb2b359f40d"
+        "value_the_first_view_stored": "a14ba4e9336349bb806c5332774342e6"
       },
       "name": "A second view reads nothing the first view stored",
       "proof": 7,
@@ -2928,16 +3030,86 @@
     }
   ],
   "run": {
-    "github_run_id": "43949657800",
+    "github_run_id": "43962464137",
     "name": "linux-weston-headless"
+  },
+  "scrollbars": {
+    "cause": "the scrollbars of the view document take no space: its inner size equals the client size of its root element, so the paint already covers the whole rectangle of the view and is left unchanged",
+    "child_webview_bounds_read_back": {
+      "height": 160.0,
+      "width": 502.0,
+      "x": 29.0,
+      "y": 57.0
+    },
+    "main_page": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": false,
+        "content_is_wider_than_the_root": false,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "root_scroll_size": {
+        "height": 420.0,
+        "width": 560.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    },
+    "paint": "unchanged",
+    "read": "before any paint and before any change to the scrollbars, by one script evaluated in the main page and in the document of the view webview",
+    "view_document": {
+      "elements_whose_scrollbars_take_space": [],
+      "inner_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "overflow": {
+        "body_x": "visible",
+        "body_y": "visible",
+        "content_is_taller_than_the_root": true,
+        "content_is_wider_than_the_root": true,
+        "root_x": "visible",
+        "root_y": "visible"
+      },
+      "root_client_size": {
+        "height": 160.0,
+        "width": 502.0
+      },
+      "root_scroll_size": {
+        "height": 384.0,
+        "width": 532.0
+      },
+      "space_taken_by_the_scrollbars": {
+        "height": 0.0,
+        "width": 0.0
+      },
+      "width_of_a_scrollbar_that_takes_space": 0.0
+    }
   },
   "sightings": [
     {
-      "unavailable": "\"import\" \"-silent\" \"-window\" \"root\" \"-crop\" \"612x509+0+0\" \"+repage\" \"bmp3:capture-linux-weston-headless-in-thread-as-mounted-cyan.bmp\" ended with exit status: 1: import: unable to open X server `' @ error/import.c/ImportImageCommand/348."
+      "unavailable": "no capture route of the Wayland compositor answered: grim answered: \"grim\" \"-t\" \"ppm\" \"capture-linux-weston-headless-in-thread-as-mounted-cyan.ppm\" ended with exit status: 1: compositor doesn't support wlr-screencopy-unstable-v1; weston-screenshooter answered: cd \"capture-linux-weston-headless-in-thread-as-mounted-cyan.shots\" && \"weston-screenshooter\" ended with signal: 6 (SIGABRT) (core dumped): weston-screenshooter: ../clients/screenshot.c:101: screenshot_create_shm_buffer: Assertion `width > 0' failed."
+    },
+    {
+      "unavailable": "no capture route of the Wayland compositor answered: grim answered: \"grim\" \"-t\" \"ppm\" \"capture-linux-weston-headless-in-thread-before-input-cyan.ppm\" ended with exit status: 1: compositor doesn't support wlr-screencopy-unstable-v1; weston-screenshooter answered: cd \"capture-linux-weston-headless-in-thread-before-input-cyan.shots\" && \"weston-screenshooter\" ended with signal: 6 (SIGABRT) (core dumped): weston-screenshooter: ../clients/screenshot.c:101: screenshot_create_shm_buffer: Assertion `width > 0' failed."
     }
   ],
   "tauri": "2.12.2",
-  "ticket": "OPE-2355",
+  "ticket": "OPE-2364",
   "verdict": "in-thread",
   "view_drawn_over_its_placeholder": "not proven: no capture of the window could be read",
   "views": {
@@ -2982,8 +3154,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /b7495c42f511491d997dffb2b359f40d/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:44253/b7495c42f511491d997dffb2b359f40d/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /a14ba4e9336349bb806c5332774342e6/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:37573/a14ba4e9336349bb806c5332774342e6/view.html"
     },
     "second_view": {
       "attempts_the_page_script_reached_read_by_the_host": [
@@ -2995,8 +3167,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /4efd28ecb78e44b38f5686a8375c9c6c/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:43853/4efd28ecb78e44b38f5686a8375c9c6c/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /9c67530cf55648e78183a94a5a783625/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:45021/9c67530cf55648e78183a94a5a783625/view.html"
     }
   },
   "webview": "2.52.6"

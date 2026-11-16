@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   in-thread:
-    if: github.head_ref == 'feature/ope-2355-the-live-html-view-can-be-placed-in-the'
+    if: github.head_ref == 'feature/ope-2364-the-live-html-view-in-the-thread-takes'
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +29,12 @@ jobs:
           - os: ubuntu-latest
             run: linux-weston-headless
             setup: weston-headless
+          - os: ubuntu-latest
+            run: linux-sway-on-xvfb
+            setup: sway-on-xvfb
+          - os: ubuntu-latest
+            run: linux-xfce-on-xvfb
+            setup: xfce-on-xvfb
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     defaults:
@@ -41,17 +47,29 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install the Linux webview, the display servers and the capture tool
+      - name: Install the Linux webview, the display servers, the desktop session and the capture and input tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            dbus-x11 \
+            grim \
             imagemagick \
             libwebkit2gtk-4.1-dev \
             openbox \
             pkg-config \
+            sway \
             weston \
+            wlrctl \
+            wmctrl \
+            wtype \
+            xdotool \
+            xfce4-panel \
+            xfce4-session \
+            xfce4-settings \
+            xfdesktop4 \
+            xfwm4 \
             xvfb
 
       - name: Read the Rust version pinned in rust-toolchain.toml
@@ -95,6 +113,31 @@ jobs:
               weston --backend=headless --socket=wl-spike --width=1280 --height=1024 &
               sleep 3
               WAYLAND_DISPLAY=wl-spike GDK_BACKEND=wayland "$harness" in-thread
+              ;;
+            sway-on-xvfb)
+              export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg-spike"
+              mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+              printf '%s\n' 'xwayland disable' 'default_floating_border none' 'for_window [title=".*"] floating enable' > "$RUNNER_TEMP/sway-spike.config"
+              xvfb-run -a bash -c "
+                WLR_BACKENDS=x11 WLR_RENDERER=pixman sway --config '$RUNNER_TEMP/sway-spike.config' &
+                for attempt in \$(seq 1 30); do
+                  ls \"\$XDG_RUNTIME_DIR\"/sway-ipc.*.sock > /dev/null 2>&1 && break
+                  sleep 1
+                done
+                export SWAYSOCK=\$(ls \"\$XDG_RUNTIME_DIR\"/sway-ipc.*.sock)
+                export WAYLAND_DISPLAY=\$(basename \$(ls \"\$XDG_RUNTIME_DIR\"/wayland-* | grep -v lock))
+                unset DISPLAY
+                GDK_BACKEND=wayland exec '$harness' in-thread"
+              ;;
+            xfce-on-xvfb)
+              xvfb-run -a dbus-run-session -- bash -c "
+                startxfce4 > '$RUNNER_TEMP/xfce-session.log' 2>&1 &
+                for attempt in \$(seq 1 60); do
+                  wmctrl -m > /dev/null 2>&1 && pgrep -x xfce4-session > /dev/null && pgrep -x xfce4-panel > /dev/null && pgrep -x xfdesktop > /dev/null && break
+                  sleep 1
+                done
+                sleep 3
+                exec '$harness' in-thread"
               ;;
             *)
               "$harness" in-thread

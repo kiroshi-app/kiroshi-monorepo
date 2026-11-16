@@ -149,29 +149,106 @@ pub enum Shot {
 	Window(isize),
 	#[cfg(not(target_os = "macos"))]
 	Region(Rectangle),
+	#[cfg(target_os = "linux")]
+	Output,
 }
 
-#[cfg(target_os = "macos")]
-fn grabber(shot: &Shot, bitmap: &Path) -> Result<Command, String> {
-	let Shot::Window(number) = shot;
-	let mut command = Command::new("screencapture");
-	command.args(["-x", "-o", "-t", "bmp", "-l", &number.to_string()]).arg(bitmap);
-	Ok(command)
+impl Shot {
+	pub fn is_the_whole_output(&self) -> bool {
+		#[cfg(target_os = "linux")]
+		return matches!(self, Self::Output);
+		#[cfg(not(target_os = "linux"))]
+		false
+	}
 }
 
 #[cfg(target_os = "linux")]
-fn grabber(shot: &Shot, bitmap: &Path) -> Result<Command, String> {
-	let Shot::Region(Rectangle { x, y, width, height }) = shot;
+pub const NO_OUTPUT_CAPTURE: &str = "no capture route of the Wayland compositor answered";
+#[cfg(target_os = "linux")]
+const OUTPUT_ROUTES: [(&str, fn(&Path) -> Result<(), String>); 2] =
+	[("grim", grabbed_by_grim), ("weston-screenshooter", grabbed_by_the_weston_screenshooter)];
+
+#[cfg(target_os = "linux")]
+pub fn is_under_wayland() -> bool {
+	std::env::var_os("WAYLAND_DISPLAY").is_some()
+		&& std::env::var("GDK_BACKEND").map_or(true, |backend| backend != "x11")
+}
+
+#[cfg(target_os = "linux")]
+fn as_a_bitmap(picture: &Path, bitmap: &Path) -> Result<(), String> {
+	let mut command = Command::new("convert");
+	command.arg(picture).args(["-alpha", "off"]).arg(format!("bmp3:{}", bitmap.display()));
+	answered(command)?;
+	Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn grabbed_by_grim(bitmap: &Path) -> Result<(), String> {
+	let picture = bitmap.with_extension("ppm");
+	let mut command = Command::new("grim");
+	command.args(["-t", "ppm"]).arg(&picture);
+	answered(command)?;
+	as_a_bitmap(&picture, bitmap)?;
+	std::fs::remove_file(&picture)
+		.map_err(|cause| format!("{} could not be removed: {cause}", picture.display()))
+}
+
+#[cfg(target_os = "linux")]
+fn grabbed_by_the_weston_screenshooter(bitmap: &Path) -> Result<(), String> {
+	let through_the_files = |cause: std::io::Error| cause.to_string();
+	let folder = bitmap.with_extension("shots");
+	std::fs::create_dir_all(&folder).map_err(through_the_files)?;
+	let mut command = Command::new("weston-screenshooter");
+	command.current_dir(&folder);
+	let shot = answered(command).and_then(|_| {
+		let mut pictures = std::fs::read_dir(&folder).map_err(through_the_files)?;
+		let picture = pictures
+			.next()
+			.ok_or("weston-screenshooter left no picture")?
+			.map_err(through_the_files)?;
+		as_a_bitmap(&picture.path(), bitmap)
+	});
+	std::fs::remove_dir_all(&folder).map_err(through_the_files)?;
+	shot
+}
+
+#[cfg(target_os = "macos")]
+fn grabbed(shot: &Shot, bitmap: &Path) -> Result<(), String> {
+	let Shot::Window(number) = shot;
+	let mut command = Command::new("screencapture");
+	command.args(["-x", "-o", "-t", "bmp", "-l", &number.to_string()]).arg(bitmap);
+	answered(command)?;
+	Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn grabbed_from_the_output(bitmap: &Path) -> Result<(), String> {
+	let mut refusals = Vec::new();
+	for (route, grabbed_by_the_route) in OUTPUT_ROUTES {
+		match grabbed_by_the_route(bitmap) {
+			Ok(()) => return Ok(()),
+			Err(refusal) => refusals.push(format!("{route} answered: {refusal}")),
+		}
+	}
+	Err(format!("{NO_OUTPUT_CAPTURE}: {}", refusals.join("; ")))
+}
+
+#[cfg(target_os = "linux")]
+fn grabbed(shot: &Shot, bitmap: &Path) -> Result<(), String> {
+	let Shot::Region(Rectangle { x, y, width, height }) = shot else {
+		return grabbed_from_the_output(bitmap);
+	};
 	let mut command = Command::new("import");
 	command
 		.args(["-silent", "-window", "root", "-crop", &format!("{width}x{height}+{x}+{y}")])
 		.arg("+repage")
 		.arg(format!("bmp3:{}", bitmap.display()));
-	Ok(command)
+	answered(command)?;
+	Ok(())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn grabber(_shot: &Shot, _bitmap: &Path) -> Result<Command, String> {
+fn grabbed(_shot: &Shot, _bitmap: &Path) -> Result<(), String> {
 	Err("the harness captures no window on this platform".to_owned())
 }
 
@@ -189,11 +266,11 @@ fn converter(bitmap: &Path, picture: &Path) -> Command {
 	command
 }
 
-fn finished(mut command: Command) -> Result<(), String> {
+pub fn answered(mut command: Command) -> Result<String, String> {
 	let output =
 		command.output().map_err(|cause| format!("{command:?} could not be started: {cause}"))?;
 	if output.status.success() {
-		return Ok(());
+		return Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned());
 	}
 	Err(format!(
 		"{command:?} ended with {}: {}",
@@ -203,7 +280,7 @@ fn finished(mut command: Command) -> Result<(), String> {
 }
 
 pub fn grab(shot: &Shot, bitmap: &Path) -> Result<Bitmap, String> {
-	finished(grabber(shot, bitmap)?)?;
+	grabbed(shot, bitmap)?;
 	let bytes = std::fs::read(bitmap)
 		.map_err(|cause| format!("the capture left no readable {}: {cause}", bitmap.display()))?;
 	Bitmap::parse(&bytes)
@@ -211,7 +288,7 @@ pub fn grab(shot: &Shot, bitmap: &Path) -> Result<Bitmap, String> {
 
 pub fn kept_as_a_picture(bitmap: &Path) -> Result<PathBuf, String> {
 	let picture = bitmap.with_extension("png");
-	finished(converter(bitmap, &picture))?;
+	answered(converter(bitmap, &picture))?;
 	std::fs::remove_file(bitmap)
 		.map_err(|cause| format!("{} could not be removed: {cause}", bitmap.display()))?;
 	Ok(picture)
