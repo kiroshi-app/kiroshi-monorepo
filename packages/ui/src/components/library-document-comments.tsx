@@ -115,6 +115,8 @@ const PIN_GAP = 8
 
 const RESOLVED_PIN_OVERLAP = 1
 
+const KEPT_CLEAR_OF_PINS = '[data-slot="markdown-fence-copy"]'
+
 const isCommentRun = (id: string) =>
 	id === DRAFT_RUN || id.startsWith(COMMENT_RUN)
 
@@ -333,6 +335,11 @@ const clippingBoxOf = (element: Element): Element => {
 const innerRightOf = (box: Element) =>
 	box.getBoundingClientRect().left + box.clientLeft + box.clientWidth
 
+const isWithin = (at: number, box: Element) =>
+	at >= box.getBoundingClientRect().left && at <= innerRightOf(box)
+
+const FRAME_PLACERS = new WeakMap<Element, () => void>()
+
 const usePlaceInBlock = (placeIn: PlaceIn) => {
 	const frame = useRef<HTMLDivElement>(null)
 
@@ -353,14 +360,17 @@ const usePlaceInBlock = (placeIn: PlaceIn) => {
 	useLayoutEffect(() => place())
 
 	useEffect(() => {
-		const block = frame.current?.parentElement
-		if (!block) return
+		const placed = frame.current
+		const block = placed?.parentElement
+		if (!placed || !block) return
 		const follow = () => place()
+		FRAME_PLACERS.set(placed, follow)
 		const observer = new ResizeObserver(follow)
 		observer.observe(block)
 		observer.observe(clippingBoxOf(block))
 		block.addEventListener("scroll", follow, { capture: true, passive: true })
 		return () => {
+			FRAME_PLACERS.delete(placed)
 			observer.disconnect()
 			block.removeEventListener("scroll", follow, { capture: true })
 		}
@@ -369,10 +379,21 @@ const usePlaceInBlock = (placeIn: PlaceIn) => {
 	return frame
 }
 
+const shownPinOf = (block: Element, pin: string) => {
+	const anchor = block.querySelector(`[data-comment-pin="${pin}"]`)
+	const frame = anchor?.parentElement
+	if (!anchor || !frame) return undefined
+	FRAME_PLACERS.get(frame)?.()
+	return getComputedStyle(anchor).visibility === "visible" &&
+		isWithin(anchor.getBoundingClientRect().left, clippingBoxOf(anchor))
+		? anchor
+		: undefined
+}
+
 const besidePin =
 	(pin: string): PlaceIn =>
 	(block, card) => {
-		const anchor = block.querySelector(`[data-comment-pin="${pin}"]`)
+		const anchor = shownPinOf(block, pin)
 		if (!anchor) return undefined
 		const from = block.getBoundingClientRect()
 		const box = anchor.getBoundingClientRect()
@@ -388,25 +409,31 @@ const besidePin =
 
 const onPassageEnd =
 	(run: string, isAboveLine: boolean): PlaceIn =>
-	(block) => {
+	(block, mark) => {
 		const end = [...block.querySelectorAll(`[data-passage-end="${run}"]`)].at(
 			-1,
 		)
 		const line = [...(end?.getClientRects() ?? [])].at(-1)
-		if (!end || !line) return undefined
-		const clip = clippingBoxOf(end)
-		if (
-			line.right < clip.getBoundingClientRect().left ||
-			line.right > innerRightOf(clip)
-		)
+		if (!end || !line || !isWithin(line.right, clippingBoxOf(end)))
 			return undefined
 		const from = block.getBoundingClientRect()
+		const { width, height } = mark.getBoundingClientRect()
+		const top = isAboveLine
+			? line.top + RESOLVED_PIN_OVERLAP
+			: (line.top + line.bottom) / 2
+		const drawnTop = top - (isAboveLine ? height : height / 2)
+		const control = [...block.querySelectorAll(KEPT_CLEAR_OF_PINS)]
+			.map((each) => each.getBoundingClientRect())
+			.find(
+				(box) =>
+					box.top < drawnTop + height &&
+					box.bottom > drawnTop &&
+					box.right > line.right &&
+					box.left - PIN_GAP < line.right + width,
+			)
 		return {
-			left: line.right - from.left,
-			top:
-				(isAboveLine
-					? line.top + RESOLVED_PIN_OVERLAP
-					: (line.top + line.bottom) / 2) - from.top,
+			left: (control ? control.left - PIN_GAP - width : line.right) - from.left,
+			top: top - from.top,
 		}
 	}
 
@@ -415,32 +442,34 @@ type PlacedOnPinProps = {
 	children: ReactNode
 }
 
-type PinOnPassageEndProps = PlacedOnPinProps & {
-	isAboveLine: boolean
+type MarkOnPassageEndProps = {
+	run: string
+	isAboveLine?: boolean
+	children: ReactNode
 }
 
 const CardBesidePin = ({ pin, children }: PlacedOnPinProps) => (
 	<CardFrame
-		className="opacity-0 data-placed:opacity-100"
+		className="pointer-events-none opacity-0 data-placed:pointer-events-auto data-placed:opacity-100"
 		ref={usePlaceInBlock(besidePin(pin))}
 	>
 		{children}
 	</CardFrame>
 )
 
-const PinOnPassageEnd = ({
-	pin,
-	isAboveLine,
+const MarkOnPassageEnd = ({
+	run,
+	isAboveLine = false,
 	children,
-}: PinOnPassageEndProps) => (
-	// biome-ignore lint/a11y/noStaticElementInteractions: a press on a pin beside the field being written leaves the caret and the focus in that field
+}: MarkOnPassageEndProps) => (
+	// biome-ignore lint/a11y/noStaticElementInteractions: a press on a mark beside the field being written leaves the caret and the focus in that field
 	<div
 		className={cn(
 			"invisible absolute z-10 flex data-placed:visible",
 			isAboveLine ? "-translate-y-full" : "-translate-y-1/2",
 		)}
 		onMouseDown={(event) => event.preventDefault()}
-		ref={usePlaceInBlock(onPassageEnd(pin, isAboveLine))}
+		ref={usePlaceInBlock(onPassageEnd(run, isAboveLine))}
 	>
 		{children}
 	</div>
@@ -537,7 +566,7 @@ type LibraryDocumentCommentRunProps = {
 	layer: LibraryDocumentCommentLayer
 	id: string
 	isEnd: boolean
-	isInField?: boolean
+	hasPlacedPin?: boolean
 	children: ReactNode
 }
 
@@ -545,7 +574,7 @@ const LibraryDocumentCommentRun = ({
 	layer,
 	id,
 	isEnd,
-	isInField = false,
+	hasPlacedPin = false,
 	children,
 }: LibraryDocumentCommentRunProps) => {
 	const placed = layer.threads.find(({ thread }) => runIdOf(thread) === id)
@@ -564,8 +593,8 @@ const LibraryDocumentCommentRun = ({
 
 	return (
 		<Passage
-			endOf={isEnd && isInField ? id : undefined}
-			pin={isEnd && !isInField ? pin : null}
+			endOf={isEnd && hasPlacedPin ? id : undefined}
+			pin={isEnd && !hasPlacedPin ? pin : null}
 			state={state}
 		>
 			{children}
@@ -579,14 +608,14 @@ type LibraryDocumentBlockCommentsProps = {
 	layer: LibraryDocumentCommentLayer
 	blockId: string
 	source: string
-	hasPlacedPins: boolean
+	placedRuns: string[]
 }
 
 const LibraryDocumentBlockComments = ({
 	layer,
 	blockId,
 	source,
-	hasPlacedPins,
+	placedRuns,
 }: LibraryDocumentBlockCommentsProps) => {
 	const { t } = useTranslation("common")
 	const mentionNameOf = useMentionNameOf()
@@ -603,30 +632,28 @@ const LibraryDocumentBlockComments = ({
 		({ thread, anchor }) => anchor.passage && thread.id === openThread?.id,
 	)
 	const isBlockDraft = draft !== undefined && !draft.anchor.passage
-	const placedPins = hasPlacedPins
-		? [
-				...threads.flatMap(({ thread, anchor }) =>
-					anchor.passage
-						? [
-								{
-									run: runIdOf(thread),
-									isAboveLine: pinStateOf(layer, thread) === "resolved",
-									pin: <ThreadPin layer={layer} thread={thread} />,
-								},
-							]
-						: [],
-				),
-				...(draft?.anchor.passage
-					? [
-							{
-								run: DRAFT_RUN,
-								isAboveLine: false,
-								pin: <DraftPin draft={draft.draft} />,
-							},
-						]
-					: []),
-			]
-		: []
+	const placedPins = [
+		...threads.flatMap(({ thread, anchor }) =>
+			anchor.passage
+				? [
+						{
+							run: runIdOf(thread),
+							isAboveLine: pinStateOf(layer, thread) === "resolved",
+							pin: <ThreadPin layer={layer} thread={thread} />,
+						},
+					]
+				: [],
+		),
+		...(draft?.anchor.passage
+			? [
+					{
+						run: DRAFT_RUN,
+						isAboveLine: false,
+						pin: <DraftPin draft={draft.draft} />,
+					},
+				]
+			: []),
+	].filter(({ run }) => placedRuns.includes(run))
 	const isFromShortcut = draft?.draft.target.origin === "shortcut"
 	const lineOf = ({ passage }: LibraryBlockAnchor) =>
 		passage
@@ -682,9 +709,9 @@ const LibraryDocumentBlockComments = ({
 				<CardFrame className="-end-2 top-full mt-3">{draftCard}</CardFrame>
 			) : null}
 			{placedPins.map(({ run, isAboveLine, pin }) => (
-				<PinOnPassageEnd isAboveLine={isAboveLine} key={run} pin={run}>
+				<MarkOnPassageEnd isAboveLine={isAboveLine} key={run} run={run}>
 					{pin}
-				</PinOnPassageEnd>
+				</MarkOnPassageEnd>
 			))}
 			{draft?.anchor.passage ? (
 				<CardBesidePin key={draft.anchor.passage.start} pin={DRAFT_RUN}>
@@ -720,4 +747,5 @@ export {
 	type LibraryDocumentOpenThread,
 	type LibraryDocumentThread,
 	LibraryDocumentThreadCard,
+	MarkOnPassageEnd as LibraryDocumentMarkOnPassageEnd,
 }

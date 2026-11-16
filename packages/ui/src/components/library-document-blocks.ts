@@ -134,6 +134,17 @@ const withBlankLine = (gap: string) =>
 const blockTypeOf = (source: string): LibraryBlockType =>
 	parsedBlocksOf(source)[0]?.type ?? "paragraph"
 
+const codeSpansOf = (source: string) => {
+	const spans: Pick<ParsedBlock, "from" | "to">[] = []
+	markdownLanguage.parser.parse(source).iterate({
+		enter: ({ name, from, to }) => {
+			if (typeOfNode(name, source.slice(from, to)) === "code")
+				spans.push({ from, to })
+		},
+	})
+	return spans
+}
+
 const randomId = () =>
 	Array.from(
 		crypto.getRandomValues(new Uint8Array(ID_LENGTH)),
@@ -877,6 +888,7 @@ export {
 	checklistRowsOf,
 	checklistSourceOf,
 	codeLanguageOf,
+	codeSpansOf,
 	continuedMarkerOf,
 	conversionsOf,
 	convertSource,

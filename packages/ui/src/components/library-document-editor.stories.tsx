@@ -1435,19 +1435,19 @@ export const AgentsWriting = meta.story({
 
 const ATLAS_WRITERS = LIBRARY_WRITERS.slice(0, 1)
 
-const createWritersStore = () => {
-	let writers = ATLAS_WRITERS
+const createWritersStore = (start = ATLAS_WRITERS) => {
+	let writers = start
 	const listeners = new Set<() => void>()
-	const write = (next: typeof ATLAS_WRITERS) => {
+	const write = (next: typeof start) => {
 		writers = next
 		for (const listener of listeners) listener()
 	}
 	return {
 		read: () => writers,
 		finish: () => write([]),
-		resume: () => write(ATLAS_WRITERS),
+		resume: () => write(start),
 		reset: () => {
-			writers = ATLAS_WRITERS
+			writers = start
 		},
 		subscribe: (listener: () => void) => {
 			listeners.add(listener)
@@ -4015,6 +4015,545 @@ export const CodeFieldTypedSelectedAndTabbed = meta.story({
 		await expect(shownPassageOf(block, SNIPPET_PASSAGE)).toBeVisible()
 		await keyboard("{Shift>}{Tab}{/Shift}")
 		await expect(field).toHaveFocus()
+	},
+})
+
+const NESTED_BLOCK = "nest01"
+
+const NESTED_SOURCE = `- Run the launch script:\n\n  \`\`\`ts\n  ${SNIPPET_LINE}\n  await announce(launch)\n  \`\`\``
+
+const TEAM_LINE = "Then tell the team."
+
+const TEAM_PASSAGE = "tell the team"
+
+type CodePlace = {
+	block: string
+	source: string
+}
+
+const TOP_LEVEL_CODE: CodePlace = {
+	block: SNIPPET_BLOCK,
+	source: SNIPPET_SOURCE,
+}
+
+const NESTED_CODE: CodePlace = { block: NESTED_BLOCK, source: NESTED_SOURCE }
+
+const FENCE = '[data-slot="markdown-fence"]'
+
+const codeBodyOf = ({ block, source }: CodePlace) =>
+	`${source}\n\n^${block}\n\n${TEAM_LINE}`
+
+const codeAnchorOf = ({ block, source }: CodePlace) => ({
+	blockId: block,
+	passage: passageIn(source, SNIPPET_PASSAGE),
+})
+
+const commentedCode = (place: CodePlace, thread?: LibraryDocumentThread) => ({
+	...commentedDocument(),
+	body: codeBodyOf(place),
+	threads: thread ? [{ ...thread, anchor: codeAnchorOf(place) }] : [],
+})
+
+const COMMENTED_CODE = {
+	rest: (place: CodePlace) => commentedCode(place, BUDGET_THREAD),
+	resolved: (place: CodePlace) => commentedCode(place, RESOLVED_SESSION_THREAD),
+	selected: (place: CodePlace) => ({
+		...commentedCode(place, BUDGET_THREAD),
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	}),
+	draft: (place: CodePlace) => ({
+		...commentedCode(place),
+		commentDraft: draftOn({ ...codeAnchorOf(place), origin: "pointer" }),
+	}),
+}
+
+type CommentKind = keyof typeof COMMENTED_CODE
+
+const COMMENT_PIN: Record<CommentKind, string> = {
+	rest: `comment:${BUDGET_THREAD.id}`,
+	resolved: `comment:${RESOLVED_SESSION_THREAD.id}`,
+	selected: `comment:${BUDGET_THREAD.id}`,
+	draft: DRAFT_PIN,
+}
+
+const PASSAGE_STATE: Record<CommentKind, string> = {
+	rest: "rest",
+	resolved: "resolved",
+	selected: "selected",
+	draft: "selected",
+}
+
+const commentCardIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-comment-card")
+
+const expectCommentedCode = async (
+	canvasElement: HTMLElement,
+	{ block }: CodePlace,
+	kind: CommentKind,
+) => {
+	const passage = shownPassageOf(blockOf(canvasElement, block), SNIPPET_PASSAGE)
+	await expect(passage).toBeVisible()
+	await expect(passage).toHaveAttribute("data-state", PASSAGE_STATE[kind])
+	const pin = pinIn(canvasElement, COMMENT_PIN[kind])
+	await waitFor(async () => {
+		await expect(pin).toBeVisible()
+		await (kind === "resolved" ? expectPinAbovePassageEnd : expectPassagePin)(
+			pin,
+			passage,
+		)
+	})
+	await expectDrawnWhole(pin)
+	if (kind === "selected" || kind === "draft")
+		await waitFor(async () => {
+			const card = boxOf(commentCardIn(canvasElement))
+			await expectClose(card.left, boxOf(pin).right + 8)
+			await expectClose(card.top, boxOf(pin).top)
+		})
+	return passage
+}
+
+const commentedCodeAtRest = (
+	place: CodePlace,
+	kind: CommentKind,
+	story: string,
+) => ({
+	args: COMMENTED_CODE[kind](place),
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const passage = await expectCommentedCode(canvasElement, place, kind)
+		await expect(passage.closest(FENCE)).not.toBeNull()
+	},
+})
+
+const commentedCodeFocused = (
+	place: CodePlace,
+	kind: CommentKind,
+	story: string,
+) => ({
+	args: COMMENTED_CODE[kind](place),
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const field = await openBlock(
+			canvasElement,
+			blockOf(canvasElement, place.block),
+		)
+		await expectCommentedCode(canvasElement, place, kind)
+		await expect(field).toHaveFocus()
+	},
+})
+
+const writerOn = (
+	agent: (typeof LIBRARY_AGENTS)[keyof typeof LIBRARY_AGENTS],
+	body: string,
+	text: string,
+) => ({
+	agent,
+	start: body.indexOf(text),
+	end: body.indexOf(text) + text.length,
+	elapsedSeconds: 44,
+	sentenceCount: 1,
+	section: "Launch",
+})
+
+const writtenCode = (place: CodePlace) => ({
+	...commentedCode(place),
+	onStop: fn(),
+	onStopAll: fn(),
+	onOpenConversation: fn(),
+})
+
+const letterAt = (root: HTMLElement, text: string) => {
+	const { node, offset } = shownPointAt(root, shownIn(root).indexOf(text) + 1)
+	const letter = document.createRange()
+	letter.setStart(node, offset - 1)
+	letter.setEnd(node, offset)
+	return letter.getBoundingClientRect()
+}
+
+const codeIn = (canvasElement: HTMLElement, { block }: CodePlace) =>
+	blockOf(canvasElement, block).querySelector("code") as HTMLElement
+
+const expectCaretOn = async (caret: HTMLElement, at: number, line: DOMRect) => {
+	await waitFor(() => expect(caret).toBeVisible())
+	await expect(boxOf(caret)).toMatchObject({ width: 2, height: 24 })
+	await expectClose(boxOf(caret).left, at)
+	await expectClose(middleOf(boxOf(caret)), middleOf(line))
+}
+
+const agentWritingCode = (place: CodePlace, story: string) => ({
+	args: {
+		...writtenCode(place),
+		writers: [
+			writerOn(LIBRARY_AGENTS.atlas, codeBodyOf(place), SNIPPET_PASSAGE),
+			writerOn(LIBRARY_AGENTS.mira, codeBodyOf(place), TEAM_PASSAGE),
+		],
+	},
+	parameters: describedAs(story),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, place.block)
+		const text = blockWith(canvasElement, TEAM_PASSAGE)
+		const run = slotIn(block, "library-document-run")
+		await expect(run).toHaveTextContent(SNIPPET_PASSAGE)
+		await expect(run.closest(FENCE)).not.toBeNull()
+		await expect(run.className).toBe(
+			slotIn(text, "library-document-run").className,
+		)
+		await expect(getComputedStyle(run).backgroundColor).toBe(washOf(run, 12))
+
+		const caret = slotIn(block, "library-document-caret")
+		await expect(caret.className).toBe(
+			slotIn(text, "library-document-caret").className,
+		)
+		const line = lastLineOf(run)
+		await expectCaretOn(caret, line.right, line)
+		const flag = within(block).getByRole("button", { name: "Atlas is writing" })
+		await expectDrawnWhole(flag)
+
+		await userEvent.hover(flag)
+		await screen.findByRole("dialog", { name: "Atlas is writing…" })
+		await userEvent.click(screen.getByRole("button", { name: "Stop Atlas" }))
+		await expect(args.onStop).toHaveBeenCalledWith(LIBRARY_AGENTS.atlas)
+	},
+})
+
+const heldRunInCode = (place: CodePlace, story: string) => {
+	const writing = createWritersStore([
+		writerOn(LIBRARY_AGENTS.atlas, codeBodyOf(place), SNIPPET_PASSAGE),
+	])
+	return {
+		args: writtenCode(place),
+		beforeEach: writing.reset,
+		render: (args: LibraryDocumentEditorProps) => (
+			<FinishingWriterEditor {...args} writing={writing} />
+		),
+		parameters: describedAs(story),
+		play: async ({ canvasElement }: CommentPlay) => {
+			const block = blockOf(canvasElement, place.block)
+			const { writtenLook } = await stopWriting(canvasElement, writing)
+			const held = slotIn(block, "library-document-held-run")
+			await expect(held).toHaveTextContent(SNIPPET_PASSAGE)
+			await expect(held.closest(FENCE)).not.toBeNull()
+			await expect(getComputedStyle(held)).toMatchObject(writtenLook)
+			await expect(slotsIn(block, "library-document-caret")).toHaveLength(0)
+		},
+	}
+}
+
+const personInCode = (place: CodePlace, story: string) => ({
+	args: {
+		...writtenCode(place),
+		people: [{ ...LEA, caret: codeBodyOf(place).indexOf(SNIPPET_PASSAGE) }],
+	},
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const block = blockOf(canvasElement, place.block)
+		const caret = await within(block).findByRole("img", { name: LEA.name })
+		await expect(caret).toHaveAttribute(
+			"data-slot",
+			"library-document-person-caret",
+		)
+		const letter = letterAt(codeIn(canvasElement, place), SNIPPET_PASSAGE)
+		await expectCaretOn(caret, letter.left, letter)
+		await expectDrawnWhole(slotIn(caret, "library-document-person-flag"))
+	},
+})
+
+export const CodeSelectedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		TOP_LEVEL_CODE,
+		"selected",
+		"The thread of a passage open on a code block at rest. Check the passage in its selected state inside the fence, the selected pin whole on the end of the passage, and the thread card 8px right of the pin with its top on the pin top.",
+	),
+)
+
+export const CodeDraftPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		TOP_LEVEL_CODE,
+		"draft",
+		"A comment draft on a passage of a code block at rest. Check the passage in its selected state inside the fence, the draft pin whole on the end of the passage, and the composer 8px right of the pin with its top on the pin top.",
+	),
+)
+
+const agentWritingTopLevelCode = agentWritingCode(
+	TOP_LEVEL_CODE,
+	"Atlas writing inside a code block while Mira writes in the paragraph under it. Check the run in the fence wears the written look of the run in the paragraph, the named caret stands whole on the end of the run, centred on its line, and that its flag opens the card that stops Atlas.",
+)
+
+export const CodeAgentWritingAtRest = meta.story({
+	...agentWritingTopLevelCode,
+	globals: LIGHT,
+})
+
+export const CodeAgentWritingAtRestDark = meta.story({
+	...agentWritingTopLevelCode,
+	globals: DARK,
+})
+
+export const CodeHeldRunAtRest = meta.story(
+	heldRunInCode(
+		TOP_LEVEL_CODE,
+		"Atlas stops writing inside a code block. Check his finished run stays in the fence with its written look and that his caret leaves with him.",
+	),
+)
+
+export const CodePersonCaretAtRest = meta.story(
+	personInCode(
+		TOP_LEVEL_CODE,
+		"Léa has her caret inside a code block. Check her named caret stands on the character her caret points at, centred on its line, and that her flag is drawn whole.",
+	),
+)
+
+export const CodeSelectedPassageFocused = meta.story(
+	commentedCodeFocused(
+		TOP_LEVEL_CODE,
+		"selected",
+		"The thread of a passage open on a code block whose field has focus. Check the passage in its selected state under the field, the selected pin whole on the end of the passage, the thread card 8px right of the pin, and the focus kept in the field.",
+	),
+)
+
+export const CodeDraftPassageFocused = meta.story(
+	commentedCodeFocused(
+		TOP_LEVEL_CODE,
+		"draft",
+		"A comment draft on a passage of a code block whose field has focus. Check the passage in its selected state under the field, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+export const NestedCodePassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"rest",
+		"A commented passage on a code block nested under a list item, at rest. Check the passage at rest inside the fence and its pin whole on the end of the passage, centred on its line, as on a code block of its own.",
+	),
+)
+
+export const NestedCodeResolvedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"resolved",
+		"A resolved passage on a code block nested under a list item, at rest. Check the passage in its resolved state inside the fence and its pin whole above the end of the passage.",
+	),
+)
+
+export const NestedCodeSelectedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"selected",
+		"The thread of a passage open on a code block nested under a list item, at rest. Check the passage in its selected state inside the fence, the selected pin whole on the end of the passage, and the thread card 8px right of the pin.",
+	),
+)
+
+export const NestedCodeDraftPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"draft",
+		"A comment draft on a passage of a code block nested under a list item, at rest. Check the passage in its selected state inside the fence, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+export const NestedCodeAgentWritingAtRest = meta.story(
+	agentWritingCode(
+		NESTED_CODE,
+		"Atlas writing inside a code block nested under a list item. Check the run in the fence wears the written look of the run in the paragraph, the named caret stands whole on the end of the run, and that its flag opens the card that stops Atlas.",
+	),
+)
+
+export const NestedCodeHeldRunAtRest = meta.story(
+	heldRunInCode(
+		NESTED_CODE,
+		"Atlas stops writing inside a code block nested under a list item. Check his finished run stays in the fence with its written look and that his caret leaves with him.",
+	),
+)
+
+export const NestedCodePersonCaretAtRest = meta.story(
+	personInCode(
+		NESTED_CODE,
+		"Léa has her caret inside a code block nested under a list item. Check her named caret stands on the character her caret points at, centred on its line, and that her flag is drawn whole.",
+	),
+)
+
+export const NestedCodePassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"rest",
+		"A commented passage on a code block nested under a list item whose field has focus. Check the passage at rest in the field and its pin whole on the end of the passage.",
+	),
+)
+
+export const NestedCodeResolvedPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"resolved",
+		"A resolved passage on a code block nested under a list item whose field has focus. Check the passage in its resolved state in the field and its pin whole above the end of the passage.",
+	),
+)
+
+export const NestedCodeSelectedPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"selected",
+		"The thread of a passage open on a code block nested under a list item whose field has focus. Check the passage in its selected state in the field, the selected pin whole on the end of the passage, and the thread card 8px right of the pin.",
+	),
+)
+
+export const NestedCodeDraftPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"draft",
+		"A comment draft on a passage of a code block nested under a list item whose field has focus. Check the passage in its selected state in the field, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+const LINE_END_SNIPPET_LINE = `const launch = ${"withRetries(".repeat(12)}${SNIPPET_PASSAGE}`
+
+const LINE_END_SNIPPET_SOURCE = `\`\`\`ts\n${LINE_END_SNIPPET_LINE}\n\`\`\``
+
+const expectApart = async (pin: HTMLElement, control: HTMLElement) => {
+	const isBeside =
+		boxOf(pin).right <= boxOf(control).left ||
+		boxOf(pin).left >= boxOf(control).right
+	const isAboveOrBelow =
+		boxOf(pin).bottom <= boxOf(control).top ||
+		boxOf(pin).top >= boxOf(control).bottom
+	await expect(isBeside || isAboveOrBelow).toBe(true)
+}
+
+export const CodePinClearOfCopy = meta.story({
+	args: snippetDocument(LINE_END_SNIPPET_SOURCE),
+	parameters: describedAs(
+		"A commented passage that ends where the first line of a code block ends, scrolled to that end, under the Copy button. Check the pin and Copy never share a pixel, both are drawn whole, pressing Copy copies the code and pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const scroller = snippetScrollerIn(block)
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const copy = within(block).getByRole("button", { name: "Copy code" })
+		scroller.scrollLeft = scroller.scrollWidth
+		await waitFor(() => expect(pin).toBeVisible())
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expectClose(boxOf(passage).right, boxOf(scroller).right)
+		await expectClose(middleOf(boxOf(pin)), middleOf(lastLineOf(passage)))
+		await expect(boxOf(pin).bottom).toBeGreaterThan(boxOf(copy).top)
+		await expect(boxOf(pin).top).toBeLessThan(boxOf(copy).bottom)
+		await expectApart(pin, copy)
+		await expectDrawnWhole(pin)
+		await expectDrawnWhole(copy)
+
+		await userEvent.click(copy)
+		await expect(writeText).toHaveBeenCalledWith(LINE_END_SNIPPET_LINE)
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+
+		writeText.mockRestore()
+	},
+})
+
+const expectCardBesideOrUnder = async (card: HTMLElement, pin: HTMLElement) => {
+	await expect(card).toHaveAttribute("data-placed")
+	const isBeside =
+		Math.abs(boxOf(card).left - boxOf(pin).right - 8) <= 1 &&
+		Math.abs(boxOf(card).top - boxOf(pin).top) <= 1
+	const isUnder = Math.abs(boxOf(card).top - boxOf(pin).bottom - 8) <= 1
+	await expect(isBeside || isUnder).toBe(true)
+}
+
+const expectCardGoneWithPin = async (card: HTMLElement, pin: HTMLElement) => {
+	await expect(pin).not.toBeVisible()
+	await expect(card).not.toHaveAttribute("data-placed")
+	await expect(getComputedStyle(card).opacity).toBe("0")
+	await expect(getComputedStyle(card).pointerEvents).toBe("none")
+}
+
+export const CodeThreadCardHidesWithPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...snippetDocument(LONG_SNIPPET_SOURCE),
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	},
+	play: async ({ canvasElement }) => {
+		const scroller = snippetScrollerIn(blockOf(canvasElement, SNIPPET_BLOCK))
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const card = commentCardIn(canvasElement)
+		await expectCardGoneWithPin(card, pin)
+
+		scroller.scrollLeft = scroller.scrollWidth
+		await waitFor(() => expect(pin).toBeVisible())
+		await waitFor(() => expectCardBesideOrUnder(card, pin))
+
+		scroller.scrollLeft = 0
+		await waitFor(() => expectCardGoneWithPin(card, pin))
+	},
+})
+
+const WIDE_TABLE_BLOCK = "wide01"
+
+const WIDE_TABLE_PASSAGE = "review session 1"
+
+const WIDE_TABLE_COLUMNS = Array.from({ length: 8 }, (_, index) => index)
+
+const WIDE_TABLE = [
+	WIDE_TABLE_COLUMNS.map((index) => `Column number ${index} heading`),
+	WIDE_TABLE_COLUMNS.map(() => "---"),
+	WIDE_TABLE_COLUMNS.map((index) => `Roadmap review session ${index}`),
+]
+	.map((cells) => `| ${cells.join(" | ")} |`)
+	.join("\n")
+
+const scrollerIn = (block: HTMLElement) =>
+	[...block.querySelectorAll<HTMLElement>("*")].find(
+		(each) => getComputedStyle(each).overflowX === "auto",
+	) as HTMLElement
+
+export const TableThreadCardFollowsPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: `${WIDE_TABLE}\n\n^${WIDE_TABLE_BLOCK}`,
+		threads: [
+			{
+				...BUDGET_THREAD,
+				anchor: {
+					blockId: WIDE_TABLE_BLOCK,
+					passage: passageIn(WIDE_TABLE, WIDE_TABLE_PASSAGE),
+				},
+			},
+		],
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, WIDE_TABLE_BLOCK)
+		const card = commentCardIn(canvasElement)
+		const atRest = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await waitFor(() => expectCardBesideOrUnder(card, atRest))
+
+		const table = scrollerIn(block)
+		table.scrollLeft = 200
+		await waitFor(() => expectCardBesideOrUnder(card, atRest))
+		table.scrollLeft = table.scrollWidth
+		await expect(boxOf(atRest).right).toBeLessThan(boxOf(table).left)
+		await waitFor(() =>
+			expect(commentCardIn(canvasElement)).not.toHaveAttribute("data-placed"),
+		)
+
+		bodyOf(canvasElement, WIDE_TABLE_BLOCK).focus()
+		const editor = await waitFor(() => {
+			const field = block.querySelector<HTMLElement>(FIELD)
+			expect(field).not.toBeNull()
+			return scrollerIn(block)
+		})
+		const placed = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		editor.scrollLeft = 0
+		await waitFor(() => expect(placed).toBeVisible())
+		await waitFor(() => expectCardBesideOrUnder(card, placed))
+		editor.scrollLeft = 200
+		await waitFor(() => expect(boxOf(placed).left).toBeLessThan(600))
+		await expectCardBesideOrUnder(card, placed)
+		editor.scrollLeft = editor.scrollWidth
+		await waitFor(() => expectCardGoneWithPin(card, placed))
 	},
 })
 

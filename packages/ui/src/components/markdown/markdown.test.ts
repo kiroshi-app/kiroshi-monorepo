@@ -671,11 +671,71 @@ describe("markdown runs", () => {
 		)
 	})
 
-	it("draws no run in a fence whose lines are indented under a list item", () => {
-		const source = "- Run it:\n\n  ```\n  ship()\n  announce()\n  ```"
-		const html = renderRuns([runOver("passage", "announce", source)], source)
+	const NESTED_FENCE =
+		"- Run it:\n\n  ```\n  ship()\n  announce()\n  ```\n\n  Then rest."
 
-		expect(markedIn(html)).toEqual([])
+	it("draws a run in a fence whose lines are indented under a list item", () => {
+		const html = renderRuns(
+			[runOver("passage", "announce", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([{ text: "announce", isEnd: true }])
 		expect(html.replace(/<[^>]+>/g, "")).toContain("ship()\nannounce()")
+	})
+
+	it("draws a run over two indented lines of a fence without their indentation", () => {
+		const html = renderRuns(
+			[runOver("passage", "ship()\n  announce", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "ship()", isEnd: false },
+			{ text: "announce", isEnd: true },
+		])
+	})
+
+	it("ends a run that enters a fence from the text above it inside the fence alone", () => {
+		const html = renderRuns(
+			[runOver("passage", "Run it:\n\n  ```\n  ship", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "Run it:", isEnd: false },
+			{ text: "ship", isEnd: true },
+		])
+	})
+
+	it("ends a run that leaves a fence on the text below it alone", () => {
+		const html = renderRuns(
+			[runOver("passage", "announce()\n  ```\n\n  Then", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "announce()", isEnd: false },
+			{ text: "Then", isEnd: true },
+		])
+	})
+
+	it("draws a caret inside a fence where it stands", () => {
+		const caret = NESTED_FENCE.indexOf("announce")
+		const html = renderRuns(
+			[{ id: "caret", start: caret, end: caret }],
+			NESTED_FENCE,
+		)
+
+		expect(html).toMatch(
+			/ship\(\)(<[^>]+>)*\n<mark data-run="caret" data-end="true">(<[^>]+>)*<\/mark>(<[^>]+>)*announce/,
+		)
+	})
+
+	it("draws a run in an indented code block of one line", () => {
+		const source = "Run it:\n\n    ship()"
+		const html = renderRuns([runOver("passage", "ship", source)], source)
+
+		expect(markedIn(html)).toEqual([{ text: "ship", isEnd: true }])
 	})
 })

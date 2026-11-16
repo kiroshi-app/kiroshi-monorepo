@@ -50,6 +50,7 @@ import {
 import {
 	agentScopeOf,
 	type LibraryDocumentAgent,
+	LibraryDocumentAgentCaret,
 	type LibraryDocumentPerson,
 	LibraryDocumentPersonCaret,
 	type LibraryDocumentWriter,
@@ -60,6 +61,7 @@ import {
 import {
 	blockIdsOf,
 	blockTypeOf,
+	codeSpansOf,
 	continuedMarkerOf,
 	conversionsOf,
 	convertSource,
@@ -109,6 +111,7 @@ import {
 	type LibraryDocumentCommentOrigin,
 	type LibraryDocumentCommentProps,
 	LibraryDocumentCommentRun,
+	LibraryDocumentMarkOnPassageEnd,
 	LibraryDocumentModeCursor,
 } from "@workspace/ui/components/library-document-comments"
 import {
@@ -126,6 +129,7 @@ import {
 } from "@workspace/ui/components/library-slash-menu"
 import { MARKDOWN_CLASS, Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownRunRenderProps } from "@workspace/ui/components/markdown/run"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import {
 	SELECTION_TOOLBAR_SEPARATOR,
 	SELECTION_TOOLBAR_SLOT,
@@ -327,6 +331,14 @@ const runsIn = ({ writers, held, people, start, length }: RunsInput) => {
 				: [],
 		),
 	]
+}
+
+const fencedRunsOf = (source: string, runs: MarkdownRun[]) => {
+	if (runs.length === 0) return []
+	const code = codeSpansOf(source)
+	return runs
+		.filter(({ end }) => code.some(({ from, to }) => from < end && end <= to))
+		.map(({ id }) => id)
 }
 
 const textTypeOf = (type: LibraryBlockType): BlockTextType =>
@@ -1288,45 +1300,58 @@ const LibraryDocumentBlockEditor = ({
 	const commentLayer = commentLayerOf(doc.blocks, commentProps)
 
 	const renderFieldRun = (run: MarkdownRunRenderProps) => (
-		<LibraryDocumentCommentRun {...run} isInField layer={commentLayer} />
+		<LibraryDocumentCommentRun {...run} hasPlacedPin layer={commentLayer} />
 	)
 
-	const renderRun = ({ id, isEnd, children }: MarkdownRunRenderProps) => {
-		if (isCommentRun(id))
-			return (
-				<LibraryDocumentCommentRun id={id} isEnd={isEnd} layer={commentLayer}>
+	const renderRunWith =
+		(fencedRuns: string[]) =>
+		({ id, isEnd, children }: MarkdownRunRenderProps) => {
+			const isFenced = fencedRuns.includes(id)
+			if (isCommentRun(id))
+				return (
+					<LibraryDocumentCommentRun
+						hasPlacedPin={isFenced}
+						id={id}
+						isEnd={isEnd}
+						layer={commentLayer}
+					>
+						{children}
+					</LibraryDocumentCommentRun>
+				)
+			if (id.startsWith(PERSON_RUN)) {
+				if (isFenced)
+					return (
+						<span data-passage-end={isEnd ? id : undefined}>{children}</span>
+					)
+				const person = people.find(
+					(candidate) => `${PERSON_RUN}${candidate.id}` === id,
+				)
+				return (
+					<>
+						{children}
+						{person && isEnd ? (
+							<LibraryDocumentPersonCaret person={person} />
+						) : null}
+					</>
+				)
+			}
+			const held = heldRuns.find((run) => `${HELD_RUN}${run.id}` === id)
+			if (held) return <HeldWrittenRun run={held}>{children}</HeldWrittenRun>
+			const writer = writers.find(({ agent }) => agent.id === id)
+			return writer ? (
+				<LibraryDocumentWrittenRun
+					hasPlacedCaret={isFenced}
+					isEnd={isEnd}
+					onOpenConversation={onOpenConversation}
+					onStop={onStop}
+					writer={writer}
+				>
 					{children}
-				</LibraryDocumentCommentRun>
-			)
-		if (id.startsWith(PERSON_RUN)) {
-			const person = people.find(
-				(candidate) => `${PERSON_RUN}${candidate.id}` === id,
-			)
-			return (
-				<>
-					{children}
-					{person && isEnd ? (
-						<LibraryDocumentPersonCaret person={person} />
-					) : null}
-				</>
+				</LibraryDocumentWrittenRun>
+			) : (
+				children
 			)
 		}
-		const held = heldRuns.find((run) => `${HELD_RUN}${run.id}` === id)
-		if (held) return <HeldWrittenRun run={held}>{children}</HeldWrittenRun>
-		const writer = writers.find(({ agent }) => agent.id === id)
-		return writer ? (
-			<LibraryDocumentWrittenRun
-				isEnd={isEnd}
-				onOpenConversation={onOpenConversation}
-				onStop={onStop}
-				writer={writer}
-			>
-				{children}
-			</LibraryDocumentWrittenRun>
-		) : (
-			children
-		)
-	}
 
 	const toggleTaskIn = (id: string) => (box: HTMLInputElement) => {
 		const block = box.closest('[data-slot="library-document-block"]')
@@ -1440,21 +1465,20 @@ const LibraryDocumentBlockEditor = ({
 				const hasBlockEditor = BLOCK_EDITORS.includes(type)
 				const textType = textTypeOf(type)
 				const isEditable = EDITABLE_TYPES.includes(type) || hasBlockEditor
-				const isCode = type === "code"
+				const hasPassageField =
+					isEditing && (!hasBlockEditor || PASSAGE_EDITORS.includes(type))
 				const commentRuns = commentRunsIn(commentLayer, block.id)
-				const runs = isCode
-					? commentRuns
-					: [
-							...runsIn({
-								writers,
-								held: heldRuns,
-								people,
-								start: offsets[index],
-								length: block.source.length,
-							}),
-							...commentRuns,
-						]
-				const renderShownRun = isCode ? renderFieldRun : renderRun
+				const runs = [
+					...runsIn({
+						writers,
+						held: heldRuns,
+						people,
+						start: offsets[index],
+						length: block.source.length,
+					}),
+					...commentRuns,
+				]
+				const fencedRuns = isEditing ? [] : fencedRunsOf(block.source, runs)
 				const placeholder = placeholderAt(block, offsets[index], anchors)
 				const isDropBefore = drop?.to === index
 				const isDropAfter = drop?.to === count && index === count - 1
@@ -1521,7 +1545,7 @@ const LibraryDocumentBlockEditor = ({
 									}}
 									onKeyDown={keyInField(block, textType)}
 									renderRun={renderFieldRun}
-									runs={commentRunsIn(commentLayer, block.id)}
+									runs={commentRuns}
 									source={block.source}
 									type={textType}
 								/>
@@ -1579,7 +1603,9 @@ const LibraryDocumentBlockEditor = ({
 									<Markdown
 										className={DOCUMENT_TYPE}
 										onToggleTask={toggleTaskIn(block.id)}
-										renderRun={runs.length > 0 ? renderShownRun : undefined}
+										renderRun={
+											runs.length > 0 ? renderRunWith(fencedRuns) : undefined
+										}
 										resolveImage={resolveImage}
 										runs={runs.length > 0 ? runs : undefined}
 									>
@@ -1594,14 +1620,38 @@ const LibraryDocumentBlockEditor = ({
 						) : null}
 						<LibraryDocumentBlockComments
 							blockId={block.id}
-							hasPlacedPins={
-								isCode ||
-								(isEditing &&
-									(!hasBlockEditor || PASSAGE_EDITORS.includes(type)))
-							}
 							layer={commentLayer}
+							placedRuns={
+								hasPassageField ? commentRuns.map(({ id }) => id) : fencedRuns
+							}
 							source={block.source}
 						/>
+						{writers
+							.filter(({ agent }) => fencedRuns.includes(agent.id))
+							.map((writer) => (
+								<LibraryDocumentMarkOnPassageEnd
+									key={writer.agent.id}
+									run={writer.agent.id}
+								>
+									<span className="flex" {...agentScopeOf(writer.agent)}>
+										<LibraryDocumentAgentCaret
+											onOpenConversation={onOpenConversation}
+											onStop={onStop}
+											writer={writer}
+										/>
+									</span>
+								</LibraryDocumentMarkOnPassageEnd>
+							))}
+						{people
+							.filter(({ id }) => fencedRuns.includes(`${PERSON_RUN}${id}`))
+							.map((person) => (
+								<LibraryDocumentMarkOnPassageEnd
+									key={person.id}
+									run={`${PERSON_RUN}${person.id}`}
+								>
+									<LibraryDocumentPersonCaret person={person} />
+								</LibraryDocumentMarkOnPassageEnd>
+							))}
 						{isDropBefore || isDropAfter ? (
 							<span
 								aria-hidden="true"
