@@ -403,21 +403,6 @@ const useReplyChips = (
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
 
-const missionPropertiesRowOf = ({
-	mission,
-	now,
-}: ThreadMission): TranscriptItem => ({
-	key: "mission-properties",
-	render: () => (
-		<MissionProperties {...toMissionProperties(mission)} now={now} />
-	),
-})
-
-const rowsUnderMissionProperties = (
-	rows: TranscriptItem[],
-	seat: ThreadMission | null,
-): TranscriptItem[] => (seat ? [missionPropertiesRowOf(seat), ...rows] : rows)
-
 const missionsSeatedIn = (
 	missions: Mission[],
 	seat: ThreadMission | null,
@@ -1931,7 +1916,7 @@ function ThreadView(props: ThreadViewProps) {
 		}),
 		older: view.state.messages.length > 0 ? view.older : undefined,
 		onFollowChange: view.controller.follow,
-		rows: rowsUnderMissionProperties(view.transcriptRows, view.missionSeat),
+		rows: view.transcriptRows,
 		scrollerRef: view.scrollerRef,
 		transcriptKey: view.facts.id,
 	}
@@ -1989,6 +1974,13 @@ function ThreadView(props: ThreadViewProps) {
 
 	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
 
+	const opening = view.missionSeat ? (
+		<MissionProperties
+			{...toMissionProperties(view.missionSeat.mission)}
+			now={view.missionSeat.now}
+		/>
+	) : undefined
+
 	const layout = (
 		<ThreadLayout
 			{...transcript}
@@ -2024,6 +2016,7 @@ function ThreadView(props: ThreadViewProps) {
 			}
 			header={header}
 			notice={notice}
+			opening={opening}
 			overlay={overlay}
 			pending={departure ? undefined : approval}
 			queue={queue}

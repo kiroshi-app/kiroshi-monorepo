@@ -165,6 +165,7 @@ export const AnswerImageViewer = ({
 			{...imageActions}
 			{...barActionsOf(image, imageActions)}
 			count={viewed?.images.length ?? 0}
+			dragRegion="deep"
 			image={image}
 			isSavingToLibrary={
 				image !== null && imageActions.isSavingImage(image.src)

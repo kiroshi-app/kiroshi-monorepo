@@ -706,13 +706,18 @@ describe("WorkspaceBody missions", () => {
 			pullRequestUrl: "https://github.com/vocca/kiroshi/pull/4172",
 		})
 
+		const opening = threadSlot("transcript-opening") as HTMLElement
 		const properties = within(threadSlot("mission-properties") as HTMLElement)
 		const feed = screen.getByRole("region", { name: "Mission conversation" })
 		const [firstRow] = feed.querySelectorAll(
 			'[data-slot="message-scroller-item"]',
 		)
 
-		expect(firstRow.firstElementChild).toBe(threadSlot("mission-properties"))
+		expect(opening.contains(threadSlot("mission-properties"))).toBe(true)
+		expect(
+			opening.compareDocumentPosition(firstRow) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
 		expect(properties.getByText("OPE-42")).toBeTruthy()
 		expect(properties.getByText("Changelog parser")).toBeTruthy()
 		expect(properties.getByText("Parsing the 2.0 entries")).toBeTruthy()
@@ -907,6 +912,15 @@ describe("WorkspaceBody frame", () => {
 		await settle()
 
 		expect(within(staticBarAboveThread()).getByText("Garden")).toBeTruthy()
+	})
+
+	it("opens a conversation on its first row, with nothing above it", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+
+		expect(thread()).toBeTruthy()
+		expect(threadSlot("transcript-opening")).toBeNull()
 	})
 
 	it("drags the window from the leading side of the bar, never from one of its controls", async () => {
@@ -1868,6 +1882,7 @@ describe("WorkspaceBody library", () => {
 		).toBeNull()
 		expect(islandsIn(layout)).toEqual([])
 		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
 	it("wears the static bar above an opened document, outside any island", async () => {
@@ -1883,6 +1898,8 @@ describe("WorkspaceBody library", () => {
 			bar?.closest('[data-slot="screen-layout-floating-header"]'),
 		).toBeNull()
 		expect(takesPress(back)).toBe(true)
+		expect(startsWindowDrag(bar as HTMLElement)).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
 	})
 
 	it("wears the static bar above an opened image, outside any island", async () => {
@@ -1890,9 +1907,13 @@ describe("WorkspaceBody library", () => {
 
 		await open("hero-dunes.png")
 		const lightbox = screen.getByRole("dialog", { name: "hero-dunes.png" })
+		const bar = lightbox.querySelector(
+			'[data-slot="app-header"]',
+		) as HTMLElement
 
-		expect(lightbox.querySelector('[data-slot="app-header"]')).not.toBeNull()
+		expect(bar).not.toBeNull()
 		expect(islandsIn(lightbox)).toHaveLength(0)
+		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
 	it("shows an empty Library with its header actions, a new document and its templates", async () => {

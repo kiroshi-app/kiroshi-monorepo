@@ -2969,9 +2969,8 @@ describe("ThreadScreen", () => {
 		})
 		await settle()
 
-		const [properties, ...rows] = transcriptRows()
+		const rows = transcriptRows()
 
-		expect(properties).toContain("Ticket")
 		expect(rows).toHaveLength(3)
 		expect(rows[0]).toContain("Mission opened by")
 		expect(rows[1]).toContain(MISSION_SAID.text)

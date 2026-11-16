@@ -169,6 +169,7 @@ export const LibraryBoard = ({
 		<ScreenLayout
 			header={
 				<LibraryDocumentBar
+					dragRegion="deep"
 					item={{ name: title }}
 					onBack={onBack}
 					onDelete={onDelete}

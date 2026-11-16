@@ -8,7 +8,11 @@ export const MissionsRoute = () => {
 
 	return (
 		<ContentCard>
-			<MissionsPage {...sidebarMissions.page} now={rosterLines.now} />
+			<MissionsPage
+				{...sidebarMissions.page}
+				dragRegion="deep"
+				now={rosterLines.now}
+			/>
 		</ContentCard>
 	)
 }

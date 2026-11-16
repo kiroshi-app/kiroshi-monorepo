@@ -33,7 +33,7 @@ import {
 } from "@/lib/bindings"
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { invoke, listen } from "@/lib/host"
-import { takesPress } from "@/lib/host/fake-window-drag"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
@@ -410,6 +410,8 @@ describe("a Library board on its live session", () => {
 		expect(canvas.closest('[data-slot="screen-layout-column"]')).toBeNull()
 		expect(takesPress(canvas)).toBe(true)
 		expect(takesPress(back)).toBe(true)
+		expect(startsWindowDrag(header)).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
 
 		fireEvent.click(back)
 

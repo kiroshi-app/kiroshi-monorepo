@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { MissionsRoute } from "@/components/missions-route"
-import { takesPress } from "@/lib/host/fake-window-drag"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import type { WorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
 
@@ -52,5 +52,6 @@ describe("MissionsRoute with nothing selected", () => {
 		expect(document.querySelector('[data-slot="header-island"]')).toBeNull()
 		expect(takesPress(title)).toBe(true)
 		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
 	})
 })
