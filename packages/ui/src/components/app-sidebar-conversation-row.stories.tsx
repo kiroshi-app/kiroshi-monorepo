@@ -52,6 +52,8 @@ import type { AppSidebarConversation } from "@workspace/ui/components/app-sideba
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
+import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import {
@@ -1618,5 +1620,128 @@ export const NoTooltipWhileTheRowIsLifted = meta.story({
 		await userEvent.tab()
 		await expect(row).toHaveFocus()
 		await expect(screen.queryByRole("tooltip")).toBeNull()
+	},
+})
+
+const WAITING_MISSION_ENTRIES = [
+	"Open mission",
+	"Copy",
+	"Answer the question",
+	"Close",
+]
+
+const CONVERSATION_ENTRIES = [
+	"Unpin",
+	"Open in a new tab",
+	"Open settings",
+	"Delete",
+]
+
+const menuOnAWaitingMission: MissionTreeRowWrap = (row) => (
+	<MissionMenu
+		hasBranch
+		hasPullRequest={false}
+		hasWorkspacePath
+		onAnswer={fn()}
+		onClose={fn()}
+		onCopy={fn()}
+		onMessageAgent={fn()}
+		onOpen={fn()}
+		onOpenPullRequest={fn()}
+		onReopen={fn()}
+		onStopAgent={fn()}
+		state="waiting_human"
+	>
+		{row}
+	</MissionMenu>
+)
+
+const entriesOf = (menu: HTMLElement) =>
+	within(menu)
+		.getAllByRole("menuitem")
+		.map((item) => item.textContent)
+
+const closeMenu = async () => {
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+}
+
+const missionMenuStory = {
+	render: missionTooltipStory(false).render,
+	args: {
+		conversation: MISSIONS_ROOM,
+		wrapMission: menuOnAWaitingMission,
+		onOpenMission: fn(),
+		onOpenInNewTab: fn(),
+		onUnpin: fn(),
+		onOpenSettings: fn(),
+		onDelete: fn(),
+	},
+}
+
+export const MissionRowOpensTheMissionMenu = meta.story({
+	...missionMenuStory,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission under its conversation in the expanded sidebar, right clicked. Check the menu that opens is the mission menu, with the entries of a mission waiting on the person, that no conversation entry is drawn, Delete least of all, that the conversation row above keeps its resting look while the mission menu is open, and that a plain click on the mission still opens it.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const surface = surfaceOf(rowIn(canvasElement))
+		const mission = slotIn(canvasElement, "mission-capsule")
+		rightClick(mission)
+		const menu = await shown(
+			await screen.findByRole("menu", { name: "Mission actions" }),
+		)
+
+		await expect(entriesOf(menu)).toEqual(WAITING_MISSION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([menu])
+		await expect(surface).not.toHaveAttribute("data-popup-open")
+		await closeMenu()
+		await userEvent.click(mission)
+		await expect(args.onOpenMission).toHaveBeenCalledWith(WAITING_MISSION.id)
+	},
+})
+
+export const ConversationTitleKeepsTheConversationMenu = meta.story({
+	...missionMenuStory,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The title of a conversation that carries missions, right clicked. Check the menu that opens is the conversation menu with Unpin, Open in a new tab, Open settings and Delete, and that no mission menu opens beside it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(rowIn(canvasElement), "roster-row-name"))
+		const menu = await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${MISSIONS_ROOM.name}`,
+			}),
+		)
+
+		await expect(entriesOf(menu)).toEqual(CONVERSATION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([menu])
+		await closeMenu()
+	},
+})
+
+export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
+	...missionMenuStory,
+	tags: ["test-only"],
+	args: { ...missionMenuStory.args, wrapMission: undefined },
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(canvasElement, "mission-capsule"))
+		await new Promise(requestAnimationFrame)
+		await new Promise(requestAnimationFrame)
+
+		await expect(surfaceOf(rowIn(canvasElement))).not.toHaveAttribute(
+			"data-popup-open",
+		)
+		await expect(screen.queryByRole("menu")).toBeNull()
 	},
 })

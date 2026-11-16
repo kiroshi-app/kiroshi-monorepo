@@ -25,6 +25,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import {
 	MissionCapsuleList,
 	type MissionOpening,
+	type MissionTreeRowWrap,
 } from "@workspace/ui/components/mission-capsule"
 import {
 	PinGroup,
@@ -68,6 +69,7 @@ interface ConversationRosterRowProps
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	wrapMission?: MissionTreeRowWrap
 	lift: Lifter
 }
 
@@ -92,6 +94,7 @@ const ConversationRosterRow = ({
 	onCreateSectionFor,
 	openMissionId,
 	onOpenMission,
+	wrapMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const { state } = useSidebar()
@@ -170,6 +173,7 @@ const ConversationRosterRow = ({
 						missions={conversation.missions}
 						onOpenMission={onOpenMission}
 						openMissionId={openMissionId}
+						wrapMission={wrapMission}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent

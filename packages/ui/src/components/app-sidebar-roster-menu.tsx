@@ -38,6 +38,7 @@ import {
 	COMPACT_ROW_GAP,
 	useIsCompactRows,
 } from "@workspace/ui/components/compact-rows"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
@@ -52,6 +53,7 @@ interface RosterRowsContext
 	selectedConversationId?: string
 	openMissionId?: string
 	onOpenMission?: (missionId: string) => void
+	wrapMission?: MissionTreeRowWrap
 	spaceId?: string
 	spaces: Space[]
 	sections: AppSidebarSection[]
@@ -103,6 +105,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 		keepFocus: rows.keepFocus,
 		openMissionId: rows.openMissionId,
 		onOpenMission: rows.onOpenMission,
+		wrapMission: rows.wrapMission,
 	}
 	const isShowingMission =
 		(entry.conversation ?? entry.bot)?.missions?.some(

@@ -5,6 +5,7 @@ import { createElement, type ReactElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import {
 	MissionMenu,
 	type MissionMenuProps,
@@ -183,6 +184,13 @@ type MissionsPageRowState = MissionsPageRow["props"]["mission"]["state"]
 
 const pageRowOf = (id: string, state: MissionsPageRowState) =>
 	createElement("li", { mission: { id, state } }) as unknown as MissionsPageRow
+
+type SidebarRow = Parameters<MissionTreeRowWrap>[0]
+
+type SidebarRowState = SidebarRow["props"]["mission"]["state"]
+
+const sidebarRowOf = (id: string, state: SidebarRowState) =>
+	createElement("li", { mission: { id, state } }) as unknown as SidebarRow
 
 type RenderedMissions = ReturnType<typeof renderSidebarMissions>["result"]
 
@@ -388,6 +396,26 @@ describe("useSidebarMissions", () => {
 			"waiting_human",
 			"working",
 		])
+	})
+
+	it("wraps a sidebar mission row in the menu its mission gets on the Missions page", async () => {
+		const { result } = renderSidebarMissions()
+		await missionsRead(result)
+
+		const menu = result.current.wrapSidebarRow(
+			sidebarRowOf("m-waiting", "waiting"),
+		) as ReactElement<MissionMenuProps>
+
+		expect(menu.type).toBe(MissionMenu)
+		expect(menu.props.state).toBe("waiting_human")
+	})
+
+	it("leaves a sidebar mission row without a menu when the feed holds no such mission", async () => {
+		const { result } = renderSidebarMissions()
+		await missionsRead(result)
+		const row = sidebarRowOf("m-unknown", "working")
+
+		expect(result.current.wrapSidebarRow(row)).toBe(row)
 	})
 
 	it("opens the mission of a row from its menu, landing on the composer", async () => {

@@ -58,6 +58,8 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	const chat = useChat(driver, store, {
 		senderAccountId,
 		rereadConversation: roster.controller.rereadConversationRow,
+		isListedInOpenSpace: (botId) =>
+			roster.controller.getState().bots.some((bot) => bot.id === botId),
 	})
 	const conversationRuntimes = useMemo(
 		() =>

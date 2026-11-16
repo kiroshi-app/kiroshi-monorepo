@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::time::{timeout, Instant};
@@ -16,7 +17,14 @@ const HELD_FRAMES: usize = 1024;
 
 pub(super) const LEARN_BOUND: Duration = Duration::from_secs(30);
 
+const PAYLOAD_TOO_LARGE: u16 = 413;
+
 pub(super) const BUFFERED_EVENTS: usize = 2 * HELD_FRAMES;
+
+#[derive(Deserialize)]
+struct CallId {
+	id: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Presence {
@@ -306,6 +314,16 @@ impl MemberLink {
 		}
 		*sequence = Sequence::Applied(caught_up);
 		Resync::InStep
+	}
+
+	pub(super) fn refused_as_too_large(&self, call: &str, refusal: String) {
+		let Ok(CallId { id }) = serde_json::from_str(call) else {
+			return log::warn!(
+				"the member relay of instance {} refused a frame that names no call: {refusal}",
+				self.instance_id
+			);
+		};
+		self.answered(&json!({ "id": id, "status": PAYLOAD_TOO_LARGE, "body": refusal }));
 	}
 
 	fn answered(&self, frame: &Value) {
