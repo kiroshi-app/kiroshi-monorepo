@@ -275,7 +275,18 @@ describe("the Download CSV button of a table in an answer", () => {
 		["Ada - Lovelace", "ada-lovelace-table.csv"],
 		["--Ada--", "ada-table.csv"],
 		["R2-D2", "r2-d2-table.csv"],
-		["日本 ✦", "table.csv"],
+		["Éloïse", "éloïse-table.csv"],
+		["E\u0301loi\u0308se", "éloïse-table.csv"],
+		["日本 ✦", "日本-table.csv"],
+		["Анна", "анна-table.csv"],
+		["Ζωή", "ζωή-table.csv"],
+		["हिंदी ४२!", "हिंदी-४२-table.csv"],
+		["Ada ❤\ufe0f", "ada-table.csv"],
+		['Ada\u0000\u001f\u007f"\\Lovelace', "ada-lovelace-table.csv"],
+		["a".repeat(70), `${"a".repeat(64)}-table.csv`],
+		[`${"a".repeat(63)} b`, `${"a".repeat(63)}-table.csv`],
+		[`a${"𠀀".repeat(70)}`, `a${"𠀀".repeat(63)}-table.csv`],
+		["/:*?<>|", "table.csv"],
 	])("saves the table of %s as %s", async (agentName, name) => {
 		host.saveCsvFile.mockResolvedValue(null)
 

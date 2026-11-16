@@ -8,11 +8,22 @@ const reportFailure = failureReporterIn("save-answer-table")
 
 const TABLE_FILE_NAME = "table.csv"
 
-const fileSlugOf = (agentName: string): string =>
+const SLUG_CODE_POINT_LIMIT = 64
+
+const LETTER_OR_DIGIT_RUNS = /[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}]*/gu
+
+const hyphenatedRunsOf = (agentName: string): string =>
 	agentName
 		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-|-$/g, "")
+		.normalize("NFC")
+		.match(LETTER_OR_DIGIT_RUNS)
+		?.join("-") ?? ""
+
+const fileSlugOf = (agentName: string): string =>
+	Array.from(hyphenatedRunsOf(agentName))
+		.slice(0, SLUG_CODE_POINT_LIMIT)
+		.join("")
+		.replace(/-$/, "")
 
 const tableFileNameOf = (agentName: string): string => {
 	const slug = fileSlugOf(agentName)
