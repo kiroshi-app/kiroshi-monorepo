@@ -27,9 +27,15 @@ const REPLAY_IDENTIFIERS = [
 const BUNDLE_TEXT_FILE = /\.(js|css|html|map|json)$/
 const SOURCE_FILE = /\.(ts|tsx|css|html)$/
 
-const filesNaming = (root: string, kept: RegExp, identifiers: string[]) =>
+type Scan = {
+	root: string
+	isScanned: (path: string) => boolean
+	identifiers: string[]
+}
+
+const filesNaming = ({ root, isScanned, identifiers }: Scan) =>
 	readdirSync(root, { recursive: true, encoding: "utf8" })
-		.filter((path) => kept.test(path))
+		.filter(isScanned)
 		.filter((path) => {
 			const text = readFileSync(join(root, path), "utf8")
 			return identifiers.some((identifier) => text.includes(identifier))
@@ -37,9 +43,12 @@ const filesNaming = (root: string, kept: RegExp, identifiers: string[]) =>
 
 describe("the replay mode in a build", () => {
 	it("is imported by no source the build bundles", () => {
-		const importers = filesNaming(SOURCES, SOURCE_FILE, [REPLAY_FOLDER]).filter(
-			(path) => !path.startsWith(REPLAY_FOLDER),
-		)
+		const importers = filesNaming({
+			root: SOURCES,
+			isScanned: (path) =>
+				SOURCE_FILE.test(path) && !path.startsWith(REPLAY_FOLDER),
+			identifiers: [REPLAY_FOLDER],
+		})
 
 		expect(importers).toEqual([])
 		expect(
@@ -50,11 +59,12 @@ describe("the replay mode in a build", () => {
 	it.skipIf(!existsSync(BUNDLE_ENTRY))(
 		"leaves no replay identifier in the built bundle",
 		() => {
-			const naming = filesNaming(
-				BUNDLE,
-				BUNDLE_TEXT_FILE,
-				REPLAY_IDENTIFIERS,
-			).filter((path) => !path.startsWith(TSC_EMIT_FOLDER))
+			const naming = filesNaming({
+				root: BUNDLE,
+				isScanned: (path) =>
+					BUNDLE_TEXT_FILE.test(path) && !path.startsWith(TSC_EMIT_FOLDER),
+				identifiers: REPLAY_IDENTIFIERS,
+			})
 
 			expect(naming).toEqual([])
 		},
