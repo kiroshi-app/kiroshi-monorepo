@@ -18,7 +18,7 @@ import {
 import { type RosterFrame, rosterFrameReader } from "./roster-frame"
 import { type RosterLine, rosterLineKey, type SoloThreads } from "./roster-line"
 
-import { listen, onHostReconnected } from "@/lib/host"
+import { listen, onHostReconnectedFirst } from "@/lib/host"
 import type { ConversationInPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { useInfiniteListEnd } from "../query/use-infinite-list-end"
@@ -88,7 +88,7 @@ const listenToRosterChanges = (controller: RosterController) =>
 const useRosterRefreshes = (controller: RosterController) => {
 	useEffect(() => {
 		const listenings = listenToRosterChanges(controller)
-		const stopCatchingUp = onHostReconnected(controller.catchUpWithHost)
+		const stopCatchingUp = onHostReconnectedFirst(controller.catchUpWithHost)
 		return () => {
 			stopCatchingUp()
 			for (const listening of listenings) {

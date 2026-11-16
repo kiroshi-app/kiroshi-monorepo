@@ -80,6 +80,8 @@ export const listenToActiveHost = joinedHosts.listenToActiveHost
 
 export const onHostReconnected = joinedHosts.onReconnected
 
+export const onHostReconnectedFirst = joinedHosts.onReconnectedFirst
+
 export function isDesktopHost(): boolean {
 	return hasTauriInternals()
 }

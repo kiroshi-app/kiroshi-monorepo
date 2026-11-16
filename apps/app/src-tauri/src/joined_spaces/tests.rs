@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
@@ -10,14 +11,15 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, patch, post};
 use axum::Router;
-use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, AppHandle, Listener, Manager};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use tokio::sync::mpsc::{self, UnboundedSender};
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 use tokio::time::Instant;
 
 use super::commands::{
@@ -25,7 +27,8 @@ use super::commands::{
 	CHANGED_EVENT, REMOVED_EVENT,
 };
 use super::contract::{
-	JoinedSpace, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
+	JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait,
+	JoinedSpaceWaitReason,
 };
 use super::member_link::{MemberLink, Presence};
 use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
@@ -34,6 +37,7 @@ use super::test_host::{SealingHost, MEMBER_RELAY_ID};
 use super::wait_reason::{wait_of, Stall};
 use super::waiting;
 use crate::account::session::{self, AccountSession};
+use crate::attachments;
 use crate::conversations::contract::Hue;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
@@ -71,6 +75,11 @@ const MEMBERSHIP_ENDED: u16 = 4003;
 const SPACE_DELETED: u16 = 4007;
 const LONG_PAUSE: Duration = Duration::from_secs(3600);
 const ENDING_PAUSE: Duration = Duration::from_secs(90);
+const STORE_ATTACHMENTS: &str = "chat_store_attachments";
+const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
+const SLOW_UPLINK_PIECE_BYTES: usize = 64 * 1024;
+const SLOW_UPLINK_PIECE_EVERY: Duration = Duration::from_millis(32);
+const SLOW_UPLINK_UNDER_WAY_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone)]
 enum HostSide {
@@ -82,6 +91,7 @@ enum HostSide {
 	Answering(String),
 	GreetingAfterRead { frames: Vec<String>, reads: usize },
 	DroppingAfterItsAnswer { host: Arc<SealingHost>, command: &'static str, body: Value },
+	WeighingItsCalls { host: Arc<SealingHost>, command: &'static str },
 }
 
 struct Room {
@@ -107,6 +117,8 @@ struct Room {
 	leave: (StatusCode, Value),
 	is_sign_out_stalled: bool,
 	sign_out_calls: Vec<(&'static str, String)>,
+	pinging: Arc<Notify>,
+	pongs_and_weighed_calls: Vec<&'static str>,
 }
 
 #[derive(Clone)]
@@ -137,6 +149,8 @@ impl Relay {
 			leave: (StatusCode::NO_CONTENT, Value::Null),
 			is_sign_out_stalled: false,
 			sign_out_calls: Vec::new(),
+			pinging: Arc::new(Notify::new()),
+			pongs_and_weighed_calls: Vec::new(),
 		})))
 	}
 
@@ -180,6 +194,14 @@ impl Relay {
 
 	fn connections(&self) -> usize {
 		self.room().connections
+	}
+
+	fn pings_its_member(&self) {
+		self.room().pinging.notify_one();
+	}
+
+	fn pongs_and_weighed_calls(&self) -> Vec<&'static str> {
+		self.room().pongs_and_weighed_calls.clone()
 	}
 
 	async fn served(&self) -> String {
@@ -380,7 +402,9 @@ async fn member_socket(
 		room.connections += 1;
 		room.socket_devices.push(device);
 	}
-	upgrade.on_upgrade(move |socket| membered(relay, socket))
+	upgrade
+		.max_frame_size(RELAY_FRAME_CEILING_BYTES)
+		.on_upgrade(move |socket| membered(relay, socket))
 }
 
 fn is_missed_rekey(frame: &Value) -> bool {
@@ -394,7 +418,10 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 		let close = CloseFrame { code: HOST_ABSENT, reason: "".into() };
 		return socket.send(Message::Close(Some(close))).await.expect("the close leaves");
 	}
-	while let Some(Ok(frame)) = socket.recv().await {
+	while let Some(Ok(frame)) = member_frame(&relay, &mut socket).await {
+		if matches!(frame, Message::Pong(_)) {
+			relay.room().pongs_and_weighed_calls.push("pong");
+		}
 		let Message::Text(text) = frame else {
 			continue;
 		};
@@ -408,6 +435,17 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 			let answer = json!({ "id": call["id"], "status": 200, "body": body }).to_string();
 			let sealed = Message::Text(host.sealed(&answer).into());
 			return socket.send(sealed).await.expect("the answer leaves");
+		}
+		if let HostSide::WeighingItsCalls { host, command } = host {
+			let call = host.opened(text.as_str()).plaintext;
+			if call["command"] == command {
+				relay.room().pongs_and_weighed_calls.push("call");
+				let body = json!({ "argumentBytes": call["args"].to_string().len() });
+				let answer = json!({ "id": call["id"], "status": 200, "body": body }).to_string();
+				let sealed = Message::Text(host.sealed(&answer).into());
+				socket.send(sealed).await.expect("the answer leaves");
+			}
+			continue;
 		}
 		if !is_missed_rekey(&frame) {
 			for greeting in relay.greeting().await {
@@ -432,11 +470,25 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 			HostSide::Silent
 			| HostSide::Leaving(_)
 			| HostSide::GreetingAfterRead { .. }
-			| HostSide::DroppingAfterItsAnswer { .. } => continue,
+			| HostSide::DroppingAfterItsAnswer { .. }
+			| HostSide::WeighingItsCalls { .. } => continue,
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
 		if socket.send(answer).await.is_err() {
 			return;
+		}
+	}
+}
+
+async fn member_frame(
+	relay: &Relay,
+	socket: &mut WebSocket,
+) -> Option<Result<Message, axum::Error>> {
+	let pinging = Arc::clone(&relay.room().pinging);
+	loop {
+		tokio::select! {
+			frame = socket.recv() => return frame,
+			_ = pinging.notified() => socket.send(Message::Ping(Vec::new().into())).await.ok()?,
 		}
 	}
 }
@@ -2215,6 +2267,133 @@ async fn online_and_greeted(member: &Member, host: &SealingHost) -> JoinedSpace 
 	joined
 }
 
+struct SlowUplink {
+	cloud: String,
+	carried_bytes: Arc<AtomicUsize>,
+}
+
+async fn a_slow_uplink_to(cloud: &str) -> SlowUplink {
+	let relay = cloud.trim_start_matches("http://").to_owned();
+	let socket = TcpSocket::new_v4().expect("the slow uplink opens");
+	socket.set_recv_buffer_size(SLOW_UPLINK_PIECE_BYTES as u32).expect("the slow uplink is sized");
+	socket.bind((Ipv4Addr::LOCALHOST, 0).into()).expect("the slow uplink binds");
+	let listener = socket.listen(64).expect("the slow uplink listens");
+	let address = listener.local_addr().expect("the slow uplink is named");
+	let carried_bytes = Arc::new(AtomicUsize::new(0));
+	let carried = Arc::clone(&carried_bytes);
+	tokio::spawn(async move {
+		while let Ok((member, _)) = listener.accept().await {
+			let relay = TcpStream::connect(&relay).await.expect("the relay is reached");
+			tokio::spawn(slowed_upward(member, relay, Arc::clone(&carried)));
+		}
+	});
+	SlowUplink { cloud: format!("http://{address}"), carried_bytes }
+}
+
+async fn slowed_upward(member: TcpStream, relay: TcpStream, carried: Arc<AtomicUsize>) {
+	let (mut from_member, mut to_member) = member.into_split();
+	let (mut from_relay, mut to_relay) = relay.into_split();
+	let downward =
+		tokio::spawn(async move { tokio::io::copy(&mut from_relay, &mut to_member).await });
+	let mut piece = vec![0u8; SLOW_UPLINK_PIECE_BYTES];
+	while let Ok(read @ 1..) = from_member.read(&mut piece).await {
+		if to_relay.write_all(&piece[..read]).await.is_err() {
+			break;
+		}
+		carried.fetch_add(read, Ordering::SeqCst);
+		tokio::time::sleep(SLOW_UPLINK_PIECE_EVERY).await;
+	}
+	downward.abort();
+}
+
+async fn invoked(
+	connection: &JoinedSpaceConnection,
+	command: &str,
+	args: &Value,
+) -> (StatusCode, String) {
+	crate::missions::github::installed_tls_provider();
+	let answered = reqwest::Client::new()
+		.post(format!("{}/api/invoke/{command}", connection.host_url))
+		.bearer_auth(&connection.token)
+		.json(args)
+		.send()
+		.await
+		.expect("the proxy answers");
+	(answered.status(), answered.text().await.expect("an answer body"))
+}
+
+fn weighed(args: &Value) -> String {
+	json!({ "argumentBytes": args.to_string().len() }).to_string()
+}
+
+#[test]
+fn a_message_carrying_the_largest_image_crosses_a_slow_relay_link_without_a_stall_answering_a_ping_on_its_way(
+) {
+	run(async {
+		let relay = Relay::new();
+		let uplink = a_slow_uplink_to(&relay.served().await).await;
+		let member = Member::over("largest-image-slow-link", relay, &uplink.cloud, PATIENCE);
+		let host = Arc::new(member.host());
+		let joined = online_and_greeted(&member, &host).await;
+		member.relay.hosting(HostSide::WeighingItsCalls { host, command: STORE_ATTACHMENTS });
+		let app = member.app.handle().clone();
+		let connection =
+			joined_space_connect(app, joined.id.clone()).await.expect("the connection");
+		let image = BASE64_STANDARD.encode(vec![0xff; attachments::MAX_BYTES as usize]);
+		let args = json!({
+			"conversationId": null,
+			"attachments": [{ "name": "photo.png", "base64": image }]
+		});
+		let sockets_before = member.relay.connections();
+		let carried_before = uplink.carried_bytes.load(Ordering::SeqCst);
+		let under_way = carried_before + SLOW_UPLINK_UNDER_WAY_BYTES;
+
+		let (answered, ()) = tokio::join!(invoked(&connection, STORE_ATTACHMENTS, &args), async {
+			until("the upload under way", || async {
+				(uplink.carried_bytes.load(Ordering::SeqCst) > under_way).then_some(())
+			})
+			.await;
+			member.relay.pings_its_member();
+		});
+
+		assert_eq!(answered, (StatusCode::OK, weighed(&args)));
+		assert_eq!(member.relay.pongs_and_weighed_calls(), ["pong", "call"]);
+		assert_eq!(member.relay.connections(), sockets_before);
+		let guests = member.app.state::<RelayGuests>();
+		assert_eq!(guests.presence(&joined.id), Some(Presence::Online));
+	});
+}
+
+#[test]
+fn a_call_sealing_over_the_relay_frame_ceiling_answers_413_and_keeps_its_socket() {
+	run(async {
+		let member = Member::new("over-the-ceiling").await;
+		let host = Arc::new(member.host());
+		let joined = online_and_greeted(&member, &host).await;
+		member.relay.hosting(HostSide::WeighingItsCalls { host, command: STORE_ATTACHMENTS });
+		let app = member.app.handle().clone();
+		let connection =
+			joined_space_connect(app, joined.id.clone()).await.expect("the connection");
+		let over = json!({ "blob": "s".repeat(RELAY_FRAME_CEILING_BYTES * 3 / 4) });
+		let within = json!({ "blob": "s" });
+		let sockets_before = member.relay.connections();
+
+		let refused = invoked(&connection, STORE_ATTACHMENTS, &over).await;
+		let answered = invoked(&connection, STORE_ATTACHMENTS, &within).await;
+
+		let (status, refusal) = refused;
+		assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+		let named = refusal
+			.strip_prefix("the call seals into a frame of ")
+			.and_then(|sized| sized.strip_suffix(" bytes, over the relay limit of 67108864 bytes"))
+			.and_then(|bytes| bytes.parse::<usize>().ok());
+		assert!(named.is_some_and(|bytes| bytes > RELAY_FRAME_CEILING_BYTES), "{refusal}");
+		assert_eq!(answered, (StatusCode::OK, weighed(&within)));
+		assert_eq!(member.relay.pongs_and_weighed_calls(), ["call"]);
+		assert_eq!(member.relay.connections(), sockets_before);
+	});
+}
+
 #[test]
 fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_and_hue() {
 	run(async {
@@ -2240,6 +2419,37 @@ fn a_description_the_link_drops_before_its_event_still_lists_the_answered_name_a
 		assert_eq!(member.listed().await, vec![answered]);
 		let heard = changes.lock().expect("the events").clone();
 		assert_eq!(heard, vec![json!({ "id": joined.id, "hostedBy": "Ann", "colour": 200 })]);
+	});
+}
+
+#[test]
+fn a_member_relay_drop_is_logged_with_the_size_of_the_last_frames_both_ways() {
+	run(async {
+		crate::test_log::capturing();
+		let member = Member::new("drop-weighed").await;
+		let host = Arc::new(member.host());
+		let joined = online_and_greeted(&member, &host).await;
+		let body = json!({
+			"id": SPACE, "name": "Lab", "colour": 200, "position": 0, "createdAt": 0,
+			"shared": true, "instanceId": INSTANCE,
+		});
+		let dropping = HostSide::DroppingAfterItsAnswer { host, command: "space_update", body };
+		member.relay.hosting(dropping);
+
+		described(&member.app, &joined, Some(200)).await.expect("the description");
+
+		let lost =
+			format!("joined space {} (instance {INSTANCE}) lost its member relay", joined.id);
+		let lost = crate::test_log::warnings_naming(&lost).await;
+		let weighed = lost[0].split_once(" (last frame received: ").map(|(_, weighed)| weighed);
+		let sizes = weighed.and_then(|weighed| weighed.split_once(" bytes, last frame sent: "));
+		let is_a_size = |size: &str| size.parse::<usize>().is_ok_and(|bytes| bytes > 0);
+		assert!(
+			sizes.is_some_and(|(received, sent)| {
+				is_a_size(received) && sent.strip_suffix(" bytes)").is_some_and(is_a_size)
+			}),
+			"{lost:?}"
+		);
 	});
 }
 

@@ -33,7 +33,7 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 		host.handlers.set(event, handler)
 		return () => host.handlers.delete(event)
 	},
-	onHostReconnected: (onReconnected: (hostId: string) => void) => {
+	onHostReconnectedFirst: (onReconnected: (hostId: string) => void) => {
 		host.reconnects.add(onReconnected)
 		return () => host.reconnects.delete(onReconnected)
 	},
