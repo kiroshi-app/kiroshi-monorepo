@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react"
+import type { ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -42,7 +42,7 @@ const MissionPropertyAction = ({
 }: MissionPropertyActionProps) => (
 	<Button
 		className={cn(
-			"rounded-full text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5",
+			"rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5",
 			className,
 		)}
 		size="icon-xs"
@@ -58,7 +58,8 @@ type MissionPropertiesProps = {
 	status?: MissionStatus
 	commitsAhead?: number
 	pullRequest?: MissionPullRequest
-	ticketActions?: ReactNode
+	onOpenCodingSession?: () => void
+	onEdit?: () => void
 	className?: string
 }
 
@@ -69,7 +70,8 @@ const MissionProperties = ({
 	status,
 	commitsAhead = 0,
 	pullRequest,
-	ticketActions,
+	onOpenCodingSession,
+	onEdit,
 	className,
 }: MissionPropertiesProps) => {
 	const { t } = useTranslation("chat")
@@ -94,12 +96,27 @@ const MissionProperties = ({
 					<dt className={PROPERTY_LABEL}>{t("missions.properties.ticket")}</dt>
 					<dd className={cn(PROPERTY_VALUE, "@max-[40rem]:items-start")}>
 						<MissionTicketLine layout="line" ticket={ticket} />
-						{ticketActions ? (
+						{onOpenCodingSession || onEdit ? (
 							<span
-								className="flex shrink-0 items-center gap-0.5 @max-[40rem]:ms-auto"
+								className="flex shrink-0 items-center gap-2 @max-[40rem]:ms-auto"
 								data-slot="mission-ticket-actions"
 							>
-								{ticketActions}
+								{onOpenCodingSession ? (
+									<MissionPropertyAction
+										aria-label={t("missions.properties.openCodingSession")}
+										onClick={onOpenCodingSession}
+									>
+										<Icons.Command aria-hidden="true" />
+									</MissionPropertyAction>
+								) : null}
+								{onEdit ? (
+									<MissionPropertyAction
+										aria-label={t("missions.properties.edit")}
+										onClick={onEdit}
+									>
+										<Icons.Edit aria-hidden="true" />
+									</MissionPropertyAction>
+								) : null}
 							</span>
 						) : null}
 					</dd>
@@ -172,4 +189,4 @@ const MissionProperties = ({
 	)
 }
 
-export { MissionProperties, type MissionPropertiesProps, MissionPropertyAction }
+export { MissionProperties, type MissionPropertiesProps }

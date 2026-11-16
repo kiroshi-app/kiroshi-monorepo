@@ -1,4 +1,4 @@
-import { expect } from "storybook/test"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -8,11 +8,7 @@ import {
 	slotsIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
-import { Icons } from "@workspace/ui/components/icons"
-import {
-	MissionProperties,
-	MissionPropertyAction,
-} from "@workspace/ui/components/mission-properties"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
 import {
 	LONG_MISSION_STATUS,
 	LONG_MISSION_TICKET_TITLE,
@@ -23,16 +19,22 @@ import {
 	MISSION_TICKET,
 } from "@workspace/ui/components/missions.fixtures"
 
-const TICKET_ACTIONS = (
-	<>
-		<MissionPropertyAction aria-label="Copy the ticket identifier">
-			<Icons.Copy aria-hidden="true" />
-		</MissionPropertyAction>
-		<MissionPropertyAction aria-label="Open the ticket">
-			<Icons.ExternalLink aria-hidden="true" />
-		</MissionPropertyAction>
-	</>
-)
+const TICKET_CALLBACKS = { onOpenCodingSession: fn(), onEdit: fn() }
+
+const expectTicketAction = async (button: HTMLElement) => {
+	const icon = button.querySelector("svg") as SVGElement
+	const style = getComputedStyle(button)
+
+	await expect([boxOf(button).width, boxOf(button).height]).toEqual([24, 24])
+	await expect(
+		Number.parseFloat(style.borderTopLeftRadius),
+	).toBeGreaterThanOrEqual(12)
+	await expect([boxOf(icon).width, boxOf(icon).height]).toEqual([14, 14])
+	await expect(style.color).toBe(
+		tokenStyleIn(button, "text-muted-foreground", "color"),
+	)
+	await expect(style.transitionProperty).toBe("none")
+}
 
 const ROW_HEIGHT = 24
 
@@ -69,7 +71,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a mission answers and where its branch stands, as one block of labelled rows: the ticket, the last status its agent wrote, the pull request with the commits ahead and how long the mission has been open. It sits at the top of whatever scrolls the mission thread and leaves with it, closed by a rule. A row with nothing to say is left out and the others close ranks; `ticketActions` holds the icon buttons of the Ticket row, built from `MissionPropertyAction`, and draws nothing when left empty.",
+					"What a mission answers and where its branch stands, as one block of labelled rows: the ticket, the last status its agent wrote, the pull request with the commits ahead and how long the mission has been open. It sits at the top of whatever scrolls the mission thread and leaves with it, closed by a rule. A row with nothing to say is left out and the others close ranks; `onOpenCodingSession` and `onEdit` each put an icon button after the ticket title, and a callback left out draws no button.",
 			},
 		},
 	},
@@ -323,40 +325,101 @@ export const TicketLink = meta.story({
 })
 
 export const WithTicketActions = meta.story({
-	args: { ticketActions: TICKET_ACTIONS },
+	args: TICKET_CALLBACKS,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The Ticket row carrying its two icon buttons, in the 640px thread column. Check that each is a 24px round button with a 14px icon in the muted foreground, named for what it does, and that the pair follows the title 8px after it rather than sitting at the far end. Pick `LongContent` for the pair pinned to the end of a narrow column. The app leaves this slot empty today.",
+					"The Ticket row carrying its two icon buttons, in the 640px thread column. Check that Open the coding session comes first and Edit after it, each a 24px round button with a 14px icon in the muted foreground, that tabbing to one draws a visible ring, that a click reaches its own callback and never the other, and that the pair follows the title 8px after it, Edit 8px after Open the coding session, rather than sitting at the far end. Pick `WithOneTicketAction` for a row given one callback and `LongContent` for the pair pinned to the end of a narrow column. The app passes neither callback today.",
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const row = rowOf(canvasElement, "ticket")
 		const actions = slotIn(row, "mission-ticket-actions")
-		const buttons = Array.from(actions.querySelectorAll("button"))
+		const openCodingSession = canvas.getByRole("button", {
+			name: "Open the coding session",
+		})
+		const edit = canvas.getByRole("button", { name: "Edit" })
 
-		await expect(buttons).toHaveLength(2)
-		for (const button of buttons) {
-			const icon = button.querySelector("svg") as SVGElement
-
-			await expect([boxOf(button).width, boxOf(button).height]).toEqual([
-				24, 24,
-			])
-			await expect(
-				Number.parseFloat(getComputedStyle(button).borderTopLeftRadius),
-			).toBeGreaterThanOrEqual(12)
-			await expect([boxOf(icon).width, boxOf(icon).height]).toEqual([14, 14])
-			await expect(getComputedStyle(button).color).toBe(
-				tokenStyleIn(button, "text-muted-foreground", "color"),
-			)
-			await expect(button).toHaveAccessibleName()
-		}
+		await expect(Array.from(actions.querySelectorAll("button"))).toEqual([
+			openCodingSession,
+			edit,
+		])
+		await expectTicketAction(openCodingSession)
+		await expectTicketAction(edit)
 		await expect(boxOf(row).height).toBe(ROW_HEIGHT)
 		await expect(
 			boxOf(actions).left - boxOf(slotIn(row, "mission-ticket-line")).right,
 		).toBe(CELL_GAP)
+		await expect(boxOf(edit).left - boxOf(openCodingSession).right).toBe(
+			CELL_GAP,
+		)
+
+		await userEvent.tab()
+		await userEvent.tab()
+		await expect(openCodingSession).toHaveFocus()
+		await expect(getComputedStyle(openCodingSession).boxShadow).not.toBe("none")
+		await userEvent.tab()
+		await expect(edit).toHaveFocus()
+		await expect(getComputedStyle(edit).boxShadow).not.toBe("none")
+
+		await userEvent.click(openCodingSession)
+		await expect(args.onOpenCodingSession).toHaveBeenCalledOnce()
+		await expect(args.onEdit).not.toHaveBeenCalled()
+
+		await userEvent.click(edit)
+		await expect(args.onEdit).toHaveBeenCalledOnce()
+		await expect(args.onOpenCodingSession).toHaveBeenCalledOnce()
+	},
+})
+
+export const WithOneTicketAction = meta.story({
+	args: TICKET_CALLBACKS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Ticket row given one callback only, Open the coding session above and Edit below. Check that each row draws the one button it was handed, 8px after the title, with no room kept for the other. Pick `WithTicketActions` for the pair and `Default` for a row given neither.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex w-160 max-w-full flex-col gap-6">
+			<section data-holds="open-coding-session">
+				<MissionProperties {...args} onEdit={undefined} />
+			</section>
+			<section data-holds="edit">
+				<MissionProperties {...args} onOpenCodingSession={undefined} />
+			</section>
+		</div>
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const lone = [
+			["open-coding-session", "Open the coding session"],
+			["edit", "Edit"],
+		]
+
+		for (const [holder, name] of lone) {
+			const row = rowOf(holderOf(canvasElement, holder), "ticket")
+			const actions = slotIn(row, "mission-ticket-actions")
+			const [button, ...others] = Array.from(actions.querySelectorAll("button"))
+
+			await expect(others).toHaveLength(0)
+			await expect(button).toHaveAccessibleName(name)
+			await expectTicketAction(button)
+			await expect([boxOf(actions).width, boxOf(row).height]).toEqual([
+				24,
+				ROW_HEIGHT,
+			])
+			await expect(
+				boxOf(actions).left - boxOf(slotIn(row, "mission-ticket-line")).right,
+			).toBe(CELL_GAP)
+
+			await userEvent.click(button)
+		}
+		await expect(args.onOpenCodingSession).toHaveBeenCalledOnce()
+		await expect(args.onEdit).toHaveBeenCalledOnce()
 	},
 })
 
@@ -364,7 +427,7 @@ export const LongContent = meta.story({
 	args: {
 		ticket: { ...MISSION_TICKET, title: LONG_MISSION_TICKET_TITLE },
 		status: LONG_MISSION_STATUS,
-		ticketActions: TICKET_ACTIONS,
+		...TICKET_CALLBACKS,
 	},
 	parameters: {
 		docs: {

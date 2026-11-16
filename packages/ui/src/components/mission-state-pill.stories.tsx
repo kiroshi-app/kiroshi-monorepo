@@ -81,7 +81,7 @@ export const InAppHeader = meta.story({
 		docs: {
 			description: {
 				story:
-					"The five states the pill speaks for, each at the trailing end of an `AppHeader`, where the pill is a filled capsule rather than a badge. Check that each is 28px tall, the height of the bar's controls, fully rounded on the fill the bar's own capsule wears, with a 6px dot in the colour of its state, 6px before a 12px medium label in the foreground and 10px of padding either side. Pick `States` for the badge a mission card draws. `packages/ui/src/components/mission-header.tsx:82` hands the pill to the bar.",
+					"The five states the pill speaks for, each at the trailing end of an `AppHeader`, where the pill is a filled capsule rather than a badge. Check that each is 36px tall with 10px of padding on every side and a 16px radius, on the fill the bar's own capsule wears, with a 6px dot in the colour of its state 6px before a 12px medium label in the foreground, and that the bar stays 56px tall around it. Pick `States` for the badge a mission card draws. `packages/ui/src/components/mission-header.tsx:82` hands the pill to the bar.",
 			},
 		},
 	},
@@ -109,20 +109,18 @@ export const InAppHeader = meta.story({
 			const dot = dotOf(pill).getBoundingClientRect()
 			const style = getComputedStyle(pill)
 
-			await expect(box.height).toBe(28)
-			await expect(
-				Number.parseFloat(style.borderTopLeftRadius),
-			).toBeGreaterThanOrEqual(14)
 			await expect([
+				box.height,
+				style.borderRadius,
 				dot.left - box.left,
 				dot.width,
 				dot.height,
 				style.columnGap,
-				style.paddingRight,
+				style.padding,
 				style.fontSize,
 				style.lineHeight,
 				style.fontWeight,
-			]).toEqual([10, 6, 6, "6px", "10px", "12px", "16px", "500"])
+			]).toEqual([36, "16px", 10, 6, 6, "6px", "10px", "12px", "16px", "500"])
 			await expect(style.backgroundColor).toBe(
 				tokenStyleIn(pill, "bg-foreground/5", "backgroundColor"),
 			)
@@ -133,6 +131,9 @@ export const InAppHeader = meta.story({
 		await expect(slotsIn(canvasElement, "mission-state-pill")).toHaveLength(
 			PILL_STATES.length,
 		)
+		for (const bar of slotsIn(canvasElement, "app-header")) {
+			await expect(bar.offsetHeight).toBe(56)
+		}
 		await expect(
 			getComputedStyle(
 				dotOf(

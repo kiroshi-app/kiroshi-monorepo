@@ -1125,6 +1125,8 @@ const chat = {
 			activity: "Activité",
 			pullRequest: "Pull request",
 			openedAt: "ouverte {{time}}",
+			openCodingSession: "Ouvrir la session de code",
+			edit: "Modifier",
 		},
 		feed: {
 			label: "Conversation de la mission",

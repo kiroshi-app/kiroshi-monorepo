@@ -59,7 +59,7 @@ const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 		return (
 			<span
 				className={cn(
-					"flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 font-medium text-foreground text-xs leading-4",
+					"flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-bubble p-2.5 font-medium text-foreground text-xs leading-4",
 					APP_HEADER_CAPSULE_FILL,
 					className,
 				)}
