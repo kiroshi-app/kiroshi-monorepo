@@ -64,18 +64,37 @@ jobs:
         run: cargo build --locked
 
       - name: Play the hostile view in a frame
+        if: ${{ !cancelled() }}
         timeout-minutes: 3
-        run: ${{ matrix.launcher }} cargo run --locked --quiet -- frame
+        run: |
+          mkdir -p ci-results && cd ci-results
+          ${{ matrix.launcher }} cargo run --locked --quiet --manifest-path ../Cargo.toml -- frame
 
       - name: Play the hostile view in a window without rights
         if: ${{ !cancelled() }}
         timeout-minutes: 3
-        run: ${{ matrix.launcher }} cargo run --locked --quiet -- window
+        run: |
+          mkdir -p ci-results && cd ci-results
+          ${{ matrix.launcher }} cargo run --locked --quiet --manifest-path ../Cargo.toml -- window
+
+      - name: Play the hostile view in a window with its own storage
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        run: |
+          mkdir -p ci-results && cd ci-results
+          ${{ matrix.launcher }} cargo run --locked --quiet --manifest-path ../Cargo.toml -- window-isolated
+
+      - name: Play the hostile view sandboxed and framed in its window
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        run: |
+          mkdir -p ci-results && cd ci-results
+          ${{ matrix.launcher }} cargo run --locked --quiet --manifest-path ../Cargo.toml -- window-sandboxed
 
       - name: Upload the results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: results-${{ matrix.os }}
-          path: spikes/ope-2298-html-frame/results-*.json
+          path: spikes/ope-2298-html-frame/ci-results/results-*.json
           if-no-files-found: error
