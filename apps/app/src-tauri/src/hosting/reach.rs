@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -688,7 +688,7 @@ impl Readers {
 
 pub(super) struct GuestEvents {
 	shared_space_id: String,
-	held_children: HashMap<(SpaceChild, String), bool>,
+	held_children: HashSet<(SpaceChild, String)>,
 	main_owners: HashMap<String, Option<ChatOwner>>,
 }
 
@@ -696,7 +696,7 @@ impl GuestEvents {
 	pub(super) fn new(shared_space_id: &str) -> Self {
 		Self {
 			shared_space_id: shared_space_id.to_owned(),
-			held_children: HashMap::new(),
+			held_children: HashSet::new(),
 			main_owners: HashMap::new(),
 		}
 	}
@@ -843,13 +843,13 @@ impl GuestEvents {
 		match (held.check, scope) {
 			(Check::Child(kind), Value::String(child_id)) if never_changes_space(kind) => {
 				let key = (kind, child_id.to_owned());
-				if let Some(is_held) = self.held_children.get(&key) {
-					return *is_held;
+				if self.held_children.contains(&key) {
+					return true;
 				}
-				let Some(is_held) = lookup.resolved_child(kind, child_id).await else {
-					return false;
-				};
-				self.held_children.insert(key, is_held);
+				let is_held = lookup.holds_child(kind, child_id).await;
+				if is_held {
+					self.held_children.insert(key);
+				}
 				is_held
 			}
 			_ => lookup.holds(&held, Some(scope)).await,

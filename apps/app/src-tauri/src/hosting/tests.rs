@@ -2370,6 +2370,50 @@ fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
 	});
 }
 
+const A_ROOM: &str = "
+	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+		VALUES (?1, 'topic', ?2, 'Opened by a mention', 1, 1)";
+
+const THE_ROOM_JOINS_ITS_SPACE: &str = "UPDATE conversations SET space_id = ?2 WHERE id = ?1";
+
+async fn stored(
+	guest: &Guest,
+	statement: &'static str,
+	room: &'static str,
+	space: Option<&'static str>,
+) {
+	db::open(&guest.effects.database)
+		.call_mut(move |connection| Ok(connection.execute(statement, (room, space))?))
+		.await
+		.expect("the room is written");
+}
+
+fn asks_in(guest: &Guest, room: &str, id: &str) {
+	let scope = a_held_scope_in(room, "b-mine");
+	commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+		.emit(a_question(id), a_turn_in(room));
+}
+
+#[test]
+fn a_room_checked_before_its_space_holds_it_relays_the_question_asked_once_it_is_held() {
+	run(async {
+		const ROOM: &str = "c-held-later";
+		let mut guest = Guest::of_two_spaces("held-later").await;
+		stored(&guest, A_ROOM, ROOM, None).await;
+		let first = an_agent_event_of(a_runtime_scope(ROOM));
+		events::emit(guest.harness.app.handle(), Event::untyped(first.0), first.1)
+			.expect("emitted");
+		let before_it_is_held = guest.events_until_the_marker().await;
+		stored(&guest, THE_ROOM_JOINS_ITS_SPACE, ROOM, Some(PERSONAL)).await;
+
+		asks_in(&guest, ROOM, "q-held-later");
+		let once_it_is_held = guest.events_until_the_marker().await;
+
+		assert!(before_it_is_held.is_empty(), "{before_it_is_held:?}");
+		assert!(once_it_is_held.iter().any(is_the_question("q-held-later")), "{once_it_is_held:?}");
+	});
+}
+
 const KEPT_OFF: &str = "c-kept-off-the-relay";
 
 const A_CONVERSATION_ELSEWHERE: &str = "
