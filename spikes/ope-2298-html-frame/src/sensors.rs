@@ -42,20 +42,27 @@ fn summary(request: Option<&Request>) -> String {
 	}
 }
 
+#[derive(Clone)]
+pub struct Connection {
+	pub accepted_at: Instant,
+	pub bytes_received: usize,
+	pub summary: String,
+}
+
 pub struct Tripwire {
 	listener: Listener,
-	connections: Arc<Mutex<Vec<String>>>,
+	connections: Arc<Mutex<Vec<Connection>>>,
 	control_connections: usize,
 }
 
 pub struct TripwireReading {
 	pub address: String,
 	pub control_connections: usize,
-	pub connections: Vec<String>,
+	pub connections: Vec<Connection>,
 }
 
 impl TripwireReading {
-	pub fn view_connections(&self) -> &[String] {
+	pub fn view_connections(&self) -> &[Connection] {
 		self.connections.get(self.control_connections..).unwrap_or(&[])
 	}
 
@@ -67,7 +74,7 @@ impl TripwireReading {
 		json!({
 			"address": self.address,
 			"control_connections_from_the_harness": self.control_connections,
-			"connections_from_views": self.view_connections(),
+			"connections_from_views": self.view_connections().iter().map(|connection| &connection.summary).collect::<Vec<_>>(),
 		})
 	}
 }
@@ -76,8 +83,12 @@ impl Tripwire {
 	pub fn open(ip: IpAddr) -> io::Result<Self> {
 		let connections = Arc::new(Mutex::new(Vec::new()));
 		let recorded = Arc::clone(&connections);
-		let listener = Listener::open(ip, move |request| {
-			locked(&recorded).push(summary(request.as_ref()));
+		let listener = Listener::open(ip, move |incoming| {
+			locked(&recorded).push(Connection {
+				accepted_at: incoming.accepted_at,
+				bytes_received: incoming.bytes_received,
+				summary: summary(incoming.request.as_ref()),
+			});
 			Response {
 				status: "200 OK",
 				headers: vec![
@@ -108,17 +119,13 @@ impl Tripwire {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-	Writer,
-	Reader,
-}
+pub const WRITER_ROLE: &str = "writer";
+pub const READER_ROLE: &str = "reader";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Targets {
-	pub role: Role,
+	pub role: &'static str,
 	pub loopback_tripwire: String,
 	pub lan_tripwire: Option<String>,
 	pub navigation_sink: String,
@@ -178,8 +185,8 @@ impl ViewServer {
 		let record = Arc::new(Mutex::new(ViewRecord::default()));
 		let recorded = Arc::clone(&record);
 		let (route_token, route_csp) = (token.clone(), csp.clone());
-		let listener = Listener::open(IpAddr::V4(Ipv4Addr::LOCALHOST), move |request| {
-			let Some(request) = request else {
+		let listener = Listener::open(IpAddr::V4(Ipv4Addr::LOCALHOST), move |incoming| {
+			let Some(request) = incoming.request else {
 				locked(&recorded).unrouted_requests.push(summary(None));
 				return Response::empty("400 Bad Request");
 			};

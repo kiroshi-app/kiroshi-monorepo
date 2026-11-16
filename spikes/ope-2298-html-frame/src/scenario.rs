@@ -8,9 +8,12 @@ use serde_json::json;
 use tauri::{AppHandle, Listener as _, WebviewWindow};
 
 use crate::host::{HostState, Tick, ViewAddress};
-use crate::proofs::{Observations, ViewObservation, WindowUrl};
-use crate::sensors::{non_loopback_ipv4, Role, Targets, Tripwire, ViewServer};
-use crate::windows::{open_main_window, open_view_window, MAIN_WINDOW_LABEL};
+use crate::probe::{self, HostReading};
+use crate::proofs::{
+	HostReadings, NavigationAlone, Observations, ViewObservation, WindowUrl, NAVIGATION_ATTEMPTS,
+};
+use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewServer, READER_ROLE, WRITER_ROLE};
+use crate::windows::{open_main_window, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL};
 use crate::Mode;
 
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
@@ -24,6 +27,8 @@ const FIRST_VIEW_TIMEOUT: Duration = Duration::from_secs(50);
 const SECOND_VIEW_TIMEOUT: Duration = Duration::from_secs(12);
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(10);
 const SETTLE: Duration = Duration::from_millis(1500);
+const ALONE_TIMEOUT: Duration = Duration::from_secs(8);
+const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const RUN_LIMIT: Duration = Duration::from_secs(115);
 const HARNESS_FAILURE: i32 = 1;
 
@@ -45,7 +50,7 @@ impl Sensors {
 		Ok(Self { loopback, lan, navigation_sink })
 	}
 
-	fn targets(&self, role: Role) -> Targets {
+	fn targets(&self, role: &'static str) -> Targets {
 		Targets {
 			role,
 			loopback_tripwire: self.loopback.address().to_string(),
@@ -72,7 +77,7 @@ fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
 
 pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Failure> {
 	let sensors = Sensors::open()?;
-	let first_view = ViewServer::open(&sensors.targets(Role::Writer))?;
+	let first_view = ViewServer::open(&sensors.targets(WRITER_ROLE))?;
 	point_at(&host, &first_view);
 	let main_window = open_main_window(&app, &host)?;
 	let heartbeat_host = Arc::clone(&host);
@@ -114,11 +119,21 @@ struct Run {
 	started: Instant,
 }
 
+struct OpenView {
+	label: String,
+	server: ViewServer,
+	window: Option<WebviewWindow>,
+	opened_at: Instant,
+	settled_at: Instant,
+}
+
 struct PlayedView {
+	label: String,
 	observation: ViewObservation,
 	url: String,
 	csp: String,
 	window_url_after: Option<Result<String, String>>,
+	open: (Instant, Instant),
 }
 
 impl Run {
@@ -139,26 +154,52 @@ impl Run {
 		let baseline = (baseline_started, Instant::now());
 		let main_url_before = self.main_window.url()?.to_string();
 
-		let writer = self.play_view("view-1", first_view, FIRST_VIEW_TIMEOUT)?;
+		let first = self.open_view(FIRST_VIEW_LABEL, first_view, FIRST_VIEW_TIMEOUT, SETTLE)?;
+		let first_reading = self.host_reading(&first);
+		let writer = self.close_view(first)?;
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
-		let reader = self.play_second_view()?;
+		let (reader, second_reading) = match self.open_second_view()? {
+			Some(second) => {
+				let reading = self.host_reading(&second);
+				(Some(self.close_view(second)?), reading)
+			}
+			None => (None, None),
+		};
+		let alone = match self.mode {
+			Mode::WindowIsolated => self.play_navigation_attempts_alone()?,
+			Mode::Frame | Mode::Window => Vec::new(),
+		};
 
 		let mut window_urls = vec![WindowUrl {
 			window: MAIN_WINDOW_LABEL.to_owned(),
 			before_the_view: main_url_before,
 			after_the_view: main_url_after,
 		}];
-		if let Some(after_the_view) = writer.window_url_after.clone() {
-			window_urls.push(WindowUrl {
-				window: "view-1".to_owned(),
-				before_the_view: writer.url.clone(),
-				after_the_view,
-			});
-		}
+		let windowed = std::iter::once(&writer).chain(alone.iter().map(|(_, view)| view));
+		window_urls.extend(windowed.filter_map(|view| {
+			Some(WindowUrl {
+				window: view.label.clone(),
+				before_the_view: view.url.clone(),
+				after_the_view: view.window_url_after.clone()?,
+			})
+		}));
 		let views = json!({
 			"first_view": view_summary(&writer),
 			"second_view": reader.as_ref().map(view_summary),
+		});
+		let host_readings = first_reading.map(|first_view| HostReadings {
+			first_view,
+			second_view: second_reading,
+			first_view_open: writer.open,
+			navigations_alone: alone
+				.iter()
+				.map(|(attempt, view)| NavigationAlone {
+					attempt,
+					window: view.label.clone(),
+					open: view.open,
+				})
+				.collect(),
 		});
 		let observations = Observations {
 			secret_calls: self.host.secret_calls(),
@@ -171,6 +212,7 @@ impl Run {
 			window_urls,
 			writer: writer.observation,
 			reader: reader.map(|view| view.observation),
+			host_readings,
 		};
 		let results = json!({
 			"ticket": "OPE-2298",
@@ -196,8 +238,8 @@ impl Run {
 		Ok(())
 	}
 
-	fn play_second_view(&self) -> Result<Option<PlayedView>, Failure> {
-		let second_view = ViewServer::open(&self.sensors.targets(Role::Reader))?;
+	fn open_second_view(&self) -> Result<Option<OpenView>, Failure> {
+		let second_view = ViewServer::open(&self.sensors.targets(READER_ROLE))?;
 		point_at(&self.host, &second_view);
 		if self.mode == Mode::Frame && !self.reload_main_window()? {
 			eprintln!(
@@ -205,7 +247,20 @@ impl Run {
 			);
 			return Ok(None);
 		}
-		self.play_view("view-2", second_view, SECOND_VIEW_TIMEOUT).map(Some)
+		self.open_view("view-2", second_view, SECOND_VIEW_TIMEOUT, SETTLE).map(Some)
+	}
+
+	fn play_navigation_attempts_alone(&self) -> Result<Vec<(&'static str, PlayedView)>, Failure> {
+		NAVIGATION_ATTEMPTS
+			.iter()
+			.map(|attempt| {
+				let server = ViewServer::open(&self.sensors.targets(attempt))?;
+				point_at(&self.host, &server);
+				let label = format!("alone-{attempt}");
+				let view = self.open_view(&label, server, ALONE_TIMEOUT, ALONE_SETTLE)?;
+				Ok((*attempt, self.close_view(view)?))
+			})
+			.collect()
 	}
 
 	fn reload_main_window(&self) -> Result<bool, Failure> {
@@ -218,13 +273,21 @@ impl Run {
 		}))
 	}
 
-	fn play_view(
+	fn host_reading(&self, view: &OpenView) -> Option<HostReading> {
+		match (&view.window, self.mode) {
+			(Some(window), Mode::WindowIsolated) => Some(probe::read(window)),
+			_ => None,
+		}
+	}
+
+	fn open_view(
 		&self,
 		label: &str,
-		view: ViewServer,
+		server: ViewServer,
 		timeout: Duration,
-	) -> Result<PlayedView, Failure> {
-		let url = view.url();
+		settle: Duration,
+	) -> Result<OpenView, Failure> {
+		let url = server.url();
 		self.host.mark_view_open(true);
 		let window = match self.mode {
 			Mode::Frame => {
@@ -232,25 +295,43 @@ impl Run {
 					.eval(format!("window.__spikeOpenView({})", serde_json::to_string(&url)?))?;
 				None
 			}
-			Mode::Window => Some(open_view_window(&self.app, &self.host, label, url.parse()?)?),
+			Mode::Window | Mode::WindowIsolated => {
+				Some(open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?)
+			}
 		};
-		if !wait_until(timeout, || view.record().outcome(RUN_SIGNAL).is_some()) {
+		let opened_at = Instant::now();
+		if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
 			eprintln!("{label} never signalled the end of its run");
 		}
-		thread::sleep(SETTLE);
-		let window_url_after = window.as_ref().map(|window| {
+		thread::sleep(settle);
+		Ok(OpenView {
+			label: label.to_owned(),
+			server,
+			window,
+			opened_at,
+			settled_at: Instant::now(),
+		})
+	}
+
+	fn close_view(&self, view: OpenView) -> Result<PlayedView, Failure> {
+		let window_url_after = view.window.as_ref().map(|window| {
 			window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string())
 		});
-		match window {
+		match view.window {
 			Some(window) => window.destroy()?,
 			None => self.main_window.eval("window.__spikeCloseView()")?,
 		}
 		self.host.mark_view_open(false);
 		Ok(PlayedView {
-			observation: ViewObservation { token: view.token().to_owned(), record: view.record() },
-			url,
-			csp: view.csp().to_owned(),
+			label: view.label,
+			observation: ViewObservation {
+				token: view.server.token().to_owned(),
+				record: view.server.record(),
+			},
+			url: view.server.url(),
+			csp: view.server.csp().to_owned(),
 			window_url_after,
+			open: (view.opened_at, view.settled_at),
 		})
 	}
 }

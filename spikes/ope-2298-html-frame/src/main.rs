@@ -1,5 +1,6 @@
 mod host;
 mod http;
+mod probe;
 mod proofs;
 mod scenario;
 mod sensors;
@@ -23,6 +24,7 @@ const USAGE_ERROR: u8 = 2;
 pub enum Mode {
 	Frame,
 	Window,
+	WindowIsolated,
 }
 
 impl Mode {
@@ -30,6 +32,7 @@ impl Mode {
 		match argument {
 			"frame" => Some(Self::Frame),
 			"window" => Some(Self::Window),
+			"window-isolated" => Some(Self::WindowIsolated),
 			_ => None,
 		}
 	}
@@ -38,7 +41,12 @@ impl Mode {
 		match self {
 			Self::Frame => "frame",
 			Self::Window => "window",
+			Self::WindowIsolated => "window-isolated",
 		}
+	}
+
+	pub fn isolates_view_storage(self) -> bool {
+		self == Self::WindowIsolated
 	}
 }
 
@@ -49,7 +57,7 @@ fn spike_secret(webview: tauri::Webview, host: tauri::State<'_, Arc<HostState>>)
 
 fn main() -> ExitCode {
 	let Some(mode) = std::env::args().nth(1).as_deref().and_then(Mode::parse) else {
-		eprintln!("usage: ope-2298-html-frame <frame|window>");
+		eprintln!("usage: ope-2298-html-frame <frame|window|window-isolated>");
 		return ExitCode::from(USAGE_ERROR);
 	};
 	let host = Arc::new(HostState::default());

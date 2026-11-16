@@ -5,8 +5,10 @@ use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::host::{HandlerEvent, HostState};
+use crate::Mode;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
+pub const FIRST_VIEW_LABEL: &str = "view-1";
 
 const FRAME_DIRECTIVE: &str = "frame-src";
 const WINDOW_WIDTH: f64 = 560.0;
@@ -108,6 +110,7 @@ pub fn open_main_window(app: &AppHandle, host: &Arc<HostState>) -> tauri::Result
 pub fn open_view_window(
 	app: &AppHandle,
 	host: &Arc<HostState>,
+	mode: Mode,
 	label: &str,
 	url: Url,
 ) -> tauri::Result<WebviewWindow> {
@@ -115,6 +118,7 @@ pub fn open_view_window(
 		.title("OPE-2298 hostile view")
 		.position(VIEW_WINDOW_LEFT, WINDOW_TOP)
 		.inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
-		.always_on_top(true);
+		.always_on_top(true)
+		.incognito(mode.isolates_view_storage());
 	guarded(builder, host, label, Surface::View).build()
 }

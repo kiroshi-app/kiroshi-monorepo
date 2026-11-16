@@ -5,7 +5,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::host::{HandlerEvent, Heartbeat, SecretCall};
+use crate::probe::{self, HostReading};
 use crate::sensors::{TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
+use crate::windows::FIRST_VIEW_LABEL;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 const BLOCKED_HOST: &str = "example.com";
@@ -39,7 +41,7 @@ const TRIPWIRE_ATTEMPTS: [&str; 8] = [
 ];
 const ALLOWED_FETCH_ATTEMPT: &str = "allowlist-fetch-cdn-jsdelivr";
 const BLOCKED_FETCH_ATTEMPT: &str = "allowlist-fetch-example-com";
-const NAVIGATION_ATTEMPTS: [&str; 5] = [
+pub const NAVIGATION_ATTEMPTS: [&str; 5] = [
 	"navigation-window-open",
 	"navigation-anchor-download",
 	"navigation-top",
@@ -97,6 +99,19 @@ pub struct ViewObservation {
 	pub record: ViewRecord,
 }
 
+pub struct NavigationAlone {
+	pub attempt: &'static str,
+	pub window: String,
+	pub open: (Instant, Instant),
+}
+
+pub struct HostReadings {
+	pub first_view: HostReading,
+	pub second_view: Option<HostReading>,
+	pub first_view_open: (Instant, Instant),
+	pub navigations_alone: Vec<NavigationAlone>,
+}
+
 pub struct Observations {
 	pub secret_calls: Vec<SecretCall>,
 	pub heartbeat: Heartbeat,
@@ -108,11 +123,12 @@ pub struct Observations {
 	pub window_urls: Vec<WindowUrl>,
 	pub writer: ViewObservation,
 	pub reader: Option<ViewObservation>,
+	pub host_readings: Option<HostReadings>,
 }
 
 impl Observations {
 	pub fn proofs(&self) -> Vec<Proof> {
-		vec![
+		let mut proofs = vec![
 			self.host_commands_unreachable(),
 			self.main_window_untouched(),
 			self.local_services_unreachable(),
@@ -120,7 +136,30 @@ impl Observations {
 			self.navigation_contained(),
 			self.main_window_stays_responsive(),
 			self.storage_not_shared_between_views(),
-		]
+		];
+		if self.host_readings.is_some() {
+			let has_ended = self.has_first_view_reached_its_last_attempts();
+			for proof in &mut proofs {
+				proof.evidence["first_view_seen_by_the_handlers_reaching_its_last_attempts"] =
+					json!(has_ended);
+			}
+		}
+		proofs
+	}
+
+	fn has_first_view_reached_its_last_attempts(&self) -> bool {
+		NAVIGATION_ATTEMPTS.iter().all(|attempt| {
+			self.handler_events
+				.iter()
+				.any(|event| event.window == FIRST_VIEW_LABEL && event.url.ends_with(attempt))
+		})
+	}
+
+	fn is_played(&self, never_signalled: &[&'static str]) -> bool {
+		match self.host_readings {
+			Some(_) => self.has_first_view_reached_its_last_attempts(),
+			None => never_signalled.is_empty(),
+		}
 	}
 
 	pub fn page_claims(&self) -> Value {
@@ -163,7 +202,9 @@ impl Observations {
 		let listeners =
 			[&self.loopback_tripwire, &self.navigation_sink].into_iter().chain(&self.lan_tripwire);
 		from_views
-			.chain(listeners.flat_map(|listener| listener.view_connections().iter().cloned()))
+			.chain(listeners.flat_map(|listener| {
+				listener.view_connections().iter().map(|connection| connection.summary.clone())
+			}))
 			.collect()
 	}
 
@@ -189,7 +230,8 @@ impl Observations {
 		Proof {
 			proof: 1,
 			name: "The view reaches no host command",
-			result: (from_views.is_empty() && !control.is_empty() && unobserved.is_empty()).into(),
+			result: (from_views.is_empty() && !control.is_empty() && self.is_played(&unobserved))
+				.into(),
 			attempts: IPC_ATTEMPTS.to_vec(),
 			evidence: json!({
 				"spike_secret_calls_counted": self.secret_calls.len(),
@@ -216,7 +258,7 @@ impl Observations {
 			result: (is_checked
 				&& self.heartbeat.altered_snapshots.is_empty()
 				&& leaked.is_empty()
-				&& unobserved.is_empty())
+				&& self.is_played(&unobserved))
 			.into(),
 			attempts: PARENT_ATTEMPTS.to_vec(),
 			evidence: json!({
@@ -236,7 +278,7 @@ impl Observations {
 		Proof {
 			proof: 3,
 			name: "The view reaches no local service",
-			result: (self.are_tripwires_silent() && unobserved.is_empty()).into(),
+			result: (self.are_tripwires_silent() && self.is_played(&unobserved)).into(),
 			attempts: TRIPWIRE_ATTEMPTS.to_vec(),
 			evidence,
 		}
@@ -263,12 +305,24 @@ impl Observations {
 			json!(ALLOWLIST_HOSTS.map(reports_about).concat());
 		evidence["browser_csp_reports_about_the_other_host"] = json!(reports_about(BLOCKED_HOST));
 		evidence["view_csp_reports_received"] = json!(record.csp_reports.len());
+		let (decisive_allowed, decisive_blocked) = match &self.host_readings {
+			Some(host) => {
+				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
+				let view = host.first_view.as_ref().ok();
+				(
+					view.map(|view| view.allowlisted_fetch.as_str()),
+					view.map(|view| view.other_host_fetch.as_str()),
+				)
+			}
+			None => (allowed_fetch, blocked_fetch),
+		};
 		Proof {
 			proof: 4,
 			name: "Network egress follows the allowlist",
 			result: (self.are_tripwires_silent()
-				&& allowed_fetch == Some("ok")
-				&& blocked_fetch.is_some_and(|outcome| outcome.starts_with("blocked")))
+				&& decisive_allowed == Some("ok")
+				&& decisive_blocked.is_some_and(|outcome| outcome.starts_with("blocked"))
+				&& self.is_played(&[]))
 			.into(),
 			attempts,
 			evidence,
@@ -283,23 +337,64 @@ impl Observations {
 			.map(|url| json!({ "window": url.window, "before": url.before_the_view, "after": url.after_the_view }))
 			.collect();
 		let unobserved = Self::unobserved(&self.writer.record, &NAVIGATION_ATTEMPTS);
+		let mut evidence = json!({
+			"navigation_sink": self.navigation_sink.evidence(),
+			"windows_whose_url_changed": moved,
+			"windows_checked": self.window_urls.iter().map(|url| &url.window).collect::<Vec<_>>(),
+			"handler_events": self.handler_events,
+			"attempts_never_signalled": unobserved,
+		});
+		if let Some(host) = &self.host_readings {
+			let alone: Vec<Value> =
+				host.navigations_alone.iter().map(|view| self.navigation_alone(view)).collect();
+			evidence["sink_connections_despite_a_denying_handler"] = alone
+				.iter()
+				.filter(|view| view["sink_connections"] != 0 && view["handler_denied_it"] == true)
+				.map(|view| {
+					json!({
+						"attempt": view["attempt"],
+						"sink_connections": view["sink_connections"],
+						"any_request_bytes": view["request_bytes_received"] != 0,
+					})
+				})
+				.collect();
+			evidence["navigation_attempts_played_alone"] = json!(alone);
+		}
 		Proof {
 			proof: 5,
 			name: "The view cannot navigate, open a window or download",
 			result: (self.navigation_sink.is_silent()
 				&& moved.is_empty()
 				&& !self.window_urls.is_empty()
-				&& unobserved.is_empty())
+				&& self.is_played(&unobserved))
 			.into(),
 			attempts: NAVIGATION_ATTEMPTS.to_vec(),
-			evidence: json!({
-				"navigation_sink": self.navigation_sink.evidence(),
-				"windows_whose_url_changed": moved,
-				"windows_checked": self.window_urls.iter().map(|url| &url.window).collect::<Vec<_>>(),
-				"handler_events": self.handler_events,
-				"attempts_never_signalled": unobserved,
-			}),
+			evidence,
 		}
+	}
+
+	fn navigation_alone(&self, view: &NavigationAlone) -> Value {
+		let connections: Vec<_> = self
+			.navigation_sink
+			.view_connections()
+			.iter()
+			.filter(|connection| {
+				connection.accepted_at >= view.open.0 && connection.accepted_at <= view.open.1
+			})
+			.collect();
+		let answers: Vec<_> = self
+			.handler_events
+			.iter()
+			.filter(|event| event.window == view.window && event.url.ends_with(view.attempt))
+			.collect();
+		json!({
+			"attempt": view.attempt,
+			"window": view.window,
+			"sink_connections": connections.len(),
+			"request_bytes_received": connections.iter().map(|connection| connection.bytes_received).sum::<usize>(),
+			"handler_denied_it": answers.iter().any(|event| !event.allowed),
+			"handler_answers": answers,
+		})
 	}
 
 	fn main_window_stays_responsive(&self) -> Proof {
@@ -310,20 +405,30 @@ impl Observations {
 		let busy_gap =
 			busy_loop.map(|(started, finished)| self.heartbeat.longest_gap(started, finished));
 		let baseline_gap = self.heartbeat.longest_gap(self.baseline.0, self.baseline.1);
+		let mut evidence = json!({
+			"heartbeat_gap_limit_ms": HEARTBEAT_GAP_LIMIT.as_millis(),
+			"longest_heartbeat_gap_during_the_busy_loop_ms": busy_gap.map(|gap| gap.as_millis()),
+			"busy_loop_observed_ms": busy_loop.map(|(started, finished)| finished.duration_since(started).as_millis()),
+			"longest_heartbeat_gap_before_any_view_ms": baseline_gap.as_millis(),
+			"heartbeats_received": self.heartbeat.arrivals.len(),
+		});
+		let is_responsive = match &self.host_readings {
+			Some(host) => {
+				let (opened, settled) = host.first_view_open;
+				let gap = self.heartbeat.longest_gap(opened, settled);
+				evidence["first_view_open_ms"] = json!(settled.duration_since(opened).as_millis());
+				evidence["longest_heartbeat_gap_while_the_first_view_was_open_ms"] =
+					json!(gap.as_millis());
+				gap <= HEARTBEAT_GAP_LIMIT && self.has_first_view_reached_its_last_attempts()
+			}
+			None => busy_gap.is_some_and(|gap| gap <= HEARTBEAT_GAP_LIMIT),
+		};
 		Proof {
 			proof: 6,
 			name: "The main window stays responsive while the view spins",
-			result: (baseline_gap <= HEARTBEAT_GAP_LIMIT
-				&& busy_gap.is_some_and(|gap| gap <= HEARTBEAT_GAP_LIMIT))
-			.into(),
+			result: (baseline_gap <= HEARTBEAT_GAP_LIMIT && is_responsive).into(),
 			attempts: vec![BUSY_LOOP_ATTEMPT],
-			evidence: json!({
-				"heartbeat_gap_limit_ms": HEARTBEAT_GAP_LIMIT.as_millis(),
-				"longest_heartbeat_gap_during_the_busy_loop_ms": busy_gap.map(|gap| gap.as_millis()),
-				"busy_loop_observed_ms": busy_loop.map(|(started, finished)| finished.duration_since(started).as_millis()),
-				"longest_heartbeat_gap_before_any_view_ms": baseline_gap.as_millis(),
-				"heartbeats_received": self.heartbeat.arrivals.len(),
-			}),
+			evidence,
 		}
 	}
 
@@ -356,21 +461,35 @@ impl Observations {
 			.collect();
 		let mut unobserved = Self::unobserved(&self.writer.record, &STORAGE_WRITE_ATTEMPTS);
 		unobserved.extend(Self::unobserved(&reader.record, &STORAGE_READ_ATTEMPTS));
+		let mut evidence = json!({
+			"value_the_first_view_stored": first_view_value,
+			"first_view_write_beacons": Self::outcomes(&self.writer.record, &STORAGE_WRITE_ATTEMPTS),
+			"second_view_read_beacons": reads,
+			"reads_returning_the_first_view_value": leaked_reads,
+			"cookie_headers_received_from_the_second_view": reader.record.cookie_headers,
+			"cookie_headers_carrying_the_first_view_value": leaked_cookies,
+			"attempts_never_signalled": unobserved,
+		});
+		let is_isolated = match &self.host_readings {
+			Some(host) => {
+				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
+				let stores = host.second_view.as_ref().and_then(|second| {
+					evidence["second_view_read_by_the_host"] = probe::evidence(second);
+					second.as_ref().ok().map(|view| view.stores_holding(first_view_value))
+				});
+				evidence["stores_where_the_host_found_the_first_view_value"] = json!(stores);
+				stores.is_some_and(|stores| stores.is_empty())
+					&& leaked_cookies.is_empty()
+					&& self.has_first_view_reached_its_last_attempts()
+			}
+			None => leaked_reads.is_empty() && leaked_cookies.is_empty() && unobserved.is_empty(),
+		};
 		Proof {
 			proof: 7,
 			name: "A second view reads nothing the first view stored",
-			result: (leaked_reads.is_empty() && leaked_cookies.is_empty() && unobserved.is_empty())
-				.into(),
+			result: is_isolated.into(),
 			attempts,
-			evidence: json!({
-				"value_the_first_view_stored": first_view_value,
-				"first_view_write_beacons": Self::outcomes(&self.writer.record, &STORAGE_WRITE_ATTEMPTS),
-				"second_view_read_beacons": reads,
-				"reads_returning_the_first_view_value": leaked_reads,
-				"cookie_headers_received_from_the_second_view": reader.record.cookie_headers,
-				"cookie_headers_carrying_the_first_view_value": leaked_cookies,
-				"attempts_never_signalled": unobserved,
-			}),
+			evidence,
 		}
 	}
 }

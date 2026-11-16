@@ -258,27 +258,33 @@
 				await pause(NAVIGATION_PAUSE_MS);
 			};
 
-			const tryNavigation = async () => {
-				await leave("navigation-window-open", (url) => window.open(url));
-				await leave("navigation-anchor-download", (url) => {
+			const departures = {
+				"navigation-window-open": (url) => window.open(url),
+				"navigation-anchor-download": (url) => {
 					const anchor = document.createElement("a");
 					anchor.href = url;
 					anchor.download = "spike.txt";
 					document.body.append(anchor);
 					anchor.click();
-				});
-				await leave("navigation-top", (url) => {
+				},
+				"navigation-top": (url) => {
 					top.location.href = url;
-				});
-				await leave("navigation-self", (url) => {
+				},
+				"navigation-self": (url) => {
 					location.href = url;
-				});
-				await leave("navigation-meta-refresh", (url) => {
+				},
+				"navigation-meta-refresh": (url) => {
 					const refresh = document.createElement("meta");
 					refresh.httpEquiv = "refresh";
 					refresh.content = `0; url=${url}`;
 					document.head.append(refresh);
-				});
+				},
+			};
+
+			const tryNavigation = async () => {
+				for (const [id, action] of Object.entries(departures)) {
+					await leave(id, action);
+				}
 			};
 
 			const write = async () => {
@@ -292,7 +298,17 @@
 				await tryNavigation();
 			};
 
-			(TARGETS.role === "reader" ? readStorage() : write()).then(
+			const play = () => {
+				if (TARGETS.role === "reader") {
+					return readStorage();
+				}
+				if (TARGETS.role in departures) {
+					return leave(TARGETS.role, departures[TARGETS.role]);
+				}
+				return write();
+			};
+
+			play().then(
 				() => signal("run", "done"),
 				(cause) => signal("run", `crashed-${cause}`),
 			);

@@ -3,7 +3,7 @@ use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const ACCEPT_POLL: Duration = Duration::from_millis(5);
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
@@ -37,6 +37,25 @@ impl Response {
 	}
 }
 
+pub struct Incoming {
+	pub accepted_at: Instant,
+	pub bytes_received: usize,
+	pub request: Option<Request>,
+}
+
+struct Counted<'a> {
+	stream: &'a TcpStream,
+	bytes: usize,
+}
+
+impl Read for Counted<'_> {
+	fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+		let read = self.stream.read(buffer)?;
+		self.bytes += read;
+		Ok(read)
+	}
+}
+
 pub struct Listener {
 	address: SocketAddr,
 	is_closed: Arc<AtomicBool>,
@@ -45,7 +64,7 @@ pub struct Listener {
 impl Listener {
 	pub fn open<H>(ip: IpAddr, answer: H) -> io::Result<Self>
 	where
-		H: Fn(Option<Request>) -> Response + Send + Sync + 'static,
+		H: Fn(Incoming) -> Response + Send + Sync + 'static,
 	{
 		let socket = TcpListener::bind((ip, 0))?;
 		socket.set_nonblocking(true)?;
@@ -57,9 +76,10 @@ impl Listener {
 			while !accept_closed.load(Ordering::SeqCst) {
 				match socket.accept() {
 					Ok((stream, _)) => {
+						let accepted_at = Instant::now();
 						let answer = Arc::clone(&answer);
 						thread::spawn(move || {
-							if let Err(cause) = serve(stream, answer.as_ref()) {
+							if let Err(cause) = serve(stream, accepted_at, answer.as_ref()) {
 								eprintln!("listener {address}: {cause}");
 							}
 						});
@@ -85,18 +105,20 @@ impl Drop for Listener {
 	}
 }
 
-fn serve<H>(stream: TcpStream, answer: &H) -> io::Result<()>
+fn serve<H>(stream: TcpStream, accepted_at: Instant, answer: &H) -> io::Result<()>
 where
-	H: Fn(Option<Request>) -> Response,
+	H: Fn(Incoming) -> Response,
 {
 	stream.set_nonblocking(false)?;
 	stream.set_read_timeout(Some(READ_TIMEOUT))?;
-	let request = match read_request(&stream) {
+	let mut reader = BufReader::new(Counted { stream: &stream, bytes: 0 });
+	let request = match read_request(&mut reader) {
 		Ok(request) => request,
 		Err(cause) if is_silent_peer(&cause) => None,
 		Err(cause) => return Err(cause),
 	};
-	let response = answer(request);
+	let bytes_received = reader.get_ref().bytes;
+	let response = answer(Incoming { accepted_at, bytes_received, request });
 	let mut head = format!(
 		"HTTP/1.1 {}\r\nConnection: close\r\nContent-Length: {}\r\n",
 		response.status,
@@ -122,8 +144,7 @@ fn is_silent_peer(cause: &io::Error) -> bool {
 	)
 }
 
-fn read_request(stream: &TcpStream) -> io::Result<Option<Request>> {
-	let mut reader = BufReader::new(stream);
+fn read_request(reader: &mut impl BufRead) -> io::Result<Option<Request>> {
 	let mut request_line = String::new();
 	if reader.read_line(&mut request_line)? == 0 {
 		return Ok(None);
