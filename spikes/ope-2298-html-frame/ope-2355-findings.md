@@ -4,24 +4,37 @@ Read-only spike. This branch is never merged. Every number below was read at run
 
 ## Status of the runs
 
-The result files committed here come from this machine, not from CI: macOS 27 locally, Linux in Docker (linux/arm64, Ubuntu 24.04, webkit2gtk 2.52.6, tauri 2.12.2). The `run.github_run_id` field of each file is null for that reason. The workflow `.github/workflows/spike-ope-2355.yml` has not run yet: the branch was not pushed by the agent that wrote this (see "Not done").
+**CI run 43949657800**, workflow `Spike OPE-2355`, draft PR #2500, head `27a5aa732`: four jobs, four green. Every file below whose `run.github_run_id` is `43949657800` comes from it.
 
-`results-macos-ci-in-thread.json` and every Windows file are still the OPE-2346 files, untouched.
+| File | Origin | Runner | Verdict in the file |
+|---|---|---|---|
+| `results-linux-in-thread.json` | CI | ubuntu-26.04, Xvfb alone | in-thread |
+| `results-linux-xvfb-openbox-in-thread.json` | CI | ubuntu-26.04, Xvfb + openbox | in-thread |
+| `results-linux-weston-headless-in-thread.json` | CI | ubuntu-26.04, weston headless | in-thread |
+| `results-macos-ci-in-thread.json` | CI | macos-26-arm64 | **separate-window-only** |
+| `results-macos-local-in-thread.json` | local, `run.github_run_id` null | macOS 27, this machine | in-thread |
+
+- The CI macOS file replaces the OPE-2346 file of the same name.
+- The CI macOS verdict differs from the local one. The job is green because the harness ran to its end; the verdict it wrote is `separate-window-only`. See "CI against local".
+- The local macOS file was `results-macos-in-thread.json` and is renamed, with its four captures (`capture-macos-local-in-thread-*.png`). Inside the file the captures still carry the names the run gave them, `capture-macos-in-thread-*.png`: the file is not edited by hand.
+- The local Docker Linux files are dropped: the CI files of the same three setups take their names. They stay in the history at `bf2d47188`. Their `display_setup.real_desktop_session` named the GitHub runner before any CI run had happened; the CI files state it while running on it.
+- Local runs came from the code one commit before `27a5aa732` (the `simplify:` commit); the CI run is the first harness run of `27a5aa732` itself.
+- Every Windows file is still the OPE-2346 file, untouched.
 
 ## Linux: why the two webviews were 560 x 210
 
-Cause, measured in `results-linux-in-thread.json` under `halved_views_cause`:
+From CI run 43949657800, `results-linux-in-thread.json`, `halved_views_cause`. Identical in the local Docker runs.
 
 - The default vbox of the main window is a vertical `GtkBox`. Tauri builds every webview of a window into it: `tauri-runtime-wry 2.12.1 src/lib.rs:5171-5174` calls `build_gtk` on `window.default_vbox()` for a child webview, and `wry 0.57.0 src/webkitgtk/mod.rs:690-694` adds it with `pack_start(webview, true, true, 0)`.
 - Two children packed with expand and fill share the height: main webview 560 x 210 at 0, 0, child webview 560 x 210 at 0, 210, window content 560 x 420. The widget tree with each allocation and each packing is in `halved_views_cause.measurement.widget_tree`.
 - The child was never at 0, 0. `tauri::Webview::bounds` answers 560 x 210 at 0, 0 because `wry 0.57.0 src/webkitgtk/mod.rs:957-958` reads only `allocated_size` outside an X11 child window. GTK allocates the child at 0, 210, below the main webview.
 - `set_bounds`, `set_position` and `set_size` change nothing: `wry 0.57.0 src/webkitgtk/mod.rs:963-984` acts only on an X11 child window or on a webview built in a `GtkFixed`.
 
-None of the three suspects of the ticket is the runner: the cause and the table below are identical under Xvfb alone, Xvfb with openbox and headless weston.
+The runner setup is not the cause: the cause and the table below are identical under the three display setups, in CI and locally.
 
 ## Linux: placements tried
 
-Rectangle asked for in every row: 502 x 160 at 29, 57 (the placeholder). Read back from the GTK allocation translated to the window content. Window content 560 x 420.
+From CI run 43949657800. Rectangle asked for in every row: 502 x 160 at 29, 57 (the placeholder). Read back from the GTK allocation translated to the window content. Window content 560 x 420.
 
 | Placement | Webview | View read back | Main webview read back | Xvfb | Xvfb + openbox | weston headless |
 |---|---|---|---|---|---|---|
@@ -37,7 +50,7 @@ The two GTK rows keep the webview Tauri manages: `tauri::Webview::with_webview` 
 
 ## Linux verdict
 
-**Possible in the thread, with GTK calls Tauri 2.12.2 does not make itself.** No Tauri API places the view. With the view widget moved into a `GtkFixed` over the main webview, on that same mount:
+**Possible in the thread, with GTK calls Tauri 2.12.2 does not make itself.** No Tauri API places the view. With the view widget moved into a `GtkFixed` over the main webview, on that same mount, in CI run 43949657800:
 
 | Setup | File | Behaviours | Proofs | View drawn over its placeholder |
 |---|---|---|---|---|
@@ -45,20 +58,22 @@ The two GTK rows keep the webview Tauri manages: `tauri::Webview::with_webview` 
 | Xvfb + openbox | `results-linux-xvfb-openbox-in-thread.json` | 5 of 5 | 7 of 7 | yes, offset 0, 0 px, read from pixels |
 | weston headless (Wayland) | `results-linux-weston-headless-in-thread.json` | 5 of 5 | 7 of 7 | not proven: no capture under Wayland |
 
-Three Xvfb runs in Docker gave the same cause and the same table.
+Locally, three Xvfb runs in Docker gave the same cause and the same table as each other and as CI.
 
 ## macOS: where the view is drawn
 
-Read from a capture of the window (`screencapture -l` on the window number), placeholder painted cyan, view painted magenta, in window points. File: `results-macos-in-thread.json`, `sightings`.
+Read from a capture of the window (`screencapture -l` on the window number), placeholder painted cyan, view painted magenta, in window points. `sightings` of each file.
 
-| Capture | Asked for | Placeholder drawn | View drawn | Vertical offset |
-|---|---|---|---|---|
-| as mounted, no correction | 502 x 160 at 29, 57 | 502 x 160 at 29, 89 | 502 x 160 at 29, 57 | -32 pt (view above its placeholder) |
-| corrected | 502 x 160 at 29, 154 | 502 x 160 at 29, 154 | 502 x 160 at 29, 154 | 0 pt |
+| Run | Capture | Asked for | Placeholder drawn | Magenta drawn | Offset | Magenta size minus placeholder size |
+|---|---|---|---|---|---|---|
+| CI 43949657800 | as mounted | 485 x 160 at 29, 57 | 485 x 160 at 29, 89 | 468 x 143 at 29, 57 | 0, -32 pt | -17, -17 |
+| CI 43949657800 | corrected | 485 x 160 at 29, 154 | 485 x 160 at 29, 154 | 468 x 143 at 29, 154 | 0, 0 pt | -17, -17 |
+| local | as mounted | 502 x 160 at 29, 57 | 502 x 160 at 29, 89 | 502 x 160 at 29, 57 | 0, -32 pt | 0, 0 |
+| local | corrected | 502 x 160 at 29, 154 | 502 x 160 at 29, 154 | 502 x 160 at 29, 154 | 0, 0 pt | 0, 0 |
 
-Captures: `capture-macos-in-thread-as-mounted-*.png`, `capture-macos-in-thread-corrected-*.png`.
+The offset is the same in both: the view is drawn 32 pt above its placeholder as mounted, and on it once corrected.
 
-What produces the 32 px, measured in `native_geometry`:
+What produces the 32 px, measured in `native_geometry`, same values in CI and locally:
 
 - The window has the full-size content view style. `tauri-runtime-wry 2.12.1 src/lib.rs:783` gives every window `TitleBarStyle::Visible`, and `src/lib.rs:1119-1123` turns that into `with_fullsize_content_view(true)`; `tao 0.37.1 src/platform_impl/macos/window.rs:242-243` sets the mask.
 - So the content view and the main webview span the 420 pt of the window frame, the 32 pt title bar included. That is why the main webview bounds read 560 x 420.
@@ -69,18 +84,50 @@ Correction: add the page origin, 0, 32, to every rectangle the page reports. The
 
 ## macOS verdict
 
-**In the thread, once the placement adds the 32 pt.** After the correction: 5 of 5 behaviours, 7 of 7 proofs, offset 0 pt. Three local runs gave the same verdict and the same offsets (-32 pt, then 0 pt).
+**Split: `separate-window-only` in CI, `in-thread` locally.** In both, after the correction: offset 0 pt, 5 of 5 behaviours, 7 of 7 proofs, child webview bounds read back equal to the rectangle asked for. The CI file fails one rule only: `view_drawn_over_its_placeholder` is false, because the magenta box is 17 pt narrower and 17 pt shorter than the placeholder.
 
-The OPE-2346 green on macOS said the numbers matched; the view was in fact drawn 32 pt above its placeholder.
+The rule was not changed. The reason for the 17 pt is read from the CI captures by eye, not by the harness: `capture-macos-ci-in-thread-corrected-magenta.png` shows a vertical and a horizontal scrollbar of the view on the right and bottom edges of the placeholder rectangle, around the magenta. The paint is a fixed element covering the viewport of the view document, which excludes its scrollbars. On the CI runner scrollbars always take space: the main page loses the same 17 pt (placeholder 485 wide in CI, 502 locally). Locally scrollbars overlay and the paint covers the whole view.
+
+So in CI the top-left corner of the view is proven on its placeholder, and its right and bottom edges are not proven by pixels. Whether the paint should hide the scrollbars of the view while it measures is a decision for the reviewer: it would change what the CI file says, and needs a new run.
+
+The OPE-2346 green on macOS said the numbers matched; the view was in fact drawn 32 pt above its placeholder, in CI and locally.
+
+## CI against local
+
+| Setup | Value | CI 43949657800 | Local |
+|---|---|---|---|
+| macOS | verdict | `separate-window-only` | `in-thread` |
+| macOS | `view_drawn_over_its_placeholder` | false | true |
+| macOS | magenta box, corrected | 468 x 143 at 29, 154 | 502 x 160 at 29, 154 |
+| macOS | placeholder and rectangle asked, as mounted | 485 x 160 at 29, 57 | 502 x 160 at 29, 57 |
+| macOS | pixels per point | 1 | 2 |
+| macOS | webview | 21624.5.1.11.3 (macos-26-arm64) | 22625.1.29.11.28 (macOS 27) |
+| macOS | offset as mounted, then corrected | 0, -32 then 0, 0 | 0, -32 then 0, 0 |
+| macOS | behaviours, proofs | 5 of 5, 7 of 7 | 5 of 5, 7 of 7 |
+| Linux, three setups | verdict, every placement row, behaviours, proofs, offsets | same as local | same as CI |
+| Linux, weston | message of the refused capture | `import: unable to open X server` | `import-im6.q16: unable to open X server` |
+| Linux | image | ubuntu-26.04, webkit2gtk 2.52.6 | Ubuntu 24.04 in Docker linux/arm64, webkit2gtk 2.52.6 |
+
+No job was red, so no fix was committed for this run.
 
 ## Not proven
 
-- Nothing here ran in CI. The macOS CI capture, and the Linux setups on the GitHub runner, wait for the first push.
-- A real Linux desktop session: not reachable from this machine. Each Linux file says so under `display_setup.real_desktop_session`, with what was tried.
-- The drawn position under Wayland: no capture is taken there, only the GTK allocations.
+From neither CI nor local runs:
+
+- A real Linux desktop session. Each CI Linux file says so under `display_setup.real_desktop_session`, with what was tried.
+- The drawn position under Wayland: no capture is taken there, only the GTK allocations (CI and local).
 - Input through the `GtkOverlay` on Linux: the `GtkFixed` is pass-through, no click was sent to the view or to the main page under it.
-- The 32 pt on macOS is the title bar of this window style on macOS 27. Fullscreen, another title bar style, or the window of `apps/app` were not measured: read the inset, do not hard-code it.
-- Screen capture was allowed on this machine (`host_may_capture_the_screen` true), so the refusal path of the ticket was not taken.
+- The 32 pt on macOS in fullscreen, with another title bar style, or in the window of `apps/app`: read the inset, do not hard-code it.
+- The refusal path of the capture: it was allowed locally and on the CI runner (`host_may_capture_the_screen` true in both).
+
+From CI only:
+
+- The right and bottom edges of the view on macOS (see "macOS verdict"). Proven locally, on a display where scrollbars overlay.
+
+From local runs only, never in CI:
+
+- Determinism: three macOS runs and three Xvfb runs gave identical results locally. CI ran each setup once.
+- A macOS run with the magenta covering the whole view (`results-macos-local-in-thread.json`).
 
 ## Decisions taken alone
 
@@ -94,8 +141,4 @@ The full list is the `decisions` array of each result file. The ones that change
 - `gtk` and `wry` (Linux), `objc2` and `objc2-foundation` (macOS) are now direct dependencies, at the versions already in the lock. No package entered the lock.
 - The workflow plays the in-thread mode only, on macOS and Linux. Windows and the window-sandboxed mode are left out.
 - `results-linux-in-thread.json` is the Xvfb alone setup; the other setups carry their name in the file name.
-
-## Not done
-
-- **No push, no draft PR, no CI run.** The agent that wrote this works under a standing rule never to push. The title asked for is `chore(spike): place the live HTML view in the thread on Linux and prove its place on macOS (OPE-2355)`, and this file is written to be its body.
-- So the committed result files are local runs, and the contract lines that need CI (two display setups in CI, the files of the last CI run, the macOS capture as an artifact) are open.
+- The CI macOS verdict is recorded as the harness wrote it. No rule, paint or file was altered after the run.
