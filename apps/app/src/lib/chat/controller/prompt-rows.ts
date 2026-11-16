@@ -16,8 +16,9 @@ export const createPromptRows = ({
 		content: string,
 		replyLinks: ReplyLink[],
 		documents: string[],
+		id = newId(),
 	) => ({
-		id: newId(),
+		id,
 		turnId: newId(),
 		conversationId,
 		content,
