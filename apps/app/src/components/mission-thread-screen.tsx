@@ -154,7 +154,6 @@ export function MissionThreadScreen({
 		return detailSkeleton ? (
 			<ThreadLayout
 				header={<MissionHeaderSkeleton dragRegion="deep" onBack={onLeave} />}
-				isHeaderFloating
 				skeleton={detailSkeleton}
 			>
 				{null}

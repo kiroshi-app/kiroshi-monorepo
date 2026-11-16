@@ -30,6 +30,7 @@ import {
 	type ShownImageActions,
 	type ThreadImage,
 } from "@/lib/chat/answer-actions"
+import { startsWindowDrag } from "@/lib/host/fake-window-drag"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { joinedRowIdOf } from "@/lib/spaces/joined-spaces-controller"
@@ -481,6 +482,15 @@ describe("the bar of the thread viewer on an attachment", () => {
 		renderViewer()
 
 		expect(barButton("download")).toBeInstanceOf(HTMLElement)
+	})
+
+	it("drags the window from its bar, never from one of its buttons", () => {
+		renderViewer()
+		const copy = barButton("copy") as HTMLElement
+		const bar = copy.closest('[data-slot="app-header"]') as HTMLElement
+
+		expect(startsWindowDrag(bar)).toBe(true)
+		expect(startsWindowDrag(copy)).toBe(false)
 	})
 })
 

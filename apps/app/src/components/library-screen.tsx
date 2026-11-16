@@ -542,6 +542,7 @@ export const LibraryScreen = ({
 			<LibraryDocumentEditor
 				body={document.markdown}
 				detail={openedDocument.detail}
+				dragRegion="deep"
 				format={documentFormatOf(openedDocument.name)}
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
@@ -593,6 +594,7 @@ export const LibraryScreen = ({
 
 	return (
 		<LibraryPanel
+			dragRegion="deep"
 			filter={filter}
 			isActionShown={isActionShownOn}
 			items={[...importingItems, ...shownItems]}
@@ -613,6 +615,7 @@ export const LibraryScreen = ({
 				<>
 					<LibraryLightbox
 						count={images.length}
+						dragRegion="deep"
 						image={images[imageIndex] ?? null}
 						onClose={close}
 						onCopy={copyAndWait}

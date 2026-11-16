@@ -27,6 +27,7 @@ import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
 import {
 	PINNED_AVATAR_SIZE,
@@ -228,6 +229,7 @@ import {
 	type MissionCardRead,
 	missionFaceOf,
 	toMissionCard,
+	toMissionProperties,
 } from "@/lib/missions/missions-model"
 import { useLiveMissions } from "@/lib/missions/use-live-missions"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
@@ -469,7 +471,6 @@ const ThreadHeader = ({
 	return (
 		<AppHeader
 			data-tauri-drag-region="deep"
-			isFloating
 			leading={
 				thread.kind === "bot" ? (
 					<HeaderIdentityButton
@@ -1973,6 +1974,13 @@ function ThreadView(props: ThreadViewProps) {
 
 	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
 
+	const opening = view.missionSeat ? (
+		<MissionProperties
+			{...toMissionProperties(view.missionSeat.mission)}
+			now={view.missionSeat.now}
+		/>
+	) : undefined
+
 	const layout = (
 		<ThreadLayout
 			{...transcript}
@@ -2007,8 +2015,8 @@ function ThreadView(props: ThreadViewProps) {
 						))
 			}
 			header={header}
-			isHeaderFloating
 			notice={notice}
+			opening={opening}
 			overlay={overlay}
 			pending={departure ? undefined : approval}
 			queue={queue}

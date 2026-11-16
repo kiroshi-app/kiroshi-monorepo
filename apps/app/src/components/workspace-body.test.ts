@@ -687,6 +687,69 @@ describe("WorkspaceBody missions", () => {
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
+	const openReportedMission = async (held: Partial<Mission> = {}) => {
+		const { workspace } = await seed((mission) => ({
+			mission: { ...mission, ...held },
+			events: [eventOf("opened", 0)],
+		}))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+		await openMission()
+	}
+
+	it("opens the mission thread on its properties, ahead of every row of the thread", async () => {
+		const openedAt = Date.now() - 2 * 60 * 60 * 1000
+		await openReportedMission({
+			openedAt,
+			status: { text: "Parsing the 2.0 entries", writtenAt: openedAt },
+			commitsAhead: 3,
+			pullRequestUrl: "https://github.com/vocca/kiroshi/pull/4172",
+		})
+
+		const opening = threadSlot("transcript-opening") as HTMLElement
+		const block = threadSlot("mission-properties") as HTMLElement
+		const properties = within(block)
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+		const [firstRow] = feed.querySelectorAll(
+			'[data-slot="message-scroller-item"]',
+		)
+
+		expect(opening.contains(block)).toBe(true)
+		expect(
+			opening.compareDocumentPosition(firstRow) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(properties.getByText("OPE-42")).toBeTruthy()
+		expect(properties.getByText("Changelog parser")).toBeTruthy()
+		expect(properties.getByText("Parsing the 2.0 entries")).toBeTruthy()
+		expect(properties.getByText("#4172")).toBeTruthy()
+		expect(properties.getByText("3 commits ahead")).toBeTruthy()
+		expect(properties.getByText("opened 2 hr. ago")).toBeTruthy()
+	})
+
+	it("scrolls the properties of the mission with its thread, under the bar that stays above it", async () => {
+		await openReportedMission()
+
+		const bar = barOf(missionHeader())
+		const properties = threadSlot("mission-properties") as HTMLElement
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+
+		expect(feed.contains(properties)).toBe(true)
+		expect(feed.contains(bar)).toBe(false)
+		expect(
+			bar.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
+	it("draws no button after the ticket of the mission, the app opening no coding session and editing no mission", async () => {
+		await openReportedMission()
+
+		const properties = threadSlot("mission-properties") as HTMLElement
+
+		expect(within(properties).getByText("OPE-42")).toBeTruthy()
+		expect(within(properties).queryAllByRole("button")).toHaveLength(0)
+	})
+
 	it("returns to the origin conversation from Back while the mission loads", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
@@ -850,6 +913,15 @@ describe("WorkspaceBody frame", () => {
 		await settle()
 
 		expect(within(staticBarAboveThread()).getByText("Garden")).toBeTruthy()
+	})
+
+	it("opens a conversation on its first row, with nothing above it", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+
+		expect(thread()).toBeTruthy()
+		expect(threadSlot("transcript-opening")).toBeNull()
 	})
 
 	it("drags the window from the leading side of the bar, never from one of its controls", async () => {
@@ -1811,6 +1883,7 @@ describe("WorkspaceBody library", () => {
 		).toBeNull()
 		expect(islandsIn(layout)).toEqual([])
 		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
 	it("wears the static bar above an opened document, outside any island", async () => {
@@ -1826,6 +1899,8 @@ describe("WorkspaceBody library", () => {
 			bar?.closest('[data-slot="screen-layout-floating-header"]'),
 		).toBeNull()
 		expect(takesPress(back)).toBe(true)
+		expect(startsWindowDrag(bar as HTMLElement)).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
 	})
 
 	it("wears the static bar above an opened image, outside any island", async () => {
@@ -1833,9 +1908,12 @@ describe("WorkspaceBody library", () => {
 
 		await open("hero-dunes.png")
 		const lightbox = screen.getByRole("dialog", { name: "hero-dunes.png" })
+		const bar = lightbox.querySelector(
+			'[data-slot="app-header"]',
+		) as HTMLElement
 
-		expect(lightbox.querySelector('[data-slot="app-header"]')).not.toBeNull()
 		expect(islandsIn(lightbox)).toHaveLength(0)
+		expect(startsWindowDrag(bar)).toBe(true)
 	})
 
 	it("shows an empty Library with its header actions, a new document and its templates", async () => {
