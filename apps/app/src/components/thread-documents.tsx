@@ -156,19 +156,6 @@ export const useThreadDocuments = (
 	)
 }
 
-export const ThreadDocumentsInTabs = ({ children }: PropsWithChildren) => {
-	const documents = useContext(ThreadDocumentsContext)
-	const openInLibrary = useOpenLibraryItem()
-
-	return (
-		<ThreadDocumentsContext
-			value={documents && { ...documents, open: openInLibrary }}
-		>
-			{children}
-		</ThreadDocumentsContext>
-	)
-}
-
 const documentTitleOf = (name: string) => titleOf({ kind: "document", name })
 
 const chipStateOf = (

@@ -29,6 +29,7 @@ export const createEventRouting = (
 		showForeignTurn,
 		onMessageStored,
 		onReconnected,
+		isListedInOpenSpace,
 		reportRead,
 		enqueue,
 	}: ChatContext,
@@ -101,12 +102,20 @@ export const createEventRouting = (
 		}
 	}
 
+	const reloadListedBots = () => {
+		for (const bot of bots.values()) {
+			if (isListedInOpenSpace(bot.id)) {
+				reloadPage(bot)
+			}
+		}
+	}
+
 	const connect = () => {
 		disconnect()
 		stopStoredMessages = onMessageStored(({ conversationId }) =>
 			botsShowing(conversationId).forEach(reloadPage),
 		)
-		stopReconnections = onReconnected(() => bots.forEach(reloadPage))
+		stopReconnections = onReconnected(reloadListedBots)
 		detach = driver.subscribe((scoped) => route(scoped))
 		return detach
 	}

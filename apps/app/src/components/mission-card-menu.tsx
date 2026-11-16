@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 
 import type { MissionState } from "@workspace/ui/components/mission"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
 import {
 	MissionMenu,
@@ -16,6 +17,7 @@ import {
 	type OpenMission,
 } from "@/lib/missions/mission-actions"
 import type { Mission } from "@/lib/missions/mission-contract"
+import { missionStateOf } from "@/lib/missions/missions-model"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 
 type StoppableThread = Pick<ConversationController, "stop">
@@ -34,6 +36,7 @@ type MissionCardMenusInput = {
 type MissionMenus = {
 	wrapCard: MissionCardWrap
 	wrapPageRow: MissionsPageRowWrap
+	wrapSidebarRow: MissionTreeRowWrap
 }
 
 const writeClipboard = (text: string) => navigator.clipboard.writeText(text)
@@ -87,6 +90,10 @@ export const useMissionMenus = ({
 			wrapCard: (card) => menuOn(card.props.id, card.props.state, card),
 			wrapPageRow: (row) =>
 				menuOn(row.props.mission.id, row.props.mission.state, row),
+			wrapSidebarRow: (row) => {
+				const mission = missionById.get(row.props.mission.id)
+				return mission ? menuOn(mission.id, missionStateOf(mission), row) : row
+			},
 		}
 	}, [missions, runtimes, onOpenMission, onChanged])
 

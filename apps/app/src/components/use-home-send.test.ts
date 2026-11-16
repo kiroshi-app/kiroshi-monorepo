@@ -5,24 +5,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
-import { useHomeSend } from "@/components/use-home-send"
+import {
+	type HomeConversationStart,
+	useHomeSend,
+} from "@/components/use-home-send"
 import {
 	type AttachmentsController,
 	type AttachmentsPort,
 	createAttachmentsController,
 } from "@/lib/chat/attachments-controller"
+import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import {
 	createDraftsController,
 	type DraftsController,
 } from "@/lib/chat/drafts-controller"
-import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
+import {
+	type ConversationRuntimes,
+	createConversationRuntimes,
+} from "@/lib/conversations/conversation-runtimes"
+import { createFakeReconnections } from "@/lib/conversations/fake-reconnections"
+import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Conversation } from "@/lib/conversations/store-contract"
+import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { hostOfflineOf } from "@/lib/host/host-offline"
 
 const PREVIEW = "blob:home-preview"
 
 const SPACE_ID = "space-a"
 
 const OTHER_SPACE_ID = "space-b"
+
+const HOST_SPACE_ID = "personal"
 
 const NEW_CONVERSATION_ID = "c-new-1"
 
@@ -36,6 +50,7 @@ const notes = () =>
 
 const runtimes = {
 	runtimeFor: () => ({ open: () => Promise.resolve() }),
+	release: () => Promise.resolve(),
 } as unknown as ConversationRuntimes
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
@@ -63,11 +78,19 @@ const createConversationStore = () => {
 	}
 }
 
-type Workspace = {
+type HomeWorkspace = {
 	attachments: AttachmentsController
 	drafts: DraftsController
-	conversations: ReturnType<typeof createConversationStore>
+	runtimes: ConversationRuntimes
+	conversations: Pick<
+		HomeConversationStart,
+		"startConversation" | "discardConversation"
+	>
 	openConversation: (conversationId: string) => void
+}
+
+type Workspace = HomeWorkspace & {
+	conversations: ReturnType<typeof createConversationStore>
 }
 
 const storeEveryFile: AttachmentsPort["store"] = (_owner, files) =>
@@ -80,18 +103,74 @@ const createWorkspace = (port: Partial<AttachmentsPort> = {}): Workspace => ({
 		...port,
 	}),
 	drafts: createDraftsController(),
+	runtimes,
 	conversations: createConversationStore(),
 	openConversation: vi.fn(),
 })
 
-const mountHome = (workspace: Workspace, spaceId = SPACE_ID) =>
+const createMemberWorkspace = async () => {
+	const host = createFakeTranscriptStore()
+	const [agent] = await seatBots(host, HOST_SPACE_ID, ["Ada"])
+	const loadPage = vi.fn(host.loadPage)
+	const relay = createFakeReconnections()
+	const driver = createScriptedDriver()
+	const memberRuntimes = createConversationRuntimes(
+		driver,
+		{
+			...host,
+			loadPage,
+			sendUserMessage: () => Promise.reject(hostOfflineOf("relay lost")),
+		},
+		{ onReconnected: relay.onReconnected },
+	)
+	const startedIds: string[] = []
+	return {
+		attachments: createAttachmentsController(
+			createAttachmentsPort({
+				chat: { storeAttachments: vi.fn(), sendTo: vi.fn() },
+				driver,
+				runtimes: memberRuntimes,
+			}),
+		),
+		drafts: createDraftsController(),
+		runtimes: memberRuntimes,
+		conversations: {
+			startConversation: async () => {
+				const conversation = await host.createConversation({
+					spaceId: HOST_SPACE_ID,
+					sectionId: null,
+					title: "",
+					botIds: [agent.id],
+				})
+				startedIds.push(conversation.id)
+				return conversation
+			},
+			discardConversation: host.deleteConversation,
+		},
+		openConversation: vi.fn(),
+		startedIds,
+		listedIds: async () =>
+			(await host.conversations(HOST_SPACE_ID)).map(({ id }) => id),
+		pageReadIds: () => loadPage.mock.calls.map(([id]) => id),
+		forgetPageReads: () => loadPage.mockClear(),
+		reconnectRelay: relay.reconnect,
+	}
+}
+
+const settled = async () => {
+	for (let round = 0; round < 20; round += 1) {
+		await Promise.resolve()
+	}
+}
+
+const mountHome = (workspace: HomeWorkspace, spaceId = SPACE_ID) =>
 	renderHook(() =>
 		useHomeSend({
 			agentId: "agent",
 			spaceId,
 			attachments: workspace.attachments,
 			drafts: workspace.drafts,
-			runtimes,
+			runtimes: workspace.runtimes,
 			startConversation: workspace.conversations.startConversation,
 			discardConversation: workspace.conversations.discardConversation,
 			openConversation: workspace.openConversation,
@@ -290,5 +369,62 @@ describe("a Home send", () => {
 			NEW_CONVERSATION_ID,
 		])
 		expect(workspace.openConversation).toHaveBeenCalledOnce()
+	})
+})
+
+const NEVER_SETTLED = new Promise<void>(() => undefined)
+
+describe("a Home send whose runtime cannot be let go", () => {
+	it.each([
+		["hangs", () => NEVER_SETTLED],
+		["fails", () => Promise.reject(new Error("stuck"))],
+	])(
+		"still discards the conversation and says the send failed when the release %s",
+		async (_outcome, release) => {
+			vi.spyOn(console, "error").mockReturnValue(undefined)
+			const released = vi.fn(release)
+			const workspace = {
+				...createWorkspace({ send: () => false }),
+				runtimes: { ...runtimes, release: released },
+			}
+			const home = mountHome(workspace)
+			act(() => home.result.current.onDraftChange("look"))
+
+			act(() => home.result.current.onSubmit("look"))
+
+			await waitFor(() =>
+				expect(noticeTitles()).toEqual(["Couldn’t send that request"]),
+			)
+			expect(released).toHaveBeenCalledWith(NEW_CONVERSATION_ID)
+			expect(workspace.conversations.conversationIds()).toEqual([])
+			expect(home.result.current.draft).toBe("look")
+			expect(workspace.openConversation).not.toHaveBeenCalled()
+		},
+	)
+})
+
+describe("a Home send on a member device", () => {
+	it("never reads the discarded conversation from the host again once the relay reconnects", async () => {
+		const member = await createMemberWorkspace()
+		const home = mountHome(member)
+		act(() => home.result.current.onDraftChange("look"))
+
+		act(() => home.result.current.onSubmit("look"))
+		await waitFor(() =>
+			expect(noticeTitles()).toEqual(["Couldn’t send that request"]),
+		)
+		const [discardedId] = member.startedIds
+		expect(member.pageReadIds()).toContain(discardedId)
+		member.forgetPageReads()
+
+		await act(async () => {
+			member.reconnectRelay()
+			await settled()
+		})
+
+		expect(member.pageReadIds()).not.toContain(discardedId)
+		expect(await member.listedIds()).toEqual([])
+		expect(home.result.current.draft).toBe("look")
+		expect(member.openConversation).not.toHaveBeenCalled()
 	})
 })

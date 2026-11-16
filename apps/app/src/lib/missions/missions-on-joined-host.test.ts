@@ -451,6 +451,20 @@ describe("missions read on a joined host", () => {
 		expect(markIdsOf(result.current)).toEqual([HOST_MISSION.id])
 	})
 
+	it("reads the marks once when the front event socket alone reopens", async () => {
+		const { result, reopened } = await marksOnGarage()
+		const before = readsOf("mission_space_feed")
+
+		dropLastSocket()
+		await openLastSocket()
+		await waitFor(() =>
+			expect(markIdsOf(result.current)).toEqual([reopened.id]),
+		)
+		await settled()
+
+		expect(readsOf("mission_space_feed")).toBe(before + 1)
+	})
+
 	it.each([
 		{ first: "socket", second: "relay", times: "twice", rereads: 2 },
 		{ first: "relay", second: "socket", times: "once", rereads: 1 },
