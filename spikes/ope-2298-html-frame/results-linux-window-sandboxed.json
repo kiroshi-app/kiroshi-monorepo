@@ -6,9 +6,9 @@
     "each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
     "the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop"
   ],
-  "duration_ms": 66580,
+  "duration_ms": 66485,
   "main_window_csp_served": [
-    "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; script-src 'self' 'self' 'sha256-mESxVZ5FFw+o4+rusMVLhS5FWIwuMEW9UToOXw89A9s='; object-src 'none'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; base-uri 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src http://127.0.0.1:46247"
+    "connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; base-uri 'self'; default-src 'self'; script-src 'self' 'self' 'sha256-J4sU99lafYJUVoYDWTGFOYdBtNvFQCmmY0wdGoHQyCU='; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; font-src 'self' data:; object-src 'none'; frame-src http://127.0.0.1:33895"
   ],
   "mitigations": [
     "each view webview is built with incognito(true), so every view has its own storage",
@@ -105,7 +105,7 @@
       "evidence": {
         "altered_snapshots": [],
         "attempts_never_signalled": [],
-        "integrity_snapshots_compared": 658,
+        "integrity_snapshots_compared": 657,
         "main_documents_checked": 1,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
@@ -140,12 +140,12 @@
       "evidence": {
         "attempts_never_signalled": [],
         "lan_tripwire": {
-          "address": "10.1.0.37:46871",
+          "address": "10.0.132.161:45897",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:34075",
+          "address": "127.0.0.1:38753",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -176,7 +176,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:34075",
+                "blocked_uri": "http://127.0.0.1:38753",
                 "directive": "frame-src"
               }
             ],
@@ -189,7 +189,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:34075",
+                "blocked_uri": "http://127.0.0.1:38753",
                 "directive": "frame-src"
               }
             ],
@@ -218,7 +218,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.37:46871",
+                "blocked_uri": "http://10.0.132.161:45897",
                 "directive": "frame-src"
               }
             ],
@@ -231,7 +231,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.37:46871",
+                "blocked_uri": "http://10.0.132.161:45897",
                 "directive": "frame-src"
               }
             ],
@@ -282,12 +282,12 @@
         ],
         "fetches_where_the_host_read_and_the_page_beacon_disagree": [],
         "lan_tripwire": {
-          "address": "10.1.0.37:46871",
+          "address": "10.0.132.161:45897",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:34075",
+          "address": "127.0.0.1:38753",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -301,7 +301,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:34993/3ab94ac76bd8433a8ef92ac333430a31/hostile.html",
+          "document_url": "http://127.0.0.1:39555/bac2a7d6c71540a5835003db41c6abcb/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -328,7 +328,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:34075",
+                "blocked_uri": "http://127.0.0.1:38753",
                 "directive": "frame-src"
               }
             ],
@@ -341,7 +341,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:34075",
+                "blocked_uri": "http://127.0.0.1:38753",
                 "directive": "frame-src"
               }
             ],
@@ -370,7 +370,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.37:46871",
+                "blocked_uri": "http://10.0.132.161:45897",
                 "directive": "frame-src"
               }
             ],
@@ -383,7 +383,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.37:46871",
+                "blocked_uri": "http://10.0.132.161:45897",
                 "directive": "frame-src"
               }
             ],
@@ -420,13 +420,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46247/be355e68ed7a4801ac3bc5c86c548563/view.html",
+            "url": "http://127.0.0.1:33895/6273c159380d4c7b9b662b84848467d9/view.html",
             "window": "view-1"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46247/be355e68ed7a4801ac3bc5c86c548563/hostile.html",
+            "url": "http://127.0.0.1:33895/6273c159380d4c7b9b662b84848467d9/hostile.html",
             "window": "view-1"
           },
           {
@@ -438,13 +438,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:34993/3ab94ac76bd8433a8ef92ac333430a31/view.html",
+            "url": "http://127.0.0.1:39555/bac2a7d6c71540a5835003db41c6abcb/view.html",
             "window": "view-2"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:34993/3ab94ac76bd8433a8ef92ac333430a31/hostile.html",
+            "url": "http://127.0.0.1:39555/bac2a7d6c71540a5835003db41c6abcb/hostile.html",
             "window": "view-2"
           },
           {
@@ -456,13 +456,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:32853/7b9dbb520d4c4d7fbe8757aa44f75316/view.html",
+            "url": "http://127.0.0.1:34337/4ecf3385794f4cc3a23376f1480b1c4a/view.html",
             "window": "alone-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:32853/7b9dbb520d4c4d7fbe8757aa44f75316/hostile.html",
+            "url": "http://127.0.0.1:34337/4ecf3385794f4cc3a23376f1480b1c4a/hostile.html",
             "window": "alone-navigation-window-open"
           },
           {
@@ -474,13 +474,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:34053/b4af809640434d40a010a7963903343c/view.html",
+            "url": "http://127.0.0.1:35037/0371a18c5b874a1dadb4fc9b6c9d23c3/view.html",
             "window": "alone-navigation-anchor-download"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:34053/b4af809640434d40a010a7963903343c/hostile.html",
+            "url": "http://127.0.0.1:35037/0371a18c5b874a1dadb4fc9b6c9d23c3/hostile.html",
             "window": "alone-navigation-anchor-download"
           },
           {
@@ -492,13 +492,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46757/35dbb5ebc82644b086f1c771f86fdeba/view.html",
+            "url": "http://127.0.0.1:44157/ec1a8ac7d2d649e0b2de0e5a2156c5a7/view.html",
             "window": "alone-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:46757/35dbb5ebc82644b086f1c771f86fdeba/hostile.html",
+            "url": "http://127.0.0.1:44157/ec1a8ac7d2d649e0b2de0e5a2156c5a7/hostile.html",
             "window": "alone-navigation-top"
           },
           {
@@ -510,13 +510,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45279/c2b9390254a643b180135416f9560efe/view.html",
+            "url": "http://127.0.0.1:43517/a16e8712e24648fb8d997a1b047eca2f/view.html",
             "window": "alone-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45279/c2b9390254a643b180135416f9560efe/hostile.html",
+            "url": "http://127.0.0.1:43517/a16e8712e24648fb8d997a1b047eca2f/hostile.html",
             "window": "alone-navigation-self"
           },
           {
@@ -528,13 +528,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33835/89875ba132c44130aa12c9d77637c9a4/view.html",
+            "url": "http://127.0.0.1:40749/ace53d66400f44ec8a4e839b13e65dd9/view.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33835/89875ba132c44130aa12c9d77637c9a4/hostile.html",
+            "url": "http://127.0.0.1:40749/ace53d66400f44ec8a4e839b13e65dd9/hostile.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
@@ -546,13 +546,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38651/a6e3601885124037bea9e6c73738794a/view.html",
+            "url": "http://127.0.0.1:34503/37108f8ea0d94c44a211d18184e2ba9d/view.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:38651/a6e3601885124037bea9e6c73738794a/hostile.html",
+            "url": "http://127.0.0.1:34503/37108f8ea0d94c44a211d18184e2ba9d/hostile.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
@@ -564,13 +564,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33655/3c3a853e828b45b3b3f8f2ce9b61e216/view.html",
+            "url": "http://127.0.0.1:34939/c52bb6534e60402b8bd87abe3bcf0b7c/view.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:33655/3c3a853e828b45b3b3f8f2ce9b61e216/hostile.html",
+            "url": "http://127.0.0.1:34939/c52bb6534e60402b8bd87abe3bcf0b7c/hostile.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
@@ -582,13 +582,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41361/2aa7c50af436469f99cc60f827f3afa5/view.html",
+            "url": "http://127.0.0.1:37061/ef6846a708984f80bf6edef53fea988c/view.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:41361/2aa7c50af436469f99cc60f827f3afa5/hostile.html",
+            "url": "http://127.0.0.1:37061/ef6846a708984f80bf6edef53fea988c/hostile.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
@@ -600,13 +600,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:37835/b1acc0406e2645a9b517cf3bbc8c7761/view.html",
+            "url": "http://127.0.0.1:32837/33a3eadcfaa0445f9e2a17390fe2ce75/view.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:37835/b1acc0406e2645a9b517cf3bbc8c7761/hostile.html",
+            "url": "http://127.0.0.1:32837/33a3eadcfaa0445f9e2a17390fe2ce75/hostile.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
@@ -618,13 +618,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39905/24a2fe16a5ec4149b82a6e900b0bdde7/view.html",
+            "url": "http://127.0.0.1:45645/33179e55aed246d78ce1b4c513294323/view.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:39905/24a2fe16a5ec4149b82a6e900b0bdde7/hostile.html",
+            "url": "http://127.0.0.1:45645/33179e55aed246d78ce1b4c513294323/hostile.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
@@ -636,13 +636,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42147/a386906372eb41fa9f8ecaeb96dddc6e/view.html",
+            "url": "http://127.0.0.1:32859/1d2c6e07ce924e859e37b5df8f2b3e00/view.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:42147/a386906372eb41fa9f8ecaeb96dddc6e/hostile.html",
+            "url": "http://127.0.0.1:32859/1d2c6e07ce924e859e37b5df8f2b3e00/hostile.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
@@ -654,13 +654,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:36977/46ac470b363b4b9b9131a7ca37959d01/view.html",
+            "url": "http://127.0.0.1:37451/3babfe341de04dd3a25d51f73fa00609/view.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:36977/46ac470b363b4b9b9131a7ca37959d01/hostile.html",
+            "url": "http://127.0.0.1:37451/3babfe341de04dd3a25d51f73fa00609/hostile.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
@@ -672,13 +672,13 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45519/e3607df8bbd548ccbb7d4eec4941e8d4/view.html",
+            "url": "http://127.0.0.1:33823/6e4058ddadf9495195d32d0c4380e741/view.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:45519/e3607df8bbd548ccbb7d4eec4941e8d4/hostile.html",
+            "url": "http://127.0.0.1:33823/6e4058ddadf9495195d32d0c4380e741/hostile.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           },
           {
@@ -706,7 +706,7 @@
             "attempt": "navigation-anchor-download",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:33393",
+                "blocked_uri": "http://127.0.0.1:44689",
                 "directive": "frame-src"
               }
             ],
@@ -729,7 +729,7 @@
             "attempt": "navigation-self",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:33393",
+                "blocked_uri": "http://127.0.0.1:44689",
                 "directive": "frame-src"
               }
             ],
@@ -743,7 +743,7 @@
             "attempt": "navigation-meta-refresh",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:33393",
+                "blocked_uri": "http://127.0.0.1:44689",
                 "directive": "frame-src"
               }
             ],
@@ -755,7 +755,7 @@
           }
         ],
         "navigation_sink": {
-          "address": "127.0.0.1:33393",
+          "address": "127.0.0.1:44689",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -789,27 +789,27 @@
         "busy-loop"
       ],
       "evidence": {
-        "busy_loop_observed_ms": 10004,
+        "busy_loop_observed_ms": 10002,
         "gaps_above_the_limit": [
           {
-            "gap_ms": 517,
+            "gap_ms": 513,
             "measured": "while the view window was built",
             "started_ms_after_the_view_window_creation_began": 0,
-            "started_ms_relative_to_the_busy_loop_start": -741
+            "started_ms_relative_to_the_busy_loop_start": -683
           }
         ],
         "heartbeat_gap_limit_ms": 500,
-        "heartbeats_received": 658,
-        "hostile_view_ran_ms": 15224,
+        "heartbeats_received": 657,
+        "hostile_view_ran_ms": 15178,
         "longest_heartbeat_gap_before_any_view_ms": 100,
         "longest_heartbeat_gap_during_the_busy_loop_ms": 100,
         "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 100,
-        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 517,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 513,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 3,
           "by_the_handlers": 0
         },
-        "view_window_build_ms": 568
+        "view_window_build_ms": 556
       },
       "name": "The main window stays responsive while the view spins",
       "proof": 6,
@@ -835,7 +835,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:46247/be355e68ed7a4801ac3bc5c86c548563/hostile.html",
+          "document_url": "http://127.0.0.1:33895/6273c159380d4c7b9b662b84848467d9/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -864,14 +864,14 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:34993/3ab94ac76bd8433a8ef92ac333430a31/hostile.html",
+          "document_url": "http://127.0.0.1:39555/bac2a7d6c71540a5835003db41c6abcb/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
           "other_host_fetch_status": null
         },
         "stores_where_the_host_found_the_first_view_value": [],
-        "value_the_first_view_stored": "be355e68ed7a4801ac3bc5c86c548563"
+        "value_the_first_view_stored": "6273c159380d4c7b9b662b84848467d9"
       },
       "name": "A second view reads nothing the first view stored",
       "proof": 7,
@@ -922,8 +922,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /be355e68ed7a4801ac3bc5c86c548563/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:46247/be355e68ed7a4801ac3bc5c86c548563/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /6273c159380d4c7b9b662b84848467d9/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:33895/6273c159380d4c7b9b662b84848467d9/view.html"
     },
     "second_view": {
       "attempts_the_page_script_reached_read_by_the_host": [
@@ -935,8 +935,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /3ab94ac76bd8433a8ef92ac333430a31/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:34993/3ab94ac76bd8433a8ef92ac333430a31/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /bac2a7d6c71540a5835003db41c6abcb/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:39555/bac2a7d6c71540a5835003db41c6abcb/view.html"
     }
   },
   "webview": "2.52.6"

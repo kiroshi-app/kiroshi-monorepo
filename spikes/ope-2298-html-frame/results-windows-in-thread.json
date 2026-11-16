@@ -16,7 +16,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
             "intersection": {
               "height": 160.0,
               "width": 487.0,
@@ -47,7 +47,7 @@
               "y": 243.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 487.0,
@@ -78,7 +78,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 160.0,
               "width": 487.0,
@@ -119,7 +119,7 @@
               "y": 323.0
             },
             "child_webview_visible": false,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 21,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 16,
             "intersection": null,
             "placeholder": {
               "height": 160.0,
@@ -173,7 +173,7 @@
               "y": 33.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 2,
             "intersection": {
               "height": 80.0,
               "width": 487.0,
@@ -204,7 +204,7 @@
               "y": 323.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
             "intersection": {
               "height": 80.0,
               "width": 487.0,
@@ -243,7 +243,7 @@
             "y": 138.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 7,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 8,
           "intersection": {
             "height": 160.0,
             "width": 487.0,
@@ -276,7 +276,7 @@
                 "y": 138.0
               },
               "child_webview_visible": true,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 6,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -316,7 +316,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 21,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 15,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -349,7 +349,7 @@
                 "y": 138.0
               },
               "child_webview_visible": true,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 6,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -389,7 +389,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 20,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 14,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -422,7 +422,7 @@
                 "y": 138.0
               },
               "child_webview_visible": true,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 7,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 4,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -462,7 +462,7 @@
                 "y": 138.0
               },
               "child_webview_visible": false,
-              "delay_from_the_page_event_to_the_bounds_applied_ms": 20,
+              "delay_from_the_page_event_to_the_bounds_applied_ms": 14,
               "intersection": {
                 "height": 160.0,
                 "width": 487.0,
@@ -504,7 +504,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 6,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
             "intersection": {
               "height": 160.0,
               "width": 627.0,
@@ -535,7 +535,7 @@
               "y": 138.0
             },
             "child_webview_visible": true,
-            "delay_from_the_page_event_to_the_bounds_applied_ms": 5,
+            "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
             "intersection": {
               "height": 160.0,
               "width": 487.0,
@@ -574,7 +574,7 @@
             "y": 138.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 6,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
           "intersection": {
             "height": 160.0,
             "width": 487.0,
@@ -607,7 +607,7 @@
             "y": 33.0
           },
           "child_webview_visible": true,
-          "delay_from_the_page_event_to_the_bounds_applied_ms": 6,
+          "delay_from_the_page_event_to_the_bounds_applied_ms": 3,
           "intersection": {
             "height": 370.0,
             "width": 487.0,
@@ -641,23 +641,48 @@
     }
   ],
   "child_webview_errors": [],
+  "child_webview_mount": {
+    "child_webview_bounds": {
+      "height": 160.0,
+      "width": 487.0,
+      "x": 29.0,
+      "y": 57.0
+    },
+    "main_page_viewport": {
+      "height": 420.0,
+      "width": 560.0
+    },
+    "main_webview_bounds": {
+      "height": 420.0,
+      "width": 560.0,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "main_webview_bounds_after_one_refit": null,
+    "main_webview_fills_the_window": true,
+    "window_inner_size": {
+      "height": 420.0,
+      "width": 560.0
+    }
+  },
   "decisions": [
     "proof 4 is decided from the host reading of the second view, whose document never navigates; a host reading taken in a document whose URL is not the served URL is a sensor fault, never a green, in proof 4 and in proof 7",
     "proof 5 accepts a sink connection on Windows alone, when it carries zero bytes and was accepted while a view whose navigation to the sink the host saw blocked, by a handler or by a browser CSP report, was open; decided by Steve",
     "each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
     "the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
+    "the child webview is placed in window coordinates from rectangles the main page gives in its own viewport coordinates, with no correction: where main_page_viewport is smaller than main_webview_bounds in child_webview_mount, the two do not share an origin and a green behaviour says the numbers match, not that the view is drawn over its placeholder",
     "the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
     "child_webview_bounds is read back from the webview after the host set it; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
     "the delay runs from Date.now() in the main page handler that reported the placement to the host clock once the bounds were read back",
     "cutting the view to the column only shrinks the child webview: its document keeps its own origin and is not shifted by the hidden part",
     "enlarged means the placeholder takes the height of the visible column",
-    "the five behaviours are played on the second view, once its document has settled",
+    "the five behaviours are played on the second view, once its document has settled, and only when the main webview bounds read back fill the window inner size, after at most one refit of the main webview to that size",
     "the capability names the webview main where it named the window main, so a child webview of the main window receives none"
   ],
-  "duration_ms": 102383,
+  "duration_ms": 102293,
   "main_window_csp_served": [
-    "connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; base-uri 'self'; font-src 'self' data:; object-src 'none'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; default-src 'self'; script-src 'self' 'self' 'sha256-mESxVZ5FFw+o4+rusMVLhS5FWIwuMEW9UToOXw89A9s='; frame-src http://127.0.0.1:52007",
-    "connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; base-uri 'self'; font-src 'self' data:; object-src 'none'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; default-src 'self'; script-src 'self' 'self' 'sha256-mESxVZ5FFw+o4+rusMVLhS5FWIwuMEW9UToOXw89A9s='; frame-src http://127.0.0.1:52007"
+    "script-src 'self' 'self' 'sha256-J4sU99lafYJUVoYDWTGFOYdBtNvFQCmmY0wdGoHQyCU='; base-uri 'self'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; object-src 'none'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; default-src 'self'; font-src 'self' data:; frame-src http://127.0.0.1:54092",
+    "script-src 'self' 'self' 'sha256-J4sU99lafYJUVoYDWTGFOYdBtNvFQCmmY0wdGoHQyCU='; base-uri 'self'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; object-src 'none'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; default-src 'self'; font-src 'self' data:; frame-src http://127.0.0.1:54092"
   ],
   "mitigations": [
     "each view webview is built with incognito(true), so every view has its own storage",
@@ -751,7 +776,7 @@
       "evidence": {
         "altered_snapshots": [],
         "attempts_never_signalled": [],
-        "integrity_snapshots_compared": 1019,
+        "integrity_snapshots_compared": 1018,
         "main_documents_checked": 1,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 1,
@@ -786,7 +811,7 @@
       "evidence": {
         "attempts_never_signalled": [],
         "lan_tripwire": {
-          "address": "10.1.0.61:52003",
+          "address": "10.1.0.37:54088",
           "connections_from_views": [
             {
               "attributed_from": "the view that played this attempt alone",
@@ -808,7 +833,7 @@
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:52001",
+          "address": "127.0.0.1:54086",
           "connections_from_views": [
             {
               "attributed_from": "the view that played this attempt alone",
@@ -856,7 +881,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:52001",
+                "blocked_uri": "http://127.0.0.1:54086",
                 "directive": "frame-src"
               }
             ],
@@ -869,7 +894,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:52001",
+                "blocked_uri": "http://127.0.0.1:54086",
                 "directive": "frame-src"
               }
             ],
@@ -898,7 +923,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.61:52003",
+                "blocked_uri": "http://10.1.0.37:54088",
                 "directive": "frame-src"
               }
             ],
@@ -911,7 +936,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.61:52003",
+                "blocked_uri": "http://10.1.0.37:54088",
                 "directive": "frame-src"
               }
             ],
@@ -958,7 +983,7 @@
         ],
         "fetches_where_the_host_read_and_the_page_beacon_disagree": [],
         "lan_tripwire": {
-          "address": "10.1.0.61:52003",
+          "address": "10.1.0.37:54088",
           "connections_from_views": [
             {
               "attributed_from": "the view that played this attempt alone",
@@ -980,7 +1005,7 @@
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:52001",
+          "address": "127.0.0.1:54086",
           "connections_from_views": [
             {
               "attributed_from": "the view that played this attempt alone",
@@ -1011,7 +1036,7 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:63789/d4d681e40b0d43debe447183a968a054/hostile.html",
+          "document_url": "http://127.0.0.1:61306/6b3a7ae896194a40977d3362365ed5b4/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
@@ -1038,7 +1063,7 @@
             "attempt": "tripwire-loopback-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:52001",
+                "blocked_uri": "http://127.0.0.1:54086",
                 "directive": "frame-src"
               }
             ],
@@ -1051,7 +1076,7 @@
             "attempt": "tripwire-loopback-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://127.0.0.1:52001",
+                "blocked_uri": "http://127.0.0.1:54086",
                 "directive": "frame-src"
               }
             ],
@@ -1080,7 +1105,7 @@
             "attempt": "tripwire-lan-navigation-self",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.61:52003",
+                "blocked_uri": "http://10.1.0.37:54088",
                 "directive": "frame-src"
               }
             ],
@@ -1093,7 +1118,7 @@
             "attempt": "tripwire-lan-navigation-meta-refresh",
             "browser_csp_reports_about_the_tripwire": [
               {
-                "blocked_uri": "http://10.1.0.61:52003",
+                "blocked_uri": "http://10.1.0.37:54088",
                 "directive": "frame-src"
               }
             ],
@@ -1153,91 +1178,91 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:52007/d7020fe4f5214393b60ceb8276ce51a5/view.html",
+            "url": "http://127.0.0.1:54092/3fa75e92875b4065a7b37f92bfe0a458/view.html",
             "window": "view-1"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:63789/d4d681e40b0d43debe447183a968a054/view.html",
+            "url": "http://127.0.0.1:61306/6b3a7ae896194a40977d3362365ed5b4/view.html",
             "window": "view-2"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:57781/6e5c7860dd064df087636bf87eedfdd5/view.html",
+            "url": "http://127.0.0.1:49220/92d1800490fa483f93498c902a4bedb4/view.html",
             "window": "alone-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:58771/d76fc2c92a0a409a8dd8e67646d9904a/view.html",
+            "url": "http://127.0.0.1:61782/0d89f515297b4b60b06e3d874584d3ad/view.html",
             "window": "alone-navigation-anchor-download"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:60462/96487b833a3143bf8ceee832740de417/view.html",
+            "url": "http://127.0.0.1:58138/3d0a5540571445e48e1d508f61dd5652/view.html",
             "window": "alone-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:64790/08c5ef9721e14ff7803be44bf8644bca/view.html",
+            "url": "http://127.0.0.1:60453/1fa0e9acf0754b4d92dbb7bdd64d3b55/view.html",
             "window": "alone-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:50759/df96ad6424d6498285767141aff7079c/view.html",
+            "url": "http://127.0.0.1:51384/828468a46c3a4a54abd76b92f4b39bcd/view.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:60684/8f74ef6a323d4ab3b638d882f79c8c82/view.html",
+            "url": "http://127.0.0.1:53047/25389e1b203545bbaa2f128417c1b8a5/view.html",
             "window": "alone-tripwire-loopback-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:62341/fedcb95b5fb04a51b2c6e3ee197ebb18/view.html",
+            "url": "http://127.0.0.1:64756/44311a0400ed4dc485b2780a1b6e3669/view.html",
             "window": "alone-tripwire-loopback-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:65019/356287b426be44198ee19383fe6721a9/view.html",
+            "url": "http://127.0.0.1:62705/12410654bb4a4d20a840ef016b3a5b42/view.html",
             "window": "alone-tripwire-loopback-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:65002/cb0f312dc37a4403a05311e85fbaf52d/view.html",
+            "url": "http://127.0.0.1:50136/4936aad5faf04de5802c0adc33297c83/view.html",
             "window": "alone-tripwire-loopback-navigation-meta-refresh"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:49492/4b68fe4d8c2147829b46d2773126191f/view.html",
+            "url": "http://127.0.0.1:50737/fcf478c461d04db1998524e34aaa0f64/view.html",
             "window": "alone-tripwire-lan-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:60951/92d73aaff7814a58af3fdfcebf4bf7aa/view.html",
+            "url": "http://127.0.0.1:49898/fbe7da6bb94b4f7bbce5ea85642999eb/view.html",
             "window": "alone-tripwire-lan-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:59939/bb966617ab3b47ecb73aeefbb04b7ed1/view.html",
+            "url": "http://127.0.0.1:64111/ba6660d659b64e51bc35d09740a0a212/view.html",
             "window": "alone-tripwire-lan-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:62131/6a9e1698b6b646b99338cf78b4535080/view.html",
+            "url": "http://127.0.0.1:52010/322768f5ea434ad5a2e15de65ef6c224/view.html",
             "window": "alone-tripwire-lan-navigation-meta-refresh"
           }
         ],
@@ -1259,7 +1284,7 @@
             "attempt": "navigation-anchor-download",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:52005",
+                "blocked_uri": "http://127.0.0.1:54090",
                 "directive": "frame-src"
               }
             ],
@@ -1282,7 +1307,7 @@
             "attempt": "navigation-self",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:52005",
+                "blocked_uri": "http://127.0.0.1:54090",
                 "directive": "frame-src"
               }
             ],
@@ -1296,7 +1321,7 @@
             "attempt": "navigation-meta-refresh",
             "browser_csp_reports_about_the_sink": [
               {
-                "blocked_uri": "http://127.0.0.1:52005",
+                "blocked_uri": "http://127.0.0.1:54090",
                 "directive": "frame-src"
               }
             ],
@@ -1308,7 +1333,7 @@
           }
         ],
         "navigation_sink": {
-          "address": "127.0.0.1:52005",
+          "address": "127.0.0.1:54090",
           "connections_from_views": [
             {
               "attributed_from": "the attempts that opened a connection without a request when played alone",
@@ -1367,7 +1392,7 @@
             "blocked_navigation_it_followed": {
               "browser_csp_reports_about_the_sink": [
                 {
-                  "blocked_uri": "http://127.0.0.1:52005",
+                  "blocked_uri": "http://127.0.0.1:54090",
                   "directive": "frame-src"
                 }
               ],
@@ -1387,7 +1412,7 @@
             "blocked_navigation_it_followed": {
               "browser_csp_reports_about_the_sink": [
                 {
-                  "blocked_uri": "http://127.0.0.1:52005",
+                  "blocked_uri": "http://127.0.0.1:54090",
                   "directive": "frame-src"
                 }
               ],
@@ -1405,7 +1430,7 @@
             "blocked_navigation_it_followed": {
               "browser_csp_reports_about_the_sink": [
                 {
-                  "blocked_uri": "http://127.0.0.1:52005",
+                  "blocked_uri": "http://127.0.0.1:54090",
                   "directive": "frame-src"
                 }
               ],
@@ -1423,7 +1448,7 @@
             "blocked_navigation_it_followed": {
               "browser_csp_reports_about_the_sink": [
                 {
-                  "blocked_uri": "http://127.0.0.1:52005",
+                  "blocked_uri": "http://127.0.0.1:54090",
                   "directive": "frame-src"
                 }
               ],
@@ -1468,17 +1493,17 @@
         "busy_loop_observed_ms": 10006,
         "gaps_above_the_limit": [],
         "heartbeat_gap_limit_ms": 500,
-        "heartbeats_received": 1019,
-        "hostile_view_ran_ms": 39490,
-        "longest_heartbeat_gap_before_any_view_ms": 101,
-        "longest_heartbeat_gap_during_the_busy_loop_ms": 103,
-        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 103,
-        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 110,
+        "heartbeats_received": 1018,
+        "hostile_view_ran_ms": 39512,
+        "longest_heartbeat_gap_before_any_view_ms": 100,
+        "longest_heartbeat_gap_during_the_busy_loop_ms": 101,
+        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 106,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 90,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 1,
           "by_the_handlers": 0
         },
-        "view_window_build_ms": 122
+        "view_window_build_ms": 99
       },
       "name": "The main window stays responsive while the view spins",
       "proof": 6,
@@ -1500,7 +1525,7 @@
         "cookie_headers_carrying_the_first_view_value": [],
         "cookie_headers_received_from_the_second_view": [],
         "first_view_read_by_the_host": {
-          "unavailable": "the host read the document chrome-error://chromewebdata/ while the view server served http://127.0.0.1:52007/d7020fe4f5214393b60ceb8276ce51a5/hostile.html"
+          "unavailable": "the host read the document chrome-error://chromewebdata/ while the view server served http://127.0.0.1:54092/3fa75e92875b4065a7b37f92bfe0a458/hostile.html"
         },
         "first_view_write_beacons": {
           "storage-write-cache": "blocked-SecurityError",
@@ -1525,14 +1550,14 @@
           "allowlisted_fetch_status": 200,
           "cache": "blocked-SecurityError",
           "cookie": "blocked-SecurityError",
-          "document_url": "http://127.0.0.1:63789/d4d681e40b0d43debe447183a968a054/hostile.html",
+          "document_url": "http://127.0.0.1:61306/6b3a7ae896194a40977d3362365ed5b4/hostile.html",
           "indexed_db": "blocked-SecurityError",
           "local_storage": "blocked-SecurityError",
           "other_host_fetch": "blocked-TypeError",
           "other_host_fetch_status": null
         },
         "stores_where_the_host_found_the_first_view_value": [],
-        "value_the_first_view_stored": "d7020fe4f5214393b60ceb8276ce51a5"
+        "value_the_first_view_stored": "3fa75e92875b4065a7b37f92bfe0a458"
       },
       "name": "A second view reads nothing the first view stored",
       "proof": 7,
@@ -1580,8 +1605,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /d7020fe4f5214393b60ceb8276ce51a5/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:52007/d7020fe4f5214393b60ceb8276ce51a5/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /3fa75e92875b4065a7b37f92bfe0a458/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:54092/3fa75e92875b4065a7b37f92bfe0a458/view.html"
     },
     "second_view": {
       "attempts_the_page_script_reached_read_by_the_host": [
@@ -1593,8 +1618,8 @@
       ],
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /d4d681e40b0d43debe447183a968a054/csp-report; sandbox allow-scripts",
-      "url": "http://127.0.0.1:63789/d4d681e40b0d43debe447183a968a054/view.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /6b3a7ae896194a40977d3362365ed5b4/csp-report; sandbox allow-scripts",
+      "url": "http://127.0.0.1:61306/6b3a7ae896194a40977d3362365ed5b4/view.html"
     }
   },
   "webview": "156.0.4314.58"
