@@ -152,8 +152,12 @@ export const createEventRouting = (
 		}
 	}
 
-	const catchUp = (bot: BotChat) => {
+	const reloadAndSettle = (bot: BotChat) => {
 		void reloadPage(bot).then(() => settleRecorded(bot))
+	}
+
+	const catchUp = (bot: BotChat) => {
+		reloadAndSettle(bot)
 		const conversationId = bot.state.conversationId
 		if (conversationId) {
 			void routePendingQuestions(bot, conversationId)
@@ -171,7 +175,7 @@ export const createEventRouting = (
 	const connect = () => {
 		disconnect()
 		stopStoredMessages = onMessageStored(({ conversationId }) =>
-			botsShowing(conversationId).forEach(reloadPage),
+			botsShowing(conversationId).forEach(reloadAndSettle),
 		)
 		stopReconnections = onReconnected(reloadListedBots)
 		detach = driver.subscribe((scoped) => route(scoped))

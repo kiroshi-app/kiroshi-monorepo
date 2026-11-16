@@ -17,10 +17,14 @@ import type { FakeChatDriver } from "../fake-driver"
 import type { CancelOutcome, TurnState } from "../../agent/contract"
 import { createFakeReconnections } from "../../conversations/fake-reconnections"
 import { createFakeTranscriptStore } from "../../conversations/fake-transcript-store"
+import { createFakeWindowEvents } from "../../conversations/fake-window-events"
 import { RefusedWrite } from "../../conversations/refused-write"
 import type { TranscriptStore } from "../../conversations/store-port"
 import type { TranscriptMessage } from "../../conversations/transcript-contract"
-import { botIdentity } from "../../conversations/transcript-fixtures"
+import {
+	botIdentity,
+	message as transcriptMessage,
+} from "../../conversations/transcript-fixtures"
 
 const outboxOf = (controller: ChatController) =>
 	controller.getState().outbox.map((entry) => entry.text)
@@ -417,6 +421,7 @@ describe("prompts the session cannot take yet", () => {
 			let answer = first
 			let isReadRefused = false
 			const storedIds: string[] = []
+			const sent: Parameters<TranscriptStore["sendUserMessage"]>[0][] = []
 			const store: TranscriptStore = {
 				...base,
 				loadPage: (conversationId, cursor) =>
@@ -425,6 +430,7 @@ describe("prompts the session cannot take yet", () => {
 						: base.loadPage(conversationId, cursor),
 				sendUserMessage: async (message, summoned) => {
 					storedIds.push(message.id)
+					sent.push(message)
 					if (answer === "accepted") {
 						return base.sendUserMessage(message, summoned)
 					}
@@ -442,6 +448,7 @@ describe("prompts the session cannot take yet", () => {
 			const submits: string[] = []
 			let sessionOpenings = 0
 			const relay = createFakeReconnections()
+			const events = createFakeWindowEvents()
 			const harness = await bootedHarness({
 				store,
 				driver: (fake) => {
@@ -455,6 +462,7 @@ describe("prompts the session cannot take yet", () => {
 					}
 				},
 				onReconnected: relay.onReconnected,
+				onMessageStored: events.onMessageStored,
 			})
 			await harness.controller.send("only")
 			await vi.runAllTimersAsync()
@@ -476,6 +484,24 @@ describe("prompts the session cannot take yet", () => {
 				await reconnect()
 				isReadRefused = false
 			}
+			const reportedStored = async () => {
+				const recorded = sent.at(0)
+				if (recorded) {
+					events.deliver(
+						transcriptMessage({
+							id: recorded.id,
+							conversationId: recorded.conversationId,
+							role: "user",
+						}),
+					)
+				}
+				await vi.runAllTimersAsync()
+			}
+			const reportedStoredWhileReadsRefused = async () => {
+				isReadRefused = true
+				await reportedStored()
+				isReadRefused = false
+			}
 			return {
 				harness,
 				storedIds,
@@ -484,6 +510,8 @@ describe("prompts the session cannot take yet", () => {
 				replayed,
 				reconnected,
 				readsRefusedOnReconnection,
+				reportedStored,
+				reportedStoredWhileReadsRefused,
 			}
 		}
 
@@ -532,6 +560,35 @@ describe("prompts the session cannot take yet", () => {
 
 			expect(harness.controller.getState().outbox).toEqual([])
 			expect(writeFailuresIn(harness.controller)).toEqual([])
+			harness.detach()
+		})
+
+		it("settles the message the host reports stored without a reconnection", async () => {
+			const { harness, storedIds, submits, sessionOpenings, reportedStored } =
+				await refusingHost("recorded")
+			const storedBeforeReport = storedIds.length
+			const openedBeforeReport = sessionOpenings()
+
+			await reportedStored()
+
+			const state = harness.controller.getState()
+			expect(storedIds).toHaveLength(storedBeforeReport)
+			expect(sessionOpenings()).toBe(openedBeforeReport)
+			expect(state.outbox).toEqual([])
+			expect(promptsIn(state.messages)).toEqual([["user", "only", "complete"]])
+			expect(submits).toHaveLength(1)
+			expect(writeFailuresIn(harness.controller)).toEqual([])
+			harness.detach()
+		})
+
+		it("keeps the words and one write failure when the stored-message reload fails", async () => {
+			const { harness, reportedStoredWhileReadsRefused } =
+				await refusingHost("recorded")
+
+			await reportedStoredWhileReadsRefused()
+
+			expect(outboxOf(harness.controller)).toEqual(["only"])
+			expect(writeFailuresIn(harness.controller)).toHaveLength(1)
 			harness.detach()
 		})
 
