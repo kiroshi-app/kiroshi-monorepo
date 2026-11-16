@@ -328,30 +328,19 @@ mod macos {
 	use tauri::{Runtime, WebviewWindow};
 
 	pub(super) fn paint_light<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
-		let painted = window.clone();
-		window.run_on_main_thread(move || {
-			let Some(ns_window) = ns_window_of(&painted) else {
+		let label = window.label().to_owned();
+		window.with_webview(move |webview| {
+			let Some(ns_window) =
+				(unsafe { Retained::retain(webview.ns_window().cast::<NSWindow>()) })
+			else {
+				log::error!("the screenshot window {label} has no NSWindow to paint light");
 				return;
 			};
 			let light = NSAppearance::appearanceNamed(unsafe { NSAppearanceNameAqua });
 			if light.is_none() {
-				log::error!("macOS has no Aqua appearance for the screenshot window");
+				log::error!("macOS has no Aqua appearance for the screenshot window {label}");
 			}
 			ns_window.setAppearance(light.as_deref());
 		})
-	}
-
-	fn ns_window_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<Retained<NSWindow>> {
-		let handle = window
-			.ns_window()
-			.inspect_err(|failure| {
-				log::error!("the screenshot window {} has no NSWindow: {failure}", window.label());
-			})
-			.ok()?;
-		let ns_window = unsafe { Retained::retain(handle.cast::<NSWindow>()) };
-		if ns_window.is_none() {
-			log::error!("the screenshot window {} has a null NSWindow", window.label());
-		}
-		ns_window
 	}
 }
