@@ -111,6 +111,7 @@ export const useWorkspaceAssembly = () => {
 	})
 	const sidebarMissions = useSidebarMissions({
 		core,
+		missionMarks: drivers.missionMarks,
 		navigation,
 	})
 	const overlay = useWorkspaceOverlay({
