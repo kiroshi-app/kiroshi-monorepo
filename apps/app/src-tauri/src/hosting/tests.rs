@@ -5927,8 +5927,13 @@ async fn a_main_conversation_waiting_on(guest: &Guest, owner: ChatOwner) -> Stri
 		.await
 		.expect("the main conversation opens");
 	let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
-	conversations.hold_prompt(prompt).await.expect("the prompt is held");
 	let app = guest.harness.app.handle();
+	let asking = agent::RuntimeScope {
+		runtime_session_id: prompt.runtime_session_id.clone(),
+		..a_held_scope_in(&main.id, "b-mine")
+	};
+	commands::a_run_held_by_the_app(app, asking);
+	conversations.hold_prompt(prompt).await.expect("the prompt is held");
 	conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
 	main.id
 }
@@ -6676,10 +6681,8 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
 		);
 		let room_id = room["id"].as_str().expect("the room has an id");
-		let state = host.app.state::<DatabaseState>();
-		let conversations = state.as_ref().expect("the database").conversations();
-		let prompt = a_pending_prompt(room_id, PromptKind::Question);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		commands::a_run_held_by_the_app(host.app.handle(), a_held_scope_in(room_id, "b-mine"))
+			.emit(a_question("q1"), a_turn_in(room_id));
 		let state_of = |rows: &Value| {
 			rows.as_array()
 				.expect("the read holds a list")
@@ -6716,10 +6719,11 @@ fn a_guest_and_the_host_each_read_the_solo_state_of_their_own_main_conversation(
 		let host = Authoring::new(Some(BEARER)).await;
 		let main_of_the_host = host.main_of(ChatOwner::Host).await;
 		let main_of_the_guest = host.main_of(ChatOwner::Member(GUEST.to_owned())).await;
-		let state = host.app.state::<DatabaseState>();
-		let conversations = state.as_ref().expect("the database").conversations();
-		let prompt = a_pending_prompt(&main_of_the_guest, PromptKind::Question);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		commands::a_run_held_by_the_app(
+			host.app.handle(),
+			a_held_scope_in(&main_of_the_guest, "b-mine"),
+		)
+		.emit(a_question("q1"), a_turn_in(&main_of_the_guest));
 		let args = json!({ "spaceId": PERSONAL });
 
 		let read_by_the_guest = host
