@@ -45,7 +45,7 @@ import {
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
-const HOVER_INTENT_DELAY_MS = 120
+const TOOLTIP_OPEN_DELAY_MS = 600
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"
 ```
@@ -71,7 +71,7 @@ and its single use at line 31 becomes:
 
 ## Steps
 
-1. In `packages/ui/src/components/tooltip-hint.tsx`, delete line 15 (`const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"`) and the blank line that follows it, so one blank line remains between `HOVER_INTENT_DELAY_MS` and `type TooltipHintSide`.
+1. In `packages/ui/src/components/tooltip-hint.tsx`, delete line 15 (`const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"`) and the blank line that follows it, so one blank line remains between `TOOLTIP_OPEN_DELAY_MS` and `type TooltipHintSide`.
 2. In the same file, add `import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"` between the `@workspace/ui/components/ui/tooltip` import and the `@workspace/ui/lib/utils` import. Leave line 30 (`className={cn("break-words", STILL_UNDER_REDUCED_MOTION)}`) as it is.
 3. In `packages/ui/src/components/toggle-switch.tsx`, rename `STILL_UNDER_REDUCED_MOTION` to `THUMB_STILL_UNDER_REDUCED_MOTION` at its declaration (line 6) and at its use (line 31). The string value does not change.
 

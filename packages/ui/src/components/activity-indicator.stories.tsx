@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -7,6 +7,7 @@ import {
 	companionGlyphOf,
 	companionGlyphs,
 	companionHueOf,
+	findHoverTooltip,
 	isInBrowserRunner,
 	realPointer,
 	slotIn,
@@ -426,7 +427,7 @@ export const LongContent = meta.story({
 		await expect(clock.scrollWidth).toBe(clock.clientWidth)
 
 		await userEvent.hover(label)
-		const tip = await screen.findByRole("tooltip")
+		const tip = await findHoverTooltip()
 		const box = tip.getBoundingClientRect()
 
 		await expect(tip).toHaveTextContent(LONG_TOOL_LABEL)

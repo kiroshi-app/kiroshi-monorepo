@@ -1,11 +1,13 @@
 import type { CSSProperties, ReactNode } from "react"
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	companionGlyphsIn,
 	expectClickModifiers,
+	expectNoHoverTooltip,
+	findHoverTooltip,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -586,8 +588,6 @@ export const CardLongContent = meta.story({
 	},
 })
 
-const TOOLTIP_WAIT_MS = 400
-
 const SHORT_OBJECTIVE_MISSION_CARD = {
 	...UNTICKETED_MISSION_CARD,
 	objective: "Ship the status line",
@@ -622,8 +622,7 @@ export const CardWithStatus = meta.story({
 			`Open the mission: ${WAITING_MISSION_CARD.objective}`,
 		)
 		await userEvent.hover(open)
-		await new Promise((resolve) => setTimeout(resolve, TOOLTIP_WAIT_MS))
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expectNoHoverTooltip()
 		await expect(centerOf(status)).toBe(open)
 	},
 })
@@ -675,8 +674,7 @@ export const CardLongStatus = meta.story({
 
 		const [open] = canvas.getAllByRole("button")
 		await userEvent.hover(open)
-		await new Promise((resolve) => setTimeout(resolve, TOOLTIP_WAIT_MS))
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expectNoHoverTooltip()
 	},
 })
 
@@ -1161,7 +1159,7 @@ export const RowWithStatus = meta.story({
 		).toHaveLength(0)
 
 		await userEvent.hover(status)
-		const tip = await screen.findByRole("tooltip")
+		const tip = await findHoverTooltip()
 		await expect(tip).toHaveTextContent(MISSION_STATUS.text)
 		await expect(tip).toHaveTextContent("4 minutes ago")
 
@@ -1199,7 +1197,7 @@ export const RowLongStatus = meta.story({
 		).toBeVisible()
 
 		await userEvent.hover(status)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+		await expect(await findHoverTooltip()).toHaveTextContent(
 			LONG_MISSION_STATUS.text,
 		)
 	},

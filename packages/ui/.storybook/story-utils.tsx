@@ -42,6 +42,7 @@ import {
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
 	Sidebar,
 	SidebarContent,
@@ -1242,9 +1243,25 @@ export const expectQuestionCutInsideTheRow = async (row: HTMLElement) => {
 	await expect(sidesOf(slotIn(line, "needs-you-glyph"))).toEqual([12, 12])
 }
 
+const SLOW_RUNNER_HEADROOM_MS = 900
+
+export const HOVER_TOOLTIP_WAIT = {
+	timeout: TOOLTIP_OPEN_DELAY_MS + SLOW_RUNNER_HEADROOM_MS,
+}
+
+export const findHoverTooltip = () =>
+	screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT)
+
 export const openTooltipOf = async (trigger: HTMLElement) => {
 	await userEvent.hover(trigger)
-	return settled(await screen.findByRole("tooltip"))
+	return settled(await findHoverTooltip())
+}
+
+export const expectNoHoverTooltip = async () => {
+	await new Promise((resolve) =>
+		setTimeout(resolve, HOVER_TOOLTIP_WAIT.timeout),
+	)
+	await expect(screen.queryByRole("tooltip")).toBeNull()
 }
 
 const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'

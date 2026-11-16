@@ -18,6 +18,7 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	findHoverTooltip,
 	hueScopeOf,
 	isInBrowserRunner,
 	realPointer,
@@ -2043,7 +2044,7 @@ export const A3ToolbarButtonHover = meta.story({
 		const bold = await canvas.findByRole("button", { name: "Bold" })
 		await expect(getComputedStyle(bold).transitionProperty).toBe("none")
 		await userEvent.hover(bold)
-		const tooltip = await screen.findByRole("tooltip")
+		const tooltip = await findHoverTooltip()
 		await expect(tooltip).toHaveTextContent("Bold⌘B")
 		await expect(
 			[...tooltip.children]
