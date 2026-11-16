@@ -707,13 +707,14 @@ describe("WorkspaceBody missions", () => {
 		})
 
 		const opening = threadSlot("transcript-opening") as HTMLElement
-		const properties = within(threadSlot("mission-properties") as HTMLElement)
+		const block = threadSlot("mission-properties") as HTMLElement
+		const properties = within(block)
 		const feed = screen.getByRole("region", { name: "Mission conversation" })
 		const [firstRow] = feed.querySelectorAll(
 			'[data-slot="message-scroller-item"]',
 		)
 
-		expect(opening.contains(threadSlot("mission-properties"))).toBe(true)
+		expect(opening.contains(block)).toBe(true)
 		expect(
 			opening.compareDocumentPosition(firstRow) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1911,7 +1912,6 @@ describe("WorkspaceBody library", () => {
 			'[data-slot="app-header"]',
 		) as HTMLElement
 
-		expect(bar).not.toBeNull()
 		expect(islandsIn(lightbox)).toHaveLength(0)
 		expect(startsWindowDrag(bar)).toBe(true)
 	})
