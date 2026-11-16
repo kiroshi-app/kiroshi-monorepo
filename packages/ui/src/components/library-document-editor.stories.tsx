@@ -18,6 +18,8 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectHeaderTitleStep,
+	expectStaticHeaderBar,
 	findHoverTooltip,
 	hueScopeOf,
 	isInBrowserRunner,
@@ -853,13 +855,63 @@ const DECISIONS_TABLE = {
 	].join("\n"),
 }
 
+const BAR_DETAILS = "MD · 4 KB · 12 min ago"
+
+export const BarAtRest = meta.story({
+	args: {
+		...LAUNCH_REVIEW,
+		detail: BAR_DETAILS,
+		template: undefined,
+		onCopy: fn(),
+		onDownload: fn(),
+	},
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule and no island or fade, that its top line reads the Library path link, a separator and the details over the document name, that Download, Copy, More then Close follow, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const page = slotIn(canvasElement, "library-document-editor")
+		const bar = await expectStaticHeaderBar(page)
+		await expect(slotsIn(page, "header-island")).toHaveLength(0)
+
+		await expect(slotIn(bar, "app-header-top-line")).toHaveTextContent(
+			`Library/${BAR_DETAILS}`,
+		)
+		const name = bar.querySelector('[aria-current="page"]') as HTMLElement
+		await expect(name).toHaveTextContent(LAUNCH_REVIEW.title)
+		await expectHeaderTitleStep(name)
+		await expect(
+			within(bar)
+				.getAllByRole("button")
+				.map(
+					(button) => button.getAttribute("aria-label") ?? button.textContent,
+				),
+		).toEqual(["Library", "Download", "Copy", "More", "Close"])
+
+		const column = slotIn(canvasElement, "library-document-column")
+		await expect(
+			canvas.getByRole("textbox", { name: "Title" }).getBoundingClientRect()
+				.top - bar.getBoundingClientRect().bottom,
+		).toBe(24)
+		await expect(within(column).queryByText(BAR_DETAILS)).toBe(null)
+
+		await userEvent.click(within(bar).getByRole("button", { name: "Library" }))
+		await expect(args.onBack).toHaveBeenCalledOnce()
+	},
+})
+
 export const ColumnAtMaximumWidth = meta.story({
 	args: { ...DECISIONS_TABLE, template: undefined },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A document opened in its tab on a frame wider than the column. Check the article stops at 794 wide, an A4 sheet, centred in the column, the title, the meta line and the body sharing its left edge, and the three-column table showing every cell of its last column in full, without a scroll.",
+					"A document opened in its tab on a frame wider than the column. Check the article stops at 794 wide, an A4 sheet, centred in the column, the title and the body sharing its left edge, and the three-column table showing every cell of its last column in full, without a scroll.",
 			},
 		},
 	},
@@ -878,7 +930,6 @@ export const ColumnAtMaximumWidth = meta.story({
 		).toBeLessThanOrEqual(1)
 		for (const edge of [
 			canvas.getByRole("textbox", { name: "Title" }),
-			canvas.getByText(DECISIONS_TABLE.detail),
 			blocksIn(canvasElement)[0],
 		]) {
 			await expect(edge.getBoundingClientRect().left).toBe(articleBox.left)
@@ -1712,7 +1763,7 @@ const PRESENCE_ARGS = {
 }
 
 const barIn = (canvasElement: HTMLElement) =>
-	within(slotIn(canvasElement, "library-document-bar"))
+	within(slotIn(canvasElement, "app-header"))
 
 const WRITING_COUNT = /agents? writing/
 

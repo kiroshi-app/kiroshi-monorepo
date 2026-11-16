@@ -11,11 +11,12 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import {
-	HeaderIsland,
-	HeaderIslandButton,
-} from "@workspace/ui/components/header-island"
+	AppHeaderButton,
+	AppHeaderCapsule,
+	AppHeaderPathSeparator,
+} from "@workspace/ui/components/app-header"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
@@ -33,7 +34,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@workspace/ui/components/ui/dropdown-menu"
-import { Separator } from "@workspace/ui/components/ui/separator"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
@@ -337,20 +337,31 @@ const LIBRARY_BAR_DIVIDER = "bg-foreground/12 data-vertical:self-center"
 
 const LIBRARY_ISLAND_CONTEXT = "min-w-0 shrink"
 
-const LIBRARY_ISLAND_TITLE =
-	"min-w-0 truncate p-2 font-medium text-foreground text-sm leading-4"
-
 const LIBRARY_OVERLAY_ISLAND =
 	"bg-header-island-overlay backdrop-blur-lg dark:bg-header-island-overlay"
 
-const LibraryIslandButton = ({
+const LibraryBarButton = ({
 	"aria-label": label,
 	...props
-}: ComponentProps<typeof HeaderIslandButton>) => (
+}: ComponentProps<typeof AppHeaderButton>) => (
 	<TooltipHint content={label} side="bottom">
-		<HeaderIslandButton aria-label={label} {...props} />
+		<AppHeaderButton aria-label={label} {...props} />
 	</TooltipHint>
 )
+
+type LibraryBarMetaProps = {
+	meta?: string
+}
+
+const LibraryBarMeta = ({ meta }: LibraryBarMetaProps) =>
+	meta ? (
+		<>
+			<AppHeaderPathSeparator />
+			<span className="truncate tabular-nums" data-slot="library-bar-meta">
+				{meta}
+			</span>
+		</>
+	) : null
 
 const barMenuActionsOf = <Item,>(
 	handlers: LibraryItemHandlers<Item>,
@@ -367,6 +378,20 @@ const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
 }
 
 type LibraryItemBarSurface = "lightbox" | "document"
+
+type LibraryBarSkin = {
+	fill?: string
+	control?: string
+}
+
+const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
+	document: {},
+	lightbox: {
+		fill: "dark:bg-white/8",
+		control:
+			"text-[#e5e5e5] focus-visible:ring-lightbox-bar in-data-content-card:focus-visible:ring-lightbox-bar",
+	},
+}
 
 type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	item: Item
@@ -396,6 +421,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const { onCopy, onDownload, onDelete } = actions
 	const menuActions = barMenuActionsOf(actions)
 	const hasMenu = hasLibraryItemActions(menuActions)
+	const { fill, control } = LIBRARY_BAR_SKIN[surface]
 
 	useEffect(() => {
 		if (copiedItem === null) return
@@ -418,75 +444,78 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	}
 
 	return (
-		<HeaderIsland
-			className={surface === "lightbox" ? LIBRARY_OVERLAY_ISLAND : undefined}
+		<div
+			className="flex shrink-0 items-center gap-2"
+			data-slot="library-bar-actions"
 		>
 			{leading}
-			{onDownload ? (
-				<LibraryIslandButton
-					aria-label={t(`library.${surface}.download`)}
-					onClick={() => onDownload(item)}
-				>
-					<Icons.Download aria-hidden="true" />
-				</LibraryIslandButton>
-			) : null}
-			{onCopy ? (
-				<LibraryIslandButton
-					aria-label={t(`library.${surface}.copy`)}
-					onClick={copy}
-				>
-					<IconSwap
-						icon={<Icons.Duplicate aria-hidden="true" />}
-						isSwapped={isCopied}
-						swappedIcon={<Icons.Check aria-hidden="true" />}
-					/>
-				</LibraryIslandButton>
-			) : null}
-			{hasMenu ? (
-				<DropdownMenu onOpenChange={onMenuOpenChange}>
-					<DropdownMenuTrigger
-						render={
-							<LibraryIslandButton
-								aria-label={t(`library.${surface}.more`)}
-								className="aria-expanded:bg-header-island-control-hover aria-expanded:text-foreground"
-							/>
-						}
-					>
-						<Icons.More aria-hidden="true" />
-					</DropdownMenuTrigger>
-					<DropdownMenuContent
-						align="end"
-						aria-label={t("library.itemMenu.label", {
-							name: libraryDisplayName(item.name, t),
-						})}
-						className={cn(
-							"w-auto",
-							surface === "lightbox" && "dark",
-							STILL_UNDER_REDUCED_MOTION,
-						)}
-						finalFocus={menuFinalFocus}
-					>
-						<LibraryItemMenuItems
-							actions={menuActions}
-							item={item}
-							onPickDelete={() => confirmDelete(true)}
-							parts={DROPDOWN_MENU_PARTS}
-						/>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			) : null}
 			{onDownload || onCopy || hasMenu ? (
-				<Separator
-					className="mx-1 h-4 bg-header-island-rule data-vertical:self-center"
-					orientation="vertical"
-				/>
+				<AppHeaderCapsule className={fill}>
+					{onDownload ? (
+						<LibraryBarButton
+							aria-label={t(`library.${surface}.download`)}
+							className={control}
+							onClick={() => onDownload(item)}
+						>
+							<Icons.Download aria-hidden="true" />
+						</LibraryBarButton>
+					) : null}
+					{onCopy ? (
+						<LibraryBarButton
+							aria-label={t(`library.${surface}.copy`)}
+							className={control}
+							onClick={copy}
+						>
+							<IconSwap
+								icon={<Icons.Duplicate aria-hidden="true" />}
+								isSwapped={isCopied}
+								swappedIcon={<Icons.Check aria-hidden="true" />}
+							/>
+						</LibraryBarButton>
+					) : null}
+					{hasMenu ? (
+						<DropdownMenu onOpenChange={onMenuOpenChange}>
+							<DropdownMenuTrigger
+								render={
+									<LibraryBarButton
+										aria-label={t(`library.${surface}.more`)}
+										className={control}
+									/>
+								}
+							>
+								<Icons.More aria-hidden="true" />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent
+								align="end"
+								aria-label={t("library.itemMenu.label", {
+									name: libraryDisplayName(item.name, t),
+								})}
+								className={cn(
+									"w-auto",
+									surface === "lightbox" && "dark",
+									STILL_UNDER_REDUCED_MOTION,
+								)}
+								finalFocus={menuFinalFocus}
+							>
+								<LibraryItemMenuItems
+									actions={menuActions}
+									item={item}
+									onPickDelete={() => confirmDelete(true)}
+									parts={DROPDOWN_MENU_PARTS}
+								/>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
+				</AppHeaderCapsule>
 			) : null}
-			<LibraryIslandButton
+			<LibraryBarButton
 				aria-label={t(`library.${surface}.close`)}
+				className={cn(control, fill)}
+				kind="close"
 				onClick={onClose}
 			>
 				<Icons.Close aria-hidden="true" />
-			</LibraryIslandButton>
+			</LibraryBarButton>
 			<span aria-live="polite" className="sr-only">
 				{isCopied ? t(`library.${surface}.copied`) : ""}
 			</span>
@@ -496,7 +525,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 				onOpenChange={confirmDelete}
 				open={isConfirmingDelete}
 			/>
-		</HeaderIsland>
+		</div>
 	)
 }
 
@@ -511,9 +540,8 @@ export {
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
 	LIBRARY_ISLAND_CONTEXT,
-	LIBRARY_ISLAND_TITLE,
 	LIBRARY_OVERLAY_ISLAND,
-	LibraryIslandButton,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	LibraryItemContextMenu,

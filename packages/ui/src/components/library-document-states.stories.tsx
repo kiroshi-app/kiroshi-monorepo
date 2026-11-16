@@ -76,6 +76,7 @@ const DocumentPage = ({
 					<LibraryDocumentBar
 						isReadOnly={isReadOnly}
 						item={item}
+						meta={item.detail}
 						onBack={fn()}
 						onCopy={fn()}
 						onDelete={fn()}
@@ -83,10 +84,8 @@ const DocumentPage = ({
 						onRename={fn()}
 					/>
 				}
-				isHeaderFloating
 				scroller={() => (
 					<LibraryDocumentColumn
-						detail={item.detail}
 						heading={heading ?? <h1 className={DOCUMENT_TITLE}>{item.name}</h1>}
 					>
 						{children}
@@ -105,7 +104,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The four states a Library document page takes beyond reading: an empty document offering what to start with, files dragged over it, an image that failed to import in its gallery cell, and the read-only islands of a member offline. Each piece is drawn here on the page the app assembles from LibraryDocumentBar, floating over LibraryDocumentColumn.",
+					"The four states a Library document page takes beyond reading: an empty document offering what to start with, files dragged over it, an image that failed to import in its gallery cell, and the read-only bar of a member offline. Each piece is drawn here on the page the app assembles from LibraryDocumentBar, floating over LibraryDocumentColumn.",
 			},
 		},
 	},
@@ -254,7 +253,7 @@ export const ReadOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document while the member is offline, as artboard 5d draws it. Check the Read-only chip sits in the actions island before More, and that no offline banner shows above the document.",
+					"A document while the member is offline, as artboard 5d draws it. Check the Read-only chip sits in the bar's right group, right before the capsule that holds More, and that no offline banner shows above the document.",
 			},
 		},
 	},
@@ -264,6 +263,10 @@ export const ReadOnly = meta.story({
 		await expect(
 			chip.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
+		await expect(
+			chip.closest('[data-slot="library-document-read-only"]')
+				?.nextElementSibling,
+		).toBe(more.closest('[data-slot="app-header-capsule"]'))
 		await expect(canvas.queryByRole("alert")).toBeNull()
 		await expect(canvasElement.querySelector('[data-slot="notice"]')).toBeNull()
 	},

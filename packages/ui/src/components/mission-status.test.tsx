@@ -8,7 +8,7 @@ import {
 	MissionCard,
 	type MissionCardProps,
 } from "@workspace/ui/components/mission-card"
-import { MissionHeader } from "@workspace/ui/components/mission-header"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 
 import "@workspace/ui/lib/i18n"
@@ -78,27 +78,21 @@ describe("a mission status holding only whitespace", () => {
 		expect(container.querySelectorAll(`${STATUS_SLOTS}, time`)).toHaveLength(0)
 	})
 
-	it("draws no status, no rule of its own and no status time on the header", () => {
+	it("draws no status, no Activity row and no status time in the properties", () => {
 		const { container } = render(
-			<MissionHeader
-				bot={BOT}
-				isWorking={false}
+			<MissionProperties
 				now={NOW}
-				objective={CARD.objective}
-				onBack={open}
 				openedAt={NOW - 5_400_000}
-				state="working"
 				status={BLANK_STATUS}
 				ticket={TICKET}
-				tools={CARD.tools}
 			/>,
 		)
 
 		expect(container.querySelectorAll(STATUS_SLOTS)).toHaveLength(0)
 		expect(
-			container.querySelectorAll('[data-slot="mission-ticket-rule"]'),
-		).toHaveLength(1)
-		expect(container.querySelectorAll("time")).toHaveLength(1)
+			container.querySelectorAll('[data-property="activity"]'),
+		).toHaveLength(0)
+		expect(container.querySelectorAll("time")).toHaveLength(0)
 	})
 
 	it.each(["row", "card"] as const)(

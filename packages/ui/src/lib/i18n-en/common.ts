@@ -530,7 +530,7 @@ const common = {
 			copy: "Copy",
 			copied: "Copied",
 			more: "More",
-			back: "Back",
+			back: "Library",
 			close: "Close",
 			previous: "Previous image",
 			next: "Next image",

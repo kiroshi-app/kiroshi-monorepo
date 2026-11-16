@@ -229,13 +229,17 @@ export const SidebarFrame = ({
 export const expectSkeletonFilledTo = (root: Element, edge: "top" | "bottom") =>
 	waitFor(() => {
 		const edgeY = slotIn(root, "list-skeleton").getBoundingClientRect()[edge]
-		const lastRow = slotsIn(root, "list-skeleton-row")
-			.at(-1)
-			?.getBoundingClientRect()
+		const reachesEdge = (row: Element | undefined) => {
+			const farSide = row?.getBoundingClientRect()[edge]
+			if (farSide === undefined) return false
+			return edge === "top" ? farSide <= edgeY : farSide >= edgeY
+		}
+		const rows = slotsIn(root, "list-skeleton-row")
 
-		expect(
-			lastRow !== undefined && lastRow.top <= edgeY && lastRow.bottom >= edgeY,
-		).toBe(true)
+		expect([reachesEdge(rows.at(-1)), reachesEdge(rows.at(-2))]).toEqual([
+			true,
+			false,
+		])
 	}, FRAME_POLL)
 
 export const slotsIn = (root: Element, slot: string) =>

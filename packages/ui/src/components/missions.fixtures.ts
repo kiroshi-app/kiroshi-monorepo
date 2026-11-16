@@ -258,6 +258,9 @@ export const MISSION_TICKET: MissionTicketLink = {
 	url: "https://linear.example/kiroshi/issue/OPE-30",
 }
 
+export const LONG_MISSION_TICKET_TITLE =
+	"Release builds ship without the sidecar binary on every desktop target, so the installed app starts with no coding session until the sidecar is fetched by hand"
+
 export const MISSION_OBJECTIVE =
 	"Render the mission thread header and its event rows"
 
