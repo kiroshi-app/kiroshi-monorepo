@@ -167,20 +167,14 @@ export const MarkdownFenceLines = ({
 				runPiecesOf(runs, line.offset, endOf(line)).map((piece) => {
 					const from = line.offset + piece.from
 					const to = line.offset + piece.to
+					const key = `${from}:${to}:${piece.ids}`
 					return piece.ids.reduceRight<ReactNode>(
 						(children, id) => (
-							<MarkdownRunSpan
-								id={id}
-								isEnd={runEnds.get(id) === to}
-								key={`${from}:${to}:${piece.ids}`}
-							>
+							<MarkdownRunSpan id={id} isEnd={runEnds.get(id) === to} key={key}>
 								{children}
 							</MarkdownRunSpan>
 						),
-						<CodeLine
-							key={`${from}:${to}:${piece.ids}`}
-							{...partOf(line, from, to)}
-						/>,
+						<CodeLine key={key} {...partOf(line, from, to)} />,
 					)
 				})
 			)}

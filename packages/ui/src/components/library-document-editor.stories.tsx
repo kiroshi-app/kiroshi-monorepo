@@ -4535,9 +4535,7 @@ export const TableThreadCardFollowsPin = meta.story({
 		await waitFor(() => expectCardBesideOrUnder(card, atRest))
 		table.scrollLeft = table.scrollWidth
 		await expect(boxOf(atRest).right).toBeLessThan(boxOf(table).left)
-		await waitFor(() =>
-			expect(commentCardIn(canvasElement)).not.toHaveAttribute("data-placed"),
-		)
+		await waitFor(() => expect(card).not.toHaveAttribute("data-placed"))
 
 		bodyOf(canvasElement, WIDE_TABLE_BLOCK).focus()
 		const editor = await waitFor(() => {
@@ -4549,8 +4547,9 @@ export const TableThreadCardFollowsPin = meta.story({
 		editor.scrollLeft = 0
 		await waitFor(() => expect(placed).toBeVisible())
 		await waitFor(() => expectCardBesideOrUnder(card, placed))
+		const unscrolled = boxOf(placed).left
 		editor.scrollLeft = 200
-		await waitFor(() => expect(boxOf(placed).left).toBeLessThan(600))
+		await waitFor(() => expect(boxOf(placed).left).toBeLessThan(unscrolled))
 		await expectCardBesideOrUnder(card, placed)
 		editor.scrollLeft = editor.scrollWidth
 		await waitFor(() => expectCardGoneWithPin(card, placed))
