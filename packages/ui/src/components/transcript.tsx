@@ -84,9 +84,10 @@ const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
 const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
 
-const OPENING_AT_THE_TOP = "justify-start pt-6"
+const OPENING_AT_THE_TOP =
+	"has-[>[data-slot=transcript-opening]:not(:empty)]:justify-start has-[>[data-slot=transcript-opening]:not(:empty)]:pt-6"
 
-const OPENING_OVER_THE_FIRST_MESSAGE = "-mb-3 pb-4"
+const OPENING_OVER_THE_FIRST_MESSAGE = "-mb-3 pb-4 empty:hidden"
 
 const keyAfter = (rows: TranscriptItem[], key: string | null) => {
 	const index = key === null ? -1 : rows.findIndex((row) => row.key === key)

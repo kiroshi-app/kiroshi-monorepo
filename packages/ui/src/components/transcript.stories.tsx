@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -407,7 +407,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released. A new `transcriptKey` forgets both and lands at the end again. `opening` is what stands at the top of the thread, over the first row: it sits 24px under the top of the scrolling content and 16px over the first row, scrolls away with the rows, and stays out until `older` has no page left.",
+					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released. A new `transcriptKey` forgets both and lands at the end again. `opening` is what stands at the top of the thread, over the first row: it sits 24px under the top of the scrolling content and 16px over the first row, scrolls away with the rows, and stays out until `older` has no page left. An `opening` that renders nothing lays out no box and leaves the rows where a thread with no opening puts them.",
 			},
 		},
 	},
@@ -748,6 +748,124 @@ export const Opening = meta.story({
 		await expect(opening.getBoundingClientRect().top - frameTop).toBe(
 			OPENING_FROM_TOP,
 		)
+	},
+})
+
+type OpeningLineProps = {
+	isDrawn: boolean
+}
+
+const OpeningLine = ({ isDrawn }: OpeningLineProps) =>
+	isDrawn ? OPENING : null
+
+type OpeningSwitchDemoProps = DemoProps & {
+	switchedOpening: ReactNode
+	switchLabel: string
+}
+
+const OpeningSwitchDemo = ({
+	opening,
+	switchedOpening,
+	switchLabel,
+	...demoProps
+}: OpeningSwitchDemoProps) => {
+	const [isSwitched, setSwitched] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-2">
+			<TranscriptDemo
+				{...demoProps}
+				entries={SHORT_HISTORY}
+				opening={isSwitched ? switchedOpening : opening}
+			/>
+			<Button onClick={() => setSwitched(true)} size="sm" variant="outline">
+				{switchLabel}
+			</Button>
+		</div>
+	)
+}
+
+const placementOfTheRows = (viewport: HTMLElement) => {
+	const content = slotIn(viewport, "message-scroller-content")
+	const rows = slotsIn(content, "message-scroller-item")
+	return {
+		firstRowFromTop:
+			rows[0].getBoundingClientRect().top - content.getBoundingClientRect().top,
+		lastRowFromBottom:
+			viewport.getBoundingClientRect().bottom -
+			rows[rows.length - 1].getBoundingClientRect().bottom,
+	}
+}
+
+const expectNoBoxForTheOpening = async (viewport: HTMLElement) => {
+	const slot = slotIn(viewport, "transcript-opening")
+	await expect(slot).toBeEmptyDOMElement()
+	await expect(slot.getClientRects()).toHaveLength(0)
+}
+
+export const OpeningThatRendersNothing = meta.story({
+	render: (args) => (
+		<OpeningSwitchDemo
+			{...args}
+			opening={<OpeningLine isDrawn={false} />}
+			switchedOpening={undefined}
+			switchLabel="Drop the opening"
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A short thread given an `opening` that renders nothing, the way a mission without a ticket, a status or a pull request hands in its properties. Check that the slot lays out no box, that the first row sits as far from the top of the scrolling content and the last row rests as close to the bottom edge as they do once *Drop the opening* leaves the thread with no opening at all.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await settleScroll()
+		await expectNoBoxForTheOpening(viewport)
+		const withEmptyOpening = placementOfTheRows(viewport)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Drop the opening" }),
+		)
+		await settleScroll()
+
+		await expect(slotsIn(viewport, "transcript-opening")).toHaveLength(0)
+		await expect(placementOfTheRows(viewport)).toEqual(withEmptyOpening)
+	},
+})
+
+export const OpeningStartsRendering = meta.story({
+	render: (args) => (
+		<OpeningSwitchDemo
+			{...args}
+			opening={<OpeningLine isDrawn={false} />}
+			switchedOpening={<OpeningLine isDrawn />}
+			switchLabel="Draw the opening"
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A short thread whose `opening` renders nothing, then starts rendering once *Draw the opening* is pressed, without the transcript remounting. Check that the line then stands 24px under the top of the scrolling content and 16px over the first row, as in `Opening`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await expectNoBoxForTheOpening(viewport)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Draw the opening" }),
+		)
+		await settleScroll()
+
+		await expect(canvas.getByRole("region", { name: "Conversation" })).toBe(
+			viewport,
+		)
+		await expectOpeningOverTheRows(viewport)
 	},
 })
 
