@@ -259,8 +259,7 @@ describe("createChatController on a reconnection", () => {
 		await controller.openAside(unshared.id, null)
 		await vi.runAllTimersAsync()
 		const listedChatId = controller.stateFor(BOT).conversationId
-		const unsharedChatId = controller.stateFor(unshared.id).conversationId
-		expect(unsharedChatId).not.toBeNull()
+		expect(controller.stateFor(unshared.id).conversationId).not.toBeNull()
 
 		listedBotIds.delete(unshared.id)
 		loadPage.mockClear()
