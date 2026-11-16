@@ -113,9 +113,10 @@ const MISSION_TICKET_LINE_STYLE: Record<
 		title: "wrap-break-word",
 	},
 	line: {
-		root: "flex min-w-0 items-center gap-2 text-xs leading-4",
-		identifier: "text-foreground",
-		title: "truncate text-soft-foreground",
+		root: "flex min-w-0 gap-2 py-0.5 text-compact text-soft-foreground leading-5",
+		identifier: "",
+		title:
+			"truncate @max-[40rem]:wrap-break-word @max-[40rem]:whitespace-normal",
 	},
 }
 

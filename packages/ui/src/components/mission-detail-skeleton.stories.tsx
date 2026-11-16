@@ -10,11 +10,7 @@ import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-s
 import { MissionHeader } from "@workspace/ui/components/mission-header"
 import {
 	MISSION_BOT,
-	MISSION_NOW,
 	MISSION_OBJECTIVE,
-	MISSION_OPENED_AT,
-	MISSION_TICKET,
-	MISSION_TOOLS,
 } from "@workspace/ui/components/missions.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
@@ -38,13 +34,9 @@ const meta = preview.meta({
 				<MissionHeader
 					bot={MISSION_BOT}
 					isWorking={false}
-					now={MISSION_NOW}
 					objective={MISSION_OBJECTIVE}
 					onBack={fn()}
-					openedAt={MISSION_OPENED_AT}
 					state="waiting_human"
-					ticket={MISSION_TICKET}
-					tools={MISSION_TOOLS}
 				/>
 			}
 			isHeaderFloating

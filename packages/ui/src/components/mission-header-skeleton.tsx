@@ -1,91 +1,50 @@
-import { useTranslation } from "react-i18next"
-
-import {
-	HeaderIsland,
-	HeaderIslandButton,
-	HeaderIslandCell,
-	HeaderIslandRow,
-} from "@workspace/ui/components/header-island"
-import { Icons } from "@workspace/ui/components/icons"
+import { AppHeader, AppHeaderText } from "@workspace/ui/components/app-header"
 import {
 	SkeletonBar,
 	SkeletonHexagon,
 } from "@workspace/ui/components/list-skeleton"
 import {
-	MISSION_HEADER_ROWS,
-	MISSION_TICKET_ISLAND,
-	MISSION_TICKET_SPACER,
-	MISSION_TICKET_STACKED_CELL,
+	MissionHeaderPath,
 	type MissionHeaderProps,
 } from "@workspace/ui/components/mission-header"
-import { ScreenLayoutFloatingHeader } from "@workspace/ui/components/screen-layout"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none"
 
 type MissionHeaderSkeletonProps = Pick<
 	MissionHeaderProps,
-	"onBack" | "dragRegion" | "className"
+	"onBack" | "pathLabel" | "dragRegion" | "className"
 >
 
 const MissionHeaderSkeleton = ({
 	onBack,
+	pathLabel,
 	dragRegion,
 	className,
-}: MissionHeaderSkeletonProps) => {
-	const { t } = useTranslation("chat")
-
-	return (
-		<ScreenLayoutFloatingHeader>
-			<div
-				aria-busy="true"
-				className={cn(MISSION_HEADER_ROWS, className)}
-				data-slot="mission-header-skeleton"
-			>
-				<HeaderIslandRow
-					data-tauri-drag-region={dragRegion}
-					leading={
-						<>
-							<HeaderIslandButton
-								aria-label={t("missions.header.back")}
-								onClick={onBack}
-							>
-								<Icons.Previous aria-hidden="true" />
-							</HeaderIslandButton>
-							<HeaderIslandCell
-								aria-hidden="true"
-								className={cn("p-1", SKELETON_PULSE)}
-							>
-								<SkeletonHexagon className="size-6" />
-								<SkeletonBar className="w-48" />
-							</HeaderIslandCell>
-						</>
-					}
-				/>
-				<HeaderIsland
-					aria-hidden="true"
-					className={MISSION_TICKET_ISLAND}
-					data-island="mission-ticket"
-				>
-					<HeaderIslandCell
-						className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
+}: MissionHeaderSkeletonProps) => (
+	<div
+		aria-busy="true"
+		className={className}
+		data-slot="mission-header-skeleton"
+	>
+		<AppHeader
+			data-tauri-drag-region={dragRegion}
+			leading={
+				<>
+					<SkeletonHexagon className={cn("size-8", SKELETON_PULSE)} />
+					<AppHeaderText
+						topLine={
+							<MissionHeaderPath onBack={onBack} pathLabel={pathLabel} />
+						}
 					>
-						<SkeletonBar className="w-12 shrink-0" />
-						<SkeletonBar className="w-48" />
-					</HeaderIslandCell>
-					<HeaderIslandCell
-						className={cn(MISSION_TICKET_STACKED_CELL, SKELETON_PULSE)}
-					>
-						<SkeletonBar className="w-40" isFaint />
-					</HeaderIslandCell>
-					<span className={MISSION_TICKET_SPACER} />
-					<HeaderIslandCell className={cn("shrink-0", SKELETON_PULSE)}>
-						<SkeletonBar className="w-20" isFaint />
-					</HeaderIslandCell>
-				</HeaderIsland>
-			</div>
-		</ScreenLayoutFloatingHeader>
-	)
-}
+						<span className="flex h-4.5 items-center">
+							<SkeletonBar className={cn("w-48", SKELETON_PULSE)} />
+						</span>
+					</AppHeaderText>
+				</>
+			}
+		/>
+	</div>
+)
 
 export { MissionHeaderSkeleton, type MissionHeaderSkeletonProps }

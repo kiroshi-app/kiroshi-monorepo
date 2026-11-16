@@ -1,10 +1,7 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	HeaderIslandCell,
-	useIsInHeaderIsland,
-} from "@workspace/ui/components/header-island"
+import { useIsInAppHeader } from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
@@ -51,15 +48,15 @@ type MissionStatePillProps = {
 
 const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 	const { t } = useTranslation("chat")
-	const isInIsland = useIsInHeaderIsland()
+	const isInAppHeader = useIsInAppHeader()
 
 	if (!hasStatePill(state)) return null
 
-	if (isInIsland)
+	if (isInAppHeader)
 		return (
-			<HeaderIslandCell
+			<span
 				className={cn(
-					"whitespace-nowrap font-medium text-compact leading-4",
+					"flex h-7 items-center gap-1.5 whitespace-nowrap px-2 font-medium text-foreground text-xs leading-4",
 					className,
 				)}
 				data-slot="mission-state-pill"
@@ -73,7 +70,7 @@ const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 					)}
 				/>
 				{t(`missions.state.${state}`)}
-			</HeaderIslandCell>
+			</span>
 		)
 
 	return (

@@ -1064,9 +1064,10 @@ const chat = {
 		card: {
 			open: "Open the mission: {{objective}}",
 		},
-		header: {
-			tools: "Tools",
-			back: "Back to the conversation",
+		properties: {
+			ticket: "Ticket",
+			activity: "Activity",
+			pullRequest: "Pull request",
 			openedAt: "opened {{time}}",
 		},
 		feed: {
