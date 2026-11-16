@@ -19,7 +19,7 @@ pub(super) const LEARN_BOUND: Duration = Duration::from_secs(30);
 
 const PAYLOAD_TOO_LARGE: u16 = 413;
 
-pub(crate) const ANSWER_REFUSED_BY_THE_RELAY: &str =
+const ANSWER_REFUSED_BY_THE_RELAY: &str =
 	"the relay refused the host's answer: Device socket is full";
 
 pub(super) const BUFFERED_EVENTS: usize = 2 * HELD_FRAMES;

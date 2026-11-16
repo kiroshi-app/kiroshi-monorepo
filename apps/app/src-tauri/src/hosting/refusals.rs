@@ -5,9 +5,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::Instant;
 
-pub(super) const RESYNC_EVERY: Duration = Duration::from_secs(5);
+const RESYNC_EVERY: Duration = Duration::from_secs(5);
 
-pub(super) const DEVICE_SOCKET_FULL: &str = "Device socket is full";
+const DEVICE_SOCKET_FULL: &str = "Device socket is full";
 
 const PAYLOAD_TOO_LARGE: u64 = 413;
 
