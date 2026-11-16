@@ -343,6 +343,11 @@ impl RelayGuests {
 	}
 
 	#[cfg(test)]
+	pub(crate) fn is_reading_members(&self, id: &str) -> bool {
+		self.members_reading.lock().unwrap_or_else(PoisonError::into_inner).contains_key(id)
+	}
+
+	#[cfg(test)]
 	pub(super) fn presence(&self, id: &str) -> Option<Presence> {
 		self.reached(id).map(|reached| *reached.link.presence().borrow())
 	}
