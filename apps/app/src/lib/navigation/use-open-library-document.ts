@@ -2,19 +2,15 @@ import { useNavigate, useRouter } from "@tanstack/react-router"
 
 import { type LibraryOpening, librarySearchOf } from "./library-search"
 
-export const useOpenLibraryDocument = () => {
-	const navigate = useNavigate()
-	return (name: string) =>
-		void navigate({
-			to: "/library",
-			search: librarySearchOf({ kind: "document", name }),
-		})
-}
-
 export const useOpenLibraryItem = () => {
 	const navigate = useNavigate()
 	return (opening: LibraryOpening) =>
 		void navigate({ to: "/library", search: librarySearchOf(opening) })
+}
+
+export const useOpenLibraryDocument = () => {
+	const openItem = useOpenLibraryItem()
+	return (name: string) => openItem({ kind: "document", name })
 }
 
 const useLibraryHrefOf = () => {
