@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::WebviewWindow;
+use tauri::Webview;
 
 const POLL: Duration = Duration::from_millis(100);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
@@ -161,31 +161,42 @@ frames[0].postMessage("{TRIGGER}", "*");"#
 	}
 }
 
-pub fn read(window: &WebviewWindow, target: Target) -> HostReading {
+fn read_served_document(reading: &str, served_url: &str) -> HostReading {
+	let reading: ViewReading = serde_json::from_str(reading)
+		.map_err(|cause| format!("unreadable host probe reading: {cause}"))?;
+	if reading.document_url != served_url {
+		return Err(format!(
+			"the host read the document {} while the view server served {served_url}",
+			reading.document_url
+		));
+	}
+	Ok(reading)
+}
+
+pub fn read(webview: &Webview, target: Target, served_url: &str) -> HostReading {
 	let slot = format!("__spikeHostProbe{}", uuid::Uuid::new_v4().simple());
-	window.eval(script(target, &slot)).map_err(|cause| cause.to_string())?;
+	webview.eval(script(target, &slot)).map_err(|cause| cause.to_string())?;
 	let deadline = Instant::now() + READING_TIMEOUT;
 	while Instant::now() < deadline {
 		thread::sleep(POLL);
-		let reading = answer(window, &format!("window.{slot} ?? \"\""))?;
+		let reading = answer(webview, &format!("window.{slot} ?? \"\""))?;
 		if !reading.is_empty() {
-			return serde_json::from_str(&reading)
-				.map_err(|cause| format!("unreadable host probe reading: {cause}"));
+			return read_served_document(&reading, served_url);
 		}
 	}
 	Err(format!("the host probe gave no reading within {} seconds", READING_TIMEOUT.as_secs()))
 }
 
-pub fn reached_attempts(window: &WebviewWindow) -> HostTrace {
-	let trace = answer(window, TRACE_READING)?;
+pub fn reached_attempts(webview: &Webview) -> HostTrace {
+	let trace = answer(webview, TRACE_READING)?;
 	serde_json::from_str::<Option<Vec<String>>>(&trace)
 		.map_err(|cause| format!("unreadable host trace: {cause}"))?
 		.ok_or_else(|| "the document the host read holds no host trace".to_owned())
 }
 
-fn answer(window: &WebviewWindow, expression: &str) -> Result<String, String> {
+fn answer(webview: &Webview, expression: &str) -> Result<String, String> {
 	let (sender, receiver) = mpsc::channel();
-	window
+	webview
 		.eval_with_callback(expression, move |answer| {
 			if sender.send(answer).is_err() {
 				eprintln!("a host probe answer arrived after its deadline");
@@ -197,4 +208,40 @@ fn answer(window: &WebviewWindow, expression: &str) -> Result<String, String> {
 		.map_err(|cause| format!("the host probe was not answered: {cause}"))?;
 	serde_json::from_str(&answer)
 		.map_err(|cause| format!("unreadable host probe answer {answer:?}: {cause}"))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const SERVED_URL: &str = "http://127.0.0.1:4100/token/hostile.html";
+
+	fn reading_of(document_url: &str) -> String {
+		json!({
+			"documentUrl": document_url,
+			"localStorage": "none",
+			"indexedDb": "none",
+			"cookie": "none",
+			"cache": "none",
+			"allowlistedFetch": "ok",
+			"allowlistedFetchStatus": 200,
+			"otherHostFetch": "blocked-TypeError",
+			"otherHostFetchStatus": null,
+		})
+		.to_string()
+	}
+
+	#[test]
+	fn a_reading_of_the_served_document_is_kept() {
+		let reading = read_served_document(&reading_of(SERVED_URL), SERVED_URL);
+		assert!(reading.is_ok_and(|view| view.other_host_fetch == "blocked-TypeError"));
+	}
+
+	#[test]
+	fn a_reading_of_another_document_is_a_fault_that_names_both_urls() {
+		let fault = read_served_document(&reading_of("chrome-error://chromewebdata/"), SERVED_URL)
+			.err()
+			.unwrap_or_default();
+		assert!(fault.contains("chrome-error://chromewebdata/") && fault.contains(SERVED_URL));
+	}
 }

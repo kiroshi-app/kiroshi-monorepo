@@ -10,7 +10,7 @@ publish = false
 tauri-build = "2"
 
 [dependencies]
-tauri = { version = "=2.12.2", features = ["custom-protocol"] }
+tauri = { version = "=2.12.2", features = ["custom-protocol", "unstable"] }
 tauri-plugin-updater = "2"
 tauri-plugin-log = "2"
 tauri-plugin-process = "2"

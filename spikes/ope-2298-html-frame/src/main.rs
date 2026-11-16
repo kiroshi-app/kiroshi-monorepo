@@ -1,5 +1,7 @@
+mod behaviours;
 mod host;
 mod http;
+mod placement;
 mod probe;
 mod proofs;
 mod scenario;
@@ -22,7 +24,9 @@ use sensors::WRAPPER_CSP;
 const USAGE_ERROR: u8 = 2;
 const SANDBOX_DIRECTIVE: &str = "sandbox allow-scripts";
 const INCOGNITO_MITIGATION: &str =
-	"each view window is built with incognito(true), so every view has its own storage";
+	"each view webview is built with incognito(true), so every view has its own storage";
+const CHILD_WEBVIEW_MITIGATION: &str =
+	"each view is a child webview of the main window, without a window of its own and without a capability, behind the navigation, new-window and download guards of the view windows";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
@@ -30,6 +34,7 @@ pub enum Mode {
 	Window,
 	WindowIsolated,
 	WindowSandboxed,
+	InThread,
 }
 
 impl Mode {
@@ -39,6 +44,7 @@ impl Mode {
 			"window" => Some(Self::Window),
 			"window-isolated" => Some(Self::WindowIsolated),
 			"window-sandboxed" => Some(Self::WindowSandboxed),
+			"in-thread" => Some(Self::InThread),
 			_ => None,
 		}
 	}
@@ -49,23 +55,28 @@ impl Mode {
 			Self::Window => "window",
 			Self::WindowIsolated => "window-isolated",
 			Self::WindowSandboxed => "window-sandboxed",
+			Self::InThread => "in-thread",
 		}
 	}
 
 	pub fn shows_views_in_windows(self) -> bool {
-		self != Self::Frame
+		matches!(self, Self::Window | Self::WindowIsolated | Self::WindowSandboxed)
+	}
+
+	pub fn places_views_in_the_thread(self) -> bool {
+		self == Self::InThread
 	}
 
 	pub fn isolates_view_storage(self) -> bool {
-		matches!(self, Self::WindowIsolated | Self::WindowSandboxed)
+		matches!(self, Self::WindowIsolated | Self::WindowSandboxed | Self::InThread)
 	}
 
 	pub fn decides_from_host_observations(self) -> bool {
-		matches!(self, Self::WindowIsolated | Self::WindowSandboxed)
+		matches!(self, Self::WindowIsolated | Self::WindowSandboxed | Self::InThread)
 	}
 
 	pub fn frames_view_documents(self) -> bool {
-		self == Self::WindowSandboxed
+		matches!(self, Self::WindowSandboxed | Self::InThread)
 	}
 
 	pub fn mitigations(self) -> Vec<String> {
@@ -75,14 +86,15 @@ impl Mode {
 			.iter()
 			.map(|directive| format!("hostile.html is served with the CSP directive {directive}"));
 		let wrapper = self.frames_view_documents().then(|| {
-			format!("the view window loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP {WRAPPER_CSP}, the containment the main window frame-src gives in frame mode")
+			format!("the view webview loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP {WRAPPER_CSP}, the containment the main window frame-src gives in frame mode")
 		});
-		incognito.into_iter().chain(directives).chain(wrapper).collect()
+		let child = self.places_views_in_the_thread().then(|| CHILD_WEBVIEW_MITIGATION.to_owned());
+		incognito.into_iter().chain(directives).chain(wrapper).chain(child).collect()
 	}
 
 	pub fn view_csp_directives(self) -> &'static [&'static str] {
 		match self {
-			Self::WindowSandboxed => &[SANDBOX_DIRECTIVE],
+			Self::WindowSandboxed | Self::InThread => &[SANDBOX_DIRECTIVE],
 			Self::Frame | Self::Window | Self::WindowIsolated => &[],
 		}
 	}
@@ -95,7 +107,9 @@ fn spike_secret(webview: tauri::Webview, host: tauri::State<'_, Arc<HostState>>)
 
 fn main() -> ExitCode {
 	let Some(mode) = std::env::args().nth(1).as_deref().and_then(Mode::parse) else {
-		eprintln!("usage: ope-2298-html-frame <frame|window|window-isolated|window-sandboxed>");
+		eprintln!(
+			"usage: ope-2298-html-frame <frame|window|window-isolated|window-sandboxed|in-thread>"
+		);
 		return ExitCode::from(USAGE_ERROR);
 	};
 	let host = Arc::new(HostState::default());

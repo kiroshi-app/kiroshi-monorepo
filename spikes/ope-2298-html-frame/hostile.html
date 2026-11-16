@@ -249,10 +249,10 @@
 				await signal("busy-loop", "finished");
 			};
 
-			const leave = async (id, action) => {
+			const leave = async (id, url) => {
 				await signal(id, "attempted");
 				try {
-					action(`${TARGETS.navigationSink}/${id}`);
+					departures[departureOf(id)](url);
 				} catch (cause) {
 					await signal(id, failure(cause));
 				}
@@ -282,9 +282,26 @@
 				},
 			};
 
+			const TRIPWIRE_DEPARTURES = [
+				"navigation-window-open",
+				"navigation-top",
+				"navigation-self",
+				"navigation-meta-refresh",
+			];
+
+			const departureOf = (id) => Object.keys(departures).find((departure) => id.endsWith(departure));
+
+			const sinkDestinations = () =>
+				Object.fromEntries(Object.keys(departures).map((id) => [id, `${TARGETS.navigationSink}/${id}`]));
+
+			const tripwireDestinations = (name, host) =>
+				Object.fromEntries(
+					TRIPWIRE_DEPARTURES.map((departure) => [`tripwire-${name}-${departure}`, `http://${host}/${departure}`]),
+				);
+
 			const tryNavigation = async () => {
-				for (const [id, action] of Object.entries(departures)) {
-					await leave(id, action);
+				for (const [id, url] of Object.entries(sinkDestinations())) {
+					await leave(id, url);
 				}
 			};
 
@@ -303,8 +320,13 @@
 				if (TARGETS.role === "reader") {
 					return readStorage();
 				}
-				if (TARGETS.role in departures) {
-					return leave(TARGETS.role, departures[TARGETS.role]);
+				const destinations = {
+					...sinkDestinations(),
+					...tripwireDestinations("loopback", TARGETS.loopbackTripwire),
+					...tripwireDestinations("lan", TARGETS.lanTripwire),
+				};
+				if (TARGETS.role in destinations) {
+					return leave(TARGETS.role, destinations[TARGETS.role]);
 				}
 				const tripwires = {
 					...tripwireAttempts("loopback", TARGETS.loopbackTripwire),

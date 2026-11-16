@@ -1,25 +1,32 @@
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-use tauri::{AppHandle, Listener as _, WebviewWindow};
+use tauri::{AppHandle, Listener as _, Url, Webview, WebviewWindow};
 
+use crate::behaviours::{self, Behaviour, Stage};
 use crate::host::{HostState, Tick, ViewAddress};
+use crate::placement::{PlacementReport, ThreadView, PLACEMENT_EVENT};
 use crate::probe::{self, HostReading};
 use crate::proofs::{
-	AttemptAlone, HostReadings, Observations, ViewObservation, WindowUrl, LAN_TRIPWIRE_ATTEMPTS,
-	LOOPBACK_TRIPWIRE_ATTEMPTS, NAVIGATION_ATTEMPTS,
+	AttemptAlone, HostReadings, Observations, Proof, ViewObservation, WindowUrl,
+	LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS,
+	LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS,
 };
 use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewServer, READER_ROLE, WRITER_ROLE};
-use crate::windows::{open_main_window, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL};
+use crate::windows::{
+	open_main_window, open_view_child, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL,
+};
 use crate::Mode;
 
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
 const RUN_SIGNAL: &str = "run";
 const BEAT_SCRIPT: &str = "window.__spikeBeat?.()";
+const WAKE_SCRIPT: &str = "void 0";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
 const POLL: Duration = Duration::from_millis(50);
 const MAIN_WINDOW_TIMEOUT: Duration = Duration::from_secs(12);
@@ -30,8 +37,28 @@ const RELOAD_TIMEOUT: Duration = Duration::from_secs(10);
 const SETTLE: Duration = Duration::from_millis(1500);
 const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
-const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(95);
-const RUN_LIMIT: Duration = Duration::from_secs(115);
+const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(150);
+const RUN_LIMIT: Duration = Duration::from_secs(180);
+const TICKET: &str = "OPE-2346";
+const IN_THREAD_VERDICT: &str = "in-thread";
+const SEPARATE_WINDOW_VERDICT: &str = "separate-window-only";
+const NO_PLACEHOLDER: &str = "the main page reported no placeholder rectangle";
+const NO_SECOND_VIEW: &str = "the second view never opened";
+const DECISIONS: [&str; 4] = [
+	"proof 4 is decided from the host reading of the second view, whose document never navigates; a host reading taken in a document whose URL is not the served URL is a sensor fault, never a green, in proof 4 and in proof 7",
+	"proof 5 accepts a sink connection on Windows alone, when it carries zero bytes and was accepted while a view whose navigation to the sink the host saw blocked, by a handler or by a browser CSP report, was open; decided by Steve",
+	"each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
+	"the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
+];
+const IN_THREAD_DECISIONS: [&str; 7] = [
+	"the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
+	"child_webview_bounds is read back from the webview after the host set it; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
+	"the delay runs from Date.now() in the main page handler that reported the placement to the host clock once the bounds were read back",
+	"cutting the view to the column only shrinks the child webview: its document keeps its own origin and is not shifted by the hidden part",
+	"enlarged means the placeholder takes the height of the visible column",
+	"the five behaviours are played on the second view, once its document has settled",
+	"the capability names the webview main where it named the window main, so a child webview of the main window receives none",
+];
 const RESIDUAL_EXPOSURE: &str = "no mitigation is applied: Chromium 156, which WebView2 embeds, opens one socket to the target of every http or https navigation when the navigation request is created, before the CSP check and before a host handler is asked. The only gate is the embedder hook ShouldPreconnectNavigation: there is no command line switch, no WebView2 setting and no Tauri 2.12.2 builder option for it, so a view can still make the webview open a connection without request bytes to any host and port it names";
 const HARNESS_FAILURE: i32 = 1;
 
@@ -80,7 +107,19 @@ fn point_at(host: &HostState, view: &ViewServer, mode: Mode) {
 	host.point_at_view(ViewAddress { origin: view.origin(), urls });
 }
 
-fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
+fn keep_awake(webview: Webview, is_closed: Arc<AtomicBool>) {
+	thread::spawn(move || loop {
+		thread::sleep(HEARTBEAT_INTERVAL);
+		if is_closed.load(Ordering::SeqCst) {
+			return;
+		}
+		if let Err(cause) = webview.eval(WAKE_SCRIPT) {
+			return eprintln!("{} is no longer kept awake: {cause}", webview.label());
+		}
+	});
+}
+
+pub fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
 	let deadline = Instant::now() + timeout;
 	while Instant::now() < deadline {
 		if is_reached() {
@@ -101,6 +140,16 @@ pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Fai
 		Ok(tick) => heartbeat_host.record_tick(tick),
 		Err(cause) => eprintln!("unreadable heartbeat: {cause}"),
 	});
+	let thread_view = Arc::new(ThreadView::default());
+	if mode.places_views_in_the_thread() {
+		let followed = Arc::clone(&thread_view);
+		app.listen(PLACEMENT_EVENT, move |event| {
+			match serde_json::from_str::<PlacementReport>(event.payload()) {
+				Ok(report) => followed.follow(report),
+				Err(cause) => eprintln!("unreadable placement: {cause}"),
+			}
+		});
+	}
 	let paced_window = main_window.clone();
 	thread::spawn(move || loop {
 		thread::sleep(HEARTBEAT_INTERVAL);
@@ -114,7 +163,8 @@ pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Fai
 		std::process::exit(HARNESS_FAILURE);
 	});
 	thread::spawn(move || {
-		let run = Run { app, host, mode, sensors, main_window, started: Instant::now() };
+		let run =
+			Run { app, host, mode, sensors, main_window, thread_view, started: Instant::now() };
 		match run.play(first_view) {
 			Ok(()) => std::process::exit(0),
 			Err(cause) => {
@@ -132,13 +182,31 @@ struct Run {
 	mode: Mode,
 	sensors: Sensors,
 	main_window: WebviewWindow,
+	thread_view: Arc<ThreadView>,
 	started: Instant,
+}
+
+enum Shown {
+	Frame,
+	Window(Webview),
+	Child(Webview),
+	Nowhere(String),
+}
+
+impl Shown {
+	fn webview(&self) -> Option<&Webview> {
+		match self {
+			Self::Window(webview) | Self::Child(webview) => Some(webview),
+			Self::Frame | Self::Nowhere(_) => None,
+		}
+	}
 }
 
 struct OpenView {
 	label: String,
 	server: ViewServer,
-	window: Option<WebviewWindow>,
+	shown: Shown,
+	is_closed: Arc<AtomicBool>,
 	creation_began: Instant,
 	settled_at: Instant,
 }
@@ -154,6 +222,7 @@ struct PlayedView {
 	url: String,
 	csp: String,
 	window_url_after: Option<Result<String, String>>,
+	creation_error: Option<String>,
 	open: (Instant, Instant),
 }
 
@@ -181,12 +250,13 @@ impl Run {
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
 		let second = self.open_later_view("view-2", READER_ROLE, SECOND_VIEW_TIMEOUT, SETTLE)?;
-		let (reader, second_reading) = match second {
+		let (reader, second_reading, behaviours) = match second {
 			Some(second) => {
 				let reading = self.host_reading(&second);
-				(Some(self.close_view(second)?), reading)
+				let behaviours = self.thread_behaviours(&second);
+				(Some(self.close_view(second)?), reading, behaviours)
 			}
-			None => (None, None),
+			None => (None, None, behaviours::not_played(NO_SECOND_VIEW)),
 		};
 		let AloneReplays { played: alone, not_played: not_played_alone } =
 			self.play_attempts_alone()?;
@@ -215,11 +285,21 @@ impl Run {
 			.map(|(attempt, view)| AttemptAlone {
 				attempt,
 				window: view.label.clone(),
+				page_signal: view.observation.record.outcome(attempt).map(str::to_owned),
 				open: view.open,
 				csp_reports: view.observation.record.csp_reports.clone(),
 			})
 			.collect();
+		let child_webview_errors: Vec<_> = std::iter::once(&writer)
+			.chain(&reader)
+			.chain(alone.iter().map(|(_, view)| view))
+			.filter_map(|view| {
+				let error = view.creation_error.as_ref()?;
+				Some(json!({ "view": view.label, "error": error }))
+			})
+			.collect();
 		let observations = Observations {
+			platform: std::env::consts::OS,
 			secret_calls: self.host.secret_calls(),
 			heartbeat: self.host.heartbeat(),
 			baseline,
@@ -234,8 +314,9 @@ impl Run {
 			host_readings,
 			attempts_alone,
 		};
+		let proofs = observations.proofs();
 		let mut results = json!({
-			"ticket": "OPE-2298",
+			"ticket": TICKET,
 			"os": std::env::consts::OS,
 			"mode": self.mode.name(),
 			"tauri": tauri::VERSION,
@@ -247,10 +328,23 @@ impl Run {
 			"mitigations": self.mode.mitigations(),
 			"main_window_csp_served": self.host.main_window_csps(),
 			"views": views,
-			"proofs": observations.proofs(),
+			"decisions": self.decisions(),
 			"attempts_not_played_alone": not_played_alone,
 			"page_claims_never_used_alone_for_a_verdict": observations.page_claims(),
 		});
+		if self.mode.places_views_in_the_thread() {
+			let is_shown_in_the_thread = child_webview_errors.is_empty()
+				&& proofs.iter().all(Proof::is_green)
+				&& behaviours.iter().all(Behaviour::is_green);
+			results["verdict"] = json!(if is_shown_in_the_thread {
+				IN_THREAD_VERDICT
+			} else {
+				SEPARATE_WINDOW_VERDICT
+			});
+			results["behaviours"] = json!(behaviours);
+			results["child_webview_errors"] = json!(child_webview_errors);
+		}
+		results["proofs"] = json!(proofs);
 		if cfg!(windows) {
 			results["residual_exposure"] = json!(RESIDUAL_EXPOSURE);
 		}
@@ -261,6 +355,47 @@ impl Run {
 		)?;
 		println!("{rendered}");
 		Ok(())
+	}
+
+	fn decisions(&self) -> Vec<&'static str> {
+		let in_thread: &[&str] =
+			if self.mode.places_views_in_the_thread() { &IN_THREAD_DECISIONS } else { &[] };
+		DECISIONS.iter().chain(in_thread).copied().collect()
+	}
+
+	fn thread_behaviours(&self, view: &OpenView) -> Vec<Behaviour> {
+		match &view.shown {
+			Shown::Child(_) => {
+				Stage { main_window: &self.main_window, thread_view: &self.thread_view }
+					.play(|| view.server.record().document_requests)
+			}
+			Shown::Nowhere(cause) => behaviours::not_played(cause),
+			Shown::Frame | Shown::Window(_) => Vec::new(),
+		}
+	}
+
+	fn open_child(&self, label: &str, url: Url) -> Shown {
+		let opened =
+			self.thread_view.latest_report().ok_or_else(|| NO_PLACEHOLDER.to_owned()).and_then(
+				|report| {
+					open_view_child(
+						&self.main_window,
+						&self.host,
+						self.mode,
+						label,
+						url,
+						report.placeholder,
+					)
+					.map_err(|cause| cause.to_string())
+				},
+			);
+		match opened {
+			Ok(child) => {
+				self.thread_view.attach(child.clone());
+				Shown::Child(child)
+			}
+			Err(cause) => Shown::Nowhere(cause),
+		}
 	}
 
 	fn open_later_view(
@@ -294,6 +429,10 @@ impl Run {
 		{
 			attempts.extend(NAVIGATION_ATTEMPTS);
 		}
+		attempts.extend(LOOPBACK_TRIPWIRE_NAVIGATIONS);
+		if self.sensors.lan.is_ok() {
+			attempts.extend(LAN_TRIPWIRE_NAVIGATIONS);
+		}
 		if has_a_connection_without_a_request(&self.sensors.loopback) {
 			attempts.extend(LOOPBACK_TRIPWIRE_ATTEMPTS);
 		}
@@ -308,7 +447,12 @@ impl Run {
 		let mut not_played = Vec::new();
 		for attempt in self.attempts_to_play_alone() {
 			let is_navigation = NAVIGATION_ATTEMPTS.contains(&attempt);
-			let decides_a_verdict = is_navigation && self.mode.decides_from_host_observations();
+			let decides_a_verdict = if is_navigation {
+				self.mode.decides_from_host_observations()
+			} else {
+				LOOPBACK_TRIPWIRE_NAVIGATIONS.contains(&attempt)
+					|| LAN_TRIPWIRE_NAVIGATIONS.contains(&attempt)
+			};
 			if !decides_a_verdict && self.started.elapsed() > ATTRIBUTION_DEADLINE {
 				not_played.push(attempt);
 				continue;
@@ -341,13 +485,18 @@ impl Run {
 	}
 
 	fn host_reading(&self, view: &OpenView) -> Option<HostReading> {
-		let window = view.window.as_ref()?;
+		if !self.mode.decides_from_host_observations() {
+			return None;
+		}
 		let target = if self.mode.frames_view_documents() {
 			probe::Target::FirstFrame
 		} else {
 			probe::Target::Document
 		};
-		self.mode.decides_from_host_observations().then(|| probe::read(window, target))
+		match &view.shown {
+			Shown::Nowhere(cause) => Some(Err(cause.clone())),
+			shown => Some(probe::read(shown.webview()?, target, &view.server.url())),
+		}
 	}
 
 	fn open_view(
@@ -360,35 +509,64 @@ impl Run {
 		let url = window_url(&server, self.mode);
 		self.host.mark_view_open(true);
 		let creation_began = Instant::now();
-		let window = if self.mode.shows_views_in_windows() {
-			Some(open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?)
+		let shown = if self.mode.places_views_in_the_thread() {
+			self.open_child(label, url.parse()?)
+		} else if self.mode.shows_views_in_windows() {
+			let window = open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?;
+			let webview: &Webview = window.as_ref();
+			Shown::Window(webview.clone())
 		} else {
 			self.main_window
 				.eval(format!("window.__spikeOpenView({})", serde_json::to_string(&url)?))?;
-			None
+			Shown::Frame
 		};
-		if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
-			eprintln!("{label} never signalled the end of its run");
+		let is_closed = Arc::new(AtomicBool::new(false));
+		if let Some(webview) = shown.webview() {
+			keep_awake(webview.clone(), Arc::clone(&is_closed));
 		}
-		thread::sleep(settle);
+		if let Shown::Nowhere(cause) = &shown {
+			eprintln!("{label} was shown nowhere: {cause}");
+		} else {
+			if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
+				eprintln!("{label} never signalled the end of its run");
+			}
+			thread::sleep(settle);
+		}
 		Ok(OpenView {
 			label: label.to_owned(),
 			server,
-			window,
+			shown,
+			is_closed,
 			creation_began,
 			settled_at: Instant::now(),
 		})
 	}
 
 	fn close_view(&self, view: OpenView) -> Result<PlayedView, Failure> {
-		let window_url_after = view.window.as_ref().map(|window| {
-			window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string())
+		let window_url_after = view.shown.webview().map(|webview| {
+			webview.url().map(|url| url.to_string()).map_err(|cause| cause.to_string())
 		});
-		let reached = probe::reached_attempts(view.window.as_ref().unwrap_or(&self.main_window));
-		match view.window {
-			Some(window) => window.destroy()?,
-			None => self.main_window.eval("window.__spikeCloseView()")?,
-		}
+		let reached = match &view.shown {
+			Shown::Nowhere(cause) => Err(cause.clone()),
+			shown => probe::reached_attempts(shown.webview().unwrap_or(self.main_window.as_ref())),
+		};
+		view.is_closed.store(true, Ordering::SeqCst);
+		let creation_error = match view.shown {
+			Shown::Frame => {
+				self.main_window.eval("window.__spikeCloseView()")?;
+				None
+			}
+			Shown::Window(webview) => {
+				webview.window().destroy()?;
+				None
+			}
+			Shown::Child(child) => {
+				self.thread_view.detach();
+				child.close()?;
+				None
+			}
+			Shown::Nowhere(cause) => Some(cause),
+		};
 		self.host.mark_view_open(false);
 		Ok(PlayedView {
 			label: view.label,
@@ -400,6 +578,7 @@ impl Run {
 			url: window_url(&view.server, self.mode),
 			csp: view.server.csp().to_owned(),
 			window_url_after,
+			creation_error,
 			open: (view.creation_began, view.settled_at),
 		})
 	}

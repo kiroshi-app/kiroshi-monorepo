@@ -11,6 +11,7 @@ use crate::windows::FIRST_VIEW_LABEL;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 const BLOCKED_HOST: &str = "example.com";
+const SECOND_VIEW_NEVER_OPENED: &str = "the second view never opened, so the host read no view";
 
 const IPC_ATTEMPTS: [&str; 5] = [
 	"ipc-tauri-global",
@@ -37,6 +38,19 @@ pub const LOOPBACK_TRIPWIRE_ATTEMPTS: [&str; 4] = [
 ];
 pub const LAN_TRIPWIRE_ATTEMPTS: [&str; 4] =
 	["tripwire-lan-fetch", "tripwire-lan-img", "tripwire-lan-websocket", "tripwire-lan-form-post"];
+pub const LOOPBACK_TRIPWIRE_NAVIGATIONS: [&str; 4] = [
+	"tripwire-loopback-navigation-window-open",
+	"tripwire-loopback-navigation-top",
+	"tripwire-loopback-navigation-self",
+	"tripwire-loopback-navigation-meta-refresh",
+];
+pub const LAN_TRIPWIRE_NAVIGATIONS: [&str; 4] = [
+	"tripwire-lan-navigation-window-open",
+	"tripwire-lan-navigation-top",
+	"tripwire-lan-navigation-self",
+	"tripwire-lan-navigation-meta-refresh",
+];
+const ACCEPTING_PLATFORM: &str = "windows";
 const ALLOWED_FETCH_ATTEMPT: &str = "allowlist-fetch-cdn-jsdelivr";
 const BLOCKED_FETCH_ATTEMPT: &str = "allowlist-fetch-example-com";
 pub const NAVIGATION_ATTEMPTS: [&str; 5] = [
@@ -60,7 +74,7 @@ const STORAGE_READ_ATTEMPTS: [&str; 4] = [
 	"storage-read-cache",
 ];
 
-#[derive(Serialize)]
+#[derive(PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Verdict {
 	Green,
@@ -86,6 +100,12 @@ pub struct Proof {
 	evidence: Value,
 }
 
+impl Proof {
+	pub fn is_green(&self) -> bool {
+		self.result == Verdict::Green
+	}
+}
+
 fn signed_ms(reference: Instant, instant: Instant) -> i128 {
 	if instant >= reference {
 		instant.duration_since(reference).as_millis() as i128
@@ -109,6 +129,7 @@ pub struct ViewObservation {
 pub struct AttemptAlone {
 	pub attempt: &'static str,
 	pub window: String,
+	pub page_signal: Option<String>,
 	pub open: (Instant, Instant),
 	pub csp_reports: Vec<CspReport>,
 }
@@ -138,9 +159,34 @@ impl AttemptAlone {
 struct TripwireAloneReading<'a> {
 	attempt: &'static str,
 	window: &'a str,
+	page_signal: Option<&'a str>,
 	tripwire_connections: usize,
 	request_bytes_received: usize,
 	browser_csp_reports_about_the_tripwire: Vec<&'a CspReport>,
+}
+
+#[derive(Serialize)]
+struct BlockedNavigation<'a> {
+	view: &'a str,
+	denied_by_the_handlers: Vec<&'a HandlerEvent>,
+	browser_csp_reports_about_the_sink: Vec<&'a CspReport>,
+}
+
+#[derive(Serialize)]
+struct StrayReading<'a> {
+	request: &'a str,
+	request_bytes_received: usize,
+	opened_by: Vec<&'static str>,
+	blocked_navigation_it_followed: Option<BlockedNavigation<'a>>,
+	accepted: bool,
+}
+
+fn is_stray_accepted(
+	platform: &str,
+	bytes_received: usize,
+	follows_a_blocked_navigation: bool,
+) -> bool {
+	platform == ACCEPTING_PLATFORM && bytes_received == 0 && follows_a_blocked_navigation
 }
 
 #[derive(Serialize)]
@@ -160,6 +206,7 @@ pub struct HostReadings {
 }
 
 pub struct Observations {
+	pub platform: &'static str,
 	pub secret_calls: Vec<SecretCall>,
 	pub heartbeat: Heartbeat,
 	pub baseline: (Instant, Instant),
@@ -175,8 +222,16 @@ pub struct Observations {
 	pub attempts_alone: Vec<AttemptAlone>,
 }
 
+fn loopback_attempts() -> Vec<&'static str> {
+	[LOOPBACK_TRIPWIRE_ATTEMPTS, LOOPBACK_TRIPWIRE_NAVIGATIONS].concat()
+}
+
+fn lan_attempts() -> Vec<&'static str> {
+	[LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS].concat()
+}
+
 fn tripwire_attempts() -> Vec<&'static str> {
-	[LOOPBACK_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_ATTEMPTS].concat()
+	[loopback_attempts(), lan_attempts()].concat()
 }
 
 impl Observations {
@@ -342,8 +397,8 @@ impl Observations {
 
 	fn tripwire_attempts_alone(&self) -> Vec<TripwireAloneReading<'_>> {
 		let tripwires = [
-			(LOOPBACK_TRIPWIRE_ATTEMPTS, Some(&self.loopback_tripwire)),
-			(LAN_TRIPWIRE_ATTEMPTS, self.lan_tripwire.as_ref().ok()),
+			(loopback_attempts(), Some(&self.loopback_tripwire)),
+			(lan_attempts(), self.lan_tripwire.as_ref().ok()),
 		];
 		self.attempts_alone
 			.iter()
@@ -355,6 +410,7 @@ impl Observations {
 				Some(TripwireAloneReading {
 					attempt: view.attempt,
 					window: &view.window,
+					page_signal: view.page_signal.as_deref(),
 					tripwire_connections: connections.len(),
 					request_bytes_received: connections
 						.iter()
@@ -366,11 +422,25 @@ impl Observations {
 			.collect()
 	}
 
+	fn tripwire_navigations_never_played(&self) -> Vec<&'static str> {
+		let is_played = |attempt: &&str| {
+			self.attempts_alone
+				.iter()
+				.any(|view| view.attempt == *attempt && view.page_signal.is_some())
+		};
+		let lan = self.lan_tripwire.is_ok().then_some(LAN_TRIPWIRE_NAVIGATIONS);
+		LOOPBACK_TRIPWIRE_NAVIGATIONS
+			.into_iter()
+			.chain(lan.into_iter().flatten())
+			.filter(|attempt| !is_played(attempt))
+			.collect()
+	}
+
 	fn tripwire_evidence(&self) -> Value {
 		let mut evidence = json!({
-			"loopback_tripwire": self.listener_evidence(&self.loopback_tripwire, &LOOPBACK_TRIPWIRE_ATTEMPTS),
+			"loopback_tripwire": self.listener_evidence(&self.loopback_tripwire, &loopback_attempts()),
 			"lan_tripwire": match &self.lan_tripwire {
-				Ok(tripwire) => self.listener_evidence(tripwire, &LAN_TRIPWIRE_ATTEMPTS),
+				Ok(tripwire) => self.listener_evidence(tripwire, &lan_attempts()),
 				Err(cause) => json!({ "unavailable": cause }),
 			},
 		});
@@ -432,17 +502,24 @@ impl Observations {
 	}
 
 	fn local_services_unreachable(&self) -> Proof {
-		let attempts = tripwire_attempts();
-		let unobserved = Self::unobserved(&self.writer.record, &attempts);
+		let unobserved = Self::unobserved(
+			&self.writer.record,
+			&[LOOPBACK_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_ATTEMPTS].concat(),
+		);
+		let navigations_never_played = self.tripwire_navigations_never_played();
 		let mut evidence = self.tripwire_evidence();
+		evidence["navigation_attempts_never_played_alone"] = json!(navigations_never_played);
 		evidence["attempts_never_signalled"] = json!(unobserved);
 		evidence["never_signalled_attempts_read_by_the_host"] =
 			json!(Self::reach(&self.writer, &unobserved));
 		Proof {
 			proof: 3,
 			name: "The view reaches no local service",
-			result: (self.are_tripwires_silent() && self.is_played(&unobserved)).into(),
-			attempts,
+			result: (self.are_tripwires_silent()
+				&& self.is_played(&unobserved)
+				&& navigations_never_played.is_empty())
+			.into(),
+			attempts: tripwire_attempts(),
 			evidence,
 		}
 	}
@@ -503,13 +580,20 @@ impl Observations {
 		evidence["view_csp_reports_received"] = json!(record.csp_reports.len());
 		let is_allowlist_followed = match &self.host_readings {
 			Some(host) => {
-				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
-				if let Ok(view) = &host.first_view {
-					evidence["fetches_where_the_host_read_and_the_page_beacon_disagree"] =
-						json!(Self::fetch_disagreements(view, allowed_fetch, blocked_fetch));
+				let reading = match &host.second_view {
+					Some(reading) => reading.as_ref().map_err(String::as_str),
+					None => Err(SECOND_VIEW_NEVER_OPENED),
+				};
+				match reading {
+					Ok(view) => {
+						evidence["second_view_read_by_the_host"] = json!(view);
+						evidence["fetches_where_the_host_read_and_the_page_beacon_disagree"] =
+							json!(Self::fetch_disagreements(view, allowed_fetch, blocked_fetch));
+					}
+					Err(fault) => evidence["sensor_fault"] = json!(fault),
 				}
 				self.has_first_view_reached_its_navigation_attempts()
-					&& host.first_view.as_ref().is_ok_and(|view| {
+					&& reading.is_ok_and(|view| {
 						view.allowlisted_fetch == "ok"
 							&& view.other_host_fetch.starts_with("blocked")
 					})
@@ -536,8 +620,10 @@ impl Observations {
 			.map(|url| json!({ "window": url.window, "before": url.before_the_view, "after": url.after_the_view }))
 			.collect();
 		let unobserved = Self::unobserved(&self.writer.record, &NAVIGATION_ATTEMPTS);
+		let strays = self.sink_strays();
 		let mut evidence = json!({
 			"navigation_sink": self.listener_evidence(&self.navigation_sink, &NAVIGATION_ATTEMPTS),
+			"stray_connections_at_the_sink": strays,
 			"windows_whose_url_changed": moved,
 			"windows_checked": self.window_urls.iter().map(|url| &url.window).collect::<Vec<_>>(),
 			"handler_events": self.handler_events,
@@ -568,7 +654,8 @@ impl Observations {
 		Proof {
 			proof: 5,
 			name: "The view cannot navigate, open a window or download",
-			result: (self.navigation_sink.is_silent()
+			result: (self.navigation_sink.control_connections > 0
+				&& strays.iter().all(|stray| stray.accepted)
 				&& moved.is_empty()
 				&& !self.window_urls.is_empty()
 				&& self.is_played(&unobserved))
@@ -576,6 +663,57 @@ impl Observations {
 			attempts: NAVIGATION_ATTEMPTS.to_vec(),
 			evidence,
 		}
+	}
+
+	fn blocked_navigation_behind(&self, connection: &Connection) -> Option<BlockedNavigation<'_>> {
+		let sink = &self.navigation_sink.address;
+		let (opened, settled) = self.first_view_open;
+		let (view, reports) =
+			if opened <= connection.accepted_at && connection.accepted_at <= settled {
+				(FIRST_VIEW_LABEL, &self.writer.record.csp_reports)
+			} else {
+				let alone = self.attempts_alone.iter().find(|view| {
+					NAVIGATION_ATTEMPTS.contains(&view.attempt)
+						&& view.was_open_at(connection.accepted_at)
+				})?;
+				(alone.window.as_str(), &alone.csp_reports)
+			};
+		let denied_by_the_handlers: Vec<_> = self
+			.handler_events
+			.iter()
+			.filter(|event| event.window == view && !event.allowed && event.url.contains(sink))
+			.collect();
+		let browser_csp_reports_about_the_sink: Vec<_> =
+			reports.iter().filter(|report| report.blocked_uri.contains(sink)).collect();
+		(!denied_by_the_handlers.is_empty() || !browser_csp_reports_about_the_sink.is_empty())
+			.then_some(BlockedNavigation {
+				view,
+				denied_by_the_handlers,
+				browser_csp_reports_about_the_sink,
+			})
+	}
+
+	fn sink_strays(&self) -> Vec<StrayReading<'_>> {
+		self.navigation_sink
+			.view_connections()
+			.iter()
+			.map(|connection| {
+				let blocked_navigation = self.blocked_navigation_behind(connection);
+				StrayReading {
+					request: &connection.summary,
+					request_bytes_received: connection.bytes_received,
+					opened_by: self
+						.opened_by(&self.navigation_sink, connection, &NAVIGATION_ATTEMPTS)
+						.0,
+					accepted: is_stray_accepted(
+						self.platform,
+						connection.bytes_received,
+						blocked_navigation.is_some(),
+					),
+					blocked_navigation_it_followed: blocked_navigation,
+				}
+			})
+			.collect()
 	}
 
 	fn navigation_alone<'a>(&'a self, view: &'a AttemptAlone) -> NavigationAloneReading<'a> {
@@ -720,5 +858,184 @@ impl Observations {
 			attempts,
 			evidence,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const SINK: &str = "127.0.0.1:4103";
+	const FIRST_VIEW_LASTS: Duration = Duration::from_secs(20);
+	const AFTER_EVERY_VIEW: Duration = Duration::from_secs(60);
+	const ALONE_VIEW_LASTS: Duration = Duration::from_secs(4);
+
+	fn listener(address: &str, connections: Vec<Connection>) -> TripwireReading {
+		let control = Connection {
+			accepted_at: Instant::now(),
+			bytes_received: 40,
+			target: Some("/control".to_owned()),
+			summary: "GET /control".to_owned(),
+		};
+		TripwireReading {
+			address: address.to_owned(),
+			control_connections: 1,
+			connections: std::iter::once(control).chain(connections).collect(),
+		}
+	}
+
+	fn reading(document_fetches: (&str, &str)) -> ViewReading {
+		ViewReading {
+			document_url: "http://127.0.0.1:4100/token/hostile.html".to_owned(),
+			local_storage: "none".to_owned(),
+			indexed_db: "none".to_owned(),
+			cookie: "none".to_owned(),
+			cache: "none".to_owned(),
+			allowlisted_fetch: document_fetches.0.to_owned(),
+			allowlisted_fetch_status: None,
+			other_host_fetch: document_fetches.1.to_owned(),
+			other_host_fetch_status: None,
+		}
+	}
+
+	fn tripwire_navigations_played_alone() -> Vec<AttemptAlone> {
+		let first_opened = Instant::now() + AFTER_EVERY_VIEW;
+		[LOOPBACK_TRIPWIRE_NAVIGATIONS, LAN_TRIPWIRE_NAVIGATIONS]
+			.concat()
+			.into_iter()
+			.zip(0..)
+			.map(|(attempt, turn)| played_alone(attempt, first_opened + ALONE_VIEW_LASTS * turn))
+			.collect()
+	}
+
+	fn played_alone(attempt: &'static str, opened: Instant) -> AttemptAlone {
+		AttemptAlone {
+			attempt,
+			window: format!("alone-{attempt}"),
+			page_signal: Some("attempted".to_owned()),
+			open: (opened, opened + ALONE_VIEW_LASTS / 2),
+			csp_reports: Vec::new(),
+		}
+	}
+
+	fn observations(platform: &'static str, strays: &[(Duration, usize)]) -> Observations {
+		let opened = Instant::now();
+		let strays = strays
+			.iter()
+			.map(|(after_the_view_opened, bytes_received)| Connection {
+				accepted_at: opened + *after_the_view_opened,
+				bytes_received: *bytes_received,
+				target: None,
+				summary: "connection without a request".to_owned(),
+			})
+			.collect();
+		let blocked =
+			CspReport { blocked_uri: format!("http://{SINK}"), directive: "frame-src".to_owned() };
+		Observations {
+			platform,
+			secret_calls: Vec::new(),
+			heartbeat: Heartbeat::default(),
+			baseline: (opened, opened),
+			loopback_tripwire: listener("127.0.0.1:4101", Vec::new()),
+			lan_tripwire: Ok(listener("192.0.2.7:4102", Vec::new())),
+			navigation_sink: listener(SINK, strays),
+			handler_events: Vec::new(),
+			window_urls: vec![WindowUrl {
+				window: FIRST_VIEW_LABEL.to_owned(),
+				before_the_view: "http://127.0.0.1:4100/token/view.html".to_owned(),
+				after_the_view: Ok("http://127.0.0.1:4100/token/view.html".to_owned()),
+			}],
+			first_view_open: (opened, opened + FIRST_VIEW_LASTS),
+			writer: ViewObservation {
+				token: "token".to_owned(),
+				record: ViewRecord { csp_reports: vec![blocked], ..ViewRecord::default() },
+				reached: Ok(Vec::new()),
+			},
+			reader: None,
+			host_readings: Some(HostReadings {
+				first_view: Ok(reading(("ok", "blocked-TypeError"))),
+				second_view: Some(Ok(reading(("ok", "blocked-TypeError")))),
+			}),
+			attempts_alone: Vec::new(),
+		}
+	}
+
+	#[test]
+	fn a_silent_sink_is_green_on_every_platform() {
+		assert!(observations("macos", &[]).navigation_contained().is_green());
+	}
+
+	#[test]
+	fn windows_accepts_a_zero_byte_stray_that_follows_a_blocked_navigation() {
+		let proof = observations("windows", &[(Duration::from_secs(12), 0)]).navigation_contained();
+		assert!(proof.is_green());
+		assert_eq!(proof.evidence["stray_connections_at_the_sink"][0]["accepted"], true);
+	}
+
+	#[test]
+	fn another_platform_refuses_the_same_zero_byte_stray() {
+		let proof = observations("macos", &[(Duration::from_secs(12), 0)]).navigation_contained();
+		assert!(!proof.is_green());
+		assert_eq!(proof.evidence["stray_connections_at_the_sink"][0]["accepted"], false);
+	}
+
+	#[test]
+	fn windows_refuses_a_stray_that_carries_a_byte() {
+		let strays = [(Duration::from_secs(12), 0), (Duration::from_secs(13), 1)];
+		assert!(!observations("windows", &strays).navigation_contained().is_green());
+	}
+
+	#[test]
+	fn windows_refuses_a_zero_byte_stray_that_follows_no_blocked_navigation() {
+		let proof = observations("windows", &[(AFTER_EVERY_VIEW, 0)]).navigation_contained();
+		assert!(!proof.is_green());
+		assert!(proof.evidence["stray_connections_at_the_sink"][0]
+			["blocked_navigation_it_followed"]
+			.is_null());
+	}
+
+	#[test]
+	fn a_rejected_other_host_fetch_read_in_the_served_document_is_green() {
+		assert!(observations("macos", &[]).egress_follows_the_allowlist().is_green());
+	}
+
+	#[test]
+	fn a_host_reading_that_failed_is_a_sensor_fault_and_never_a_green() {
+		let fault = "the host read the document chrome-error://chromewebdata/".to_owned();
+		let mut observed = observations("windows", &[]);
+		observed.host_readings = Some(HostReadings {
+			first_view: Ok(reading(("ok", "blocked-TypeError"))),
+			second_view: Some(Err(fault.clone())),
+		});
+		let proof = observed.egress_follows_the_allowlist();
+		assert!(!proof.is_green());
+		assert_eq!(proof.evidence["sensor_fault"], fault);
+	}
+
+	#[test]
+	fn proof_three_is_red_until_every_tripwire_navigation_was_played_alone() {
+		let mut observed = observations("macos", &[]);
+		assert!(!observed.local_services_unreachable().is_green());
+		observed.attempts_alone = tripwire_navigations_played_alone();
+		assert!(observed.local_services_unreachable().is_green());
+	}
+
+	#[test]
+	fn a_zero_byte_connection_of_a_tripwire_navigation_turns_proof_three_red_and_names_it() {
+		let mut observed = observations("windows", &[]);
+		observed.attempts_alone = tripwire_navigations_played_alone();
+		let culprit = &observed.attempts_alone[2];
+		let preconnect = Connection {
+			accepted_at: culprit.open.0 + Duration::from_millis(5),
+			bytes_received: 0,
+			target: None,
+			summary: "connection without a request".to_owned(),
+		};
+		observed.loopback_tripwire = listener("127.0.0.1:4101", vec![preconnect]);
+		let proof = observed.local_services_unreachable();
+		let stray = &proof.evidence["loopback_tripwire"]["connections_from_views"][0];
+		assert!(!proof.is_green());
+		assert_eq!(stray["opened_by"][0], "tripwire-loopback-navigation-self");
+		assert_eq!(stray["request_bytes_received"], 0);
 	}
 }
