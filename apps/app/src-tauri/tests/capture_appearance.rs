@@ -36,7 +36,7 @@ mod macos {
 	const WAIT: Duration = Duration::from_secs(10);
 	const POLL: Duration = Duration::from_millis(20);
 
-	#[derive(Debug, Clone, PartialEq, Eq)]
+	#[derive(Debug)]
 	struct Appearance {
 		reported_theme: Theme,
 		main_window: String,
