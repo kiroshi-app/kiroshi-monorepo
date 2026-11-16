@@ -29,13 +29,13 @@ const FLOATING_HEADER =
 
 const SCROLL_CONTAINER = /auto|scroll/
 
-const HEADER_HEIGHT = "--screen-layout-header-height"
+const HEADER_HEIGHT_PROPERTY = "--screen-layout-header-height"
 
 const publishHeaderHeight = (header: HTMLDivElement) => {
 	const layout = header.parentElement
 	const observer = new ResizeObserver(([entry]) => {
 		layout?.style.setProperty(
-			HEADER_HEIGHT,
+			HEADER_HEIGHT_PROPERTY,
 			`${entry.borderBoxSize[0].blockSize}px`,
 		)
 	})
@@ -43,7 +43,7 @@ const publishHeaderHeight = (header: HTMLDivElement) => {
 
 	return () => {
 		observer.disconnect()
-		layout?.style.removeProperty(HEADER_HEIGHT)
+		layout?.style.removeProperty(HEADER_HEIGHT_PROPERTY)
 	}
 }
 

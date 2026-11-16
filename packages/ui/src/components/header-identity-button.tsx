@@ -21,8 +21,6 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const AVATAR_SIZE = 32
 
-const BESIDE_PRESENCE = "flex min-w-0 items-center gap-1.5"
-
 type HeaderSubjectButtonProps = {
 	"aria-label": string
 	"data-slot": string
@@ -87,15 +85,18 @@ const HeaderIdentityButton = ({
 }: HeaderIdentityButtonProps) => {
 	const { t } = useTranslation("chat")
 
-	const presence = (
-		<ConnectionStatus
-			className="shrink-0"
-			name={name}
-			state={connection}
-			version={version}
-		/>
-	)
 	const shownName = <span className={APP_HEADER_TITLE}>{name}</span>
+	const besidePresence = (line: ReactNode) => (
+		<span className="flex min-w-0 items-center gap-1.5">
+			{line}
+			<ConnectionStatus
+				className="shrink-0"
+				name={name}
+				state={connection}
+				version={version}
+			/>
+		</span>
+	)
 
 	return (
 		<HeaderSubjectButton
@@ -116,22 +117,12 @@ const HeaderIdentityButton = ({
 			/>
 			<AppHeaderText
 				topLine={
-					title ? (
-						<span className={BESIDE_PRESENCE}>
-							<span className="truncate">{title}</span>
-							{presence}
-						</span>
-					) : undefined
+					title
+						? besidePresence(<span className="truncate">{title}</span>)
+						: undefined
 				}
 			>
-				{title ? (
-					shownName
-				) : (
-					<span className={BESIDE_PRESENCE}>
-						{shownName}
-						{presence}
-					</span>
-				)}
+				{title ? shownName : besidePresence(shownName)}
 			</AppHeaderText>
 		</HeaderSubjectButton>
 	)
