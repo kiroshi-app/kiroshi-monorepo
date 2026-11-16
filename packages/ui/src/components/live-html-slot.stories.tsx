@@ -33,6 +33,18 @@ const rectOf = (element: Element) => {
 const lastRectOf = (onRectChange: LiveHtmlSlotProps["onRectChange"]) =>
 	(onRectChange as ReturnType<typeof fn>).mock.lastCall?.[0]
 
+const reportFollows = async (
+	onRectChange: LiveHtmlSlotProps["onRectChange"],
+	measure: () => ReturnType<typeof rectOf>,
+	previous?: object,
+) => {
+	await waitFor(() => {
+		expect(lastRectOf(onRectChange)).not.toEqual(previous)
+		expect(lastRectOf(onRectChange)).toEqual(measure())
+	})
+	return measure()
+}
+
 const visiblePartOf = (view: Element, scroller: Element) => {
 	const viewBox = view.getBoundingClientRect()
 	const scrollerBox = scroller.getBoundingClientRect()
@@ -107,34 +119,30 @@ export const Live = meta.story({
 	play: async ({ args, canvas, canvasElement }) => {
 		const view = viewOf(canvasElement)
 		const scroller = canvas.getByTestId("reply-scroller")
-		const reportFollows = async (previous?: object) => {
-			await waitFor(() => {
-				expect(lastRectOf(args.onRectChange)).not.toEqual(previous)
-				expect(lastRectOf(args.onRectChange)).toEqual(
-					visiblePartOf(view, scroller),
-				)
-			})
-			return visiblePartOf(view, scroller)
-		}
+		const visible = () => visiblePartOf(view, scroller)
 
-		const mounted = await reportFollows()
+		const mounted = await reportFollows(args.onRectChange, visible)
 		await expect(mounted).toEqual(rectOf(view))
 
 		scroller.scrollTop += 16
-		const scrolled = await reportFollows(mounted)
+		const scrolled = await reportFollows(args.onRectChange, visible, mounted)
 
 		scroller.style.width = `${scroller.offsetWidth / 2}px`
-		const resized = await reportFollows(scrolled)
+		const resized = await reportFollows(args.onRectChange, visible, scrolled)
 
 		const above = canvas.getByTestId("paragraph-above")
 		above.textContent = `${above.textContent} `.repeat(12)
-		const reflowed = await reportFollows(resized)
+		const reflowed = await reportFollows(args.onRectChange, visible, resized)
 
 		scroller.scrollTop +=
 			view.getBoundingClientRect().top -
 			scroller.getBoundingClientRect().top +
 			view.offsetHeight / 2
-		const partlyHidden = await reportFollows(reflowed)
+		const partlyHidden = await reportFollows(
+			args.onRectChange,
+			visible,
+			reflowed,
+		)
 		await expect(partlyHidden.height).toBeGreaterThan(0)
 		await expect(partlyHidden.height).toBeLessThan(view.offsetHeight)
 
@@ -205,17 +213,10 @@ export const Enlarged = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const reportFollowsView = (previous?: object) =>
-			waitFor(() => {
-				expect(lastRectOf(args.onRectChange)).not.toEqual(previous)
-				expect(lastRectOf(args.onRectChange)).toEqual(
-					rectOf(viewOf(canvasElement)),
-				)
-			})
+		const viewRect = () => rectOf(viewOf(canvasElement))
 		const topAfter = () =>
 			canvas.getByTestId("paragraph-after").getBoundingClientRect().top
-		await reportFollowsView()
-		const inPlace = rectOf(viewOf(canvasElement))
+		const inPlace = await reportFollows(args.onRectChange, viewRect)
 		const inPlaceTopAfter = topAfter()
 
 		await userEvent.click(
@@ -225,8 +226,7 @@ export const Enlarged = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Shrink the live view" }),
 		).toHaveFocus()
-		await reportFollowsView(inPlace)
-		const enlarged = rectOf(viewOf(canvasElement))
+		const enlarged = await reportFollows(args.onRectChange, viewRect, inPlace)
 		await expect(
 			rectOf(canvas.getByRole("group", { name: "Live view" })),
 		).toEqual(rectOf(canvas.getByTestId("enlarged-container")))
@@ -239,7 +239,7 @@ export const Enlarged = meta.story({
 				canvas.getByRole("button", { name: "Enlarge the live view" }),
 			).toHaveFocus(),
 		)
-		await reportFollowsView(enlarged)
+		await reportFollows(args.onRectChange, viewRect, enlarged)
 		await expect(lastRectOf(args.onRectChange)).toEqual(inPlace)
 		await expect(topAfter()).toBe(inPlaceTopAfter)
 

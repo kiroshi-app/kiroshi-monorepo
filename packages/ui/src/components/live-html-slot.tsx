@@ -211,7 +211,6 @@ const LiveHtmlSlot = ({
 			ref={isEnlarged ? undefined : measureInPlace}
 			fill={isEnlarged ? enlargedFill : undefined}
 			data-status={status}
-			data-enlarged={isEnlarged}
 			role="group"
 			aria-label={t("liveHtml.label")}
 			aria-busy={isLoading}
