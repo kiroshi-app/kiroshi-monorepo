@@ -318,6 +318,8 @@ const settings = {
 				"Tous les agents de {{space}}. Choisissez-en un pour changer sa façon de travailler.",
 			create: "Créer un agent",
 			empty: "Aucun agent dans cet espace pour l’instant.",
+			emptyDescription:
+				"Créez-en un pour lui donner un nom, des instructions et des compétences.",
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
 				"Impossible de lire les compétences et les applications des agents. Rouvrez Agents pour réessayer.",

@@ -98,6 +98,7 @@ const bots = {
 		label: "Navigation",
 		home: "Home",
 		newConversation: "New",
+		agents: "Agents",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Library",
