@@ -381,14 +381,15 @@ type LibraryItemBarSurface = "lightbox" | "document"
 
 type LibraryBarSkin = {
 	fill?: string
-	ink?: string
+	control?: string
 }
 
 const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
 	document: {},
 	lightbox: {
 		fill: "dark:bg-white/8",
-		ink: "text-[#e5e5e5] focus-visible:ring-lightbox-bar in-data-content-card:focus-visible:ring-lightbox-bar",
+		control:
+			"text-[#e5e5e5] focus-visible:ring-lightbox-bar in-data-content-card:focus-visible:ring-lightbox-bar",
 	},
 }
 
@@ -420,7 +421,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const { onCopy, onDownload, onDelete } = actions
 	const menuActions = barMenuActionsOf(actions)
 	const hasMenu = hasLibraryItemActions(menuActions)
-	const { fill, ink } = LIBRARY_BAR_SKIN[surface]
+	const { fill, control } = LIBRARY_BAR_SKIN[surface]
 
 	useEffect(() => {
 		if (copiedItem === null) return
@@ -453,7 +454,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					{onDownload ? (
 						<LibraryBarButton
 							aria-label={t(`library.${surface}.download`)}
-							className={ink}
+							className={control}
 							onClick={() => onDownload(item)}
 						>
 							<Icons.Download aria-hidden="true" />
@@ -462,7 +463,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					{onCopy ? (
 						<LibraryBarButton
 							aria-label={t(`library.${surface}.copy`)}
-							className={ink}
+							className={control}
 							onClick={copy}
 						>
 							<IconSwap
@@ -478,7 +479,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 								render={
 									<LibraryBarButton
 										aria-label={t(`library.${surface}.more`)}
-										className={ink}
+										className={control}
 									/>
 								}
 							>
@@ -509,7 +510,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			) : null}
 			<LibraryBarButton
 				aria-label={t(`library.${surface}.close`)}
-				className={cn(ink, fill)}
+				className={cn(control, fill)}
 				kind="close"
 				onClick={onClose}
 			>
