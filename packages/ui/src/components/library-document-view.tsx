@@ -28,7 +28,7 @@ import {
 } from "@workspace/ui/components/library-document-agents"
 import {
 	handlersFor,
-	LibraryBarPath,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	type LibraryMenuSubject,
@@ -170,14 +170,12 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 				<nav className="min-w-0">
 					<AppHeaderText
 						topLine={
-							<LibraryBarPath
-								link={
-									<AppHeaderPathLink className="shrink-0" onClick={onBack}>
-										{t("library.document.back")}
-									</AppHeaderPathLink>
-								}
-								meta={meta}
-							/>
+							<>
+								<AppHeaderPathLink className="shrink-0" onClick={onBack}>
+									{t("library.document.back")}
+								</AppHeaderPathLink>
+								<LibraryBarMeta meta={meta} />
+							</>
 						}
 					>
 						<span
@@ -254,7 +252,7 @@ const LibraryDocumentColumn = ({
 						DOCUMENT_COLUMN_MEASURE,
 					)}
 				>
-					<header className="flex flex-col pb-1.5">{heading}</header>
+					<header className="pb-1.5">{heading}</header>
 					{children}
 				</article>
 			</div>

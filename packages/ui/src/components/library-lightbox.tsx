@@ -21,7 +21,7 @@ import {
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
 	LIBRARY_OVERLAY_ISLAND,
-	LibraryBarPath,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
@@ -317,16 +317,14 @@ const LibraryLightbox = ({
 							leading={
 								<AppHeaderText
 									topLine={
-										<LibraryBarPath
-											link={
-												<DialogClose
-													render={<AppHeaderPathLink className="shrink-0" />}
-												>
-													{t("library.lightbox.back")}
-												</DialogClose>
-											}
-											meta={image.detail}
-										/>
+										<>
+											<DialogClose
+												render={<AppHeaderPathLink className="shrink-0" />}
+											>
+												{t("library.lightbox.back")}
+											</DialogClose>
+											<LibraryBarMeta meta={image.detail} />
+										</>
 									}
 								>
 									<DialogTitle className={APP_HEADER_TITLE} title={image.name}>

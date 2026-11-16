@@ -349,28 +349,19 @@ const LibraryBarButton = ({
 	</TooltipHint>
 )
 
-type LibraryBarPathProps = {
-	link: ReactNode
+type LibraryBarMetaProps = {
 	meta?: string
 }
 
-const LibraryBarPath = ({ link, meta }: LibraryBarPathProps) => (
-	<>
-		{link}
-		{meta ? (
-			<>
-				<AppHeaderPathSeparator />
-				<span className="truncate tabular-nums" data-slot="library-bar-meta">
-					{meta}
-				</span>
-			</>
-		) : null}
-	</>
-)
-
-const LIGHTBOX_BAR_FILL = "dark:bg-white/8"
-
-const LIGHTBOX_BAR_INK = "text-[#e5e5e5]"
+const LibraryBarMeta = ({ meta }: LibraryBarMetaProps) =>
+	meta ? (
+		<>
+			<AppHeaderPathSeparator />
+			<span className="truncate tabular-nums" data-slot="library-bar-meta">
+				{meta}
+			</span>
+		</>
+	) : null
 
 const barMenuActionsOf = <Item,>(
 	handlers: LibraryItemHandlers<Item>,
@@ -387,6 +378,16 @@ const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
 }
 
 type LibraryItemBarSurface = "lightbox" | "document"
+
+type LibraryBarSkin = {
+	fill?: string
+	ink?: string
+}
+
+const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
+	document: {},
+	lightbox: { fill: "dark:bg-white/8", ink: "text-[#e5e5e5]" },
+}
 
 type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	item: Item
@@ -416,8 +417,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const { onCopy, onDownload, onDelete } = actions
 	const menuActions = barMenuActionsOf(actions)
 	const hasMenu = hasLibraryItemActions(menuActions)
-	const isOnLightbox = surface === "lightbox"
-	const ink = isOnLightbox ? LIGHTBOX_BAR_INK : undefined
+	const { fill, ink } = LIBRARY_BAR_SKIN[surface]
 
 	useEffect(() => {
 		if (copiedItem === null) return
@@ -446,9 +446,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 		>
 			{leading}
 			{onDownload || onCopy || hasMenu ? (
-				<AppHeaderCapsule
-					className={isOnLightbox ? LIGHTBOX_BAR_FILL : undefined}
-				>
+				<AppHeaderCapsule className={fill}>
 					{onDownload ? (
 						<LibraryBarButton
 							aria-label={t(`library.${surface}.download`)}
@@ -490,7 +488,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 								})}
 								className={cn(
 									"w-auto",
-									isOnLightbox && "dark",
+									surface === "lightbox" && "dark",
 									STILL_UNDER_REDUCED_MOTION,
 								)}
 								finalFocus={menuFinalFocus}
@@ -508,7 +506,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			) : null}
 			<LibraryBarButton
 				aria-label={t(`library.${surface}.close`)}
-				className={cn(ink, isOnLightbox && LIGHTBOX_BAR_FILL)}
+				className={cn(ink, fill)}
 				kind="close"
 				onClick={onClose}
 			>
@@ -539,7 +537,7 @@ export {
 	LIBRARY_BAR_ROUND,
 	LIBRARY_ISLAND_CONTEXT,
 	LIBRARY_OVERLAY_ISLAND,
-	LibraryBarPath,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	LibraryItemContextMenu,
