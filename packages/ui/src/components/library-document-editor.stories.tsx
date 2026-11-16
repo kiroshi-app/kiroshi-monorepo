@@ -3156,7 +3156,17 @@ const shownStartIconIn = async (canvasElement: HTMLElement, id: string) => {
 	await expect(boxOf(icon).width).toBe(24)
 	await expect(boxOf(icon).height).toBe(24)
 	await expect(boxOf(icon.querySelector("svg") as SVGElement).width).toBe(16)
+	await expect(getComputedStyle(icon).borderRadius).toBe("4px")
 	return icon
+}
+
+const startHintAbove = async (icon: HTMLElement) => {
+	const hint = await screen.findByRole("tooltip")
+	await expect(hint.querySelector(":scope > [data-side]")).not.toBeVisible()
+	await waitFor(() =>
+		expect(boxOf(icon).top - boxOf(hint).bottom).toBeCloseTo(12, 1),
+	)
+	return hint
 }
 
 const pointAcross = async (
@@ -3200,7 +3210,7 @@ const expectInEmptyPinSlot = async (
 	)
 }
 
-const iconAtRest = (glyph: string) => ({
+const iconAtRest = (glyph: string, hoverGround: string) => ({
 	args: commentedDocument(),
 	play: async ({ canvasElement }: CommentPlay) => {
 		await pointAcross(canvasElement, INTRO_BLOCK, 0.5)
@@ -3219,7 +3229,8 @@ const iconAtRest = (glyph: string) => ({
 
 		if (!isInBrowserRunner()) return
 		const body = bodyOf(canvasElement, INTRO_BLOCK)
-		await (await realPointer()).hover(body, {
+		const pointer = await realPointer()
+		await pointer.hover(body, {
 			position: { x: boxOf(body).width * 0.9, y: 12 },
 		})
 		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBeVisible()
@@ -3228,14 +3239,20 @@ const iconAtRest = (glyph: string) => ({
 				slotIn(blockOf(canvasElement, INTRO_BLOCK), "library-block-handle"),
 			).opacity,
 		).toBe("1")
+
+		await pointer.hover(icon)
+		await expect(getComputedStyle(icon).backgroundColor).toBe(
+			colourOf(icon, hoverGround),
+		)
+		await startHintAbove(icon)
 	},
 })
 
 export const Doc7CommentIconAtRest = meta.story({
-	...iconAtRest("rgb(107, 107, 107)"),
+	...iconAtRest("rgb(107, 107, 107)", "background"),
 	globals: LIGHT,
 	parameters: describedAs(
-		"Artboard Doc 7: comment mode off, the pointer over the right part of a paragraph that has no pin. Check no icon while the pointer is over the left 70 percent, then the 24px icon with its 16px glyph in the muted tint on no ground, centred in the empty pin slot 20px right of the column with its top on the top of the left handle, kept while the pointer crosses the margin towards it, and the left handle shown on the same block.",
+		"Artboard Doc 7: comment mode off, the pointer over the right part of a paragraph that has no pin. Check no icon while the pointer is over the left 70 percent, then the 24px icon of radius 4px with its 16px glyph in the muted tint on no ground, centred in the empty pin slot 20px right of the column with its top on the top of the left handle, kept while the pointer crosses the margin towards it, and the left handle shown on the same block. Under a real pointer, check the background ground once the pointer is on the icon, and its tooltip 12px above it with no arrow.",
 	),
 })
 
@@ -3244,7 +3261,7 @@ export const Doc8CommentIconHovered = meta.story({
 	args: commentedDocument(),
 	globals: LIGHT,
 	parameters: describedAs(
-		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the accent ground and the foreground glyph with no colour transition, the tooltip above the icon reading Comment in white then the Mac symbols of the comment shortcut in the muted tint, on a black bubble of radius 8px and padding 6px 8px with a gap of 8px in 12px medium, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
+		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the background ground of radius 4px and the foreground glyph with no colour transition, the tooltip 12px above the icon with no arrow, reading Comment in white then the Mac symbols of the comment shortcut in the muted tint, on a black bubble of radius 8px and padding 6px 8px with a gap of 8px in 12px medium, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
 	),
 	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
 		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
@@ -3252,11 +3269,8 @@ export const Doc8CommentIconHovered = meta.story({
 		await expect(getComputedStyle(icon).transitionProperty).toBe("none")
 
 		await userEvent.pointer(overMiddleOf(icon))
-		const tooltip = await screen.findByRole("tooltip")
+		const tooltip = await startHintAbove(icon)
 		await expect(tooltip).toHaveTextContent("Comment⌘⌥M")
-		await waitFor(() =>
-			expect(boxOf(tooltip).bottom).toBeLessThanOrEqual(boxOf(icon).top),
-		)
 		const bubble = getComputedStyle(tooltip)
 		await expect(bubble.backgroundColor).toBe("rgb(10, 10, 10)")
 		await expect(bubble.color).toBe("rgb(255, 255, 255)")
@@ -3272,7 +3286,7 @@ export const Doc8CommentIconHovered = meta.story({
 		if (isInBrowserRunner()) {
 			await (await realPointer()).hover(icon)
 			const look = getComputedStyle(icon)
-			await expect(look.backgroundColor).toBe(colourOf(icon, "accent"))
+			await expect(look.backgroundColor).toBe(colourOf(icon, "background"))
 			await expect(look.color).toBe(colourOf(icon, "foreground"))
 		}
 
@@ -3354,10 +3368,10 @@ export const Doc11CommentIconBesidePassagePin = meta.story({
 })
 
 export const Doc12CommentIconAtRestDark = meta.story({
-	...iconAtRest("rgb(163, 163, 163)"),
+	...iconAtRest("rgb(163, 163, 163)", "accent"),
 	globals: DARK,
 	parameters: describedAs(
-		"Artboard Doc 12, the dark twin of Doc 7. Check the same icon in the same slot, its glyph in the dark muted tint.",
+		"Artboard Doc 12, the dark twin of Doc 7. Check the same icon in the same slot, its glyph in the dark muted tint. Under a real pointer, check the accent ground once the pointer is on the icon, and the same tooltip 12px above it with no arrow.",
 	),
 })
 
