@@ -10,6 +10,8 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Icons } from "@workspace/ui/components/icons"
+import { HANDLE_BUTTON } from "@workspace/ui/components/library-block-handle"
 import type {
 	LibraryCommentAgent,
 	LibraryCommentAnchor,
@@ -36,7 +38,14 @@ import {
 } from "@workspace/ui/components/library-document-blocks"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { useRosterBots } from "@workspace/ui/components/roster"
+import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@workspace/ui/components/ui/tooltip"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
+import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryDocumentThread = {
@@ -575,11 +584,61 @@ const LibraryDocumentCommentRun = ({
 
 const UNDER_PIN = "end-0 top-full mt-2"
 
+const START_HINT = cn(
+	"gap-2 rounded-md px-2 py-1.5 font-medium text-on-foreground",
+	STILL_UNDER_REDUCED_MOTION,
+)
+
+type LibraryDocumentCommentStart = "absent" | "reachable" | "shown"
+
+type StartButtonProps = {
+	isShown: boolean
+	onStart: () => void
+}
+
+const StartButton = ({ isShown, onStart }: StartButtonProps) => {
+	const { t } = useTranslation("common")
+	const name = t("library.comments.bar.comment")
+
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				delay={HOVER_INTENT_DELAY_MS}
+				render={
+					<button
+						aria-label={name}
+						className={cn(
+							HANDLE_BUTTON,
+							"w-6",
+							!isShown && "opacity-0 focus-visible:opacity-100",
+						)}
+						data-slot="library-document-comment-start"
+						onClick={onStart}
+						type="button"
+					>
+						<Icons.Comment aria-hidden="true" />
+					</button>
+				}
+			/>
+			<TooltipContent className={START_HINT} role="tooltip" side="top">
+				{name}
+				<kbd className="font-sans text-on-foreground-muted">
+					{t(
+						`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
+					)}
+				</kbd>
+			</TooltipContent>
+		</Tooltip>
+	)
+}
+
 type LibraryDocumentBlockCommentsProps = {
 	layer: LibraryDocumentCommentLayer
 	blockId: string
 	source: string
 	hasPlacedPins: boolean
+	start: LibraryDocumentCommentStart
+	onStart?: () => void
 }
 
 const LibraryDocumentBlockComments = ({
@@ -587,6 +646,8 @@ const LibraryDocumentBlockComments = ({
 	blockId,
 	source,
 	hasPlacedPins,
+	start,
+	onStart,
 }: LibraryDocumentBlockCommentsProps) => {
 	const { t } = useTranslation("common")
 	const mentionNameOf = useMentionNameOf()
@@ -596,7 +657,8 @@ const LibraryDocumentBlockComments = ({
 	)
 	const draft =
 		layer.draft?.anchor.blockId === blockId ? layer.draft : undefined
-	if (threads.length === 0 && !draft) return null
+	if (threads.length === 0 && !draft && !onStart) return null
+	const startHere = draft ? undefined : onStart
 
 	const blockThreads = threads.filter(({ anchor }) => !anchor.passage)
 	const openPassage = threads.find(
@@ -653,9 +715,12 @@ const LibraryDocumentBlockComments = ({
 
 	return (
 		<>
-			{blockThreads.length > 0 || isBlockDraft ? (
+			{blockThreads.length > 0 || isBlockDraft || startHere ? (
 				<div
-					className="absolute start-full -top-1 ms-4 flex gap-1"
+					className={cn(
+						"absolute start-full -top-1 flex gap-1",
+						startHere ? "bottom-0 items-start ps-4" : "ms-4",
+					)}
 					data-slot="library-document-comment-pins"
 				>
 					{blockThreads.map((placed) => (
@@ -673,6 +738,13 @@ const LibraryDocumentBlockComments = ({
 							<DraftPin draft={draft.draft} />
 							{isFromShortcut ? null : (
 								<CardFrame className={UNDER_PIN}>{draftCard}</CardFrame>
+							)}
+						</span>
+					) : null}
+					{startHere ? (
+						<span className="flex size-8 items-center justify-center">
+							{start === "absent" ? null : (
+								<StartButton isShown={start === "shown"} onStart={startHere} />
 							)}
 						</span>
 					) : null}
@@ -715,6 +787,7 @@ export {
 	type LibraryDocumentCommentOrigin,
 	type LibraryDocumentCommentProps,
 	LibraryDocumentCommentRun,
+	type LibraryDocumentCommentStart,
 	type LibraryDocumentCommentTarget,
 	LibraryDocumentModeCursor,
 	type LibraryDocumentOpenThread,

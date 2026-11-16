@@ -247,4 +247,4 @@ const LibraryBlockHandle = ({
 	)
 }
 
-export { type DragProps, LibraryBlockHandle }
+export { type DragProps, HANDLE_BUTTON, LibraryBlockHandle }

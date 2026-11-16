@@ -109,6 +109,7 @@ import {
 	type LibraryDocumentCommentOrigin,
 	type LibraryDocumentCommentProps,
 	LibraryDocumentCommentRun,
+	type LibraryDocumentCommentStart,
 	LibraryDocumentModeCursor,
 } from "@workspace/ui/components/library-document-comments"
 import {
@@ -201,6 +202,8 @@ const UNWRITTEN_TEXT =
 const MENTION_CHIP = '[data-slot="bot-mention"]'
 
 const MENTION_INK = "<>"
+
+const COMMENT_START_ZONE = 0.3
 
 const COMMENT_MODE_PASS = `button, a, input, textarea, [data-slot="${COMMENT_CARD_SLOT}"]`
 
@@ -507,6 +510,8 @@ const LibraryDocumentBlockEditor = ({
 	const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
 	const heldDoc = useRef(doc)
 	const [hovered, setHovered] = useState<string>()
+	const [pointedEnd, setPointedEnd] = useState<string>()
+	const [focusedBlock, setFocusedBlock] = useState<string>()
 	const modeCursor = useRef<HTMLSpanElement>(null)
 
 	const anchorsAfter = (markdown: string) => {
@@ -937,11 +942,31 @@ const LibraryDocumentBlockEditor = ({
 				? target.closest<HTMLElement>(BLOCK_SLOT)
 				: null
 		setHovered(block?.dataset.blockId)
+		setPointedEnd(undefined)
 		const cursor = modeCursor.current
 		if (!cursor) return
 		const frame = currentTarget.getBoundingClientRect()
 		cursor.style.left = `${clientX - frame.left}px`
 		cursor.style.top = `${clientY - frame.top}px`
+	}
+
+	const followBlockEnd = ({
+		target,
+		clientX,
+	}: PointerEvent<HTMLDivElement>) => {
+		const block =
+			target instanceof Element ? target.closest<HTMLElement>(BLOCK_SLOT) : null
+		const box = block?.getBoundingClientRect()
+		setPointedEnd(
+			box && clientX >= box.right - box.width * COMMENT_START_ZONE
+				? block?.dataset.blockId
+				: undefined,
+		)
+	}
+
+	const commentStartOf = (id: string): LibraryDocumentCommentStart => {
+		if (pointedEnd === id) return "shown"
+		return focusedBlock === id ? "reachable" : "absent"
 	}
 
 	const toolbarFor = ({ anchor, formats, link }: SelectedText) => {
@@ -1429,8 +1454,10 @@ const LibraryDocumentBlockEditor = ({
 			data-slot="library-document-blocks"
 			onBlur={leaveBody}
 			onClick={isCommentMode ? startCommentAtPointer : undefined}
-			onPointerLeave={isCommentMode ? () => setHovered(undefined) : undefined}
-			onPointerMove={isCommentMode ? followPointer : undefined}
+			onPointerLeave={() =>
+				isCommentMode ? setHovered(undefined) : setPointedEnd(undefined)
+			}
+			onPointerMove={isCommentMode ? followPointer : followBlockEnd}
 			ref={list}
 			role="group"
 		>
@@ -1470,6 +1497,11 @@ const LibraryDocumentBlockEditor = ({
 						data-slot="library-document-block"
 						data-type={type}
 						key={block.id}
+						onBlur={(event) => {
+							if (!event.currentTarget.contains(event.relatedTarget))
+								setFocusedBlock(undefined)
+						}}
+						onFocus={() => setFocusedBlock(block.id)}
 						onKeyDown={shortcutsFor(block.id)}
 					>
 						<div className={cn("absolute end-full top-0", HANDLE_GUTTER)}>
@@ -1600,7 +1632,14 @@ const LibraryDocumentBlockEditor = ({
 									(!hasBlockEditor || PASSAGE_EDITORS.includes(type)))
 							}
 							layer={commentLayer}
+							onStart={
+								onStartComment && !isCommentMode
+									? () =>
+											onStartComment({ blockId: block.id, origin: "pointer" })
+									: undefined
+							}
 							source={block.source}
+							start={commentStartOf(block.id)}
 						/>
 						{isDropBefore || isDropAfter ? (
 							<span

@@ -2138,6 +2138,8 @@ navigation-librarydocumenteditor--comment-draft-scroll-never-animates
 navigation-librarydocumenteditor--comment-escape-closes-innermost
 navigation-librarydocumenteditor--comment-escape-from-block-closes-thread
 navigation-librarydocumenteditor--comment-escape-from-toggle-closes-thread
+navigation-librarydocumenteditor--comment-icon-absent-in-comment-mode
+navigation-librarydocumenteditor--comment-icon-reached-by-keyboard
 navigation-librarydocumenteditor--comment-mode-click-starts-block-comment
 navigation-librarydocumenteditor--comment-mode-selection-across-formatting
 navigation-librarydocumenteditor--comment-mode-selection-over-mention
@@ -2147,6 +2149,9 @@ navigation-librarydocumenteditor--comment-thread-long
 navigation-librarydocumenteditor--create-failure
 navigation-librarydocumenteditor--doc-1-pins-at-rest
 navigation-librarydocumenteditor--doc-1-pins-at-rest-dark
+navigation-librarydocumenteditor--doc-10-comment-icon-beside-block-pin
+navigation-librarydocumenteditor--doc-11-comment-icon-beside-passage-pin
+navigation-librarydocumenteditor--doc-12-comment-icon-at-rest-dark
 navigation-librarydocumenteditor--doc-2-comment-mode
 navigation-librarydocumenteditor--doc-2-comment-mode-dark
 navigation-librarydocumenteditor--doc-3-block-draft
@@ -2156,6 +2161,9 @@ navigation-librarydocumenteditor--doc-4-passage-draft-dark
 navigation-librarydocumenteditor--doc-5-shortcut-draft
 navigation-librarydocumenteditor--doc-5-shortcut-draft-dark
 navigation-librarydocumenteditor--doc-6-thread-open
+navigation-librarydocumenteditor--doc-7-comment-icon-at-rest
+navigation-librarydocumenteditor--doc-8-comment-icon-hovered
+navigation-librarydocumenteditor--doc-9-comment-icon-pressed
 navigation-librarydocumenteditor--draft-quote-across-mention
 navigation-librarydocumenteditor--edge-1-anchor-gone
 navigation-librarydocumenteditor--edge-1-anchor-gone-dark
