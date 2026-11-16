@@ -304,6 +304,24 @@ it.each([
 	},
 )
 
+it("reports once a conversation the store refuses to start from the shortcut", async () => {
+	await mountRouterAt()
+	const refused = vi
+		.spyOn(harness.store as TranscriptStore, "createConversation")
+		.mockRejectedValue(new Error("no room"))
+
+	await act(async () => {
+		fireEvent.keyDown(window, { key: "n", metaKey: true })
+	})
+	await settle()
+
+	const failed = i18n.t("bots:roster.conversation.createFailed")
+	expect(refused).toHaveBeenCalledOnce()
+	expect(raisedNoticeTitles().filter((title) => title === failed)).toEqual([
+		failed,
+	])
+})
+
 it("returns to the conversations when the route names no conversation of the Space", async () => {
 	const router = await mountRouterAt("/settings/conversation/nowhere")
 

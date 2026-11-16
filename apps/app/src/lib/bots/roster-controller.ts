@@ -219,7 +219,7 @@ export type RosterController = {
 	createUnselectedConversation: (
 		botIds: string[],
 	) => Promise<Conversation | null>
-	duplicate: (id: string, spaceRowId?: string) => Promise<Bot | null>
+	duplicate: (id: string, spaceRowId?: string) => Promise<Bot>
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
@@ -1013,7 +1013,7 @@ export const createRosterController = (
 			})
 			hold(created, spaceRowId)
 			return created
-		}).catch(reloadAndYield)
+		})
 
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
 		const seated = rosterIn(current().conversationRosters, spaceRowId)
@@ -1232,7 +1232,7 @@ export const createRosterController = (
 					hostSpaceIdIn(spaceRowId),
 				)
 				admit(written, current().spaceRowId)
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		createFromDraft: (draft: BotDraft) =>
 			commit(async () => {
@@ -1249,10 +1249,10 @@ export const createRosterController = (
 			}),
 
 		createConversation: (botIds = NOBODY_SEATED) =>
-			writeConversation(botIds, admitConversation),
+			writeConversation(botIds, admitConversation).catch(reloadAndReject),
 
 		createUnselectedConversation: (botIds) =>
-			writeConversation(botIds, enrolConversation),
+			writeConversation(botIds, enrolConversation).catch(reloadAndYield),
 
 		duplicate: (id: string, spaceRowId?: string) =>
 			commit(async () => {
@@ -1260,7 +1260,7 @@ export const createRosterController = (
 				const written = await store.duplicateBot(id, hostSpaceIdIn(destination))
 				admit(written, destination)
 				return written
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		settingsSettled: (id: string) => writes.settled(id),
 
@@ -1324,7 +1324,7 @@ export const createRosterController = (
 					...rosterIn(current().rosters, spaceRowId),
 					{ ...joined, sectionId: null, pinPosition: null },
 				])
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		removeFromSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {

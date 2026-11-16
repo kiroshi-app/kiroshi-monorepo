@@ -112,7 +112,12 @@ export const useSidebarActions = ({
 				}
 			},
 			onCreateBot: () => {
-				void roster.create()
+				void roster.create().catch((reason: unknown) => {
+					void reportFailure(
+						{ title: i18n.t("bots:roster.createFailed") },
+						{ reason },
+					)
+				})
 			},
 			onCreateSection: (name, rowId) => {
 				const { rosters, conversationRosters, spaceRowId } = roster.getState()
@@ -164,10 +169,20 @@ export const useSidebarActions = ({
 				void sections.remove(id)
 			},
 			onDuplicateBot: (id) => {
-				void roster.duplicate(id)
+				void roster.duplicate(id).catch((reason: unknown) => {
+					void reportFailure(
+						{ title: i18n.t("bots:roster.duplicateFailed") },
+						{ botId: id, reason },
+					)
+				})
 			},
 			onAddBotToSpace: (botId, spaceId) => {
-				void roster.addToSpace(botId, spaceId)
+				void roster.addToSpace(botId, spaceId).catch((reason: unknown) => {
+					void reportFailure(
+						{ title: i18n.t("bots:spaces.add.failed") },
+						{ botId, space: spaceId, reason },
+					)
+				})
 			},
 			onRemoveBotFromSpace: (botId, spaceId) => {
 				void roster.removeFromSpace(botId, spaceId)
