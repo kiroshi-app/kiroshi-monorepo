@@ -69,12 +69,10 @@ const holdAnimationFrames = () => {
 	vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) =>
 		held.push(frame),
 	)
-	return {
-		passNext: () => {
-			for (const frame of held.splice(0)) {
-				frame(performance.now())
-			}
-		},
+	return () => {
+		for (const frame of held.splice(0)) {
+			frame(performance.now())
+		}
 	}
 }
 
@@ -218,7 +216,7 @@ describe("the theme command", () => {
 	})
 
 	it("answers once the next animation frame has passed", async () => {
-		const frames = holdAnimationFrames()
+		const passNextFrame = holdAnimationFrames()
 		let outcome: ReplayOutcome | undefined
 		const answering = runReplayCommand(
 			{ name: "theme", scheme: "dark" },
@@ -231,7 +229,7 @@ describe("the theme command", () => {
 		expect([...document.documentElement.classList]).toEqual(["dark"])
 		expect(outcome).toBeUndefined()
 
-		frames.passNext()
+		passNextFrame()
 		await answering
 		expect(outcome).toEqual({
 			ok: true,
