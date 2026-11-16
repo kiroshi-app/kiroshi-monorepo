@@ -403,7 +403,7 @@ export const toMissionHeaderActivity = (
 	pullRequest: pullRequestOf(mission.pullRequestUrl),
 })
 
-export type MissionPropertiesRead = Pick<
+type MissionPropertiesRead = Pick<
 	MissionPropertiesProps,
 	"ticket" | "openedAt" | "status" | "commitsAhead" | "pullRequest"
 >

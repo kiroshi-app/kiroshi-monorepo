@@ -403,13 +403,11 @@ const useReplyChips = (
 const isClosedMission = (seat: ThreadMission | null): boolean =>
 	seat !== null && seat.mission.closedAt !== null
 
-const MISSION_PROPERTIES_ROW_KEY = "mission-properties"
-
 const missionPropertiesRowOf = ({
 	mission,
 	now,
 }: ThreadMission): TranscriptItem => ({
-	key: MISSION_PROPERTIES_ROW_KEY,
+	key: "mission-properties",
 	render: () => (
 		<MissionProperties {...toMissionProperties(mission)} now={now} />
 	),
