@@ -255,7 +255,7 @@ export const expectCommentThreadCapped = async (card: HTMLElement) => {
 	)
 	await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 	await expect(scroller.tabIndex).toBe(0)
-	await expect(getComputedStyle(scroller).overscrollBehaviorY).toBe("contain")
+	await expect(getComputedStyle(scroller).overscrollBehaviorY).toBe("none")
 
 	await expect(header.clientHeight).toBeGreaterThan(0)
 	await expect(header.scrollHeight).toBeLessThanOrEqual(header.clientHeight)

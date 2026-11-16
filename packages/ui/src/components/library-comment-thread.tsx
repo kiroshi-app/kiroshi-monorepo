@@ -249,7 +249,7 @@ const LibraryCommentThread = ({
 				</header>
 				<div
 					aria-label={t("library.comments.thread.comments")}
-					className="overflow-y-auto overscroll-contain outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
+					className="overflow-y-auto overscroll-none outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
 					data-slot={SCROLLER_SLOT}
 					ref={keepWheelOffHost}
 					role="group"
