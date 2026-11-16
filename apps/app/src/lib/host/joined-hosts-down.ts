@@ -41,7 +41,7 @@ export const createJoinedHostsDown = ({
 
 	const isActive = (id: string) => store.getState().active === id
 
-	const hasNotCaughtUp = (reason: unknown) => {
+	const reportFailedCatchUp = (reason: unknown) => {
 		reportCatchUpFailure(reason)
 		return false
 	}
@@ -49,7 +49,7 @@ export const createJoinedHostsDown = ({
 	const hasCaughtUpWith = (id: string) =>
 		Promise.all([...reconnectionCatchUps].map((catchUp) => catchUp(id))).then(
 			(caughtUp) => caughtUp.every(Boolean),
-			hasNotCaughtUp,
+			reportFailedCatchUp,
 		)
 
 	const tellListenersOf = (id: string) => {
