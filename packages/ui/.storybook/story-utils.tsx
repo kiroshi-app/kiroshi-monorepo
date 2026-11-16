@@ -1308,3 +1308,40 @@ export const expectTooltipOnOneLine = async (tooltip: HTMLElement) => {
 		0,
 	)
 }
+
+const tooltipTextBoxOf = (tooltip: HTMLElement) => {
+	const style = getComputedStyle(tooltip)
+	const box = tooltip.getBoundingClientRect()
+	const text = document.createRange()
+	text.selectNodeContents(tooltip)
+
+	return {
+		lines: Math.round(
+			(box.height -
+				Number.parseFloat(style.paddingTop) -
+				Number.parseFloat(style.paddingBottom)) /
+				Number.parseFloat(style.lineHeight),
+		),
+		lineWidth:
+			tooltip.clientWidth -
+			Number.parseFloat(style.paddingLeft) -
+			Number.parseFloat(style.paddingRight),
+		textWidth: [...text.getClientRects()].reduce(
+			(total, { width }) => total + width,
+			0,
+		),
+	}
+}
+
+export const expectTooltipWrappedWhole = async (
+	tooltip: HTMLElement,
+	text: string,
+) => {
+	const { lines, lineWidth, textWidth } = tooltipTextBoxOf(tooltip)
+
+	await expect(tooltip.textContent).toBe(text)
+	await expect(getComputedStyle(tooltip).textOverflow).not.toBe("ellipsis")
+	await expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth)
+	await expect(lines).toBeGreaterThan(1)
+	await expect(lines).toBeLessThanOrEqual(Math.ceil(textWidth / lineWidth) + 1)
+}
