@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -602,6 +602,15 @@ const CONVERSATION_POINTERS: [&str; 3] =
 
 const CONVERSATION_LIST_POINTER: &str = "/conversationIds";
 
+const QUESTION_REQUESTED: &str = "questionRequested";
+
+fn question_asked_in(published: &Published) -> Option<&str> {
+	let payload = &published.payload;
+	let is_asked = published.event == crate::agent::commands::EVENT_CHANNEL
+		&& payload["event"]["type"] == QUESTION_REQUESTED;
+	is_asked.then(|| payload["scope"]["conversationId"].as_str()).flatten()
+}
+
 #[derive(Clone, Copy)]
 enum Naming {
 	One(&'static str),
@@ -679,7 +688,7 @@ impl Readers {
 
 pub(super) struct GuestEvents {
 	shared_space_id: String,
-	held_children: HashMap<(SpaceChild, String), bool>,
+	held_children: HashSet<(SpaceChild, String)>,
 	main_owners: HashMap<String, Option<ChatOwner>>,
 }
 
@@ -687,7 +696,7 @@ impl GuestEvents {
 	pub(super) fn new(shared_space_id: &str) -> Self {
 		Self {
 			shared_space_id: shared_space_id.to_owned(),
-			held_children: HashMap::new(),
+			held_children: HashSet::new(),
 			main_owners: HashMap::new(),
 		}
 	}
@@ -705,6 +714,7 @@ impl GuestEvents {
 			}
 		};
 		if !self.holds_the_guest(app, &published).await {
+			self.warn_of_a_question_kept_off(app, &published).await;
 			return Vec::new();
 		}
 		if let Some(Value::Array(listed)) = published.payload.pointer(CONVERSATION_LIST_POINTER) {
@@ -712,6 +722,26 @@ impl GuestEvents {
 		}
 		let addressee = self.addressee(app, &published).await;
 		addressee.map(|addressee| (frame.clone(), addressee)).into_iter().collect()
+	}
+
+	async fn warn_of_a_question_kept_off<R: Runtime>(
+		&self,
+		app: &AppHandle<R>,
+		published: &Published,
+	) {
+		let Some(conversation_id) = question_asked_in(published) else {
+			return;
+		};
+		let lookup =
+			Lookup { app, shared_space_id: &self.shared_space_id, relayed: &published.event };
+		if lookup.is_held_by_another_space(conversation_id).await {
+			return;
+		}
+		log::warn!(
+			"the {QUESTION_REQUESTED} frame of conversation {conversation_id} was kept off the \
+			 relay of space {}: it failed the Conversation check",
+			self.shared_space_id
+		);
 	}
 
 	async fn addressee<R: Runtime>(
@@ -827,13 +857,13 @@ impl GuestEvents {
 		match (held.check, scope) {
 			(Check::Child(kind), Value::String(child_id)) if never_changes_space(kind) => {
 				let key = (kind, child_id.to_owned());
-				if let Some(is_held) = self.held_children.get(&key) {
-					return *is_held;
+				if self.held_children.contains(&key) {
+					return true;
 				}
-				let Some(is_held) = lookup.resolved_child(kind, child_id).await else {
-					return false;
-				};
-				self.held_children.insert(key, is_held);
+				let is_held = lookup.holds_child(kind, child_id).await;
+				if is_held {
+					self.held_children.insert(key);
+				}
 				is_held
 			}
 			_ => lookup.holds(&held, Some(scope)).await,
@@ -1014,6 +1044,24 @@ impl<R: Runtime> Lookup<'_, R> {
 
 	async fn holds_child(&self, kind: SpaceChild, child_id: &str) -> bool {
 		self.resolved_child(kind, child_id).await == Some(true)
+	}
+
+	async fn is_held_by_another_space(&self, conversation_id: &str) -> bool {
+		let state = self.app.state::<DatabaseState>();
+		let database = match state.as_ref() {
+			Ok(database) => database,
+			Err(failure) => {
+				self.unresolved(Conversation, failure);
+				return false;
+			}
+		};
+		match database.conversations().space(conversation_id.to_owned()).await {
+			Ok(space) => space.is_some_and(|space| space != self.shared_space_id),
+			Err(failure) => {
+				self.unresolved(Conversation, &failure);
+				false
+			}
+		}
 	}
 
 	async fn resolved_child(&self, kind: SpaceChild, child_id: &str) -> Option<bool> {

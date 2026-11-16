@@ -91,7 +91,18 @@ pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
 		return (Vec::new(), events::subscribed(app));
 	};
 	let (pending, heard) = state.live.questions_pending_at(|| events::subscribed(app));
-	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
+	(framed_questions(pending), heard)
+}
+
+pub(crate) fn pending_question_frames<R: Runtime>(app: &AppHandle<R>) -> Vec<Frame> {
+	let Some(state) = app.try_state::<AgentState>() else {
+		return Vec::new();
+	};
+	framed_questions(state.live.pending_questions())
+}
+
+fn framed_questions(pending: Vec<PendingQuestion>) -> Vec<Frame> {
+	pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect()
 }
 
 fn framed_question(asked: ScopedEvent) -> Option<Frame> {

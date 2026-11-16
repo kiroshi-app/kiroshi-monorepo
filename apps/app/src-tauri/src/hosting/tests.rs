@@ -2293,6 +2293,148 @@ fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
 	});
 }
 
+fn is_the_question(id: &str) -> impl Fn(&Value) -> bool + '_ {
+	move |frame| {
+		let payload = &frame["event"]["payload"];
+		payload["event"]["type"] == "questionRequested" && payload["event"]["request"]["id"] == id
+	}
+}
+
+async fn asked_then_pushed_out_of_the_ring(guest: &mut Guest, id: &str) -> (Value, String, u64) {
+	asks_in(guest, "c-mine", id);
+	let asked = next_stamped(&mut guest.member, is_the_question(id)).await;
+	let (epoch, seq) = stamp_of(&asked);
+	for n in 1..=RING_FRAMES + 2 {
+		numbered_through(&guest.harness, &mut guest.member, n).await;
+	}
+	(asked, epoch, seq - 1)
+}
+
+async fn asked_again(member: &mut MemberWire, id: &str) -> Value {
+	tokio::time::timeout(PATIENCE, next_stamped(member, is_the_question(id)))
+		.await
+		.expect("the question still waiting is replayed in time")
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_the_question_still_waiting() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-question").await;
+		let (asked, epoch, since) =
+			asked_then_pushed_out_of_the_ring(&mut guest, "q-waiting").await;
+
+		let (replayed, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let asked_again = asked_again(&mut guest.member, "q-waiting").await;
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert_eq!(unstamped(asked_again), unstamped(asked));
+	});
+}
+
+#[test]
+fn a_resume_inside_the_ring_is_followed_by_the_question_still_waiting() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-in-step-question").await;
+		asks_in(&guest, "c-mine", "q-in-step");
+		let asked = next_stamped(&mut guest.member, is_the_question("q-in-step")).await;
+		let (epoch, seq) = stamp_of(&asked);
+
+		let (replayed, answer) = resumed_from(&mut guest.member, &epoch, seq).await;
+		let asked_again = asked_again(&mut guest.member, "q-in-step").await;
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "replayed": 0 }));
+		assert_eq!(unstamped(asked_again), unstamped(asked));
+	});
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-answered").await;
+		let (_, epoch, since) = asked_then_pushed_out_of_the_ring(&mut guest, "q-answered").await;
+		let scope = a_held_scope_in("c-mine", "b-mine");
+		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+			.emit(its_answer("q-answered"), a_turn_in("c-mine"));
+
+		let (_, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert!(!heard.iter().any(is_the_question("q-answered")), "{heard:?}");
+	});
+}
+
+const A_ROOM: &str = "
+	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+		VALUES (?1, 'topic', ?2, 'Opened by a mention', 1, 1)";
+
+const THE_ROOM_JOINS_ITS_SPACE: &str = "UPDATE conversations SET space_id = ?2 WHERE id = ?1";
+
+async fn stored(
+	guest: &Guest,
+	statement: &'static str,
+	room: &'static str,
+	space: Option<&'static str>,
+) {
+	db::open(&guest.effects.database)
+		.call_mut(move |connection| Ok(connection.execute(statement, (room, space))?))
+		.await
+		.expect("the room is written");
+}
+
+fn asks_in(guest: &Guest, room: &str, id: &str) {
+	let scope = a_held_scope_in(room, "b-mine");
+	commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+		.emit(a_question(id), a_turn_in(room));
+}
+
+#[test]
+fn a_room_checked_before_its_space_holds_it_relays_the_question_asked_once_it_is_held() {
+	run(async {
+		const ROOM: &str = "c-held-later";
+		let mut guest = Guest::of_two_spaces("held-later").await;
+		stored(&guest, A_ROOM, ROOM, None).await;
+		let first = an_agent_event_of(a_runtime_scope(ROOM));
+		events::emit(guest.harness.app.handle(), Event::untyped(first.0), first.1)
+			.expect("emitted");
+		let before_it_is_held = guest.events_until_the_marker().await;
+		stored(&guest, THE_ROOM_JOINS_ITS_SPACE, ROOM, Some(PERSONAL)).await;
+
+		asks_in(&guest, ROOM, "q-held-later");
+		let once_it_is_held = guest.events_until_the_marker().await;
+
+		assert!(before_it_is_held.is_empty(), "{before_it_is_held:?}");
+		assert!(once_it_is_held.iter().any(is_the_question("q-held-later")), "{once_it_is_held:?}");
+	});
+}
+
+#[test]
+fn a_question_kept_off_the_relay_warns_for_a_room_no_space_holds_and_not_for_one_held_elsewhere() {
+	run(async {
+		const ELSEWHERE_ROOM: &str = "c-kept-off-elsewhere";
+		const NOWHERE_ROOM: &str = "c-kept-off-nowhere";
+		crate::test_log::capturing();
+		let mut guest = Guest::of_two_spaces("question-kept-off").await;
+		stored(&guest, A_ROOM, ELSEWHERE_ROOM, Some(ELSEWHERE)).await;
+		asks_in(&guest, ELSEWHERE_ROOM, "q-elsewhere");
+		asks_in(&guest, NOWHERE_ROOM, "q-nowhere");
+
+		let heard = guest.events_until_the_marker().await;
+		let warned = crate::test_log::warnings_naming("c-kept-off-").await;
+
+		assert!(heard.is_empty(), "{heard:?}");
+		assert_eq!(
+			warned,
+			vec![format!(
+				"the questionRequested frame of conversation {NOWHERE_ROOM} was kept off the \
+				 relay of space {PERSONAL}: it failed the Conversation check"
+			)]
+		);
+	});
+}
+
 #[test]
 fn a_reopened_host_socket_first_sends_the_frames_recorded_while_it_was_down_in_seq_order() {
 	run(async {

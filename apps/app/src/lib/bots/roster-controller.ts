@@ -203,7 +203,7 @@ export type RosterController = {
 	rereadSpaceSoon: (origin: SpaceOnHost) => void
 	rereadSpacesOfBotSoon: (botId: string) => void
 	settingsSettled: (botId: string) => Promise<void> | undefined
-	catchUpWithHost: (hostId: string) => void
+	catchUpWithHost: (hostId: string) => Promise<boolean>
 	rereadConversationRow: (conversationId: string) => void
 	forgetConversation: (conversationId: string) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
@@ -947,16 +947,22 @@ export const createRosterController = (
 		spaceRowIds.forEach(rereadSoon)
 	}
 
-	const catchUpWithHost = (hostId: string) => {
+	const hasRosterReadIn = (spaceRowId: string) =>
+		queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)?.status ===
+		"success"
+
+	const catchUpWithHost = async (hostId: string) => {
 		const spaceRowId = joinedRowIdOf(hostId)
 		if (!heldSpaceRowIdsOf(chosen()).includes(spaceRowId)) {
-			return
+			return true
 		}
-		void rereadRosterIn(spaceRowId)
+		const rereading = rereadRosterIn(spaceRowId)
 		void queryClient.invalidateQueries({
 			queryKey: conversationQueryKeys.soloThreadsIn(spaceRowId),
 			refetchType: "none",
 		})
+		await rereading
+		return hasRosterReadIn(spaceRowId)
 	}
 
 	const rereadConversationRow = (conversationId: string) => {

@@ -17,6 +17,7 @@ export type ConversationRuntimes = {
 
 type HeldRuntime = {
 	controller: ConversationController
+	detach: () => void
 	stop: () => void
 }
 
@@ -25,6 +26,7 @@ export type ConversationRuntimesOptions = Pick<
 	| "onNamed"
 	| "readReportedRuns"
 	| "onCompanionArrived"
+	| "onReconnected"
 	| "rereadConversation"
 	| "senderAccountId"
 >
@@ -49,9 +51,9 @@ export const createConversationRuntimes = (
 			return held.controller
 		}
 		const opened = createConversationController(driver, store, options)
-		opened.attach()
 		runtimes.set(conversationId, {
 			controller: opened,
+			detach: opened.attach(),
 			stop: opened.subscribe(publish),
 		})
 		return opened
@@ -74,6 +76,7 @@ export const createConversationRuntimes = (
 		}
 		runtimes.delete(conversationId)
 		held.stop()
+		held.detach()
 		publish()
 		await held.controller.shutdown().catch(() => undefined)
 	}
