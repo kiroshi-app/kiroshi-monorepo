@@ -2350,23 +2350,33 @@ fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
 	});
 }
 
+const KEPT_OFF: &str = "c-kept-off-the-relay";
+
+const A_CONVERSATION_KEPT_OFF: &str = "
+	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+		VALUES ('c-kept-off-the-relay', 'topic', 'elsewhere', 'Kept off', 1, 1);";
+
 #[test]
 fn a_question_asked_outside_the_shared_space_is_kept_off_its_relay_with_a_warning() {
 	run(async {
 		crate::test_log::capturing();
 		let mut guest = Guest::of_two_spaces("question-kept-off").await;
-		let scope = a_held_scope_in("c-theirs", "b-theirs");
+		db::open(&guest.effects.database)
+			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION_KEPT_OFF)?))
+			.await
+			.expect("the conversation of the other space is planted");
+		let scope = a_held_scope_in(KEPT_OFF, "b-theirs");
 		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
-			.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
+			.emit(a_question("q-kept-off"), a_turn_in(KEPT_OFF));
 
 		let heard = guest.events_until_the_marker().await;
-		let warned = crate::test_log::warnings_naming("c-theirs").await;
+		let warned = crate::test_log::warnings_naming(KEPT_OFF).await;
 
 		assert!(heard.is_empty(), "{heard:?}");
 		assert_eq!(
 			warned,
 			vec![format!(
-				"the questionRequested frame of conversation c-theirs was kept off the relay \
+				"the questionRequested frame of conversation {KEPT_OFF} was kept off the relay \
 				 of space {PERSONAL}: it failed the Conversation check"
 			)]
 		);
