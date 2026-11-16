@@ -1,7 +1,7 @@
 {
-  "duration_ms": 39194,
+  "duration_ms": 39595,
   "main_window_csp_served": [
-    "connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; font-src 'self' data:; default-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'self'; img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; script-src 'self' 'self' 'sha256-62iTz8fLBb8Km2H+hWi5i/TCp+hjlYuATJOkFgxc3a0='; frame-src http://127.0.0.1:55414"
+    "img-src 'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*; object-src 'none'; default-src 'self'; script-src 'self' 'self' 'sha256-62iTz8fLBb8Km2H+hWi5i/TCp+hjlYuATJOkFgxc3a0='; font-src 'self' data:; base-uri 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*; frame-src http://127.0.0.1:49564"
   ],
   "mitigations": [
     "each view window is built with incognito(true), so every view has its own storage"
@@ -23,7 +23,7 @@
       "navigation-self": "attempted",
       "navigation-top": "attempted",
       "navigation-window-open": "attempted",
-      "parent-cookie-read": "read-spike_view_value_82d2e70b486e43e58930677dad3f847a__spike_view_value_cross_site_82d2e70b486e43e58930677dad3f847a",
+      "parent-cookie-read": "read-spike_view_value_cb6606535ac348d59913e214b12e0e2f__spike_view_value_cross_site_cb6606535ac348d59913e214b12e0e2f",
       "parent-cookie-write": "written",
       "parent-dom-read": "blocked-TypeError",
       "parent-dom-write": "written",
@@ -95,7 +95,7 @@
       "evidence": {
         "altered_snapshots": [],
         "attempts_never_signalled": [],
-        "integrity_snapshots_compared": 369,
+        "integrity_snapshots_compared": 372,
         "main_documents_checked": 1,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 0,
@@ -121,12 +121,12 @@
       "evidence": {
         "attempts_never_signalled": [],
         "lan_tripwire": {
-          "address": "192.0.0.3:55410",
+          "address": "192.0.0.3:49560",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:55408",
+          "address": "127.0.0.1:49558",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -167,19 +167,19 @@
         ],
         "first_view_read_by_the_host": {
           "allowlisted_fetch": "ok",
-          "cache": "read-82d2e70b486e43e58930677dad3f847a",
-          "cookie": "read-spike_main_sentinel=altered; spike_view_value=82d2e70b486e43e58930677dad3f847a; spike_view_value_cross_site=82d2e70b486e43e58930677dad3f847a",
-          "indexed_db": "read-82d2e70b486e43e58930677dad3f847a",
-          "local_storage": "read-82d2e70b486e43e58930677dad3f847a",
+          "cache": "read-cb6606535ac348d59913e214b12e0e2f",
+          "cookie": "read-spike_main_sentinel=altered; spike_view_value=cb6606535ac348d59913e214b12e0e2f; spike_view_value_cross_site=cb6606535ac348d59913e214b12e0e2f",
+          "indexed_db": "read-cb6606535ac348d59913e214b12e0e2f",
+          "local_storage": "read-cb6606535ac348d59913e214b12e0e2f",
           "other_host_fetch": "blocked-TypeError"
         },
         "lan_tripwire": {
-          "address": "192.0.0.3:55410",
+          "address": "192.0.0.3:49560",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
         "loopback_tripwire": {
-          "address": "127.0.0.1:55408",
+          "address": "127.0.0.1:49558",
           "connections_from_views": [],
           "control_connections_from_the_harness": 1
         },
@@ -222,7 +222,7 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55414/82d2e70b486e43e58930677dad3f847a/hostile.html",
+            "url": "http://127.0.0.1:49564/cb6606535ac348d59913e214b12e0e2f/hostile.html",
             "window": "view-1"
           },
           {
@@ -234,37 +234,37 @@
           {
             "allowed": false,
             "handler": "on_new_window",
-            "url": "http://127.0.0.1:55412/navigation-window-open",
+            "url": "http://127.0.0.1:49562/navigation-window-open",
             "window": "view-1"
           },
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-anchor-download",
+            "url": "http://127.0.0.1:49562/navigation-anchor-download",
             "window": "view-1"
           },
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-top",
+            "url": "http://127.0.0.1:49562/navigation-top",
             "window": "view-1"
           },
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-self",
+            "url": "http://127.0.0.1:49562/navigation-self",
             "window": "view-1"
           },
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-meta-refresh",
+            "url": "http://127.0.0.1:49562/navigation-meta-refresh",
             "window": "view-1"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55549/1987b56c47bb46948a27b99a330eb584/hostile.html",
+            "url": "http://127.0.0.1:49700/36ac7433d5514e1ea269ab4798c1c1db/hostile.html",
             "window": "view-2"
           },
           {
@@ -276,7 +276,7 @@
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55569/b22e3fc0a96b4ef1a10b1c7daccf64a3/hostile.html",
+            "url": "http://127.0.0.1:49732/d81863d26da7497a82935c543b0fedba/hostile.html",
             "window": "alone-navigation-window-open"
           },
           {
@@ -288,13 +288,13 @@
           {
             "allowed": false,
             "handler": "on_new_window",
-            "url": "http://127.0.0.1:55412/navigation-window-open",
+            "url": "http://127.0.0.1:49562/navigation-window-open",
             "window": "alone-navigation-window-open"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55593/a9aca6ddc73e41d4b767ae3441c93743/hostile.html",
+            "url": "http://127.0.0.1:49751/807b824a28ed496883dd63fc9a2c59b9/hostile.html",
             "window": "alone-navigation-anchor-download"
           },
           {
@@ -306,13 +306,13 @@
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-anchor-download",
+            "url": "http://127.0.0.1:49562/navigation-anchor-download",
             "window": "alone-navigation-anchor-download"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55608/714b5186945c4a809215646888400df3/hostile.html",
+            "url": "http://127.0.0.1:49771/7ad6e9bf9d784dc7ba2fa73ba288aa58/hostile.html",
             "window": "alone-navigation-top"
           },
           {
@@ -324,13 +324,13 @@
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-top",
+            "url": "http://127.0.0.1:49562/navigation-top",
             "window": "alone-navigation-top"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55619/1e1018f2621b48c5b3f56d49eb25d8fb/hostile.html",
+            "url": "http://127.0.0.1:49784/a99f626b0f0943b89e0f1cc84a531697/hostile.html",
             "window": "alone-navigation-self"
           },
           {
@@ -342,13 +342,13 @@
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-self",
+            "url": "http://127.0.0.1:49562/navigation-self",
             "window": "alone-navigation-self"
           },
           {
             "allowed": true,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55655/0cbb4079057545d0a692d8561e3523ad/hostile.html",
+            "url": "http://127.0.0.1:49801/0c4f777a646f45f5b84ef1dae5e8e4a6/hostile.html",
             "window": "alone-navigation-meta-refresh"
           },
           {
@@ -360,7 +360,7 @@
           {
             "allowed": false,
             "handler": "on_navigation",
-            "url": "http://127.0.0.1:55412/navigation-meta-refresh",
+            "url": "http://127.0.0.1:49562/navigation-meta-refresh",
             "window": "alone-navigation-meta-refresh"
           }
         ],
@@ -376,7 +376,7 @@
               {
                 "allowed": false,
                 "handler": "on_new_window",
-                "url": "http://127.0.0.1:55412/navigation-window-open",
+                "url": "http://127.0.0.1:49562/navigation-window-open",
                 "window": "alone-navigation-window-open"
               }
             ],
@@ -392,7 +392,7 @@
               {
                 "allowed": false,
                 "handler": "on_navigation",
-                "url": "http://127.0.0.1:55412/navigation-anchor-download",
+                "url": "http://127.0.0.1:49562/navigation-anchor-download",
                 "window": "alone-navigation-anchor-download"
               }
             ],
@@ -408,7 +408,7 @@
               {
                 "allowed": false,
                 "handler": "on_navigation",
-                "url": "http://127.0.0.1:55412/navigation-top",
+                "url": "http://127.0.0.1:49562/navigation-top",
                 "window": "alone-navigation-top"
               }
             ],
@@ -424,7 +424,7 @@
               {
                 "allowed": false,
                 "handler": "on_navigation",
-                "url": "http://127.0.0.1:55412/navigation-self",
+                "url": "http://127.0.0.1:49562/navigation-self",
                 "window": "alone-navigation-self"
               }
             ],
@@ -440,7 +440,7 @@
               {
                 "allowed": false,
                 "handler": "on_navigation",
-                "url": "http://127.0.0.1:55412/navigation-meta-refresh",
+                "url": "http://127.0.0.1:49562/navigation-meta-refresh",
                 "window": "alone-navigation-meta-refresh"
               }
             ],
@@ -451,7 +451,7 @@
           }
         ],
         "navigation_sink": {
-          "address": "127.0.0.1:55412",
+          "address": "127.0.0.1:49562",
           "connections_from_views": [
             "connection without a request",
             "connection without a request"
@@ -478,17 +478,20 @@
         "busy-loop"
       ],
       "evidence": {
-        "busy_loop_observed_ms": 10005,
-        "first_view_open_ms": 16073,
+        "busy_loop_observed_ms": 10008,
+        "gaps_above_the_limit": [],
         "heartbeat_gap_limit_ms": 500,
-        "heartbeats_received": 369,
-        "longest_heartbeat_gap_before_any_view_ms": 112,
+        "heartbeats_received": 372,
+        "hostile_view_ran_ms": 16077,
+        "longest_heartbeat_gap_before_any_view_ms": 111,
         "longest_heartbeat_gap_during_the_busy_loop_ms": 116,
-        "longest_heartbeat_gap_while_the_first_view_was_open_ms": 116,
+        "longest_heartbeat_gap_while_the_hostile_view_ran_ms": 121,
+        "longest_heartbeat_gap_while_the_view_window_was_built_ms": 53,
         "navigation_attempts_of_the_first_view_seen_by_the_host": {
           "by_browser_csp_reports": 0,
           "by_the_handlers": 5
-        }
+        },
+        "view_window_build_ms": 53
       },
       "name": "The main window stays responsive while the view spins",
       "proof": 6,
@@ -511,10 +514,10 @@
         "cookie_headers_received_from_the_second_view": [],
         "first_view_read_by_the_host": {
           "allowlisted_fetch": "ok",
-          "cache": "read-82d2e70b486e43e58930677dad3f847a",
-          "cookie": "read-spike_main_sentinel=altered; spike_view_value=82d2e70b486e43e58930677dad3f847a; spike_view_value_cross_site=82d2e70b486e43e58930677dad3f847a",
-          "indexed_db": "read-82d2e70b486e43e58930677dad3f847a",
-          "local_storage": "read-82d2e70b486e43e58930677dad3f847a",
+          "cache": "read-cb6606535ac348d59913e214b12e0e2f",
+          "cookie": "read-spike_main_sentinel=altered; spike_view_value=cb6606535ac348d59913e214b12e0e2f; spike_view_value_cross_site=cb6606535ac348d59913e214b12e0e2f",
+          "indexed_db": "read-cb6606535ac348d59913e214b12e0e2f",
+          "local_storage": "read-cb6606535ac348d59913e214b12e0e2f",
           "other_host_fetch": "blocked-TypeError"
         },
         "first_view_write_beacons": {
@@ -543,7 +546,7 @@
           "other_host_fetch": "blocked-TypeError"
         },
         "stores_where_the_host_found_the_first_view_value": [],
-        "value_the_first_view_stored": "82d2e70b486e43e58930677dad3f847a"
+        "value_the_first_view_stored": "cb6606535ac348d59913e214b12e0e2f"
       },
       "name": "A second view reads nothing the first view stored",
       "proof": 7,
@@ -556,14 +559,14 @@
     "first_view": {
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /82d2e70b486e43e58930677dad3f847a/csp-report",
-      "url": "http://127.0.0.1:55414/82d2e70b486e43e58930677dad3f847a/hostile.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /cb6606535ac348d59913e214b12e0e2f/csp-report",
+      "url": "http://127.0.0.1:49564/cb6606535ac348d59913e214b12e0e2f/hostile.html"
     },
     "second_view": {
       "document_requests": 1,
       "requests_outside_the_routes": [],
-      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /1987b56c47bb46948a27b99a330eb584/csp-report",
-      "url": "http://127.0.0.1:55549/1987b56c47bb46948a27b99a330eb584/hostile.html"
+      "response_csp": "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /36ac7433d5514e1ea269ab4798c1c1db/csp-report",
+      "url": "http://127.0.0.1:49700/36ac7433d5514e1ea269ab4798c1c1db/hostile.html"
     }
   },
   "webview": "22625.1.29.11.28"
