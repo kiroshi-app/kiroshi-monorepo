@@ -399,11 +399,17 @@ The host addresses the answer to a `relay_resume`, like every answer and like
 the frames it replays, to the one device that sent the call, and the relay hands
 it to that device alone. A client takes a resume answer only when its `token` is
 the one of its pending resume: any other answers a resume it no longer awaits.
-The host expects a member to re-read on `tooOld`, when its `relay_resume` is
-answered with an error status, an answer that carries the `id` of the call and
-no `token`, or when no answer comes within 300 seconds: the client adopts the
-`epoch` and `seq` of the next frame and re-reads with calls the state it shows
-(for example `conversation_list`, `conversation_message_page`, `mission_list`).
+
+The host expects a member to re-read for three reasons:
+
+- An answer whose `body` carries `tooOld`.
+- An answer to the `id` of its resume call whose `status` is not 200. That answer
+  carries no `token`, so the client matches it by that `id`.
+- No answer within 300 seconds.
+
+For all three, the client adopts the `epoch` and `seq` of the next frame and
+re-reads with calls the state it shows (for example `conversation_list`,
+`conversation_message_page`, `mission_list`).
 A client with no epoch yet re-reads on each socket open. Neither the epoch nor
 the seq survives an app restart.
 
