@@ -5,7 +5,6 @@ import preview from "@workspace/storybook/preview"
 import {
 	commentScrollerIn,
 	expectCommentThreadCapped,
-	expectLatestCommentInView,
 	hueScopeOf,
 	slotIn,
 	slotsIn,
@@ -667,7 +666,6 @@ export const LongThread = meta.story({
 		await expect(slotsIn(card, "library-comment")).toHaveLength(
 			LONG_THREAD_COMMENTS.length + 1,
 		)
-		await expectLatestCommentInView(card)
 		await expectCommentThreadCapped(card)
 	},
 })

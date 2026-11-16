@@ -243,15 +243,6 @@ const COMMENT_THREAD_CAP = 0.6
 export const commentScrollerIn = (card: Element) =>
 	slotIn(card, "library-comment-scroller")
 
-export const expectLatestCommentInView = async (card: Element) => {
-	const scroller = commentScrollerIn(card).getBoundingClientRect()
-	const latest = slotsIn(card, "library-comment").at(-1)
-	if (!latest) throw new Error("This thread holds no comment")
-	const box = latest.getBoundingClientRect()
-	await expect(box.bottom).toBeLessThanOrEqual(Math.ceil(scroller.bottom))
-	await expect(box.bottom).toBeGreaterThan(scroller.top)
-}
-
 export const expectCommentThreadCapped = async (card: HTMLElement) => {
 	const header = card.firstElementChild as HTMLElement
 	const footer = card.lastElementChild as HTMLElement
@@ -282,7 +273,12 @@ export const expectCommentThreadCapped = async (card: HTMLElement) => {
 	await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
 		Math.ceil(box.bottom),
 	)
-	await expectLatestCommentInView(card)
+
+	const latest = slotsIn(card, "library-comment").at(-1)
+	if (!latest) throw new Error("This thread holds no comment")
+	const latestBottom = latest.getBoundingClientRect().bottom
+	await expect(latestBottom).toBeLessThanOrEqual(Math.ceil(scrolled.bottom))
+	await expect(latestBottom).toBeGreaterThan(scrolled.top)
 }
 
 const SPACE_CAROUSEL_SETTLE_MS = 250
