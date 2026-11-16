@@ -7,6 +7,8 @@ import { defineConfig } from "vite"
 
 import { version } from "./package.json" with { type: "json" }
 
+import { replayPlugin } from "./src/lib/replay/replay-vite-plugin"
+
 // biome-ignore lint/style/noDefaultExport: Vite requires a default export
 export default defineConfig({
 	define: { __APP_VERSION__: JSON.stringify(version) },
@@ -15,6 +17,7 @@ export default defineConfig({
 		react(),
 		babel({ presets: [reactCompilerPreset()] }),
 		tailwindcss(),
+		replayPlugin({ isEnabled: process.env.KIROSHI_REPLAY === "on" }),
 	],
 	server: {
 		port: 1420,
