@@ -1120,9 +1120,10 @@ const chat = {
 		card: {
 			open: "Ouvrir la mission : {{objective}}",
 		},
-		header: {
-			tools: "Outils",
-			back: "Retour à la conversation",
+		properties: {
+			ticket: "Ticket",
+			activity: "Activité",
+			pullRequest: "Pull request",
 			openedAt: "ouverte {{time}}",
 		},
 		feed: {

@@ -58,7 +58,7 @@ export const AsLine = meta.story({
 		docs: {
 			description: {
 				story:
-					"The one-line form the mission header band uses, in a container squeezed to 320 pixels. Check that the identifier keeps its room in the foreground and that the title truncates rather than wrapping. Pick `Default` for the wrapping form a card takes. `packages/ui/src/components/mission-header.tsx:86` asks for the one-line form in the header band.",
+					"The one-line form the Ticket row of `MissionProperties` uses, outside any container, in a box squeezed to 320 pixels. Check that the identifier keeps its room and that the title truncates rather than wrapping; inside the properties block the title wraps instead once the block is narrower than 640 pixels. Pick `Default` for the wrapping form a card takes. `packages/ui/src/components/mission-properties.tsx:97` asks for this form.",
 			},
 		},
 	},
