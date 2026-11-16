@@ -13,6 +13,9 @@ import {
 } from "./controller-fixtures"
 
 import type { AgentEvent, ScopedEvent } from "../../agent/contract"
+import { createFakeReconnections } from "../../conversations/fake-reconnections"
+import { createFakeTranscriptStore } from "../../conversations/fake-transcript-store"
+import { seatBots } from "../../conversations/transcript-fixtures"
 
 const STALE_TURN: AgentEvent[] = [
 	{ type: "turnChanged", state: "running" },
@@ -230,5 +233,40 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(
 			spoken(controller.getState().messages),
 		)
+	})
+})
+
+describe("createChatController on a reconnection", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("rereads the main chat of the companions the open Space lists and of no other", async () => {
+		const store = createFakeTranscriptStore()
+		const [unshared] = await seatBots(store, "personal", ["Nyx"])
+		const loadPage = vi.spyOn(store, "loadPage")
+		const relay = createFakeReconnections()
+		const listedBotIds = new Set([BOT, unshared.id])
+		const { controller } = await bootedHarness({
+			store,
+			onReconnected: relay.onReconnected,
+			isListedInOpenSpace: (botId) => listedBotIds.has(botId),
+		})
+		await controller.openAside(unshared.id, null)
+		await vi.runAllTimersAsync()
+		const listedChatId = controller.stateFor(BOT).conversationId
+		const unsharedChatId = controller.stateFor(unshared.id).conversationId
+		expect(unsharedChatId).not.toBeNull()
+
+		listedBotIds.delete(unshared.id)
+		loadPage.mockClear()
+		relay.reconnect()
+		await vi.runAllTimersAsync()
+
+		expect(loadPage.mock.calls.map(([id]) => id)).toEqual([listedChatId])
 	})
 })
