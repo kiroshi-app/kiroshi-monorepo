@@ -36,6 +36,7 @@ final class MissionThreadStore {
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var seeding: Task<Void, Never>?
+    @ObservationIgnored private var isRereadingAfterResync = false
 
     init(
         mission: Mission,
@@ -176,6 +177,12 @@ final class MissionThreadStore {
             rereads?.yield()
         case .state:
             isOnline = false
+        case .resynced:
+            guard !isRereadingAfterResync, let relay else { return }
+            isRereadingAfterResync = true
+            rereads?.yield()
+            seeding?.cancel()
+            seeding = Task { await seedPendingQuestions(through: relay) }
         case .event(let event):
             switch MissionThreadFrame(event, conversationId: mission.threadConversationId) {
             case .stored(let message):
@@ -197,6 +204,7 @@ final class MissionThreadStore {
 
     private func reread(_ signals: AsyncStream<Void>, through relay: MissionsRelay) async {
         for await _ in signals {
+            let answersResync = isRereadingAfterResync
             do {
                 let page = try await relay.thread(conversationId: mission.threadConversationId)
                 for message in page.messages {
@@ -207,6 +215,9 @@ final class MissionThreadStore {
             } catch {
                 guard !Task.isCancelled else { return }
                 hasFailed = !hasLoaded
+            }
+            if answersResync {
+                isRereadingAfterResync = false
             }
         }
     }

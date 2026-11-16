@@ -55,7 +55,7 @@ final class CompanionWork {
 
     func apply(_ update: RelayUpdate) {
         switch update {
-        case .state(.online):
+        case .state(.online), .resynced:
             break
         case .state:
             forget()

@@ -14,4 +14,5 @@ enum RelayState: Equatable, Sendable {
 enum RelayUpdate: Sendable {
     case state(RelayState)
     case event(RelayEvent)
+    case resynced
 }

@@ -39,6 +39,7 @@ final class ThreadStore {
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var stopping: Task<Void, Never>?
     @ObservationIgnored private var loadingOlder: Task<Void, Never>?
@@ -198,6 +199,8 @@ final class ThreadStore {
                 reload()
             case .state:
                 isReachable = false
+            case .resynced:
+                resyncReread.start { reload() }
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)

@@ -60,6 +60,7 @@ final class ConversationsStore {
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var opening: Companion.ID?
     @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var creating: Task<Void, Never>?
     @ObservationIgnored private var paging: Task<Void, Never>?
     @ObservationIgnored private var merging: Task<Void, Never>?
@@ -133,6 +134,8 @@ final class ConversationsStore {
                 reload()
             case .state:
                 isOnline = false
+            case .resynced:
+                resyncReread.start { reload() }
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)

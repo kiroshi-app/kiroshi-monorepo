@@ -25,6 +25,7 @@ final class MissionsStore {
     @ObservationIgnored private var sharedSpaceId: String?
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var reading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var paging: Task<Void, Never>?
     @ObservationIgnored private var merging: Task<Void, Never>?
     @ObservationIgnored private var nextCursor: String?
@@ -113,6 +114,8 @@ final class MissionsStore {
             reread()
         case .state:
             break
+        case .resynced:
+            resyncReread.start { reread() }
         case .event(let event):
             guard let changed = MissionChanged(event), sharedSpaceId != nil else { return }
             entries = entries.map { entry in
