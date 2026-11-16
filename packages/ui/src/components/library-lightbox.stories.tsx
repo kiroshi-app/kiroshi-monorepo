@@ -361,7 +361,6 @@ export const OverlayFitted = meta.story({
 
 		const bar = await expectStaticHeaderBar(popup)
 		const rule = bar.getBoundingClientRect().bottom
-		await expect(slotsIn(popup, "header-island")).toHaveLength(0)
 		await expect(getComputedStyle(bar).backgroundColor).toBe("rgb(11, 11, 12)")
 
 		const name = within(popup).getByRole("heading", {

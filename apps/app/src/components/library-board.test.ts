@@ -403,10 +403,6 @@ describe("a Library board on its live session", () => {
 			name: common("library.document.back"),
 		})
 
-		expect(back.closest('[data-slot="header-island"]')).toBeNull()
-		expect(
-			header.closest('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
 		expect(canvas.closest('[data-slot="screen-layout-column"]')).toBeNull()
 		expect(takesPress(canvas)).toBe(true)
 		expect(takesPress(back)).toBe(true)

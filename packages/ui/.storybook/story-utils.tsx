@@ -594,8 +594,6 @@ export const expectStaticHeaderBar = async (layout: Element) => {
 			"borderTopColor",
 		),
 	)
-	await expect(slotsIn(layout, "screen-layout-fade")).toHaveLength(0)
-	await expect(slotsIn(layout, "screen-layout-floating-header")).toHaveLength(0)
 
 	return bar
 }
@@ -665,7 +663,6 @@ export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 
 	const bar = await expectStaticHeaderBar(region)
 	await expect(slotsIn(region, "app-header")).toEqual([bar])
-	await expect(slotsIn(region, "header-island")).toHaveLength(0)
 	await expect(bar).toHaveAttribute("aria-hidden", "true")
 
 	const frame = bar.getBoundingClientRect()
@@ -732,7 +729,6 @@ export const expectSettingsPage = async (
 	const columnBox = column.getBoundingClientRect()
 	const firstRowBox = firstRow.getBoundingClientRect()
 
-	await expect(slotsIn(header, "header-island")).toHaveLength(0)
 	await expect(
 		within(header).getByRole("heading", { level: 2, name: label }),
 	).toBeVisible()

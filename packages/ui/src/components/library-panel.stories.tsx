@@ -1682,12 +1682,6 @@ const expectBarAsDrawn = async (
 	await expect(slotIn(canvasElement, "screen-layout").firstElementChild).toBe(
 		bar,
 	)
-	for (const slot of [
-		"screen-layout-floating-header",
-		"header-island",
-		"screen-layout-fade",
-	])
-		await expect(slotsIn(canvasElement, slot)).toHaveLength(0)
 	await expect([
 		boxOf(bar).top - frame.top,
 		boxOf(bar).width,
@@ -1968,7 +1962,6 @@ export const BarScrolled = Bar.extend({
 		await expect([boxOf(bar).top, boxOf(bar).height]).toEqual([frame.top, 56])
 		await expect(boxOf(scroller).top).toBe(boxOf(bar).bottom)
 		await expect(boxOf(controls).bottom).toBeLessThan(boxOf(bar).top)
-		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
 		await expect(
 			bar.contains(
 				document.elementFromPoint(frame.left + frame.width / 2, frame.top + 28),
@@ -2240,9 +2233,7 @@ export const FilterHover = meta.story({
 		await pointer.hover(images)
 		await expectFill(
 			images,
-			isDarkAround(images)
-				? "bg-header-island-control-hover"
-				: "bg-header-island-control-pressed",
+			isDarkAround(images) ? "bg-control-hover" : "bg-control-pressed",
 		)
 		await expect(getComputedStyle(images).backgroundColor).not.toBe(
 			tokenStyleIn(images, "bg-muted", "backgroundColor"),

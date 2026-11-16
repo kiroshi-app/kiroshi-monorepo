@@ -127,7 +127,7 @@ const LibraryDocumentReadOnly = () => {
 
 	return (
 		<span
-			className="flex h-7 shrink-0 items-center gap-1.5 rounded-header-island-control bg-foreground/5 px-2.5 font-medium text-soft-foreground text-xs leading-4"
+			className="flex h-7 shrink-0 items-center gap-1.5 rounded-compact-control bg-foreground/5 px-2.5 font-medium text-soft-foreground text-xs leading-4"
 			data-slot="library-document-read-only"
 		>
 			<Icons.Lock aria-hidden="true" className="size-3.25" />

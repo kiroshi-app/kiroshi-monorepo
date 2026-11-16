@@ -243,7 +243,6 @@ const Panel = ({
 					header={
 						header ?? (
 							<AppHeader
-								isFloating
 								leading={
 									leading ?? (
 										<HeaderIdentityButton
@@ -267,7 +266,6 @@ const Panel = ({
 							/>
 						)
 					}
-					isHeaderFloating
 					rows={rows}
 					label={label}
 					queue={queue}

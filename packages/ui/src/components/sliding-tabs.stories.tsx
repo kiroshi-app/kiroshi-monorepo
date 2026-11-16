@@ -14,7 +14,6 @@ import {
 	tokenStyleIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
-import { HeaderIsland } from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	SlidingTab,
@@ -131,8 +130,10 @@ const QuestionPanel = ({ children }: GroundProps) => (
 	</div>
 )
 
-const FilterIsland = ({ children }: GroundProps) => (
-	<HeaderIsland onTransitionRun={reportPillGlide}>{children}</HeaderIsland>
+const LibraryContentRow = ({ children }: GroundProps) => (
+	<div className="flex items-center" onTransitionRun={reportPillGlide}>
+		{children}
+	</div>
 )
 
 const GrowingFilterRow = (props: SlidingTabsProps) => {
@@ -142,13 +143,13 @@ const GrowingFilterRow = (props: SlidingTabsProps) => {
 
 	return (
 		<div className="flex flex-col items-start gap-4">
-			<FilterIsland>
+			<LibraryContentRow>
 				<HeldSlidingTabs {...props}>
 					{filterTabsOf(
 						hasVideos ? { All, Videos: 3, ...kinds } : { All, ...kinds },
 					)}
 				</HeldSlidingTabs>
-			</FilterIsland>
+			</LibraryContentRow>
 			<Button onClick={() => setHasGrown(true)} variant="outline">
 				Import a thousand images
 			</Button>
@@ -322,9 +323,9 @@ export const LibraryFilters = meta.story({
 	globals: { theme: "light" },
 	decorators: [
 		(Story) => (
-			<FilterIsland>
+			<LibraryContentRow>
 				<Story />
-			</FilterIsland>
+			</LibraryContentRow>
 		),
 	],
 	parameters: {
@@ -510,9 +511,9 @@ export const KeyboardFocus = meta.story({
 			<QuestionPanel>
 				<HeldSlidingTabs {...args} {...QUESTION_CONTROL} />
 			</QuestionPanel>
-			<FilterIsland>
+			<LibraryContentRow>
 				<HeldSlidingTabs {...args} {...FILTER_ROW} />
-			</FilterIsland>
+			</LibraryContentRow>
 		</div>
 	),
 	parameters: {

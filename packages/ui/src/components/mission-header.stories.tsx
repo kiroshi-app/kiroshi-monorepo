@@ -129,7 +129,6 @@ export const Default = meta.story({
 		const path = canvas.getByRole("button", { name: ORIGIN_CONVERSATION })
 
 		await expect(header.children).toHaveLength(1)
-		await expect(slotsIn(header, "header-island")).toHaveLength(0)
 		await expect(boxOf(bar).height).toBe(56)
 		await expectLeadingCluster(bar)
 		await expect(path).toBe(pathLinkIn(bar))
@@ -385,7 +384,6 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 	const messages = slotsIn(content, "message-scroller-item")
 	const firstMessage = boxOf(messages[0])
 
-	await expect(slotsIn(frame, "header-island")).toHaveLength(0)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
 	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
@@ -618,7 +616,6 @@ const MissionThread = ({ header, notice, skeleton }: MissionThreadProps) => (
 		<ThreadLayout
 			composer={<PromptInput onSubmit={fn()} />}
 			header={header}
-			isHeaderFloating
 			notice={notice}
 			rows={SHORT_THREAD}
 			skeleton={skeleton}

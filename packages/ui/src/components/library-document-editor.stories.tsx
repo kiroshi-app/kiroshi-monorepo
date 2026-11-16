@@ -884,7 +884,6 @@ export const BarAtRest = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const page = slotIn(canvasElement, "library-document-editor")
 		const bar = await expectStaticHeaderBar(page)
-		await expect(slotsIn(page, "header-island")).toHaveLength(0)
 		await expectBarLeavesTheWindowInPlace(bar)
 
 		await expect(slotIn(bar, "app-header-top-line")).toHaveTextContent(

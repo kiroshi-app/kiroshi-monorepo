@@ -46,10 +46,6 @@ describe("MissionsRoute with nothing selected", () => {
 
 		expect(layout.firstElementChild).toBe(bar)
 		expect(bar.contains(title)).toBe(true)
-		expect(
-			document.querySelector('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
-		expect(document.querySelector('[data-slot="header-island"]')).toBeNull()
 		expect(takesPress(title)).toBe(true)
 		expect(takesPress(bar)).toBe(true)
 		expect(startsWindowDrag(bar)).toBe(true)

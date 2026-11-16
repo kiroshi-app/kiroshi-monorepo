@@ -255,7 +255,6 @@ const expectBarControls = async (canvasElement: HTMLElement) => {
 const expectBarAtRest = async (canvasElement: HTMLElement, surface: string) => {
 	const page = slotIn(canvasElement, "library-document-view")
 	const bar = await expectStaticHeaderBar(page)
-	await expect(slotsIn(page, "header-island")).toHaveLength(0)
 	await expect(getComputedStyle(bar).backgroundColor).toBe(TRANSPARENT)
 	await expect(getComputedStyle(page).backgroundColor).toBe(surface)
 
@@ -566,7 +565,6 @@ export const BoardBarAtRest = meta.story({
 							onDelete={fn()}
 						/>
 					}
-					isHeaderFloating
 					scroller={() => <div className="min-h-0 flex-1" data-slot="canvas" />}
 				/>
 			</ContentCard>
@@ -575,7 +573,6 @@ export const BoardBarAtRest = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const screenLayout = slotIn(canvasElement, "board-screen")
 		const bar = await expectStaticHeaderBar(screenLayout)
-		await expect(slotsIn(screenLayout, "header-island")).toHaveLength(0)
 		await expectBarLeavesTheWindowInPlace(bar)
 
 		const topLine = slotIn(bar, "app-header-top-line")

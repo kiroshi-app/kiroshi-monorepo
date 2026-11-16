@@ -476,10 +476,6 @@ describe("SpaceSettingsScreen on a local space", () => {
 		) as HTMLElement
 
 		expect(page.firstElementChild).toBe(bar)
-		expect(
-			dialog.querySelector('[data-slot="screen-layout-floating-header"]'),
-		).toBeNull()
-		expect(dialog.querySelector('[data-slot="header-island"]')).toBeNull()
 		expect(takesPress(bar)).toBe(true)
 		expect(startsWindowDrag(bar)).toBe(true)
 		expect(startsWindowDrag(within(bar).getByRole("heading"))).toBe(true)
