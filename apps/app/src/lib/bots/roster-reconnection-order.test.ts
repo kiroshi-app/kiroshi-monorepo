@@ -192,3 +192,50 @@ it("reads no main chat on a reconnection whose reread of the shared agents fails
 	expect(roster.getState().hasFailedToLoad).toBe(true)
 	expect(pageReads).not.toHaveBeenCalled()
 })
+
+const heldRead = () => {
+	let release: () => void = () => undefined
+	const held = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	return { held, release }
+}
+
+it("rereads the waiting questions of an open thread only once the shared agents are reread, and never those of an agent unshared while down", async () => {
+	const { store, shed, kept, unshared, chat } = await joinedMember()
+	const keptChatId = chat.controller.stateFor(kept.id).conversationId
+	const questionReads = vi.spyOn(chat.driver, "pendingQuestions")
+	const listPage = store.conversationPage.bind(store)
+	const rosterRead = heldRead()
+	vi.spyOn(store, "conversationPage").mockImplementation(async (...page) => {
+		await rosterRead.held
+		return listPage(...page)
+	})
+
+	dropLastSocket()
+	await store.removeBotFromSpace(unshared.id, shed.id)
+	await openLastSocket()
+	await settled()
+
+	expect(questionReads).not.toHaveBeenCalled()
+
+	rosterRead.release()
+	await settled()
+
+	expect(questionReads.mock.calls).toEqual([[keptChatId]])
+})
+
+it("rereads no waiting question on a reconnection whose reread of the shared agents fails", async () => {
+	const { store, roster, chat } = await joinedMember()
+	const questionReads = vi.spyOn(chat.driver, "pendingQuestions")
+	vi.spyOn(store, "conversationPage").mockRejectedValue(
+		new Error("the host could not list its conversations"),
+	)
+
+	dropLastSocket()
+	await openLastSocket()
+	await settled()
+
+	expect(roster.getState().hasFailedToLoad).toBe(true)
+	expect(questionReads).not.toHaveBeenCalled()
+})
