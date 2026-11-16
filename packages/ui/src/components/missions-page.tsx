@@ -9,11 +9,14 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { AppHeader } from "@workspace/ui/components/app-header"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
-import { HeaderIslandCell } from "@workspace/ui/components/header-island"
 import {
 	type ConversationIconName,
 	ConversationIcons,
@@ -494,7 +497,7 @@ const MissionsPageBody = ({
 
 	if (status === "loading") {
 		return (
-			<div className="min-h-0 flex-1 pt-14" data-slot="missions-page-skeleton">
+			<div className="min-h-0 flex-1" data-slot="missions-page-skeleton">
 				<ListSkeleton className="gap-0" row={MissionsPageSkeletonGroup} />
 			</div>
 		)
@@ -502,7 +505,7 @@ const MissionsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3 pt-17" data-slot="missions-page-failure">
+			<div className="p-3" data-slot="missions-page-failure">
 				<Notice
 					description={t("activity.failure.missions.description")}
 					retry={{ onRetry }}
@@ -512,12 +515,7 @@ const MissionsPageBody = ({
 		)
 	}
 
-	if (missions.length === 0)
-		return (
-			<div className="pt-14" data-slot="missions-page-empty">
-				<MissionsEmpty />
-			</div>
-		)
+	if (missions.length === 0) return <MissionsEmpty />
 
 	const toggle = (key: MissionsPageGroupKey) =>
 		setFoldedGroups((folded) => {
@@ -528,7 +526,7 @@ const MissionsPageBody = ({
 
 	return (
 		<div
-			className="min-h-0 flex-1 overflow-y-auto pt-14"
+			className="min-h-0 flex-1 overflow-y-auto"
 			data-slot="missions-page-groups"
 		>
 			{MISSIONS_PAGE_GROUPS.map((group) => {
@@ -567,17 +565,15 @@ const MissionsPage = (props: MissionsPageProps) => {
 			<ScreenLayout
 				header={
 					<AppHeader
-						isFloating
 						leading={
-							<HeaderIslandCell>
-								<h1 className="truncate font-medium leading-4" id={titleId}>
+							<AppHeaderText>
+								<h1 className={APP_HEADER_TITLE} id={titleId}>
 									{t("missions.page.title")}
 								</h1>
-							</HeaderIslandCell>
+							</AppHeaderText>
 						}
 					/>
 				}
-				isHeaderFloating
 				scroller={() => <MissionsPageBody {...props} />}
 			/>
 		</section>

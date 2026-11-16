@@ -6,6 +6,9 @@ import {
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 	botIdentityAvatars,
 	colourTransitionsOf,
+	expectHeaderTitleStep,
+	expectHeaderTopLineStep,
+	expectStaticHeaderBar,
 	LAPTOP_WINDOW,
 	mergeA11y,
 	probedStyleOf,
@@ -914,19 +917,15 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 	},
 })
 
-const HEADER_ISLAND_INSET = 8
-
-const HEADER_ISLAND_HEIGHT = 40
-
-const HEADER_CONTROL_SIZE = 32
-
-const CONVERSATION_CONTENT_TOP = 56
-
 const NARROW_CONVERSATION_WIDTH = 400
 
-const HEADER_ISLAND_EDGE = 5
+const HEADER_BAR_INSET = 12
 
-const TWO_CONTROL_ISLAND_WIDTH = 76
+const CAPSULE_BUTTON = 28
+
+const TWO_BUTTON_CAPSULE_WIDTH = 62
+
+const CONVERSATION_CONTENT_TOP = "32px"
 
 const SOLO_NAME = "Ichi"
 
@@ -939,14 +938,14 @@ const LONG_GROUP_TITLE =
 
 const openSubjectSettings = fn()
 
-const FLOATING_CONTROLS = (
+const CAPSULE_CONTROLS = (
 	<>
 		<PinnedMessages messages={[]} onJump={fn()} onUnpin={fn()} />
 		<RoutinesPanelTrigger />
 	</>
 )
 
-const SOLO_ISLANDS = (
+const SOLO_BAR = (
 	<AppHeader
 		isFloating
 		leading={
@@ -960,11 +959,11 @@ const SOLO_ISLANDS = (
 				version="2.1.233"
 			/>
 		}
-		trailing={FLOATING_CONTROLS}
+		trailing={CAPSULE_CONTROLS}
 	/>
 )
 
-const groupIslands = (name: string) => (
+const groupBar = (name: string) => (
 	<AppHeader
 		isFloating
 		leading={
@@ -975,7 +974,7 @@ const groupIslands = (name: string) => (
 				onOpenSettings={openSubjectSettings}
 			/>
 		}
-		trailing={FLOATING_CONTROLS}
+		trailing={CAPSULE_CONTROLS}
 	/>
 )
 
@@ -988,7 +987,7 @@ const LONG_CONVERSATION_ROWS: TranscriptItem[] = [
 	render: () => <UserTurn>{question}</UserTurn>,
 }))
 
-const FLOATING_THREAD = {
+const THREAD_UNDER_THE_BAR = {
 	isHeaderFloating: true,
 	rows: CONVERSATION_ROWS,
 	children: null,
@@ -1019,114 +1018,152 @@ const inNarrowConversation = (Story: () => ReactNode) => (
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
-const expectConversationIslands = async (
+const centreOf = (element: Element) =>
+	(boxOf(element).top + boxOf(element).bottom) / 2
+
+const expectConversationBar = async (
 	canvasElement: HTMLElement,
 	subjectSlot: string,
+	name: string,
+	settingsName: string,
 ) => {
 	const layout = slotIn(canvasElement, "chat-layout")
 	const frame = boxOf(layout)
-	const bar = slotIn(layout, "app-header")
-	const [leading, trailing] = slotsIn(bar, "header-island")
+	const bar = await expectStaticHeaderBar(layout)
+	const leading = slotIn(bar, "app-header-leading")
 	const subject = slotIn(leading, subjectSlot)
-	const gear = subject.lastElementChild as HTMLElement
-	const pins = slotIn(trailing, "pinned-messages-trigger")
+	const gear = within(subject).getByRole("button", { name: settingsName })
+	const capsule = slotIn(bar, "app-header-capsule")
+	const [pins, handoff] = within(capsule).getAllByRole("button")
+	const title = within(subject).getByText(name)
 
-	await expect(getComputedStyle(bar).borderBottomWidth).toBe("0px")
+	await expect(within(leading).getAllByRole("button")).toEqual([gear])
+	await expect(gear).toHaveAttribute("aria-expanded", "false")
 	await expect([
-		boxOf(leading).left - frame.left,
-		boxOf(leading).top - frame.top,
-		boxOf(leading).height,
-	]).toEqual([HEADER_ISLAND_INSET, HEADER_ISLAND_INSET, HEADER_ISLAND_HEIGHT])
-	await expect([
-		frame.right - boxOf(trailing).right,
-		boxOf(trailing).top - frame.top,
-		boxOf(trailing).height,
-	]).toEqual([HEADER_ISLAND_INSET, HEADER_ISLAND_INSET, HEADER_ISLAND_HEIGHT])
-
-	await expect(within(leading).getAllByRole("button")).toEqual([subject])
-	await expect(subject).toHaveAttribute("aria-expanded", "false")
-	await expect([
-		boxOf(subject).left - boxOf(leading).left,
-		boxOf(subject).height,
-		boxOf(leading).right - boxOf(subject).right,
-	]).toEqual([HEADER_ISLAND_EDGE, HEADER_CONTROL_SIZE, HEADER_ISLAND_EDGE])
-	await expect([
-		boxOf(gear).width,
-		boxOf(subject).right - boxOf(gear).right,
-	]).toEqual([HEADER_CONTROL_SIZE, 0])
-	await expect(boxOf(gear.firstElementChild as Element).width).toBe(16)
-	await expect([boxOf(pins).width, boxOf(pins).height]).toEqual([
-		HEADER_CONTROL_SIZE,
-		HEADER_CONTROL_SIZE,
+		boxOf(subject).left - frame.left,
+		getComputedStyle(subject).columnGap,
+	]).toEqual([HEADER_BAR_INSET, "10px"])
+	await expect([boxOf(gear).width, boxOf(gear).height]).toEqual([
+		CAPSULE_BUTTON,
+		CAPSULE_BUTTON,
 	])
-	await expect(boxOf(pins.firstElementChild as Element).width).toBe(16)
+	await expect(boxOf(gear.firstElementChild as Element).width).toBe(14)
+	await expect(getComputedStyle(gear).color).toBe(
+		tokenStyleIn(gear, "text-muted-foreground", "color"),
+	)
+	await expectHeaderTitleStep(title)
+
+	await expect([
+		frame.right - boxOf(capsule).right,
+		boxOf(capsule).width,
+		boxOf(capsule).height,
+		getComputedStyle(capsule).padding,
+		getComputedStyle(capsule).columnGap,
+	]).toEqual([HEADER_BAR_INSET, TWO_BUTTON_CAPSULE_WIDTH, 32, "2px", "2px"])
+	await expect(getComputedStyle(capsule).backgroundColor).toBe(
+		tokenStyleIn(
+			capsule,
+			capsule.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
+			"backgroundColor",
+		),
+	)
+	await expect(pins).toHaveAccessibleName("Pinned messages")
+	for (const control of [pins, handoff]) {
+		await expect([boxOf(control).width, boxOf(control).height]).toEqual([
+			CAPSULE_BUTTON,
+			CAPSULE_BUTTON,
+		])
+		await expect(boxOf(control.firstElementChild as Element).width).toBe(16)
+		await expect(getComputedStyle(control).color).toBe(
+			tokenStyleIn(control, "text-soft-foreground", "color"),
+		)
+	}
 	await withMotionAllowed(async () => {
-		await expect(colourTransitionsOf(subject)).toEqual([])
+		await expect(colourTransitionsOf(gear)).toEqual([])
 		await expect(colourTransitionsOf(pins)).toEqual([])
 	})
 	await waitFor(() =>
 		expect(
 			getComputedStyle(slotIn(layout, "message-scroller-content")).paddingTop,
-		).toBe(`${CONVERSATION_CONTENT_TOP}px`),
+		).toBe(CONVERSATION_CONTENT_TOP),
 	)
 
-	return { frame, leading, trailing, subject, gear }
+	return { layout, frame, bar, subject, gear, capsule, title }
 }
 
-const expectSoloIslands = async (canvasElement: HTMLElement) => {
-	const islands = await expectConversationIslands(
+const expectSoloBar = async (canvasElement: HTMLElement) => {
+	const parts = await expectConversationBar(
 		canvasElement,
 		"header-identity-button",
-	)
-	const [avatar] = botIdentityAvatars(islands.subject)
-	const dot = slotIn(islands.subject, "connection-status")
-		.firstElementChild as HTMLElement
-
-	await expect(islands.subject).toHaveAccessibleName(
+		SOLO_NAME,
 		`${SOLO_NAME} · agent settings`,
 	)
-	await expect(boxOf(avatar).width).toBe(24)
+	const [avatar] = botIdentityAvatars(parts.subject)
+	const topLine = slotIn(parts.subject, "app-header-top-line")
+	const role = within(topLine).getByText(SOLO_ROLE)
+	const dot = slotIn(topLine, "connection-status")
+		.firstElementChild as HTMLElement
+
+	await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([32, 32])
+	await expectHeaderTopLineStep(topLine)
+	await expect(boxOf(topLine).bottom).toBe(boxOf(parts.title).top)
 	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
+	await expect(Math.round(boxOf(dot).left - boxOf(role).right)).toBe(6)
 
-	return { ...islands, dot, role: slotIn(islands.subject, "bot-title-badge") }
+	return { ...parts, role }
 }
 
-const expectIslandSurface = async (
-	canvasElement: HTMLElement,
-	surface: "bg-card" | "bg-card-raised",
+const expectGroupBar = async (canvasElement: HTMLElement, name: string) => {
+	const parts = await expectConversationBar(
+		canvasElement,
+		"header-conversation-button",
+		name,
+		`${name} · conversation settings`,
+	)
+	const tile = slotIn(parts.subject, "conversation-subject-icon-tile")
+
+	await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([32, 32])
+	await expect(getComputedStyle(tile).borderTopLeftRadius).toBe("8px")
+	await expect(slotsIn(parts.subject, "app-header-top-line")).toHaveLength(0)
+	await expect(slotsIn(parts.subject, "connection-status")).toHaveLength(0)
+	await expect(centreOf(parts.title)).toBe(centreOf(tile))
+
+	return parts
+}
+
+const expectTurnsLeaveAtTheBarEdge = async (
+	layout: HTMLElement,
+	bar: HTMLElement,
 ) => {
-	for (const island of slotsIn(canvasElement, "header-island")) {
-		await expect(getComputedStyle(island).backgroundColor).toBe(
-			tokenStyleIn(island, surface, "backgroundColor"),
-		)
-	}
+	const content = slotIn(layout, "message-scroller-content")
+
+	await waitFor(() =>
+		expect(boxOf(content).top).toBeLessThan(boxOf(bar).bottom),
+	)
+	await expectStaticHeaderBar(layout)
 }
 
-const ASSEMBLED_ONCE_THE_APP_OPTS_IN =
-	"`apps/app/src/components/thread-screen.tsx:477` assembles it once it passes `isFloating` to the header and `isHeaderFloating` to the layout."
+const WORN_BY_THE_APP =
+	"`apps/app/src/components/thread-screen.tsx:477` assembles it and still passes `isFloating` to the header and `isHeaderFloating` to the layout, which change nothing here."
 
 export const Solo1a = meta.story({
-	args: { ...FLOATING_THREAD, header: SOLO_ISLANDS },
+	args: { ...THREAD_UNDER_THE_BAR, header: SOLO_BAR },
 	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 1a, a conversation with one agent. Check that no bar and no rule cross the top: the leading island sits 8px from the top and the side and holds one button, the avatar, the name, the role chip, the connection dot and the gear in its 32px cell; the trailing island sits 8px from the other side and holds the pins control then the routines opener, two 32px cells 2px apart. Check the transcript starts 56px from the top and that neither control animates its colours. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I1a, a conversation with one agent. Check the one bar across the top, 56px tall on the content surface with a 1px rule under it and no fade: the 32px hexagonal avatar 12px from the side, the role and the 6px presence dot on the 12px top line over the agent name in 14px semibold, then the 28px settings button with its 14px gear; on the other side the capsule, 12px from the edge, holding the pins control then the handoff, two 28px circles 2px apart. Check the transcript starts 32px under the bar and that no control animates its colours. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
-		const { subject, role } = await expectSoloIslands(canvasElement)
+		const { gear, role } = await expectSoloBar(canvasElement)
 
-		await expectIslandSurface(canvasElement, "bg-card")
 		await expect(role).toBeVisible()
-		await expect(role).toHaveTextContent(SOLO_ROLE)
-		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
-
-		await userEvent.click(subject)
+		await userEvent.click(gear)
 		await expect(openSubjectSettings).toHaveBeenCalledOnce()
 	},
 })
@@ -1139,14 +1176,13 @@ export const SoloDark1b = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1b, the conversation with one agent in the dark theme. Check that both islands wear the raised card surface and keep the geometry of `Solo1a`. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I1b, the conversation with one agent in the dark theme. Check that the bar keeps the geometry of `Solo1a`, its rule and its capsule drawn in white at 8 and 6 percent. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectSoloIslands(canvasElement)
-		await expectIslandSurface(canvasElement, "bg-card-raised")
+		await expectSoloBar(canvasElement)
 	},
 })
 
@@ -1158,14 +1194,15 @@ export const SoloScrolled1c = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1c, a conversation with one agent long enough to scroll. Check that the turns pass under both islands and that the top fade of the layout covers them as they leave. Pick `Solo1a` for a conversation short enough to rest whole. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I1c, a conversation with one agent long enough to scroll. Check that the turns leave at the edge of the bar and that the bar stays as it is in `Solo1a`: same place, no fade, no shadow. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectSoloIslands(canvasElement)
-		await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
+		const { layout, bar } = await expectSoloBar(canvasElement)
+
+		await expectTurnsLeaveAtTheBarEdge(layout, bar)
 	},
 })
 
@@ -1176,58 +1213,37 @@ export const SoloNarrow1d = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1d, the conversation with one agent in a thread 400px wide. Check that the role chip is gone and that the name, the connection dot and the gear stay whole inside the leading island, with the trailing island whole beside it. Pick `Solo1a` for the width that keeps the role. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I1d, the conversation with one agent in a thread 400px wide. Check the same bar: the role, the name and the settings button whole on the leading side, and the capsule at its full width, 12px from the edge. Pick `GroupNarrow2d` for a title too long to fit. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const { frame, leading, trailing, subject, role, dot, gear } =
-			await expectSoloIslands(canvasElement)
-		const name = within(subject).getByText(SOLO_NAME)
+		const { frame, gear, capsule, title } = await expectSoloBar(canvasElement)
 
 		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
-		await expect(role).not.toBeVisible()
-		await expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth)
-		for (const whole of [dot, gear]) {
-			await expect(boxOf(whole).right).toBeLessThanOrEqual(
-				boxOf(leading).right - 4,
-			)
-		}
-		await expect(boxOf(leading).right).toBeLessThan(boxOf(trailing).left)
+		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
+		await expect(boxOf(gear).right).toBeLessThan(boxOf(capsule).left)
 	},
 })
 
 export const Group2a = meta.story({
-	args: { ...FLOATING_THREAD, header: groupIslands(GROUP_TITLE) },
+	args: { ...THREAD_UNDER_THE_BAR, header: groupBar(GROUP_TITLE) },
 	decorators: [inRoutinesShell],
 	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 2a, a group conversation. Check the same two islands as `Solo1a`, the leading one holding one button made of the 24px subject tile, a square with 6px corners in the conversation colour, the title and the gear, with no role chip and no connection dot. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I2a, a group conversation. Check the same bar as `Solo1a` with no top line: the 32px subject tile, a square with 8px corners in the conversation colour, the title alone on the tile's centre line, then the settings button and the capsule. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
-		const { subject } = await expectConversationIslands(
-			canvasElement,
-			"header-conversation-button",
-		)
+		const { gear } = await expectGroupBar(canvasElement, GROUP_TITLE)
 
-		await expectIslandSurface(canvasElement, "bg-card")
-		await expect(subject).toHaveAccessibleName(
-			`${GROUP_TITLE} · conversation settings`,
-		)
-		const tile = slotIn(subject, "conversation-subject-icon-tile")
-		await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([24, 24])
-		await expect(getComputedStyle(tile).borderTopLeftRadius).toBe("6px")
-		await expect(slotsIn(subject, "bot-title-badge")).toHaveLength(0)
-		await expect(slotsIn(subject, "connection-status")).toHaveLength(0)
-
-		await userEvent.click(subject)
+		await userEvent.click(gear)
 		await expect(openSubjectSettings).toHaveBeenCalledOnce()
 	},
 })
@@ -1240,14 +1256,13 @@ export const GroupDark2b = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 2b, the group conversation in the dark theme. Check that both islands wear the raised card surface and keep the geometry of `Group2a`. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I2b, the group conversation in the dark theme. Check that the bar keeps the geometry of `Group2a`, its rule and its capsule drawn in white at 8 and 6 percent. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectConversationIslands(canvasElement, "header-conversation-button")
-		await expectIslandSurface(canvasElement, "bg-card-raised")
+		await expectGroupBar(canvasElement, GROUP_TITLE)
 	},
 })
 
@@ -1259,40 +1274,38 @@ export const GroupScrolled2c = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 2c, a group conversation long enough to scroll. Check that the turns pass under both islands and that the top fade of the layout covers them as they leave. Pick `Group2a` for a conversation short enough to rest whole. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I2c, a group conversation long enough to scroll. Check that the turns leave at the edge of the bar and that the bar stays as it is in `Group2a`: same place, no fade, no shadow. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expectConversationIslands(canvasElement, "header-conversation-button")
-		await waitFor(() => slotIn(canvasElement, "screen-layout-fade"))
+		const { layout, bar } = await expectGroupBar(canvasElement, GROUP_TITLE)
+
+		await expectTurnsLeaveAtTheBarEdge(layout, bar)
 	},
 })
 
 export const GroupNarrow2d = meta.story({
-	args: { ...FLOATING_THREAD, header: groupIslands(LONG_GROUP_TITLE) },
+	args: { ...THREAD_UNDER_THE_BAR, header: groupBar(LONG_GROUP_TITLE) },
 	decorators: [inRoutinesShell, inNarrowConversation],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 2d, a group conversation with a title written as a sentence, in a thread 400px wide. Check that the title truncates with an ellipsis, that the gear keeps its 32px cell inside the leading island, and that the trailing island stays whole, 8px from the side. Pick `Group2a` for a title that fits. " +
-					ASSEMBLED_ONCE_THE_APP_OPTS_IN,
+					"Artboard I2d, a group conversation with a title written as a sentence, in a thread 400px wide. Check that the title ends in an ellipsis before the settings button, and that the settings button and the capsule keep their full size, the capsule 12px from the edge. Pick `Group2a` for a title that fits. " +
+					WORN_BY_THE_APP,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const { frame, leading, trailing } = await expectConversationIslands(
+	play: async ({ canvasElement }) => {
+		const { frame, gear, capsule, title } = await expectGroupBar(
 			canvasElement,
-			"header-conversation-button",
+			LONG_GROUP_TITLE,
 		)
-		const title = canvas.getByText(LONG_GROUP_TITLE)
 
 		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-		await expect(getComputedStyle(title).textOverflow).toBe("ellipsis")
-		await expect(boxOf(leading).right).toBeLessThan(boxOf(trailing).left)
-		await expect(boxOf(trailing).width).toBe(TWO_CONTROL_ISLAND_WIDTH)
+		await expect(boxOf(gear).right).toBeLessThan(boxOf(capsule).left)
 	},
 })

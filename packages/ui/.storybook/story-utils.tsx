@@ -547,9 +547,83 @@ export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 export const expectLaptopWindow = () =>
 	expect([window.innerWidth, window.innerHeight]).toEqual([1280, 800])
 
-const SETTINGS_TITLE_ISLAND = { inset: 8, height: 40 }
+const HEADER_BAR = { height: 56, row: 32, padding: "12px", gap: "12px" }
 
-const SETTINGS_FIRST_ROW = { top: 56, inline: 24 }
+export const expectStaticHeaderBar = async (layout: Element) => {
+	const bar = slotIn(layout, "app-header")
+	const frame = layout.getBoundingClientRect()
+	const box = bar.getBoundingClientRect()
+	const style = getComputedStyle(bar)
+
+	await expect([
+		box.left - frame.left,
+		box.top - frame.top,
+		box.width,
+		box.height,
+	]).toEqual([0, 0, frame.width, HEADER_BAR.height])
+	await expect([
+		style.position,
+		style.boxShadow,
+		style.paddingTop,
+		style.paddingInline,
+		style.columnGap,
+		style.borderBottomWidth,
+		bar.clientHeight -
+			Number.parseFloat(style.paddingTop) -
+			Number.parseFloat(style.paddingBottom),
+	]).toEqual([
+		"static",
+		"none",
+		HEADER_BAR.padding,
+		HEADER_BAR.padding,
+		HEADER_BAR.gap,
+		"1px",
+		HEADER_BAR.row,
+	])
+	await expect(style.borderBottomColor).toBe(
+		tokenStyleIn(
+			bar,
+			bar.closest(".dark")
+				? "border border-white/8"
+				: "border border-foreground/8",
+			"borderTopColor",
+		),
+	)
+	await expect(slotsIn(layout, "screen-layout-fade")).toHaveLength(0)
+	await expect(slotsIn(layout, "screen-layout-floating-header")).toHaveLength(0)
+
+	return bar
+}
+
+export const expectHeaderTitleStep = async (title: Element) => {
+	const style = getComputedStyle(title)
+
+	await expect([
+		style.fontSize,
+		style.lineHeight,
+		style.fontWeight,
+		style.textOverflow,
+		style.whiteSpace,
+	]).toEqual(["14px", "18px", "600", "ellipsis", "nowrap"])
+	await expect(style.color).toBe(
+		probedStyleOf("text-foreground", "color", title),
+	)
+}
+
+export const expectHeaderTopLineStep = async (topLine: Element) => {
+	const style = getComputedStyle(topLine)
+
+	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+		"12px",
+		"16px",
+		"400",
+	])
+	await expect(style.color).toBe(
+		probedStyleOf("text-muted-foreground", "color", topLine),
+	)
+}
+
+const SETTINGS_FIRST_ROW = { top: 88, inline: 24 }
 
 export const COLUMN_WIDTH_CAP = 800
 
@@ -559,30 +633,18 @@ export const expectSettingsPage = async (
 	width: ScreenLayoutWidth,
 ) => {
 	const page = slotIn(root, "settings-screen-page")
-	const header = slotIn(page, "app-header")
-	const island = slotIn(header, "header-island")
+	const header = await expectStaticHeaderBar(page)
 	const scroller = slotIn(page, "screen-layout-scroller")
 	const column = slotIn(page, "screen-layout-column")
 	const firstRow = column.firstElementChild
 	if (!firstRow) throw new globalThis.Error("The settings page is empty")
 	const pageBox = page.getBoundingClientRect()
-	const islandBox = island.getBoundingClientRect()
 	const columnBox = column.getBoundingClientRect()
 	const firstRowBox = firstRow.getBoundingClientRect()
 
-	await expect(getComputedStyle(header).borderBottomWidth).toBe("0px")
-	await expect(slotsIn(header, "header-island")).toHaveLength(1)
-	await expect([
-		islandBox.left - pageBox.left,
-		islandBox.top - pageBox.top,
-		islandBox.height,
-	]).toEqual([
-		SETTINGS_TITLE_ISLAND.inset,
-		SETTINGS_TITLE_ISLAND.inset,
-		SETTINGS_TITLE_ISLAND.height,
-	])
+	await expect(slotsIn(header, "header-island")).toHaveLength(0)
 	await expect(
-		within(island).getByRole("heading", { level: 2, name: label }),
+		within(header).getByRole("heading", { level: 2, name: label }),
 	).toBeVisible()
 	await expect(hasOverlayScrollbars(scroller)).toBe(true)
 	await expect(
@@ -906,7 +968,10 @@ export const expectSubjectIconInBothThemes = async (
 	await expect(slotsIn(root, "bot-identity-avatar")).toHaveLength(0)
 	const fills = []
 	for (const icon of icons) {
-		const fill = getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
+		const [tile] = slotsIn(icon, "conversation-subject-icon-tile")
+		const fill = tile
+			? getComputedStyle(tile).backgroundColor
+			: getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
 		await expect(icon).toHaveAttribute("aria-hidden", "true")
 		await expect(sidesOf(icon)).toEqual([side, side])
 		await expect(icon).toHaveAttribute("data-hue", String(hue ?? ""))

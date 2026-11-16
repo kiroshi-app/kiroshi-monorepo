@@ -14,7 +14,6 @@ import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
-import { HeaderIsland } from "@workspace/ui/components/header-island"
 
 const CONNECTION_STATES = listExhaustively<ConnectionStatusState>({
 	checking: true,
@@ -34,7 +33,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The header's leading control: who the reader is talking to, whether the agent answers, and the way into that companion's settings, in one ghost button. It is the only focusable thing on that row — the connection mark inside it is decorative markup, never a second target — so the header stays one tab stop. Reach for it in an app header; the sidebar's own companion rows are `AppSidebar`, not this.",
+					"The header's leading control: who the reader is talking to, whether the agent answers, and the way into that companion's settings, through the one settings button after the name. The avatar, the role with its presence dot and the name are plain content: the settings button is the only focusable thing in it, so the leading side of the header stays one tab stop. Reach for it in an app header; the sidebar's own companion rows are `AppSidebar`, not this.",
 			},
 		},
 	},
@@ -101,14 +100,22 @@ export const Expanded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this while the companion's settings are open: the button is the trigger that stays lit under its own panel. Check that the ghost surface holds the expanded tint and that assistive tech reads it as expanded. Pick `Default` for the closed state. The app assembles it at `apps/app/src/components/thread-screen.tsx:334`.",
+					"Reach for this while the companion's settings are open: the button is the trigger that stays lit under its own panel. Check that the settings button holds the hover fill with a full foreground gear, that assistive tech reads it as expanded, and that the fill arrives with no colour transition. Pick `Default` for the closed state. The app assembles it at `apps/app/src/components/thread-screen.tsx:334`.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByRole("button")).toHaveAttribute(
-			"aria-expanded",
-			"true",
+		const button = canvas.getByRole("button")
+
+		await expect(button).toHaveAttribute("aria-expanded", "true")
+		await expect(getComputedStyle(button).backgroundColor).toBe(
+			tokenStyleIn(button, "bg-foreground/6", "backgroundColor"),
+		)
+		await expect(getComputedStyle(button).color).toBe(
+			tokenStyleIn(button, "text-foreground", "color"),
+		)
+		await withMotionAllowed(() =>
+			expect(colourTransitionsOf(button)).toEqual([]),
 		)
 	},
 })
@@ -186,50 +193,24 @@ export const InLayout = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to check the button in the header it ships in, with an empty trailing slot. Check that the room left of the button matches the room above and below it, that the header keeps its 48px height, and that nothing pulls to the trailing edge. Pick `Default` to inspect the button alone.",
+					"Reach for this to check the button in the header it ships in, with an empty trailing slot. Check that the room left of the button matches the room above and below it, that the header keeps its 56px height, and that nothing pulls to the trailing edge. Pick `Default` to inspect the button alone.",
 			},
 		},
 	},
 	render: (args) => <AppHeader leading={<HeaderIdentityButton {...args} />} />,
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		const header = canvas.getByRole("banner").getBoundingClientRect()
-		const button = canvas.getByRole("button").getBoundingClientRect()
-
-		await expect(header.height).toBe(48)
-		await expect(button.height).toBe(36)
-		await expect(button.left - header.left).toBe(6)
-		await expect(Math.abs(button.top - header.top - 6)).toBeLessThan(1)
-	},
-})
-
-export const ExpandedInIsland = meta.story({
-	args: { connection: "ready", isSettingsOpen: true, name: "Nest" },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this while the agent's settings are open from a floating header: the button is one 32px cell of the island and stays lit under its own panel. Check that it wears the island hover fill with a full foreground, that assistive tech reads it as expanded, and that the fill arrives with no colour transition. Pick `Expanded` for the button in the fixed bar.",
-			},
-		},
-	},
-	render: (args) => (
-		<HeaderIsland>
-			<HeaderIdentityButton {...args} />
-		</HeaderIsland>
-	),
-	play: async ({ canvas }) => {
-		const button = canvas.getByRole("button")
-
-		await expect(button).toHaveAttribute("aria-expanded", "true")
-		await expect(button.getBoundingClientRect().height).toBe(32)
-		await expect(getComputedStyle(button).backgroundColor).toBe(
-			tokenStyleIn(button, "bg-header-island-control-hover", "backgroundColor"),
+		const [avatar] = botIdentityAvatars(canvasElement).map((drawn) =>
+			drawn.getBoundingClientRect(),
 		)
-		await expect(getComputedStyle(button).color).toBe(
-			tokenStyleIn(button, "text-foreground", "color"),
-		)
-		await withMotionAllowed(() =>
-			expect(colourTransitionsOf(button)).toEqual([]),
-		)
+		const gear = canvas.getByRole("button").getBoundingClientRect()
+
+		await expect(header.height).toBe(56)
+		await expect([
+			avatar.width,
+			avatar.left - header.left,
+			avatar.top - header.top,
+		]).toEqual([32, 12, 12])
+		await expect([gear.width, gear.height]).toEqual([28, 28])
 	},
 })

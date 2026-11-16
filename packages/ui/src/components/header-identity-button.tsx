@@ -3,7 +3,11 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
+import {
+	APP_HEADER_TITLE,
+	AppHeaderButton,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
@@ -12,17 +16,10 @@ import {
 	ConnectionStatus,
 	type ConnectionStatusState,
 } from "@workspace/ui/components/connection-status"
-import {
-	HEADER_ISLAND_CONTROL,
-	useIsInHeaderIsland,
-} from "@workspace/ui/components/header-island"
 import { Icons } from "@workspace/ui/components/icons"
-import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-const AVATAR_SIZE = 24
-
-const HEADER_IDENTITY_CLASS = "h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5"
+const AVATAR_SIZE = 32
 
 type HeaderSubjectButtonProps = {
 	"aria-label": string
@@ -34,50 +31,28 @@ type HeaderSubjectButtonProps = {
 }
 
 const HeaderSubjectButton = ({
+	"aria-label": settingsLabel,
 	isSettingsOpen,
 	onOpenSettings,
 	className,
 	children,
 	...props
-}: HeaderSubjectButtonProps) => {
-	const isInIsland = useIsInHeaderIsland()
-
-	if (!isInIsland)
-		return (
-			<Button
-				aria-expanded={isSettingsOpen}
-				className={cn(HEADER_IDENTITY_CLASS, className)}
-				onClick={onOpenSettings}
-				variant="ghost"
-				{...props}
-			>
-				{children}
-				<Icons.Settings aria-hidden="true" className="text-muted-foreground" />
-			</Button>
-		)
-
-	return (
-		<button
+}: HeaderSubjectButtonProps) => (
+	<div
+		className={cn("flex min-w-0 items-center gap-2.5", className)}
+		{...props}
+	>
+		{children}
+		<AppHeaderButton
 			aria-expanded={isSettingsOpen}
-			className={cn(
-				HEADER_ISLAND_CONTROL,
-				"flex h-8 min-w-0 items-center gap-0.5 ps-1 text-foreground",
-				className,
-			)}
+			aria-label={settingsLabel}
+			kind="subject"
 			onClick={onOpenSettings}
-			type="button"
-			{...props}
 		>
-			<span className="flex min-w-0 items-center gap-2 pe-1">{children}</span>
-			<span className="flex w-8 shrink-0 justify-center">
-				<Icons.Settings
-					aria-hidden="true"
-					className="size-4 text-soft-foreground"
-				/>
-			</span>
-		</button>
-	)
-}
+			<Icons.Settings aria-hidden="true" />
+		</AppHeaderButton>
+	</div>
+)
 
 type HeaderIdentityButtonProps = {
 	name: string
@@ -110,6 +85,19 @@ const HeaderIdentityButton = ({
 }: HeaderIdentityButtonProps) => {
 	const { t } = useTranslation("chat")
 
+	const shownName = <span className={APP_HEADER_TITLE}>{name}</span>
+	const besidePresence = (line: ReactNode) => (
+		<span className="flex min-w-0 items-center gap-1.5">
+			{line}
+			<ConnectionStatus
+				className="shrink-0"
+				name={name}
+				state={connection}
+				version={version}
+			/>
+		</span>
+	)
+
 	return (
 		<HeaderSubjectButton
 			aria-label={t("screen.identity", { name })}
@@ -127,18 +115,15 @@ const HeaderIdentityButton = ({
 				size={AVATAR_SIZE}
 				working={working}
 			/>
-			<span className="min-w-0 truncate">{name}</span>
-			<BotTitleBadge
-				className="in-data-[slot=header-island]:@max-md:hidden in-data-[slot=header-island]:bg-muted"
-				title={title}
-				variant="line"
-			/>
-			<ConnectionStatus
-				className="shrink-0"
-				name={name}
-				state={connection}
-				version={version}
-			/>
+			<AppHeaderText
+				topLine={
+					title
+						? besidePresence(<span className="truncate">{title}</span>)
+						: undefined
+				}
+			>
+				{title ? shownName : besidePresence(shownName)}
+			</AppHeaderText>
 		</HeaderSubjectButton>
 	)
 }

@@ -123,7 +123,7 @@ const DocumentPanel = ({
 				slot="document-panel-resize-handle"
 			/>
 			<div
-				className="flex h-12 shrink-0 items-center gap-2 border-foreground/6 border-b px-3 pt-px"
+				className="flex h-14 shrink-0 items-center gap-2 border-foreground/6 border-b px-3 pt-px"
 				data-slot="document-panel-header"
 			>
 				{isBoard ? <BoardGlyph /> : <DocumentGlyph />}

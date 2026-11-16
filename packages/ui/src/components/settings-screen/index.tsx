@@ -14,7 +14,13 @@ import {
 	type AppFrameRailProps,
 	AppFrameShell,
 } from "@workspace/ui/components/app-frame"
-import { AppHeader } from "@workspace/ui/components/app-header"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderButton,
+	AppHeaderPathSeparator,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
@@ -38,8 +44,8 @@ import {
 import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
-import { HeaderIslandCell } from "@workspace/ui/components/header-island"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -516,26 +522,39 @@ const SettingsScreenBodyLayout = ({
 			</SettingsMenu>
 			<ContentCard>
 				<ScreenLayout
-					contentClassName={cn(
-						"pt-14",
-						shown.value === SPACE_ENTRY ? "gap-6" : "gap-4",
-					)}
+					contentClassName={shown.value === SPACE_ENTRY ? "gap-6" : "gap-4"}
 					data-entry={shown.value}
 					data-slot="settings-screen-page"
 					header={
 						<AppHeader
 							data-tauri-drag-region="deep"
-							isFloating
+							close={
+								onBack ? (
+									<AppHeaderButton
+										aria-label={t("settings:screen.close")}
+										kind="close"
+										onClick={() => leaveThen(onBack)}
+									>
+										<Icons.Close aria-hidden="true" />
+									</AppHeaderButton>
+								) : null
+							}
 							leading={
-								<HeaderIslandCell>
-									<h2 className="truncate font-medium leading-4">
-										{shown.label}
-									</h2>
-								</HeaderIslandCell>
+								<AppHeaderText
+									topLine={
+										<>
+											<span className="truncate">
+												{t("settings:breadcrumb.title")}
+											</span>
+											<AppHeaderPathSeparator />
+										</>
+									}
+								>
+									<h2 className={APP_HEADER_TITLE}>{shown.label}</h2>
+								</AppHeaderText>
 							}
 						/>
 					}
-					isHeaderFloating
 					ref={(layout) => {
 						scroller.current =
 							layout?.querySelector<HTMLElement>(

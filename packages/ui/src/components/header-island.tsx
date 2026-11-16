@@ -1,4 +1,9 @@
-import { type ComponentProps, createContext, useContext } from "react"
+import {
+	type ComponentProps,
+	createContext,
+	type ReactNode,
+	useContext,
+} from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -36,6 +41,41 @@ const HeaderIslandCell = ({ className, ...props }: ComponentProps<"div">) => (
 	/>
 )
 
+type HeaderIslandRowProps = Omit<ComponentProps<"header">, "children"> & {
+	leading?: ReactNode
+	trailing?: ReactNode
+}
+
+const HeaderIslandRow = ({
+	leading,
+	trailing,
+	className,
+	...props
+}: HeaderIslandRowProps) => (
+	<header
+		data-slot="app-header"
+		className={cn(
+			"@container flex w-full min-w-0 items-start gap-2",
+			className,
+		)}
+		{...props}
+	>
+		{leading ? (
+			<HeaderIsland
+				className="min-w-0 shrink font-medium text-sm"
+				data-side="leading"
+			>
+				{leading}
+			</HeaderIsland>
+		) : null}
+		{trailing ? (
+			<HeaderIsland className="ms-auto" data-side="trailing">
+				{trailing}
+			</HeaderIsland>
+		) : null}
+	</header>
+)
+
 interface HeaderIslandButtonProps extends ComponentProps<"button"> {
 	"aria-label": string
 }
@@ -57,9 +97,9 @@ const HeaderIslandButton = ({
 )
 
 export {
-	HEADER_ISLAND_CONTROL,
 	HeaderIsland,
 	HeaderIslandButton,
 	HeaderIslandCell,
+	HeaderIslandRow,
 	useIsInHeaderIsland,
 }

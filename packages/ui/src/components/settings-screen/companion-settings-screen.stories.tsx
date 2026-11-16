@@ -4,14 +4,16 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectHeaderTitleStep,
+	expectHeaderTopLineStep,
 	expectLaptopWindow,
 	expectSettingsChrome,
 	expectSettingsMenuLeftColumn,
 	expectSettingsPage,
+	expectStaticHeaderBar,
 	LAPTOP_WINDOW,
 	opaque,
 	slotIn,
-	slotsIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { TITLE_BAR } from "@workspace/ui/components/app-title-bar.fixtures"
@@ -244,30 +246,56 @@ export const General = meta.story({
 	},
 })
 
-const expectTitleIsland = async (surface: "bg-card" | "bg-card-raised") => {
+const NARROW_SETTINGS_PAGE_WIDTH = 400
+
+const NARROW_SETTINGS_WINDOW_WIDTH = 757
+
+const expectSettingsBar = async () => {
 	const page = slotIn(screen.getByRole("main"), "settings-screen-page")
-	const island = slotIn(page, "header-island")
-	const title = within(island).getByRole("heading", {
+	const bar = slotIn(page, "app-header")
+	const topLine = slotIn(bar, "app-header-top-line")
+	const path = within(topLine).getByText("Settings")
+	const slash = slotIn(topLine, "app-header-path-separator")
+	const title = within(bar).getByRole("heading", {
 		level: 2,
 		name: "General",
 	})
-	const style = getComputedStyle(title)
+	const close = within(bar).getByRole("button", { name: "Close settings" })
+	const closeBox = close.getBoundingClientRect()
 
 	await expectPageShown("General")
-	await expect(within(island).queryAllByRole("button")).toHaveLength(0)
-	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
-		"14px",
-		"16px",
-		"500",
-	])
+	await expect(within(bar).getAllByRole("button")).toEqual([close])
+	await expectHeaderTopLineStep(topLine)
+	await expectHeaderTitleStep(title)
+	await expect(topLine.getBoundingClientRect().bottom).toBe(
+		title.getBoundingClientRect().top,
+	)
 	await expect(
-		title.getBoundingClientRect().left - island.getBoundingClientRect().left,
-	).toBe(13)
-	await expect(getComputedStyle(island).backgroundColor).toBe(
-		tokenStyleIn(island, surface, "backgroundColor"),
+		path.getBoundingClientRect().left - bar.getBoundingClientRect().left,
+	).toBe(12)
+	await expect(
+		Math.round(
+			slash.getBoundingClientRect().left - path.getBoundingClientRect().right,
+		),
+	).toBe(4)
+	await expect(slash).toHaveAttribute("aria-hidden", "true")
+	await expect(getComputedStyle(slash).color).toBe(
+		bar.closest(".dark") ? "rgb(107, 107, 107)" : "rgb(163, 163, 163)",
+	)
+	await expect([
+		closeBox.width,
+		closeBox.height,
+		bar.getBoundingClientRect().right - closeBox.right,
+	]).toEqual([32, 32, 12])
+	await expect(getComputedStyle(close).backgroundColor).toBe(
+		tokenStyleIn(
+			close,
+			bar.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
+			"backgroundColor",
+		),
 	)
 
-	return page
+	return { page, bar, title, close }
 }
 
 export const Settings8a = meta.story({
@@ -276,13 +304,15 @@ export const Settings8a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 8a, a settings page under its floating header. Check that no bar and no rule cross the top of the page: one island sits 8px from the top and the side of the content card and holds the page label alone, General, as the level 2 heading in 14px medium on a 16px line, with no control beside it and no trailing island. Check the first row of the page starts 56px from the top.",
+					"Artboard I8a, a settings page under its header bar. Check the one bar across the top of the content card, 56px tall with a 1px rule under it: the path Settings then a slash on the 12px top line, over the page label, General, the level 2 heading in 14px semibold, and the 32px round close control 12px from the other side. Check the first row of the page starts 32px under the bar and that the close control leaves the settings.",
 			},
 		},
 	},
-	play: async () => {
-		const page = await expectTitleIsland("bg-card")
-		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
+	play: async ({ args, userEvent }) => {
+		const { close } = await expectSettingsBar()
+
+		await userEvent.click(close)
+		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })
 
@@ -292,12 +322,12 @@ export const SettingsDark8b = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 8b, the settings page in the dark theme. Check that the title island wears the raised card surface and keeps the geometry of `Settings8a`.",
+					"Artboard I8b, the settings page in the dark theme. Check that the bar keeps the geometry of `Settings8a`, its rule and its close control drawn in white at 8 and 6 percent, the slash in the darker grey.",
 			},
 		},
 	},
 	play: async () => {
-		await expectTitleIsland("bg-card-raised")
+		await expectSettingsBar()
 	},
 })
 
@@ -314,7 +344,7 @@ export const SettingsScrolled8c = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 8c, the General page scrolled away from its start, in a window 224px high so the page is long enough to scroll. Check that the page passes under the title island and that the top fade of the layout covers it as it leaves. Pick `Settings8a` for the page at rest.",
+					"Artboard I8c, the General page scrolled away from its start, in a window 224px high so the page is long enough to scroll. Check that the page leaves at the edge of the bar and that the bar stays as it is in `Settings8a`: same place, no fade, no shadow.",
 			},
 		},
 	},
@@ -323,11 +353,43 @@ export const SettingsScrolled8c = meta.story({
 		const scroller = slotIn(page, "screen-layout-scroller")
 
 		await expectPageShown("General")
-		await expect(slotsIn(page, "screen-layout-fade")).toHaveLength(0)
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 		scroller.scrollTo({ top: scroller.scrollHeight })
-		await waitFor(() => slotIn(page, "screen-layout-fade"))
-		await expect(slotIn(page, "header-island")).toBeVisible()
+		await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0))
+		await expect(scroller.getBoundingClientRect().top).toBe(
+			slotIn(page, "app-header").getBoundingClientRect().bottom,
+		)
+		await expectStaticHeaderBar(page)
+	},
+})
+
+export const SettingsNarrow8d = meta.story({
+	globals: { theme: "light" },
+	decorators: [
+		(Story) => (
+			<div style={{ width: NARROW_SETTINGS_WINDOW_WIDTH }}>
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The settings screen in a window narrow enough to leave its page 400px wide beside the menu. Check the same bar as `Settings8a`: the path, the label and the close control whole, the close control keeping its 32px, 12px from the side.",
+			},
+		},
+	},
+	play: async () => {
+		const { page, title, close } = await expectSettingsBar()
+
+		await expect(page.getBoundingClientRect().width).toBe(
+			NARROW_SETTINGS_PAGE_WIDTH,
+		)
+		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
+		await expect(title.getBoundingClientRect().right).toBeLessThan(
+			close.getBoundingClientRect().left,
+		)
 	},
 })
 
