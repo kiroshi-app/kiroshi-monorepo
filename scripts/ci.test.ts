@@ -252,6 +252,12 @@ const pullRequest = (number: number, runId: number): GitHubContext => ({
 
 const A_PULL_REQUEST = pullRequest(7, 11)
 
+const A_PULL_REQUEST_INTO_A_FEATURE_BRANCH: GitHubContext = {
+	...pullRequest(9, 13),
+	base_ref: "feature/conversation-feed",
+	event: { pull_request: { base: { sha: "feature-branch-tip" } } },
+}
+
 const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
 	...pullRequest(8, 12),
 	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
@@ -1109,11 +1115,40 @@ describe("the jobs of ci.yml", () => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push and a pull_request only", () => {
+	it("triggers on a push to main, a v* tag and a pull_request into main or a feature/** branch only", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main"], tags: ["v*"] },
-			pull_request: { branches: ["main"] },
+			pull_request: { branches: ["main", "feature/**"] },
 		})
+	})
+
+	it("runs on a pull_request into a feature/** branch the jobs of one into main, on the same path filter, reading no base branch name", () => {
+		const github = A_PULL_REQUEST_INTO_A_FEATURE_BRANCH
+		const paths = ["packages/ui/src/components/markdown/answer-block.tsx"]
+
+		expect(ciEventOf(github)).toBe("pull_request")
+		expect(jobsRunningOn(github)).toEqual(PULL_REQUEST_JOB_SET)
+		expect(outputsOn(github, paths)).toEqual(outputsOn(A_PULL_REQUEST, paths))
+		expect(failingVerifySteps(github, resultsByRule(github))).toEqual([])
+		expect(JSON.stringify(workflow)).not.toMatch(/base_ref|base\.ref/)
+	})
+
+	it("diffs a pull_request against the head of its base branch, main or not", () => {
+		const scope = scopeOf(A_PULL_REQUEST_INTO_A_FEATURE_BRANCH)
+		const fetchStep = stepNamed("changes", "Fetch the base to diff against")
+		const decideStep = stepNamed("changes", "Decide the jobs to run")
+
+		expect(evaluate(fetchStep?.if ?? "false", scope)).toBe(true)
+		expect(interpolate(fetchStep?.env?.BASE ?? "", scope)).toBe(
+			"feature-branch-tip",
+		)
+		expect(fetchStep?.run).toBe('git fetch --depth=1 origin "$BASE"')
+		expect(interpolate(decideStep?.env?.BASE ?? "", scope)).toBe(
+			"feature-branch-tip",
+		)
+		expect(decideStep?.run).toStartWith(
+			'bun scripts/ci-changes.ts "$CI_EVENT" "$BASE"',
+		)
 	})
 
 	it("runs only changes, lint, vitest and rust on a pull_request", () => {

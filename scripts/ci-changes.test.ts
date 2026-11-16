@@ -106,12 +106,17 @@ const commitFile = (repo: string, path: string) => {
 	return git(repo, "rev-parse", "HEAD")
 }
 
+const repositoryOnMain = (name: string) => {
+	const repository = join(scratch, name)
+	mkdirSync(repository)
+	git(repository, "init", "--quiet", "--initial-branch=main")
+	git(repository, "config", "user.email", "ci@example.com")
+	git(repository, "config", "user.name", "CI")
+	return repository
+}
+
 const shallowCheckoutPastGreen = (name: string) => {
-	const origin = join(scratch, `${name}-origin`)
-	mkdirSync(origin)
-	git(origin, "init", "--quiet", "--initial-branch=main")
-	git(origin, "config", "user.email", "ci@example.com")
-	git(origin, "config", "user.name", "CI")
+	const origin = repositoryOnMain(`${name}-origin`)
 	const green = commitFile(origin, "packages/ui/src/button.tsx")
 	commitFile(origin, "apps/website/src/page.tsx")
 	commitFile(origin, "apps/app/src-tauri/src/lib.rs")
@@ -218,6 +223,28 @@ describe("ci jobs per event", () => {
 			rust: true,
 			ios: true,
 		})
+	})
+
+	it("diffs a pull_request into a feature branch against that branch, leaving out what the branch holds over main", () => {
+		const repository = repositoryOnMain("feature-base")
+		const main = commitFile(repository, "README.md")
+		git(repository, "switch", "--quiet", "--create", "feature/feed")
+		const featureBranch = commitFile(
+			repository,
+			"apps/app/src-tauri/src/lib.rs",
+		)
+		git(repository, "switch", "--quiet", "--create", "sub-branch")
+		commitFile(repository, "packages/ui/src/button.tsx")
+
+		const againstItsBase = runChangeDetectorIn(
+			repository,
+			"pull_request",
+			featureBranch,
+		)
+		const againstMain = runChangeDetectorIn(repository, "pull_request", main)
+
+		expect(outputOf(againstItsBase)).toEqual({ ...none, vitest: true })
+		expect(outputOf(againstMain)).toEqual({ ...none, vitest: true, rust: true })
 	})
 
 	it("refuses an event it does not know", () => {
