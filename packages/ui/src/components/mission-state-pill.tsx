@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { useIsInAppHeader } from "@workspace/ui/components/app-header"
+import {
+	APP_HEADER_CAPSULE_FILL,
+	useIsInAppHeader,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
@@ -56,7 +59,8 @@ const MissionStatePill = ({ state, className }: MissionStatePillProps) => {
 		return (
 			<span
 				className={cn(
-					"flex h-7 items-center gap-1.5 whitespace-nowrap px-2 font-medium text-foreground text-xs leading-4",
+					"flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 font-medium text-foreground text-xs leading-4",
+					APP_HEADER_CAPSULE_FILL,
 					className,
 				)}
 				data-slot="mission-state-pill"

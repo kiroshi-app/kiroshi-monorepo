@@ -228,7 +228,6 @@ import {
 	type MissionCardRead,
 	missionFaceOf,
 	toMissionCard,
-	toMissionHeaderActivity,
 } from "@/lib/missions/missions-model"
 import { useLiveMissions } from "@/lib/missions/use-live-missions"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
@@ -449,7 +448,6 @@ const ThreadHeader = ({
 		)
 		return (
 			<MissionHeader
-				{...toMissionHeaderActivity(mission.mission)}
 				bot={toMissionFace(missionFace)}
 				isWorking={liveMissionIds.has(mission.mission.id)}
 				objective={mission.mission.objective}

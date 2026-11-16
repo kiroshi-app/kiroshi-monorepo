@@ -43,9 +43,12 @@ import { UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+const ORIGIN_CONVERSATION = "Sidecar release"
+
 const WORKING_HEADER: Omit<MissionHeaderProps, "onBack"> = {
 	bot: MISSION_BOT,
 	objective: MISSION_OBJECTIVE,
+	pathLabel: ORIGIN_CONVERSATION,
 	state: "working",
 	isWorking: true,
 }
@@ -57,8 +60,8 @@ const PILLS_THE_MATRIX_DRAWS = 10
 const LONG_OBJECTIVE =
 	"Rework the mission thread so a reader can follow a run that spans several days without ever losing the ticket it answers"
 
-const LONG_PATH_LABEL =
-	"Missions blocked on the release workflow of the desktop app and its sidecar"
+const LONG_ORIGIN_CONVERSATION =
+	"Sidecar release, packaging and signing on every desktop target this quarter"
 
 const FILLED_BY_THE_THREAD =
 	"`apps/app/src/components/thread-screen.tsx:451` is the header of every mission thread, filled from the stored mission."
@@ -91,7 +94,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The top of a mission thread, as the one static bar every screen wears: the avatar of the agent running it, a path link over the objective, and the state at the trailing end. The path link is the way out of the mission, named `Missions` unless `pathLabel` says where the reader came from. The ticket, the status and the pull request are not here: `MissionProperties` lists them at the top of the thread, where they scroll away. Reach for it as the header of a mission thread; on its own it is useful to check that a long path and a long objective truncate before the state loses room.",
+					"The top of a mission thread, as the one static bar every screen wears: the avatar of the agent running it, a path link over the objective, and the state at the trailing end. The path link is the way out of the mission: `pathLabel` names the conversation it goes back to, and `onBack` goes there. The ticket, the status and the pull request are not here: `MissionProperties` lists them at the top of the thread, where they scroll away. Reach for it as the header of a mission thread; on its own it is useful to check that a long path and a long objective truncate before the state loses room.",
 			},
 		},
 	},
@@ -108,7 +111,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission an agent is working on right now, given no path label. Check that the header is one bar with no island and no second row, that the 32px avatar sits 10px before the text, that the path link reads `Missions` over the objective and is the first thing the keyboard reaches, and that activating it leaves the mission. " +
+					"A mission an agent is working on right now, opened from the `Sidecar release` conversation. Check that the header is one bar with no island and no second row, that the 32px avatar sits 10px before the text, that the path link reads the name of that conversation over the objective and is the first thing the keyboard reaches, and that activating it leaves the mission. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -116,7 +119,7 @@ export const Default = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const header = slotIn(canvasElement, "mission-header")
 		const bar = slotIn(header, "app-header")
-		const path = canvas.getByRole("button", { name: "Missions" })
+		const path = canvas.getByRole("button", { name: ORIGIN_CONVERSATION })
 
 		await expect(header.children).toHaveLength(1)
 		await expect(slotsIn(header, "header-island")).toHaveLength(0)
@@ -189,7 +192,7 @@ export const WithoutAPill = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bar of a mission nobody can act on yet, above the bar of one waiting on its reader. Check that the `working` bar draws no capsule at all: `packages/ui/src/components/app-header.tsx:131` mounts its trailing capsule on the truthiness of the node it is handed, so a state left to render nothing would still draw an empty capsule beside the objective. " +
+					"The bar of a mission nobody can act on yet, above the bar of one waiting on its reader. Check that the `working` bar draws nothing after its leading cluster, no empty pill and no gap held open for one, while the bar under it ends on its state. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -217,7 +220,7 @@ export const LongContent = meta.story({
 	args: {
 		bot: { ...MISSION_BOT, name: "Anastasia Konstantinopoulou-Whitfield" },
 		objective: LONG_OBJECTIVE,
-		pathLabel: LONG_PATH_LABEL,
+		pathLabel: LONG_ORIGIN_CONVERSATION,
 		state: "waiting_human",
 	},
 	parameters: {
@@ -242,7 +245,7 @@ export const LongContent = meta.story({
 		const avatar = slotIn(bar, "app-header-leading").firstElementChild
 
 		await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth)
-		await expect(path).toHaveTextContent(LONG_PATH_LABEL)
+		await expect(path).toHaveTextContent(LONG_ORIGIN_CONVERSATION)
 		await expect(path.scrollWidth).toBeGreaterThan(path.clientWidth)
 		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
 		await expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth)
@@ -343,34 +346,20 @@ const inMissionFrame = (args: MissionHeaderProps) => (
 )
 
 const expectStatePill = async (bar: HTMLElement) => {
-	const capsule = slotIn(bar, "app-header-capsule")
-	const pill = slotIn(capsule, "mission-state-pill")
-	const dot = pill.firstElementChild as HTMLElement
-	const style = getComputedStyle(pill)
+	const pill = slotIn(bar, "mission-state-pill")
 
 	await expect(pill).toHaveTextContent("Ready to merge")
-	await expect(boxOf(capsule).height).toBe(32)
-	await expect(
-		Number.parseFloat(getComputedStyle(capsule).borderTopLeftRadius),
-	).toBeGreaterThanOrEqual(16)
+	await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
 	await expect([
-		boxOf(dot).left - boxOf(capsule).left,
-		boxOf(dot).width,
-		boxOf(dot).height,
-		style.columnGap,
-		style.fontSize,
-		style.lineHeight,
-		style.fontWeight,
-	]).toEqual([10, 6, 6, "6px", "12px", "16px", "500"])
-	await expect(getComputedStyle(capsule).backgroundColor).toBe(
+		boxOf(pill).height,
+		boxOf(bar).right - boxOf(pill).right,
+	]).toEqual([28, 12])
+	await expect(getComputedStyle(pill).backgroundColor).toBe(
 		tokenStyleIn(
-			capsule,
-			capsule.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
+			pill,
+			pill.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
 			"backgroundColor",
 		),
-	)
-	await expect(getComputedStyle(dot).backgroundColor).toBe(
-		tokenStyleIn(dot, "bg-success", "backgroundColor"),
 	)
 }
 
@@ -433,7 +422,9 @@ export const Mission3a = meta.story({
 		])
 		await expect(messages.children).toHaveLength(2)
 
-		await userEvent.click(canvas.getByRole("button", { name: "Missions" }))
+		await userEvent.click(
+			canvas.getByRole("button", { name: ORIGIN_CONVERSATION }),
+		)
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
 })
@@ -536,7 +527,7 @@ export const MissionNarrow3e = meta.story({
 	args: {
 		...ARTBOARD_HEADER,
 		objective: LONG_OBJECTIVE,
-		pathLabel: LONG_PATH_LABEL,
+		pathLabel: LONG_ORIGIN_CONVERSATION,
 	},
 	parameters: {
 		layout: "fullscreen",
@@ -575,7 +566,7 @@ export const MissionNarrow3e = meta.story({
 		await expect(path.scrollWidth).toBeGreaterThan(path.clientWidth)
 		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
 		await expect(
-			boxOf(slotIn(bar, "app-header-capsule")).right,
+			boxOf(slotIn(bar, "mission-state-pill")).right,
 		).toBeLessThanOrEqual(boxOf(frame).right - 12)
 		await expect(
 			boxOf(line.lastElementChild as Element).height,
@@ -625,7 +616,10 @@ const MissionOnItsWay = (args: MissionHeaderProps) => {
 				isLoaded ? (
 					<MissionHeader {...args} />
 				) : (
-					<MissionHeaderSkeleton onBack={args.onBack} />
+					<MissionHeaderSkeleton
+						onBack={args.onBack}
+						pathLabel={args.pathLabel}
+					/>
 				)
 			}
 			notice={
@@ -670,7 +664,12 @@ export const MissionSkeleton = meta.story({
 	},
 	render: (args) => (
 		<MissionThread
-			header={<MissionHeaderSkeleton onBack={args.onBack} />}
+			header={
+				<MissionHeaderSkeleton
+					onBack={args.onBack}
+					pathLabel={args.pathLabel}
+				/>
+			}
 			skeleton={<MissionDetailSkeleton />}
 		/>
 	),
@@ -686,10 +685,10 @@ export const MissionSkeleton = meta.story({
 			AVATAR_SIZE,
 			AVATAR_SIZE,
 		])
-		await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
+		await expect(slotsIn(bar, "mission-state-pill")).toHaveLength(0)
 		await expect(slotsIn(bar, "mission-objective")).toHaveLength(0)
 
-		const path = canvas.getByRole("button", { name: "Missions" })
+		const path = canvas.getByRole("button", { name: ORIGIN_CONVERSATION })
 		await userEvent.click(path)
 		await expect(args.onBack).toHaveBeenCalledOnce()
 		path.blur()

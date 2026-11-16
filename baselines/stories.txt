@@ -737,6 +737,7 @@ conversation-missions-missionproperties--without-pull-request
 conversation-missions-missionproperties--without-status
 conversation-missions-missionproperties--without-ticket
 conversation-missions-missionproperties--zero-value
+conversation-missions-missionstatepill--in-app-header
 conversation-missions-missionstatepill--states
 conversation-missions-missionturn--done
 conversation-missions-missionturn--done-dark

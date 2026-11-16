@@ -13,10 +13,7 @@ import {
 	type MissionState,
 	missionBadgeFor,
 } from "@workspace/ui/components/mission"
-import {
-	hasStatePill,
-	MissionStatePill,
-} from "@workspace/ui/components/mission-state-pill"
+import { MissionStatePill } from "@workspace/ui/components/mission-state-pill"
 
 const MISSION_HEADER_AVATAR_SIZE = 32
 
@@ -82,7 +79,7 @@ const MissionHeader = ({
 					</AppHeaderText>
 				</>
 			}
-			trailing={hasStatePill(state) ? <MissionStatePill state={state} /> : null}
+			close={<MissionStatePill state={state} />}
 		/>
 	</div>
 )
