@@ -95,6 +95,7 @@ type FailureContext = {
 	session?: string
 	turn?: string
 	command?: string
+	errorKind?: string
 	httpStatus?: number
 	count?: number
 }
@@ -156,6 +157,7 @@ const FAILURE_CONTEXT_LABELS = {
 	session: "Session",
 	turn: "Turn",
 	command: "Command",
+	errorKind: "Error kind",
 	httpStatus: "HTTP status",
 	count: "Count",
 } satisfies Record<keyof FailureContext, string>

@@ -5,6 +5,8 @@ import type { FailureLog } from "@workspace/ui/components/notice-surface"
 import { commands } from "./bindings"
 import { scrubFailureText } from "./failure-text-scrubber"
 
+import { writeToLogFile } from "./host/console-log-forwarding"
+
 const LOG_FILE = "kiroshi.log"
 
 const REPORTED_LOG_LINES = 200
@@ -27,3 +29,5 @@ export const readFailureLog = async (): Promise<FailureLog> => {
 		lineCount: lines.length,
 	}
 }
+
+export const writeFailureLine = (line: string) => writeToLogFile("error", line)

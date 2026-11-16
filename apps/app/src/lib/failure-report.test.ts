@@ -20,6 +20,8 @@ import {
 	reportLocalWhen,
 } from "./failure-report"
 
+import { writeToLogFile } from "./host/console-log-forwarding"
+import { nameCallOnFailure } from "./host/failed-call"
 import { HostRefused } from "./host/host-refused"
 import { createHostedSpaces } from "./host/hosted-spaces"
 import { createHttpHost, raiseRefusalNotice } from "./host/http"
@@ -37,6 +39,8 @@ vi.mock("./bindings", async (original) => {
 	}
 })
 
+vi.mock("./host/console-log-forwarding", () => ({ writeToLogFile: vi.fn() }))
+
 vi.mock("@workspace/ui/components/notice-surface", async (original) => ({
 	...(await original<object>()),
 	raiseFailureNotice: vi.fn(() => "notice-1"),
@@ -45,6 +49,7 @@ vi.mock("@workspace/ui/components/notice-surface", async (original) => ({
 const failureNotice = vi.mocked(raiseFailureNotice)
 const diagnostics = vi.mocked(commands.diagnostics)
 const logTail = vi.mocked(commands.logTail)
+const logWrite = vi.mocked(writeToLogFile)
 
 const RAISED_AT = "2026-10-11T09:30:00.000Z"
 
@@ -127,6 +132,7 @@ beforeEach(() => {
 	failureNotice.mockClear()
 	diagnostics.mockReset().mockResolvedValue(THIS_MAC)
 	logTail.mockReset().mockResolvedValue({ status: "ok", data: LOG_LINES })
+	logWrite.mockReset().mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -462,6 +468,117 @@ describe("a reporter handed the rejection its caller caught", () => {
 		expect(
 			failureNotice.mock.lastCall?.[0]?.report?.context,
 		).not.toHaveProperty("reason")
+	})
+})
+
+describe("a failure raised with the reason its raiser caught", () => {
+	const reportRefusedComment = failureReporterIn("use-library-comment-threads")
+
+	const UNSAVED = { title: "Couldn’t add your comment" }
+
+	const reportedContext = async () => (await raisedNotice()).report.context
+
+	const failedOnTheRoute = async (command: string, reason: object) => {
+		await expect(
+			nameCallOnFailure(command, Promise.reject(reason)),
+		).rejects.toBe(reason)
+		return reason
+	}
+
+	it("names the command, the kind and the status of a host refusal", async () => {
+		const reason = new HostRefused("kept", null, "hostOnly", {
+			command: "library_comment_create",
+			status: 403,
+		})
+
+		await reportRefusedComment(UNSAVED, { reason })
+
+		expect(await reportedContext()).toMatchObject({
+			command: "library_comment_create",
+			errorKind: "hostOnly",
+			httpStatus: 403,
+		})
+	})
+
+	it("copies the call and the typed kind of a Tauri error the invoke route met", async () => {
+		const reason = await failedOnTheRoute("library_comment_create", {
+			kind: "missingTarget",
+			name: "launch.md",
+			target: "intro",
+		})
+
+		await reportRefusedComment(UNSAVED, { reason })
+
+		expect((await copiedTextOfRaisedNotice()).split("\n")).toEqual(
+			expect.arrayContaining([
+				"Raised in: use-library-comment-threads",
+				"Command: library_comment_create",
+				"Error kind: missingTarget",
+			]),
+		)
+	})
+
+	it("derives the call and the kind from the reason it is handed", async () => {
+		const reason = await failedOnTheRoute("library_comment_create", {
+			kind: "missingTarget",
+		})
+
+		await raiseReportedFailure(UNSAVED, {
+			raisedIn: "use-library-comment-threads",
+			reason,
+		})
+
+		expect(await reportedContext()).toMatchObject({
+			command: "library_comment_create",
+			errorKind: "missingTarget",
+		})
+	})
+
+	it.each([
+		["an Error of this Mac", new Error("disk full")],
+		["a plain sentence", "the host broke"],
+		["a refusal of no typed kind", new HostRefused("the host broke", null)],
+		["a kind written as a sentence", { kind: "reading ~/notes.md failed" }],
+	])("leaves out the call and the kind of %s", async (_case, reason) => {
+		await reportRefusedComment(UNSAVED, { reason })
+
+		expect(await copiedTextOfRaisedNotice()).not.toMatch(
+			/Command:|Error kind:|HTTP status:/,
+		)
+	})
+
+	it("writes one line naming where, the call and the kind before the log tail is read", async () => {
+		const reason = await failedOnTheRoute("library_comment_create", {
+			kind: "missingTarget",
+		})
+
+		await reportRefusedComment(UNSAVED, { reason })
+		await raisedNotice()
+
+		expect(logWrite).toHaveBeenCalledExactlyOnceWith(
+			"error",
+			"failure raisedIn=use-library-comment-threads command=library_comment_create errorKind=missingTarget",
+		)
+		expect(logWrite).toHaveBeenCalledBefore(logTail)
+	})
+
+	it("writes only where it was raised when the reason names no call and no kind", async () => {
+		await reportRefusedComment(UNSAVED, { reason: new Error("disk full") })
+		await raisedNotice()
+
+		expect(logWrite).toHaveBeenCalledExactlyOnceWith(
+			"error",
+			"failure raisedIn=use-library-comment-threads",
+		)
+	})
+
+	it("leaves Log out when the failure line could not be written", async () => {
+		logWrite.mockRejectedValue(new Error("log plugin gone"))
+
+		const report = await buildFailureReport({ raisedIn: "use-account" })
+
+		expect(report.log).toBeUndefined()
+		expect(logTail).not.toHaveBeenCalled()
 	})
 })
 

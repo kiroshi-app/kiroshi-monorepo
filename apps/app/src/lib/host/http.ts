@@ -269,7 +269,10 @@ export const createHttpHost = ({
 			side: "member",
 		}
 		onRefused(refusal)
-		throw new HostRefused(refusal.message, reason, refusalKindOf(refusal))
+		throw new HostRefused(refusal.message, reason, refusalKindOf(refusal), {
+			command,
+			status,
+		})
 	}
 
 	const rejectFailedPost = (
