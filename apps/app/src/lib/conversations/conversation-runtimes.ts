@@ -25,6 +25,7 @@ export type ConversationRuntimesOptions = Pick<
 	| "onNamed"
 	| "readReportedRuns"
 	| "onCompanionArrived"
+	| "onReconnected"
 	| "rereadConversation"
 	| "senderAccountId"
 >

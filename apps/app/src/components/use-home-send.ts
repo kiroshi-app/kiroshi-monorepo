@@ -94,15 +94,20 @@ export const useHomeSend = ({
 		)
 	}
 
+	const releaseAndDiscard = async (conversationId: string) => {
+		await runtimes.release(conversationId)
+		await discardConversation(conversationId)
+	}
+
 	const deliverOrDiscard = async (conversation: Conversation, text: string) => {
 		try {
 			const isSent = await deliverTo(conversation, text)
 			if (!isSent) {
-				await discardConversation(conversation.id)
+				await releaseAndDiscard(conversation.id)
 			}
 			return isSent
 		} catch (reason) {
-			await discardConversation(conversation.id)
+			await releaseAndDiscard(conversation.id)
 			throw reason
 		}
 	}
