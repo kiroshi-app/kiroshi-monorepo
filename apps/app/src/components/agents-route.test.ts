@@ -18,7 +18,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { AgentsRoute } from "@/components/agents-route"
 import type { CompanionCounts } from "@/lib/bindings"
-import type { Bot } from "@/lib/conversations/store-contract"
+import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { invoke, isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
@@ -76,11 +76,17 @@ const sidebarActions = {
 
 const openCompanionSettings = vi.fn()
 
+const retryLoad = vi.fn(async () => undefined)
+
+const ROOM = { id: "c-room" } as Conversation
+
 type Roster = {
 	hasLoaded: boolean
 	rosteredSpaceId: string
 	isRosterPending: boolean
 	hasFailedToLoad: boolean
+	bots: Bot[]
+	conversations: Conversation[]
 }
 
 const workspaceOn = (
@@ -90,15 +96,26 @@ const workspaceOn = (
 		rosteredSpaceId = space.id,
 		isRosterPending = false,
 		hasFailedToLoad = false,
+		bots = ROSTERS[rosteredSpaceId],
+		conversations = [],
 	}: Partial<Roster> = {},
 ) =>
 	({
 		core: {
-			roster: { state: { rosters: ROSTERS, isRosterPending, hasFailedToLoad } },
+			roster: {
+				controller: { retryLoad },
+				state: {
+					rosters: ROSTERS,
+					bots,
+					conversations,
+					isRosterPending,
+					hasFailedToLoad,
+				},
+			},
 		},
 		navigation: { openCompanionSettings },
 		rosterLines: { sidebarActions },
-		rosterView: { bots: ROSTERS[rosteredSpaceId], hasLoaded, rosteredSpaceId },
+		rosterView: { bots, hasLoaded, rosteredSpaceId },
 		scopes: {
 			openRowId: space.id,
 			selectedSpace: isJoinedRowId(space.id) ? undefined : space,
@@ -231,12 +248,46 @@ describe("the Agents page of a Space whose roster failed to load", () => {
 		expect(slotsOf("agents-page-skeleton")).toEqual([])
 	})
 
-	it("shows the loading page, not the empty one, when the roster holds no agent", () => {
+	it("shows the failed page, neither the loading nor the empty one, when the roster holds nothing", () => {
 		showAgentsOf(workspaceOn(ATTIC, { hasFailedToLoad: true }))
 
-		expect(slotsOf("agents-page-skeleton")).toHaveLength(1)
+		expect(slotsOf("agents-page-failure")).toHaveLength(1)
+		expect(slotsOf("agents-page-skeleton")).toEqual([])
 		expect(slotsOf("agents-page-empty")).toEqual([])
 		expect(cardNames()).toEqual([])
+	})
+
+	it("shows the empty page of the roster held when it holds a conversation and no agent", () => {
+		showAgentsOf(
+			workspaceOn(ATTIC, { hasFailedToLoad: true, conversations: [ROOM] }),
+		)
+
+		expect(slotsOf("agents-page-empty")).toHaveLength(1)
+		expect(slotsOf("agents-page-failure")).toEqual([])
+		expect(slotsOf("agents-page-skeleton")).toEqual([])
+	})
+
+	it("retries the read once from Retry, then shows the loading page and the agents read", async () => {
+		const { rerender } = showAgentsOf(
+			workspaceOn(HOME, { bots: [], hasFailedToLoad: true }),
+		)
+
+		await press(within(slotsOf("agents-page-failure")[0]).getByRole("button"))
+
+		expect(retryLoad).toHaveBeenCalledTimes(1)
+
+		rerender(
+			agentsRouteIn(workspaceOn(HOME, { bots: [], isRosterPending: true })),
+		)
+
+		expect(slotsOf("agents-page-skeleton")).toHaveLength(1)
+		expect(slotsOf("agents-page-failure")).toEqual([])
+
+		rerender(agentsRouteIn(workspaceOn(HOME)))
+
+		expect(cardNames()).toEqual([ADA.name, BO.name])
+		expect(slotsOf("agents-page-skeleton")).toEqual([])
+		expect(slotsOf("agents-page-failure")).toEqual([])
 	})
 })
 
