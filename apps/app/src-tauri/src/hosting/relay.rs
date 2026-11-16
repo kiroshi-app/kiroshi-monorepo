@@ -708,6 +708,7 @@ async fn online<R: Runtime>(
 							"hosted space {} (instance {}) heard a hello from relay device {}",
 							ids.space_id, ids.instance_id, sender.relay_device_id
 						);
+						deliveries.forget_sent_to(&sender.relay_device_id);
 						if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Device(&sender.relay_device_id)).await {
 							return ended;
 						}

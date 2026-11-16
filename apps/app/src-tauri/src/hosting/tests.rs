@@ -2395,6 +2395,26 @@ fn a_refusal_the_host_does_not_know_or_naming_a_device_off_the_roster_is_logged_
 }
 
 #[test]
+fn a_resync_names_no_call_answered_before_the_latest_hello_of_the_device() {
+	run(async {
+		let mut harness = Harness::signed_in("resync-after-hello").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		send(&mut member, r#"{"id": 5, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 5);
+
+		member.greeted().await;
+		send(&mut member, r#"{"id": 1, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 1);
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+
+		assert_eq!(resynced(&mut member).await, json!({ "resync": { "answered": [1] } }));
+	});
+}
+
+#[test]
 fn a_resync_the_relay_refuses_again_is_sent_again_on_the_next_interval() {
 	run(async {
 		let mut harness = Harness::signed_in("resync-again").await;

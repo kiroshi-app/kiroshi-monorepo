@@ -414,9 +414,11 @@ frames to it:
 ```
 
 `answered` lists the ids of the calls the host answered to that device since it
-was last in step, the last 1024 at most. Every frame sent before the resync
-reached the device before it or was refused, so a call in `answered` still
-awaiting its answer lost it: the client ends it with an error. Then the client
+was last in step, the last 1024 at most. The host forgets every answer it sent to
+a device when that device says hello, so `answered` names only calls of the
+socket open now. Every frame sent before the resync reached the device before it
+or was refused, so a call in `answered` still awaiting its answer lost it: the
+client ends it with an error. Then the client
 resumes from the last event it applied, as on a `seq` jump, dropping a resume
 already pending; a client with no epoch yet re-reads.
 

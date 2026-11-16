@@ -188,14 +188,18 @@ impl Deliveries {
 		});
 		for resync in &resyncs {
 			if let Resync::Settled(relay_device_id) = resync {
-				let confirmed = Unconfirmed {
-					events_to_everyone_before: self.events_to_everyone,
-					..Default::default()
-				};
-				self.unconfirmed.insert(relay_device_id.clone(), confirmed);
+				self.forget_sent_to(relay_device_id);
 			}
 		}
 		resyncs
+	}
+
+	pub(super) fn forget_sent_to(&mut self, relay_device_id: &str) {
+		let forgotten = Unconfirmed {
+			events_to_everyone_before: self.events_to_everyone,
+			..Default::default()
+		};
+		self.unconfirmed.insert(relay_device_id.to_owned(), forgotten);
 	}
 
 	pub(super) fn left(&mut self, relay_device_id: &str) {
@@ -314,6 +318,28 @@ mod tests {
 			deliveries.unconfirmed_line(DEVICE),
 			", unconfirmed frames sent to it: 0 events, 0 call answers, 0 file answers, 0 rekeys"
 		);
+	}
+
+	#[test]
+	fn a_hello_forgets_what_was_sent_to_the_device_and_keeps_it_behind() {
+		let mut deliveries = Deliveries::default();
+		deliveries.sent_to_everyone();
+		deliveries.answered(DEVICE, SentKind::CallAnswer, r#"{"id":7,"status":200,"body":1}"#);
+		deliveries.sent(DEVICE, SentKind::Rekey);
+		assert!(deliveries.refused(DEVICE));
+
+		deliveries.forget_sent_to(DEVICE);
+
+		assert_eq!(
+			deliveries.unconfirmed_line(DEVICE),
+			", unconfirmed frames sent to it: 0 events, 0 call answers, 0 file answers, 0 rekeys"
+		);
+		assert_eq!(
+			deliveries.resync_frame(DEVICE),
+			json!({ "resync": { "answered": [] } }).to_string()
+		);
+		assert!(deliveries.next_resync_at().is_some());
+		assert!(!deliveries.refused(DEVICE));
 	}
 
 	#[test]
