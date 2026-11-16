@@ -677,8 +677,7 @@ impl<R: Runtime> LibraryHost<R> {
 		for id in wanted {
 			outline.index_of(id)?;
 		}
-		let writer = client_id_of(&agent.id);
-		if !marked(&self.app, root, space_id, name, writer, &outline.text)? {
+		if !marked(&self.app, root, space_id, name, client_id_of(&agent.id), &outline.text)? {
 			return Ok(outline);
 		}
 		Ok(self.opened(root, space_id, name)?)
@@ -1589,9 +1588,7 @@ async fn turn_of<'a, R: Runtime>(
 }
 
 pub(crate) fn is_agent_on<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str) -> bool {
-	writes(app).writing().iter().any(|((space, document, _), writers)| {
-		space == space_id && document == name && !writers.is_empty()
-	})
+	writes(app).writing().keys().any(|(space, document, _)| space == space_id && document == name)
 }
 
 pub(crate) async fn stop_writers<R: Runtime>(
