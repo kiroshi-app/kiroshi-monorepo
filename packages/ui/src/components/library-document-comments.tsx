@@ -38,7 +38,8 @@ import {
 } from "@workspace/ui/components/library-document-blocks"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { useRosterBots } from "@workspace/ui/components/roster"
-import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import { Kbd } from "@workspace/ui/components/ui/kbd"
 import {
 	Tooltip,
 	TooltipContent,
@@ -616,7 +617,7 @@ const UNDER_PIN = "end-0 top-full mt-2"
 const START_HINT_GAP = 12
 
 const START_HINT = cn(
-	"gap-2 rounded-md px-2 py-1.5 font-medium text-on-foreground [&>[data-side]]:hidden",
+	"gap-2 **:data-[slot=kbd]:rounded-md",
 	STILL_UNDER_REDUCED_MOTION,
 )
 
@@ -634,7 +635,7 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 	return (
 		<Tooltip>
 			<TooltipTrigger
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				render={
 					<button
 						aria-label={name}
@@ -658,11 +659,11 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 				sideOffset={START_HINT_GAP}
 			>
 				{name}
-				<kbd className="font-sans text-on-foreground-muted">
+				<Kbd className="px-0.5">
 					{t(
 						`library.comments.composer.shortcut.${isMacPlatform() ? "mac" : "other"}`,
 					)}
-				</kbd>
+				</Kbd>
 			</TooltipContent>
 		</Tooltip>
 	)

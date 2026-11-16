@@ -9,6 +9,8 @@ import {
 	fireEvent,
 	fn,
 	type Mock,
+	screen,
+	userEvent,
 	waitFor,
 	within,
 } from "storybook/test"
@@ -40,6 +42,7 @@ import {
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
 	Sidebar,
 	SidebarContent,
@@ -201,10 +204,16 @@ export const expectAnswerInsideFrame = async (root: HTMLElement) => {
 type SidebarFrameProps = {
 	children: ReactNode
 	width?: number
+	isCollapsed?: boolean
 }
 
-export const SidebarFrame = ({ children, width }: SidebarFrameProps) => (
+export const SidebarFrame = ({
+	children,
+	width,
+	isCollapsed = false,
+}: SidebarFrameProps) => (
 	<SidebarProvider
+		defaultOpen={!isCollapsed}
 		style={
 			width === undefined
 				? undefined
@@ -1275,4 +1284,93 @@ export const expectQuestionCutInsideTheRow = async (row: HTMLElement) => {
 		label.getBoundingClientRect().width + 1,
 	)
 	await expect(sidesOf(slotIn(line, "needs-you-glyph"))).toEqual([12, 12])
+}
+
+const SLOW_RUNNER_HEADROOM_MS = 900
+
+export const HOVER_TOOLTIP_WAIT = {
+	timeout: TOOLTIP_OPEN_DELAY_MS + SLOW_RUNNER_HEADROOM_MS,
+}
+
+export const findHoverTooltip = () =>
+	screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT)
+
+export const openTooltipOf = async (trigger: HTMLElement) => {
+	await userEvent.hover(trigger)
+	return settled(await findHoverTooltip())
+}
+
+export const expectNoHoverTooltip = async () => {
+	await new Promise((resolve) =>
+		setTimeout(resolve, HOVER_TOOLTIP_WAIT.timeout),
+	)
+	await expect(screen.queryByRole("tooltip")).toBeNull()
+}
+
+const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
+
+const GAP_PAST_SIDEBAR_EDGE = 4
+
+const expectTooltipBesideTheSidebar = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	const sidebar = row.closest(SIDEBAR_BOX)
+	if (!sidebar) throw new Error("The row sits in no sidebar")
+	await waitFor(
+		() =>
+			expect(
+				tooltip.getBoundingClientRect().left -
+					sidebar.getBoundingClientRect().right,
+			).toBeCloseTo(GAP_PAST_SIDEBAR_EDGE, 0),
+		FRAME_POLL,
+	)
+}
+
+export const expectTooltipPastTheSidebarEdge = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	await expectTooltipBesideTheSidebar(row, tooltip)
+	await waitFor(async () => {
+		const bubble = tooltip.getBoundingClientRect()
+		const held = row.getBoundingClientRect()
+		await expect(bubble.top + bubble.height / 2).toBeCloseTo(
+			held.top + held.height / 2,
+			0,
+		)
+	}, FRAME_POLL)
+}
+
+export const expectTooltipOnOneLine = async (tooltip: HTMLElement) => {
+	const style = getComputedStyle(tooltip)
+	await expect(tooltip.getBoundingClientRect().height).toBeCloseTo(
+		Number.parseFloat(style.lineHeight) +
+			Number.parseFloat(style.paddingTop) +
+			Number.parseFloat(style.paddingBottom),
+		0,
+	)
+}
+
+export const expectTooltipWrappedWhole = async (
+	tooltip: HTMLElement,
+	text: string,
+) => {
+	const style = getComputedStyle(tooltip)
+	const rendered = document.createRange()
+	rendered.selectNodeContents(tooltip)
+	const lines = [...rendered.getClientRects()]
+	const lineWidth =
+		tooltip.clientWidth -
+		Number.parseFloat(style.paddingLeft) -
+		Number.parseFloat(style.paddingRight)
+	const textWidth = lines.reduce((total, { width }) => total + width, 0)
+
+	await expect(tooltip.textContent).toBe(text)
+	await expect(style.textOverflow).not.toBe("ellipsis")
+	await expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth)
+	await expect(lines.length).toBeGreaterThan(1)
+	await expect(lines.length).toBeLessThanOrEqual(
+		Math.ceil(textWidth / lineWidth) + 1,
+	)
 }

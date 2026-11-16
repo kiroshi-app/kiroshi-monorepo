@@ -10,6 +10,7 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	HOVER_TOOLTIP_WAIT,
 	hueScopeOf,
 	isInBrowserRunner,
 	slotIn,
@@ -129,7 +130,7 @@ const expectSoleTooltip = (name: string) =>
 		const tooltips = screen.getAllByRole("tooltip")
 		expect(tooltips).toHaveLength(1)
 		expect(tooltips[0]).toHaveTextContent(name)
-	})
+	}, HOVER_TOOLTIP_WAIT)
 
 const copySwapIn = (popup: HTMLElement) => {
 	const [copyLayer, checkLayer] = within(popup)

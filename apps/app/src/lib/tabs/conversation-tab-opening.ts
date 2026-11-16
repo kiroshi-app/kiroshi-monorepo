@@ -17,7 +17,6 @@ import {
 import {
 	activeTabOf,
 	currentHrefOf,
-	openTabOn,
 	revealTab,
 	type SpaceTabs,
 	type Tab,
@@ -36,7 +35,7 @@ export type ConversationTarget = {
 
 export type ConversationTabOpening = {
 	open: (target: ConversationTarget) => Promise<void>
-	openInTab: (conversationId: string, spaceId: string) => void
+	openInSpace: (conversationId: string, spaceId: string) => void
 	showOverHome: (thread: ThreadSearch, spaceId?: string) => void
 	answerReveals: () => Promise<() => void>
 }
@@ -84,12 +83,11 @@ const conversationHrefOf = ({
 const showsHome = (space: SpaceTabs) =>
 	isHomePage(pageOf(currentHrefOf(activeTabOf(space))))
 
-const overHomeOr =
-	(href: string, otherwise: (space: SpaceTabs) => SpaceTabs) =>
-	(space: SpaceTabs) =>
-		showsHome(space) ? revealTab(space, space.activeId, href) : otherwise(space)
+const landInActiveTab = (href: string) => (space: SpaceTabs) =>
+	revealTab(space, space.activeId, href)
 
-const unchanged = (space: SpaceTabs) => space
+const landOverHome = (href: string) => (space: SpaceTabs) =>
+	showsHome(space) ? landInActiveTab(href)(space) : space
 
 const isWindowShowing = (windowLabel: string, conversationId: string) =>
 	keptSpaceIdsOf(windowLabel).some((spaceId) => {
@@ -171,11 +169,10 @@ export const createConversationTabOpening = ({
 		)
 	}
 
-	const openInTab = (conversationId: string, spaceId: string) => {
-		const href = conversationHrefOf({ conversationId })
+	const openInSpace = (conversationId: string, spaceId: string) => {
 		tabs.changeSpace(
 			spaceId,
-			overHomeOr(href, (space) => openTabOn(space, href)),
+			landInActiveTab(conversationHrefOf({ conversationId })),
 		)
 		showSpace(spaceId)
 	}
@@ -183,7 +180,7 @@ export const createConversationTabOpening = ({
 	const showOverHome = (
 		thread: ThreadSearch,
 		spaceId = tabs.getState().spaceId,
-	) => tabs.changeSpace(spaceId, overHomeOr(threadHrefOf(thread), unchanged))
+	) => tabs.changeSpace(spaceId, landOverHome(threadHrefOf(thread)))
 
 	const revealAsked = async ({ conversationId, href }: RevealRequest) => {
 		const spaceId = tabs.findSpace(isShowingIn(conversationId))
@@ -197,7 +194,7 @@ export const createConversationTabOpening = ({
 
 	return {
 		open,
-		openInTab,
+		openInSpace,
 		showOverHome,
 		answerReveals: () => watchRevealAsks(tabs.windowLabel, revealAsked),
 	}

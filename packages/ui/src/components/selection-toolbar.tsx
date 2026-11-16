@@ -14,7 +14,7 @@ import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Kbd } from "@workspace/ui/components/ui/kbd"
@@ -79,12 +79,11 @@ const PLAIN_BUTTON = cn(
 )
 
 const TOOLTIP = cn(
-	"rounded-control p-1.5 font-medium text-card break-words **:data-[slot=kbd]:rounded-md [&>[data-side]]:hidden",
+	"break-words **:data-[slot=kbd]:rounded-md",
 	STILL_UNDER_REDUCED_MOTION,
 )
 
-const SHORTCUT =
-	"px-0.5 in-data-[slot=tooltip-content]:bg-card/10 in-data-[slot=tooltip-content]:text-card dark:in-data-[slot=tooltip-content]:bg-card/10"
+const SHORTCUT = "px-0.5"
 
 const NAME = {
 	bold: "library.editor.toolbar.bold",
@@ -137,7 +136,7 @@ const ActionButton = ({ action, onPress, buttonRef }: ActionButtonProps) => {
 	return (
 		<Tooltip>
 			<TooltipTrigger
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				render={
 					<Toolbar.Button
 						aria-label={name}
