@@ -83,11 +83,11 @@ vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	convertFileSrc: (path: string) => `asset://${path}`,
 }))
 
-const openInItsTab = vi.hoisted(() => vi.fn())
+const openInLibrary = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/navigation/use-open-library-document", () => ({
 	useOpenLibraryDocument: () => () => undefined,
-	useOpenLibraryItemInItsTab: () => openInItsTab,
+	useOpenLibraryItem: () => openInLibrary,
 }))
 
 const measuredRoom = vi.hoisted(() => ({ width: null as number | null }))
@@ -484,7 +484,7 @@ describe("a board opened beside a conversation", () => {
 		cleanup()
 		libraryHost.answers.clear()
 		localStorage.clear()
-		openInItsTab.mockClear()
+		openInLibrary.mockClear()
 	})
 
 	it.each([
@@ -532,7 +532,7 @@ describe("a board opened beside a conversation", () => {
 		).toBeTruthy()
 	})
 
-	it("closes the panel and shows the board in its own tab on Open in Library", () => {
+	it("shows the board in the Library on Open in Library, the panel left to the navigation", () => {
 		const close = vi.fn()
 		renderLaunchBoardPanel(close)
 
@@ -542,8 +542,8 @@ describe("a board opened beside a conversation", () => {
 			}),
 		)
 
-		expect(close).toHaveBeenCalledOnce()
-		expect(openInItsTab).toHaveBeenCalledWith({
+		expect(close).not.toHaveBeenCalled()
+		expect(openInLibrary).toHaveBeenCalledExactlyOnceWith({
 			kind: "board",
 			name: LAUNCH_BOARD,
 		})
@@ -1090,8 +1090,8 @@ describe("a document opened from the Home conversation", () => {
 		)
 	}
 
-	it("opens in its Library tab instead of beside the conversation", () => {
-		openInItsTab.mockClear()
+	it("opens in the Library instead of beside the conversation", () => {
+		openInLibrary.mockClear()
 		const openBeside = vi.fn()
 		render(
 			createElement(
@@ -1112,7 +1112,7 @@ describe("a document opened from the Home conversation", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Open brief" }))
 
-		expect(openInItsTab).toHaveBeenCalledWith({
+		expect(openInLibrary).toHaveBeenCalledWith({
 			kind: "document",
 			name: "brief",
 		})
