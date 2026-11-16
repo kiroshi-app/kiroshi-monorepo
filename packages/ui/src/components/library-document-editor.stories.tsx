@@ -859,6 +859,11 @@ const DECISIONS_TABLE = {
 
 const BAR_DETAILS = "MD · 4 KB · 12 min ago"
 
+const barButtonNames = (bar: HTMLElement) =>
+	within(bar)
+		.getAllByRole("button")
+		.map((button) => button.getAttribute("aria-label") ?? button.textContent)
+
 export const BarAtRest = meta.story({
 	args: {
 		...LAUNCH_REVIEW,
@@ -888,13 +893,13 @@ export const BarAtRest = meta.story({
 		const name = bar.querySelector('[aria-current="page"]') as HTMLElement
 		await expect(name).toHaveTextContent(LAUNCH_REVIEW.title)
 		await expectHeaderTitleStep(name)
-		await expect(
-			within(bar)
-				.getAllByRole("button")
-				.map(
-					(button) => button.getAttribute("aria-label") ?? button.textContent,
-				),
-		).toEqual(["Library", "Download", "Copy", "More", "Close"])
+		await expect(barButtonNames(bar)).toEqual([
+			"Library",
+			"Download",
+			"Copy",
+			"More",
+			"Close",
+		])
 
 		const column = slotIn(canvasElement, "library-document-column")
 		await expect(
@@ -1579,13 +1584,14 @@ export const BarDragsTheWindow = meta.story({
 			slotIn(canvasElement, "library-document-editor"),
 		)
 
-		await expect(
-			within(bar)
-				.getAllByRole("button")
-				.map(
-					(button) => button.getAttribute("aria-label") ?? button.textContent,
-				),
-		).toEqual(["Library", "Stop all", "Download", "Copy", "More", "Close"])
+		await expect(barButtonNames(bar)).toEqual([
+			"Library",
+			"Stop all",
+			"Download",
+			"Copy",
+			"More",
+			"Close",
+		])
 		await expectBarDragsTheWindow(bar)
 	},
 })
