@@ -1358,6 +1358,9 @@ layout-workspaceshell--toggle-during-slide-turns-back
 navigation-agentspage--actions-menu-open
 navigation-agentspage--default
 navigation-agentspage--empty
+navigation-agentspage--failed
+navigation-agentspage--failed-light
+navigation-agentspage--failed-without-retry
 navigation-agentspage--keyboard-focus
 navigation-agentspage--light
 navigation-agentspage--loading

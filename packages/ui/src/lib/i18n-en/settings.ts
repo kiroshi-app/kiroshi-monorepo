@@ -312,6 +312,10 @@ const settings = {
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
 				"Couldn’t read the skills and applications of the agents. Open Agents again to retry.",
+			failure: {
+				title: "Couldn’t load agents",
+				description: "The agents are still there; only the list didn’t load.",
+			},
 			skills_zero: "no skills",
 			skills_one: "{{count}} skill",
 			skills_other: "{{count}} skills",
