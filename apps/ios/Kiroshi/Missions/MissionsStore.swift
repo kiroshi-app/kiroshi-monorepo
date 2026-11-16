@@ -25,6 +25,7 @@ final class MissionsStore {
     @ObservationIgnored private var sharedSpaceId: String?
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var reading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var paging: Task<Void, Never>?
     @ObservationIgnored private var merging: Task<Void, Never>?
     @ObservationIgnored private var nextCursor: String?
@@ -68,6 +69,7 @@ final class MissionsStore {
         for await update in await connection.updates() {
             apply(update)
         }
+        resyncReread.cancel()
         for task in [reading, paging, merging] {
             task?.cancel()
         }
@@ -113,6 +115,8 @@ final class MissionsStore {
             reread()
         case .state:
             break
+        case .resynced:
+            resyncReread.start { [weak self] in self?.reread() }
         case .event(let event):
             guard let changed = MissionChanged(event), sharedSpaceId != nil else { return }
             entries = entries.map { entry in

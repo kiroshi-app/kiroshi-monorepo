@@ -18,6 +18,8 @@ actor RelayConnection {
     static let callDeadline = Duration.seconds(300)
     static let hello = Data(#"{"hello":{}}"#.utf8)
     static let noKeyId: UInt32 = 0
+    static let answerRefusedByTheRelay =
+        "the relay refused the host's answer: Device socket is full"
 
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
@@ -516,6 +518,9 @@ actor RelayConnection {
             guard opened.header.to == device.keys.deviceId, let fresh = opened.header.challenge
             else { return }
             heardChallenge(fresh)
+        } else if let resync = head.resync {
+            guard opened.header.to == device.keys.deviceId else { return }
+            resynced(endingAnswersTo: resync.answered)
         } else if let event = head.event {
             broadcast(.event(RelayEvent(name: event.event, frame: frame)))
         } else if let id = head.id, let status = head.status {
@@ -579,6 +584,19 @@ actor RelayConnection {
                 break
             }
         }
+    }
+
+    private func resynced(endingAnswersTo answered: [Int]) {
+        for id in answered where pendingCalls[id] != nil {
+            settle(id, with: .success(Self.refusedAnswer(to: id)))
+        }
+        broadcast(.resynced)
+    }
+
+    private static func refusedAnswer(to id: Int) -> RelayAnswer {
+        RelayAnswer(
+            status: 413,
+            frame: Data(#"{"id":\#(id),"status":413,"body":"\#(answerRefusedByTheRelay)"}"#.utf8))
     }
 
     private func queue(_ id: Int) {
@@ -703,17 +721,40 @@ private struct RelayFrameHead: Decodable {
 
     struct Hello: Decodable {}
 
+    struct Resync: Decodable {
+        let answered: [Int]
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            answered = try container.decode([CallId].self, forKey: .answered).compactMap(\.number)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case answered
+        }
+
+        private struct CallId: Decodable {
+            let number: Int?
+
+            init(from decoder: any Decoder) throws {
+                number = try? decoder.singleValueContainer().decode(Int.self)
+            }
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case status
         case event
         case hello
+        case resync
     }
 
     let id: Int?
     let status: Int?
     let event: Event?
     let hello: Hello?
+    let resync: Resync?
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -721,5 +762,6 @@ private struct RelayFrameHead: Decodable {
         status = try? container.decodeIfPresent(Int.self, forKey: .status)
         event = try? container.decodeIfPresent(Event.self, forKey: .event)
         hello = try? container.decodeIfPresent(Hello.self, forKey: .hello)
+        resync = try? container.decodeIfPresent(Resync.self, forKey: .resync)
     }
 }
