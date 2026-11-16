@@ -94,9 +94,9 @@ const visibleRectOf = (
 	element: Element,
 	clippingAncestors: Element[],
 ): LiveHtmlRect => {
-	const { left, top, right, bottom } = clippingAncestors.reduce(
+	const { left, top, right, bottom } = clippingAncestors.reduce<Edges>(
 		(edges, ancestor) => intersect(edges, paddingBoxOf(ancestor)),
-		element.getBoundingClientRect() as Edges,
+		element.getBoundingClientRect(),
 	)
 	const width = right - left
 	const height = bottom - top
@@ -209,31 +209,23 @@ const LiveHtmlSlot = ({
 				<span id={labelId} className={LABEL_CLASS}>
 					{t("liveHtml.label")}
 				</span>
-				{isEnlarged ? (
-					<Button
-						ref={focusWhenPending("shrink")}
-						variant="ghost"
-						size="xs"
-						className="transition-none"
-						aria-label={t("liveHtml.shrinkName")}
-						onClick={() => changeEnlarged(false)}
-					>
+				<Button
+					ref={focusWhenPending(isEnlarged ? "shrink" : "enlarge")}
+					variant="ghost"
+					size="xs"
+					className="transition-none"
+					aria-label={t(
+						isEnlarged ? "liveHtml.shrinkName" : "liveHtml.enlargeName",
+					)}
+					onClick={() => changeEnlarged(!isEnlarged)}
+				>
+					{isEnlarged ? (
 						<Icons.FullscreenExit className="size-3.5" />
-						{t("liveHtml.shrink")}
-					</Button>
-				) : (
-					<Button
-						ref={focusWhenPending("enlarge")}
-						variant="ghost"
-						size="xs"
-						className="transition-none"
-						aria-label={t("liveHtml.enlargeName")}
-						onClick={() => changeEnlarged(true)}
-					>
+					) : (
 						<Icons.Fullscreen className="size-3.5" />
-						{t("liveHtml.enlarge")}
-					</Button>
-				)}
+					)}
+					{t(isEnlarged ? "liveHtml.shrink" : "liveHtml.enlarge")}
+				</Button>
 			</div>
 			<div className={cn("flex p-2", isEnlarged && "min-h-0 flex-1")}>
 				<div
