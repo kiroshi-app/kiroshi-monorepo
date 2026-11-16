@@ -30,9 +30,12 @@ const readFailureLog = async (): Promise<FailureLog> => {
 	}
 }
 
+const warnUnwritten = (line: string) => (reason: unknown) =>
+	console.warn(`kiroshi.log refused the line: ${line}`, reason)
+
 export const readFailureLogAfterWriting = async (
 	line: string,
 ): Promise<FailureLog> => {
-	await writeToLogFile("error", line)
+	await writeToLogFile("error", line).catch(warnUnwritten(line))
 	return readFailureLog()
 }

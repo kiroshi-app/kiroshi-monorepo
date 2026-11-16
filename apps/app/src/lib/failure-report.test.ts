@@ -138,6 +138,7 @@ beforeEach(() => {
 afterEach(() => {
 	vi.useRealTimers()
 	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
 	reportLocalWhen(() => false)
 })
 
@@ -572,13 +573,21 @@ describe("a failure raised with the reason its raiser caught", () => {
 		)
 	})
 
-	it("leaves Log out when the failure line could not be written", async () => {
+	it("still fills Log from the tail when the failure line could not be written", async () => {
 		logWrite.mockRejectedValue(new Error("log plugin gone"))
+		vi.spyOn(console, "warn").mockImplementation(() => undefined)
 
 		const report = await buildFailureReport({ raisedIn: "use-account" })
 
-		expect(report.log).toBeUndefined()
-		expect(logTail).not.toHaveBeenCalled()
+		expect(report.log).toEqual({
+			lines: SCRUBBED_LOG_LINES,
+			path: "~/Library/Logs/app.kiroshi/kiroshi.log",
+			lineCount: 2,
+		})
+		expect(console.warn).toHaveBeenCalledWith(
+			"kiroshi.log refused the line: failure raisedIn=use-account",
+			new Error("log plugin gone"),
+		)
 	})
 })
 
