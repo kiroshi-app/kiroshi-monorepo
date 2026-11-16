@@ -1128,9 +1128,9 @@ export const createConversationController = (
 			settlePrompt(held, id)
 			return
 		}
-		const foreign = foreignTurns.questionAsking(id)
+		const foreign = foreignTurns.scopeAsking(id)
 		if (foreign) {
-			foreignTurns.release(foreign.scope, id)
+			foreignTurns.release(foreign, id)
 			sync()
 		}
 	}
