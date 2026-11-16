@@ -231,11 +231,11 @@ impl<S> Live<S> {
 	}
 
 	fn release_question(&self, scope: &RuntimeScope, id: &str) -> Option<CallOrigin> {
-		let released = self
-			.questions()
+		self.questions()
 			.extract_if(.., |question| question.asked_by(scope) && question.request.id == id)
-			.collect::<Vec<_>>();
-		released.into_iter().find_map(|question| question.answered_by)
+			.collect::<Vec<_>>()
+			.into_iter()
+			.find_map(|question| question.answered_by)
 	}
 
 	fn note_answerer(&self, scope: &RuntimeScope, id: &str, answerer: Option<CallOrigin>) {
@@ -529,12 +529,10 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		}
 		let pending_write = matches!(event, AgentEvent::TurnEnded { .. })
 			.then(|| self.pending_writes.register(&self.scope.bot_id));
+		let scoped = ScopedEvent { scope: Some(self.scope.clone()), turn, event };
 		match answered_by {
-			Some(by) => {
-				let scoped = ScopedEvent { scope: Some(self.scope.clone()), turn, event };
-				announce_answered(&self.app, scoped, &by);
-			}
-			None => announce_in_turn(&self.app, Some(self.scope.clone()), turn, event),
+			Some(by) => announce_answered(&self.app, scoped, &by),
+			None => announce_scoped(&self.app, scoped),
 		}
 		if let Some(pending_write) = pending_write {
 			self.record_writes(pending_write);
