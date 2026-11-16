@@ -460,15 +460,14 @@ impl Observations {
 			("during the busy loop", busy_gap),
 		]
 		.into_iter()
-		.filter_map(|(measured, gap)| gap.map(|gap| (measured, gap)))
-		.filter(|(_, gap)| gap.length > HEARTBEAT_GAP_LIMIT)
-		.map(|(measured, gap)| {
-			json!({
+		.filter_map(|(measured, gap)| {
+			let gap = gap.filter(|gap| gap.length > HEARTBEAT_GAP_LIMIT)?;
+			Some(json!({
 				"measured": measured,
 				"gap_ms": gap.length.as_millis(),
 				"started_ms_after_the_view_window_creation_began": signed_ms(creation_began, gap.started),
 				"started_ms_relative_to_the_busy_loop_start": busy_started.map(|busy| signed_ms(busy, gap.started)),
-			})
+			}))
 		})
 		.collect();
 		let length_ms = |gap: Option<Gap>| gap.map(|gap| gap.length.as_millis());
