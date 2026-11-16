@@ -6,11 +6,17 @@ import {
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
+import {
+	raiseFailureNotice,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 import "@workspace/ui/lib/i18n"
 
 import { AnswerBody, TurnBody } from "@/components/turn-body"
@@ -24,6 +30,24 @@ import {
 } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 
+const host = vi.hoisted(() => ({ saveCsvFile: vi.fn() }))
+
+vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tauri-apps/api/core")>()),
+	invoke: async (command: string, args: unknown) => {
+		if (command === "save_csv_file") return host.saveCsvFile(args)
+		throw new Error(`unanswered host call ${command}`)
+	},
+}))
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseFailureNotice: vi.fn(() => "notice"),
+	raiseTransientNotice: vi.fn(() => "notice"),
+}))
+
 vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
 
 vi.mock("@/lib/host", async (importOriginal) => ({
@@ -34,6 +58,9 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 afterEach(() => {
 	cleanup()
 	vi.mocked(openAttachment).mockClear()
+	vi.mocked(raiseFailureNotice).mockClear()
+	vi.mocked(raiseTransientNotice).mockClear()
+	host.saveCsvFile.mockReset()
 })
 
 const fenced = (label: string, body: string) =>
@@ -202,6 +229,108 @@ describe("the Save button of a sourced image in an answer", () => {
 				src: SOURCED_IMAGE.src,
 			}),
 		)
+	})
+})
+
+const TABLE = `| City | Nights |
+| --- | --- |
+| Lisbon | 3 |
+| Porto, north | 2 |`
+
+const TABLE_CSV = 'City,Nights\r\nLisbon,3\r\n"Porto, north",2'
+
+const TABLE_NOT_SAVED =
+	"Couldn’t save the table. Press Download CSV to try again."
+
+const renderBubblelessTableOf = (agentName: string) =>
+	render(
+		createElement(
+			MarkdownSizeContext,
+			{ value: "answer" },
+			createElement(
+				AnswerActionsContext,
+				{ value: actionsSpy() },
+				createElement(AnswerBody, {
+					attachments: [],
+					text: TABLE,
+					agentName,
+					isWriting: false,
+				}),
+			),
+		),
+	)
+
+const downloadTableOf = async (agentName = "Ada") => {
+	renderBubblelessTableOf(agentName)
+	const download = await screen.findByRole("button", { name: "Download CSV" })
+	await act(async () => {
+		fireEvent.click(download)
+	})
+}
+
+describe("the Download CSV button of a table in an answer", () => {
+	it.each([
+		["Ada", "ada-table.csv"],
+		["Ada Lovelace!", "ada-lovelace-table.csv"],
+		["Ada - Lovelace", "ada-lovelace-table.csv"],
+		["--Ada--", "ada-table.csv"],
+		["R2-D2", "r2-d2-table.csv"],
+		["日本 ✦", "table.csv"],
+	])("saves the table of %s as %s", async (agentName, name) => {
+		host.saveCsvFile.mockResolvedValue(null)
+
+		await downloadTableOf(agentName)
+
+		expect(host.saveCsvFile).toHaveBeenCalledTimes(1)
+		expect(host.saveCsvFile).toHaveBeenCalledWith({ name, text: TABLE_CSV })
+	})
+
+	it("raises no notice when the person cancels the picker", async () => {
+		host.saveCsvFile.mockResolvedValue(null)
+
+		await downloadTableOf()
+
+		expect(host.saveCsvFile).toHaveBeenCalledTimes(1)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		"/Users/ada/Desktop/lisbon-nights.csv",
+		"C:\\Users\\ada\\Desktop\\lisbon-nights.csv",
+	])("names the file saved at %s in a notice", async (path) => {
+		host.saveCsvFile.mockResolvedValue(path)
+
+		await downloadTableOf()
+
+		await waitFor(() =>
+			expect(raiseTransientNotice).toHaveBeenCalledWith({
+				type: "success",
+				title: "Table saved as lisbon-nights.csv",
+			}),
+		)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		[
+			"the host refuses the name",
+			{ kind: "invalidName", name: "ada-table.csv" },
+		],
+		["the file can’t be written", { kind: "unwritable", detail: "read-only" }],
+		["the host call rejects", new Error("ipc down")],
+	])("says the table was not saved when %s", async (_case, failure) => {
+		host.saveCsvFile.mockRejectedValue(failure)
+
+		await downloadTableOf()
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({ title: TABLE_NOT_SAVED }),
+			),
+		)
+		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 })
 

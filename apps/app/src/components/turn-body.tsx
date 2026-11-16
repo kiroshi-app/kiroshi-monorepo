@@ -22,6 +22,7 @@ import {
 	type MessageContent,
 	resolveCitedImage,
 } from "@/lib/chat/message-attachments"
+import { answerTableSaverOf } from "@/lib/chat/save-answer-table"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
@@ -167,6 +168,7 @@ export const AnswerBody = ({
 				onUseValues: actions.insert,
 				onOpenImage: actions.openImage,
 				onOpenWebPage: openWebPage,
+				onDownloadTable: answerTableSaverOf(agentName),
 				imageMenu: actions.imageActions,
 				isSavingImage: actions.imageActions.isSavingImage,
 			}}
