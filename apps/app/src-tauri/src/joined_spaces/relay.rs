@@ -36,8 +36,8 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
-	SILENCE_BOUND,
+	dropped_reason, opened_unpaused, until_stopped, Backoff, Departure, LastFrames, MeasuredSink,
+	Opened, Socket, PING_EVERY, SILENCE_BOUND,
 };
 use crate::spaces::contract::SpaceDescribed;
 
@@ -1190,7 +1190,13 @@ async fn online<R: Runtime>(
 		}
 	};
 	let mut wire = MemberWire::new(database.joined_space_relay(), &linked.instance_id, held);
-	let ended = sealed_session(app, socket, relay_device_id, linked, &mut wire, stop).await;
+	let mut frames = LastFrames::default();
+	let ended =
+		sealed_session(app, socket, relay_device_id, linked, &mut wire, stop, &mut frames).await;
+	let ended = match ended {
+		Ended::Dropped(reason) => Ended::Dropped(dropped_reason(&reason, frames)),
+		ended => ended,
+	};
 	(ended, wire.into_held())
 }
 
@@ -1208,10 +1214,12 @@ async fn sealed_session<R: Runtime>(
 	linked: &Linked,
 	wire: &mut MemberWire<'_>,
 	stop: &mut watch::Receiver<bool>,
+	frames: &mut LastFrames,
 ) -> Ended {
 	let link = &linked.link;
 	let answer_bound = app.state::<RelayGuests>().answer_bound();
-	let (mut sink, mut stream) = socket.split();
+	let (sink, mut stream) = socket.split();
+	let mut sink = MeasuredSink::new(sink, frames);
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
 	let mut unopened = Some(calls_in);
 	let mut hello_deadline = Instant::now() + answer_bound;
@@ -1238,7 +1246,7 @@ async fn sealed_session<R: Runtime>(
 		outgoing = tokio::select! {
 			_ = stop.changed() => {
 				let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
-				if let Err(reason) = sent(&mut sink, Message::Close(Some(close))).await {
+				if let Err(reason) = sink.sent(Message::Close(Some(close))).await {
 					log::warn!(
 						"joined space {} (instance {}) left its member relay without its 1000 close frame: {reason}",
 						linked.id, linked.instance_id
@@ -1248,6 +1256,9 @@ async fn sealed_session<R: Runtime>(
 			}
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
+				if let Some(Ok(heard)) = &frame {
+					sink.heard(heard);
+				}
 				match frame {
 					Some(Ok(Message::Text(text))) => heard(app, linked, wire, text.as_str(), &mut unopened).await,
 					Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
@@ -1274,7 +1285,7 @@ async fn sealed_session<R: Runtime>(
 }
 
 async fn delivered(
-	sink: &mut Sink,
+	sink: &mut MeasuredSink<'_>,
 	wire: &mut MemberWire<'_>,
 	outgoing: Outgoing,
 ) -> Result<(), String> {
@@ -1284,7 +1295,7 @@ async fn delivered(
 		Outgoing::Sealed(plaintext) => Message::text(wire.sealed(&plaintext).await?),
 		Outgoing::Ping => Message::Ping(Vec::new().into()),
 	};
-	sent(sink, message).await
+	sink.sent(message).await
 }
 
 async fn heard<R: Runtime>(

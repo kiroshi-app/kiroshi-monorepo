@@ -16,7 +16,8 @@ use tokio::sync::{watch, Mutex};
 use tokio::task::JoinSet;
 use tokio::time::{interval_at, sleep, timeout, Instant};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::{CloseCode, Data, OpCode};
+use tokio_tungstenite::tungstenite::protocol::frame::Frame;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
@@ -52,6 +53,8 @@ const CONNECT_BOUND: Duration = Duration::from_secs(20);
 
 const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
 
+const FRAGMENT_BYTES: usize = 16 * 1024;
+
 const HOST_REPLACED: u16 = 4001;
 
 const SERVER_RESTARTING: u16 = 4005;
@@ -63,24 +66,28 @@ pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 pub(crate) type Sink = SplitSink<Socket, Message>;
 
 #[derive(Default, Clone, Copy)]
-struct LastFrames {
+pub(crate) struct LastFrames {
 	received: Option<usize>,
 	sent: Option<usize>,
 }
 
-struct MeasuredSink<'a> {
+pub(crate) struct MeasuredSink<'a> {
 	sink: Sink,
 	frames: &'a mut LastFrames,
 }
 
-impl MeasuredSink<'_> {
-	fn heard(&mut self, frame: &Message) {
+impl<'a> MeasuredSink<'a> {
+	pub(crate) fn new(sink: Sink, frames: &'a mut LastFrames) -> Self {
+		Self { sink, frames }
+	}
+
+	pub(crate) fn heard(&mut self, frame: &Message) {
 		if carries_data(frame) {
 			self.frames.received = Some(frame.len());
 		}
 	}
 
-	async fn sent(&mut self, message: Message) -> Result<(), String> {
+	pub(crate) async fn sent(&mut self, message: Message) -> Result<(), String> {
 		if carries_data(&message) {
 			self.frames.sent = Some(message.len());
 		}
@@ -92,7 +99,7 @@ fn carries_data(frame: &Message) -> bool {
 	frame.is_text() || frame.is_binary()
 }
 
-fn dropped_reason(reason: &str, frames: LastFrames) -> String {
+pub(crate) fn dropped_reason(reason: &str, frames: LastFrames) -> String {
 	let weighed = |frame: Option<usize>| {
 		frame.map_or_else(|| "none".to_owned(), |bytes| format!("{bytes} bytes"))
 	};
@@ -566,7 +573,7 @@ async fn online<R: Runtime>(
 		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 	}
 	let (sink, mut stream) = socket.split();
-	let mut sink = MeasuredSink { sink, frames };
+	let mut sink = MeasuredSink::new(sink, frames);
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
 	let unsent = recorded.borrow_and_update().rejoined(last_sent);
@@ -1040,11 +1047,39 @@ async fn devices_of(
 }
 
 pub(crate) async fn sent(sink: &mut Sink, message: Message) -> Result<(), String> {
-	match timeout(SEND_PATIENCE, sink.send(message)).await {
-		Ok(Ok(())) => Ok(()),
-		Ok(Err(error)) => Err(format!("the relay socket refused a frame: {error}")),
-		Err(_) => Err(format!("the relay socket stalled on a frame for {SEND_PATIENCE:?}")),
+	for fragment in fragments(message) {
+		match timeout(SEND_PATIENCE, sink.send(fragment)).await {
+			Ok(Ok(())) => {}
+			Ok(Err(error)) => return Err(format!("the relay socket refused a frame: {error}")),
+			Err(_) => {
+				return Err(format!("the relay socket stalled on a frame for {SEND_PATIENCE:?}"))
+			}
+		}
 	}
+	Ok(())
+}
+
+fn fragments(message: Message) -> Vec<Message> {
+	let opcode = match &message {
+		Message::Text(_) => Data::Text,
+		Message::Binary(_) => Data::Binary,
+		_ => return vec![message],
+	};
+	if message.len() <= FRAGMENT_BYTES {
+		return vec![message];
+	}
+	let payload = message.into_data();
+	let last = (payload.len() - 1) / FRAGMENT_BYTES;
+	(0..=last)
+		.map(|index| {
+			let start = index * FRAGMENT_BYTES;
+			let end = payload.len().min(start + FRAGMENT_BYTES);
+			let opcode = if index == 0 { opcode } else { Data::Continue };
+			let frame =
+				Frame::message(payload.slice(start..end), OpCode::Data(opcode), index == last);
+			Message::Frame(frame)
+		})
+		.collect()
 }
 
 pub(crate) async fn until_stopped<F: Future>(
@@ -1115,6 +1150,51 @@ mod tests {
 			dropped_reason("the relay socket ended", LastFrames::default()),
 			"the relay socket ended (last frame received: none, last frame sent: none)"
 		);
+	}
+
+	fn frame_of(message: &Message) -> &Frame {
+		let Message::Frame(frame) = message else {
+			panic!("a fragment is a raw frame: {message:?}");
+		};
+		frame
+	}
+
+	fn fragment_of(message: &Message) -> (OpCode, bool, usize) {
+		let frame = frame_of(message);
+		(frame.header().opcode, frame.header().is_final, frame.payload().len())
+	}
+
+	#[test]
+	fn a_frame_over_a_fragment_leaves_in_fragments_that_join_back_into_its_bytes() {
+		let text = "s".repeat(2 * FRAGMENT_BYTES + 1);
+
+		let sent = fragments(Message::text(text.clone()));
+
+		let shapes: Vec<_> = sent.iter().map(fragment_of).collect();
+		assert_eq!(
+			shapes,
+			[
+				(OpCode::Data(Data::Text), false, FRAGMENT_BYTES),
+				(OpCode::Data(Data::Continue), false, FRAGMENT_BYTES),
+				(OpCode::Data(Data::Continue), true, 1),
+			]
+		);
+		let joined: Vec<u8> =
+			sent.iter().flat_map(|fragment| frame_of(fragment).payload().to_vec()).collect();
+		assert_eq!(joined, text.as_bytes());
+		let binary = fragments(Message::binary(vec![1u8; FRAGMENT_BYTES + 1]));
+		assert_eq!(fragment_of(&binary[0]).0, OpCode::Data(Data::Binary));
+		assert_eq!(fragment_of(&binary[1]), (OpCode::Data(Data::Continue), true, 1));
+	}
+
+	#[test]
+	fn a_frame_within_a_fragment_or_carrying_no_data_leaves_whole() {
+		let small = Message::text("s".repeat(FRAGMENT_BYTES));
+		let ping = Message::Ping(vec![0u8; 8].into());
+
+		assert_eq!(fragments(small.clone()), [small]);
+		assert_eq!(fragments(ping.clone()), [ping]);
+		assert_eq!(fragments(Message::Close(None)), [Message::Close(None)]);
 	}
 
 	#[test]
