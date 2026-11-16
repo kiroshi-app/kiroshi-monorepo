@@ -5,6 +5,7 @@ import {
 	fn,
 	screen,
 	userEvent,
+	waitFor,
 	within,
 } from "storybook/test"
 
@@ -16,10 +17,15 @@ import {
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTooltipOnOneLine,
+	expectTooltipPastTheSidebarEdge,
+	expectTooltipWrappedWhole,
 	glyphIn,
 	isInBrowserRunner,
+	openTooltipOf,
 	pictureOf,
 	realPointer,
+	rightClick,
 	SidebarFrame,
 	shown,
 	slotIn,
@@ -90,7 +96,10 @@ const meta = preview.meta({
 					</SidebarMenu>
 				</IconRailFrame>
 			) : (
-				<SidebarFrame width={parameters.sidebarWidth}>
+				<SidebarFrame
+					isCollapsed={parameters.isSidebarCollapsed}
+					width={parameters.sidebarWidth}
+				>
 					<SidebarMenu>
 						<Story />
 					</SidebarMenu>
@@ -952,7 +961,7 @@ const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 		) as HTMLElement
 		await withMotionAllowed(async () => {
 			await hoverMissionGroup(row)
-			await expectOneMissionSurface(row, TRANSPARENT)
+			await expectOneMissionSurface(row, missionGroupFillOf(row))
 			await hoverMissionGroup(row, lastMission)
 			await hoverMissionGroup(missionFreeRow)
 		})
@@ -1416,4 +1425,198 @@ export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 	},
 	play: ({ canvasElement }) =>
 		expectLongQuestionBesideAWholePile(canvasElement),
+})
+
+const LONG_TITLE =
+	"Launch readiness review with the platform, design and support teams before the autumn release"
+
+const LONG_TITLED_ROOM: AppSidebarConversation = {
+	...roomOf(FIVE_BOTS),
+	name: LONG_TITLE,
+}
+
+const renderWithRoomAboveTheRow = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<>
+		<li aria-hidden="true" className="h-40" />
+		<ConversationRosterRow {...args} />
+	</>
+)
+
+export const TooltipCarriesTheTitleAlone = meta.story({
+	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the expanded sidebar whose title the row cuts, with five agents seated and a last message. Check the tooltip holds the whole title and nothing else, no agents, no message and no date, that a title wider than the bubble wraps onto more lines inside it and never ends in an ellipsis, that the row keeps its own ellipsis, that the tooltip sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name. Pick `TooltipWrapsALongTitleOnTheIconRail` for the collapsed sidebar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const name = slotIn(row, "roster-row-name")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).not.toHaveAttribute("aria-label")
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const TooltipWrapsALongTitleOnTheIconRail = meta.story({
+	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar whose title is wider than the bubble. Check the tooltip holds the whole title, wrapped onto more lines inside the bubble with no ellipsis, and that it sits just past the rail edge and centred on the tile. Pick `TooltipCarriesTheTitleAlone` for the expanded sidebar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(LONG_TITLE)
+	},
+})
+
+export const TooltipOnTheIconRail = meta.story({
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar. Check the tooltip is the one the expanded sidebar shows, the conversation title alone on one line, that it sits just past the rail edge and centred on the tile, and that the tile keeps the conversation name as its accessible name with no description.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expect(tooltip.textContent).toBe(DESK_ROOM.name)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(DESK_ROOM.name)
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+const [WAITING_MISSION] = MISSIONS_ROOM.missions ?? []
+
+const missionTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { conversation: MISSIONS_ROOM },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on a mission under its conversation, in the ${isSidebarCollapsed ? "collapsed" : "expanded"} sidebar. Check the tooltip holds the mission title on one line and nothing else, without the ticket identifier or the state, that it sits just past the sidebar edge and centred on the mission, and that the mission gains no description.`,
+			},
+		},
+	},
+	render: (args: ComponentProps<typeof ConversationRosterRow>) => (
+		<CompactRowsContext.Provider value>
+			<ConversationRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const mission = slotIn(canvasElement, "mission-capsule")
+		const tooltip = await openTooltipOf(mission)
+
+		await expect(mission).toHaveTextContent(WAITING_MISSION.ticket.externalId)
+		await expect(tooltip.textContent).toBe(WAITING_MISSION.ticket.title)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(mission, tooltip)
+		await expect(mission).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const MissionTooltipCarriesTheTitleAlone = meta.story(
+	missionTooltipStory(false),
+)
+
+export const MissionTooltipOnTheCollapsedSidebar = meta.story(
+	missionTooltipStory(true),
+)
+
+const LONG_MISSION_TITLE =
+	"Ship the release notes with every migration step spelled out for the reader, then check each link against the published changelog"
+
+const LONG_TITLED_MISSION_ROOM: AppSidebarConversation = {
+	...MISSIONS_ROOM,
+	missions: [
+		{
+			...WAITING_MISSION,
+			ticket: { ...WAITING_MISSION.ticket, title: LONG_MISSION_TITLE },
+		},
+	],
+}
+
+const longMissionTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { conversation: LONG_TITLED_MISSION_ROOM },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on a mission whose title the row cuts, in the ${isSidebarCollapsed ? "collapsed" : "expanded"} sidebar. Check the tooltip holds the whole mission title, wrapped onto more lines inside the bubble with no ellipsis, that the mission row keeps its own ellipsis, and that the tooltip sits just past the sidebar edge and centred on the mission.`,
+			},
+		},
+	},
+	render: missionTooltipStory(isSidebarCollapsed).render,
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const mission = slotIn(canvasElement, "mission-capsule")
+		const title = slotIn(mission, "mission-capsule-title")
+		const tooltip = await openTooltipOf(mission)
+
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_MISSION_TITLE)
+		await expectTooltipPastTheSidebarEdge(mission, tooltip)
+	},
+})
+
+export const MissionTooltipWrapsALongTitle = meta.story(
+	longMissionTooltipStory(false),
+)
+
+export const MissionTooltipWrapsALongTitleOnTheCollapsedSidebar = meta.story(
+	longMissionTooltipStory(true),
+)
+
+export const TooltipClosesWhileTheRowMenuIsOpen = meta.story({
+	tags: ["test-only"],
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		await openTooltipOf(row)
+
+		rightClick(row)
+		await screen.findByRole("menu", {
+			name: `Actions for ${DESK_ROOM.name}`,
+		})
+
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+	},
+})
+
+export const NoTooltipWhileTheRowIsLifted = meta.story({
+	tags: ["test-only"],
+	args: { isLifted: true },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+		await userEvent.tab()
+		await expect(row).toHaveFocus()
+		await expect(screen.queryByRole("tooltip")).toBeNull()
+	},
 })

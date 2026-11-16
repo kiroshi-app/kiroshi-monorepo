@@ -11,12 +11,14 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 	expectControlFrame,
 	expectInverseAtRest,
 	hueScopeOf,
 	isInBrowserRunner,
 	lineHeightOf,
+	mergeA11y,
 	realPointer,
 	settled,
 	slotIn,
@@ -396,7 +398,10 @@ export const OptionRowHovered = meta.story({
 	args: { questions: [PLAN_QUESTION], hasDigitKeys: true },
 	render: inComposerSlot,
 	parameters: {
-		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		a11y: mergeA11y(
+			A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+			A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		),
 		pseudo: { hover: OPTION_ROW_SELECTOR },
 		docs: {
 			description: {

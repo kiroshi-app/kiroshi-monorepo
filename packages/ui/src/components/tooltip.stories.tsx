@@ -4,6 +4,7 @@ import { expect, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -12,7 +13,6 @@ import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@workspace/ui/components/ui/tooltip"
 
@@ -92,7 +92,11 @@ const sideStory = (side: Side) => ({
 			})
 
 			await userEvent.hover(trigger)
-			const bubble = await screen.findByText("New bot")
+			const bubble = await screen.findByText(
+				"New bot",
+				undefined,
+				HOVER_TOOLTIP_WAIT,
+			)
 
 			await waitFor(async () => {
 				await expect(bubble).not.toHaveAttribute("data-starting-style")
@@ -134,13 +138,6 @@ const sideStory = (side: Side) => ({
 const meta = preview.meta({
 	title: "Overlays/Tooltip",
 	component: TypedTooltip,
-	decorators: [
-		(Story) => (
-			<TooltipProvider>
-				<Story />
-			</TooltipProvider>
-		),
-	],
 	parameters: {
 		layout: "centered",
 		docs: {
@@ -152,6 +149,31 @@ const meta = preview.meta({
 	},
 })
 
+const renderSendTooltip = () => (
+	<Tooltip>
+		<TooltipTrigger render={<Button variant="outline">Send</Button>} />
+		<TooltipContent>Send this prompt</TooltipContent>
+	</Tooltip>
+)
+
+const openSendTooltip = async ({
+	canvasElement,
+	userEvent,
+}: HoverPlayContext) => {
+	await userEvent.hover(
+		within(canvasElement).getByRole("button", { name: "Send" }),
+	)
+	const bubble = await screen.findByText(
+		"Send this prompt",
+		undefined,
+		HOVER_TOOLTIP_WAIT,
+	)
+	await waitFor(async () => {
+		await expect(bubble).toBeVisible()
+	}, FRAME_POLL)
+	return bubble
+}
+
 export const Default = meta.story({
 	parameters: {
 		docs: {
@@ -161,20 +183,9 @@ export const Default = meta.story({
 			},
 		},
 	},
-	render: () => (
-		<Tooltip>
-			<TooltipTrigger render={<Button variant="outline">Send</Button>} />
-			<TooltipContent>Send this prompt</TooltipContent>
-		</Tooltip>
-	),
-	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
-
-		const bubble = await screen.findByText("Send this prompt")
-
-		await waitFor(async () => {
-			await expect(bubble).toBeVisible()
-		}, FRAME_POLL)
+	render: renderSendTooltip,
+	play: async (context) => {
+		await openSendTooltip(context)
 	},
 })
 
@@ -207,7 +218,11 @@ export const LongContent = meta.story({
 	),
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
-		const bubble = await screen.findByText(LONG_LABEL)
+		const bubble = await screen.findByText(
+			LONG_LABEL,
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 
 		await waitFor(async () => {
 			await expect(bubble.getBoundingClientRect().right).toBeLessThanOrEqual(
@@ -217,30 +232,84 @@ export const LongContent = meta.story({
 	},
 })
 
-export const OnDarkSurface = meta.story({
-	tags: ["test-only"],
-	globals: { theme: "dark" },
+const REFERENCE_PAINT = {
+	light: {
+		backgroundColor: "rgb(255, 255, 255)",
+		color: "rgb(47, 47, 47)",
+		boxShadow:
+			"rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.05) 0px 2px 6px 0px, rgba(0, 0, 0, 0.06) 0px 4px 42px 0px",
+	},
+	dark: {
+		backgroundColor: "rgb(34, 34, 34)",
+		color: "rgb(240, 240, 240)",
+		boxShadow:
+			"rgba(255, 255, 255, 0.03) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0.08) 0px 1px 1px 0px, rgba(0, 0, 0, 0.15) 0px 2px 6px 0px",
+	},
+} as const
+
+type Theme = keyof typeof REFERENCE_PAINT
+
+const REFERENCE_SHAPE = {
+	borderRadius: "10px",
+	padding: "8px",
+	fontSize: "13px",
+	lineHeight: "18px",
+	fontWeight: "400",
+}
+
+const expectReferenceSurface = async (bubble: HTMLElement, theme: Theme) => {
+	const style = getComputedStyle(bubble)
+	const arrows = [...bubble.querySelectorAll(":scope > [data-side]")]
+
+	await expect({
+		backgroundColor: style.backgroundColor,
+		color: style.color,
+		boxShadow: style.boxShadow,
+	}).toEqual(REFERENCE_PAINT[theme])
+	await expect({
+		borderRadius: style.borderRadius,
+		padding: style.padding,
+		fontSize: style.fontSize,
+		lineHeight: style.lineHeight,
+		fontWeight: style.fontWeight,
+	}).toEqual(REFERENCE_SHAPE)
+	await expect(style.fontFamily).toBe(
+		getComputedStyle(document.body).fontFamily,
+	)
+	await expect(arrows).toHaveLength(1)
+	await expect(getComputedStyle(arrows[0]).display).toBe("none")
+}
+
+const surfaceStory = (theme: Theme) => ({
+	globals: { theme },
 	parameters: {
 		docs: {
 			description: {
-				story:
-					"The bubble open on the dark surface, where it inverts with its tokens rather than keeping the light fill. Check that the label reads against the bubble and that the bubble reads against the page behind it.",
+				story: `The surface every tooltip of the app wears, on the ${theme} theme. Check the fill \`--tooltip\`, the text \`--tooltip-foreground\` and the shadow \`--tooltip-shadow\`, a 10px radius, 8px of padding on all four sides, 13px text on an 18px line at the regular weight in the app font, and no arrow.`,
 			},
 		},
 	},
-	render: () => (
-		<Tooltip>
-			<TooltipTrigger render={<Button variant="outline">Send</Button>} />
-			<TooltipContent>Send this prompt</TooltipContent>
-		</Tooltip>
-	),
-	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
+	render: renderSendTooltip,
+	play: async (context: HoverPlayContext) =>
+		expectReferenceSurface(await openSendTooltip(context), theme),
+})
 
-		const bubble = await screen.findByText("Send this prompt")
+export const Surface = meta.story(surfaceStory("light"))
 
-		await waitFor(async () => {
-			await expect(bubble).toBeVisible()
-		}, FRAME_POLL)
+export const SurfaceDark = meta.story(surfaceStory("dark"))
+
+export const SurfaceFollowsTheThemeSwitch = meta.story({
+	tags: ["test-only"],
+	globals: { theme: "light" },
+	render: renderSendTooltip,
+	play: async (context) => {
+		const bubble = await openSendTooltip(context)
+		await expectReferenceSurface(bubble, "light")
+
+		document.documentElement.classList.add("dark")
+		await expectReferenceSurface(bubble, "dark")
+
+		document.documentElement.classList.remove("dark")
+		await expectReferenceSurface(bubble, "light")
 	},
 })

@@ -1,7 +1,11 @@
 import { expect, fn, screen } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	findHoverTooltip,
+	listExhaustively,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	UpdateBadge,
 	type UpdateBadgeStatus,
@@ -142,9 +146,7 @@ export const ReadyWithAgentsRunning = meta.story({
 		await expect(restart).toHaveAttribute("aria-disabled", "true")
 
 		await userEvent.hover(restart)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			BUSY_LABEL,
-		)
+		await expect(await findHoverTooltip()).toHaveTextContent(BUSY_LABEL)
 		await userEvent.click(restart)
 		await expect(args.onRestart).not.toHaveBeenCalled()
 	},

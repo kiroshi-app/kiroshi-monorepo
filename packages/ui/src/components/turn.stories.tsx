@@ -522,10 +522,11 @@ export const CompanionSelectOnGutterHovered = meta.story({
 	tags: ["test-only"],
 	globals: { theme_layout: "side-by-side" },
 	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		pseudo: { hover: true },
 		docs: {
 			description: {
-				story: `The two gutter avatars with the pointer resting on them, in both themes at once, drawn by the pseudo-state addon. The select dims its target instead of ringing it: the stop veils the face because pressing it ends work, while the select only opens the companion, so it lowers the avatar to 70 percent opacity and leaves the face in view. Check by eye in the light and the dark theme that the blot and the picture read as dimmed by the same amount, with no ring and no shadow around either, and that each stays recognizable against the page background. The pseudo-state addon rewrites no hover rule under the vitest runner, so the play asserts the computed shadow, the hover class and that nothing transitions, rather than a computed opacity. ${SELECT_NOT_YET_RENDERED}`,
+				story: `The two gutter avatars with the pointer resting on them, in both themes at once, drawn by the pseudo-state addon. The select dims its target instead of ringing it: the stop veils the face because pressing it ends work, while the select only opens the companion, so it lowers the avatar to 70 percent opacity and leaves the face in view. Check by eye in the light and the dark theme that the blot and the picture read as dimmed by the same amount, with no ring and no shadow around either, and that each stays recognizable against the page background. The play asserts the computed shadow, the hover class and that nothing transitions, and reads no computed opacity: the vitest runner draws the hover before the play, but the sidebar draws it only once the play has run. ${SELECT_NOT_YET_RENDERED}`,
 			},
 		},
 	},

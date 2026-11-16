@@ -2410,7 +2410,7 @@ describe("the page the main window opens on at a cold launch", () => {
 			selectSpace: tabs.showSpace,
 		})
 
-		opening.openInTab("notified", SPACE)
+		opening.openInSpace("notified", SPACE)
 
 		expect(tabs.getState().spaceId).toBe(SPACE)
 		expect(activeHref(tabs)).toBe(threadOf("notified"))

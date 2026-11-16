@@ -1507,8 +1507,8 @@ describe("the boards of the Library grid", () => {
 	})
 })
 
-describe("a board opened in its tab", () => {
-	it("creates a board from New board and opens it in a new tab named after it", async () => {
+describe("a board opened from the Library grid", () => {
+	it("creates a board from New board and opens it in the same unpinned tab, named after it", async () => {
 		const { router } = await mountApp()
 		await showLibraryOf(router, [ROADMAP])
 		const tabsBefore = tabCount()
@@ -1517,7 +1517,7 @@ describe("a board opened in its tab", () => {
 			screen.getByRole("button", { name: common("library.newBoard") }),
 		)
 
-		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(tabCount()).toBe(tabsBefore)
 		expect(selectedTabName()).toBe(common("library.editor.untitled"))
 		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
 		expect(
@@ -1525,7 +1525,7 @@ describe("a board opened in its tab", () => {
 		).toBeInstanceOf(HTMLElement)
 	})
 
-	it("opens a board from its tile in a new tab with the Library breadcrumb, its objects and the zoom control", async () => {
+	it("opens a board from its tile in the same unpinned tab with the Library breadcrumb, its objects and the zoom control", async () => {
 		const { router } = await mountApp()
 		harness.boardNodes = { [ROADMAP.name]: ROADMAP_NODES }
 		await showLibraryOf(router, [ROADMAP])
@@ -1533,7 +1533,7 @@ describe("a board opened in its tab", () => {
 
 		await click(tileNamed(titleOf(ROADMAP)))
 
-		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(tabCount()).toBe(tabsBefore)
 		expect(selectedTabName()).toBe(titleOf(ROADMAP))
 		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
 		expect(boardObjectCount()).toBe(ROADMAP_NODES.length)
@@ -1570,17 +1570,85 @@ describe("a board opened in its tab", () => {
 		expect(boardCanvas()).toBeNull()
 	})
 
-	it("focuses the tab a board is already open in instead of opening a second one", async () => {
+	it("turns its tab back into the Library on the board's Back", async () => {
 		const { router } = await mountApp()
 		await showLibraryOf(router, [ROADMAP])
 		await click(tileNamed(titleOf(ROADMAP)))
 		const tabsWithBoard = tabCount()
 
-		await click(tabTitled(LIBRARY_NAME))
+		await click(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		)
+
+		expect(tabCount()).toBe(tabsWithBoard)
+		expect(selectedTabName()).toContain(LIBRARY_NAME)
+		expect(libraryHeading()).not.toBeNull()
+		expect(boardCanvas()).toBeNull()
+	})
+
+	it("opens a board from its tile in a new active tab from a pinned tab, left on its grid", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		const pinnedId = await pinActiveTab(router)
+		const tabsBefore = tabCount()
+
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(activeTabId(router)).not.toBe(pinnedId)
+		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		expect(currentHrefOfTab(router, pinnedId)).toBe("/library")
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+	})
+
+	it("creates a board from New board in a new active tab from a pinned tab, left on its grid", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		const pinnedId = await pinActiveTab(router)
+		const tabsBefore = tabCount()
+
+		await click(
+			screen.getByRole("button", { name: common("library.newBoard") }),
+		)
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(activeTabId(router)).not.toBe(pinnedId)
+		expect(selectedTabName()).toBe(common("library.editor.untitled"))
+		expect(currentHrefOfTab(router, pinnedId)).toBe("/library")
+	})
+
+	it("selects the tab a board is already open in from a pinned tab instead of opening a second one", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		const pinnedId = await pinActiveTab(router)
+		await click(tileNamed(titleOf(ROADMAP)))
+		const tabsWithBoard = tabCount()
+
+		await act(async () => router.options.context.tabs.select(pinnedId))
+		await settle()
 		await click(tileNamed(titleOf(ROADMAP)))
 
 		expect(tabCount()).toBe(tabsWithBoard)
+		expect(activeTabId(router)).not.toBe(pinnedId)
 		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		expect(currentHrefOfTab(router, pinnedId)).toBe("/library")
 		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+	})
+
+	it("opens a board on a modifier click in a new tab, the unpinned tab left on its grid", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		const tabsBefore = tabCount()
+		const shownId = activeTabId(router)
+
+		await modifierClick(tileNamed(titleOf(ROADMAP)))
+
+		expect(tabCount()).toBe(tabsBefore + 1)
+		expect(activeTabId(router)).toBe(shownId)
+		expect(currentHrefOfTab(router, shownId)).toBe("/library")
+		expect(otherTab().textContent).toContain(titleOf(ROADMAP))
+		expect(boardCanvas()).toBeNull()
 	})
 })

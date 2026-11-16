@@ -38,7 +38,7 @@ import {
 } from "@workspace/ui/components/library-document-blocks"
 import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { useRosterBots } from "@workspace/ui/components/roster"
-import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
 	Tooltip,
 	TooltipContent,
@@ -634,7 +634,7 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 	return (
 		<Tooltip>
 			<TooltipTrigger
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				render={
 					<button
 						aria-label={name}

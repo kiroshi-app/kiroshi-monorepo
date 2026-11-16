@@ -87,7 +87,7 @@ const watchAlongside = async ({
 		},
 		conversations: {
 			open: async ({ openInPlace }) => openInPlace(),
-			openInTab: () => undefined,
+			openInSpace: () => undefined,
 			showOverHome: () => undefined,
 		},
 		missions: createFakeMissions(),
