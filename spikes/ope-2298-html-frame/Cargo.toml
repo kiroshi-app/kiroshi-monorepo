@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = "2"
 
 [dependencies]
 tauri = { version = "=2.12.2", features = ["custom-protocol"] }

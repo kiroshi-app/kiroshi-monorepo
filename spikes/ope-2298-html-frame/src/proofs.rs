@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::host::{HandlerEvent, Heartbeat, SecretCall};
-use crate::sensors::{ViewRecord, ALLOWLIST_HOSTS};
+use crate::sensors::{TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 const BLOCKED_HOST: &str = "example.com";
@@ -86,30 +86,6 @@ pub struct Proof {
 	evidence: Value,
 }
 
-pub struct TripwireReading {
-	pub address: String,
-	pub control_connections: usize,
-	pub connections: Vec<String>,
-}
-
-impl TripwireReading {
-	fn view_connections(&self) -> &[String] {
-		self.connections.get(self.control_connections..).unwrap_or(&[])
-	}
-
-	fn is_silent(&self) -> bool {
-		self.control_connections > 0 && self.view_connections().is_empty()
-	}
-
-	fn evidence(&self) -> Value {
-		json!({
-			"address": self.address,
-			"control_connections_from_the_harness": self.control_connections,
-			"connections_from_views": self.view_connections(),
-		})
-	}
-}
-
 pub struct WindowUrl {
 	pub window: String,
 	pub before_the_view: String,
@@ -127,7 +103,7 @@ pub struct Observations {
 	pub baseline: (Instant, Instant),
 	pub loopback_tripwire: TripwireReading,
 	pub lan_tripwire: Result<TripwireReading, String>,
-	pub navigation_sink: Vec<String>,
+	pub navigation_sink: TripwireReading,
 	pub handler_events: Vec<HandlerEvent>,
 	pub window_urls: Vec<WindowUrl>,
 	pub writer: ViewObservation,
@@ -184,15 +160,10 @@ impl Observations {
 				.chain(view.record.unrouted_requests.iter().cloned())
 				.chain(view.record.cookie_headers.iter().cloned())
 		});
-		let lan = self
-			.lan_tripwire
-			.as_ref()
-			.map(|tripwire| tripwire.connections.clone())
-			.unwrap_or_default();
+		let listeners =
+			[&self.loopback_tripwire, &self.navigation_sink].into_iter().chain(&self.lan_tripwire);
 		from_views
-			.chain(self.loopback_tripwire.connections.iter().cloned())
-			.chain(lan)
-			.chain(self.navigation_sink.iter().cloned())
+			.chain(listeners.flat_map(|listener| listener.view_connections().iter().cloned()))
 			.collect()
 	}
 
@@ -315,14 +286,14 @@ impl Observations {
 		Proof {
 			proof: 5,
 			name: "The view cannot navigate, open a window or download",
-			result: (self.navigation_sink.is_empty()
+			result: (self.navigation_sink.is_silent()
 				&& moved.is_empty()
 				&& !self.window_urls.is_empty()
 				&& unobserved.is_empty())
 			.into(),
 			attempts: NAVIGATION_ATTEMPTS.to_vec(),
 			evidence: json!({
-				"requests_received_by_the_navigation_sink": self.navigation_sink,
+				"navigation_sink": self.navigation_sink.evidence(),
 				"windows_whose_url_changed": moved,
 				"windows_checked": self.window_urls.iter().map(|url| &url.window).collect::<Vec<_>>(),
 				"handler_events": self.handler_events,

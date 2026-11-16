@@ -8,7 +8,7 @@ use serde_json::json;
 use tauri::{AppHandle, Listener as _, WebviewWindow};
 
 use crate::host::{HostState, Tick, ViewAddress};
-use crate::proofs::{Observations, TripwireReading, ViewObservation, WindowUrl};
+use crate::proofs::{Observations, ViewObservation, WindowUrl};
 use crate::sensors::{non_loopback_ipv4, Role, Targets, Tripwire, ViewServer};
 use crate::windows::{open_main_window, open_view_window, MAIN_WINDOW_LABEL};
 use crate::Mode;
@@ -31,55 +31,27 @@ type Failure = Box<dyn Error>;
 
 struct Sensors {
 	loopback: Tripwire,
-	loopback_control: usize,
-	lan: Result<(Tripwire, usize), String>,
+	lan: Result<Tripwire, String>,
 	navigation_sink: Tripwire,
 }
 
 impl Sensors {
 	fn open() -> Result<Self, Failure> {
 		let loopback = Tripwire::open(IpAddr::V4(Ipv4Addr::LOCALHOST))?;
-		let loopback_control = loopback.count_control_connection()?;
 		let lan = non_loopback_ipv4()
 			.and_then(|address| Tripwire::open(IpAddr::V4(address)))
-			.and_then(|tripwire| {
-				tripwire.count_control_connection().map(|control| (tripwire, control))
-			})
 			.map_err(|cause| cause.to_string());
 		let navigation_sink = Tripwire::open(IpAddr::V4(Ipv4Addr::LOCALHOST))?;
-		Ok(Self { loopback, loopback_control, lan, navigation_sink })
+		Ok(Self { loopback, lan, navigation_sink })
 	}
 
 	fn targets(&self, role: Role) -> Targets {
 		Targets {
 			role,
 			loopback_tripwire: self.loopback.address().to_string(),
-			lan_tripwire: self
-				.lan
-				.as_ref()
-				.ok()
-				.map(|(tripwire, _)| tripwire.address().to_string()),
+			lan_tripwire: self.lan.as_ref().ok().map(|tripwire| tripwire.address().to_string()),
 			navigation_sink: format!("http://{}", self.navigation_sink.address()),
 		}
-	}
-
-	fn loopback_reading(&self) -> TripwireReading {
-		reading(&self.loopback, self.loopback_control)
-	}
-
-	fn lan_reading(&self) -> Result<TripwireReading, String> {
-		self.lan
-			.as_ref()
-			.map(|(tripwire, control)| reading(tripwire, *control))
-			.map_err(Clone::clone)
-	}
-}
-
-fn reading(tripwire: &Tripwire, control_connections: usize) -> TripwireReading {
-	TripwireReading {
-		address: tripwire.address().to_string(),
-		control_connections,
-		connections: tripwire.connections(),
 	}
 }
 
@@ -192,9 +164,9 @@ impl Run {
 			secret_calls: self.host.secret_calls(),
 			heartbeat: self.host.heartbeat(),
 			baseline,
-			loopback_tripwire: self.sensors.loopback_reading(),
-			lan_tripwire: self.sensors.lan_reading(),
-			navigation_sink: self.sensors.navigation_sink.connections(),
+			loopback_tripwire: self.sensors.loopback.reading(),
+			lan_tripwire: self.sensors.lan.as_ref().map(Tripwire::reading).map_err(Clone::clone),
+			navigation_sink: self.sensors.navigation_sink.reading(),
 			handler_events: self.host.handler_events(),
 			window_urls,
 			writer: writer.observation,

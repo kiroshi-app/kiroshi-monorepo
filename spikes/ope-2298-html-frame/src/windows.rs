@@ -27,15 +27,13 @@ fn is_app_url(url: &Url) -> bool {
 
 fn with_frame_source(policy: &str, origin: &str) -> String {
 	let frame_source = format!("{FRAME_DIRECTIVE} {origin}");
-	let mut directives: Vec<String> = policy
+	policy
 		.split(';')
 		.map(str::trim)
-		.filter(|directive| !directive.starts_with(FRAME_DIRECTIVE))
-		.map(str::to_owned)
-		.collect();
-	directives.retain(|directive| !directive.is_empty());
-	directives.push(frame_source);
-	directives.join("; ")
+		.filter(|directive| !directive.is_empty() && !directive.starts_with(FRAME_DIRECTIVE))
+		.chain(std::iter::once(frame_source.as_str()))
+		.collect::<Vec<_>>()
+		.join("; ")
 }
 
 fn guarded<'a>(

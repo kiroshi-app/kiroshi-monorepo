@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use serde_json::{json, Value};
 
 use crate::http::{Listener, Request, Response};
 
@@ -44,6 +45,31 @@ fn summary(request: Option<&Request>) -> String {
 pub struct Tripwire {
 	listener: Listener,
 	connections: Arc<Mutex<Vec<String>>>,
+	control_connections: usize,
+}
+
+pub struct TripwireReading {
+	pub address: String,
+	pub control_connections: usize,
+	pub connections: Vec<String>,
+}
+
+impl TripwireReading {
+	pub fn view_connections(&self) -> &[String] {
+		self.connections.get(self.control_connections..).unwrap_or(&[])
+	}
+
+	pub fn is_silent(&self) -> bool {
+		self.control_connections > 0 && self.view_connections().is_empty()
+	}
+
+	pub fn evidence(&self) -> Value {
+		json!({
+			"address": self.address,
+			"control_connections_from_the_harness": self.control_connections,
+			"connections_from_views": self.view_connections(),
+		})
+	}
 }
 
 impl Tripwire {
@@ -61,24 +87,24 @@ impl Tripwire {
 				body: b"tripwire".to_vec(),
 			}
 		})?;
-		Ok(Self { listener, connections })
+		let mut control = TcpStream::connect_timeout(&listener.address(), PROBE_TIMEOUT)?;
+		control.set_read_timeout(Some(PROBE_TIMEOUT))?;
+		control.write_all(b"GET /control HTTP/1.1\r\nHost: tripwire\r\n\r\n")?;
+		control.read_to_end(&mut Vec::new())?;
+		let control_connections = locked(&connections).len();
+		Ok(Self { listener, connections, control_connections })
 	}
 
 	pub fn address(&self) -> SocketAddr {
 		self.listener.address()
 	}
 
-	pub fn connections(&self) -> Vec<String> {
-		locked(&self.connections).clone()
-	}
-
-	pub fn count_control_connection(&self) -> io::Result<usize> {
-		let mut stream = TcpStream::connect_timeout(&self.address(), PROBE_TIMEOUT)?;
-		stream.set_read_timeout(Some(PROBE_TIMEOUT))?;
-		stream.write_all(b"GET /control HTTP/1.1\r\nHost: tripwire\r\n\r\n")?;
-		let mut answer = Vec::new();
-		stream.read_to_end(&mut answer)?;
-		Ok(self.connections().len())
+	pub fn reading(&self) -> TripwireReading {
+		TripwireReading {
+			address: self.address().to_string(),
+			control_connections: self.control_connections,
+			connections: locked(&self.connections).clone(),
+		}
 	}
 }
 
