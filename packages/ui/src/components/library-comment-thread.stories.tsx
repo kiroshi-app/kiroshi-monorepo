@@ -202,6 +202,41 @@ const expectCardAtContentHeight = async (card: HTMLElement) => {
 	).toBeLessThanOrEqual(renderedLine)
 }
 
+const CLASSIC_SCROLLBAR =
+	"contents [&_[data-slot=library-comment-scroller]::-webkit-scrollbar-thumb]:bg-(--scrollbar)"
+
+const CLASSIC_SCROLLBAR_TAKING_WIDTH = `${CLASSIC_SCROLLBAR} [&_[data-slot=library-comment-scroller]]:[scrollbar-gutter:stable]`
+
+const ROW_INLINE_PADDING = 12
+
+const rowsCutIn = (scroller: HTMLElement) => {
+	const visibleEnd = Math.ceil(
+		scroller.getBoundingClientRect().left +
+			scroller.clientLeft +
+			scroller.clientWidth,
+	)
+
+	return slotsIn(scroller, "library-comment").filter(
+		(row) =>
+			Math.floor(row.getBoundingClientRect().right) > visibleEnd ||
+			Array.from(row.querySelectorAll("p")).some(
+				(line) => line.scrollWidth > line.clientWidth,
+			),
+	)
+}
+
+const rowsOffTheirInlinePadding = (scroller: HTMLElement) =>
+	slotsIn(scroller, "library-comment").filter((row) => {
+		const box = row.getBoundingClientRect()
+		const avatar = slotIn(row, "library-comment-avatar").getBoundingClientRect()
+		const text = (row.lastElementChild as HTMLElement).getBoundingClientRect()
+
+		return (
+			Math.round(avatar.left - box.left) !== ROW_INLINE_PADDING ||
+			Math.round(box.right - text.right) < ROW_INLINE_PADDING
+		)
+	})
+
 const authorsIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		canvasElement.querySelectorAll('[data-slot="library-comment"]'),
@@ -675,6 +710,65 @@ export const LongThreadDark = meta.story({
 	globals: { theme: "dark" },
 	render: LongThread.input.render,
 	play: LongThread.input.play,
+})
+
+export const LongThreadClassicScrollbar = meta.story({
+	args: { comments: [...LONG_THREAD_COMMENTS, LONG_COMMENT] },
+	decorators: [
+		(Story) => (
+			<div className={CLASSIC_SCROLLBAR_TAKING_WIDTH}>
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Thirty two comments, the last one holding an unbreakable link, with the scrollbar of the comments always drawn as the app draws it on hover, a thumb in the scrollbar colour on a transparent track, as a classic scrollbar that takes width. Its room is held open by the story, so the comments lose that width even in the test runner, which draws no scrollbar. Check every comment keeps its 12 px on the left and on the right of its text, no comment runs under the scrollbar and nothing scrolls sideways.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const scroller = commentScrollerIn(threadIn(canvasElement))
+
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+		await expect(scroller.clientWidth).toBeLessThan(scroller.offsetWidth)
+		await expect(rowsCutIn(scroller)).toEqual([])
+		await expect(rowsOffTheirInlinePadding(scroller)).toEqual([])
+		await expect(scroller.scrollWidth).toBe(scroller.clientWidth)
+	},
+})
+
+export const LongThreadClassicScrollbarDark = meta.story({
+	args: LongThreadClassicScrollbar.input.args,
+	globals: { theme: "dark" },
+	decorators: LongThreadClassicScrollbar.input.decorators,
+	play: LongThreadClassicScrollbar.input.play,
+})
+
+export const ShortThreadClassicScrollbar = meta.story({
+	decorators: [
+		(Story) => (
+			<div className={CLASSIC_SCROLLBAR}>
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One comment, shorter than the cap, under the same always drawn scrollbar, its room left to the card. Check the comments show no scrollbar and keep no room for one: they are as tall as their content and as wide as the card.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const scroller = commentScrollerIn(threadIn(canvasElement))
+
+		await expect(scroller.scrollHeight).toBe(scroller.clientHeight)
+		await expect(scroller.clientWidth).toBe(scroller.offsetWidth)
+	},
 })
 
 export const LongThreadResolved = meta.story({
