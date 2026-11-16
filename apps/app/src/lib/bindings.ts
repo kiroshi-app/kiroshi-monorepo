@@ -34,6 +34,7 @@ export const commands = {
 } | null>("application_runnable", { config }),
 	chatStoreAttachments: (conversationId: string, attachments: SubmittedAttachment[]) => typedError<string[], AttachmentStoreError>(__TAURI_INVOKE("chat_store_attachments", { conversationId, attachments })),
 	remoteImageRead: (url: string) => typedError<RemoteImage, RemoteImageError>(__TAURI_INVOKE("remote_image_read", { url })),
+	saveCsvFile: (name: string, text: string) => typedError<string | null, SaveCsvError>(__TAURI_INVOKE("save_csv_file", { name, text })),
 	libraryList: (spaceId: string) => typedError<LibraryItem[], LibraryError>(__TAURI_INVOKE("library_list", { spaceId })),
 	libraryReadDocument: (spaceId: string, name: string) => typedError<LibraryDocument, LibraryError>(__TAURI_INVOKE("library_read_document", { spaceId, name })),
 	librarySave: (spaceId: string, name: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save", { spaceId, name })),
@@ -1924,6 +1925,8 @@ export type RuntimeSession = {
 	seq: number,
 	startedAt: number,
 };
+
+export type SaveCsvError = { kind: "invalidName"; name: string } | { kind: "unwritable"; detail: string };
 
 export type ScopedEvent = ScopedEvent_Serialize | ScopedEvent_Deserialize;
 
