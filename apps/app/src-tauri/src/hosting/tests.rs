@@ -2414,34 +2414,26 @@ fn a_room_checked_before_its_space_holds_it_relays_the_question_asked_once_it_is
 	});
 }
 
-const KEPT_OFF: &str = "c-kept-off-the-relay";
-
-const A_CONVERSATION_ELSEWHERE: &str = "
-	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
-		VALUES (?1, 'topic', 'elsewhere', 'Kept off', 1, 1)";
-
 #[test]
-fn a_question_asked_outside_the_shared_space_is_kept_off_its_relay_with_a_warning() {
+fn a_question_kept_off_the_relay_warns_for_a_room_no_space_holds_and_not_for_one_held_elsewhere() {
 	run(async {
+		const ELSEWHERE_ROOM: &str = "c-kept-off-elsewhere";
+		const NOWHERE_ROOM: &str = "c-kept-off-nowhere";
 		crate::test_log::capturing();
 		let mut guest = Guest::of_two_spaces("question-kept-off").await;
-		db::open(&guest.effects.database)
-			.call_mut(|connection| Ok(connection.execute(A_CONVERSATION_ELSEWHERE, [KEPT_OFF])?))
-			.await
-			.expect("the conversation of the other space is planted");
-		let scope = a_held_scope_in(KEPT_OFF, "b-theirs");
-		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
-			.emit(a_question("q-kept-off"), a_turn_in(KEPT_OFF));
+		stored(&guest, A_ROOM, ELSEWHERE_ROOM, Some(ELSEWHERE)).await;
+		asks_in(&guest, ELSEWHERE_ROOM, "q-elsewhere");
+		asks_in(&guest, NOWHERE_ROOM, "q-nowhere");
 
 		let heard = guest.events_until_the_marker().await;
-		let warned = crate::test_log::warnings_naming(KEPT_OFF).await;
+		let warned = crate::test_log::warnings_naming("c-kept-off-").await;
 
 		assert!(heard.is_empty(), "{heard:?}");
 		assert_eq!(
 			warned,
 			vec![format!(
-				"the questionRequested frame of conversation {KEPT_OFF} was kept off the relay \
-				 of space {PERSONAL}: it failed the Conversation check"
+				"the questionRequested frame of conversation {NOWHERE_ROOM} was kept off the \
+				 relay of space {PERSONAL}: it failed the Conversation check"
 			)]
 		);
 	});
