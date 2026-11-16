@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { showLibraryItemOfSpace } from "./use-open-library-document"
 
 import { createWorkspaceRouter } from "../../workspace-router"
+import { currentHrefOf } from "../tabs/tabs-model"
 import {
 	createWorkspaceTabs,
 	shownTabsOf,
@@ -31,15 +32,13 @@ const showPlanOf = (tabs: WorkspaceTabs, spaceId = SPACE) =>
 
 const stripOf = (tabs: WorkspaceTabs) => shownTabsOf(tabs.getState())
 
-const hrefsOf = (tabs: WorkspaceTabs) =>
-	stripOf(tabs).tabs.map((tab) => tab.entries[tab.index]?.href)
+const hrefsOf = (tabs: WorkspaceTabs) => stripOf(tabs).tabs.map(currentHrefOf)
 
 const activeHref = (tabs: WorkspaceTabs) => tabs.history.location.href
 
-const tabsShowing = (...hrefs: string[]) => {
+const tabsShowing = (first: string, ...others: string[]) => {
 	const tabs = createWorkspaceTabs()
 	tabs.showSpace(SPACE)
-	const [first = PREVIOUS, ...others] = hrefs
 	tabs.history.push(first)
 	for (const href of others) {
 		tabs.openEmptyTab()
@@ -49,10 +48,10 @@ const tabsShowing = (...hrefs: string[]) => {
 }
 
 const pinnedFirstOf = (tabs: WorkspaceTabs) => {
-	const [pinned] = stripOf(tabs).tabs
-	tabs.pin(pinned?.id ?? "")
-	tabs.select(pinned?.id ?? "")
-	return pinned?.id
+	const pinnedId = stripOf(tabs).tabs[0]?.id ?? ""
+	tabs.pin(pinnedId)
+	tabs.select(pinnedId)
+	return pinnedId
 }
 
 afterEach(() => {
