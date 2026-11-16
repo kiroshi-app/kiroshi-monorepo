@@ -1736,7 +1736,12 @@ export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
 	args: { ...missionMenuStory.args, wrapMission: undefined },
 	play: async ({ canvasElement }) => {
 		rightClick(slotIn(canvasElement, "mission-capsule"))
+		await new Promise(requestAnimationFrame)
+		await new Promise(requestAnimationFrame)
 
+		await expect(surfaceOf(rowIn(canvasElement))).not.toHaveAttribute(
+			"data-popup-open",
+		)
 		await expect(screen.queryByRole("menu")).toBeNull()
 	},
 })
