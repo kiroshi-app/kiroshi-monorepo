@@ -240,15 +240,8 @@ export const InRow = meta.story({
 })
 
 export const AdjacentHints = meta.story({
+	...COPY_BESIDE_DELETE,
 	name: "Adjacent hints",
-	args: {
-		content: "Delete",
-		children: (
-			<Button aria-label="Delete" size="icon-sm" variant="ghost">
-				<Icons.Delete />
-			</Button>
-		),
-	},
 	parameters: {
 		docs: {
 			description: {
@@ -257,12 +250,6 @@ export const AdjacentHints = meta.story({
 			},
 		},
 	},
-	render: (args) => (
-		<Row>
-			<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
-			<TooltipHint {...args} />
-		</Row>
-	),
 	play: ({ canvas, userEvent }) =>
 		withMotion(async () => {
 			await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
