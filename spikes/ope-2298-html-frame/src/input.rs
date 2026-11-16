@@ -45,21 +45,21 @@ const STATEMENTS: [&str; 4] = [
 const NO_ROUTE: &str =
 	"this display setup offers no route to send a click or a key from outside the harness";
 
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 struct Click {
 	x: f64,
 	y: f64,
 	target: String,
 }
 
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 struct Field {
 	value: String,
 	x: f64,
 	y: f64,
 }
 
-#[derive(Clone, Deserialize, PartialEq, Serialize)]
+#[derive(Deserialize, PartialEq, Serialize)]
 #[serde(rename_all(deserialize = "camelCase"))]
 struct Seen {
 	clicks: Vec<Click>,
@@ -87,7 +87,7 @@ struct Point {
 	y: f64,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 struct Reading {
 	main_page: Seen,
 	view_wrapper: Seen,
@@ -113,18 +113,21 @@ pub struct Aim {
 }
 
 impl Aim {
-	fn at_the_view(&self, point: Point) -> Point {
+	fn on_the_screen(&self, origin: Point, point: Point) -> Point {
 		Point {
-			x: self.view_on_the_screen.x + point.x * self.pixels_per_point,
-			y: self.view_on_the_screen.y + point.y * self.pixels_per_point,
+			x: origin.x + point.x * self.pixels_per_point,
+			y: origin.y + point.y * self.pixels_per_point,
 		}
 	}
 
+	fn at_the_view(&self, point: Point) -> Point {
+		let Rectangle { x, y, .. } = self.view_on_the_screen;
+		self.on_the_screen(Point { x, y }, point)
+	}
+
 	fn at_the_main_page(&self, point: Point) -> Point {
-		Point {
-			x: self.main_page_on_the_screen.x + point.x * self.pixels_per_point,
-			y: self.main_page_on_the_screen.y + point.y * self.pixels_per_point,
-		}
+		let Shift { x, y } = self.main_page_on_the_screen;
+		self.on_the_screen(Point { x, y }, point)
 	}
 
 	fn is_in_the_view(&self, point: Point) -> bool {

@@ -454,6 +454,12 @@ impl ThreadPlay {
 	}
 }
 
+fn scroll_state(webview: &Webview) -> Result<ScrollState, String> {
+	let reading = probe::answer(webview, SCROLL_READING)?;
+	serde_json::from_str(&reading)
+		.map_err(|cause| format!("unreadable scroll reading {reading:?}: {cause}"))
+}
+
 pub struct Stage<'a> {
 	pub main_window: &'a WebviewWindow,
 	pub thread_view: &'a ThreadView,
@@ -509,12 +515,6 @@ impl Stage<'_> {
 		}
 	}
 
-	fn scroll_state(webview: &Webview) -> Result<ScrollState, String> {
-		let reading = probe::answer(webview, SCROLL_READING)?;
-		serde_json::from_str(&reading)
-			.map_err(|cause| format!("unreadable scroll reading {reading:?}: {cause}"))
-	}
-
 	fn viewport_paint_shortfall(
 		&self,
 		bounds: &Result<Rectangle, String>,
@@ -533,11 +533,11 @@ impl Stage<'_> {
 	}
 
 	fn scrollbars(&self) -> Value {
-		let view_document = Self::scroll_state(self.seat.webview());
+		let view_document = scroll_state(self.seat.webview());
 		let bounds = self.seat.rectangle();
 		let mut measured = json!({
 			"read": "before any paint and before any change to the scrollbars, by one script evaluated in the main page and in the document of the view webview",
-			"main_page": probe::evidence(&Self::scroll_state(self.main_window.as_ref())),
+			"main_page": probe::evidence(&scroll_state(self.main_window.as_ref())),
 			"view_document": probe::evidence(&view_document),
 			"child_webview_bounds_read_back": probe::evidence(&bounds),
 			"paint": "unchanged",

@@ -222,16 +222,21 @@ fn grabbed(shot: &Shot, bitmap: &Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
+fn grabbed_from_the_output(bitmap: &Path) -> Result<(), String> {
+	let mut refusals = Vec::new();
+	for (route, grabbed_by_the_route) in OUTPUT_ROUTES {
+		match grabbed_by_the_route(bitmap) {
+			Ok(()) => return Ok(()),
+			Err(refusal) => refusals.push(format!("{route} answered: {refusal}")),
+		}
+	}
+	Err(format!("{NO_OUTPUT_CAPTURE}: {}", refusals.join("; ")))
+}
+
+#[cfg(target_os = "linux")]
 fn grabbed(shot: &Shot, bitmap: &Path) -> Result<(), String> {
 	let Shot::Region(Rectangle { x, y, width, height }) = shot else {
-		let mut refusals = Vec::new();
-		for (route, grabbed_by_the_route) in OUTPUT_ROUTES {
-			match grabbed_by_the_route(bitmap) {
-				Ok(()) => return Ok(()),
-				Err(refusal) => refusals.push(format!("{route} answered: {refusal}")),
-			}
-		}
-		return Err(format!("{NO_OUTPUT_CAPTURE}: {}", refusals.join("; ")));
+		return grabbed_from_the_output(bitmap);
 	};
 	let mut command = Command::new("import");
 	command

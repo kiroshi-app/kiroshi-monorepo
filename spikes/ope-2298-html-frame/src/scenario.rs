@@ -725,58 +725,69 @@ fn display_setup_name() -> String {
 }
 
 #[cfg(target_os = "linux")]
-fn window_manager() -> Result<String, String> {
-	let mut command = std::process::Command::new("wmctrl");
-	command.arg("-m");
-	let answer = crate::capture::answered(command)?;
-	answer
-		.lines()
-		.find_map(|line| line.strip_prefix("Name: "))
-		.map(str::to_owned)
-		.ok_or_else(|| format!("wmctrl -m named no window manager: {answer}"))
+struct DesktopSession {
+	window_manager: Result<String, String>,
+	processes: Vec<&'static str>,
 }
 
 #[cfg(target_os = "linux")]
-fn session_processes() -> Vec<&'static str> {
-	let is_running = |name: &&str| {
-		let mut command = std::process::Command::new("pgrep");
-		command.args(["-x", name]);
-		crate::capture::answered(command).is_ok()
-	};
-	SESSION_PROCESSES.into_iter().filter(is_running).collect()
+impl DesktopSession {
+	fn read() -> Self {
+		let mut named = std::process::Command::new("wmctrl");
+		named.arg("-m");
+		let window_manager = crate::capture::answered(named).and_then(|answer| {
+			answer
+				.lines()
+				.find_map(|line| line.strip_prefix("Name: "))
+				.map(str::to_owned)
+				.ok_or_else(|| format!("wmctrl -m named no window manager: {answer}"))
+		});
+		let is_running = |name: &&str| {
+			let mut command = std::process::Command::new("pgrep");
+			command.args(["-x", name]);
+			crate::capture::answered(command).is_ok()
+		};
+		Self {
+			window_manager,
+			processes: SESSION_PROCESSES.into_iter().filter(is_running).collect(),
+		}
+	}
+
+	fn described(&self) -> Result<String, open_points::Unproven> {
+		let running = self.processes.join(", ");
+		let window_manager = match &self.window_manager {
+			Ok(window_manager) if self.processes == SESSION_PROCESSES => {
+				return Ok(format!(
+					"an Xfce session: {window_manager} as its window manager, {running} running"
+				));
+			}
+			Ok(window_manager) => window_manager.clone(),
+			Err(refusal) => format!("none ({refusal})"),
+		};
+		let found = format!(
+			"window manager: {window_manager}; of {}, running: {}",
+			SESSION_PROCESSES.join(", "),
+			if running.is_empty() { "none" } else { &running }
+		);
+		Err(if display_setup_name() == DESKTOP_SESSION_SETUP {
+			open_points::Unproven {
+				status: open_points::Status::NotProvable,
+				reason: format!(
+					"no desktop session started. Tried: {SESSION_START}. Found: {found}"
+				),
+			}
+		} else {
+			open_points::Unproven {
+				status: open_points::Status::NotProven,
+				reason: format!("this display setup starts no desktop session. Found: {found}"),
+			}
+		})
+	}
 }
 
 #[cfg(target_os = "linux")]
 fn desktop_session() -> Option<Result<String, open_points::Unproven>> {
-	let (window_manager, processes) = (window_manager(), session_processes());
-	Some(match window_manager {
-		Ok(window_manager) if processes == SESSION_PROCESSES => Ok(format!(
-			"an Xfce session: {window_manager} as its window manager, {} running",
-			processes.join(", ")
-		)),
-		window_manager => {
-			let window_manager =
-				window_manager.unwrap_or_else(|refusal| format!("none ({refusal})"));
-			let found = format!(
-				"window manager: {window_manager}; of {}, running: {}",
-				SESSION_PROCESSES.join(", "),
-				if processes.is_empty() { "none".to_owned() } else { processes.join(", ") }
-			);
-			Err(if display_setup_name() == DESKTOP_SESSION_SETUP {
-				open_points::Unproven {
-					status: open_points::Status::NotProvable,
-					reason: format!(
-						"no desktop session started. Tried: {SESSION_START}. Found: {found}"
-					),
-				}
-			} else {
-				open_points::Unproven {
-					status: open_points::Status::NotProven,
-					reason: format!("this display setup starts no desktop session. Found: {found}"),
-				}
-			})
-		}
-	})
+	Some(DesktopSession::read().described())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -801,14 +812,15 @@ fn wayland_capture(_thread: Option<&ThreadPlay>) -> Option<bool> {
 #[cfg(target_os = "linux")]
 fn display_setup() -> Value {
 	let is_set = |variable| std::env::var_os(variable).is_some();
-	let session = desktop_session().and_then(Result::ok);
+	let session = DesktopSession::read();
+	let described = session.described().ok();
 	json!({
 		"desktop_session": {
-			"is_a_desktop_session": session.is_some(),
-			"what_it_is": session,
-			"lacks": if session.is_some() { json!(SESSION_LACKS) } else { Value::Null },
-			"window_manager": probe::evidence(&window_manager()),
-			"session_processes_running": session_processes(),
+			"is_a_desktop_session": described.is_some(),
+			"lacks": described.as_ref().map(|_| SESSION_LACKS),
+			"what_it_is": described,
+			"window_manager": probe::evidence(&session.window_manager),
+			"session_processes_running": session.processes,
 			"session_id": std::env::var("XDG_SESSION_ID").ok(),
 			"current_desktop": std::env::var("XDG_CURRENT_DESKTOP").ok(),
 			"session_bus_set": is_set("DBUS_SESSION_BUS_ADDRESS"),
