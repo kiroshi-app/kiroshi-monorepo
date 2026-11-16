@@ -637,10 +637,6 @@ const SKELETON_BAR = {
 	gap: 8,
 }
 
-const sizeOfBox = ({ width, height }: DOMRect) => [width, height]
-
-const middleOf = (top: number, bottom: number) => (top + bottom) / 2
-
 export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 	await expect(region).toHaveAttribute("aria-busy", "true")
 	await expect(region.getBoundingClientRect().height).toBe(
@@ -685,8 +681,8 @@ export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 		SKELETON_BAR.titleLine,
 	])
 	await expect([
-		sizeOfBox(capsule),
-		sizeOfBox(close),
+		[capsule.width, capsule.height],
+		[close.width, close.height],
 		close.left - capsule.right,
 		frame.right - close.right,
 		capsule.top - frame.top,
@@ -699,9 +695,7 @@ export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 		SKELETON_BAR.inset,
 		SKELETON_BAR.inset,
 	])
-	await expect(middleOf(path.top, title.bottom)).toBe(
-		middleOf(capsule.top, capsule.bottom),
-	)
+	await expect(path.top + title.bottom).toBe(capsule.top + capsule.bottom)
 
 	return bar
 }
