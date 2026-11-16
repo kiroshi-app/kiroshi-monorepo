@@ -615,10 +615,15 @@ export const createConversationController = (
 	const oldestPrompt = (): PendingPrompt | null =>
 		localPrompt() ?? foreignPrompt()
 
+	const refusalUnrecordedIn = (messages: TranscriptMessage[]) =>
+		messages.some(({ id }) => id === refused?.id) ? null : refused
+
 	const sync = () => {
+		const shown = readTranscript()
+		refused = refusalUnrecordedIn(shown.messages)
 		settle({
 			...current(),
-			...readTranscript(),
+			...shown,
 			conversationId: conversation?.id ?? null,
 			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),

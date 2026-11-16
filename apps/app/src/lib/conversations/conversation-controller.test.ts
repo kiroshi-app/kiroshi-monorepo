@@ -8,6 +8,7 @@ import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { KEPT_RUN_GRACE_MS } from "./kept-runs"
 import { readConversation } from "./read-conversation"
+import { RefusedWrite } from "./refused-write"
 import {
 	createScriptedDriver,
 	type ScriptedDriver,
@@ -4107,5 +4108,75 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		expect(room.stopDrops).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("a send whose answer the relay refused", () => {
+	type HostRun = "recorded" | "unrecorded"
+
+	const refusedAnswer = () =>
+		new RefusedWrite(
+			"conversation_send_user_message",
+			undefined,
+			new Error("relay closed"),
+		)
+
+	const sentThenReplayed = async (hostRun: HostRun) => {
+		const base = createFakeTranscriptStore()
+		const store: TranscriptStore = {
+			...base,
+			sendUserMessage: async (sent, summoned) => {
+				if (hostRun === "recorded") {
+					await base.sendUserMessage(sent, summoned)
+				}
+				throw refusedAnswer()
+			},
+		}
+		const bots = await seatBots(store, SPACE, ["Nyx"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		let replay: () => void = () => undefined
+		const controller = createConversationController(
+			withFakeHostWrites(createScriptedDriver(), store),
+			store,
+			{
+				onReconnected: (listener) => {
+					replay = listener
+					return () => undefined
+				},
+			},
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await settled()
+
+		await controller.send("hold the line")
+		await settled()
+		replay()
+		await settled()
+
+		return { controller, detach }
+	}
+
+	it("shows the message the replay brings back once, as sent, with nothing to send again", async () => {
+		const { controller, detach } = await sentThenReplayed("recorded")
+
+		expect(spokenIn(controller)).toEqual([[null, "hold the line"]])
+		expect(controller.getState().refusedMessage).toBeNull()
+		detach()
+	})
+
+	it("keeps the message refused, with its retry, when the replay does not bring it back", async () => {
+		const { controller, detach } = await sentThenReplayed("unrecorded")
+
+		expect(spokenIn(controller)).toEqual([])
+		expect(controller.getState().refusedMessage).toMatchObject({
+			text: "hold the line",
+		})
+		detach()
 	})
 })
