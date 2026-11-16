@@ -1,11 +1,19 @@
 mod behaviours;
+mod capture;
+#[cfg(target_os = "macos")]
+mod cocoa;
 mod host;
 mod http;
+#[cfg(target_os = "linux")]
+mod layer;
+mod native;
 mod placement;
 mod probe;
 mod proofs;
 mod scenario;
 mod sensors;
+#[cfg(target_os = "linux")]
+mod trials;
 mod windows;
 
 use std::process::ExitCode;
@@ -22,6 +30,7 @@ use host::HostState;
 use sensors::WRAPPER_CSP;
 
 const USAGE_ERROR: u8 = 2;
+const RUN_NAME_VARIABLE: &str = "SPIKE_RUN_NAME";
 const SANDBOX_DIRECTIVE: &str = "sandbox allow-scripts";
 const INCOGNITO_MITIGATION: &str =
 	"each view webview is built with incognito(true), so every view has its own storage";
@@ -98,6 +107,10 @@ impl Mode {
 			Self::Frame | Self::Window | Self::WindowIsolated => &[],
 		}
 	}
+}
+
+pub fn run_name() -> String {
+	std::env::var(RUN_NAME_VARIABLE).unwrap_or_else(|_| std::env::consts::OS.to_owned())
 }
 
 #[tauri::command]

@@ -176,3 +176,19 @@ pub fn open_view_child(
 		LogicalSize::new(slot.width, slot.height),
 	)
 }
+
+#[cfg(target_os = "linux")]
+pub fn open_blank_child(
+	main_window: &WebviewWindow,
+	label: &str,
+	url: &str,
+	slot: Rectangle,
+) -> tauri::Result<Webview> {
+	let url = url.parse::<Url>().map_err(|cause| tauri::Error::InvalidUrl(cause))?;
+	let main_webview: &Webview = main_window.as_ref();
+	main_webview.window().add_child(
+		WebviewBuilder::new(label, WebviewUrl::External(url)),
+		LogicalPosition::new(slot.x, slot.y),
+		LogicalSize::new(slot.width, slot.height),
+	)
+}

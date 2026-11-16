@@ -42,6 +42,26 @@ impl Rectangle {
 	pub fn matches(self, other: Self) -> bool {
 		self.largest_difference(other) <= PIXEL_TOLERANCE
 	}
+
+	pub fn moved_by(self, shift: Shift) -> Self {
+		Self { x: self.x + shift.x, y: self.y + shift.y, ..self }
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct Shift {
+	pub x: f64,
+	pub y: f64,
+}
+
+impl Shift {
+	pub fn reversed(self) -> Self {
+		Self { x: -self.x, y: -self.y }
+	}
+
+	pub fn exceeds_the_tolerance(self) -> bool {
+		self.x.abs().max(self.y.abs()) > PIXEL_TOLERANCE
+	}
 }
 
 impl fmt::Display for Rectangle {
@@ -100,8 +120,15 @@ impl PlacementReport {
 #[derive(Clone, Copy)]
 pub struct Applied {
 	pub bounds: Rectangle,
+	pub page_origin: Shift,
 	pub is_visible: bool,
 	pub delay_ms: u128,
+}
+
+impl Applied {
+	pub fn bounds_in_the_page(&self) -> Rectangle {
+		self.bounds.moved_by(self.page_origin.reversed())
+	}
 }
 
 #[derive(Clone)]
@@ -112,9 +139,9 @@ pub struct Placement {
 
 impl Placement {
 	pub fn shows(&self, expected: Rectangle) -> bool {
-		self.applied
-			.as_ref()
-			.is_ok_and(|applied| applied.is_visible && applied.bounds.matches(expected))
+		self.applied.as_ref().is_ok_and(|applied| {
+			applied.is_visible && applied.bounds_in_the_page().matches(expected)
+		})
 	}
 
 	pub fn hides(&self) -> bool {
@@ -132,9 +159,10 @@ impl Placement {
 		match &self.applied {
 			Ok(applied) => {
 				evidence["child_webview_bounds"] = json!(applied.bounds);
+				evidence["page_origin_in_the_main_webview"] = json!(applied.page_origin);
 				evidence["child_webview_visible"] = json!(applied.is_visible);
-				evidence["bounds_differ_from_the_intersection_by_px"] =
-					json!(intersection.map(|visible| applied.bounds.largest_difference(visible)));
+				evidence["bounds_differ_from_the_intersection_by_px"] = json!(intersection
+					.map(|visible| applied.bounds_in_the_page().largest_difference(visible)));
 				evidence["delay_from_the_page_event_to_the_bounds_applied_ms"] =
 					json!(applied.delay_ms);
 			}
@@ -152,20 +180,80 @@ pub fn bounds_of(webview: &Webview) -> tauri::Result<Rectangle> {
 	Ok(Rectangle { x: position.x, y: position.y, width: size.width, height: size.height })
 }
 
-fn apply(child: &Webview, report: &PlacementReport) -> tauri::Result<Applied> {
-	let target = report.target();
-	match target {
-		Some(target) => {
-			child.set_bounds(target.into())?;
-			child.show()?;
+#[derive(Clone)]
+pub enum Seat {
+	Bounds(Webview),
+	#[cfg(target_os = "linux")]
+	Layer(Webview),
+}
+
+#[derive(Clone, Copy, Default)]
+pub enum Seating {
+	#[default]
+	Bounds,
+	#[cfg(target_os = "linux")]
+	Layer(crate::layer::Holder),
+}
+
+impl Seat {
+	pub fn take(webview: Webview, seating: Seating) -> Result<Self, String> {
+		match seating {
+			Seating::Bounds => Ok(Self::Bounds(webview)),
+			#[cfg(target_os = "linux")]
+			Seating::Layer(holder) => {
+				crate::layer::raise(&webview, holder)?;
+				Ok(Self::Layer(webview))
+			}
 		}
-		None => child.hide()?,
 	}
-	let bounds = bounds_of(child)?;
-	let applied_at_epoch_ms =
-		SystemTime::now().duration_since(UNIX_EPOCH).map_err(std::io::Error::other)?.as_millis();
+
+	pub fn webview(&self) -> &Webview {
+		match self {
+			Self::Bounds(webview) => webview,
+			#[cfg(target_os = "linux")]
+			Self::Layer(webview) => webview,
+		}
+	}
+
+	fn move_to(&self, target: Rectangle) -> Result<(), String> {
+		match self {
+			Self::Bounds(webview) => {
+				webview.set_bounds(target.into()).map_err(|cause| cause.to_string())
+			}
+			#[cfg(target_os = "linux")]
+			Self::Layer(webview) => crate::layer::show_at(webview, target),
+		}
+	}
+
+	pub fn rectangle(&self) -> Result<Rectangle, String> {
+		match self {
+			Self::Bounds(webview) => bounds_of(webview).map_err(|cause| cause.to_string()),
+			#[cfg(target_os = "linux")]
+			Self::Layer(webview) => crate::layer::rectangle_over_the_main_webview(webview),
+		}
+	}
+
+	pub fn show(&self, is_shown: bool) -> Result<(), String> {
+		let webview = self.webview();
+		let shown = if is_shown { webview.show() } else { webview.hide() };
+		shown.map_err(|cause| cause.to_string())
+	}
+}
+
+fn apply(seat: &Seat, report: &PlacementReport, page_origin: Shift) -> Result<Applied, String> {
+	let target = report.target();
+	if let Some(target) = target {
+		seat.move_to(target.moved_by(page_origin))?;
+	}
+	seat.show(target.is_some())?;
+	let bounds = seat.rectangle()?;
+	let applied_at_epoch_ms = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map_err(|cause| cause.to_string())?
+		.as_millis();
 	Ok(Applied {
 		bounds,
+		page_origin,
 		is_visible: target.is_some(),
 		delay_ms: applied_at_epoch_ms.saturating_sub(u128::from(report.caused_at_epoch_ms)),
 	})
@@ -173,17 +261,18 @@ fn apply(child: &Webview, report: &PlacementReport) -> tauri::Result<Applied> {
 
 #[derive(Default)]
 struct Followed {
-	child: Option<Webview>,
+	seat: Option<Seat>,
+	page_origin: Shift,
 	latest: Option<PlacementReport>,
 	placements: Vec<Placement>,
 }
 
 impl Followed {
 	fn place(&mut self) {
-		let (Some(child), Some(report)) = (&self.child, &self.latest) else {
+		let (Some(seat), Some(report)) = (&self.seat, &self.latest) else {
 			return;
 		};
-		let applied = apply(child, report).map_err(|cause| cause.to_string());
+		let applied = apply(seat, report, self.page_origin);
 		self.placements.push(Placement { report: report.clone(), applied });
 	}
 }
@@ -203,14 +292,24 @@ impl ThreadView {
 		followed.place();
 	}
 
-	pub fn attach(&self, child: Webview) {
+	pub fn attach(&self, seat: Seat) {
 		let mut followed = locked(&self.followed);
-		followed.child = Some(child);
+		followed.seat = Some(seat);
 		followed.place();
 	}
 
 	pub fn detach(&self) {
-		locked(&self.followed).child = None;
+		locked(&self.followed).seat = None;
+	}
+
+	pub fn place_from(&self, page_origin: Shift) {
+		let mut followed = locked(&self.followed);
+		followed.page_origin = page_origin;
+		followed.place();
+	}
+
+	pub fn page_origin(&self) -> Shift {
+		locked(&self.followed).page_origin
 	}
 
 	pub fn latest_report(&self) -> Option<PlacementReport> {
@@ -277,6 +376,21 @@ mod tests {
 			rectangle: Rectangle { x: 52.0, y: 270.0, width: 160.0, height: 60.0 },
 		};
 		assert_eq!(report(placeholder, vec![menu]).target(), Some(placeholder));
+	}
+
+	#[test]
+	fn bounds_set_from_a_page_origin_are_compared_in_page_coordinates() {
+		let placeholder = Rectangle { x: 28.0, y: 100.0, width: 476.0, height: 160.0 };
+		let page_origin = Shift { x: 0.0, y: 32.0 };
+		let applied = Applied {
+			bounds: placeholder.moved_by(page_origin),
+			page_origin,
+			is_visible: true,
+			delay_ms: 0,
+		};
+		let placement = Placement { report: report(placeholder, Vec::new()), applied: Ok(applied) };
+		assert!(placement.shows(placeholder));
+		assert!(!placement.shows(placeholder.moved_by(page_origin)));
 	}
 
 	#[test]

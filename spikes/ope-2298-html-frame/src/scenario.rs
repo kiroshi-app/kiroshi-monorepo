@@ -1,16 +1,16 @@
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde_json::json;
+use serde_json::{json, Value};
 use tauri::{AppHandle, Listener as _, Url, Webview, WebviewWindow};
 
-use crate::behaviours::{self, Behaviour, Stage, ThreadPlay};
+use crate::behaviours::{self, Behaviour, Stage, ThreadPlay, NO_REPORT};
 use crate::host::{HostState, Tick, ViewAddress};
-use crate::placement::{PlacementReport, ThreadView, PLACEMENT_EVENT};
+use crate::placement::{PlacementReport, Seat, Seating, ThreadView, PLACEMENT_EVENT};
 use crate::probe::{self, HostReading};
 use crate::proofs::{
 	AttemptAlone, HostReadings, Observations, Proof, ViewObservation, WindowUrl,
@@ -21,7 +21,7 @@ use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewServer, READER_RO
 use crate::windows::{
 	open_main_window, open_view_child, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL,
 };
-use crate::Mode;
+use crate::{run_name, Mode};
 
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
 const RUN_SIGNAL: &str = "run";
@@ -39,25 +39,37 @@ const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(150);
 const RUN_LIMIT: Duration = Duration::from_secs(180);
-const TICKET: &str = "OPE-2346";
+const TICKET: &str = "OPE-2355";
+#[cfg(target_os = "linux")]
+const DISPLAY_SETUP_VARIABLE: &str = "SPIKE_DISPLAY_SETUP";
+#[cfg(target_os = "linux")]
+const PLACEHOLDER_TIMEOUT: Duration = Duration::from_secs(5);
 const IN_THREAD_VERDICT: &str = "in-thread";
 const SEPARATE_WINDOW_VERDICT: &str = "separate-window-only";
-const NO_PLACEHOLDER: &str = "the main page reported no placeholder rectangle";
 const DECISIONS: [&str; 4] = [
 	"proof 4 is decided from the host reading of the second view, whose document never navigates; a host reading taken in a document whose URL is not the served URL is a sensor fault, never a green, in proof 4 and in proof 7",
 	"proof 5 accepts a sink connection on Windows alone, when it carries zero bytes and was accepted while a view whose navigation to the sink the host saw blocked, by a handler or by a browser CSP report, was open; decided by Steve",
 	"each navigation attempt aimed at a tripwire is played alone in a view of its own, in every run, since a blocked frame navigation can replace the document that would play the next one; proof 3 is red when one of them was not played",
 	"the host evaluates a no-op in every view webview each 100 ms, as it does in the main window: behind a locked session or a display that is off, WebKit otherwise stalls the hostile script a few seconds after its busy loop",
 ];
-const IN_THREAD_DECISIONS: [&str; 8] = [
-	"the child webview is placed in window coordinates from rectangles the main page gives in its own viewport coordinates, with no correction: where main_page_viewport is smaller than main_webview_bounds in child_webview_mount, the two do not share an origin and a green behaviour says the numbers match, not that the view is drawn over its placeholder",
+const IN_THREAD_DECISIONS: [&str; 17] = [
+	"the child webview is first placed from the rectangles the main page gives in its own viewport coordinates, with no correction, and the window is captured; where the view is drawn more than 1 px from its placeholder, every later placement adds the page origin read from that capture, the placeholder drawn minus the placeholder reported, rounded to the point; the five behaviours are played once per run, after that correction, and a second capture follows them",
+	"the placeholder is painted rgb(0, 255, 255) and the view rgb(255, 0, 255), the placeholder captured with the view hidden, the view captured once shown again; a pixel counts for a paint when each of its leading channels exceeds the others by more than 100, since the display profile shifts the values a capture holds, and a box painted on less than 98 percent of its area is a fault; green was dropped because the zoom button of the title bar is green",
+	"on macOS the capture is screencapture -l on the window number of the main window, without its shadow, not a region of the screen: other sessions of this machine show always-on-top windows at the same place, and a region capture took theirs; on Linux under X11 it is import -window root cropped to the window; under Wayland no capture is taken and the drawn position stays not proven",
+	"on macOS the correction a product would apply is the safeAreaInsets.top of the main webview, which native_geometry records beside the origin read from the pixels; the harness places from the pixels so that the two agreeing is a measurement and not an assumption",
 	"the child webview is hidden while a menu, a popover or a sheet overlaps the visible part of the placeholder, and shown again once none does, since a native webview draws above every element of the main page",
-	"child_webview_bounds is read back from the webview after the host set it; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
+	"child_webview_bounds is read back from the webview after the host set it, through tauri::Webview::bounds on macOS and Windows and through the GTK allocation translated to the main webview on Linux, where tauri::Webview::bounds never reads a position; child_webview_visible is the visibility the host last asked for, since Tauri 2.12.2 has no visibility getter",
 	"the delay runs from Date.now() in the main page handler that reported the placement to the host clock once the bounds were read back",
 	"cutting the view to the column only shrinks the child webview: its document keeps its own origin and is not shifted by the hidden part",
 	"enlarged means the placeholder takes the height of the visible column",
-	"the five behaviours are played on the second view, once its document has settled, and only when the main webview bounds read back fill the window inner size, after at most one refit of the main webview to that size",
+	"the five behaviours are played on the second view, once its document has settled, and only when the main webview bounds read back fill the window content, after at most one refit of the main webview to that size; the window content is the inner size of the window, and on Linux the allocation of the default vbox, since tao counts the client-side decorations in the inner size under Wayland",
 	"the capability names the webview main where it named the window main, so a child webview of the main window receives none",
+	"on Linux every placement is tried on a blank child webview before the first view, each asked for the rectangle of the placeholder; a placement holds when the GTK allocations give the main webview the whole window content and the view its rectangle within 1 px",
+	"on Linux each view is mounted by tauri::Window::add_child, then its widget is moved by GTK calls into the first placement that held on a webview Tauri manages, the GtkFixed tried before the overlay margins; the two placements of wry alone are measured on a blank webview outside the Tauri runtime, where no guard, no capability and no proof applies",
+	"on Linux the input a view and the main page receive through the GtkOverlay was not exercised: the GtkFixed is set pass-through, no click was sent",
+	"gtk and wry on Linux, objc2 and objc2-foundation on macOS are direct dependencies of the harness at the versions the lock already held: no package entered the lock",
+	"results-linux-in-thread.json is the Xvfb alone setup, the setup of the OPE-2346 file of that name; every other display setup carries its name in the file name",
+	"the OPE-2355 workflow plays the in-thread mode alone, on macOS and on Linux: the Windows job and the window-sandboxed mode are left out, and no Windows result is touched",
 ];
 const RESIDUAL_EXPOSURE: &str = "no mitigation is applied: Chromium 156, which WebView2 embeds, opens one socket to the target of every http or https navigation when the navigation request is created, before the CSP check and before a host handler is asked. The only gate is the embedder hook ShouldPreconnectNavigation: there is no command line switch, no WebView2 setting and no Tauri 2.12.2 builder option for it, so a view can still make the webview open a connection without request bytes to any host and port it names";
 const HARNESS_FAILURE: i32 = 1;
@@ -163,8 +175,16 @@ pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Fai
 		std::process::exit(HARNESS_FAILURE);
 	});
 	thread::spawn(move || {
-		let run =
-			Run { app, host, mode, sensors, main_window, thread_view, started: Instant::now() };
+		let run = Run {
+			app,
+			host,
+			mode,
+			sensors,
+			main_window,
+			thread_view,
+			seating: OnceLock::new(),
+			started: Instant::now(),
+		};
 		match run.play(first_view) {
 			Ok(()) => std::process::exit(0),
 			Err(cause) => {
@@ -183,20 +203,22 @@ struct Run {
 	sensors: Sensors,
 	main_window: WebviewWindow,
 	thread_view: Arc<ThreadView>,
+	seating: OnceLock<Seating>,
 	started: Instant,
 }
 
 enum Shown {
 	Frame,
 	Window(Webview),
-	Child(Webview),
+	Child(Seat),
 	Nowhere(String),
 }
 
 impl Shown {
 	fn webview(&self) -> Option<&Webview> {
 		match self {
-			Self::Window(webview) | Self::Child(webview) => Some(webview),
+			Self::Window(webview) => Some(webview),
+			Self::Child(seat) => Some(seat.webview()),
 			Self::Frame | Self::Nowhere(_) => None,
 		}
 	}
@@ -243,6 +265,7 @@ impl Run {
 		thread::sleep(BASELINE);
 		let baseline = (baseline_started, Instant::now());
 		let main_url_before = self.main_window.url()?.to_string();
+		let placements = self.mode.places_views_in_the_thread().then(|| self.placements());
 
 		let first = self.open_view(FIRST_VIEW_LABEL, first_view, FIRST_VIEW_TIMEOUT, SETTLE)?;
 		let first_reading = self.host_reading(&first);
@@ -317,6 +340,10 @@ impl Run {
 		let proofs = observations.proofs();
 		let mut results = json!({
 			"ticket": TICKET,
+			"run": {
+				"name": run_name(),
+				"github_run_id": std::env::var("GITHUB_RUN_ID").ok(),
+			},
 			"os": std::env::consts::OS,
 			"mode": self.mode.name(),
 			"tauri": tauri::VERSION,
@@ -332,16 +359,30 @@ impl Run {
 			"attempts_not_played_alone": not_played_alone,
 			"page_claims_never_used_alone_for_a_verdict": observations.page_claims(),
 		});
-		if let Some(ThreadPlay { mount, behaviours }) = thread {
+		if let Some(placements) = placements {
+			for (finding, evidence) in placements {
+				results[finding] = evidence;
+			}
+		}
+		if let Some(thread) = thread {
+			let drawn_over_its_placeholder = thread.is_drawn_over_its_placeholder();
+			let ThreadPlay { mount, native_geometry, sightings, behaviours } = thread;
 			let is_shown_in_the_thread = child_webview_errors.is_empty()
 				&& proofs.iter().all(Proof::is_green)
-				&& behaviours.iter().all(Behaviour::is_green);
+				&& behaviours.iter().all(Behaviour::is_green)
+				&& drawn_over_its_placeholder != Some(false);
 			results["verdict"] = json!(if is_shown_in_the_thread {
 				IN_THREAD_VERDICT
 			} else {
 				SEPARATE_WINDOW_VERDICT
 			});
 			results["child_webview_mount"] = probe::evidence(&mount);
+			results["native_geometry"] = native_geometry;
+			results["view_drawn_over_its_placeholder"] = match drawn_over_its_placeholder {
+				Some(is_over) => json!(is_over),
+				None => json!("not proven: no capture of the window could be read"),
+			};
+			results["sightings"] = sightings.iter().map(probe::evidence).collect();
 			results["behaviours"] = json!(behaviours);
 			results["child_webview_errors"] = json!(child_webview_errors);
 		}
@@ -350,10 +391,7 @@ impl Run {
 			results["residual_exposure"] = json!(RESIDUAL_EXPOSURE);
 		}
 		let rendered = serde_json::to_string_pretty(&results)?;
-		std::fs::write(
-			format!("results-{}-{}.json", std::env::consts::OS, self.mode.name()),
-			&rendered,
-		)?;
+		std::fs::write(format!("results-{}-{}.json", run_name(), self.mode.name()), &rendered)?;
 		println!("{rendered}");
 		Ok(())
 	}
@@ -364,15 +402,66 @@ impl Run {
 		DECISIONS.iter().chain(in_thread).copied().collect()
 	}
 
+	#[cfg(target_os = "linux")]
+	fn placements(&self) -> Vec<(&'static str, Value)> {
+		use crate::trials::{self, Tried};
+		let rest = || self.thread_view.latest_report();
+		if !wait_until(PLACEHOLDER_TIMEOUT, || rest().is_some()) {
+			return vec![(
+				"placement_verdict",
+				json!({ "verdict": NOT_POSSIBLE, "reason": NO_REPORT }),
+			)];
+		}
+		let Some(asked) = rest().and_then(|report| report.target()) else {
+			return vec![(
+				"placement_verdict",
+				json!({ "verdict": NOT_POSSIBLE, "reason": NO_REPORT }),
+			)];
+		};
+		let Tried { cause, trials, holder } = trials::run(&self.main_window, asked);
+		let held: Vec<_> =
+			trials.iter().filter(|trial| trial.holds()).map(|trial| trial.name()).collect();
+		let verdict = match holder {
+			Some(holder) => {
+				if self.seating.set(Seating::Layer(holder)).is_err() {
+					eprintln!("the seating of the views was already decided");
+				}
+				json!({
+					"verdict": "possible in the thread",
+					"placement_the_views_are_mounted_with": holder,
+					"placements_that_hold": held,
+				})
+			}
+			None => json!({
+				"verdict": NOT_POSSIBLE,
+				"reason": "no placement of a webview Tauri manages gave the main webview the full window and the view its rectangle within 1 px",
+				"placements_that_hold": held,
+			}),
+		};
+		vec![
+			("display_setup", display_setup()),
+			("halved_views_cause", json!(cause)),
+			("placements_tried", json!(trials)),
+			("placement_verdict", verdict),
+		]
+	}
+
+	#[cfg(not(target_os = "linux"))]
+	fn placements(&self) -> Vec<(&'static str, Value)> {
+		Vec::new()
+	}
+
 	fn thread_play(&self, view: &OpenView) -> Option<ThreadPlay> {
 		match &view.shown {
-			Shown::Child(child) => {
+			Shown::Child(seat) => {
 				let stage =
-					Stage { main_window: &self.main_window, thread_view: &self.thread_view, child };
+					Stage { main_window: &self.main_window, thread_view: &self.thread_view, seat };
 				Some(stage.play(|| view.server.record().document_requests))
 			}
 			Shown::Nowhere(cause) => Some(ThreadPlay {
 				mount: Err(cause.clone()),
+				native_geometry: Value::Null,
+				sightings: Vec::new(),
 				behaviours: behaviours::not_played(cause),
 			}),
 			Shown::Frame | Shown::Window(_) => None,
@@ -380,24 +469,24 @@ impl Run {
 	}
 
 	fn open_child(&self, label: &str, url: Url) -> Shown {
-		let opened =
-			self.thread_view.latest_report().ok_or_else(|| NO_PLACEHOLDER.to_owned()).and_then(
-				|report| {
-					open_view_child(
-						&self.main_window,
-						&self.host,
-						self.mode,
-						label,
-						url,
-						report.placeholder,
-					)
-					.map_err(|cause| cause.to_string())
-				},
-			);
-		match opened {
-			Ok(child) => {
-				self.thread_view.attach(child.clone());
-				Shown::Child(child)
+		let opened = self.thread_view.latest_report().ok_or_else(|| NO_REPORT.to_owned()).and_then(
+			|report| {
+				open_view_child(
+					&self.main_window,
+					&self.host,
+					self.mode,
+					label,
+					url,
+					report.placeholder,
+				)
+				.map_err(|cause| cause.to_string())
+			},
+		);
+		let seating = self.seating.get().copied().unwrap_or_default();
+		match opened.and_then(|child| Seat::take(child, seating)) {
+			Ok(seat) => {
+				self.thread_view.attach(seat.clone());
+				Shown::Child(seat)
 			}
 			Err(cause) => Shown::Nowhere(cause),
 		}
@@ -565,9 +654,9 @@ impl Run {
 				webview.window().destroy()?;
 				None
 			}
-			Shown::Child(child) => {
+			Shown::Child(seat) => {
 				self.thread_view.detach();
-				child.close()?;
+				seat.webview().close()?;
 				None
 			}
 			Shown::Nowhere(cause) => Some(cause),
@@ -587,6 +676,29 @@ impl Run {
 			open: (view.creation_began, view.settled_at),
 		})
 	}
+}
+
+#[cfg(target_os = "linux")]
+const NOT_POSSIBLE: &str = "not possible in the thread";
+#[cfg(target_os = "linux")]
+const NO_DESKTOP_SESSION: &str = "not proven: this run has no desktop session, XDG_SESSION_ID and XDG_CURRENT_DESKTOP are not both set; OPE-2355 reached Linux only through Docker linux/arm64 on a macOS host and through the GitHub-hosted ubuntu-latest runner, each under Xvfb alone, Xvfb with the openbox window manager and the headless backend of the weston Wayland compositor: no login session, no GPU compositor, no physical output";
+
+#[cfg(target_os = "linux")]
+fn display_setup() -> Value {
+	let is_set = |variable| std::env::var_os(variable).is_some();
+	let has_a_desktop_session = is_set("XDG_SESSION_ID") && is_set("XDG_CURRENT_DESKTOP");
+	json!({
+		"real_desktop_session": if has_a_desktop_session {
+			json!("XDG_SESSION_ID and XDG_CURRENT_DESKTOP are set: this run has a desktop session")
+		} else {
+			json!(NO_DESKTOP_SESSION)
+		},
+		"name": std::env::var(DISPLAY_SETUP_VARIABLE).unwrap_or_else(|_| "unnamed".to_owned()),
+		"x_display_set": is_set("DISPLAY"),
+		"wayland_display_set": is_set("WAYLAND_DISPLAY"),
+		"gdk_backend_asked": std::env::var("GDK_BACKEND").ok(),
+		"session_type": std::env::var("XDG_SESSION_TYPE").ok(),
+	})
 }
 
 fn view_summary(view: &PlayedView) -> serde_json::Value {

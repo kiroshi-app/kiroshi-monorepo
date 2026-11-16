@@ -197,6 +197,9 @@
 					placeholder.style.height = `${thread.clientHeight}px`
 					scrollPlaceholderTo(0)
 				},
+				paintPlaceholder: (colour) => {
+					placeholder.style.background = colour
+				},
 				bringBack: () => {
 					placeholder.style.height = ""
 					thread.scrollTop = scrollTopBeforeEnlarging
