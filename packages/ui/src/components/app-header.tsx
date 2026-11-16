@@ -157,6 +157,7 @@ const AppHeader = ({
 )
 
 export {
+	APP_HEADER_CAPSULE_FILL,
 	APP_HEADER_TITLE,
 	AppHeader,
 	AppHeaderButton,

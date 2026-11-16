@@ -188,7 +188,7 @@ const CLOSE_ACTIVITY = "Close activity"
 
 const A_MINUTE = 60_000
 
-const BACK = "Back to the conversation"
+const BACK = "Missions"
 
 const READ_FAILURE_TITLE = "Couldn’t load this mission"
 
@@ -424,6 +424,9 @@ const islandsIn = (surface: Element) => [
 	...surface.querySelectorAll<HTMLElement>('[data-slot="header-island"]'),
 ]
 
+const barOf = (header: Element | null) =>
+	header?.querySelector('[data-slot="app-header"]') as HTMLElement
+
 const islandOf = (control: HTMLElement) =>
 	control.closest('[data-slot="header-island"]') as HTMLElement
 
@@ -498,7 +501,7 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 
 		expect(readMission).toHaveBeenCalledWith(null, "m-1")
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 		expect(missionHeader()?.textContent).toContain("Blocked on you")
 	})
 
@@ -652,7 +655,7 @@ describe("WorkspaceBody missions", () => {
 		expect(missionHeader()).toBeNull()
 	})
 
-	it("floats the header of the loading mission as islands dragging the window, Back excepted", async () => {
+	it("wears the header of the loading mission as the static bar dragging the window, Back excepted", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
 		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
@@ -661,12 +664,13 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 		const back = screen.getByRole("button", { name: BACK })
 
-		expect(floatingHeader().contains(missionHeaderSkeleton())).toBe(true)
-		expect(startsWindowDrag(islandOf(back))).toBe(true)
+		expect(floatingHeader()).toBeNull()
+		expect(islandsIn(document.body)).toHaveLength(0)
+		expect(startsWindowDrag(barOf(missionHeaderSkeleton()))).toBe(true)
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
-	it("floats the header of the open mission as islands dragging the window, Back excepted", async () => {
+	it("wears the header of the open mission as the static bar dragging the window, Back excepted", async () => {
 		const { workspace } = await seed((mission) => ({
 			mission,
 			events: [eventOf("opened", 0)],
@@ -677,8 +681,9 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 		const back = screen.getByRole("button", { name: BACK })
 
-		expect(floatingHeader().contains(missionHeader())).toBe(true)
-		expect(startsWindowDrag(islandOf(back))).toBe(true)
+		expect(floatingHeader()).toBeNull()
+		expect(islandsIn(document.body)).toHaveLength(0)
+		expect(startsWindowDrag(barOf(missionHeader()))).toBe(true)
 		expect(startsWindowDrag(back)).toBe(false)
 	})
 
@@ -716,7 +721,7 @@ describe("WorkspaceBody missions", () => {
 		await act(async () => deliver({ mission, events: [] }))
 		await settle()
 
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 		expect(missionHeaderSkeleton()).toBeNull()
 	})
 
@@ -736,7 +741,7 @@ describe("WorkspaceBody missions", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 		await settle()
 
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 	})
 
 	it("raises a failure notice when the answer cannot reach the companion", async () => {
@@ -1375,7 +1380,7 @@ describe("WorkspaceBody mission menu", () => {
 		await choose(panelCardIn("Waiting on you"), OPEN_ENTRY)
 
 		expect(readMission).toHaveBeenCalledWith(null, "m-1")
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 	})
 
 	it("opens the pull request in the browser", async () => {
@@ -1792,11 +1797,20 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("floats the Library header as islands over the grid", async () => {
+	it("tops the Library with the static bar instead of floating islands", async () => {
 		await openLibrary()
+		const layout = document.querySelector(
+			'[data-slot="library-panel"] [data-slot="screen-layout"]',
+		) as HTMLElement
+		const bar = layout.querySelector('[data-slot="app-header"]') as HTMLElement
 
-		expect(islandsIn(floatingHeader()).length).toBeGreaterThan(0)
-		expect(takesPress(floatingHeader())).toBe(false)
+		expect(layout.firstElementChild).toBe(bar)
+		expect(bar.querySelector("h1")?.textContent).toBe("Library")
+		expect(
+			layout.querySelector('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
+		expect(islandsIn(layout)).toEqual([])
+		expect(takesPress(bar)).toBe(true)
 	})
 
 	it("wears the static bar above an opened document, outside any island", async () => {
@@ -1835,9 +1849,7 @@ describe("WorkspaceBody library", () => {
 		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
 			"Library",
 		)
-		expect(
-			within(panel).getByRole("searchbox", { name: "Search the Library" }),
-		).toBeTruthy()
+		expect(within(panel).queryByRole("searchbox")).toBeNull()
 		for (const name of [
 			"New document",
 			"Blank document",

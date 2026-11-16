@@ -267,6 +267,7 @@ const common = {
 	},
 	library: {
 		title: "Library",
+		description: "Every image and document in this Space.",
 		search: "Search the Library",
 		import: "Import",
 		newDocument: "New document",

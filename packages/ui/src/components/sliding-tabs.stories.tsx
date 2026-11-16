@@ -331,7 +331,7 @@ export const LibraryFilters = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library filter row in its header island: four pressed-or-not segments with their counts, All pressed. Check that the pill wears the Space colour, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
+					"The Library filter row, which the app sets in the content above the grid: four pressed-or-not segments with their counts, All pressed. Check that the pill wears the Space colour, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
 			},
 		},
 	},

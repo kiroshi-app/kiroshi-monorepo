@@ -3,9 +3,14 @@ import { expect } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	holderOf,
+	slotIn,
 	slotsIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+} from "@workspace/ui/components/app-header"
 import { MissionStatePill } from "@workspace/ui/components/mission-state-pill"
 import {
 	MISSION_STATES,
@@ -34,7 +39,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"The seven states a mission can be in, exhaustively, each in its own holder. Check that five of them name themselves in words on the very same badge, that only the mark changes colour between them, the `waiting_human` mission state mark on `--mission-glyph-waiting` because it is the one waiting on the reader, and that `working` and `waiting_bot` leave their holder empty. Adding a state to `MissionState` without adding it here is a type error, so this list cannot drift from the contract. `packages/ui/src/components/mission-card.tsx:43` and `packages/ui/src/components/mission-header.tsx:84` each mount one pill for the state their mission is in.",
+					"The seven states a mission can be in, exhaustively, each in its own holder. Check that five of them name themselves in words on the very same badge, that only the mark changes colour between them, the `waiting_human` mission state mark on `--mission-glyph-waiting` because it is the one waiting on the reader, and that `working` and `waiting_bot` leave their holder empty. Adding a state to `MissionState` without adding it here is a type error, so this list cannot drift from the contract. `packages/ui/src/components/mission-card.tsx:102` mounts one pill for the state its mission is in. Pick `InAppHeader` for the form the mission bar draws.",
 			},
 		},
 	},
@@ -63,5 +68,80 @@ export const States = meta.story({
 		for (const state of MISSION_STATES_WITHOUT_A_PILL) {
 			await expect(holderOf(canvasElement, state)).toBeEmptyDOMElement()
 		}
+	},
+})
+
+const PILL_STATES = MISSION_STATES.filter(
+	(state) => !MISSION_STATES_WITHOUT_A_PILL.includes(state),
+)
+
+export const InAppHeader = meta.story({
+	parameters: {
+		layout: "padded",
+		docs: {
+			description: {
+				story:
+					"The five states the pill speaks for, each at the trailing end of an `AppHeader`, where the pill is a filled capsule rather than a badge. Check that each is 28px tall, the height of the bar's controls, fully rounded on the fill the bar's own capsule wears, with a 6px dot in the colour of its state, 6px before a 12px medium label in the foreground and 10px of padding either side. Pick `States` for the badge a mission card draws. `packages/ui/src/components/mission-header.tsx:82` hands the pill to the bar.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex w-[36rem] max-w-full flex-col">
+			{PILL_STATES.map((state) => (
+				<section data-holds={state} key={state}>
+					<AppHeader
+						close={<MissionStatePill state={state} />}
+						leading={
+							<span className={APP_HEADER_TITLE}>
+								Move the sidecar build into the release workflow
+							</span>
+						}
+					/>
+				</section>
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const dotOf = (pill: HTMLElement) => pill.firstElementChild as HTMLElement
+
+		for (const pill of slotsIn(canvasElement, "mission-state-pill")) {
+			const box = pill.getBoundingClientRect()
+			const dot = dotOf(pill).getBoundingClientRect()
+			const style = getComputedStyle(pill)
+
+			await expect(box.height).toBe(28)
+			await expect(
+				Number.parseFloat(style.borderTopLeftRadius),
+			).toBeGreaterThanOrEqual(14)
+			await expect([
+				dot.left - box.left,
+				dot.width,
+				dot.height,
+				style.columnGap,
+				style.paddingRight,
+				style.fontSize,
+				style.lineHeight,
+				style.fontWeight,
+			]).toEqual([10, 6, 6, "6px", "10px", "12px", "16px", "500"])
+			await expect(style.backgroundColor).toBe(
+				tokenStyleIn(pill, "bg-foreground/5", "backgroundColor"),
+			)
+			await expect(style.color).toBe(
+				tokenStyleIn(pill, "text-foreground", "color"),
+			)
+		}
+		await expect(slotsIn(canvasElement, "mission-state-pill")).toHaveLength(
+			PILL_STATES.length,
+		)
+		await expect(
+			getComputedStyle(
+				dotOf(
+					slotIn(
+						holderOf(canvasElement, "ready_to_merge"),
+						"mission-state-pill",
+					),
+				),
+			).backgroundColor,
+		).toBe(tokenStyleIn(canvasElement, "bg-success", "backgroundColor"))
 	},
 })

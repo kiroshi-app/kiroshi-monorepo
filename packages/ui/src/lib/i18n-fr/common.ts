@@ -284,6 +284,7 @@ const common = {
 	},
 	library: {
 		title: "Bibliothèque",
+		description: "Toutes les images et tous les documents de cet espace.",
 		search: "Rechercher dans la Bibliothèque",
 		import: "Importer",
 		newDocument: "Nouveau document",

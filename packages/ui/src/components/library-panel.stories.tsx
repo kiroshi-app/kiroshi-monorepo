@@ -1,6 +1,14 @@
 import { type ReactNode, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { expect, fn, mocked, spyOn, waitFor, within } from "storybook/test"
+import {
+	expect,
+	fn,
+	mocked,
+	screen,
+	spyOn,
+	waitFor,
+	within,
+} from "storybook/test"
 import { decorators as pseudoStateDecorators } from "storybook-addon-pseudo-states/preview"
 
 import preview from "@workspace/storybook/preview"
@@ -85,9 +93,8 @@ const LONG_NAMED_ITEMS: LibraryItem[] = [
 
 const ARTBOARD_FRAMES = {
 	wide: "w-[960px]",
-	narrow: "w-[560px]",
+	narrow: "w-[480px]",
 	reflow: "w-[320px]",
-	tight: "w-[920px]",
 }
 
 type LibraryArtboardFrameProps = {
@@ -111,17 +118,8 @@ const LibraryArtboardFrame = ({
 const pressedFillOf = (segment: HTMLElement) =>
 	slotIn(segment.parentElement as HTMLElement, "sliding-tabs-pill")
 
-const islandsIn = (canvasElement: HTMLElement) => {
-	const [title, actions, filters] = slotsIn(canvasElement, "header-island")
-	if (!title) throw new Error("The header lost its title island")
-	return { title, actions, filters }
-}
-
-const actionsIn = (canvasElement: HTMLElement) => {
-	const { actions } = islandsIn(canvasElement)
-	if (!actions) throw new Error("The header lost its actions island")
-	return within(actions)
-}
+const barActionsIn = (canvasElement: HTMLElement) =>
+	within(slotIn(canvasElement, "app-header")).queryAllByRole("button")
 
 const rgbOf = (hex: string) => {
 	const probe = document.createElement("span")
@@ -236,7 +234,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Library tab of a Space: every image, document and board the Space holds, read-only. The header floats over the grid as two islands: the title and the filters on one side, the search, Import, New board and New document on the other, each drawn only when its callback is passed. The filters are one single-selection toggle group whose pressed segment wears the Space colour, and they move to an island of their own on a second row once the panel is too narrow for one row; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
+					"The Library tab of a Space: every image, document and board the Space holds, read-only. A static bar tops the panel: a muted line over the Library title on one side, Import, New board and New document on the other, each drawn only when its callback is passed, Import and New board dropping to their glyph and a tooltip once the panel is too narrow for their label, New document following once its label would cut the title. The filters and the search open the content under the bar and scroll away with the grid, the search moving under the filters once the row is too narrow for both. The filters are one single-selection toggle group whose pressed segment wears the Space colour; each grid item is a single button that hands the item to `onOpenItem`, and a right-click on it opens the item action menu, listing only the actions whose callback is given. A Library with nothing in it trades the grid for the Start a document templates and the Bring in files strip, and while the Library loads a grid skeleton fills the card. Pass a `LibraryLightbox` as `overlay` so it covers the card.",
 			},
 		},
 	},
@@ -743,12 +741,12 @@ export const NewBoardAction = meta.story({
 		docs: {
 			description: {
 				story:
-					"The header as artboard 1a draws it, dark theme: New board, a ghost button identical to Import with the board glyph, between Import and New document in the actions island. Check that it reports `onNewBoard`.",
+					"The bar with its three buttons, dark theme: New board, a bordered button identical to Import with the board glyph, between Import and New document. Check that it reports `onNewBoard`.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const buttons = actionsIn(canvasElement).getAllByRole("button")
+		const buttons = barActionsIn(canvasElement)
 		await expect(buttons.map((button) => button.textContent)).toEqual([
 			"Import",
 			"New board",
@@ -1016,7 +1014,7 @@ export const SearchFilled = meta.story({
 			0,
 		)
 
-		for (let press = 0; press < 4 && document.activeElement !== search; press++)
+		for (let press = 0; press < 8 && document.activeElement !== search; press++)
 			await userEvent.tab()
 		await expect(search).toHaveFocus()
 		await expect(search.matches(":focus-visible")).toBe(true)
@@ -1042,15 +1040,16 @@ export const EmptyWithNoCallbacks = meta.story({
 		docs: {
 			description: {
 				story:
-					"An empty Library before Import, New board, New document and the templates exist in the app: the title island alone. Check that no control, no empty island and no section title is left behind by an absent callback, so the empty Library never offers a press that does nothing.",
+					"An empty Library before Import, New board, New document and the templates exist in the app: the bar with its title alone. Check that no control, no empty button group, no content row and no section title is left behind by an absent callback, so the empty Library never offers a press that does nothing.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.queryAllByRole("button")).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "header-island")).toHaveLength(1)
+		await expect(slotsIn(canvasElement, "library-actions")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "library-controls")).toHaveLength(0)
 		await expect(
-			within(islandsIn(canvasElement).title).getByRole("heading", {
+			within(slotIn(canvasElement, "app-header")).getByRole("heading", {
 				level: 1,
 				name: "Library",
 			}),
@@ -1070,21 +1069,19 @@ export const EmptyWithEveryCallback = meta.story({
 		docs: {
 			description: {
 				story:
-					"An empty Library as artboard 6c draws it, dark theme: the header keeps its actions, then Blank document, Blank board and the three templates under Start a document, then the Bring in files strip. Check that only the filters drop, that Blank board follows Blank document on the dot grid ground with its yellow sticky, and that each card reports its own callback. The artboard's Blank document glyph and its absent templates are left to their own tickets.",
+					"An empty Library as artboard 6c draws it, dark theme: the bar keeps its buttons, then Blank document, Blank board and the three templates under Start a document, then the Bring in files strip. Check that the filters and the search drop with their row, that Blank board follows Blank document on the dot grid ground with its yellow sticky, and that each card reports its own callback. The artboard's Blank document glyph and its absent templates are left to their own tickets.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
-		await expect(slotsIn(canvasElement, "header-island")).toHaveLength(2)
+		await expect(slotsIn(canvasElement, "library-controls")).toHaveLength(0)
+		await expect(canvas.queryByRole("searchbox")).toBe(null)
 		await expect(
 			canvas.getByRole("heading", { level: 1, name: "Library" }),
 		).toBeVisible()
-		await expect(canvas.getByRole("searchbox")).toBeVisible()
 		await expect(
-			actionsIn(canvasElement)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
+			barActionsIn(canvasElement).map((button) => button.textContent),
 		).toEqual(["Import", "New board", "New document"])
 
 		const cards = slotsIn(canvasElement, "library-template")
@@ -1123,7 +1120,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library before its first read lands, as artboard 6b draws it, dark theme: the two islands and their actions stay, and once the read has been slow for 300ms the four filters are drawn as a skeleton in the title island and the grid as a skeleton under the islands, whose tiles keep the loaded tile geometry and reach the bottom of the card. Check that nothing is drawn under the header at first, that the grid skeleton then runs from under the islands to the card's bottom edge in more than one row, and that the panel says it is busy throughout.",
+					"The Library before its first read lands, as artboard 6b draws it, dark theme: the bar and its buttons stay, and once the read has been slow for 300ms the four filters are drawn as a skeleton in the content row, beside the search, and the grid as a skeleton 16 px under that row, whose tiles keep the loaded tile geometry and reach the bottom of the card. Check that nothing is drawn under the bar at first, that the grid skeleton then runs from under the content row to the card's bottom edge in more than one row, and that the panel says it is busy throughout.",
 			},
 		},
 	},
@@ -1135,17 +1132,24 @@ export const Loading = meta.story({
 		await expect(slotsIn(canvasElement, "library-grid-skeleton")).toHaveLength(
 			0,
 		)
+		await expect(slotsIn(canvasElement, "library-controls")).toHaveLength(0)
 		await waitFor(() =>
 			expect(
-				slotIn(islandsIn(canvasElement).title, "library-filters-skeleton")
-					.children,
+				slotIn(
+					slotIn(canvasElement, "library-controls"),
+					"library-filters-skeleton",
+				).children,
 			).toHaveLength(4),
 		)
+		await expect(canvas.getByRole("searchbox")).toBeVisible()
 		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
 		await expect(
 			slotIn(canvasElement, "library-grid-skeleton").getBoundingClientRect()
 				.top,
-		).toBe(islandsIn(canvasElement).title.getBoundingClientRect().bottom + 8)
+		).toBe(
+			slotIn(canvasElement, "library-controls").getBoundingClientRect().bottom +
+				16,
+		)
 		await expect(canvasElement.querySelector("[aria-busy=true]")).not.toBe(null)
 		await expect(
 			slotIn(canvasElement, "list-skeleton").getBoundingClientRect().bottom,
@@ -1539,43 +1543,53 @@ const SELECTED_COUNT_INK = {
 	dark: "text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]",
 }
 
+const SECONDARY_HOVER_FILL = "bg-foreground/5"
+
+const SECONDARY_PRESSED_FILL = "bg-foreground/10"
+
 const PRIMARY_HOVER_FILL =
-	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_20%)]"
+	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_15%)]"
 
 const PRIMARY_PRESSED_FILL =
-	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_40%)]"
+	"bg-[color-mix(in_oklch,var(--primary),var(--foreground)_30%)]"
 
-const headerIn = (canvasElement: HTMLElement) => {
-	const { title, actions, filters } = islandsIn(canvasElement)
-	if (!(actions && filters)) throw new Error("The header lost an island")
-	const buttons = within(actions).getAllByRole("button")
-	const [newBoard, newDocument] = buttons
-	if (!(newBoard && newDocument)) throw new Error("The header lost an action")
+const barIn = (canvasElement: HTMLElement) => {
+	const bar = slotIn(canvasElement, "app-header")
 
 	return {
 		panel: slotIn(canvasElement, "library-panel"),
-		title,
-		actions,
-		filters,
-		heading: within(title).getByRole("heading", { level: 1, name: "Library" }),
-		searchField: slotIn(actions, "library-search"),
-		search: within(actions).getByRole("searchbox", {
-			name: "Search the Library",
-		}),
-		buttons,
-		newBoard,
-		newDocument,
+		bar,
+		heading: within(bar).getByRole("heading", { level: 1 }),
+		topLine: slotIn(bar, "app-header-top-line"),
+		actions: barActionsIn(canvasElement),
 	}
 }
 
-const headerControlsIn = (canvasElement: HTMLElement) => {
-	const header = headerIn(canvasElement)
-	const [all, images] = within(header.title).getAllByRole("button")
-	const searchGlyph = header.searchField.querySelector("svg")
-	const boardGlyph = header.newBoard.querySelector("svg")
-	if (!(all && images && searchGlyph && boardGlyph))
-		throw new Error("The header lost a control")
-	return { ...header, all, images, searchGlyph, boardGlyph }
+const controlsIn = (canvasElement: HTMLElement) => {
+	const controls = slotIn(canvasElement, "library-controls")
+	const segments = within(controls).getAllByRole("button")
+	const [all, images] = segments
+	const searchField = slotIn(controls, "library-search")
+	const searchGlyph = searchField.querySelector("svg")
+	if (!(all && images && searchGlyph))
+		throw new Error("The content row lost a control")
+
+	return {
+		controls,
+		filters: slotIn(controls, "library-filters"),
+		segments,
+		all,
+		images,
+		searchField,
+		search: within(controls).getByRole("searchbox"),
+		searchGlyph,
+	}
+}
+
+const glyphOf = (action: HTMLElement) => {
+	const glyph = action.querySelector("svg")
+	if (!glyph) throw new Error("The action lost its glyph")
+	return glyph
 }
 
 type RealPointer = Awaited<ReturnType<typeof realPointer>>
@@ -1586,102 +1600,170 @@ const tabTo = async (pointer: RealPointer, control: HTMLElement) => {
 	await expect(control).toHaveFocus()
 }
 
-const expectIslandsAtTheEdges = async (canvasElement: HTMLElement) => {
-	const { panel, title, actions } = headerIn(canvasElement)
-	const [frame, left, right] = [boxOf(panel), boxOf(title), boxOf(actions)]
+const expectNoHorizontalOverflow = async (canvasElement: HTMLElement) => {
+	const { panel, bar, heading, actions } = barIn(canvasElement)
+	const frame = boxOf(panel)
+	const scroller = slotIn(canvasElement, "screen-layout-scroller")
+	const [first] = actions
+	if (!first) throw new Error("The bar lost its actions")
 
-	await expect([
-		left.left - frame.left,
-		left.top - frame.top,
-		left.height,
-	]).toEqual([8, 8, 40])
-	await expect([
-		frame.right - right.right,
-		right.top - frame.top,
-		right.height,
-	]).toEqual([8, 8, 40])
+	for (const box of [panel, bar, scroller])
+		await expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth)
+	for (const action of actions) {
+		await expect(boxOf(action).left).toBeGreaterThanOrEqual(frame.left + 12)
+		await expect(boxOf(action).right).toBeLessThanOrEqual(frame.right - 12)
+	}
+	await expect(boxOf(heading).left - frame.left).toBe(12)
+	await expect(boxOf(first).left - boxOf(heading).right).toBeGreaterThanOrEqual(
+		12,
+	)
 }
 
-const expectHeaderOnOneRow = async (
+const expectSecondaryAtRest = async (action: HTMLElement) => {
+	await expect(getComputedStyle(action).backgroundColor).toBe(TRANSPARENT)
+	await expect(getComputedStyle(action).borderTopWidth).toBe("1px")
+	await expect(getComputedStyle(action).borderTopColor).toBe(
+		tokenStyleIn(action, "border border-foreground/12", "borderTopColor"),
+	)
+	await expect(getComputedStyle(action).color).toBe(
+		tokenStyleIn(action, "text-foreground", "color"),
+	)
+	await expect(getComputedStyle(glyphOf(action)).color).toBe(
+		tokenStyleIn(action, "text-soft-foreground", "color"),
+	)
+}
+
+const expectPrimaryAtRest = async (action: HTMLElement) => {
+	await expectFill(action, "bg-primary")
+	await expect(getComputedStyle(action).color).toBe(
+		tokenStyleIn(action, "text-primary-foreground", "color"),
+	)
+	await expect(getComputedStyle(action).borderTopWidth).toBe("0px")
+}
+
+const expectBarAsDrawn = async (
 	canvasElement: HTMLElement,
 	items: LibraryItem[],
+	labels: string[],
 ) => {
-	const {
-		panel,
-		title,
-		actions,
-		filters,
-		heading,
-		searchField,
-		search,
-		buttons,
-		newBoard,
-		newDocument,
-		searchGlyph,
-		boardGlyph,
-	} = headerControlsIn(canvasElement)
+	const { panel, bar, heading, topLine, actions } = barIn(canvasElement)
 	const frame = boxOf(panel)
 
-	await expectIslandsAtTheEdges(canvasElement)
-	await expect(filters).not.toBeVisible()
-	await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
-
-	const isDark = isDarkAround(panel)
-	for (const island of [title, actions]) {
-		const style = getComputedStyle(island)
-		await expect([
-			Number.parseFloat(style.paddingTop) +
-				Number.parseFloat(style.borderTopWidth),
-			style.columnGap,
-			style.borderTopLeftRadius,
-			style.borderTopColor,
-			style.boxShadow,
-		]).toEqual([
-			4,
-			"4px",
-			"3px",
-			tokenStyleIn(
-				island,
-				"border border-selection-toolbar-border",
-				"borderTopColor",
-			),
-			"none",
-		])
-		await expectFill(island, isDark ? "bg-card-raised" : "bg-card")
-	}
-
+	await expect(slotIn(canvasElement, "screen-layout").firstElementChild).toBe(
+		bar,
+	)
+	for (const slot of [
+		"screen-layout-floating-header",
+		"header-island",
+		"screen-layout-fade",
+	])
+		await expect(slotsIn(canvasElement, slot)).toHaveLength(0)
 	await expect([
-		boxOf(heading).height,
+		boxOf(bar).top - frame.top,
+		boxOf(bar).width,
+		boxOf(bar).height,
+		getComputedStyle(bar).paddingLeft,
+		getComputedStyle(bar).borderBottomWidth,
+	]).toEqual([0, frame.width, 56, "12px", "1px"])
+
+	await expect(topLine).toHaveTextContent(
+		"Every image and document in this Space.",
+	)
+	await expect([
+		boxOf(topLine).height,
+		getComputedStyle(topLine).fontSize,
+		getComputedStyle(topLine).lineHeight,
+		getComputedStyle(topLine).color,
+	]).toEqual([
+		16,
+		"12px",
+		"16px",
+		tokenStyleIn(bar, "text-muted-foreground", "color"),
+	])
+	await expect(heading).toHaveTextContent("Library")
+	await expect([
+		boxOf(heading).top,
 		getComputedStyle(heading).fontSize,
 		getComputedStyle(heading).lineHeight,
 		getComputedStyle(heading).fontWeight,
-	]).toEqual([32, "14px", "16px", "500"])
+	]).toEqual([boxOf(topLine).bottom, "14px", "18px", "600"])
 
-	const group = within(title).getByRole("group", { name: "Show" })
-	const segments = within(group).getAllByRole("button")
-	const [all, images] = segments
-	if (!(all && images)) throw new Error("The filters lost a segment")
-	await expect(boxOf(group).left - boxOf(heading).right).toBe(4)
+	await expect(actions.map((action) => action.textContent)).toEqual(labels)
+	const newDocument = actions.at(-1)
+	if (!newDocument) throw new Error("The bar lost New document")
+	await expect(frame.right - boxOf(newDocument).right).toBe(12)
+	for (const [index, action] of actions.entries()) {
+		const previous = actions[index - 1]
+		if (previous)
+			await expect(boxOf(action).left - boxOf(previous).right).toBeCloseTo(8)
+		await expect([
+			boxOf(action).height,
+			boxOf(action).top - frame.top,
+			getComputedStyle(action).borderTopLeftRadius,
+			getComputedStyle(action).paddingLeft,
+			getComputedStyle(action).columnGap,
+			getComputedStyle(action).fontSize,
+			getComputedStyle(action).lineHeight,
+			getComputedStyle(action).fontWeight,
+			boxOf(glyphOf(action)).width,
+			getComputedStyle(action).transitionProperty,
+		]).toEqual([
+			32,
+			12,
+			tokenStyleIn(action, "rounded-full", "borderTopLeftRadius"),
+			"12px",
+			"6px",
+			"13px",
+			"16px",
+			"500",
+			14,
+			"none",
+		])
+	}
+	for (const secondary of actions.slice(0, -1))
+		await expectSecondaryAtRest(secondary)
+	await expectPrimaryAtRest(newDocument)
+
+	const {
+		controls,
+		filters,
+		segments,
+		all,
+		images,
+		searchField,
+		search,
+		searchGlyph,
+	} = controlsIn(canvasElement)
+	const isDark = isDarkAround(panel)
+
+	await expect(
+		slotIn(canvasElement, "screen-layout-column").firstElementChild,
+	).toBe(controls)
+	await expect([
+		boxOf(controls).top - boxOf(bar).bottom,
+		boxOf(controls).left - frame.left,
+		frame.right - boxOf(controls).right,
+		boxOf(controls).height,
+	]).toEqual([24, 24, 24, 32])
+	await expect([
+		boxOf(filters).left,
+		boxOf(filters).top,
+		boxOf(filters).height,
+	]).toEqual([boxOf(controls).left, boxOf(controls).top, 32])
+	await expectFill(filters, "bg-muted")
 	await expect(segments.map((segment) => segment.textContent)).toEqual([
 		`All${items.length}`,
 		`Images${countOf(items, "image")}`,
 		`Documents${countOf(items, "document")}`,
 		`Boards${countOf(items, "board")}`,
 	])
-	await expect([
-		boxOf(group).height,
-		getComputedStyle(group).borderTopLeftRadius,
-	]).toEqual([32, "0px"])
-	await expectFill(group, "bg-muted")
-
 	await expect(all).toHaveAttribute("aria-pressed", "true")
 	await expect([
 		boxOf(all).height,
-		getComputedStyle(all).borderTopLeftRadius,
 		getComputedStyle(all).fontSize,
 		getComputedStyle(all).lineHeight,
 		getComputedStyle(all).fontWeight,
-	]).toEqual([28, "0px", "12px", "16px", "500"])
+	]).toEqual([28, "12px", "16px", "500"])
 	await expectFill(pressedFillOf(all), "bg-primary", all)
 	await expect(getComputedStyle(all).color).toBe(
 		tokenStyleIn(all, "text-primary-foreground", "color"),
@@ -1695,12 +1777,15 @@ const expectHeaderOnOneRow = async (
 		getComputedStyle(slotIn(images, "sliding-tab-count")).color,
 	).toBe(tokenStyleIn(images, "text-muted-foreground", "color"))
 
-	await expect(actions.firstElementChild).toBe(searchField)
 	await expect([
 		boxOf(search).width,
 		boxOf(search).height,
-		getComputedStyle(search).borderTopLeftRadius,
-	]).toEqual([200, 32, "0px"])
+		boxOf(search).top,
+		boxOf(search).right,
+	]).toEqual([240, 32, boxOf(controls).top, boxOf(controls).right])
+	await expect(
+		boxOf(search).left - boxOf(filters).right,
+	).toBeGreaterThanOrEqual(12)
 	await expectFill(search, "bg-muted", searchField)
 	await expect([
 		boxOf(searchGlyph).width,
@@ -1720,39 +1805,15 @@ const expectHeaderOnOneRow = async (
 			"color",
 		),
 	])
-
-	await expect(buttons.map((button) => button.textContent)).toEqual([
-		"New board",
-		"New document",
-	])
-	await expect(boxOf(newBoard).left - boxOf(search).right).toBe(4)
-	await expect([
-		boxOf(newBoard).height,
-		getComputedStyle(newBoard).borderTopLeftRadius,
-		getComputedStyle(newBoard).fontSize,
-		getComputedStyle(newBoard).lineHeight,
-		getComputedStyle(newBoard).fontWeight,
-		boxOf(boardGlyph).width,
-	]).toEqual([32, "0px", "13px", "16px", "500", 14])
-	await expect(getComputedStyle(newBoard).backgroundColor).toBe(TRANSPARENT)
-	await expect(getComputedStyle(boardGlyph).color).toBe(
-		tokenStyleIn(newBoard, "text-soft-foreground", "color"),
-	)
-	await expect(boxOf(newDocument).height).toBe(32)
-	await expectFill(newDocument, "bg-primary")
-	await expect(getComputedStyle(newDocument).color).toBe(
-		tokenStyleIn(newDocument, "text-primary-foreground", "color"),
-	)
-
-	for (const control of [all, images, search, newBoard, newDocument])
+	for (const control of [all, images, search])
 		await expect(getComputedStyle(control).transitionProperty).toBe("none")
 
 	const grid = slotIn(canvasElement, "library-grid")
 	await expect([
 		boxOf(grid).left - frame.left,
-		boxOf(grid).top - frame.top,
+		boxOf(grid).top - boxOf(controls).bottom,
 		getComputedStyle(grid).columnGap,
-	]).toEqual([24, 56, "16px"])
+	]).toEqual([24, 16, "16px"])
 }
 
 const ARTBOARD_ARGS = {
@@ -1760,7 +1821,7 @@ const ARTBOARD_ARGS = {
 	onImport: undefined,
 } satisfies Partial<LibraryPanelProps>
 
-export const FloatingHeader = meta.story({
+export const Bar = meta.story({
 	args: ARTBOARD_ARGS,
 	globals: { theme: "light" },
 	render: (args) => (
@@ -1772,75 +1833,99 @@ export const FloatingHeader = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library header as artboard 5a draws it, 960 wide, light theme: two islands 8 px from the top and side edges. Check that the left island holds the title then the four filters with All carrying the total count on the Space colour, that the right island holds the 200 px search, then New board as a ghost button, then New document on the Space colour, with no Import since the app passes none, and that the grid starts 56 px from the top and 24 px from the side.",
+					"The Library as the app draws it today, artboard I5a without its Import button, 960 wide, light theme. Check that the bar is 56 px high across the panel, that the muted line sits over the Library title, that New board with its hairline border then New document on the Space colour end 12 px from the edge and 8 px apart, and that the filters on the left and the 240 px search on the right open the content 24 px under the bar, 16 px over the grid.",
 			},
 		},
 	},
 	play: ({ args, canvasElement }) =>
-		expectHeaderOnOneRow(canvasElement, args.items),
+		expectBarAsDrawn(canvasElement, args.items, ["New board", "New document"]),
 })
 
-export const FloatingHeaderDark = FloatingHeader.extend({
+export const BarDark = Bar.extend({
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The Library header as artboard 5b draws it, 960 wide, dark theme: the same two islands on the raised card surface. Check the same geometry, order and Space colour fills as the light theme.",
+					"The Library as artboard I5b draws it, 960 wide, dark theme. Check the same bar, buttons and content row as the light theme, each on the dark value of the same token.",
 			},
 		},
 	},
 })
 
-export const FloatingHeaderScrolled = FloatingHeader.extend({
+export const BarWithImport = Bar.extend({
+	args: { onImport: fn() },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The grid scrolled as artboard 5c draws it. Check that both islands stay 8 px from the edges, that the top fade appears over the grid, that the first row passes under the islands, and that the pointer still reaches the grid between the islands.",
+					"The Library as artboard I5a draws it, Import included, which the app does not pass yet. Check that Import comes first, wears the same hairline border as New board, and reports `onImport`.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		await expectBarAsDrawn(canvasElement, args.items, [
+			"Import",
+			"New board",
+			"New document",
+		])
+		const [importAction] = barActionsIn(canvasElement)
+		if (!importAction) throw new Error("The bar lost Import")
+
+		await userEvent.click(importAction)
+		await expect(args.onImport).toHaveBeenCalledOnce()
+	},
+})
+
+export const BarScrolled = Bar.extend({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The grid scrolled as artboard I5c draws it. Check that the bar has not moved, that the filters and the search have left with the grid, that the grid stops at the bar's bottom edge instead of passing under it, and that no fade is drawn.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const { panel, title, actions } = headerIn(canvasElement)
+		const { panel, bar } = barIn(canvasElement)
+		const { controls } = controlsIn(canvasElement)
 		const scroller = slotIn(canvasElement, "screen-layout-scroller")
-		const firstItem = slotIn(canvasElement, "library-item")
 		const frame = boxOf(panel)
 
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
-		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
-		await expect(boxOf(firstItem).top).toBeGreaterThanOrEqual(
-			boxOf(title).bottom,
-		)
+		await expect(boxOf(controls).top).toBeGreaterThan(boxOf(bar).bottom)
 
 		scroller.scrollTo({ top: SCROLLED_AWAY })
-		const fade = await waitFor(() =>
-			slotIn(canvasElement, "screen-layout-fade"),
-		)
+		await waitFor(() => expect(scroller.scrollTop).toBe(SCROLLED_AWAY))
 
-		await expect(scroller.scrollTop).toBe(SCROLLED_AWAY)
-		await expectIslandsAtTheEdges(canvasElement)
-		await expect([
-			boxOf(fade).top,
-			boxOf(fade).width,
-			boxOf(fade).height,
-		]).toEqual([frame.top, frame.width, 64])
-		await expect(getComputedStyle(fade).backgroundImage).toContain(
-			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} max(50%, 100% - 40px), ${TRANSPARENT} 100%`,
-		)
-		await expect(boxOf(firstItem).top).toBeLessThan(boxOf(title).top)
+		await expect([boxOf(bar).top, boxOf(bar).height]).toEqual([frame.top, 56])
+		await expect(boxOf(scroller).top).toBe(boxOf(bar).bottom)
+		await expect(boxOf(controls).bottom).toBeLessThan(boxOf(bar).top)
+		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
 		await expect(
-			scroller.contains(
-				document.elementFromPoint(
-					(boxOf(title).right + boxOf(actions).left) / 2,
-					frame.top + 28,
-				),
+			bar.contains(
+				document.elementFromPoint(frame.left + frame.width / 2, frame.top + 28),
 			),
 		).toBe(true)
 	},
 })
 
-export const FloatingHeaderNarrow = FloatingHeader.extend({
+const expectSearchOnItsOwnLine = async (canvasElement: HTMLElement) => {
+	const { controls, filters, search } = controlsIn(canvasElement)
+
+	await expect([
+		boxOf(search).top - boxOf(filters).bottom,
+		boxOf(search).left,
+		boxOf(search).width,
+		boxOf(search).height,
+	]).toEqual([12, boxOf(controls).left, boxOf(controls).width, 32])
+	await expect(
+		boxOf(slotIn(canvasElement, "library-grid")).top - boxOf(search).bottom,
+	).toBe(16)
+}
+
+export const BarNarrow = Bar.extend({
+	args: { onImport: fn() },
 	render: (args) => (
 		<LibraryArtboardFrame width="narrow">
 			<LibraryPanel {...args} />
@@ -1850,151 +1935,115 @@ export const FloatingHeaderNarrow = FloatingHeader.extend({
 		docs: {
 			description: {
 				story:
-					"The Library header as artboard 5d draws it, 560 wide: too narrow for one row. Check that the left island holds the title alone, that the right island holds a 160 px search and its labelled buttons, that the filters sit in an island of their own 56 px from the top and 8 px from the side, read once by assistive technology, and that the grid starts below that second row.",
+					"The Library as artboard I5d draws it, 480 wide, Import included. Check that Import and New board are 32 px round buttons holding their glyph alone, still named by their label, each showing that label in a tooltip under the pointer, that New document keeps its label and shows no tooltip, and that the search has moved under the filters across the full row.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const { panel, title, filters, search, buttons } = headerIn(canvasElement)
-		const frame = boxOf(panel)
+		const importAction = canvas.getByRole("button", { name: "Import" })
+		const newBoard = canvas.getByRole("button", { name: "New board" })
+		const newDocument = canvas.getByRole("button", { name: "New document" })
 
-		await expectIslandsAtTheEdges(canvasElement)
-		await expect(within(title).queryByRole("group")).toBe(null)
-		await expect(boxOf(search).width).toBe(160)
-		for (const button of buttons)
-			await expect(boxOf(button).width).toBeGreaterThan(32)
-
-		await expect(canvas.getAllByRole("group", { name: "Show" })).toHaveLength(1)
-		await expect(
-			within(filters).getByRole("group", { name: "Show" }),
-		).toBeVisible()
-		await expect([
-			boxOf(filters).left - frame.left,
-			boxOf(filters).top - frame.top,
-			boxOf(filters).height,
-		]).toEqual([8, 56, 40])
-		await expect(
-			boxOf(slotIn(canvasElement, "library-grid")).top - frame.top,
-		).toBe(104)
-	},
-})
-
-export const FloatingHeaderAt320 = FloatingHeader.extend({
-	render: (args) => (
-		<LibraryArtboardFrame width="reflow">
-			<LibraryPanel {...args} />
-		</LibraryArtboardFrame>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The Library header in a 320 px panel, the narrowest it reflows to. Check that the search stays a visible field between the title and the actions, that New board and New document drop to their glyph and keep their name, and that neither island nor the filters row crosses the panel edge.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const { panel, title, actions, filters, search, buttons } =
-			headerIn(canvasElement)
-		const frame = boxOf(panel)
-
-		await expectIslandsAtTheEdges(canvasElement)
-		await expect(boxOf(title).right).toBeLessThan(boxOf(actions).left)
-		await expect(search).toBeVisible()
-		await expect(boxOf(search).width).toBeGreaterThan(96)
-		await expect(
-			buttons.map((button) => [button.textContent, boxOf(button).width]),
-		).toEqual([
-			["New board", 30],
-			["New document", 30],
+		await waitFor(() => expect(boxOf(importAction).width).toBe(32))
+		await expect(barActionsIn(canvasElement)).toEqual([
+			importAction,
+			newBoard,
+			newDocument,
 		])
-		await expect(boxOf(filters).right).toBeLessThanOrEqual(frame.right - 8)
+		for (const iconOnly of [importAction, newBoard]) {
+			await expect([boxOf(iconOnly).width, boxOf(iconOnly).height]).toEqual([
+				32, 32,
+			])
+			await expect(boxOf(glyphOf(iconOnly)).width).toBe(14)
+			await expectSecondaryAtRest(iconOnly)
+		}
+		await expect(boxOf(newDocument).width).toBeGreaterThan(100)
+		await expect(within(newDocument).getByText("New document")).toBeVisible()
+		await expectPrimaryAtRest(newDocument)
+		await expectNoHorizontalOverflow(canvasElement)
+		await expectSearchOnItsOwnLine(canvasElement)
+
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		for (const [iconOnly, label] of [
+			[importAction, "Import"],
+			[newBoard, "New board"],
+		] as const) {
+			await pointer.hover(iconOnly)
+			await waitFor(() =>
+				expect(screen.getByRole("tooltip")).toHaveTextContent(label),
+			)
+			await pointer.unhover(iconOnly)
+			await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
+		}
+		await pointer.hover(newDocument)
+		await waitFor(() => expect(newDocument.matches(":hover")).toBe(true))
+		await expect(screen.queryByRole("tooltip")).toBe(null)
+		await pointer.unhover(newDocument)
 	},
 })
 
-export const FloatingHeaderNarrowScrolled = FloatingHeaderNarrow.extend({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The grid scrolled under the two rows of the 560 wide header. Check that the three islands stay in place, that the top fade is solid down to 32 px from its end and reaches past the bottom of the filters island, so no tile shows between or around the two rows, and that the first row passes under the islands.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const { panel, title, filters } = headerIn(canvasElement)
-		const scroller = slotIn(canvasElement, "screen-layout-scroller")
-		const firstItem = slotIn(canvasElement, "library-item")
-		const frame = boxOf(panel)
-
-		await expect(slotsIn(canvasElement, "screen-layout-fade")).toHaveLength(0)
-
-		scroller.scrollTo({ top: SCROLLED_AWAY })
-		const fade = await waitFor(() =>
-			slotIn(canvasElement, "screen-layout-fade"),
-		)
-		const solidBottom = boxOf(fade).bottom - 32
-
-		await expectIslandsAtTheEdges(canvasElement)
-		await expect([
-			boxOf(filters).left - frame.left,
-			boxOf(filters).top - frame.top,
-		]).toEqual([8, 56])
-		await expect([
-			boxOf(fade).top,
-			boxOf(fade).width,
-			boxOf(fade).height,
-		]).toEqual([frame.top, frame.width, 112])
-		await expect(getComputedStyle(fade).backgroundImage).toContain(
-			`${tokenStyleIn(panel, "bg-card", "backgroundColor")} calc(100% - 32px), ${TRANSPARENT} 100%`,
-		)
-		await expect(solidBottom).toBeGreaterThan(boxOf(filters).top)
-		await expect(boxOf(fade).bottom).toBeGreaterThanOrEqual(
-			boxOf(filters).bottom,
-		)
-		await expect(boxOf(firstItem).top).toBeLessThan(boxOf(title).top)
-	},
-})
-
-const CONTROL_STATE_ROWS = [
+const BAR_STATE_ROWS = [
 	{ row: "rest", label: "At rest" },
 	{ row: "hover", label: "Hover" },
-	{ row: "focus", label: "Keyboard focus" },
 	{ row: "pressed", label: "Pressed" },
+	{ row: "focus", label: "Keyboard focus" },
 ] as const
 
-type ControlStateRow = (typeof CONTROL_STATE_ROWS)[number]["row"]
+type BarStateRow = (typeof BAR_STATE_ROWS)[number]["row"]
 
-type HeaderControlState =
-	| "filter-hover"
-	| "filter-focus"
-	| "search-focus-typing"
-	| "primary-rest"
-	| "primary-hover"
-	| "primary-pressed"
-	| "primary-focus"
-	| "ghost-hover"
+type ControlState = "filter-hover" | "filter-focus" | "search-focus-typing"
 
-const controlStateRowId = (row: ControlStateRow | HeaderControlState) =>
-	`library-header-${row}`
+const stateRowId = (row: BarStateRow | ControlState) => `library-${row}`
 
-const inRow = (row: ControlStateRow | HeaderControlState, selector: string) =>
-	`#${controlStateRowId(row)} ${selector}`
+const inRow = (row: BarStateRow | ControlState, selector: string) =>
+	`#${stateRowId(row)} ${selector}`
 
 const IMAGES_SEGMENT = "[data-slot=toggle-group-item]:nth-of-type(2)"
-const NEW_BOARD_ACTION = "[data-slot=button]:nth-last-child(2)"
-const NEW_DOCUMENT_ACTION = "[data-slot=button]:last-child"
 
-export const FloatingHeaderControlStates = meta.story({
-	args: ARTBOARD_ARGS,
+const BAR_ACTION = "[data-slot=library-action]"
+
+const expectBarFocusRing = async (action: HTMLElement) => {
+	await expect(action.matches(":focus-visible")).toBe(true)
+	await expect([
+		getComputedStyle(action).outlineStyle,
+		getComputedStyle(action).outlineWidth,
+		getComputedStyle(action).outlineOffset,
+		getComputedStyle(action).outlineColor,
+		getComputedStyle(action).boxShadow,
+	]).toEqual([
+		"solid",
+		"2px",
+		"2px",
+		tokenStyleIn(action, "text-primary", "color"),
+		tokenStyleIn(action, "ring-2 ring-card", "boxShadow"),
+	])
+}
+
+const holdDown = async (
+	pointer: RealPointer,
+	action: HTMLElement,
+	whileHeld: () => Promise<void>,
+) => {
+	await pointer.hover(action)
+	action.focus()
+	await pointer.keyboard("{Space>}")
+	await expect(action.matches(":hover:active")).toBe(true)
+	await whileHeld()
+	await pointer.keyboard("{/Space}")
+	await pointer.unhover(action)
+}
+
+export const BarButtonStates = meta.story({
+	args: { items: LIBRARY_ITEMS_WITH_BOARDS },
 	globals: { theme: "light" },
 	render: (args) => (
 		<div className="flex flex-col gap-2" {...hueScopeOf("blue")}>
-			{CONTROL_STATE_ROWS.map(({ row, label }) => (
+			{BAR_STATE_ROWS.map(({ row, label }) => (
 				<section
 					aria-label={label}
-					className="flex h-28 w-[960px]"
-					id={controlStateRowId(row)}
+					className="flex h-18 w-[960px]"
+					id={stateRowId(row)}
 					key={row}
 				>
 					<ContentCard isLandmark={false}>
@@ -2006,121 +2055,99 @@ export const FloatingHeaderControlStates = meta.story({
 	),
 	parameters: {
 		pseudo: {
-			hover: [
-				inRow("hover", IMAGES_SEGMENT),
-				inRow("hover", NEW_BOARD_ACTION),
-				inRow("hover", NEW_DOCUMENT_ACTION),
-				inRow("pressed", NEW_DOCUMENT_ACTION),
-			],
-			focusVisible: [
-				inRow("focus", IMAGES_SEGMENT),
-				inRow("focus", "[data-slot=input]"),
-				inRow("focus", NEW_DOCUMENT_ACTION),
-			],
-			focusWithin: [inRow("focus", "[data-slot=library-search]")],
-			active: [inRow("pressed", NEW_DOCUMENT_ACTION)],
+			hover: [inRow("hover", BAR_ACTION), inRow("pressed", BAR_ACTION)],
+			active: [inRow("pressed", BAR_ACTION)],
+			focusVisible: [inRow("focus", BAR_ACTION)],
 		},
 		docs: {
 			description: {
 				story:
-					"The header controls as artboard 5e draws them, four headers one under the other: at rest, hovered, focused from the keyboard, pressed. Check on the header at rest that a hovered filter takes the pressed island control fill and a hovered ghost button the muted fill, that a hovered ghost button draws its glyph in full ink, that a hovered New document goes one step darker than the Space colour, then two steps darker and 1 px down while pressed, and that a filter, the search and New document each wear a 1 px ring plus a 4 px ring at 30 percent in the Space colour, the focused search dropping its muted fill and darkening its icon one step.",
+					"The three bar buttons as artboard I5e draws them, one bar per state: at rest, hovered, pressed, focused from the keyboard. Check that Import and New board take a 5 percent foreground fill under the pointer and 10 percent while held, their glyph going from the soft ink to the full ink, that New document goes one step darker than the Space colour under the pointer and two steps while held, that no button moves, that all three wear a 2 px ring in the surface colour then a 2 px ring in the Space colour, and that no fill animates. The play drives the real pointer and keyboard on the bar at rest, in the Vitest browser runner only.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		if (!isInBrowserRunner()) return
 		const atRest = canvasElement.querySelector<HTMLElement>(
-			`#${controlStateRowId("rest")}`,
+			`#${stateRowId("rest")}`,
 		)
-		if (!atRest) throw new Error("The header at rest is missing")
-		const {
-			heading,
-			all,
-			images,
-			searchField,
-			search,
-			searchGlyph,
-			newBoard,
-			boardGlyph,
-			newDocument,
-		} = headerControlsIn(atRest)
+		if (!atRest) throw new Error("The bar at rest is missing")
+		const { heading, actions } = barIn(atRest)
+		const [importAction, newBoard, newDocument] = actions
+		if (!(importAction && newBoard && newDocument))
+			throw new Error("The bar lost an action")
+		const secondaries = [importAction, newBoard]
+
+		for (const secondary of secondaries) await expectSecondaryAtRest(secondary)
+		await expectPrimaryAtRest(newDocument)
+		for (const action of actions)
+			await expect([
+				getComputedStyle(action).outlineStyle,
+				getComputedStyle(action).boxShadow,
+				getComputedStyle(action).transitionProperty,
+			]).toEqual(["none", "none", "none"])
+
+		if (!isInBrowserRunner()) return
 		const pointer = await realPointer()
 
-		await pointer.hover(images)
-		await expectFill(
-			images,
-			isDarkAround(images)
-				? "bg-header-island-control-hover"
-				: "bg-header-island-control-pressed",
-		)
-		await expect(getComputedStyle(images).backgroundColor).not.toBe(
-			tokenStyleIn(images, "bg-muted", "backgroundColor"),
-		)
-		await expect(getComputedStyle(images).transitionProperty).toBe("none")
-		await pointer.hover(all)
-		await expectFill(pressedFillOf(all), "bg-primary", all)
-		await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
-		await expect(getComputedStyle(boardGlyph).color).toBe(
-			tokenStyleIn(newBoard, "text-soft-foreground", "color"),
-		)
-		await pointer.hover(newBoard)
-		await expectFill(newBoard, "bg-muted")
-		await expect(getComputedStyle(boardGlyph).color).toBe(
-			tokenStyleIn(newBoard, "text-foreground", "color"),
-		)
-		await expect(getComputedStyle(images).backgroundColor).toBe(TRANSPARENT)
+		for (const secondary of secondaries) {
+			const inFullInk = () =>
+				expect(getComputedStyle(glyphOf(secondary)).color).toBe(
+					tokenStyleIn(secondary, "text-foreground", "color"),
+				)
+
+			await pointer.hover(secondary)
+			await expectFill(secondary, SECONDARY_HOVER_FILL)
+			await inFullInk()
+			await holdDown(pointer, secondary, async () => {
+				await expectFill(secondary, SECONDARY_PRESSED_FILL)
+				await inFullInk()
+				await expect(getComputedStyle(secondary).translate).toBe("none")
+			})
+			await expectSecondaryAtRest(secondary)
+		}
 
 		await pointer.hover(newDocument)
 		await expectFill(newDocument, PRIMARY_HOVER_FILL)
-		await expect(getComputedStyle(newDocument).translate).toBe("none")
-		newDocument.focus()
-		await pointer.keyboard("{Space>}")
-		await expect(newDocument.matches(":hover:active")).toBe(true)
-		await expectFill(newDocument, PRIMARY_PRESSED_FILL)
-		await expect(getComputedStyle(newDocument).translate).toBe("0px 1px")
-		await pointer.keyboard("{/Space}")
-		await pointer.unhover(newDocument)
+		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
+			tokenStyleIn(newDocument, "bg-primary", "backgroundColor"),
+		)
+		await holdDown(pointer, newDocument, async () => {
+			await expectFill(newDocument, PRIMARY_PRESSED_FILL)
+			await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
+				tokenStyleIn(newDocument, PRIMARY_HOVER_FILL, "backgroundColor"),
+			)
+			await expect(getComputedStyle(newDocument).translate).toBe("none")
+		})
+		await expectPrimaryAtRest(newDocument)
 
 		await pointer.click(heading)
-		await pointer.tab()
-		await expect(all).toHaveFocus()
-		await expectSpaceColourRing(all)
-
-		await expect(getComputedStyle(searchGlyph).color).toBe(
-			tokenStyleIn(searchField, "text-muted-foreground", "color"),
-		)
-		await tabTo(pointer, search)
-		await expectSpaceColourRing(search, searchField)
-		await expect(getComputedStyle(search).backgroundColor).toBe(TRANSPARENT)
-		await expect(getComputedStyle(searchGlyph).color).toBe(
-			tokenStyleIn(searchField, "text-soft-foreground", "color"),
-		)
-
-		await tabTo(pointer, newDocument)
-		await expectSpaceColourRing(newDocument)
+		for (const action of actions) {
+			await tabTo(pointer, action)
+			await expectBarFocusRing(action)
+		}
+		await expectFill(newDocument, "bg-primary")
 	},
 })
 
-export const FloatingHeaderControlStatesDark =
-	FloatingHeaderControlStates.extend({
-		globals: { theme: "dark" },
-		parameters: {
-			docs: {
-				description: {
-					story:
-						"The header controls of artboard 5e in the dark theme, where the artboard draws none: the same four headers on the raised card surface. Check the same fills and rings as the light theme.",
-				},
+export const BarButtonStatesDark = BarButtonStates.extend({
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The three bar buttons of artboard I5e in the dark theme: the same four bars. Check the same fills, inks and rings as the light theme, each on the dark value of the same token.",
 			},
 		},
-	})
+	},
+})
 
-const headerStateStory = (state: HeaderControlState) => ({
+const controlStateStory = (state: ControlState) => ({
 	args: ARTBOARD_ARGS,
 	globals: { theme: "light" },
 	render: (args: LibraryPanelProps) => (
 		<div
-			className="flex h-28 w-[960px]"
-			id={controlStateRowId(state)}
+			className="flex h-40 w-[960px]"
+			id={stateRowId(state)}
 			{...hueScopeOf("blue")}
 		>
 			<ContentCard isLandmark={false}>
@@ -2130,20 +2157,20 @@ const headerStateStory = (state: HeaderControlState) => ({
 	),
 })
 
-export const FloatingHeaderFilterHover = meta.story({
-	...headerStateStory("filter-hover"),
+export const FilterHover = meta.story({
+	...controlStateStory("filter-hover"),
 	parameters: {
 		pseudo: { hover: [inRow("filter-hover", IMAGES_SEGMENT)] },
 		docs: {
 			description: {
 				story:
-					"The filter hover of artboard 5e: the pointer rests on Images, a filter that is not the selected one. Check that Images takes the pressed island control fill, one step darker than the muted track, that All keeps the Space colour under the pointer, and that the fill lands with no colour transition.",
+					"The filters keep their look in the content row: the pointer rests on Images, a filter that is not the selected one. Check that Images takes the pressed control fill, one step darker than the muted track, that All keeps the Space colour under the pointer, and that the fill lands with no colour transition.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		const { all, images } = headerControlsIn(canvasElement)
+		const { all, images } = controlsIn(canvasElement)
 		const pointer = await realPointer()
 
 		await pointer.hover(images)
@@ -2164,28 +2191,37 @@ export const FloatingHeaderFilterHover = meta.story({
 	},
 })
 
-export const FloatingHeaderFilterHoverDark = FloatingHeaderFilterHover.extend({
+export const FilterHoverDark = FilterHover.extend({
 	globals: { theme: "dark" },
 })
 
-export const FloatingHeaderFilterFocus = meta.story({
-	...headerStateStory("filter-focus"),
+export const FilterFocus = meta.story({
+	...controlStateStory("filter-focus"),
 	parameters: {
 		pseudo: { focusVisible: [inRow("filter-focus", IMAGES_SEGMENT)] },
 		docs: {
 			description: {
 				story:
-					"The filter keyboard focus of artboard 5e: Images reached from the keyboard, Tab into the filters then the right arrow. Check that it wears a 1 px ring plus a 4 px ring at 30 percent, both in the Space colour, and that it takes no fill.",
+					"The filters keep their keyboard focus in the content row: Images reached with Tab past the bar buttons, then the right arrow. Check that it wears a 1 px ring plus a 4 px ring at 30 percent, both in the Space colour, uncut by the row, and that it takes no fill.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		const { heading, all, images } = headerControlsIn(canvasElement)
+		const { heading } = barIn(canvasElement)
+		const { filters, all, images } = controlsIn(canvasElement)
+		const strip = filters.parentElement
+		if (!strip) throw new Error("The filters lost their strip")
 		const pointer = await realPointer()
 
 		await pointer.click(heading)
 		await tabTo(pointer, all)
+		await expectSpaceColourRing(all)
+		await expect([
+			boxOf(all).left - boxOf(strip).left,
+			boxOf(all).top - boxOf(strip).top,
+			boxOf(strip).bottom - boxOf(all).bottom,
+		]).toEqual([4, 4, 4])
 		await pointer.keyboard("{ArrowRight}")
 		await expect(images).toHaveFocus()
 		await expectSpaceColourRing(images)
@@ -2193,12 +2229,12 @@ export const FloatingHeaderFilterFocus = meta.story({
 	},
 })
 
-export const FloatingHeaderFilterFocusDark = FloatingHeaderFilterFocus.extend({
+export const FilterFocusDark = FilterFocus.extend({
 	globals: { theme: "dark" },
 })
 
-export const FloatingHeaderSearchFocusTyping = meta.story({
-	...headerStateStory("search-focus-typing"),
+export const SearchFocusTyping = meta.story({
+	...controlStateStory("search-focus-typing"),
 	args: {
 		items: LIBRARY_ITEMS_WITH_BOARDS.filter((item) =>
 			item.name.includes("dashboard"),
@@ -2214,14 +2250,14 @@ export const FloatingHeaderSearchFocusTyping = meta.story({
 		docs: {
 			description: {
 				story:
-					"The search of artboard 5e, focused with a query typed in. Check that the field drops its muted fill for the island surface, that it wears the 1 px ring plus the 4 px ring at 30 percent in the Space colour, that its icon darkens one step, and that the typed text is in full ink.",
+					"The search keeps its look in the content row, focused with a query typed in. Check that the field drops its muted fill for the surface, that it wears the 1 px ring plus the 4 px ring at 30 percent in the Space colour, that its icon darkens one step, and that the typed text is in full ink.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		const { heading, searchField, search, searchGlyph } =
-			headerControlsIn(canvasElement)
+		const { heading } = barIn(canvasElement)
+		const { searchField, search, searchGlyph } = controlsIn(canvasElement)
 		const pointer = await realPointer()
 
 		await expect(search).toHaveValue("dashboard")
@@ -2238,163 +2274,7 @@ export const FloatingHeaderSearchFocusTyping = meta.story({
 	},
 })
 
-export const FloatingHeaderSearchFocusTypingDark =
-	FloatingHeaderSearchFocusTyping.extend({
-		globals: { theme: "dark" },
-	})
-
-export const FloatingHeaderPrimaryRest = meta.story({
-	...headerStateStory("primary-rest"),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"New document at rest, as artboard 5e draws the primary button. Check that it sits on the Space colour with the ink that colour carries, 32 px high, with no ring, and that it has not moved.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		const { newDocument } = headerControlsIn(canvasElement)
-
-		await expectFill(newDocument, "bg-primary")
-		await expect(getComputedStyle(newDocument).color).toBe(
-			tokenStyleIn(newDocument, "text-primary-foreground", "color"),
-		)
-		await expect([
-			boxOf(newDocument).height,
-			getComputedStyle(newDocument).translate,
-			getComputedStyle(newDocument).boxShadow,
-		]).toEqual([32, "none", "none"])
-	},
-})
-
-export const FloatingHeaderPrimaryRestDark = FloatingHeaderPrimaryRest.extend({
-	globals: { theme: "dark" },
-})
-
-export const FloatingHeaderPrimaryHover = meta.story({
-	...headerStateStory("primary-hover"),
-	parameters: {
-		pseudo: { hover: [inRow("primary-hover", NEW_DOCUMENT_ACTION)] },
-		docs: {
-			description: {
-				story:
-					"New document under the pointer, as artboard 5e draws the primary hover. Check that its fill is the Space colour mixed one step towards the ink, that it has not moved, and that the fill lands with no colour transition.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		const { newDocument } = headerControlsIn(canvasElement)
-		const pointer = await realPointer()
-
-		await pointer.hover(newDocument)
-		await expectFill(newDocument, PRIMARY_HOVER_FILL)
-		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-			tokenStyleIn(newDocument, "bg-primary", "backgroundColor"),
-		)
-		await expect(getComputedStyle(newDocument).translate).toBe("none")
-		await expect(getComputedStyle(newDocument).transitionProperty).toBe("none")
-		await pointer.unhover(newDocument)
-	},
-})
-
-export const FloatingHeaderPrimaryHoverDark = FloatingHeaderPrimaryHover.extend(
-	{ globals: { theme: "dark" } },
-)
-
-export const FloatingHeaderPrimaryPressed = meta.story({
-	...headerStateStory("primary-pressed"),
-	parameters: {
-		pseudo: {
-			hover: [inRow("primary-pressed", NEW_DOCUMENT_ACTION)],
-			active: [inRow("primary-pressed", NEW_DOCUMENT_ACTION)],
-		},
-		docs: {
-			description: {
-				story:
-					"New document held down, as artboard 5e draws the primary pressed. Check that its fill is the Space colour mixed two steps towards the ink, one more than the hover, and that the button sits 1 px lower.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		const { newDocument } = headerControlsIn(canvasElement)
-		const pointer = await realPointer()
-
-		await pointer.hover(newDocument)
-		newDocument.focus()
-		await pointer.keyboard("{Space>}")
-		await expect(newDocument.matches(":hover:active")).toBe(true)
-		await expectFill(newDocument, PRIMARY_PRESSED_FILL)
-		await expect(getComputedStyle(newDocument).backgroundColor).not.toBe(
-			tokenStyleIn(newDocument, PRIMARY_HOVER_FILL, "backgroundColor"),
-		)
-		await expect(getComputedStyle(newDocument).translate).toBe("0px 1px")
-		await pointer.keyboard("{/Space}")
-		await pointer.unhover(newDocument)
-	},
-})
-
-export const FloatingHeaderPrimaryPressedDark =
-	FloatingHeaderPrimaryPressed.extend({
-		globals: { theme: "dark" },
-	})
-
-export const FloatingHeaderPrimaryFocus = meta.story({
-	...headerStateStory("primary-focus"),
-	parameters: {
-		pseudo: { focusVisible: [inRow("primary-focus", NEW_DOCUMENT_ACTION)] },
-		docs: {
-			description: {
-				story:
-					"New document reached with Tab, as artboard 5e draws the primary focus. Check that it keeps the Space colour and wears the same 1 px ring plus 4 px ring at 30 percent as the filters and the search.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		const { heading, newDocument } = headerControlsIn(canvasElement)
-		const pointer = await realPointer()
-
-		await pointer.click(heading)
-		await tabTo(pointer, newDocument)
-		await expectSpaceColourRing(newDocument)
-		await expectFill(newDocument, "bg-primary")
-	},
-})
-
-export const FloatingHeaderPrimaryFocusDark = FloatingHeaderPrimaryFocus.extend(
-	{ globals: { theme: "dark" } },
-)
-
-export const FloatingHeaderGhostHover = meta.story({
-	...headerStateStory("ghost-hover"),
-	parameters: {
-		pseudo: { hover: [inRow("ghost-hover", NEW_BOARD_ACTION)] },
-		docs: {
-			description: {
-				story:
-					"New board under the pointer, as artboard 5e draws the ghost hover, which Import wears too. Check that it takes the muted fill, that its glyph goes from the soft ink to the full ink, and that the fill lands with no colour transition.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		if (!isInBrowserRunner()) return
-		const { newBoard, boardGlyph } = headerControlsIn(canvasElement)
-		const pointer = await realPointer()
-
-		await pointer.hover(newBoard)
-		await expectFill(newBoard, "bg-muted")
-		await expect(getComputedStyle(boardGlyph).color).toBe(
-			tokenStyleIn(newBoard, "text-foreground", "color"),
-		)
-		await expect(getComputedStyle(newBoard).transitionProperty).toBe("none")
-		await pointer.unhover(newBoard)
-	},
-})
-
-export const FloatingHeaderGhostHoverDark = FloatingHeaderGhostHover.extend({
+export const SearchFocusTypingDark = SearchFocusTyping.extend({
 	globals: { theme: "dark" },
 })
 
@@ -2403,75 +2283,39 @@ const inFrench = async () => {
 	return () => i18n.changeLanguage(DEFAULT_LANGUAGE)
 }
 
-const expectIslandsFit = async (canvasElement: HTMLElement) => {
-	const header = boxOf(slotIn(canvasElement, "library-header"))
-	const { title, actions, filters } = islandsIn(canvasElement)
-	if (!(actions && filters)) throw new Error("The header lost an island")
+const nextLayout = () =>
+	new Promise<void>((resolve) => {
+		requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+	})
 
-	for (const island of [title, actions, filters]) {
-		if (island.getClientRects().length === 0) continue
-		await expect(boxOf(island).left).toBeGreaterThanOrEqual(header.left)
-		await expect(boxOf(island).right).toBeLessThanOrEqual(header.right)
-	}
-	for (const island of [title, actions])
-		await expect(island.scrollWidth).toBeLessThanOrEqual(island.clientWidth)
-	await expect(boxOf(actions).left - boxOf(title).right).toBeGreaterThanOrEqual(
-		8,
+const expectFrenchNarrowFits = async (canvasElement: HTMLElement) => {
+	const { heading, topLine, actions } = barIn(canvasElement)
+	const [newBoard] = actions
+	if (!newBoard) throw new Error("The bar lost New board")
+
+	await waitFor(() => expect(boxOf(newBoard).width).toBe(32))
+	await expect(heading).toHaveTextContent("Bibliothèque")
+	await expect(topLine).toHaveTextContent(
+		"Toutes les images et tous les documents de cet espace.",
 	)
+	await expect(boxOf(topLine).height).toBe(16)
+	await expect(newBoard).toHaveAccessibleName("Nouveau tableau")
+	await expectNoHorizontalOverflow(canvasElement)
+	await expectSearchOnItsOwnLine(canvasElement)
 }
 
-const FRENCH_ONE_ROW_PANEL_WIDTH = { withoutImport: 900, withImport: 992 }
-
-const expectFrenchHeaderFits = async (
-	canvasElement: HTMLElement,
-	oneRowPanelWidth: number,
-) => {
-	const frame = slotIn(canvasElement, "library-artboard-frame")
-	const { title, actions, filters } = islandsIn(canvasElement)
-	if (!(actions && filters)) throw new Error("The header lost an island")
-	const search = slotIn(actions, "library-search")
-	const frameEdges =
-		boxOf(frame).width - boxOf(slotIn(canvasElement, "library-panel")).width
-	const setPanelWidth = (width: number) => {
-		frame.style.width = `${width + frameEdges}px`
-	}
-
-	await expect(
-		within(title).getByRole("heading", { level: 1, name: "Bibliothèque" }),
-	).toBeVisible()
-	await expectIslandsFit(canvasElement)
-
-	try {
-		setPanelWidth(oneRowPanelWidth)
-		await expect(
-			within(title).getByRole("group", { name: "Afficher" }),
-		).toBeVisible()
-		await expect(filters).not.toBeVisible()
-		await expect(boxOf(search).width).toBeGreaterThanOrEqual(160)
-		await expectIslandsFit(canvasElement)
-
-		setPanelWidth(oneRowPanelWidth - 1)
-		await expect(within(title).queryByRole("group")).toBe(null)
-		await expect(
-			within(filters).getByRole("group", { name: "Afficher" }),
-		).toBeVisible()
-		await expectIslandsFit(canvasElement)
-
-		for (let width = oneRowPanelWidth + 64; width >= 320; width -= 8) {
-			setPanelWidth(width)
-			await expectIslandsFit(canvasElement)
-		}
-	} finally {
-		frame.style.width = ""
-	}
+const newDocumentIn = (canvasElement: HTMLElement) => {
+	const newDocument = barActionsIn(canvasElement).at(-1)
+	if (!newDocument) throw new Error("The bar lost New document")
+	return newDocument
 }
 
-export const FloatingHeaderFrenchImport = meta.story({
-	args: { items: LIBRARY_ITEMS_WITH_BOARDS },
+export const BarFrenchNarrow = meta.story({
+	args: ARTBOARD_ARGS,
 	globals: { theme: "light" },
 	beforeEach: inFrench,
 	render: (args) => (
-		<LibraryArtboardFrame width="tight">
+		<LibraryArtboardFrame width="narrow">
 			<LibraryPanel {...args} />
 		</LibraryArtboardFrame>
 	),
@@ -2479,42 +2323,139 @@ export const FloatingHeaderFrenchImport = meta.story({
 		docs: {
 			description: {
 				story:
-					"The widest header the Library draws: French, with Import beside the search, New board and New document, in a 920 px panel, where the filters already sit on their second row. Reach for this when a label, a locale or an action changes. Check that no island crosses the header edge or spills its content and that the two first-row islands stay at least 8 px apart, here, at the 992 px that are the narrowest panel keeping the filters beside the title, 1 px under it where they move to their own island, and at every width down to 320 px.",
+					"The French Library in a 480 px panel, as the app draws it, without Import. Check that Bibliothèque reads in full under its line cut by an ellipsis, that Nouveau tableau is a round glyph button keeping its name, that Nouveau document keeps its label, that nothing crosses the panel edge, and that the search sits under the filters across the full row.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expect(
-			actionsIn(canvasElement)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual(["Importer", "Nouveau tableau", "Nouveau document"])
-		await expectFrenchHeaderFits(
-			canvasElement,
-			FRENCH_ONE_ROW_PANEL_WIDTH.withImport,
+		const { heading } = barIn(canvasElement)
+		const newDocument = newDocumentIn(canvasElement)
+
+		await expectFrenchNarrowFits(canvasElement)
+		await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+		await expect(boxOf(newDocument).width).toBeGreaterThan(100)
+		await expect(newDocument.scrollWidth).toBeLessThanOrEqual(
+			newDocument.clientWidth,
 		)
 	},
 })
 
-export const FloatingHeaderFrench = FloatingHeaderFrenchImport.extend({
-	args: { onImport: undefined },
+export const BarFrenchAt320 = BarFrenchNarrow.extend({
+	render: (args) => (
+		<LibraryArtboardFrame width="reflow">
+			<LibraryPanel {...args} />
+		</LibraryArtboardFrame>
+	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The French header as the app draws it today, without Import, in a 920 px panel, where the filters still sit beside the title. Check that no island crosses the header edge or spills its content and that the two first-row islands stay at least 8 px apart, here, at the 900 px that are the narrowest panel keeping the filters beside the title, 1 px under it where they move to their own island, and at every width down to 320 px. `FloatingHeaderFrenchImport` covers the wider header Import makes.",
+					"The French Library in a 320 px panel, the narrowest it reflows to, without Import. Check that Bibliothèque reads in full, that Nouveau document has become a round glyph button on the Space colour, still named by its label and showing it in a tooltip under the pointer, that the filters scroll sideways inside the row when they are wider than it, and that nothing crosses the panel edge.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expect(
-			actionsIn(canvasElement)
-				.getAllByRole("button")
-				.map((button) => button.textContent),
-		).toEqual(["Nouveau tableau", "Nouveau document"])
-		await expectFrenchHeaderFits(
-			canvasElement,
-			FRENCH_ONE_ROW_PANEL_WIDTH.withoutImport,
+		const { heading } = barIn(canvasElement)
+		const { controls, filters } = controlsIn(canvasElement)
+		const newDocument = newDocumentIn(canvasElement)
+		const strip = filters.parentElement
+		if (!strip) throw new Error("The filters lost their strip")
+
+		await waitFor(() => expect(boxOf(newDocument).width).toBe(32))
+		await expectFrenchNarrowFits(canvasElement)
+		await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+		await expect([
+			boxOf(newDocument).height,
+			boxOf(glyphOf(newDocument)).width,
+		]).toEqual([32, 14])
+		await expect(newDocument).toHaveAccessibleName("Nouveau document")
+		await expectPrimaryAtRest(newDocument)
+		await expect(boxOf(filters).width).toBeGreaterThan(boxOf(controls).width)
+		await expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth)
+		await expect(boxOf(strip).right).toBeLessThanOrEqual(
+			boxOf(controls).right + 2,
 		)
+
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		await pointer.hover(newDocument)
+		await waitFor(() =>
+			expect(screen.getByRole("tooltip")).toHaveTextContent("Nouveau document"),
+		)
+		await pointer.unhover(newDocument)
+	},
+})
+
+const LABELLED_FROM_WITH_IMPORT = 672
+
+export const BarFrenchWithImport = meta.story({
+	args: { items: LIBRARY_ITEMS_WITH_BOARDS },
+	globals: { theme: "light" },
+	beforeEach: inFrench,
+	render: (args) => (
+		<LibraryArtboardFrame width="wide">
+			<LibraryPanel {...args} />
+		</LibraryArtboardFrame>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The widest bar the Library draws: French, with Import, New board and New document. Reach for this when a label, a locale or an action changes. Check that the three labels read in full at 960 px, that Importer and Nouveau tableau become glyph buttons under a 672 px panel, that Nouveau document keeps its label at 480 px and becomes a glyph button too at 320 px, and that at every width down to 320 px Bibliothèque reads in full and nothing crosses the panel edge.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const frame = slotIn(canvasElement, "library-artboard-frame")
+		const { panel, heading, actions } = barIn(canvasElement)
+		const [importAction, newBoard, newDocument] = actions
+		if (!(importAction && newBoard && newDocument))
+			throw new Error("The bar lost an action")
+		const frameEdges = boxOf(frame).width - boxOf(panel).width
+		const setPanelWidth = async (width: number) => {
+			frame.style.width = `${width + frameEdges}px`
+			await nextLayout()
+		}
+
+		await expect(actions.map((action) => action.textContent)).toEqual([
+			"Importer",
+			"Nouveau tableau",
+			"Nouveau document",
+		])
+		await expectNoHorizontalOverflow(canvasElement)
+
+		try {
+			await setPanelWidth(LABELLED_FROM_WITH_IMPORT)
+			await expect(boxOf(newBoard).width).toBeGreaterThan(32)
+			await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+			await expectNoHorizontalOverflow(canvasElement)
+
+			await setPanelWidth(LABELLED_FROM_WITH_IMPORT - 1)
+			await waitFor(() =>
+				expect([boxOf(importAction).width, boxOf(newBoard).width]).toEqual([
+					32, 32,
+				]),
+			)
+			await expect(importAction).toHaveAccessibleName("Importer")
+			await expect(newBoard).toHaveAccessibleName("Nouveau tableau")
+			await expectNoHorizontalOverflow(canvasElement)
+
+			await setPanelWidth(480)
+			await expect(boxOf(newDocument).width).toBeGreaterThan(100)
+
+			for (let width = 960; width >= 320; width -= 16) {
+				await setPanelWidth(width)
+				await waitFor(() =>
+					expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth),
+				)
+				await expectNoHorizontalOverflow(canvasElement)
+			}
+
+			await waitFor(() => expect(boxOf(newDocument).width).toBe(32))
+			await expect(newDocument).toHaveAccessibleName("Nouveau document")
+			await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth)
+		} finally {
+			frame.style.width = ""
+		}
 	},
 })
