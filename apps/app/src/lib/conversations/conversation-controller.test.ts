@@ -4114,13 +4114,6 @@ describe("the mentions a finished turn carries", () => {
 describe("a send whose answer the relay refused", () => {
 	type HostRun = "recorded" | "unrecorded"
 
-	const refusedAnswer = () =>
-		new RefusedWrite(
-			"conversation_send_user_message",
-			undefined,
-			new Error("relay closed"),
-		)
-
 	const sentThenReplayed = async (hostRun: HostRun) => {
 		const base = createFakeTranscriptStore()
 		const store: TranscriptStore = {
@@ -4129,7 +4122,11 @@ describe("a send whose answer the relay refused", () => {
 				if (hostRun === "recorded") {
 					await base.sendUserMessage(sent, summoned)
 				}
-				throw refusedAnswer()
+				throw new RefusedWrite(
+					"conversation_send_user_message",
+					undefined,
+					new Error("relay closed"),
+				)
 			},
 		}
 		const bots = await seatBots(store, SPACE, ["Nyx"])
