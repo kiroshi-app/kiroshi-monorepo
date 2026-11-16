@@ -504,7 +504,10 @@ mod tests {
 		),
 		(
 			"A fence label the chat does not draw",
-			&[("code.tsx", "return <MarkdownFence code={source} language={language} />")],
+			&[
+				("code.tsx", "<AnswerFence code={source} language={language} />"),
+				("code.tsx", "<MarkdownFence code={source} language={language} />"),
+			],
 		),
 		(
 			"A callout kind other than NOTE, TIP and WARNING",
