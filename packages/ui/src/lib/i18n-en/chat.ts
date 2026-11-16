@@ -1069,6 +1069,8 @@ const chat = {
 			activity: "Activity",
 			pullRequest: "Pull request",
 			openedAt: "opened {{time}}",
+			openCodingSession: "Open the coding session",
+			edit: "Edit",
 		},
 		feed: {
 			label: "Mission conversation",

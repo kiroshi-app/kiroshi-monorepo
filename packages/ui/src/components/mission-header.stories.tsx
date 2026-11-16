@@ -13,7 +13,6 @@ import {
 	slotsIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
-import { Icons } from "@workspace/ui/components/icons"
 import type { MissionState } from "@workspace/ui/components/mission"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import {
@@ -24,7 +23,6 @@ import { MissionHeaderSkeleton } from "@workspace/ui/components/mission-header-s
 import {
 	MissionProperties,
 	type MissionPropertiesProps,
-	MissionPropertyAction,
 } from "@workspace/ui/components/mission-properties"
 import {
 	LONG_MISSION_TICKET_TITLE,
@@ -69,6 +67,12 @@ const FILLED_BY_THE_THREAD =
 const AVATAR_SIZE = 32
 
 const LEADING_GAP = 10
+
+const PATH_LINE_TOP = 11
+
+const TITLE_LINE_TOP = 27
+
+const STATE_PILL = { height: 36, top: 10, padding: "10px", radius: "16px" }
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
@@ -273,16 +277,8 @@ const ARTBOARD_PROPERTIES: MissionPropertiesProps = {
 	pullRequest: { ...MISSION_PULL_REQUEST, number: 2291 },
 	openedAt: MISSION_NOW - 7_200_000,
 	now: MISSION_NOW,
-	ticketActions: (
-		<>
-			<MissionPropertyAction aria-label="Copy the ticket identifier">
-				<Icons.Copy aria-hidden="true" />
-			</MissionPropertyAction>
-			<MissionPropertyAction aria-label="Open the ticket">
-				<Icons.ExternalLink aria-hidden="true" />
-			</MissionPropertyAction>
-		</>
-	),
+	onOpenCodingSession: fn(),
+	onEdit: fn(),
 }
 
 const TWO_MESSAGES = ["Where does the mission stand?", "Is the queue moving?"]
@@ -351,9 +347,22 @@ const expectStatePill = async (bar: HTMLElement) => {
 	await expect(pill).toHaveTextContent("Ready to merge")
 	await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
 	await expect([
+		boxOf(slotIn(bar, "app-header-top-line")).top - boxOf(bar).top,
+		boxOf(slotIn(bar, "mission-objective")).top - boxOf(bar).top,
+	]).toEqual([PATH_LINE_TOP, TITLE_LINE_TOP])
+	await expect([
 		boxOf(pill).height,
+		boxOf(pill).top - boxOf(bar).top,
 		boxOf(bar).right - boxOf(pill).right,
-	]).toEqual([28, 12])
+		getComputedStyle(pill).padding,
+		getComputedStyle(pill).borderRadius,
+	]).toEqual([
+		STATE_PILL.height,
+		STATE_PILL.top,
+		12,
+		STATE_PILL.padding,
+		STATE_PILL.radius,
+	])
 	await expect(getComputedStyle(pill).backgroundColor).toBe(
 		tokenStyleIn(
 			pill,
@@ -405,7 +414,7 @@ export const Mission3a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3a, the open mission. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label at the trailing end, then, at the top of the 640px thread column, the properties block reading the ticket with its two icon buttons, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
+					"Artboard 3a, the open mission. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session and Edit icon buttons, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
