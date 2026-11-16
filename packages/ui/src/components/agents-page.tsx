@@ -10,6 +10,7 @@ import {
 	ListSkeleton,
 	SkeletonBar,
 } from "@workspace/ui/components/list-skeleton"
+import { Notice } from "@workspace/ui/components/notice"
 import { SpacesBranch } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
 import {
@@ -43,7 +44,7 @@ const SKELETON_LINE = "border-border/60"
 
 const SKELETON_CARDS_PER_ROW = ["a", "b", "c", "d", "e", "f"]
 
-type AgentsPageStatus = "loaded" | "loading"
+type AgentsPageStatus = "loaded" | "loading" | "failed"
 
 type AgentsPageAgent = CompanionSummary & {
 	memberships: string[]
@@ -57,6 +58,7 @@ type AgentsPageProps = {
 	openSpaceId?: string
 	onSelect: (id: string) => void
 	onCreate: () => void
+	onRetry?: () => void
 	onOpenInNewTab: (id: string) => void
 	onDuplicate: (id: string) => void
 	onAddToSpace: (agentId: string, spaceId: string) => void
@@ -226,6 +228,7 @@ const AgentsPageBody = ({
 	spaceName,
 	status = "loaded",
 	onCreate,
+	onRetry,
 	...actions
 }: AgentsPageProps) => {
 	const { t } = useTranslation("settings")
@@ -236,6 +239,18 @@ const AgentsPageBody = ({
 				<ListSkeleton
 					className="@container gap-4 px-6 pt-6"
 					row={skeletonRowAt}
+				/>
+			</div>
+		)
+	}
+
+	if (status === "failed") {
+		return (
+			<div className="p-3" data-slot="agents-page-failure">
+				<Notice
+					description={t("space.agents.failure.description")}
+					retry={onRetry ? { onRetry } : undefined}
+					title={t("space.agents.failure.title")}
 				/>
 			</div>
 		)

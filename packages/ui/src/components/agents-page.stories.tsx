@@ -215,6 +215,7 @@ const meta = preview.meta({
 		openSpaceId: KIROSHI.id,
 		onSelect: fn(),
 		onCreate: fn(),
+		onRetry: fn(),
 		onOpenInNewTab: fn(),
 		onDuplicate: fn(),
 		onAddToSpace: fn(),
@@ -407,6 +408,86 @@ export const Loading = meta.story({
 				"button, a, [tabindex]",
 			),
 		).toBeNull()
+	},
+})
+
+export const Failed = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: { status: "failed" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first read failed, the state the Missions page draws the same way and no artboard draws. Check the header keeps its title and Create an agent and drops its count, that one notice under it says what failed, that no skeleton, empty state, caption or card shows though the story holds six agents, and that Retry calls `onRetry` once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvas.getByRole("heading", { name: "Agents", level: 1 }),
+		).toBeVisible()
+		const alert = within(
+			slotIn(canvasElement, "agents-page-failure"),
+		).getByRole("alert")
+		await expect(alert).toHaveTextContent("Couldn’t load agents")
+		await expect(alert).toHaveTextContent(
+			"The agents are still there; only the list didn’t load.",
+		)
+
+		for (const slot of [
+			"agents-page-skeleton",
+			"agents-page-empty",
+			"agents-page-count",
+			"agents-page-body",
+		]) {
+			await expect(
+				canvasElement.querySelector(`[data-slot="${slot}"]`),
+			).toBeNull()
+		}
+		await expect(cardsIn(canvasElement)).toHaveLength(0)
+		await expect(
+			canvas.getAllByRole("button").map((button) => button.textContent),
+		).toEqual(["Create an agent", "Retry"])
+
+		const retry = canvas.getByRole("button", { name: "Retry" })
+		await userEvent.click(retry)
+		await expect(args.onRetry).toHaveBeenCalledOnce()
+		retry.blur()
+	},
+})
+
+export const FailedLight = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "light" },
+	args: Failed.input.args,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`Failed` in the light theme. Check the notice, its icon and Retry still read against the light card.",
+			},
+		},
+	},
+	play: Failed.input.play,
+})
+
+export const FailedWithoutRetry = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: { status: "failed", onRetry: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`Failed` for a caller that passes no `onRetry`. Check the notice still says what failed and offers no Retry, so Create an agent is the only button on the page.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("alert")).toHaveTextContent(
+			"Couldn’t load agents",
+		)
+		await expect(
+			canvas.getAllByRole("button").map((button) => button.textContent),
+		).toEqual(["Create an agent"])
 	},
 })
 

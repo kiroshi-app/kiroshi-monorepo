@@ -323,6 +323,11 @@ const settings = {
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
 				"Impossible de lire les compétences et les applications des agents. Rouvrez Agents pour réessayer.",
+			failure: {
+				title: "Impossible de charger les agents",
+				description:
+					"Les agents sont toujours là ; seule la liste n’a pas pu se charger.",
+			},
 			skills_zero: "aucune compétence",
 			skills_one: "{{count}} compétence",
 			skills_many: "{{count}} compétences",
