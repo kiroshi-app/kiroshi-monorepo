@@ -71,7 +71,6 @@ export type LibraryScreenProps = {
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
-	onOpenBoard: (opening: LibraryOpening) => void
 	onCloseTab?: () => void
 }
 
@@ -99,18 +98,6 @@ const openingOfItem = ({ id, kind }: KindedItem): LibraryOpening => ({
 	kind,
 	name: id,
 })
-
-type Openers = {
-	inPlace: (opening: LibraryOpening) => void
-	inItsTab: (opening: LibraryOpening) => void
-}
-
-const openerOf =
-	({ inPlace, inItsTab }: Openers) =>
-	(item: KindedItem) => {
-		const opening = openingOfItem(item)
-		return opening.kind === "board" ? inItsTab(opening) : inPlace(opening)
-	}
 
 const documentOpeningOf = ({ name, title }: DocumentDraft): LibraryOpening => ({
 	kind: "document",
@@ -382,7 +369,6 @@ export const LibraryScreen = ({
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
-	onOpenBoard,
 	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -479,9 +465,9 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = openerOf({ inPlace: onOpeningChange, inItsTab: onOpenBoard })
+	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
 	const newBoard = () =>
-		createBoard((name) => onOpenBoard({ kind: "board", name }))
+		createBoard((name) => onOpeningChange({ kind: "board", name }))
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))

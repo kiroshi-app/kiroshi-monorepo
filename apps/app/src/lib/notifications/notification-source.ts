@@ -69,7 +69,7 @@ type JoinedSpacesSource = {
 
 type ConversationsSource = Pick<
 	ConversationTabOpening,
-	"open" | "openInTab" | "showOverHome"
+	"open" | "openInSpace" | "showOverHome"
 >
 
 type MissionsSource = {
