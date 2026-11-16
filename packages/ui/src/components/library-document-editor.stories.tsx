@@ -18,6 +18,8 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
 	expectHeaderTitleStep,
 	expectStaticHeaderBar,
 	findHoverTooltip,
@@ -878,6 +880,7 @@ export const BarAtRest = meta.story({
 		const page = slotIn(canvasElement, "library-document-editor")
 		const bar = await expectStaticHeaderBar(page)
 		await expect(slotsIn(page, "header-island")).toHaveLength(0)
+		await expectBarLeavesTheWindowInPlace(bar)
 
 		await expect(slotIn(bar, "app-header-top-line")).toHaveTextContent(
 			`Library/${BAR_DETAILS}`,
@@ -1555,6 +1558,37 @@ const expectWrittenLook = async (
 }
 
 const atlasWriting = createWritersStore()
+
+export const BarDragsTheWindow = meta.story({
+	args: {
+		...AgentsWriting.input.args,
+		onCopy: fn(),
+		onDownload: fn(),
+		dragRegion: "deep",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A document opened to edit and given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Pick `BarAtRest` for the bar without it. `apps/app/src/components/library-screen.tsx:542` renders the editor and does not pass `dragRegion` yet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const bar = await expectStaticHeaderBar(
+			slotIn(canvasElement, "library-document-editor"),
+		)
+
+		await expect(
+			within(bar)
+				.getAllByRole("button")
+				.map(
+					(button) => button.getAttribute("aria-label") ?? button.textContent,
+				),
+		).toEqual(["Library", "Stop all", "Download", "Copy", "More", "Close"])
+		await expectBarDragsTheWindow(bar)
+	},
+})
 
 export const AgentRunHeldThenFades = meta.story({
 	args: HELD_RUN_ARGS,

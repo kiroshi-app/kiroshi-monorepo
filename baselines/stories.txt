@@ -2062,6 +2062,7 @@ navigation-librarydocumenteditor--a-6-toolbar-flipped-below
 navigation-librarydocumenteditor--agent-run-held-then-fades
 navigation-librarydocumenteditor--agents-writing
 navigation-librarydocumenteditor--bar-at-rest
+navigation-librarydocumenteditor--bar-drags-the-window
 navigation-librarydocumenteditor--blank
 navigation-librarydocumenteditor--blocks-rendered
 navigation-librarydocumenteditor--blocks-rendered-light
