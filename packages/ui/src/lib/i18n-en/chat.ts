@@ -352,6 +352,13 @@ const chat = {
 		writing: "Writing",
 		ready: "Ready",
 	},
+	liveHtml: {
+		label: "Live view",
+		enlarge: "Enlarge",
+		enlargeName: "Enlarge the live view",
+		shrink: "Shrink",
+		shrinkName: "Shrink the live view",
+	},
 	table: {
 		label: "Table",
 		copy: "Copy table",

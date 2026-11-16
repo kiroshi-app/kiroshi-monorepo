@@ -382,6 +382,13 @@ const chat = {
 		writing: "Écriture",
 		ready: "Prêt",
 	},
+	liveHtml: {
+		label: "Vue en direct",
+		enlarge: "Agrandir",
+		enlargeName: "Agrandir la vue en direct",
+		shrink: "Réduire",
+		shrinkName: "Réduire la vue en direct",
+	},
 	table: {
 		label: "Tableau",
 		copy: "Copier le tableau",
