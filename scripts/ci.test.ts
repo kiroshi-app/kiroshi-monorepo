@@ -1645,16 +1645,25 @@ describe("the ios shards", () => {
 		}
 	})
 
-	it("gives the unit tests to the first shard and deals unmeasured UI classes in turn", () => {
+	it("counts the unit tests in the load of the first shard before dealing the UI classes", () => {
+		expect(shardTests({ index: 1, count: 2 }, ["Alpha"])).toEqual([
+			"KiroshiTests",
+		])
+		expect(shardTests({ index: 2, count: 2 }, ["Alpha"])).toEqual([
+			"KiroshiUITests/Alpha",
+		])
+	})
+
+	it("deals unmeasured UI classes in turn, from the shard without the unit tests", () => {
 		expect(shardTests({ index: 1, count: 2 }, CLASSES)).toEqual([
 			"KiroshiTests",
+			"KiroshiUITests/Bravo",
+			"KiroshiUITests/Delta",
+		])
+		expect(shardTests({ index: 2, count: 2 }, CLASSES)).toEqual([
 			"KiroshiUITests/Alpha",
 			"KiroshiUITests/Charlie",
 			"KiroshiUITests/Echo",
-		])
-		expect(shardTests({ index: 2, count: 2 }, CLASSES)).toEqual([
-			"KiroshiUITests/Bravo",
-			"KiroshiUITests/Delta",
 		])
 	})
 
@@ -1668,12 +1677,12 @@ describe("the ios shards", () => {
 
 		expect(shardTests({ index: 1, count: 2 }, measured)).toEqual([
 			"KiroshiTests",
-			"KiroshiUITests/QuestionPanelTests",
-			"KiroshiUITests/SoloConversationTests",
-		])
-		expect(shardTests({ index: 2, count: 2 }, measured)).toEqual([
 			"KiroshiUITests/ConversationsAccessibilityTests",
 			"KiroshiUITests/InvitationAccessibilityTests",
+		])
+		expect(shardTests({ index: 2, count: 2 }, measured)).toEqual([
+			"KiroshiUITests/QuestionPanelTests",
+			"KiroshiUITests/SoloConversationTests",
 		])
 	})
 

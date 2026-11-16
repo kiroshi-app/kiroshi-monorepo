@@ -711,13 +711,16 @@ const secondsOf = (name: string) =>
 	MEDIAN_SECONDS_OF_UI_TEST_CLASS[name] ??
 	SECONDS_OF_AN_UNMEASURED_UI_TEST_CLASS
 
-type ShardLoad = { seconds: number; classes: string[] }
+const MEDIAN_SECONDS_OF_KIROSHI_TESTS = 15
+
+type ShardLoad = { seconds: number; tests: string[] }
 
 const balancedShards = (count: number, classes: string[]) => {
-	const shards: ShardLoad[] = Array.from({ length: count }, () => ({
-		seconds: 0,
-		classes: [],
-	}))
+	const shards: ShardLoad[] = Array.from({ length: count }, (_, position) =>
+		position === 0
+			? { seconds: MEDIAN_SECONDS_OF_KIROSHI_TESTS, tests: ["KiroshiTests"] }
+			: { seconds: 0, tests: [] },
+	)
 	const longestFirst = [...classes].sort(
 		(a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
 	)
@@ -725,18 +728,14 @@ const balancedShards = (count: number, classes: string[]) => {
 		const lightest = shards.reduce((lightest, shard) =>
 			shard.seconds < lightest.seconds ? shard : lightest,
 		)
-		lightest.classes.push(name)
+		lightest.tests.push(`KiroshiUITests/${name}`)
 		lightest.seconds += secondsOf(name)
 	}
-	return shards.map((shard) => shard.classes)
+	return shards.map((shard) => shard.tests)
 }
 
-export const shardTests = ({ index, count }: Shard, classes: string[]) => [
-	...(index === 1 ? ["KiroshiTests"] : []),
-	...(balancedShards(count, classes)[index - 1] ?? []).map(
-		(name) => `KiroshiUITests/${name}`,
-	),
-]
+export const shardTests = ({ index, count }: Shard, classes: string[]) =>
+	balancedShards(count, classes)[index - 1] ?? []
 
 export const startedATest = (log: string) =>
 	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
