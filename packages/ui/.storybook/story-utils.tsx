@@ -628,6 +628,78 @@ export const expectHeaderTopLineStep = async (topLine: Element) => {
 	)
 }
 
+const SKELETON_BAR = {
+	inset: 12,
+	pathLine: 16,
+	titleLine: 18,
+	capsule: [92, 32],
+	close: [32, 32],
+	gap: 8,
+}
+
+export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
+	await expect(region).toHaveAttribute("aria-busy", "true")
+	await expect(region.getBoundingClientRect().height).toBe(
+		region.closest<HTMLElement>("[data-content-card]")?.clientHeight,
+	)
+
+	const shapes = slotsIn(region, "skeleton")
+	await expect(shapes.length).toBeGreaterThan(0)
+	for (const shape of shapes)
+		await expect(shape.closest('[aria-hidden="true"]')).not.toBe(null)
+	if (isInBrowserRunner())
+		await expect(region.getAnimations({ subtree: true })).toEqual([])
+
+	const bar = await expectStaticHeaderBar(region)
+	await expect(slotsIn(region, "app-header")).toEqual([bar])
+	await expect(slotsIn(region, "header-island")).toHaveLength(0)
+	await expect(bar).toHaveAttribute("aria-hidden", "true")
+
+	const frame = bar.getBoundingClientRect()
+	const path = slotIn(bar, "app-header-top-line").getBoundingClientRect()
+	const title = slotIn(
+		bar,
+		"library-skeleton-bar-title",
+	).getBoundingClientRect()
+	const [capsule, close, ...others] = Array.from(
+		slotIn(bar, "library-skeleton-bar-actions").children,
+		(placeholder) => placeholder.getBoundingClientRect(),
+	)
+	if (!capsule || !close)
+		throw new Error("The skeleton bar does not draw its capsule and its close")
+	await expect(others).toEqual([])
+
+	await expect([
+		path.left - frame.left,
+		path.height,
+		title.top - path.bottom,
+		title.height,
+	]).toEqual([
+		SKELETON_BAR.inset,
+		SKELETON_BAR.pathLine,
+		0,
+		SKELETON_BAR.titleLine,
+	])
+	await expect([
+		[capsule.width, capsule.height],
+		[close.width, close.height],
+		close.left - capsule.right,
+		frame.right - close.right,
+		capsule.top - frame.top,
+		close.top - frame.top,
+	]).toEqual([
+		SKELETON_BAR.capsule,
+		SKELETON_BAR.close,
+		SKELETON_BAR.gap,
+		SKELETON_BAR.inset,
+		SKELETON_BAR.inset,
+		SKELETON_BAR.inset,
+	])
+	await expect(path.top + title.bottom).toBe(capsule.top + capsule.bottom)
+
+	return bar
+}
+
 const SETTINGS_FIRST_ROW = { top: 88, inline: 24 }
 
 export const COLUMN_WIDTH_CAP = 800

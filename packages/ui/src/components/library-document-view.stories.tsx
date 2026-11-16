@@ -10,6 +10,8 @@ import {
 import preview from "@workspace/storybook/preview"
 import {
 	expectHeaderTitleStep,
+	expectLibrarySkeletonBar,
+	expectSkeletonFilledTo,
 	expectStaticHeaderBar,
 	findHoverTooltip,
 	hueScopeOf,
@@ -34,6 +36,7 @@ import {
 	LibraryDocumentView,
 	type LibraryDocumentViewProps,
 } from "@workspace/ui/components/library-document-view"
+import { LibraryDocumentSkeleton } from "@workspace/ui/components/library-tab-states"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 
 const SPRING_BRIEF: LibraryDocument = {
@@ -328,6 +331,73 @@ export const Dark = meta.story({
 	play: ({ canvasElement }) => expectBarAtRest(canvasElement, DARK_SURFACE),
 })
 
+const DOCUMENT_COLUMN_WIDTH = 794
+
+const COLUMN_BLOCK_END = 40
+
+const COLUMN_GAP = 14
+
+const expectLoading = async (canvasElement: HTMLElement) => {
+	const region = within(canvasElement).getByRole("region", {
+		name: "Loading the document…",
+	})
+	const bar = await expectLibrarySkeletonBar(region)
+	await expect(getComputedStyle(bar).backgroundColor).toBe(TRANSPARENT)
+
+	const lines = slotIn(region, "list-skeleton").getBoundingClientRect()
+	await expect([
+		lines.width,
+		lines.top - bar.getBoundingClientRect().bottom,
+		region.getBoundingClientRect().bottom - lines.bottom,
+	]).toEqual([DOCUMENT_COLUMN_WIDTH, TITLE_BELOW_BAR, COLUMN_BLOCK_END])
+	await expectSkeletonFilledTo(region, "bottom")
+
+	const [title, firstBlock] = slotsIn(region, "list-skeleton-row")
+	if (!title || !firstBlock)
+		throw new Error("The skeleton does not draw its title and a first block")
+	await expect(slotsIn(title, "skeleton")).toHaveLength(1)
+	await expect(
+		firstBlock.getBoundingClientRect().top -
+			title.getBoundingClientRect().bottom,
+	).toBe(COLUMN_GAP)
+}
+
+export const Loading = meta.story({
+	globals: { theme: "light" },
+	render: () => (
+		<div
+			className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
+			{...hueScopeOf("blue")}
+		>
+			<ContentCard isLandmark={false}>
+				<LibraryDocumentSkeleton />
+			</ContentCard>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule and no island, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 24 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
+			},
+		},
+	},
+	play: ({ canvasElement }) => expectLoading(canvasElement),
+})
+
+export const LoadingDark = meta.story({
+	...Loading.input,
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same loading document in the dark theme, next to `Dark`. Check that the geometry is the light one.",
+			},
+		},
+	},
+})
+
 const LONG_BRIEF: LibraryDocument = {
 	...SPRING_BRIEF,
 	body: Array.from({ length: 4 }, () => SPRING_BRIEF.body).join("\n\n"),
@@ -349,6 +419,7 @@ export const Scrolled = meta.story({
 	play: async ({ canvasElement }) => {
 		const page = slotIn(canvasElement, "library-document-view")
 		const column = slotIn(canvasElement, "library-document-column")
+		await waitFor(() => expect(column).toHaveAttribute("tabindex", "0"))
 		const atRest = (await expectStaticHeaderBar(page)).getBoundingClientRect()
 
 		column.scrollTo({ top: SCROLLED_AWAY })

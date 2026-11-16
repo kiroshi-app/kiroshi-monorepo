@@ -2125,6 +2125,8 @@ navigation-librarydocumentview--dark
 navigation-librarydocumentview--default
 navigation-librarydocumentview--gallery-of-stored-images
 navigation-librarydocumentview--light
+navigation-librarydocumentview--loading
+navigation-librarydocumentview--loading-dark
 navigation-librarydocumentview--long-agent-name-writing
 navigation-librarydocumentview--member
 navigation-librarydocumentview--more-menu
@@ -2191,9 +2193,6 @@ navigation-librarypanel--search-focus-typing
 navigation-librarypanel--search-focus-typing-dark
 navigation-librarypanel--search-with-no-match
 navigation-librarypanel--whitespace-name-reads-untitled
-navigation-librarytabstates--document-loading
-navigation-librarytabstates--document-loading-dark
-navigation-librarytabstates--image-loading
 navigation-librarytabstates--missing-item
 navigation-librarytabstates--missing-item-dark
 navigation-librarytabstates--unreadable-item
@@ -2451,6 +2450,8 @@ overlays-librarylightbox--image-menu-open
 overlays-librarylightbox--image-menu-saving
 overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--library-path-link
+overlays-librarylightbox--loading
+overlays-librarylightbox--loading-light
 overlays-librarylightbox--member-more-menu
 overlays-librarylightbox--narrow-long-name
 overlays-librarylightbox--only-bar-actions-given
