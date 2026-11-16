@@ -1994,6 +1994,7 @@ navigation-librarycommentthread--handover-to-reply
 navigation-librarycommentthread--long-content
 navigation-librarycommentthread--long-content-dark
 navigation-librarycommentthread--long-thread
+navigation-librarycommentthread--long-thread-classic-scrollbar
 navigation-librarycommentthread--long-thread-dark
 navigation-librarycommentthread--long-thread-resolved
 navigation-librarycommentthread--replies
@@ -2005,6 +2006,7 @@ navigation-librarycommentthread--several-agents-at-work
 navigation-librarycommentthread--several-agents-at-work-dark
 navigation-librarycommentthread--shape-gone
 navigation-librarycommentthread--shape-gone-dark
+navigation-librarycommentthread--short-thread-classic-scrollbar
 navigation-librarycommentthread--target-gone
 navigation-librarycommentthread--target-gone-dark
 navigation-librarycommentthread--without-more
