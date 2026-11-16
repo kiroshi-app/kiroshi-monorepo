@@ -1,3 +1,5 @@
+mod port_probe;
+
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +23,7 @@ use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewServer, READER_RO
 use crate::windows::{
 	open_main_window, open_view_child, open_view_window, FIRST_VIEW_LABEL, MAIN_WINDOW_LABEL,
 };
-use crate::Mode;
+use crate::{Mode, Play};
 
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
 const RUN_SIGNAL: &str = "run";
@@ -39,6 +41,7 @@ const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const ATTRIBUTION_DEADLINE: Duration = Duration::from_secs(150);
 const RUN_LIMIT: Duration = Duration::from_secs(180);
+const PROBE_RUN_LIMIT: Duration = Duration::from_secs(900);
 const TICKET: &str = "OPE-2346";
 const IN_THREAD_VERDICT: &str = "in-thread";
 const SEPARATE_WINDOW_VERDICT: &str = "separate-window-only";
@@ -90,6 +93,33 @@ impl Sensors {
 	}
 }
 
+enum Script {
+	Proofs(Sensors, ViewServer),
+	Probe,
+}
+
+impl Script {
+	fn open(play: Play, host: &HostState, mode: Mode) -> Result<Self, Failure> {
+		match play {
+			Play::Proofs => {
+				let sensors = Sensors::open()?;
+				let first_view =
+					ViewServer::open(&sensors.targets(WRITER_ROLE), mode.view_csp_directives())?;
+				point_at(host, &first_view, mode);
+				Ok(Self::Proofs(sensors, first_view))
+			}
+			Play::Probe => Ok(Self::Probe),
+		}
+	}
+
+	fn run_limit(&self) -> Duration {
+		match self {
+			Self::Proofs(..) => RUN_LIMIT,
+			Self::Probe => PROBE_RUN_LIMIT,
+		}
+	}
+}
+
 fn window_url(view: &ViewServer, mode: Mode) -> String {
 	if mode.frames_view_documents() {
 		view.framed_url()
@@ -130,10 +160,8 @@ pub fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
 	is_reached()
 }
 
-pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Failure> {
-	let sensors = Sensors::open()?;
-	let first_view = ViewServer::open(&sensors.targets(WRITER_ROLE), mode.view_csp_directives())?;
-	point_at(&host, &first_view, mode);
+pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode, play: Play) -> Result<(), Failure> {
+	let script = Script::open(play, &host, mode)?;
 	let main_window = open_main_window(&app, &host)?;
 	let heartbeat_host = Arc::clone(&host);
 	app.listen(HEARTBEAT_EVENT, move |event| match serde_json::from_str::<Tick>(event.payload()) {
@@ -157,15 +185,19 @@ pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Fai
 			return eprintln!("the heartbeat stopped: {cause}");
 		}
 	});
-	thread::spawn(|| {
-		thread::sleep(RUN_LIMIT);
-		eprintln!("the harness overran {} seconds without a result", RUN_LIMIT.as_secs());
+	let run_limit = script.run_limit();
+	thread::spawn(move || {
+		thread::sleep(run_limit);
+		eprintln!("the harness overran {} seconds without a result", run_limit.as_secs());
 		std::process::exit(HARNESS_FAILURE);
 	});
 	thread::spawn(move || {
-		let run =
-			Run { app, host, mode, sensors, main_window, thread_view, started: Instant::now() };
-		match run.play(first_view) {
+		let run = Run { app, host, mode, main_window, thread_view, started: Instant::now() };
+		let played = match script {
+			Script::Proofs(sensors, first_view) => run.play(&sensors, first_view),
+			Script::Probe => run.probe(),
+		};
+		match played {
 			Ok(()) => std::process::exit(0),
 			Err(cause) => {
 				eprintln!("the harness failed: {cause}");
@@ -180,7 +212,6 @@ struct Run {
 	app: AppHandle,
 	host: Arc<HostState>,
 	mode: Mode,
-	sensors: Sensors,
 	main_window: WebviewWindow,
 	thread_view: Arc<ThreadView>,
 	started: Instant,
@@ -227,12 +258,17 @@ struct PlayedView {
 }
 
 impl Run {
-	fn play(&self, first_view: ViewServer) -> Result<(), Failure> {
+	fn wait_for_the_main_window(&self) -> Result<(), Failure> {
 		let is_main_window_live =
 			|| !self.host.heartbeat().arrivals.is_empty() && !self.host.secret_calls().is_empty();
 		if !wait_until(MAIN_WINDOW_TIMEOUT, is_main_window_live) {
 			return Err("the main window sent no heartbeat and no control call".into());
 		}
+		Ok(())
+	}
+
+	fn play(&self, sensors: &Sensors, first_view: ViewServer) -> Result<(), Failure> {
+		self.wait_for_the_main_window()?;
 		let baseline_started = self
 			.host
 			.heartbeat()
@@ -249,7 +285,8 @@ impl Run {
 		let writer = self.close_view(first)?;
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
-		let second = self.open_later_view("view-2", READER_ROLE, SECOND_VIEW_TIMEOUT, SETTLE)?;
+		let second =
+			self.open_later_view(sensors, "view-2", READER_ROLE, SECOND_VIEW_TIMEOUT, SETTLE)?;
 		let (reader, second_reading, thread) = match second {
 			Some(second) => {
 				let reading = self.host_reading(&second);
@@ -259,7 +296,7 @@ impl Run {
 			None => (None, None, None),
 		};
 		let AloneReplays { played: alone, not_played: not_played_alone } =
-			self.play_attempts_alone()?;
+			self.play_attempts_alone(sensors)?;
 
 		let mut window_urls = vec![WindowUrl {
 			window: MAIN_WINDOW_LABEL.to_owned(),
@@ -303,9 +340,9 @@ impl Run {
 			secret_calls: self.host.secret_calls(),
 			heartbeat: self.host.heartbeat(),
 			baseline,
-			loopback_tripwire: self.sensors.loopback.reading(),
-			lan_tripwire: self.sensors.lan.as_ref().map(Tripwire::reading).map_err(Clone::clone),
-			navigation_sink: self.sensors.navigation_sink.reading(),
+			loopback_tripwire: sensors.loopback.reading(),
+			lan_tripwire: sensors.lan.as_ref().map(Tripwire::reading).map_err(Clone::clone),
+			navigation_sink: sensors.navigation_sink.reading(),
 			handler_events: self.host.handler_events(),
 			window_urls,
 			first_view_open: writer.open,
@@ -405,13 +442,13 @@ impl Run {
 
 	fn open_later_view(
 		&self,
+		sensors: &Sensors,
 		label: &str,
 		role: &'static str,
 		timeout: Duration,
 		settle: Duration,
 	) -> Result<Option<OpenView>, Failure> {
-		let server =
-			ViewServer::open(&self.sensors.targets(role), self.mode.view_csp_directives())?;
+		let server = ViewServer::open(&sensors.targets(role), self.mode.view_csp_directives())?;
 		point_at(&self.host, &server, self.mode);
 		if self.mode == Mode::Frame && !self.reload_main_window()? {
 			eprintln!("the main window did not come back after its reload, {label} stays closed");
@@ -420,7 +457,7 @@ impl Run {
 		self.open_view(label, server, timeout, settle).map(Some)
 	}
 
-	fn attempts_to_play_alone(&self) -> Vec<&'static str> {
+	fn attempts_to_play_alone(&self, sensors: &Sensors) -> Vec<&'static str> {
 		let has_a_connection_without_a_request = |listener: &Tripwire| {
 			listener
 				.reading()
@@ -430,27 +467,27 @@ impl Run {
 		};
 		let mut attempts = Vec::new();
 		if self.mode.decides_from_host_observations()
-			|| has_a_connection_without_a_request(&self.sensors.navigation_sink)
+			|| has_a_connection_without_a_request(&sensors.navigation_sink)
 		{
 			attempts.extend(NAVIGATION_ATTEMPTS);
 		}
 		attempts.extend(LOOPBACK_TRIPWIRE_NAVIGATIONS);
-		if self.sensors.lan.is_ok() {
+		if sensors.lan.is_ok() {
 			attempts.extend(LAN_TRIPWIRE_NAVIGATIONS);
 		}
-		if has_a_connection_without_a_request(&self.sensors.loopback) {
+		if has_a_connection_without_a_request(&sensors.loopback) {
 			attempts.extend(LOOPBACK_TRIPWIRE_ATTEMPTS);
 		}
-		if self.sensors.lan.as_ref().is_ok_and(has_a_connection_without_a_request) {
+		if sensors.lan.as_ref().is_ok_and(has_a_connection_without_a_request) {
 			attempts.extend(LAN_TRIPWIRE_ATTEMPTS);
 		}
 		attempts
 	}
 
-	fn play_attempts_alone(&self) -> Result<AloneReplays, Failure> {
+	fn play_attempts_alone(&self, sensors: &Sensors) -> Result<AloneReplays, Failure> {
 		let mut played = Vec::new();
 		let mut not_played = Vec::new();
-		for attempt in self.attempts_to_play_alone() {
+		for attempt in self.attempts_to_play_alone(sensors) {
 			let is_navigation = NAVIGATION_ATTEMPTS.contains(&attempt);
 			let decides_a_verdict = if is_navigation {
 				self.mode.decides_from_host_observations()
@@ -464,6 +501,7 @@ impl Run {
 			}
 			let settle = if is_navigation { ALONE_SETTLE } else { SETTLE };
 			match self.open_later_view(
+				sensors,
 				&format!("alone-{attempt}"),
 				attempt,
 				ALONE_TIMEOUT,
@@ -511,6 +549,20 @@ impl Run {
 		timeout: Duration,
 		settle: Duration,
 	) -> Result<OpenView, Failure> {
+		self.open_view_until(label, server, |server| {
+			if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
+				eprintln!("{label} never signalled the end of its run");
+			}
+			thread::sleep(settle);
+		})
+	}
+
+	fn open_view_until(
+		&self,
+		label: &str,
+		server: ViewServer,
+		wait_for_the_page: impl FnOnce(&ViewServer),
+	) -> Result<OpenView, Failure> {
 		let url = window_url(&server, self.mode);
 		self.host.mark_view_open(true);
 		let creation_began = Instant::now();
@@ -532,10 +584,7 @@ impl Run {
 		if let Shown::Nowhere(cause) = &shown {
 			eprintln!("{label} was shown nowhere: {cause}");
 		} else {
-			if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
-				eprintln!("{label} never signalled the end of its run");
-			}
-			thread::sleep(settle);
+			wait_for_the_page(&server);
 		}
 		Ok(OpenView {
 			label: label.to_owned(),

@@ -185,7 +185,7 @@ pub struct ViewServer {
 }
 
 impl ViewServer {
-	pub fn open(targets: &Targets, added_directives: &[&str]) -> io::Result<Self> {
+	pub fn open(targets: &impl Serialize, added_directives: &[&str]) -> io::Result<Self> {
 		let token = uuid::Uuid::new_v4().simple().to_string();
 		let csp = view_csp(&token, added_directives);
 		let document = HOSTILE_HTML.replace(TARGETS_PLACEHOLDER, &serde_json::to_string(targets)?);

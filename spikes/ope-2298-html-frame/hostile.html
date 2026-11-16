@@ -18,16 +18,30 @@
 			const MAIN_SENTINEL_KEY = "spike-main-sentinel";
 			const VIEW_KEY = "spike-view-value";
 			const VIEW_STORE = "spike-view";
+			const PROBE_ROLE = "probe-";
+			const PROBE_QUIET_MS = 250;
+			const PROBE_WINDOW_MS = 1000;
+			const PROBE_EVENTS = [
+				"securitypolicyviolation",
+				"error",
+				"load",
+				"pagehide",
+				"beforeunload",
+				"unload",
+				"visibilitychange",
+			];
 
 			const urlSafe = (text) => String(text).replace(/[^A-Za-z0-9.~-]/g, "_").slice(0, 160);
 
-			const signal = (attempt, outcome) =>
+			const beacon = (attempt, segment) =>
 				new Promise((resolve) => {
 					const image = new Image();
 					image.onload = resolve;
 					image.onerror = resolve;
-					image.src = `${BASE}beacon/${attempt}/${urlSafe(outcome)}`;
+					image.src = `${BASE}beacon/${attempt}/${segment}`;
 				});
+
+			const signal = (attempt, outcome) => beacon(attempt, urlSafe(outcome));
 
 			const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -299,6 +313,72 @@
 					TRIPWIRE_DEPARTURES.map((departure) => [`tripwire-${name}-${departure}`, `http://${host}/${departure}`]),
 				);
 
+			const hex = (text) =>
+				Array.from(new TextEncoder().encode(text), (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+			const primitiveFields = (event) => {
+				const fields = {};
+				for (const name in event) {
+					if (["string", "number", "boolean"].includes(typeof event[name])) {
+						fields[name] = event[name];
+					}
+				}
+				return fields;
+			};
+
+			const loaded = () =>
+				document.readyState === "complete"
+					? Promise.resolve()
+					: new Promise((resolve) => addEventListener("load", resolve, { once: true }));
+
+			const probe = async (id, url) => {
+				await loaded();
+				await pause(PROBE_QUIET_MS);
+				await signal(id, "attempted");
+				const beaconUrl = new URL(`${BASE}beacon/`, location.href).href;
+				const sent = [];
+				let attemptedAt = 0;
+				let isObserving = true;
+				const report = (record) => {
+					if (!isObserving) {
+						return;
+					}
+					const stamped = { ...record, index: sent.length, atMs: performance.now() - attemptedAt };
+					sent.push(beacon(id, `${PROBE_ROLE}${hex(JSON.stringify(stamped))}`));
+				};
+				for (const [on, target] of Object.entries({ window, document })) {
+					for (const type of PROBE_EVENTS) {
+						target.addEventListener(type, (event) =>
+							report({
+								kind: "event",
+								on,
+								type,
+								fields: type === "securitypolicyviolation" ? primitiveFields(event) : undefined,
+							}),
+						);
+					}
+				}
+				const observer = new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) {
+						if (!entry.name.startsWith(beaconUrl)) {
+							report({ kind: "entry", startMs: entry.startTime - attemptedAt, entry: entry.toJSON() });
+						}
+					}
+				});
+				observer.observe({ entryTypes: PerformanceObserver.supportedEntryTypes });
+				attemptedAt = performance.now();
+				try {
+					departures[id](url);
+				} catch (cause) {
+					report({ kind: "thrown", name: String(cause?.name ?? cause) });
+				}
+				await pause(PROBE_WINDOW_MS);
+				report({ kind: "alive" });
+				isObserving = false;
+				observer.disconnect();
+				await Promise.all(sent);
+			};
+
 			const tryNavigation = async () => {
 				for (const [id, url] of Object.entries(sinkDestinations())) {
 					await leave(id, url);
@@ -319,6 +399,10 @@
 			const play = () => {
 				if (TARGETS.role === "reader") {
 					return readStorage();
+				}
+				if (TARGETS.role.startsWith(PROBE_ROLE)) {
+					const id = TARGETS.role.slice(PROBE_ROLE.length);
+					return probe(id, sinkDestinations()[id]);
 				}
 				const destinations = {
 					...sinkDestinations(),

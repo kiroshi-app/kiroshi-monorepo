@@ -2,6 +2,8 @@ mod behaviours;
 mod host;
 mod http;
 mod placement;
+mod port_reading;
+mod port_target;
 mod probe;
 mod proofs;
 mod scenario;
@@ -100,15 +102,31 @@ impl Mode {
 	}
 }
 
+#[derive(Clone, Copy)]
+pub enum Play {
+	Proofs,
+	Probe,
+}
+
+impl Play {
+	fn parse(argument: &str) -> Option<(Self, Mode)> {
+		match argument {
+			"probe-window-sandboxed" => Some((Self::Probe, Mode::WindowSandboxed)),
+			"probe-in-thread" => Some((Self::Probe, Mode::InThread)),
+			mode => Mode::parse(mode).map(|mode| (Self::Proofs, mode)),
+		}
+	}
+}
+
 #[tauri::command]
 fn spike_secret(webview: tauri::Webview, host: tauri::State<'_, Arc<HostState>>) -> usize {
 	host.count_secret_call(webview.label())
 }
 
 fn main() -> ExitCode {
-	let Some(mode) = std::env::args().nth(1).as_deref().and_then(Mode::parse) else {
+	let Some((play, mode)) = std::env::args().nth(1).as_deref().and_then(Play::parse) else {
 		eprintln!(
-			"usage: ope-2298-html-frame <frame|window|window-isolated|window-sandboxed|in-thread>"
+			"usage: ope-2298-html-frame <frame|window|window-isolated|window-sandboxed|in-thread|probe-window-sandboxed|probe-in-thread>"
 		);
 		return ExitCode::from(USAGE_ERROR);
 	};
@@ -116,7 +134,7 @@ fn main() -> ExitCode {
 	let started = tauri::Builder::default()
 		.manage(Arc::clone(&host))
 		.invoke_handler(tauri::generate_handler![spike_secret])
-		.setup(move |app| scenario::start(app.handle().clone(), host, mode))
+		.setup(move |app| scenario::start(app.handle().clone(), host, mode, play))
 		.run(tauri::generate_context!());
 	match started {
 		Ok(()) => ExitCode::SUCCESS,
