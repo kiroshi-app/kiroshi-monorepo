@@ -4,6 +4,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectHeadingFont,
+	HOVER_TOOLTIP_WAIT,
 	slotIn,
 } from "@workspace/storybook/story-utils"
 import {
@@ -79,7 +80,9 @@ export const Default = meta.story({
 		await readsStartAlignedBehindItsGlyph(only)
 
 		await userEvent.hover(only)
-		await expect(screen.findByRole("tooltip")).rejects.toThrow()
+		await expect(
+			screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).rejects.toThrow()
 		await readsStartAlignedBehindItsGlyph(only)
 
 		const title = canvas.getByRole("heading", {
@@ -136,7 +139,11 @@ export const LongContent = meta.story({
 
 		await userEvent.hover(deep)
 		await expect(
-			await within(document.body).findByRole("tooltip"),
+			await within(document.body).findByRole(
+				"tooltip",
+				undefined,
+				HOVER_TOOLTIP_WAIT,
+			),
 		).toHaveTextContent(DEEP_PATH)
 		await readsStartAlignedBehindItsGlyph(deep)
 	},

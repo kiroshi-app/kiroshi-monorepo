@@ -8,7 +8,11 @@ import {
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
+import {
+	HOVER_TOOLTIP_WAIT,
+	hueScopeOf,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import {
 	LIBRARY_AGENT_DOCUMENT,
@@ -138,7 +142,9 @@ export const Default = meta.story({
 
 		const more = canvas.getByRole("button", { name: "More" })
 		await userEvent.hover(more)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("More")
+		await expect(
+			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).toHaveTextContent("More")
 
 		const body = slotIn(canvasElement, "markdown")
 		const paragraph = body.querySelector("p") as HTMLElement
@@ -178,7 +184,9 @@ export const BarMatchesImageBar = meta.story({
 			await expect(action.getBoundingClientRect().height).toBe(32)
 			await expect(getComputedStyle(action).transitionProperty).toBe("none")
 			await userEvent.hover(action)
-			await expect(await screen.findByRole("tooltip")).toHaveTextContent(name)
+			await expect(
+				await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+			).toHaveTextContent(name)
 			await userEvent.unhover(action)
 			await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
 		}

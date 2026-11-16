@@ -4,6 +4,7 @@ import { expect, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -12,7 +13,6 @@ import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@workspace/ui/components/ui/tooltip"
 
@@ -92,7 +92,11 @@ const sideStory = (side: Side) => ({
 			})
 
 			await userEvent.hover(trigger)
-			const bubble = await screen.findByText("New bot")
+			const bubble = await screen.findByText(
+				"New bot",
+				undefined,
+				HOVER_TOOLTIP_WAIT,
+			)
 
 			await waitFor(async () => {
 				await expect(bubble).not.toHaveAttribute("data-starting-style")
@@ -134,13 +138,6 @@ const sideStory = (side: Side) => ({
 const meta = preview.meta({
 	title: "Overlays/Tooltip",
 	component: TypedTooltip,
-	decorators: [
-		(Story) => (
-			<TooltipProvider>
-				<Story />
-			</TooltipProvider>
-		),
-	],
 	parameters: {
 		layout: "centered",
 		docs: {
@@ -166,7 +163,11 @@ const openSendTooltip = async ({
 	await userEvent.hover(
 		within(canvasElement).getByRole("button", { name: "Send" }),
 	)
-	const bubble = await screen.findByText("Send this prompt")
+	const bubble = await screen.findByText(
+		"Send this prompt",
+		undefined,
+		HOVER_TOOLTIP_WAIT,
+	)
 	await waitFor(async () => {
 		await expect(bubble).toBeVisible()
 	}, FRAME_POLL)
@@ -217,7 +218,11 @@ export const LongContent = meta.story({
 	),
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
-		const bubble = await screen.findByText(LONG_LABEL)
+		const bubble = await screen.findByText(
+			LONG_LABEL,
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 
 		await waitFor(async () => {
 			await expect(bubble.getBoundingClientRect().right).toBeLessThanOrEqual(

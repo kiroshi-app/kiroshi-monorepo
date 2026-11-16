@@ -3,6 +3,7 @@ import { expect, fn, screen, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	companionGlyphsIn,
+	HOVER_TOOLTIP_WAIT,
 	holderOf,
 	slotIn,
 	slotsIn,
@@ -340,9 +341,9 @@ export const WithStatus = meta.story({
 		await expect(getComputedStyle(time).fontVariantNumeric).toBe("tabular-nums")
 
 		await userEvent.hover(status.firstElementChild as HTMLElement)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			MISSION_STATUS.text,
-		)
+		await expect(
+			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).toHaveTextContent(MISSION_STATUS.text)
 	},
 })
 
@@ -375,9 +376,9 @@ export const LongStatus = meta.story({
 		).toBe(text.getBoundingClientRect().height)
 
 		await userEvent.hover(text)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			LONG_MISSION_STATUS.text,
-		)
+		await expect(
+			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).toHaveTextContent(LONG_MISSION_STATUS.text)
 	},
 })
 

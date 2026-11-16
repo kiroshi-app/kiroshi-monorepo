@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	hueScopeOf,
 	LAPTOP_WINDOW,
 	MarkdownProse,
@@ -1240,9 +1241,9 @@ const expectBoardPanelCallbacks = async (
 		name: "Open in Library",
 	})
 	await userEvent.hover(openInLibrary)
-	await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-		"Open in Library",
-	)
+	await expect(
+		await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+	).toHaveTextContent("Open in Library")
 	await userEvent.click(openInLibrary)
 	await expect(args.onOpenInLibrary).toHaveBeenCalledOnce()
 	await userEvent.click(within(panel).getByRole("button", { name: "Close" }))

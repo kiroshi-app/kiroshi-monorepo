@@ -6,6 +6,7 @@ import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	expectMutedUntilHoveredOrActive,
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	settled,
 	slotIn,
 } from "@workspace/storybook/story-utils"
@@ -335,7 +336,7 @@ export const SearchAfterForward = meta.story({
 				expect(document.querySelector('[role="tooltip"]')).toHaveTextContent(
 					"Search",
 				),
-			FRAME_POLL,
+			{ ...FRAME_POLL, ...HOVER_TOOLTIP_WAIT },
 		)
 		await userEvent.click(search)
 		await expect(args.onOpenSearch).toHaveBeenCalledOnce()

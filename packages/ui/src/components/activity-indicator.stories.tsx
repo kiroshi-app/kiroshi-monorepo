@@ -7,6 +7,7 @@ import {
 	companionGlyphOf,
 	companionGlyphs,
 	companionHueOf,
+	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
 	realPointer,
 	slotIn,
@@ -426,7 +427,11 @@ export const LongContent = meta.story({
 		await expect(clock.scrollWidth).toBe(clock.clientWidth)
 
 		await userEvent.hover(label)
-		const tip = await screen.findByRole("tooltip")
+		const tip = await screen.findByRole(
+			"tooltip",
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 		const box = tip.getBoundingClientRect()
 
 		await expect(tip).toHaveTextContent(LONG_TOOL_LABEL)

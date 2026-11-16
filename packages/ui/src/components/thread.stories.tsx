@@ -12,6 +12,7 @@ import {
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	HOVER_TOOLTIP_WAIT,
 	hueScopeOf,
 	isInBrowserRunner,
 	realPointer,
@@ -1679,9 +1680,9 @@ const expectJumpFocusedWithARing = async (jump: HTMLElement) => {
 
 const expectJumpTooltip = async (jump: HTMLElement) => {
 	await userEvent.hover(jump)
-	await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-		"Jump to latest",
-	)
+	await expect(
+		await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+	).toHaveTextContent("Jump to latest")
 	await userEvent.unhover(jump)
 }
 

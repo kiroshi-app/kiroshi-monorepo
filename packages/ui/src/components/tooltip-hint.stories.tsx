@@ -3,7 +3,9 @@ import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectNoHoverTooltip,
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
 	Row,
 	withMotionAllowed,
@@ -11,7 +13,6 @@ import {
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	TOOLTIP_GROUPING_WINDOW_MS,
-	TOOLTIP_OPEN_DELAY_MS,
 	TooltipHint,
 } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -43,11 +44,7 @@ const COPY_BESIDE_DELETE = {
 
 const STILL_HIDDEN_AT_MS = 300
 
-const SHOWN_BY_MS = 1500
-
 const HANDED_OFF_BY_MS = 300
-
-const PAST_THE_OPEN_DELAY_MS = TOOLTIP_OPEN_DELAY_MS * 2
 
 const PAST_THE_GROUPING_WINDOW_MS = TOOLTIP_GROUPING_WINDOW_MS * 2
 
@@ -58,7 +55,7 @@ const expectHintAfterTheDelay = async (label: string) => {
 	await expect(screen.queryByRole("tooltip")).toBeNull()
 	await expect(
 		await screen.findByRole("tooltip", undefined, {
-			timeout: SHOWN_BY_MS - STILL_HIDDEN_AT_MS,
+			timeout: HOVER_TOOLTIP_WAIT.timeout - STILL_HIDDEN_AT_MS,
 		}),
 	).toHaveTextContent(label)
 }
@@ -102,7 +99,9 @@ export const Default = meta.story({
 		await expect(trigger.parentElement?.tagName).not.toBe("SPAN")
 
 		await userEvent.hover(trigger)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+		await expect(
+			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).toHaveTextContent("Copy")
 	},
 })
 
@@ -120,7 +119,7 @@ export const WithoutContent = meta.story({
 		const trigger = canvas.getByRole("button", { name: "Copy" })
 
 		await userEvent.hover(trigger)
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expectNoHoverTooltip()
 	},
 })
 
@@ -164,7 +163,11 @@ export const WithSide = meta.story({
 		const trigger = canvas.getByRole("button", { name: "New bot" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole("tooltip")
+		const hint = await screen.findByRole(
+			"tooltip",
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 
 		await waitFor(async () => {
 			await expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -189,7 +192,11 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Summarise" }))
-		const hint = await screen.findByRole("tooltip")
+		const hint = await screen.findByRole(
+			"tooltip",
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 
 		await expect(hint).toHaveTextContent(LONG_HINT)
 		await waitFor(async () => {
@@ -253,7 +260,11 @@ export const AdjacentHints = meta.story({
 	play: ({ canvas, userEvent }) =>
 		withMotion(async () => {
 			await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
-			const bubble = await screen.findByRole("tooltip")
+			const bubble = await screen.findByRole(
+				"tooltip",
+				undefined,
+				HOVER_TOOLTIP_WAIT,
+			)
 			const positioner = bubble.parentElement as HTMLElement
 
 			await waitFor(async () => {
@@ -408,7 +419,7 @@ export const SweepOpensNothing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The pointer crossing two hinted controls on its way elsewhere, resting on neither. Check that no bubble shows on either control, and that none turns up once the pointer is gone, even after twice the delay a first hint waits.",
+					"The pointer crossing two hinted controls on its way elsewhere, resting on neither. Check that no bubble shows on either control, and that none turns up once the pointer is gone, even 1.5 s after the last control was crossed.",
 			},
 		},
 	},
@@ -421,8 +432,7 @@ export const SweepOpensNothing = meta.story({
 		await expect(screen.queryByRole("tooltip")).toBeNull()
 		await userEvent.unhover(remove)
 
-		await elapse(PAST_THE_OPEN_DELAY_MS)
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expectNoHoverTooltip()
 	},
 })
 
@@ -440,7 +450,11 @@ export const ReducedMotion = meta.story({
 		const trigger = canvas.getByRole("button", { name: "Copy" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole("tooltip")
+		const hint = await screen.findByRole(
+			"tooltip",
+			undefined,
+			HOVER_TOOLTIP_WAIT,
+		)
 		const positioner = hint.parentElement as HTMLElement
 
 		await expect(getComputedStyle(hint).animationName).toBe("none")

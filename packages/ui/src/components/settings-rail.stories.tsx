@@ -6,6 +6,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	animatedTransitionsOf,
 	colourTransitionsOf,
+	HOVER_TOOLTIP_WAIT,
 	hasOverlayScrollbars,
 	isInBrowserRunner,
 	slotsIn,
@@ -219,9 +220,9 @@ export const IconsOnly = meta.story({
 
 		await expect(rail.getBoundingClientRect().width).toBeLessThan(80)
 		await userEvent.hover(appearance)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"Appearance",
-		)
+		await expect(
+			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
+		).toHaveTextContent("Appearance")
 		await expectIconSwapsWithSelection({ canvas, userEvent })
 	},
 })
