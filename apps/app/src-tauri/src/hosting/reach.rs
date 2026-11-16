@@ -605,12 +605,10 @@ const CONVERSATION_LIST_POINTER: &str = "/conversationIds";
 const QUESTION_REQUESTED: &str = "questionRequested";
 
 fn question_asked_in(published: &Published) -> Option<&str> {
-	let kind = published.payload.pointer("/event/type").and_then(Value::as_str);
-	if published.event != crate::agent::commands::EVENT_CHANNEL || kind != Some(QUESTION_REQUESTED)
-	{
-		return None;
-	}
-	published.payload.pointer("/scope/conversationId").and_then(Value::as_str)
+	let payload = &published.payload;
+	let is_asked = published.event == crate::agent::commands::EVENT_CHANNEL
+		&& payload["event"]["type"] == QUESTION_REQUESTED;
+	is_asked.then(|| payload["scope"]["conversationId"].as_str()).flatten()
 }
 
 #[derive(Clone, Copy)]

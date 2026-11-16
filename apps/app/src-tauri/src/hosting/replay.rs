@@ -283,7 +283,7 @@ pub(super) async fn recorded<R: Runtime>(
 		let missed = loop {
 			tokio::select! {
 				frame = heard.recv() => match frame {
-					Ok(frame) => all_reached(app, &mut guest_events, ring, vec![frame]).await,
+					Ok(frame) => all_reached(app, &mut guest_events, ring, [frame]).await,
 					Err(RecvError::Lagged(missed)) => break missed,
 					Err(RecvError::Closed) => return,
 				},
@@ -300,7 +300,7 @@ async fn all_reached<R: Runtime>(
 	app: &AppHandle<R>,
 	guest_events: &mut GuestEvents,
 	ring: &watch::Sender<Ring>,
-	frames: Vec<Frame>,
+	frames: impl IntoIterator<Item = Frame>,
 ) {
 	for frame in frames {
 		let addressed = guest_events.reach_the_guest(app, &frame).await;
