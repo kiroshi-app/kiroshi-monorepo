@@ -16,6 +16,8 @@ actor RelayConnection {
     static let silentPingsBeforeDrop = 3
     static let sharedSpaceDeadline = Duration.seconds(30)
     static let callDeadline = Duration.seconds(300)
+    static let resumeDeadline = Duration.seconds(300)
+    static let resumeCommand = "relay_resume"
     static let hello = Data(#"{"hello":{}}"#.utf8)
     static let noKeyId: UInt32 = 0
     static let answerRefusedByTheRelay =
@@ -23,6 +25,7 @@ actor RelayConnection {
 
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
+    private let accountId: String?
     private let request: URLRequest
     private let device: RelayDevice
     private var spaceKeys: SpaceKeys?
@@ -42,6 +45,10 @@ actor RelayConnection {
     private var flights: [Int: RelayFlight] = [:]
     private var callTasks: [Int: Task<Void, Never>] = [:]
     private var subscribers: [UUID: AsyncStream<RelayUpdate>.Continuation] = [:]
+    private var sequence = EventSequence()
+    private var resumeCall: RelayResumeCall?
+    private var isRereadDue = false
+    private var eventsAfterTheReread: [RelayEvent] = []
 
     init(
         baseURL: URL,
@@ -50,9 +57,11 @@ actor RelayConnection {
         device: RelayDevice,
         spaceKeys: SpaceKeys?,
         environment: RelayEnvironment,
+        accountId: String? = nil,
         backoff: Backoff = Backoff()
     ) {
         self.instanceId = instanceId
+        self.accountId = accountId
         request = Self.memberRequest(
             baseURL: baseURL, instanceId: instanceId, bearer: bearer, device: device.relayId)
         self.device = device
@@ -76,6 +85,9 @@ actor RelayConnection {
             Task { await self?.drop(id) }
         }
         continuation.yield(.state(state))
+        if case .online = state {
+            continuation.yield(.reread)
+        }
         subscribers[id] = continuation
         return stream
     }
@@ -97,6 +109,10 @@ actor RelayConnection {
         socket = nil
         challenge = nil
         failPendingCalls()
+        sequence.closed()
+        endResumeCall()
+        isRereadDue = false
+        eventsAfterTheReread = []
         publish(.paused)
         for subscriber in subscribers.values {
             subscriber.finish()
@@ -186,6 +202,7 @@ actor RelayConnection {
         keyAskedUnder = nil
         self.outbox = outbox
         outbox.yield(.hello)
+        follow(sequence.opened())
         backoff.reset()
         silentPings = 0
         let ending = await withTaskGroup(of: RelayEnding?.self) { group in
@@ -210,6 +227,8 @@ actor RelayConnection {
             self.outbox = nil
             challenge = nil
             failPendingCalls(with: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
+            sequence.closed()
+            endResumeCall()
         }
         return ending
     }
@@ -487,6 +506,7 @@ actor RelayConnection {
         }
         if !Task.isCancelled {
             publish(.online(sharedSpaceId: shared.spaceId))
+            rereadIfDue()
         }
         return nil
     }
@@ -522,10 +542,93 @@ actor RelayConnection {
             guard opened.header.to == device.keys.deviceId else { return }
             resynced(endingAnswersTo: resync.answered)
         } else if let event = head.event {
-            broadcast(.event(RelayEvent(name: event.event, frame: frame)))
+            let heard = RelayEvent(name: event.event, frame: frame)
+            guard let stamped = head.stamped(heard, at: accountId) else {
+                deliver(heard)
+                return
+            }
+            follow(sequence.heard(stamped))
+        } else if let resume = head.resumeAnswer {
+            guard resume.token == sequence.pendingToken else { return }
+            follow(sequence.answered(token: resume.token, isTooOld: resume.tooOld == true))
         } else if let id = head.id, let status = head.status {
             settle(id, with: .success(RelayAnswer(status: status, frame: frame)))
         }
+    }
+
+    private func follow(_ outcome: SequenceOutcome) {
+        if sequence.pendingToken != resumeCall?.token {
+            endResumeCall()
+        }
+        if outcome.rereads {
+            reread()
+        }
+        for event in outcome.applied {
+            deliver(event)
+        }
+        if let resume = outcome.resume {
+            send(resume)
+        }
+    }
+
+    private func reread() {
+        isRereadDue = true
+        guard case .online = state else { return }
+        rereadIfDue()
+    }
+
+    private func rereadIfDue() {
+        guard isRereadDue else { return }
+        isRereadDue = false
+        broadcast(.reread)
+        for event in eventsAfterTheReread {
+            broadcast(.event(event))
+        }
+        eventsAfterTheReread = []
+    }
+
+    private func deliver(_ event: RelayEvent) {
+        guard !isRereadDue else {
+            eventsAfterTheReread.append(event)
+            return
+        }
+        broadcast(.event(event))
+    }
+
+    private func send(_ resume: RelayResume) {
+        let id = nextCallId
+        nextCallId += 1
+        guard
+            let frame = try? JSONEncoder().encode(
+                RelayCallFrame(id: id, command: Self.resumeCommand, args: resume))
+        else { return }
+        flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
+        if challenge != nil {
+            queue(id)
+        }
+        let token = resume.token
+        let deadline = Task { [weak self, clock] in
+            do {
+                try await clock.sleep(for: Self.resumeDeadline)
+            } catch {
+                return
+            }
+            await self?.resumeLapsed(token)
+        }
+        resumeCall = RelayResumeCall(id: id, token: token, deadline: deadline)
+    }
+
+    private func resumeLapsed(_ token: String) {
+        relayLog.notice(
+            "No answer to the relay resume of Space \(self.instanceId, privacy: .public)")
+        follow(sequence.lapsed(token: token))
+    }
+
+    private func endResumeCall() {
+        guard let resumeCall else { return }
+        resumeCall.deadline.cancel()
+        flights[resumeCall.id] = nil
+        self.resumeCall = nil
     }
 
     private func dropped(_ frame: RelayWireFrame, holding held: SpaceKeys) {
@@ -590,7 +693,7 @@ actor RelayConnection {
         for id in answered where pendingCalls[id] != nil {
             settle(id, with: .success(Self.refusedAnswer(to: id)))
         }
-        broadcast(.resynced)
+        follow(sequence.resynced())
     }
 
     private static func refusedAnswer(to id: Int) -> RelayAnswer {
@@ -687,6 +790,12 @@ private enum RelayOutgoing: Sendable {
     case keyRequest
 }
 
+private struct RelayResumeCall {
+    let id: Int
+    let token: String
+    let deadline: Task<Void, Never>
+}
+
 private struct RelayFlight: Sendable {
     enum Stage: Sendable {
         case awaitingChallenge
@@ -721,6 +830,12 @@ private struct RelayFrameHead: Decodable {
 
     struct Hello: Decodable {}
 
+    struct ResumeAnswer: Decodable {
+        let token: String
+        let replayed: Int?
+        let tooOld: Bool?
+    }
+
     struct Resync: Decodable {
         let answered: [Int]
 
@@ -748,6 +863,12 @@ private struct RelayFrameHead: Decodable {
         case event
         case hello
         case resync
+        case epoch
+        case seq
+        case seqs
+        case rest
+        case token
+        case body
     }
 
     let id: Int?
@@ -755,6 +876,18 @@ private struct RelayFrameHead: Decodable {
     let event: Event?
     let hello: Hello?
     let resync: Resync?
+    let epoch: String?
+    let seq: Int?
+    let seqs: [String: Int]?
+    let rest: Int?
+    let token: String?
+    let resumeAnswer: ResumeAnswer?
+
+    func stamped(_ event: RelayEvent, at accountId: String?) -> StampedEvent? {
+        let place = accountId.flatMap { seqs?[$0] } ?? rest ?? seq
+        guard let epoch, let place else { return nil }
+        return StampedEvent(event: event, epoch: epoch, seq: place, token: token)
+    }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -763,5 +896,12 @@ private struct RelayFrameHead: Decodable {
         event = try? container.decodeIfPresent(Event.self, forKey: .event)
         hello = try? container.decodeIfPresent(Hello.self, forKey: .hello)
         resync = try? container.decodeIfPresent(Resync.self, forKey: .resync)
+        epoch = try? container.decodeIfPresent(String.self, forKey: .epoch)
+        seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
+        seqs = try? container.decodeIfPresent([String: Int].self, forKey: .seqs)
+        rest = try? container.decodeIfPresent(Int.self, forKey: .rest)
+        token = try? container.decodeIfPresent(String.self, forKey: .token)
+        resumeAnswer = (try? container.decodeIfPresent(ResumeAnswer.self, forKey: .body))
+            .flatMap { $0.replayed != nil || $0.tooOld != nil ? $0 : nil }
     }
 }

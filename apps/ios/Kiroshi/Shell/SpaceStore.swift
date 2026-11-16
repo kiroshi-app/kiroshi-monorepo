@@ -97,7 +97,7 @@ final class SpaceStore {
         guard !hasLeft else { return }
         let connection = RelayConnection(
             baseURL: cloud.baseURL, instanceId: spaceId, bearer: bearer, device: device,
-            spaceKeys: spaceKeys, environment: relay)
+            spaceKeys: spaceKeys, environment: relay, accountId: accountId)
         self.connection = connection
         pictures = CompanionPictures(connection: connection)
         citedFiles = CitedFiles(connection: connection)

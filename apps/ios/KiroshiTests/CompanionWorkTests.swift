@@ -70,12 +70,12 @@ struct CompanionWorkTests {
         #expect(working(work) == ["juniper"])
     }
 
-    @Test func aDroppedSocketForgetsTheQuestionsAndTheirSettling() {
+    @Test func aRereadForgetsTheQuestionsAndTheirSettling() {
         let work = CompanionWork()
         work.hear(event(.questionRequested(Self.format)))
         work.hear(event(.permissionResolved(id: "q1")))
 
-        work.apply(.state(.unreachable))
+        work.apply(.reread)
         work.hear(event(.questionRequested(Self.format)))
 
         #expect(work.question("q1") != nil)
@@ -192,14 +192,18 @@ struct CompanionWorkTests {
         #expect(work.workers.isEmpty)
     }
 
-    @Test func aDroppedConnectionForgetsWhoWorksSinceNoEventIsReplayed() {
+    @Test func aDroppedConnectionKeepsWhoWorksUntilTheRelayAsksForAReread() {
         let work = CompanionWork()
         work.hear(event(.turn(.running)))
 
-        work.apply(.state(.online(sharedSpaceId: "s-1")))
+        for state in [
+            RelayState.unreachable, .connecting, .hostOffline, .online(sharedSpaceId: "s-1"),
+        ] {
+            work.apply(.state(state))
+        }
         #expect(working(work) == ["juniper"])
 
-        work.apply(.state(.hostOffline))
+        work.apply(.reread)
         #expect(work.workers.isEmpty)
     }
 

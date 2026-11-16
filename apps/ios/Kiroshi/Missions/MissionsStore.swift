@@ -112,11 +112,15 @@ final class MissionsStore {
         switch update {
         case .state(.online(let spaceId)):
             sharedSpaceId = spaceId
-            reread()
+            if hasFailed {
+                reread()
+            }
         case .state:
             break
-        case .resynced:
+        case .reread where hasLoaded:
             resyncReread.start { [weak self] in self?.reread() }
+        case .reread:
+            reread()
         case .event(let event):
             guard let changed = MissionChanged(event), sharedSpaceId != nil else { return }
             entries = entries.map { entry in
