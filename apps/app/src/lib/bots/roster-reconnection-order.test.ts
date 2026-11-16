@@ -193,22 +193,17 @@ it("reads no main chat on a reconnection whose reread of the shared agents fails
 	expect(pageReads).not.toHaveBeenCalled()
 })
 
-const heldRead = () => {
-	let release: () => void = () => undefined
-	const held = new Promise<void>((resolve) => {
-		release = resolve
-	})
-	return { held, release }
-}
-
 it("rereads the waiting questions of an open thread only once the shared agents are reread, and never those of an agent unshared while down", async () => {
 	const { store, shed, kept, unshared, chat } = await joinedMember()
 	const keptChatId = chat.controller.stateFor(kept.id).conversationId
 	const questionReads = vi.spyOn(chat.driver, "pendingQuestions")
 	const listPage = store.conversationPage.bind(store)
-	const rosterRead = heldRead()
+	let releaseRosterRead: () => void = () => undefined
+	const rosterRead = new Promise<void>((resolve) => {
+		releaseRosterRead = resolve
+	})
 	vi.spyOn(store, "conversationPage").mockImplementation(async (...page) => {
-		await rosterRead.held
+		await rosterRead
 		return listPage(...page)
 	})
 
@@ -219,7 +214,7 @@ it("rereads the waiting questions of an open thread only once the shared agents 
 
 	expect(questionReads).not.toHaveBeenCalled()
 
-	rosterRead.release()
+	releaseRosterRead()
 	await settled()
 
 	expect(questionReads.mock.calls).toEqual([[keptChatId]])
