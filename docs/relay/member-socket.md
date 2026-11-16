@@ -367,7 +367,7 @@ the space, at most 4 MiB of them, and drops the oldest first.
 A client keeps the `epoch` and the `seq` of the last event frame it applied:
 
 - A frame carrying a `token` that is not the one of its own pending resume was
-  replayed for another member: drop it, and change nothing.
+  replayed for a resume it no longer awaits: drop it, and change nothing.
 - A frame of the same epoch whose `seq` is at most the last applied is a
   duplicate: drop it.
 - A frame whose `seq` is the last applied plus one: apply it.
@@ -395,12 +395,18 @@ stayed open only sees the `seq` continue. When the
 epoch is no longer the host's, or `since` is older than what the host kept, the
 host replays nothing and answers `{ "token": "a-random-token", "tooOld": true }`.
 
-The relay hands every answer to every member, so a client takes a resume answer
-only when its `token` is the one it sent. On `tooOld`, or when no answer comes
-within 300 seconds, the client adopts the `epoch` and `seq` of the next frame and
-re-reads with calls the state it shows (for example `conversation_list`,
-`conversation_message_page`, `mission_list`). A client with no epoch yet re-reads
-on each socket open. Neither the epoch nor the seq survives an app restart.
+The host addresses the answer to a `relay_resume`, like every answer and like
+the frames it replays, to the one device that sent the call, and the relay hands
+it to that device alone. A client takes a resume answer only when its `token` is
+the one of its pending resume: any other answers a resume it no longer awaits.
+On `tooOld`, or when no answer comes within 300 seconds, the client adopts the
+`epoch` and `seq` of the next frame and re-reads with calls the state it shows
+(for example `conversation_list`, `conversation_message_page`, `mission_list`).
+The host expects the same of a member whose `relay_resume` it answers with an
+error status, an answer that carries the `id` of the call and no `token`: that
+member adopts the `epoch` and `seq` of the next frame and re-reads the state it
+shows. A client with no epoch yet re-reads on each socket open. Neither the
+epoch nor the seq survives an app restart.
 
 ## Resync after a refused frame
 
