@@ -112,7 +112,6 @@ const MissionTreeRow = ({
 			content={isTooltipHidden ? null : title}
 			side="right"
 			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
-			variant="line"
 		>
 			<button
 				aria-current={id === openMissionId ? "page" : undefined}

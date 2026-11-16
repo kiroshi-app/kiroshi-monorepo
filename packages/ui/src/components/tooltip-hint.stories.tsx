@@ -4,10 +4,12 @@ import { expect, screen, waitFor } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectNoHoverTooltip,
+	expectTooltipWrappedWhole,
 	FRAME_POLL,
 	findHoverTooltip,
 	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
+	openTooltipOf,
 	Row,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -199,6 +201,56 @@ export const LongContent = meta.story({
 				2 * Number.parseFloat(getComputedStyle(hint).lineHeight),
 			)
 		}, FRAME_POLL)
+	},
+})
+
+const UNBREAKABLE_HINT =
+	"https://kiroshi.example/spaces/perso/conversations/launch-readiness-review/documents/autumn-release-notes"
+
+export const LongWordBreaksInsideTheBubble = meta.story({
+	tags: ["test-only"],
+	args: {
+		content: UNBREAKABLE_HINT,
+		children: <Button variant="outline">Open</Button>,
+	},
+	play: async ({ canvas }) => {
+		const hint = await openTooltipOf(
+			canvas.getByRole("button", { name: "Open" }),
+		)
+
+		await expectTooltipWrappedWhole(hint, UNBREAKABLE_HINT)
+	},
+})
+
+const NARROW_WINDOW_WIDTH = 320
+
+export const LongContentInANarrowWindow = meta.story({
+	tags: ["test-only"],
+	args: {
+		content: LONG_HINT,
+		children: <Button variant="outline">Summarise</Button>,
+	},
+	globals: { viewport: { value: "narrow" } },
+	parameters: {
+		viewport: {
+			options: {
+				narrow: {
+					name: `${NARROW_WINDOW_WIDTH}px wide window`,
+					styles: { width: `${NARROW_WINDOW_WIDTH}px`, height: "568px" },
+				},
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const hint = await openTooltipOf(
+			canvas.getByRole("button", { name: "Summarise" }),
+		)
+		const box = hint.getBoundingClientRect()
+
+		await expect(window.innerWidth).toBe(NARROW_WINDOW_WIDTH)
+		await expectTooltipWrappedWhole(hint, LONG_HINT)
+		await expect(box.left).toBeGreaterThanOrEqual(0)
+		await expect(box.right).toBeLessThanOrEqual(NARROW_WINDOW_WIDTH)
 	},
 })
 

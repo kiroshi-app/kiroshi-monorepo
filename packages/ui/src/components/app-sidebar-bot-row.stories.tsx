@@ -10,6 +10,7 @@ import {
 	expectQuestionCutInsideTheRow,
 	expectTooltipOnOneLine,
 	expectTooltipPastTheSidebarEdge,
+	expectTooltipWrappedWhole,
 	openTooltipOf,
 	SidebarFrame,
 	slotIn,
@@ -315,3 +316,43 @@ export const TooltipOnTheCollapsedSidebar = meta.story({
 		await expect(row).not.toHaveAttribute("aria-describedby")
 	},
 })
+
+const LONG_AGENT_NAME =
+	"Atlas, the research agent who reads every customer interview and files each finding under its theme"
+
+const LONG_NAMED_AGENT: AppSidebarBot = { ...ATLAS, name: LONG_AGENT_NAME }
+
+const longAgentNameTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { bot: LONG_NAMED_AGENT, isSelected: false },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on an agent row whose name the row cuts, in the ${isSidebarCollapsed ? "collapsed sidebar, its rows drawn compact" : "expanded sidebar"}. Check the tooltip holds the whole agent name, wrapped onto more lines inside the bubble with no ellipsis, that the row keeps its own ellipsis, and that the tooltip sits just past the sidebar edge and centred on the row.`,
+			},
+		},
+	},
+	render: (args: ComponentProps<typeof BotRosterRow>) => (
+		<CompactRowsContext.Provider value={isSidebarCollapsed}>
+			<li aria-hidden="true" className="h-40" />
+			<BotRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const name = slotIn(row, "roster-row-name")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_AGENT_NAME)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+	},
+})
+
+export const TooltipWrapsALongAgentName = meta.story(
+	longAgentNameTooltipStory(false),
+)
+
+export const TooltipWrapsALongAgentNameOnTheCollapsedSidebar = meta.story(
+	longAgentNameTooltipStory(true),
+)
