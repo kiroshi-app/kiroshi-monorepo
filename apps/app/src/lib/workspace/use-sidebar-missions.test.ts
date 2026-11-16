@@ -123,16 +123,7 @@ const ELSEWHERE = anEntry({
 })
 
 const aMark = (id: string, originConversationId: string): MissionEntry => ({
-	mission: aMission({
-		id,
-		botId: BOT.id,
-		originConversationId,
-		state: "working",
-		stateSeq: 1,
-		openedAt: NOW - 5000,
-		lastActivityAt: null,
-		closedAt: null,
-	}),
+	mission: aMission({ id, botId: BOT.id, originConversationId }),
 })
 
 const MARKED_ON_LISTED = aMark("m-marked-listed", "c-2")
