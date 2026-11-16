@@ -26,14 +26,10 @@ const HINT_CLOSE_GRACE_MS = 80
 
 const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
-type TooltipHintVariant = "hint" | "line"
-
-const HINT = cn("break-words", STILL_UNDER_REDUCED_MOTION)
-
-const BUBBLE: Record<TooltipHintVariant, string> = {
-	hint: HINT,
-	line: cn("block truncate", STILL_UNDER_REDUCED_MOTION),
-}
+const BUBBLE = cn(
+	"max-w-[min(var(--container-xs),var(--available-width))] wrap-anywhere",
+	STILL_UNDER_REDUCED_MOTION,
+)
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"
 
@@ -43,7 +39,6 @@ type SharedBubble = {
 	content: ReactNode
 	side: TooltipHintSide
 	sideOffset: TooltipHintSideOffset
-	variant: TooltipHintVariant
 }
 
 const SharedBubbleContext = createContext<
@@ -55,7 +50,6 @@ type TooltipHintProps = {
 	children: ReactElement
 	side?: TooltipHintSide
 	sideOffset?: TooltipHintSideOffset
-	variant?: TooltipHintVariant
 }
 
 const TooltipHint = ({
@@ -63,7 +57,6 @@ const TooltipHint = ({
 	children,
 	side = "top",
 	sideOffset,
-	variant = "hint",
 }: TooltipHintProps) => {
 	const sharedBubble = useContext(SharedBubbleContext)
 
@@ -75,7 +68,7 @@ const TooltipHint = ({
 				delay={TOOLTIP_OPEN_DELAY_MS}
 				disabled={!content}
 				handle={sharedBubble}
-				payload={{ content, side, sideOffset, variant }}
+				payload={{ content, side, sideOffset }}
 				render={children}
 			/>
 		)
@@ -86,7 +79,7 @@ const TooltipHint = ({
 			<TooltipTrigger delay={TOOLTIP_OPEN_DELAY_MS} render={children} />
 			{content ? (
 				<TooltipContent
-					className={BUBBLE[variant]}
+					className={BUBBLE}
 					role="tooltip"
 					side={side}
 					sideOffset={sideOffset}
@@ -118,7 +111,7 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 			<TooltipPrimitive.Root handle={sharedBubble}>
 				{({ payload }) => (
 					<TooltipContent
-						className={BUBBLE[payload?.variant ?? "hint"]}
+						className={BUBBLE}
 						role="tooltip"
 						side={payload?.side}
 						sideOffset={payload?.sideOffset}

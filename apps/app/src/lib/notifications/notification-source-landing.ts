@@ -183,18 +183,18 @@ export const createNotificationLanding = ({
 		spaces.select(roster.hostSpaceIdOf(spaceId))
 	}
 
-	const openInTab = (conversationId: string) => {
+	const openInItsSpace = (conversationId: string) => {
 		const spaceId = roster.spaceOfConversation(conversationId)
 
 		if (spaceId) {
-			conversations.openInTab(conversationId, spaceId)
+			conversations.openInSpace(conversationId, spaceId)
 		}
 	}
 
 	const landOnConversation = (conversationId: string) =>
 		conversations.open({
 			conversationId,
-			openInPlace: () => openInTab(conversationId),
+			openInPlace: () => openInItsSpace(conversationId),
 		})
 
 	const activate = ({ kind, id }: NotificationTarget) => {

@@ -1552,6 +1552,8 @@ navigation-appsidebarbotrow--idle-bot-ignores-its-background-tasks
 navigation-appsidebarbotrow--selected-bot
 navigation-appsidebarbotrow--tooltip-carries-the-agent-name-alone
 navigation-appsidebarbotrow--tooltip-on-the-collapsed-sidebar
+navigation-appsidebarbotrow--tooltip-wraps-a-long-agent-name
+navigation-appsidebarbotrow--tooltip-wraps-a-long-agent-name-on-the-collapsed-sidebar
 navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarbotrow--working-bot-waiting-on-one-background-task
 navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
@@ -1580,6 +1582,8 @@ navigation-appsidebarconversationrow--mission-group-menu-open
 navigation-appsidebarconversationrow--mission-group-menu-open-dark
 navigation-appsidebarconversationrow--mission-tooltip-carries-the-title-alone
 navigation-appsidebarconversationrow--mission-tooltip-on-the-collapsed-sidebar
+navigation-appsidebarconversationrow--mission-tooltip-wraps-a-long-title
+navigation-appsidebarconversationrow--mission-tooltip-wraps-a-long-title-on-the-collapsed-sidebar
 navigation-appsidebarconversationrow--mixed-rooms-and-solo-conversations
 navigation-appsidebarconversationrow--monochrome-row
 navigation-appsidebarconversationrow--monochrome-row-dark
@@ -1614,6 +1618,7 @@ navigation-appsidebarconversationrow--solo-conversation-row-dark
 navigation-appsidebarconversationrow--tooltip-carries-the-title-alone
 navigation-appsidebarconversationrow--tooltip-closes-while-the-row-menu-is-open
 navigation-appsidebarconversationrow--tooltip-on-the-icon-rail
+navigation-appsidebarconversationrow--tooltip-wraps-a-long-title-on-the-icon-rail
 navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
 navigation-appsidebarconversationrow--working-conversation-waiting-on-one-background-task
 navigation-appsidebarconversationrow--working-conversation-waiting-on-two-background-tasks
@@ -2551,6 +2556,8 @@ overlays-tooltiphint--hands-off-just-after-closing
 overlays-tooltiphint--hands-off-without-delay
 overlays-tooltiphint--in-row
 overlays-tooltiphint--long-content
+overlays-tooltiphint--long-content-in-a-narrow-window
+overlays-tooltiphint--long-word-breaks-inside-the-bubble
 overlays-tooltiphint--on-focus
 overlays-tooltiphint--opens-after-the-delay
 overlays-tooltiphint--reduced-motion

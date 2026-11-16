@@ -64,7 +64,7 @@ import {
 } from "@/lib/library/use-thread-board-drawers"
 import {
 	useOpenLibraryDocument,
-	useOpenLibraryItemInItsTab,
+	useOpenLibraryItem,
 	useOpenLibraryItemInNewTab,
 } from "@/lib/navigation/use-open-library-document"
 import { useInvalidateOnHostEvent } from "@/lib/query/host-invalidations"
@@ -158,11 +158,11 @@ export const useThreadDocuments = (
 
 export const ThreadDocumentsInTabs = ({ children }: PropsWithChildren) => {
 	const documents = useContext(ThreadDocumentsContext)
-	const openInItsTab = useOpenLibraryItemInItsTab()
+	const openInLibrary = useOpenLibraryItem()
 
 	return (
 		<ThreadDocumentsContext
-			value={documents && { ...documents, open: openInItsTab }}
+			value={documents && { ...documents, open: openInLibrary }}
 		>
 			{children}
 		</ThreadDocumentsContext>
@@ -363,19 +363,14 @@ export const ThreadBoardPanel = ({
 	})
 	const { stopAll } = useStopLibraryBoardDrawers(documents.spaceId)
 	const summary = useBoardSummary(documents.spaceId, documents.boardOf(name))
-	const openInItsTab = useOpenLibraryItemInItsTab()
+	const openInLibrary = useOpenLibraryItem()
 	const { width, keepWidth } = useKeptPanelWidth()
-
-	const openInLibrary = () => {
-		documents.close()
-		openInItsTab({ kind: "board", name })
-	}
 
 	return (
 		<DocumentPanel
 			defaultWidth={DOCUMENT_PANEL_OPENING_WIDTH}
 			onClose={documents.close}
-			onOpenInLibrary={openInLibrary}
+			onOpenInLibrary={() => openInLibrary({ kind: "board", name })}
 			onWidthChange={keepWidth}
 			presence={
 				<LibraryDocumentPresence
