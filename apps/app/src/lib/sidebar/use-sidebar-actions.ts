@@ -126,12 +126,18 @@ export const useSidebarActions = ({
 					return
 				}
 				void sections.create(born.spaceId, name, born.botId).then((created) => {
-					if (created && born.conversationId) {
-						void roster.moveConversationToSection(
-							born.conversationId,
-							created.id,
-						)
+					const conversation = born.conversationId
+					if (!created || !conversation) {
+						return
 					}
+					void roster
+						.moveConversationToSection(conversation, created.id)
+						.catch((reason: unknown) => {
+							void reportFailure(
+								{ title: i18n.t("bots:roster.conversationUnsaved") },
+								{ conversation, reason },
+							)
+						})
 				})
 			},
 			onCreateSpace: () => {

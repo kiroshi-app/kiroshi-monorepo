@@ -991,6 +991,11 @@ export const createRosterController = (
 		return null
 	}
 
+	const reloadAndReject = async (reason: unknown): Promise<never> => {
+		await reload()
+		throw reason
+	}
+
 	const writeConversation = (
 		botIds: string[],
 		hold: (written: Conversation, spaceRowId: string) => void,
@@ -1279,12 +1284,12 @@ export const createRosterController = (
 			commit(async () => {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				apply(await store.setBotAvatarImage(id, bytes))
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		remember: (id: string, memory: string) =>
 			commit(async () => {
 				apply(await store.setBotMemory(id, memory))
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		moveToSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1303,7 +1308,7 @@ export const createRosterController = (
 				)
 				admit({ ...moved, sectionId: null }, spaceRowId)
 				return moved
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		addToSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1407,7 +1412,7 @@ export const createRosterController = (
 					icon: moved.icon,
 					color: moved.color,
 				})
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		describeConversation: (id: string, value: ConversationSettingsValue) => {
 			const conversation = heldConversation(id)

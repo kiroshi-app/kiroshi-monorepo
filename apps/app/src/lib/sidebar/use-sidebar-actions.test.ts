@@ -352,3 +352,58 @@ describe("deleting a conversation", () => {
 		})
 	})
 })
+
+const sectionBornFrom = (moveConversationToSection: () => Promise<void>) => {
+	reportFailure.mockClear()
+	const roster = {
+		getState: () => ({
+			rosters: {},
+			conversationRosters: { "s-1": [{ id: "c-1" }] },
+			spaceRowId: "s-1",
+		}),
+		moveConversationToSection: vi.fn(moveConversationToSection),
+	}
+	const source: SidebarActionsSource = {
+		attachments: UNUSED,
+		collapsedSections: UNUSED,
+		conversations: UNUSED,
+		drafts: UNUSED,
+		joinedSpaces: UNUSED,
+		openedMission: UNUSED,
+		roster: roster as never,
+		runtimes: UNUSED,
+		sections: { create: async () => ({ id: "sec-1" }) } as never,
+		settings: UNUSED,
+		spaces: UNUSED,
+	}
+	const { result } = renderHook(() => useSidebarActions(source))
+	return { actions: result.current, roster }
+}
+
+describe("creating a section from a conversation row", () => {
+	it("reports once a conversation the store refuses to move into the new section", async () => {
+		const born = sectionBornFrom(REFUSED)
+
+		born.actions.onCreateSection("Rooms", "c-1")
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("bots:roster.conversationUnsaved") },
+				{ conversation: "c-1", reason: expect.anything() },
+			),
+		)
+	})
+
+	it("moves the conversation into the new section without a notice", async () => {
+		const born = sectionBornFrom(SETTLED)
+
+		born.actions.onCreateSection("Rooms", "c-1")
+
+		await vi.waitFor(() =>
+			expect(
+				born.roster.moveConversationToSection,
+			).toHaveBeenCalledExactlyOnceWith("c-1", "sec-1"),
+		)
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+})
