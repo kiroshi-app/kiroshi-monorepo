@@ -69,6 +69,13 @@ export const CompanionScreenHost = ({
 		)
 	}
 
+	const refuseSettingsWrite = (reason: unknown) => {
+		void reportFailure(
+			{ title: i18n.t("bots:roster.settingsUnsaved") },
+			{ botId: settingsBot.id, reason },
+		)
+	}
+
 	return (
 		<CompanionSettingsScreenBody
 			guardLeave={guardLeave}
@@ -111,10 +118,14 @@ export const CompanionScreenHost = ({
 			outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
 			memory={settingsBot.memory}
 			onMemoryChange={(memory) => {
-				void roster.controller.remember(settingsBot.id, memory)
+				void roster.controller
+					.remember(settingsBot.id, memory)
+					.catch(refuseSettingsWrite)
 			}}
 			onAvatarUpload={(file) => {
-				void roster.controller.uploadAvatar(settingsBot.id, file)
+				void roster.controller
+					.uploadAvatar(settingsBot.id, file)
+					.catch(refuseSettingsWrite)
 			}}
 			onDelete={() => {
 				void deleteBot(settingsBot.id).then(leave, refuseDeletion)

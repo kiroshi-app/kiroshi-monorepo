@@ -11,9 +11,11 @@ const bots = {
 	roster: {
 		label: "Conversations",
 		create: "Create an agent",
+		createFailed: "Couldn’t create the agent. Retry.",
 		createMenu: "Create",
 		conversation: {
 			create: "Start a conversation",
+			createFailed: "Couldn’t start the conversation. Retry.",
 			others: "+{{count}}",
 			preview: "{{name}}: {{text}}",
 			you: "You",
@@ -47,6 +49,7 @@ const bots = {
 		openInNewTab: "Open in a new tab",
 		settings: "Open settings",
 		duplicate: "Duplicate",
+		duplicateFailed: "Couldn’t duplicate this agent. Retry.",
 		spaces: {
 			label: "Spaces",
 			lastSpace:
@@ -124,6 +127,9 @@ const bots = {
 			up: "Online",
 			connecting: "Connecting…",
 			down: "Not connected",
+		},
+		add: {
+			failed: "Couldn’t add this agent to the space. Retry.",
 		},
 		remove: {
 			lastSpace: "An agent needs at least one space.",

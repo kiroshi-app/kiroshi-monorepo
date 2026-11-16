@@ -224,6 +224,14 @@ describe("the Agents page of the Space on screen", () => {
 		expect(captionOf(HOME)).toBeNull()
 	})
 
+	it("shows the empty page once the roster has loaded with no agent", () => {
+		showAgentsOf(workspaceOn(ATTIC))
+
+		expect(slotsOf("agents-page-empty")).toHaveLength(1)
+		expect(slotsOf("agents-page-skeleton")).toEqual([])
+		expect(cardNames()).toEqual([])
+	})
+
 	it.each<{ reason: string; roster: Partial<Roster> }>([
 		{ reason: "no roster has loaded", roster: { hasLoaded: false } },
 		{
@@ -388,6 +396,58 @@ describe("the skills and applications counts of the Agents page", () => {
 		await waitFor(() =>
 			expect(readCounts.mock.calls).toEqual([[HOME.id], [OFFICE.id]]),
 		)
+	})
+
+	it("keeps the late counts of a Space left off the Space on screen", async () => {
+		serveCounts()
+		const lateHomeCounts = Promise.withResolvers<CompanionCounts[]>()
+		readCounts.mockImplementation((spaceId) =>
+			spaceId === HOME.id
+				? lateHomeCounts.promise
+				: Promise.resolve([
+						{ botId: CY.id, skillsCount: 2, applicationsCount: 1 },
+					]),
+		)
+		const { rerender } = showAgentsOf(workspaceOn(HOME))
+		await waitFor(() => expect(readCounts).toHaveBeenCalledWith(HOME.id))
+		rerender(agentsRouteIn(workspaceOn(OFFICE)))
+		await waitFor(() =>
+			expect(countsLineOf(CY)).toBe("2 skills · 1 application"),
+		)
+
+		await act(async () => {
+			lateHomeCounts.resolve([
+				{ botId: ADA.id, skillsCount: 5, applicationsCount: 1 },
+			])
+		})
+
+		expect(countsLineOf(ADA)).toBeNull()
+		expect(countsLineOf(CY)).toBe("2 skills · 1 application")
+	})
+
+	it("reads the counts again when a Space left is opened again", async () => {
+		serveCounts()
+		readCounts
+			.mockResolvedValueOnce([
+				{ botId: BO.id, skillsCount: 5, applicationsCount: 1 },
+			])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{ botId: BO.id, skillsCount: 6, applicationsCount: 1 },
+			])
+		const { rerender } = showAgentsOf(workspaceOn(HOME))
+		await waitFor(() =>
+			expect(countsLineOf(BO)).toBe("5 skills · 1 application"),
+		)
+		rerender(agentsRouteIn(workspaceOn(OFFICE)))
+		await waitFor(() => expect(readCounts).toHaveBeenCalledTimes(2))
+
+		rerender(agentsRouteIn(workspaceOn(HOME)))
+
+		await waitFor(() =>
+			expect(countsLineOf(BO)).toBe("6 skills · 1 application"),
+		)
+		expect(readCounts.mock.calls).toEqual([[HOME.id], [OFFICE.id], [HOME.id]])
 	})
 
 	it("reads no counts for a joined Space and still lists its agents", async () => {

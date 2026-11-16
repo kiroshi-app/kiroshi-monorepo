@@ -745,6 +745,35 @@ it("keeps the companion screen open on the Danger zone and raises a notice when 
 	})
 })
 
+const holdingAMemoryItRefusesToChange: StoreChange = (store) => ({
+	...store,
+	createBot: async (identity, spaceId) => {
+		const created = await store.createBot(identity, spaceId)
+		return store.setBotMemory(created.id, "They bake on Sundays.")
+	},
+	setBotMemory: () => Promise.reject({ kind: "storage" }),
+})
+
+it("raises one notice when the memory of an agent cannot be saved", async () => {
+	await mountApp(holdingAMemoryItRefusesToChange)
+	await openCompanionScreenOf(ATLAS)
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.instructions")))
+	fireEvent.change(
+		screen.getByRole("textbox", { name: i18n.t("bots:dialog.memory.label") }),
+		{ target: { value: "They ski." } },
+	)
+
+	await press(
+		screen.getByRole("button", { name: i18n.t("bots:dialog.memory.save") }),
+	)
+
+	expect(
+		raisedNoticeTitles().filter(
+			(title) => title === i18n.t("bots:roster.settingsUnsaved"),
+		),
+	).toHaveLength(1)
+})
+
 it("brings back the open mission thread and its draft on Back to conversations", async () => {
 	await mountApp()
 	await press(missionsEntryOf())

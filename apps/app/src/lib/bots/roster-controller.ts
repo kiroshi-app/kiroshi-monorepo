@@ -219,7 +219,7 @@ export type RosterController = {
 	createUnselectedConversation: (
 		botIds: string[],
 	) => Promise<Conversation | null>
-	duplicate: (id: string, spaceRowId?: string) => Promise<Bot | null>
+	duplicate: (id: string, spaceRowId?: string) => Promise<Bot>
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
@@ -991,6 +991,11 @@ export const createRosterController = (
 		return null
 	}
 
+	const reloadAndReject = async (reason: unknown): Promise<never> => {
+		await reload()
+		throw reason
+	}
+
 	const writeConversation = (
 		botIds: string[],
 		hold: (written: Conversation, spaceRowId: string) => void,
@@ -1008,7 +1013,7 @@ export const createRosterController = (
 			})
 			hold(created, spaceRowId)
 			return created
-		}).catch(reloadAndYield)
+		})
 
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
 		const seated = rosterIn(current().conversationRosters, spaceRowId)
@@ -1227,7 +1232,7 @@ export const createRosterController = (
 					hostSpaceIdIn(spaceRowId),
 				)
 				admit(written, current().spaceRowId)
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		createFromDraft: (draft: BotDraft) =>
 			commit(async () => {
@@ -1244,10 +1249,10 @@ export const createRosterController = (
 			}),
 
 		createConversation: (botIds = NOBODY_SEATED) =>
-			writeConversation(botIds, admitConversation),
+			writeConversation(botIds, admitConversation).catch(reloadAndReject),
 
 		createUnselectedConversation: (botIds) =>
-			writeConversation(botIds, enrolConversation),
+			writeConversation(botIds, enrolConversation).catch(reloadAndYield),
 
 		duplicate: (id: string, spaceRowId?: string) =>
 			commit(async () => {
@@ -1255,7 +1260,7 @@ export const createRosterController = (
 				const written = await store.duplicateBot(id, hostSpaceIdIn(destination))
 				admit(written, destination)
 				return written
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		settingsSettled: (id: string) => writes.settled(id),
 
@@ -1279,12 +1284,12 @@ export const createRosterController = (
 			commit(async () => {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				apply(await store.setBotAvatarImage(id, bytes))
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		remember: (id: string, memory: string) =>
 			commit(async () => {
 				apply(await store.setBotMemory(id, memory))
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		moveToSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1303,7 +1308,7 @@ export const createRosterController = (
 				)
 				admit({ ...moved, sectionId: null }, spaceRowId)
 				return moved
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		addToSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1319,7 +1324,7 @@ export const createRosterController = (
 					...rosterIn(current().rosters, spaceRowId),
 					{ ...joined, sectionId: null, pinPosition: null },
 				])
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		removeFromSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1407,7 +1412,7 @@ export const createRosterController = (
 					icon: moved.icon,
 					color: moved.color,
 				})
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		describeConversation: (id: string, value: ConversationSettingsValue) => {
 			const conversation = heldConversation(id)
@@ -1476,10 +1481,7 @@ export const createRosterController = (
 				)
 				choose(choiceOf(landOn(state.bots, conversations, null)))
 				holdConversations(state.spaceRowId, conversations)
-			}).catch(async (reason: unknown) => {
-				await reload()
-				throw reason
-			}),
+			}).catch(reloadAndReject),
 
 		discardConversation: (id: string) =>
 			commit(async () => {
