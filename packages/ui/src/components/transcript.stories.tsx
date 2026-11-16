@@ -737,29 +737,23 @@ export const Opening = meta.story({
 	},
 	play: async ({ canvas }) => {
 		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const opening = holderOf(viewport, "opening")
+		const frameTop = viewport.getBoundingClientRect().top
 		await atLiveEdge(viewport)
-		await expect(
-			holderOf(viewport, "opening").getBoundingClientRect().bottom,
-		).toBeLessThan(viewport.getBoundingClientRect().top)
+		await expect(opening.getBoundingClientRect().bottom).toBeLessThan(frameTop)
 
 		await scrollUp(viewport)
 
 		await expectOpeningOverTheRows(viewport)
-		await expect(
-			holderOf(viewport, "opening").getBoundingClientRect().top -
-				viewport.getBoundingClientRect().top,
-		).toBe(OPENING_FROM_TOP)
+		await expect(opening.getBoundingClientRect().top - frameTop).toBe(
+			OPENING_FROM_TOP,
+		)
 	},
 })
 
 export const OpeningWaitsForTheStartOfHistory = meta.story({
 	render: (args) => (
-		<TranscriptDemo
-			{...args}
-			entries={HISTORY}
-			olderPages={[OLDER_PAGE]}
-			opening={OPENING}
-		/>
+		<TranscriptDemo {...args} olderPages={[OLDER_PAGE]} opening={OPENING} />
 	),
 	parameters: {
 		docs: {

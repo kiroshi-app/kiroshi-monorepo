@@ -383,18 +383,19 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 		"mission-properties",
 	)
 	const messages = slotsIn(content, "message-scroller-item")
+	const firstMessage = boxOf(messages[0])
 
 	await expect(slotsIn(frame, "header-island")).toHaveLength(0)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
 	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
-	await expect([boxOf(messages[0]).left, boxOf(messages[0]).width]).toEqual([
+	await expect([firstMessage.left, firstMessage.width]).toEqual([
 		boxOf(block).left,
 		boxOf(block).width,
 	])
 	await expect([
 		boxOf(block).top - boxOf(content).top,
-		boxOf(messages[0]).top - boxOf(block).bottom,
+		firstMessage.top - boxOf(block).bottom,
 	]).toEqual([BAR_TO_BLOCK, BLOCK_TO_FIRST_MESSAGE])
 	await expect(getComputedStyle(block).borderBottomColor).toBe(
 		tokenStyleIn(
