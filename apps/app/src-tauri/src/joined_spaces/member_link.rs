@@ -814,8 +814,7 @@ mod tests {
 		let link = an_open_link_applied_to("e-1", 1);
 		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
 
-		let refused =
-			link.refused_as_too_large(&resume.to_string(), "over the ceiling".to_owned());
+		let refused = link.refused_as_too_large(&resume.to_string(), "over the ceiling".to_owned());
 
 		assert_eq!(refused, Resync::Reread);
 		assert_eq!(link.resume_deadline(), None);
