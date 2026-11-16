@@ -2301,9 +2301,7 @@ fn is_the_question(id: &str) -> impl Fn(&Value) -> bool + '_ {
 }
 
 async fn asked_then_pushed_out_of_the_ring(guest: &mut Guest, id: &str) -> (Value, String, u64) {
-	let scope = a_held_scope_in("c-mine", "b-mine");
-	commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
-		.emit(a_question(id), a_turn_in("c-mine"));
+	asks_in(guest, "c-mine", id);
 	let asked = next_stamped(&mut guest.member, is_the_question(id)).await;
 	let (epoch, seq) = stamp_of(&asked);
 	for n in 1..=RING_FRAMES + 2 {
@@ -2338,9 +2336,7 @@ fn a_resume_from_beyond_the_ring_bound_replays_the_question_still_waiting() {
 fn a_resume_inside_the_ring_is_followed_by_the_question_still_waiting() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("resume-in-step-question").await;
-		let scope = a_held_scope_in("c-mine", "b-mine");
-		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
-			.emit(a_question("q-in-step"), a_turn_in("c-mine"));
+		asks_in(&guest, "c-mine", "q-in-step");
 		let asked = next_stamped(&mut guest.member, is_the_question("q-in-step")).await;
 		let (epoch, seq) = stamp_of(&asked);
 
