@@ -4,11 +4,14 @@ import {
 	type GitHub,
 	type GraphQLRequest,
 	type GreenRange,
+	isRunnerFailure,
 	type Job,
+	type JobStep,
 	type PullRequest,
 	type Run,
 	redMainIssue,
 	reportRedMain,
+	runnerFailureIssue,
 	skipReason,
 } from "./red-main"
 
@@ -25,9 +28,31 @@ const redRun: Run = {
 	url: RUN_URL,
 	commitMessage: "feat(search): search the current space only (#12)\n\nBody",
 	commitAuthor: "Ada Lovelace",
+	attempt: 1,
 }
 
-const job = (name: string, conclusion: string): Job => ({ name, conclusion })
+const step = (name: string, conclusion: string | null): JobStep => ({
+	name,
+	conclusion,
+})
+
+const job = (
+	name: string,
+	conclusion: string,
+	steps = [step("Gate", conclusion)],
+): Job => ({ name, conclusion, steps })
+
+const endedBeforeItsFirstTest = (name: string) =>
+	job(name, "failure", [
+		step("Gate", "failure"),
+		step("Runner failure", "failure"),
+	])
+
+const failedOnATest = (name: string) =>
+	job(name, "failure", [
+		step("Gate", "failure"),
+		step("Runner failure", "skipped"),
+	])
 
 const mergedBy: PullRequest = { number: 12, authorLogin: "octocat" }
 
@@ -54,11 +79,18 @@ const sinceGreen: GreenRange = {
 	],
 }
 
-const fakeGitHub = (run: Run, greenShas: string[] = [GREEN_SHA]) => {
+const fakeGitHub = (
+	run: Run,
+	greenShas: string[] = [GREEN_SHA],
+	jobs = [job("rust", "failure"), job("verify", "failure")],
+) => {
 	const asked: string[] = []
 	const github: GitHub = {
 		readRun: async () => run,
-		readJobs: async () => [job("rust", "failure"), job("verify", "failure")],
+		readJobs: async () => jobs,
+		rerunFailedJobs: async (runId) => {
+			asked.push(`rerun the failed jobs of ${runId}`)
+		},
 		readPullRequests: async (sha) =>
 			sha === CANCELLED_SHA ? [mergedBefore] : [mergedBy],
 		readLastGreenSha: async (createdBefore) => {
@@ -130,6 +162,48 @@ describe("the red main filter", () => {
 	)
 })
 
+describe("a runner failure", () => {
+	it("is an ios job whose Runner failure step failed", () => {
+		expect(isRunnerFailure(endedBeforeItsFirstTest("ios (2)"))).toBe(true)
+	})
+
+	it("is an ios job whose setup failed before its gate, the Runner failure step saying so", () => {
+		const lostItsBuildProducts = job("ios (3)", "failure", [
+			step("Set up job", "success"),
+			step("Download the build products", "failure"),
+			step("Gate", "skipped"),
+			step("Runner failure", "failure"),
+		])
+
+		expect(isRunnerFailure(lostItsBuildProducts)).toBe(true)
+	})
+
+	it("is an ios job with zero completed steps", () => {
+		expect(isRunnerFailure(job("ios (1)", "failure", []))).toBe(true)
+		expect(
+			isRunnerFailure(
+				job("ios-build", "failure", [
+					step("Set up job", null),
+					step("Gate", null),
+				]),
+			),
+		).toBe(true)
+	})
+
+	it("is not an ios job whose gate failed with the Runner failure step skipped", () => {
+		expect(isRunnerFailure(failedOnATest("ios (2)"))).toBe(false)
+	})
+
+	it("is not an ios-build job whose gate failed", () => {
+		expect(isRunnerFailure(job("ios-build", "failure"))).toBe(false)
+	})
+
+	it("is never another job, zero completed steps or not", () => {
+		expect(isRunnerFailure(job("rust", "failure", []))).toBe(false)
+		expect(isRunnerFailure(endedBeforeItsFirstTest("storybook"))).toBe(false)
+	})
+})
+
 describe("the red main issue", () => {
 	it("titles several failed jobs without verify, with the short sha", () => {
 		const issue = redMainIssue({
@@ -180,6 +254,40 @@ describe("the red main issue", () => {
 		})
 
 		expect(issue.title).toBe("Red main: ios at 8a7919a")
+	})
+
+	it("titles only the jobs where a test failed, and lists the runner failures on their own line", () => {
+		const issue = redMainIssue({
+			run: redRun,
+			jobs: [
+				job("rust", "failure"),
+				endedBeforeItsFirstTest("ios (1)"),
+				failedOnATest("ios (2)"),
+				job("ios (3)", "failure", []),
+				job("verify", "failure"),
+			],
+			pullRequests: [mergedBy],
+			sinceGreen,
+		})
+
+		expect(issue.title).toBe("Red main: rust, ios (2) at 8a7919a")
+		expect(issue.description.split("\n\n").slice(0, 3)).toEqual([
+			`Run: ${RUN_URL}`,
+			"Runner failures: ios (1), ios (3)",
+			"Commit: feat(search): search the current space only (#12)",
+		])
+	})
+
+	it("writes no runner failure line when every failed job failed on a test", () => {
+		const issue = redMainIssue({
+			run: redRun,
+			jobs: [failedOnATest("ios (2)"), job("verify", "failure")],
+			pullRequests: [mergedBy],
+			sinceGreen,
+		})
+
+		expect(issue.title).toBe("Red main: ios (2) at 8a7919a")
+		expect(issue.description).not.toContain("Runner failure")
 	})
 
 	it("titles verify when it is the sole failed job", () => {
@@ -286,7 +394,140 @@ describe("the red main issue", () => {
 	})
 })
 
+describe("the runner failure issue", () => {
+	it("titles the runner failures with the short sha, never Red main, and carries the run URL", () => {
+		const issue = runnerFailureIssue({
+			run: { ...redRun, attempt: 2 },
+			jobs: [
+				endedBeforeItsFirstTest("ios (2)"),
+				job("ios (3)", "failure", []),
+				job("verify", "failure"),
+			],
+			pullRequests: [mergedBy],
+		})
+
+		expect(issue.title).toBe("Runner failure: ios (2), ios (3) at 8a7919a")
+		expect(issue.description).toBe(
+			[
+				`Run: ${RUN_URL}`,
+				"Commit: feat(search): search the current space only (#12)",
+				"PR: #12 by octocat",
+				"Commit author: Ada Lovelace",
+				"Attempt 2: every failed job ended before its first test started, after the failed jobs were rerun once",
+			].join("\n\n"),
+		)
+		expect(issue).toMatchObject({
+			teamId: "10814938-0dfc-41ad-9e16-bea303d81728",
+			labelIds: ["8b4d77ec-bddc-475e-9d19-fc581ef758ce"],
+		})
+	})
+})
+
 describe("reporting a run", () => {
+	const RUNNER_FAILURES_ONLY = [
+		job("lint", "success"),
+		endedBeforeItsFirstTest("ios (2)"),
+		job("ios (3)", "failure", []),
+		job("verify", "failure"),
+	]
+
+	it("reruns the failed jobs once and asks Linear nothing when every failed job of a first attempt is a runner failure", async () => {
+		const { linear, requests } = linearAnswering()
+		const { github, asked } = fakeGitHub(redRun, [], RUNNER_FAILURES_ONLY)
+
+		const outcome = await reportRedMain("101", { github, linear })
+
+		expect(outcome).toBe(
+			"no issue: reran the failed jobs of run 101, each a runner failure (ios (2), ios (3))",
+		)
+		expect(asked).toEqual(["rerun the failed jobs of 101"])
+		expect(requests).toEqual([])
+	})
+
+	it("opens one Runner failure issue, reruns nothing and reads no commit range when the rerun ends on runner failures only", async () => {
+		const { linear, requests } = linearAnswering(noIssueYet, {
+			data: {
+				issueCreate: {
+					success: true,
+					issue: { identifier: "KIR-9", url: "https://linear.app/i/KIR-9" },
+				},
+			},
+		})
+		const { github, asked } = fakeGitHub(
+			{ ...redRun, attempt: 2 },
+			[GREEN_SHA],
+			RUNNER_FAILURES_ONLY,
+		)
+
+		const outcome = await reportRedMain("101", { github, linear })
+
+		expect(outcome).toBe("created KIR-9 https://linear.app/i/KIR-9")
+		expect(requests[0]?.variables.runUrl).toBe(RUN_URL)
+		expect(requests[1]?.variables.input).toMatchObject({
+			title: "Runner failure: ios (2), ios (3) at 8a7919a",
+		})
+		expect(asked).toEqual([])
+	})
+
+	it("opens no second Runner failure issue when one already carries the run URL", async () => {
+		const { linear, requests } = linearAnswering({
+			data: { issues: { nodes: [{ identifier: "KIR-9" }] } },
+		})
+		const { github } = fakeGitHub(
+			{ ...redRun, attempt: 3 },
+			[],
+			RUNNER_FAILURES_ONLY,
+		)
+
+		const outcome = await reportRedMain("101", { github, linear })
+
+		expect(outcome).toBe(`no issue: KIR-9 already reports ${RUN_URL}`)
+		expect(requests).toHaveLength(1)
+	})
+
+	it("opens the Red main issue and reruns nothing when a first attempt mixes runner failures and failed tests", async () => {
+		const { linear, requests } = linearAnswering(noIssueYet, {
+			data: {
+				issueCreate: {
+					success: true,
+					issue: { identifier: "KIR-10", url: "https://linear.app/i/KIR-10" },
+				},
+			},
+		})
+		const { github, asked } = fakeGitHub(
+			redRun,
+			[],
+			[
+				endedBeforeItsFirstTest("ios (1)"),
+				failedOnATest("ios (2)"),
+				job("verify", "failure"),
+			],
+		)
+
+		await reportRedMain("101", { github, linear })
+
+		expect(requests[1]?.variables.input).toMatchObject({
+			title: "Red main: ios (2) at 8a7919a",
+		})
+		expect(descriptionSent(requests[1])).toContain("Runner failures: ios (1)")
+		expect(asked).not.toContain("rerun the failed jobs of 101")
+	})
+
+	it("fails naming the step when GitHub refuses the rerun", async () => {
+		const { linear } = linearAnswering()
+		const { github } = fakeGitHub(redRun, [], RUNNER_FAILURES_ONLY)
+		const refusing: GitHub = {
+			...github,
+			rerunFailedJobs: async () => {
+				throw new Error("rerun the failed jobs of the run: GitHub answered 403")
+			},
+		}
+
+		await expect(
+			reportRedMain("101", { github: refusing, linear }),
+		).rejects.toThrow("rerun the failed jobs of the run: GitHub answered 403")
+	})
+
 	it("creates one issue for a red main run", async () => {
 		const { linear, requests } = linearAnswering(noIssueYet, {
 			data: {
