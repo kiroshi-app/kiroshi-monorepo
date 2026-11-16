@@ -88,7 +88,7 @@ use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event, BUFFERED_FRAMES};
+use crate::events::{self, CallOrigin, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
@@ -662,7 +662,7 @@ fn caller_vouched_in(effects: &HostEffects, headers: &HeaderMap) -> Caller {
 		return Caller::Host;
 	};
 	let nonce = nonce.to_str().expect("a nonce");
-	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched(nonce))
+	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched_in_this_task(nonce))
 }
 
 fn said_by_the_caller(
@@ -5049,6 +5049,7 @@ fn relayed_as(account_id: &str) -> Caller {
 		space_id: PERSONAL.to_owned(),
 		user_id: account_id.to_owned(),
 		computer: None,
+		origin: None,
 	}))
 }
 
@@ -6740,6 +6741,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 
 const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
+const GUEST_DEVICE: &str = "guest-device";
 const HOST_NAME: &str = "Ada on the host";
 
 struct Authoring {
@@ -6854,8 +6856,12 @@ impl Authoring {
 	}
 
 	async fn answered_by(&self, account_id: &str, frame: Value) -> Value {
-		let call =
-			super::bridge::member_call(&frame.to_string(), account_id).expect("a member call");
+		self.answered_from(account_id, GUEST_DEVICE, frame).await
+	}
+
+	async fn answered_from(&self, account_id: &str, device: &str, frame: Value) -> Value {
+		let call = super::bridge::member_call(&frame.to_string(), account_id, device)
+			.expect("a member call");
 		let answer = super::bridge::bridged(
 			self.app.handle().clone(),
 			self.local.clone(),
@@ -7798,6 +7804,7 @@ impl Guest {
 		conversation_create(
 			app,
 			self.harness.app.state(),
+			Caller::Host,
 			space_id.to_owned(),
 			None,
 			"New".to_owned(),
@@ -10794,5 +10801,185 @@ fn a_relayed_member_cannot_report_on_a_mission_born_in_the_main_conversation_of_
 		let turn_id = format!("t-{}", host.conversation_id);
 		let args = json!({ "missionId": mission_id, "turnId": turn_id });
 		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_reported", args).await;
+	});
+}
+
+fn published_frames(published: &mut tokio::sync::broadcast::Receiver<events::Frame>) -> Vec<Value> {
+	let mut frames = Vec::new();
+	while let Ok(frame) = published.try_recv() {
+		frames.push(serde_json::from_str(&frame).expect("a json frame"));
+	}
+	frames
+}
+
+fn frames_of<'a>(frames: &'a [Value], event: &str) -> Vec<&'a Value> {
+	frames.iter().filter(|frame| frame["event"] == json!(event)).collect()
+}
+
+fn a_group_created(id: u64) -> Value {
+	json!({
+		"id": id,
+		"command": "conversation_create",
+		"args": { "spaceId": PERSONAL, "sectionId": null, "title": "Group", "botIds": ["default"] },
+	})
+}
+
+fn keyed(mut frame: Value, call_key: &str) -> Value {
+	frame["callKey"] = json!(call_key);
+	frame
+}
+
+impl Authoring {
+	async fn with_an_agent() -> Self {
+		let host = Self::new(Some(BEARER)).await;
+		host.app.manage(commands::AgentState::default());
+		host
+	}
+
+	fn send(&self, id: u64, message_id: &str) -> Value {
+		let mut args = self.unstarted(message_id);
+		args["message"]["turnId"] = json!(message_id);
+		json!({ "id": id, "command": "conversation_send_turn", "args": args })
+	}
+
+	fn groups(&self) -> usize {
+		let listed = direct(&self.window, "conversation_list", json!({ "spaceId": PERSONAL }));
+		let listed = listed.as_array().expect("a list of conversations");
+		listed.iter().filter(|room| room["title"] == json!("Group")).count()
+	}
+
+	fn user_messages(&self) -> Vec<Value> {
+		let page = direct(&self.window, "conversation_message_page", self.page());
+		let messages = page["messages"].as_array().expect("a page of messages");
+		messages.iter().filter(|message| message["role"] == json!("user")).cloned().collect()
+	}
+}
+
+#[test]
+fn a_group_created_twice_with_one_call_key_is_left_once_and_its_creation_names_the_key() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let repeated = host.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(host.groups(), 1);
+		let frames = published_frames(&mut published);
+		let created = frames_of(&frames, CONVERSATION_CREATED_EVENT);
+		assert_eq!(created.len(), 1, "{created:?}");
+		assert_eq!(created[0]["payload"]["conversation"]["id"], first["id"]);
+		assert_eq!(created[0]["callKey"], json!("group-1"));
+		assert_eq!(created[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn the_same_send_twice_with_one_call_key_leaves_one_message_and_runs_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let (first, held) = tokio::join!(
+			host.answered(keyed(host.send(1, "m1"), "send-1")),
+			host.answered(keyed(host.send(2, "m1"), "send-1")),
+		);
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-1")).await;
+
+		assert_eq!(first["status"], json!(200), "{first}");
+		assert_eq!(
+			(held["status"].clone(), held["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
+		assert_eq!(stored[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn one_call_key_from_two_devices_runs_once_for_each() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+
+		host.answered_from(GUEST, GUEST_DEVICE, keyed(a_group_created(1), "group-1")).await;
+		host.answered_from(GUEST, "guest-tablet", keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(host.groups(), 2);
+	});
+}
+
+#[test]
+fn a_call_without_a_call_key_runs_each_time_and_its_events_name_no_call() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		host.relayed(a_group_created(1)).await;
+		host.relayed(a_group_created(2)).await;
+		host.relayed(host.send(3, "m1")).await;
+		host.relayed(host.send(4, "m1")).await;
+
+		assert_eq!(host.groups(), 2);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, CONVERSATION_CREATED_EVENT).len(), 2);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 2);
+		for frame in &frames {
+			let mut envelope =
+				frame.as_object().expect("a frame object").keys().collect::<Vec<_>>();
+			envelope.sort();
+			assert_eq!(envelope, ["event", "payload"], "{frame}");
+		}
+	});
+}
+
+#[test]
+fn a_question_a_member_answers_names_the_answering_device_on_its_resolution() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let app = host.app.handle();
+		let scope = a_held_scope_in(&host.conversation_id, "default");
+		let turn = a_turn_in(&host.conversation_id);
+		let asking = commands::a_run_held_by_the_app(app, scope.clone());
+		asking.emit(a_question("q1"), turn.clone());
+		let mut published = events::subscribed(app);
+		let origin = CallOrigin {
+			device_id: GUEST_DEVICE.to_owned(),
+			call_key: Some("answer-1".to_owned()),
+		};
+		let member = Caller::Relayed(Some(RelayedMember {
+			space_id: PERSONAL.to_owned(),
+			user_id: GUEST.to_owned(),
+			computer: None,
+			origin: Some(origin),
+		}));
+
+		let unsent = commands::agent_answer_question(
+			app.state(),
+			member,
+			scope,
+			"q1".to_owned(),
+			Default::default(),
+			None,
+		)
+		.await;
+		asking.emit(its_answer("q1"), turn);
+
+		assert_eq!(unsent, Err(agent::TransportError::NotStarted), "no session holds the run");
+		let frames = published_frames(&mut published);
+		let resolved = frames_of(&frames, commands::EVENT_CHANNEL);
+		assert_eq!(resolved.len(), 1, "{resolved:?}");
+		assert_eq!(resolved[0]["payload"]["event"]["type"], json!("permissionResolved"));
+		assert_eq!(resolved[0]["deviceId"], json!(GUEST_DEVICE));
+		assert_eq!(resolved[0]["callKey"], json!("answer-1"));
 	});
 }
