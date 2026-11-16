@@ -613,8 +613,10 @@ const LibraryDocumentCommentRun = ({
 
 const UNDER_PIN = "end-0 top-full mt-2"
 
+const START_HINT_GAP = 12
+
 const START_HINT = cn(
-	"gap-2 rounded-md px-2 py-1.5 font-medium text-on-foreground",
+	"gap-2 rounded-md px-2 py-1.5 font-medium text-on-foreground [&>[data-side]]:hidden",
 	STILL_UNDER_REDUCED_MOTION,
 )
 
@@ -638,7 +640,7 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 						aria-label={name}
 						className={cn(
 							HANDLE_BUTTON,
-							"w-6",
+							"w-6 rounded-[4px] hover:bg-background dark:hover:bg-accent",
 							!isShown && "opacity-0 focus-visible:opacity-100",
 						)}
 						data-slot="library-document-comment-start"
@@ -649,7 +651,12 @@ const StartButton = ({ isShown, onStart }: StartButtonProps) => {
 					</button>
 				}
 			/>
-			<TooltipContent className={START_HINT} role="tooltip" side="top">
+			<TooltipContent
+				className={START_HINT}
+				role="tooltip"
+				side="top"
+				sideOffset={START_HINT_GAP}
+			>
 				{name}
 				<kbd className="font-sans text-on-foreground-muted">
 					{t(
