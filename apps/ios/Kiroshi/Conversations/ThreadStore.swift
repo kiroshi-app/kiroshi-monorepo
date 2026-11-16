@@ -476,6 +476,7 @@ final class ThreadStore {
                 askedRequests[id] != nil || entries.contains(where: { $0.askedQuestionId == id })
             else { return }
             answeredElsewhereIds.insert(id)
+            work.settleQuestion(id)
         case .turn, .activity, .permissionRequested, .turnEnded, .failed, .other:
             break
         }
