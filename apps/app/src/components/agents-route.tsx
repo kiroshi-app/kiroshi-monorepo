@@ -13,11 +13,12 @@ export const AgentsRoute = () => {
 		useWorkspace()
 	const { hasFailedToLoad, isRosterPending, rosters } = core.roster.state
 	const { sidebarActions } = rosterLines
-	const isRosterShown =
+	const isRosterHeld =
 		rosterView.hasLoaded &&
 		rosterView.rosteredSpaceId === scopes.openRowId &&
-		!isRosterPending &&
-		!hasFailedToLoad
+		!isRosterPending
+	const hasFailedWithNoAgent = hasFailedToLoad && rosterView.bots.length === 0
+	const isRosterShown = isRosterHeld && !hasFailedWithNoAgent
 	const countsOf = useCompanionCounts(scopes.selectedSpace?.id)
 	const agents = isRosterShown
 		? rosterView.bots.map((bot) => ({

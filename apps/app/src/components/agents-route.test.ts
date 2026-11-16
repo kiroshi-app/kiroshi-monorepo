@@ -56,11 +56,13 @@ const spaceOf = (id: string, name: string): Space => ({
 const HOME = spaceOf("home", "Home")
 const OFFICE = spaceOf("office", "Office")
 const GARAGE = spaceOf("joined:garage", "Garage")
+const ATTIC = spaceOf("attic", "Attic")
 
 const ROSTERS = {
 	[HOME.id]: [ADA, BO],
 	[OFFICE.id]: [ADA, CY],
 	[GARAGE.id]: [CY],
+	[ATTIC.id]: [],
 }
 
 const sidebarActions = {
@@ -219,11 +221,28 @@ describe("the Agents page of the Space on screen", () => {
 			roster: { rosteredSpaceId: OFFICE.id },
 		},
 		{ reason: "its roster is being read", roster: { isRosterPending: true } },
-		{ reason: "its roster failed to load", roster: { hasFailedToLoad: true } },
 	])("shows the loading page while $reason", ({ roster }) => {
 		showAgentsOf(workspaceOn(HOME, roster))
 
 		expect(slotsOf("agents-page-skeleton")).toHaveLength(1)
+		expect(cardNames()).toEqual([])
+	})
+})
+
+describe("the Agents page of a Space whose roster failed to load", () => {
+	it("stays loaded with the agents held when the roster holds at least one", () => {
+		showAgentsOf(workspaceOn(HOME, { hasFailedToLoad: true }))
+
+		expect(cardNames()).toEqual([ADA.name, BO.name])
+		expect(captionOf(HOME)).not.toBeNull()
+		expect(slotsOf("agents-page-skeleton")).toEqual([])
+	})
+
+	it("shows the loading page, not the empty one, when the roster holds no agent", () => {
+		showAgentsOf(workspaceOn(ATTIC, { hasFailedToLoad: true }))
+
+		expect(slotsOf("agents-page-skeleton")).toHaveLength(1)
+		expect(slotsOf("agents-page-empty")).toEqual([])
 		expect(cardNames()).toEqual([])
 	})
 })
