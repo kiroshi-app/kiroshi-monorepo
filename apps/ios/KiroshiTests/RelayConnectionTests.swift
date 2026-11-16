@@ -320,6 +320,42 @@ struct RelayConnectionTests {
         await connection.stop()
     }
 
+    @Test func aSocketThatDropsBeforeTheSharedSpaceAnswerTriesAgainAfterTheBackoffNotItsDeadline()
+        async throws
+    {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let silent = ScriptedRelaySocket()
+        let (closed, closing) = AsyncStream.makeStream(of: Void.self)
+        await transport.nextOpening().accept(ClosingSocket(plain: silent, closing: closing))
+        var sent = silent.sent.makeAsyncIterator()
+        let sharedSpace = try JSONDecoder().decode(
+            SentCall.self, from: Data(try #require(await sent.next()).utf8))
+        #expect(sharedSpace.command == "relay_shared_space")
+        var thirtySecondSleeps: [TestRelayClock.Sleep] = []
+        while thirtySecondSleeps.count < 2,
+            let sleep = await clock.nextSleep(of: RelayConnection.sharedSpaceDeadline)
+        {
+            thirtySecondSleeps.append(sleep)
+        }
+
+        silent.push(.close(1006))
+        for await _ in closed {
+            break
+        }
+        _ = await connection.state
+        let stillRunning = thirtySecondSleeps.filter {
+            if case .enqueued = $0.wake.yield() { true } else { false }
+        }
+
+        #expect(stillRunning.isEmpty)
+        await waitFor(.unreachable, in: updates)
+        await clock.wakeNextSleep(of: .seconds(1))
+        _ = await transport.nextOpening()
+        await connection.stop()
+    }
+
     @Test func aCallWithoutASocketFailsAtOnce() async {
         let connection = makeConnection()
 
@@ -416,6 +452,28 @@ struct RelayConnectionTests {
 
         _ = await transport.nextOpening()
         await connection.stop()
+    }
+}
+
+private struct ClosingSocket: RelaySocket {
+    let plain: ScriptedRelaySocket
+    let closing: AsyncStream<Void>.Continuation
+
+    func send(_ text: String) async throws {
+        try await plain.send(text)
+    }
+
+    func receive() async throws -> String {
+        try await plain.receive()
+    }
+
+    func ping() async throws {
+        try await plain.ping()
+    }
+
+    func close() {
+        plain.close()
+        closing.yield()
     }
 }
 

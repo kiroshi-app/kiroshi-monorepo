@@ -225,13 +225,13 @@ actor RelayConnection {
                 }
             }
             opened.close()
+            if !Task.isCancelled {
+                endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
+            }
             group.cancelAll()
             return ending
         }
         outbox.finish()
-        if !Task.isCancelled {
-            endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
-        }
         return ending
     }
 
