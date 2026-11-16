@@ -17,6 +17,7 @@ import {
 import {
 	activeTabOf,
 	currentHrefOf,
+	landInActiveTab,
 	revealTab,
 	type SpaceTabs,
 	type Tab,
@@ -82,9 +83,6 @@ const conversationHrefOf = ({
 
 const showsHome = (space: SpaceTabs) =>
 	isHomePage(pageOf(currentHrefOf(activeTabOf(space))))
-
-const landInActiveTab = (href: string) => (space: SpaceTabs) =>
-	revealTab(space, space.activeId, href)
 
 const landOverHome = (href: string) => (space: SpaceTabs) =>
 	showsHome(space) ? landInActiveTab(href)(space) : space

@@ -2,13 +2,7 @@ import { useNavigate, useRouter } from "@tanstack/react-router"
 
 import { type LibraryOpening, librarySearchOf } from "./library-search"
 
-import { sameUrl } from "../tabs/tab-pages"
-import {
-	currentHrefOf,
-	openTabOn,
-	type SpaceTabs,
-	selectTab,
-} from "../tabs/tabs-model"
+import { landInActiveTab } from "../tabs/tabs-model"
 
 export const useOpenLibraryItem = () => {
 	const navigate = useNavigate()
@@ -35,15 +29,7 @@ export const useOpenLibraryItemInNewTab = () => {
 		router.options.context.tabs.openInNewTab(hrefOf(opening))
 }
 
-const tabShowingIn = (space: SpaceTabs, href: string) =>
-	space.tabs.find((tab) => sameUrl(currentHrefOf(tab), href))
-
 type Router = ReturnType<typeof useRouter>
-
-const shownInItsTab = (href: string) => (space: SpaceTabs) => {
-	const shown = tabShowingIn(space, href)
-	return shown ? selectTab(space, shown.id) : openTabOn(space, href)
-}
 
 export const showLibraryItemOfSpace = (
 	router: Router,
@@ -54,5 +40,5 @@ export const showLibraryItemOfSpace = (
 		to: "/library",
 		search: librarySearchOf(opening),
 	})
-	router.options.context.tabs.changeSpace(spaceRowId, shownInItsTab(href))
+	router.options.context.tabs.changeSpace(spaceRowId, landInActiveTab(href))
 }
