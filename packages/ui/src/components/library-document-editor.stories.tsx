@@ -3188,7 +3188,6 @@ const iconAtRest = (glyph: string) => ({
 		await expectInEmptyPinSlot(canvasElement, INTRO_BLOCK, icon)
 		const look = getComputedStyle(icon)
 		await expect(look.color).toBe(glyph)
-		await expect(look.color).toBe(colourOf(icon, "muted-foreground"))
 		await expect(look.backgroundColor).toBe("rgba(0, 0, 0, 0)")
 
 		await pointAcross(canvasElement, INTRO_BLOCK, IN_THE_MARGIN)

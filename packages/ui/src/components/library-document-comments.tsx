@@ -657,8 +657,8 @@ const LibraryDocumentBlockComments = ({
 	)
 	const draft =
 		layer.draft?.anchor.blockId === blockId ? layer.draft : undefined
+	if (threads.length === 0 && !draft && !onStart) return null
 	const startHere = draft ? undefined : onStart
-	if (threads.length === 0 && !draft && !startHere) return null
 
 	const blockThreads = threads.filter(({ anchor }) => !anchor.passage)
 	const openPassage = threads.find(
