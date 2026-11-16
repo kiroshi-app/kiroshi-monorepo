@@ -209,30 +209,33 @@ const CLASSIC_SCROLLBAR_TAKING_WIDTH = `${CLASSIC_SCROLLBAR} [&_[data-slot=libra
 
 const ROW_INLINE_PADDING = 12
 
-const isUncutIn = (scroller: HTMLElement, row: HTMLElement) => {
-	const visibleEnd =
+const rowsCutIn = (scroller: HTMLElement) => {
+	const visibleEnd = Math.ceil(
 		scroller.getBoundingClientRect().left +
-		scroller.clientLeft +
-		scroller.clientWidth
+			scroller.clientLeft +
+			scroller.clientWidth,
+	)
 
-	return (
-		Math.floor(row.getBoundingClientRect().right) <= Math.ceil(visibleEnd) &&
-		Array.from(row.querySelectorAll("p")).every(
-			(line) => line.scrollWidth <= line.clientWidth,
+	return slotsIn(scroller, "library-comment").filter(
+		(row) =>
+			Math.floor(row.getBoundingClientRect().right) > visibleEnd ||
+			Array.from(row.querySelectorAll("p")).some(
+				(line) => line.scrollWidth > line.clientWidth,
+			),
+	)
+}
+
+const rowsOffTheirInlinePadding = (scroller: HTMLElement) =>
+	slotsIn(scroller, "library-comment").filter((row) => {
+		const box = row.getBoundingClientRect()
+		const avatar = slotIn(row, "library-comment-avatar").getBoundingClientRect()
+		const text = (row.lastElementChild as HTMLElement).getBoundingClientRect()
+
+		return (
+			Math.round(avatar.left - box.left) !== ROW_INLINE_PADDING ||
+			Math.round(box.right - text.right) < ROW_INLINE_PADDING
 		)
-	)
-}
-
-const keepsInlinePadding = (row: HTMLElement) => {
-	const box = row.getBoundingClientRect()
-	const avatar = slotIn(row, "library-comment-avatar").getBoundingClientRect()
-	const text = (row.lastElementChild as HTMLElement).getBoundingClientRect()
-
-	return (
-		Math.round(avatar.left - box.left) === ROW_INLINE_PADDING &&
-		Math.round(box.right - text.right) >= ROW_INLINE_PADDING
-	)
-}
+	})
 
 const authorsIn = (canvasElement: HTMLElement) =>
 	Array.from(
@@ -728,12 +731,11 @@ export const LongThreadClassicScrollbar = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const scroller = commentScrollerIn(threadIn(canvasElement))
-		const rows = slotsIn(scroller, "library-comment")
 
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 		await expect(scroller.clientWidth).toBeLessThan(scroller.offsetWidth)
-		await expect(rows.filter((row) => !isUncutIn(scroller, row))).toEqual([])
-		await expect(rows.filter((row) => !keepsInlinePadding(row))).toEqual([])
+		await expect(rowsCutIn(scroller)).toEqual([])
+		await expect(rowsOffTheirInlinePadding(scroller)).toEqual([])
 		await expect(scroller.scrollWidth).toBe(scroller.clientWidth)
 	},
 })
