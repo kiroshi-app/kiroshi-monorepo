@@ -42,8 +42,6 @@ type Relayed =
 	| { answeredBy: "page"; outcome: ReplayOutcome }
 	| { answeredBy: "nobody" }
 
-type ReadBody = { isWithinLimit: true; text: string } | { isWithinLimit: false }
-
 type ReplayError = {
 	command?: string
 	reason: string
@@ -79,17 +77,23 @@ const send = (response: ServerResponse, { status, body }: Reply) => {
 	response.end(JSON.stringify(body))
 }
 
-const readBody = async (request: IncomingMessage): Promise<ReadBody> => {
+const readBody = async (
+	request: IncomingMessage,
+	name: ReplayCommandName,
+): Promise<Stage<string>> => {
 	const chunks: Buffer[] = []
 	let size = 0
 	for await (const chunk of request) {
 		size += chunk.length
 		if (size > REPLAY_BODY_LIMIT_BYTES) {
-			return { isWithinLimit: false }
+			return refused(413, {
+				command: name,
+				reason: `the body exceeds ${REPLAY_BODY_LIMIT_BYTES} bytes`,
+			})
 		}
 		chunks.push(chunk)
 	}
-	return { isWithinLimit: true, text: Buffer.concat(chunks).toString("utf8") }
+	return passed(Buffer.concat(chunks).toString("utf8"))
 }
 
 const pathOf = (request: IncomingMessage) => request.url?.split("?")[0] ?? ""
@@ -142,14 +146,11 @@ const readCommand = async (
 	request: IncomingMessage,
 	name: ReplayCommandName,
 ): Promise<Stage<ReplayCommand>> => {
-	const body = await readBody(request)
-	if (!body.isWithinLimit) {
-		return refused(413, {
-			command: name,
-			reason: `the body exceeds ${REPLAY_BODY_LIMIT_BYTES} bytes`,
-		})
+	const body = await readBody(request, name)
+	if (!body.hasPassed) {
+		return body
 	}
-	const parsed = parseBody(name, body.text)
+	const parsed = parseBody(name, body.value)
 	return parsed.ok
 		? passed(parsed.command)
 		: refused(400, { command: name, reason: parsed.reason })

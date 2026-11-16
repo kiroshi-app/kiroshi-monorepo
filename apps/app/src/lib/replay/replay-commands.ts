@@ -3,10 +3,11 @@ import type { AnyRouter } from "@tanstack/react-router"
 import {
 	MEASURED_MATCH_LIMIT,
 	type ReplayCommand,
+	type ReplayCommandName,
 	type ReplayOutcome,
 } from "./replay-protocol"
 
-type CommandNamed<Name extends ReplayCommand["name"]> = Extract<
+type CommandNamed<Name extends ReplayCommandName> = Extract<
 	ReplayCommand,
 	{ name: Name }
 >
