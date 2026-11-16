@@ -3142,6 +3142,263 @@ export const Edge3ThreadOpenDark = meta.story({
 	},
 })
 
+const INTRO_BLOCK = "intro1"
+
+const START_ICON = "library-document-comment-start"
+
+const startIconIn = (canvasElement: HTMLElement, id: string) =>
+	within(blockOf(canvasElement, id)).queryByRole("button", { name: "Comment" })
+
+const shownStartIconIn = async (canvasElement: HTMLElement, id: string) => {
+	const icon = startIconIn(canvasElement, id)
+	if (!icon) throw new Error(`No comment icon on block ${id}`)
+	await expect(icon).toBeVisible()
+	await expect(boxOf(icon).width).toBe(24)
+	await expect(boxOf(icon).height).toBe(24)
+	await expect(boxOf(icon.querySelector("svg") as SVGElement).width).toBe(16)
+	return icon
+}
+
+const pointAcross = async (
+	canvasElement: HTMLElement,
+	id: string,
+	share: number,
+) => {
+	const box = boxOf(blockOf(canvasElement, id))
+	const at = { clientX: box.left + box.width * share, clientY: box.top + 12 }
+	const target = document.elementFromPoint(at.clientX, at.clientY)
+	if (!target) throw new Error(`Nothing drawn at ${share} of block ${id}`)
+	await fireEvent.pointerMove(target, at)
+}
+
+const IN_THE_MARGIN = 1.02
+
+const overMiddleOf = (target: HTMLElement) => {
+	const { left, right, top, bottom } = boxOf(target)
+	return {
+		target,
+		coords: { clientX: (left + right) / 2, clientY: (top + bottom) / 2 },
+	}
+}
+
+const articleOf = (canvasElement: HTMLElement) =>
+	boxOf(
+		slotIn(canvasElement, "library-document-column").querySelector(
+			"article",
+		) as HTMLElement,
+	)
+
+const expectInEmptyPinSlot = async (
+	canvasElement: HTMLElement,
+	id: string,
+	icon: HTMLElement,
+) => {
+	await expectClose(boxOf(icon).left, articleOf(canvasElement).right + 20)
+	await expectClose(
+		boxOf(icon).top,
+		boxOf(slotIn(blockOf(canvasElement, id), "library-block-handle")).top,
+	)
+}
+
+const iconAtRest = (glyph: string) => ({
+	args: commentedDocument(),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.5)
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBe(null)
+
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, INTRO_BLOCK)
+		await expectInEmptyPinSlot(canvasElement, INTRO_BLOCK, icon)
+		const look = getComputedStyle(icon)
+		await expect(look.color).toBe(glyph)
+		await expect(look.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+
+		await pointAcross(canvasElement, INTRO_BLOCK, IN_THE_MARGIN)
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBe(icon)
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(1)
+
+		if (!isInBrowserRunner()) return
+		const body = bodyOf(canvasElement, INTRO_BLOCK)
+		await (await realPointer()).hover(body, {
+			position: { x: boxOf(body).width * 0.9, y: 12 },
+		})
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBeVisible()
+		await expect(
+			getComputedStyle(
+				slotIn(blockOf(canvasElement, INTRO_BLOCK), "library-block-handle"),
+			).opacity,
+		).toBe("1")
+	},
+})
+
+export const Doc7CommentIconAtRest = meta.story({
+	...iconAtRest("rgb(107, 107, 107)"),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 7: comment mode off, the pointer over the right part of a paragraph that has no pin. Check no icon while the pointer is over the left 70 percent, then the 24px icon with its 16px glyph in the muted tint on no ground, centred in the empty pin slot 20px right of the column with its top on the top of the left handle, kept while the pointer crosses the margin towards it, and the left handle shown on the same block.",
+	),
+})
+
+export const Doc8CommentIconHovered = meta.story({
+	beforeEach: onPlatform(MAC_AGENT),
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the accent ground and the foreground glyph with no colour transition, the tooltip above the icon reading Comment in white then the Mac symbols of the comment shortcut in the muted tint, on a black bubble of radius 8px and padding 6px 8px with a gap of 8px in 12px medium, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, INTRO_BLOCK)
+		await expect(getComputedStyle(icon).transitionProperty).toBe("none")
+
+		await userEvent.pointer(overMiddleOf(icon))
+		const tooltip = await screen.findByRole("tooltip")
+		await expect(tooltip).toHaveTextContent("Comment⌘⌥M")
+		await waitFor(() =>
+			expect(boxOf(tooltip).bottom).toBeLessThanOrEqual(boxOf(icon).top),
+		)
+		const bubble = getComputedStyle(tooltip)
+		await expect(bubble.backgroundColor).toBe("rgb(10, 10, 10)")
+		await expect(bubble.color).toBe("rgb(255, 255, 255)")
+		await expect(bubble.borderRadius).toBe("8px")
+		await expect(bubble.padding).toBe("6px 8px")
+		await expect(bubble.columnGap).toBe("8px")
+		await expect(bubble.fontSize).toBe("12px")
+		await expect(bubble.fontWeight).toBe("500")
+		await expect(
+			getComputedStyle(tooltip.querySelector("kbd") as HTMLElement).color,
+		).toBe("rgb(163, 163, 163)")
+
+		if (isInBrowserRunner()) {
+			await (await realPointer()).hover(icon)
+			const look = getComputedStyle(icon)
+			await expect(look.backgroundColor).toBe(colourOf(icon, "accent"))
+			await expect(look.color).toBe(colourOf(icon, "foreground"))
+		}
+
+		await userEvent.pointer({ ...overMiddleOf(icon), keys: "[MouseLeft]" })
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: INTRO_BLOCK,
+			origin: "pointer",
+		})
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(
+			slotIn(canvasElement, "library-comment-toggle"),
+		).toHaveAttribute("aria-pressed", "false")
+	},
+})
+
+export const Doc9CommentIconPressed = meta.story({
+	args: {
+		...commentedDocument(),
+		threads: [SESSION_THREAD],
+		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 9: the comment icon of a paragraph pressed, comment mode still off. Check the same draft as Doc 3, the tint around the paragraph, the selected draft pin 16px right of the column in place of the icon, the 320px composer hanging 8px under the pin with their right edges aligned and its field focused, no icon on that paragraph while its draft is open, and the bar Comment button not pressed.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		await expect(startIconIn(canvasElement, MARKET_BLOCK)).toBe(null)
+		await expectTintAround(canvasElement, MARKET_BLOCK)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		await expectClose(boxOf(pin).left, articleOf(canvasElement).right + 16)
+		const composer = boxOf(composerIn(canvasElement))
+		await expect(composer.width).toBe(320)
+		await expectClose(composer.right, boxOf(pin).right)
+		await expectClose(composer.top, boxOf(pin).bottom + 8)
+		await expect(
+			slotIn(canvasElement, "library-comment-toggle"),
+		).toHaveAttribute("aria-pressed", "false")
+		await expect(
+			canvasElement.querySelector('[data-slot="library-comment-mode-hint"]'),
+		).toBe(null)
+		await expectDraftFieldFocused(canvas)
+	},
+})
+
+export const Doc10CommentIconBesideBlockPin = meta.story({
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 10: the pointer over the right part of a paragraph that already carries a block pin. Check the pin unmoved, 16px right of the column, and the icon 8px right of it, vertically centred on the 32px pin.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, MARKET_BLOCK)
+		const pin = boxOf(threadPinIn(canvasElement, MARKET_THREAD.id))
+		await expectClose(pin.left, articleOf(canvasElement).right + 16)
+		await expect(pin.height).toBe(32)
+		await expectClose(boxOf(icon).left, pin.right + 8)
+		await expectClose(middleOf(boxOf(icon)), middleOf(pin))
+	},
+})
+
+export const Doc11CommentIconBesidePassagePin = meta.story({
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 11: the pointer over the right part of a paragraph that carries only a passage pin. Check the icon in the same empty pin slot as Doc 7, and the passage pin unmoved on the end of its passage.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, SESSION_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, SESSION_BLOCK)
+		await expectInEmptyPinSlot(canvasElement, SESSION_BLOCK, icon)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			shownPassageOf(canvasElement, SESSION_PASSAGE),
+		)
+	},
+})
+
+export const Doc12CommentIconAtRestDark = meta.story({
+	...iconAtRest("rgb(163, 163, 163)"),
+	globals: DARK,
+	parameters: describedAs(
+		"Artboard Doc 12, the dark twin of Doc 7. Check the same icon in the same slot, its glyph in the dark muted tint.",
+	),
+})
+
+export const CommentIconAbsentInCommentMode = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(true),
+	play: async ({ canvasElement }: CommentPlay) => {
+		for (const share of [0.5, 0.9, IN_THE_MARGIN]) {
+			await pointAcross(canvasElement, INTRO_BLOCK, share)
+			await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+		}
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+	},
+})
+
+export const CommentIconReachedByKeyboard = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+		await caretAfter(canvasElement, "above the harbour.")
+		const icon = startIconIn(canvasElement, INTRO_BLOCK)
+		if (!icon) throw new Error("No comment icon while focus is in the block")
+		await expect(getComputedStyle(icon).opacity).toBe("0")
+
+		await userEvent.tab()
+		await expect(icon).toHaveFocus()
+		const look = getComputedStyle(icon)
+		await expect(look.opacity).toBe("1")
+		await expect(look.outlineStyle).toBe("solid")
+		await expect(look.outlineWidth).toBe("2px")
+
+		await userEvent.keyboard("{Enter}")
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: INTRO_BLOCK,
+			origin: "pointer",
+		})
+	},
+})
+
 type ThreadWork = Pick<LibraryDocumentThread, "workingAgent" | "workingAgents">
 
 const threadAtWork = (work: ThreadWork) => ({
