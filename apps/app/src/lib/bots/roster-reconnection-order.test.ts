@@ -64,6 +64,8 @@ const SHED_HOST = "shed"
 
 const LOCAL = { spaceRowId: "personal", spaceId: "personal" }
 
+let detachChat: () => void = () => undefined
+
 const settled = () =>
 	act(async () => {
 		await new Promise((resolve) => setTimeout(resolve, 50))
@@ -88,12 +90,12 @@ const dropLastSocket = () => {
 const sharedStore = async () => {
 	const store = createFakeTranscriptStore()
 	const shed = await store.createSpace("Shed")
-	const seat = async (name: string) => {
+	const seat = async () => {
 		const bot = await store.createBot(newBotIdentity([]), LOCAL.spaceId)
 		await store.addBotToSpace(bot.id, shed.id)
-		return { ...bot, name }
+		return bot
 	}
-	return { store, shed, kept: await seat("Ada"), unshared: await seat("Nyx") }
+	return { store, shed, kept: await seat(), unshared: await seat() }
 }
 
 const joinedMember = async () => {
@@ -122,6 +124,7 @@ const joinedMember = async () => {
 		isListedInOpenSpace: (botId) =>
 			roster.getState().bots.some((bot) => bot.id === botId),
 	})
+	detachChat = chat.detach
 	await act(() => chat.controller.open(shared.kept.id, shared.shed.id))
 	await act(() => chat.controller.openAside(shared.unshared.id, shared.shed.id))
 	await settled()
@@ -129,6 +132,7 @@ const joinedMember = async () => {
 }
 
 afterEach(async () => {
+	detachChat()
 	cleanup()
 	await joinedHosts.activate(null)
 	joinedHosts.forget(SHED_HOST)
