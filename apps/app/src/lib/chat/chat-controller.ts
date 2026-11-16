@@ -112,6 +112,7 @@ export type ChatControllerOptions = {
 	onMessageStored?: MessageStoredListener
 	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
+	isListedInOpenSpace?: (botId: string) => boolean
 	rereadConversation?: (conversationId: string) => void
 }
 
