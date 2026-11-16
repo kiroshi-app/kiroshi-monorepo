@@ -614,6 +614,8 @@ conversation-message-transcript--jumps-to-the-newest-page
 conversation-message-transcript--lands-at-end
 conversation-message-transcript--loads-newer-messages
 conversation-message-transcript--marks-new-messages
+conversation-message-transcript--opening
+conversation-message-transcript--opening-waits-for-the-start-of-history
 conversation-message-transcript--prepends-older-messages
 conversation-message-transcript--rests-after-a-resize
 conversation-message-transcript--rests-posted-questions-at-the-end

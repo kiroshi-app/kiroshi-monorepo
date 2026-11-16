@@ -36,7 +36,10 @@ import {
 } from "@workspace/ui/components/missions.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
-import type { TranscriptItem } from "@workspace/ui/components/transcript"
+import {
+	Transcript,
+	type TranscriptItem,
+} from "@workspace/ui/components/transcript"
 import { UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -294,7 +297,15 @@ const NARROW_FRAME_WIDTH = 480
 
 const NARROW_COLUMN_WIDTH = 448
 
+const BAR_TO_BLOCK = 24
+
 const BLOCK_TO_FIRST_MESSAGE = 16
+
+const turnsOf = (messages: string[]): TranscriptItem[] =>
+	messages.map((message) => ({
+		key: message,
+		render: () => <UserTurn>{message}</UserTurn>,
+	}))
 
 type MissionFrameProps = {
 	header: ReactNode
@@ -315,25 +326,15 @@ const MissionFrame = ({
 		data-holds="frame"
 	>
 		{header}
-		<div
-			className={cn(
-				"min-h-0 flex-1 overflow-y-auto py-6",
+		<Transcript
+			className="flex-1"
+			contentClassName={cn(
+				"mx-auto w-full max-w-172 pb-6",
 				isNarrow ? "px-4" : "px-6",
 			)}
-			data-holds="thread"
-		>
-			<div
-				className="mx-auto flex max-w-160 flex-col gap-4"
-				data-holds="column"
-			>
-				<MissionProperties {...ARTBOARD_PROPERTIES} {...properties} />
-				<div className="flex flex-col gap-4" data-holds="messages">
-					{messages.map((message) => (
-						<UserTurn key={message}>{message}</UserTurn>
-					))}
-				</div>
-			</div>
-		</div>
+			opening={<MissionProperties {...ARTBOARD_PROPERTIES} {...properties} />}
+			rows={turnsOf(messages)}
+		/>
 	</div>
 )
 
@@ -375,18 +376,26 @@ const expectStatePill = async (bar: HTMLElement) => {
 const expectOpenMission = async (canvasElement: HTMLElement) => {
 	const frame = holderOf(canvasElement, "frame")
 	const bar = await expectStaticHeaderBar(frame)
-	const column = holderOf(frame, "column")
-	const block = slotIn(column, "mission-properties")
-	const messages = holderOf(column, "messages")
+	const thread = slotIn(frame, "message-scroller-viewport")
+	const content = slotIn(thread, "message-scroller-content")
+	const block = slotIn(
+		slotIn(content, "transcript-opening"),
+		"mission-properties",
+	)
+	const messages = slotsIn(content, "message-scroller-item")
 
 	await expect(slotsIn(frame, "header-island")).toHaveLength(0)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
 	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
-	await expect(boxOf(block).width).toBe(boxOf(column).width)
-	await expect(boxOf(messages).top - boxOf(block).bottom).toBe(
-		BLOCK_TO_FIRST_MESSAGE,
-	)
+	await expect([boxOf(messages[0]).left, boxOf(messages[0]).width]).toEqual([
+		boxOf(block).left,
+		boxOf(block).width,
+	])
+	await expect([
+		boxOf(block).top - boxOf(content).top,
+		boxOf(messages[0]).top - boxOf(block).bottom,
+	]).toEqual([BAR_TO_BLOCK, BLOCK_TO_FIRST_MESSAGE])
 	await expect(getComputedStyle(block).borderBottomColor).toBe(
 		tokenStyleIn(
 			block,
@@ -397,7 +406,7 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 		),
 	)
 
-	return { frame, bar, column, block, messages }
+	return { frame, bar, thread, block, messages }
 }
 
 const propertiesIn = (block: Element) =>
@@ -414,22 +423,23 @@ export const Mission3a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3a, the open mission. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session and Edit icon buttons, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
+					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session and Edit icon buttons, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
 	},
 	render: inMissionFrame,
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const { column, block, messages } = await expectOpenMission(canvasElement)
+		const { bar, block, messages } = await expectOpenMission(canvasElement)
 
-		await expect(boxOf(column).width).toBe(COLUMN_WIDTH)
+		await expect(boxOf(block).width).toBe(COLUMN_WIDTH)
+		await expect(boxOf(block).top - boxOf(bar).bottom).toBe(BAR_TO_BLOCK)
 		await expect(propertiesIn(block)).toEqual([
 			"ticket",
 			"activity",
 			"pull-request",
 		])
-		await expect(messages.children).toHaveLength(2)
+		await expect(messages).toHaveLength(2)
 
 		await userEvent.click(
 			canvas.getByRole("button", { name: ORIGIN_CONVERSATION }),
@@ -503,7 +513,7 @@ export const MissionScrolled3d = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3d, a mission thread long enough to scroll, scrolled to its end. Check that the bar stays where it was while the properties block leaves under it with the messages, so only the path, the objective and the state stay in sight. Pick `Mission3a` for a thread short enough to rest whole. " +
+					"Artboard 3d, a mission thread long enough to scroll, landed on its end as the transcript opens it. Check that the bar stays where it was while the properties block leaves under it with the messages, so only the path, the objective and the state stay in sight. Pick `Mission3a` for a thread short enough to rest whole. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -515,20 +525,23 @@ export const MissionScrolled3d = meta.story({
 		/>
 	),
 	play: async ({ canvasElement }) => {
-		const { frame, bar, block } = await expectOpenMission(canvasElement)
-		const thread = holderOf(frame, "thread")
-		const restingBar = boxOf(bar)
+		const { bar, thread, block } = await expectOpenMission(canvasElement)
+		const landedBar = boxOf(bar)
 
-		await expect(boxOf(block).top).toBeGreaterThan(restingBar.bottom)
-
-		thread.scrollTop = thread.scrollHeight
 		await waitFor(() => expect(thread.scrollTop).toBeGreaterThan(0))
+		await expect(boxOf(block).bottom).toBeLessThan(landedBar.bottom)
 
+		thread.dispatchEvent(
+			new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
+		)
+		thread.scrollTop = 0
+		await waitFor(() =>
+			expect(boxOf(block).top - boxOf(bar).bottom).toBe(BAR_TO_BLOCK),
+		)
 		await expect([boxOf(bar).top, boxOf(bar).height]).toEqual([
-			restingBar.top,
-			restingBar.height,
+			landedBar.top,
+			landedBar.height,
 		])
-		await expect(boxOf(block).bottom).toBeLessThan(restingBar.bottom)
 	},
 })
 
@@ -561,17 +574,18 @@ export const MissionNarrow3e = meta.story({
 		/>
 	),
 	play: async ({ canvasElement }) => {
-		const { frame, bar, column, block } = await expectOpenMission(canvasElement)
+		const { frame, bar, block } = await expectOpenMission(canvasElement)
 		const path = pathLinkIn(bar)
 		const objective = slotIn(bar, "mission-objective")
 		const row = block.querySelector('[data-property="ticket"]') as HTMLElement
 		const line = slotIn(row, "mission-ticket-line")
 		const actions = slotIn(row, "mission-ticket-actions")
 
-		await expect([boxOf(frame).width, boxOf(column).width]).toEqual([
-			NARROW_FRAME_WIDTH,
-			NARROW_COLUMN_WIDTH,
-		])
+		await expect([
+			boxOf(frame).width,
+			boxOf(block).width,
+			boxOf(block).top - boxOf(bar).bottom,
+		]).toEqual([NARROW_FRAME_WIDTH, NARROW_COLUMN_WIDTH, BAR_TO_BLOCK])
 		await expect(path.scrollWidth).toBeGreaterThan(path.clientWidth)
 		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
 		await expect(
@@ -590,10 +604,7 @@ export const MissionNarrow3e = meta.story({
 	},
 })
 
-const SHORT_THREAD: TranscriptItem[] = TWO_MESSAGES.map((message) => ({
-	key: message,
-	render: () => <UserTurn>{message}</UserTurn>,
-}))
+const SHORT_THREAD = turnsOf(TWO_MESSAGES)
 
 type MissionThreadProps = {
 	header: ReactNode
