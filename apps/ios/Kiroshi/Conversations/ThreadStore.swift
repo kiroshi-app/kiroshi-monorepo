@@ -41,6 +41,7 @@ final class ThreadStore {
     @ObservationIgnored private var loading: Task<Void, Never>?
     @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var sending: Task<Void, Never>?
+    @ObservationIgnored private var refusedSend: Outgoing?
     @ObservationIgnored private var stopping: Task<Void, Never>?
     @ObservationIgnored private var loadingOlder: Task<Void, Never>?
     @ObservationIgnored private var answeringTask: Task<Void, Never>?
@@ -267,6 +268,7 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
+        refusedSend = nil
         if let rejection = AttachmentRejection.of(attachments) {
             sendFailure = SendFailure(rejection)
             return nil
@@ -332,6 +334,7 @@ final class ThreadStore {
         } catch is CancellationError {
             return
         } catch {
+            guard !entries.contains(where: { $0.id == outgoing.id }) else { return }
             if draft.isEmpty {
                 draft = outgoing.written
             }
@@ -339,6 +342,19 @@ final class ThreadStore {
                 attachments = outgoing.picked
             }
             sendFailure = SendFailure(error)
+            refusedSend = outgoing
+        }
+    }
+
+    private func settleRefusedSend() {
+        guard let refusedSend, entries.contains(where: { $0.id == refusedSend.id }) else { return }
+        self.refusedSend = nil
+        sendFailure = nil
+        if draft == refusedSend.written {
+            draft = ""
+        }
+        if attachments == refusedSend.picked {
+            attachments = []
         }
     }
 
@@ -416,6 +432,7 @@ final class ThreadStore {
         }
         olderFailed = false
         layOut()
+        settleRefusedSend()
     }
 
     private func threadMessage(_ message: TranscriptMessage) -> ThreadMessage {
@@ -486,6 +503,7 @@ final class ThreadStore {
         guard !updateMessage(message.id, { $0.replaceText(message.text) }) else { return }
         entries.append(message)
         layOut()
+        settleRefusedSend()
     }
 
     @discardableResult

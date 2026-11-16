@@ -17,7 +17,10 @@ final class MissionThreadStore {
     var draft = ""
     var attachments: [PickedAttachment] = []
     private(set) var messages: [MissionThreadMessage] = [] {
-        didSet { transcribe() }
+        didSet {
+            transcribe()
+            settleRefusedSend()
+        }
     }
     private(set) var transcript = MissionTranscript()
     private(set) var hasLoaded = false
@@ -36,6 +39,7 @@ final class MissionThreadStore {
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
+    @ObservationIgnored private var refusedSend: RefusedSend?
     @ObservationIgnored private var seeding: Task<Void, Never>?
     @ObservationIgnored private var isRelayRereading = false
     @ObservationIgnored private var hasTrailingRelayReread = false
@@ -132,6 +136,7 @@ final class MissionThreadStore {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let picked = attachments
         sendProblem = nil
+        refusedSend = nil
         defer { isSending = false }
         do {
             let sentAt = now()
@@ -152,23 +157,41 @@ final class MissionThreadStore {
                     role: .user, content: content, createdAt: message.createdAt, authorBotId: nil,
                     authorAccountId: authorship.accountId),
                 into: messages)
-            if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
-                draft = ""
-            }
-            if attachments == picked {
-                attachments = []
-            }
+            clearDraft(sent: text, picked: picked)
         } catch is CancellationError {
             return
-        } catch MissionsCallError.refused(status: 413) {
-            sendProblem = .tooLarge
-        } catch MissionsCallError.unknownToTheHost {
-            sendProblem = .olderHost
-        } catch RelayCallError.hostOffline {
-            sendProblem = .offline
         } catch {
-            sendProblem = .couldNotSend
+            guard !messages.contains(where: { $0.id == id }) else {
+                clearDraft(sent: text, picked: picked)
+                return
+            }
+            sendProblem =
+                switch error {
+                case MissionsCallError.refused(status: 413): .tooLarge
+                case MissionsCallError.unknownToTheHost: .olderHost
+                case RelayCallError.hostOffline: .offline
+                default: .couldNotSend
+                }
+            refusedSend = RefusedSend(id: id, text: text, picked: picked)
         }
+    }
+
+    private func clearDraft(sent text: String, picked: [PickedAttachment]) {
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
+            draft = ""
+        }
+        if attachments == picked {
+            attachments = []
+        }
+    }
+
+    private func settleRefusedSend() {
+        guard let refusedSend, messages.contains(where: { $0.id == refusedSend.id }) else {
+            return
+        }
+        self.refusedSend = nil
+        sendProblem = nil
+        clearDraft(sent: refusedSend.text, picked: refusedSend.picked)
     }
 
     private func apply(_ update: RelayUpdate) {
@@ -241,6 +264,12 @@ final class MissionThreadStore {
             }
         }
     }
+}
+
+private struct RefusedSend {
+    let id: String
+    let text: String
+    let picked: [PickedAttachment]
 }
 
 extension MissionThreadStore: ThreadModel {
