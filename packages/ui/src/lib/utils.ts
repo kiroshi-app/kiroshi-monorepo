@@ -13,7 +13,7 @@ const twMerge = extendTailwindMerge({
 					rounded: ["control", "compact-control", "compact-segment"],
 				},
 			],
-			shadow: [{ shadow: ["popover"] }],
+			shadow: [{ shadow: ["popover", "comment-card"] }],
 		},
 	},
 })

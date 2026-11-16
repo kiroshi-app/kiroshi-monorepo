@@ -688,6 +688,11 @@ async fn online_with_two_members(member: &Member, host: &SealingHost) -> JoinedS
 		(members.expect("the members read").len() == 2).then_some(())
 	})
 	.await;
+	let guests = member.app.state::<RelayGuests>();
+	until("the members read to announce its roster", || async {
+		(!guests.is_reading_members(&joined.id)).then_some(())
+	})
+	.await;
 	let state = member.app.state::<DatabaseState>();
 	let spaces = state.as_ref().expect("the database").joined_spaces();
 	spaces.learned(joined.id.clone(), SPACE.to_owned()).await.expect("the space id is learned");

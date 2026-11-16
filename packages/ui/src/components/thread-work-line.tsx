@@ -49,6 +49,7 @@ type ThreadWorkLineProps = {
 	agents: ThreadWorkLineAgent[]
 	isOpen: boolean
 	onOpenChange: (isOpen: boolean) => void
+	className?: string
 }
 
 type FailedAgent = Extract<ThreadWorkLineAgent, { state: "failed" }>
@@ -369,6 +370,7 @@ const ThreadWorkLine = ({
 	agents,
 	isOpen,
 	onOpenChange,
+	className,
 }: ThreadWorkLineProps) => {
 	const detailId = useId()
 	const failed = agents.filter(isFailed)
@@ -411,7 +413,10 @@ const ThreadWorkLine = ({
 
 	if (!isDetailShown)
 		return (
-			<div data-slot="thread-work-line" className="min-w-0 ps-4.5">
+			<div
+				data-slot="thread-work-line"
+				className={cn("min-w-0 ps-4.5", className)}
+			>
 				{line}
 			</div>
 		)
@@ -420,7 +425,10 @@ const ThreadWorkLine = ({
 		<div
 			data-slot="thread-work-line"
 			data-open=""
-			className="flex min-w-0 flex-col gap-2 rounded-control bg-foreground/4 p-3"
+			className={cn(
+				"flex min-w-0 flex-col gap-2 rounded-control bg-foreground/4 p-3",
+				className,
+			)}
 		>
 			{line}
 			<span aria-hidden="true" className="h-px shrink-0 bg-foreground/8" />

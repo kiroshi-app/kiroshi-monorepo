@@ -34,6 +34,11 @@ import {
 	PLACEHOLDER_LOOK,
 } from "@workspace/ui/components/library-document-view"
 import { MARKDOWN_CLASS } from "@workspace/ui/components/markdown"
+import type { MarkdownRunRenderer } from "@workspace/ui/components/markdown/run"
+import {
+	type MarkdownRun,
+	runPiecesOf,
+} from "@workspace/ui/components/markdown/runs"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -74,6 +79,8 @@ const COMPOSED_INPUT = [
 ]
 
 const SOURCES = new WeakMap<HTMLElement, string>()
+
+const NO_RUNS: MarkdownRun[] = []
 
 const isTextControl = (
 	field: HTMLElement,
@@ -236,17 +243,74 @@ const typedOf = ({ inputType, data, dataTransfer }: InputEvent) => {
 	return undefined
 }
 
-const marksOf = (source: string, nodes: InlineNode[]): ReactNode[] =>
+type Shown = {
+	source: string
+	text: BlockText
+	hint?: string
+	runs: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
+	runEnds: Map<string, number>
+}
+
+const textSpansOf = (nodes: InlineNode[]): SourceRange[] =>
+	nodes.flatMap((node) => {
+		if (node.kind === "text") return [{ from: node.from, to: node.to }]
+		if (node.kind === "escape") return [{ from: node.from + 1, to: node.to }]
+		return "children" in node ? textSpansOf(node.children) : []
+	})
+
+const runEndsOf = (text: BlockText, runs: MarkdownRun[]) => {
+	const spans = textSpansOf(text.lines.flatMap(({ nodes }) => nodes))
+	return new Map(
+		runs.map(({ id, start, end }) => [
+			id,
+			Math.max(
+				...spans
+					.filter(({ from, to }) => start < to && end > from)
+					.map(({ to }) => Math.min(end, to)),
+			),
+		]),
+	)
+}
+
+const textOf = (
+	{ source, runs, renderRun, runEnds }: Shown,
+	from: number,
+	to: number,
+) => {
+	const spanOf = (start: number, end: number) => (
+		<span data-from={start} key={start}>
+			{source.slice(start, end)}
+		</span>
+	)
+	if (!renderRun || runs.length === 0) return spanOf(from, to)
+	return runPiecesOf(runs, from, to).map((piece) => {
+		const start = from + piece.from
+		const end = from + piece.to
+		return piece.ids.reduceRight<ReactNode>(
+			(children, id) => (
+				<Fragment key={start}>
+					{renderRun({ id, isEnd: runEnds.get(id) === end, children })}
+				</Fragment>
+			),
+			spanOf(start, end),
+		)
+	})
+}
+
+const marksOf = (shown: Shown, nodes: InlineNode[]): ReactNode[] =>
 	nodes.map((node) => {
 		if (node.kind === "marker") return null
-		if (node.kind === "text" || node.kind === "escape") {
-			const from = node.kind === "escape" ? node.from + 1 : node.from
+		if (node.kind === "text" || node.kind === "escape")
 			return (
-				<span data-from={from} key={node.from}>
-					{source.slice(from, node.to)}
-				</span>
+				<Fragment key={node.from}>
+					{textOf(
+						shown,
+						node.kind === "escape" ? node.from + 1 : node.from,
+						node.to,
+					)}
+				</Fragment>
 			)
-		}
 		if (node.kind === "image")
 			return (
 				<img
@@ -260,17 +324,12 @@ const marksOf = (source: string, nodes: InlineNode[]): ReactNode[] =>
 				/>
 			)
 		const Tag = MARK_TAGS[node.kind]
-		return <Tag key={node.from}>{marksOf(source, node.children)}</Tag>
+		return <Tag key={node.from}>{marksOf(shown, node.children)}</Tag>
 	})
 
-type Shown = {
-	source: string
-	text: BlockText
-	hint?: string
-}
-
-const contentOf = ({ source, text, hint }: Shown, line: BlockTextLine) => {
-	if (line.nodes.length > 0) return marksOf(source, line.nodes)
+const contentOf = (shown: Shown, line: BlockTextLine) => {
+	const { text, hint } = shown
+	if (line.nodes.length > 0) return marksOf(shown, line.nodes)
 	const isLast = line === text.lines[text.lines.length - 1]
 	return (
 		<span data-from={line.contentFrom}>
@@ -357,6 +416,8 @@ type LibraryBlockTextProps = {
 	"aria-label": string
 	"data-slot": string
 	hint?: string
+	runs?: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
 	className?: string
 	onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void
 	onBlur?: (event: FocusEvent<HTMLDivElement>) => void
@@ -369,6 +430,8 @@ const LibraryBlockText = ({
 	type,
 	onEdit,
 	hint,
+	runs = NO_RUNS,
+	renderRun,
 	className,
 	onKeyDown,
 	fieldRef,
@@ -558,7 +621,10 @@ const LibraryBlockText = ({
 			role="textbox"
 			suppressContentEditableWarning
 		>
-			{blockOf({ source, text, hint }, generation)}
+			{blockOf(
+				{ source, text, hint, runs, renderRun, runEnds: runEndsOf(text, runs) },
+				generation,
+			)}
 		</div>
 	)
 }

@@ -202,6 +202,7 @@ export {
 	BOARD_ZOOM_MAX,
 	BOARD_ZOOM_MIN,
 	cullBoardObjects,
+	expandRect,
 	fitBoardBounds,
 	gridScreenPitch,
 	isAtZoomMax,

@@ -19,6 +19,10 @@ import {
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	LibraryCommentBarControls,
+	type LibraryCommentBarControlsProps,
+} from "@workspace/ui/components/library-comment-bar-controls"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenu,
@@ -393,11 +397,14 @@ const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
 	},
 }
 
+type LibraryBarComments = Omit<LibraryCommentBarControlsProps, "isOnDarkStage">
+
 type LibraryItemBarActionsProps<Item extends LibraryMenuSubject> = {
 	item: Item
 	actions: LibraryItemHandlers<Item>
 	surface: LibraryItemBarSurface
 	leading?: ReactNode
+	comments?: LibraryBarComments
 	onClose: () => void
 	onMenuOpenChange?: ComponentProps<typeof DropdownMenu>["onOpenChange"]
 	menuFinalFocus?: () => HTMLElement | boolean
@@ -409,6 +416,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	actions,
 	surface,
 	leading,
+	comments,
 	onClose,
 	onMenuOpenChange,
 	menuFinalFocus,
@@ -449,6 +457,12 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			data-slot="library-bar-actions"
 		>
 			{leading}
+			{comments ? (
+				<LibraryCommentBarControls
+					{...comments}
+					isOnDarkStage={surface === "lightbox"}
+				/>
+			) : null}
 			{onDownload || onCopy || hasMenu ? (
 				<AppHeaderCapsule className={fill}>
 					{onDownload ? (
@@ -541,6 +555,7 @@ export {
 	LIBRARY_BAR_ROUND,
 	LIBRARY_ISLAND_CONTEXT,
 	LIBRARY_OVERLAY_ISLAND,
+	type LibraryBarComments,
 	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,

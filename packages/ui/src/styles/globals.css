@@ -44,7 +44,6 @@
 	--control-hover: var(--muted);
 	--control-pressed: #e6e6e6;
 	--lightbox-control: rgb(24 24 26 / 0.85);
-	--lightbox-surface: rgb(11 11 12 / 0.92);
 	--lightbox-bar: rgb(11 11 12);
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
@@ -101,11 +100,11 @@
 	--color-control-hover: var(--control-hover);
 	--color-control-pressed: var(--control-pressed);
 	--color-lightbox-control: var(--lightbox-control);
-	--color-lightbox-surface: var(--lightbox-surface);
 	--color-lightbox-bar: var(--lightbox-bar);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);
+	--color-primary-soft: var(--primary-soft);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-muted: var(--muted);
@@ -176,6 +175,7 @@
 	--color-faint-foreground: var(--faint-foreground);
 	--color-disabled-foreground: var(--disabled-foreground);
 	--color-on-foreground: var(--on-foreground);
+	--color-on-foreground-muted: var(--on-foreground-muted);
 	--color-waiting-foreground: var(--waiting-foreground);
 	--color-mission-list-faint-foreground: var(--mission-list-faint-foreground);
 	--color-mission-list-group: var(--mission-list-group);
@@ -222,6 +222,22 @@
 	--shadow-board-sticky: var(--board-sticky-shadow);
 	--shadow-board-card: var(--board-card-shadow);
 	--shadow-board-card-dragging: var(--board-card-dragging-shadow);
+	--color-comment-card: var(--comment-card);
+	--color-comment-pin: var(--comment-pin);
+	--color-comment-pin-stage: var(--comment-pin-stage);
+	--color-comment-cursor-ring: var(--comment-cursor-ring);
+	--color-comment-cursor-stage-ring: var(--comment-cursor-stage-ring);
+	--color-lightbox-stage: var(--lightbox-stage);
+	--shadow-comment-pin: var(--comment-pin-shadow);
+	--shadow-comment-pin-selected: var(--comment-pin-selected-shadow);
+	--shadow-comment-pin-stage: var(--comment-pin-stage-shadow);
+	--shadow-comment-pin-agent: var(--comment-pin-agent-shadow);
+	--shadow-comment-pin-resolved: var(--comment-pin-resolved-shadow);
+	--shadow-comment-cursor: var(--comment-cursor-shadow);
+	--shadow-comment-cursor-stage: var(--comment-cursor-stage-shadow);
+	--shadow-comment-card: var(--comment-card-shadow);
+	--shadow-comment-list: var(--comment-list-shadow);
+	--shadow-comment-hint: var(--comment-hint-shadow);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--color-board-surface: var(--board-surface);
 	--color-board-dot: var(--board-dot);
@@ -367,6 +383,7 @@
 		--color-border: var(--border);
 		--color-primary: var(--primary);
 		--color-primary-strong: var(--primary-strong);
+		--color-primary-soft: var(--primary-soft);
 		--color-ring: var(--ring);
 	}
 }

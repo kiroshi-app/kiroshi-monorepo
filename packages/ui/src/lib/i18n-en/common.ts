@@ -505,6 +505,68 @@ const common = {
 			stillImporting_one: "{{name}} is still importing.",
 			stillImporting_other: "{{count}} files are still importing.",
 		},
+		comments: {
+			pin: {
+				open: "Comment by {{name}}",
+				resolved: "Resolved comment by {{name}}",
+			},
+			composer: {
+				placeholder: "Comment, @ to mention",
+				reply: "Reply, @ to mention",
+				mention: "Mention someone",
+				send: "Send",
+				shortcut: {
+					mac: "⌘⌥M",
+					other: "Ctrl+Shift+M",
+				},
+			},
+			mentions: {
+				label: "Mention",
+				agents: "Agents",
+				people: "People",
+			},
+			thread: {
+				resolve: "Resolve",
+				more: "More",
+				close: "Close",
+				comments: "Comments",
+				working_one: "{{names}} is working on it",
+				working_other: "{{names}} are working on it",
+				replies_one: "{{count}} reply, {{names}}",
+				replies_other: "{{count}} replies, {{names}}",
+				resolvedBy: "Resolved by {{name}}",
+				reopen: "Reopen",
+			},
+			list: {
+				label: "Comments",
+				open: "Open",
+				resolved: "Resolved",
+				replies_one: "{{count}} reply",
+				replies_other: "{{count}} replies",
+				emptyOpen: "No open comments",
+				emptyResolved: "No resolved comments",
+			},
+			bar: {
+				comment: "Comment",
+				shortcut: "C",
+				count_one: "{{count}} open comment",
+				count_other: "{{count}} open comments",
+			},
+			hint: {
+				document: "Click a block to comment, select text for a passage",
+				board: "Click a shape or the board to comment",
+				image: "Click for a point, drag for a zone",
+				escape: "Esc",
+			},
+			anchor: {
+				block: "On this paragraph",
+				passage: "On “{{text}}”",
+				goneText: "On text that’s no longer in the document",
+				goneShape: "On a shape that’s no longer on the board",
+				imagePoint: "On a point of the image",
+				imageZone: "On a zone of the image",
+			},
+		},
 		itemMenu: {
 			label: "Actions for {{name}}",
 			open: "Open",
@@ -609,6 +671,22 @@ const common = {
 			copy: "Couldn’t copy the image",
 			reveal: "Couldn’t show the file in its folder",
 			delete: "Couldn’t delete the item",
+			comment: {
+				list: "Couldn’t show the comments. Open the item again from the Library.",
+				send: "Couldn’t send the comment. Press Send to try again.",
+				reply: "Couldn’t send the reply. Press Send to try again.",
+				resolve: "Couldn’t resolve the comment. Press Resolve to try again.",
+				reopen: "Couldn’t reopen the comment. Press Reopen to try again.",
+				agentTurns:
+					"Couldn’t show which agents are working on comments. Open the item again from the Library.",
+				mentionedThreadGone:
+					"The comment you were mentioned in isn’t on {{name}} anymore.",
+				turnFailedOn:
+					"{{agent}} couldn’t reply to the comment on {{item}}. Mention it again to try again.",
+				turnFailed:
+					"{{agent}} couldn’t reply to a comment. Mention it again to try again.",
+				unnamedAgent: "An agent",
+			},
 			document: {
 				create: "Couldn’t create the document. Try again from New document.",
 				open: "Couldn’t open the document. Open it again from the Library.",
@@ -705,6 +783,12 @@ const common = {
 			label: "Board",
 			loading: "Loading the board…",
 			objects: "Board objects",
+		},
+		comments: {
+			anchor: {
+				node: "On “{{title}}”",
+				board: "On the board",
+			},
 		},
 		object: {
 			named: "{{kind}}: {{text}}",

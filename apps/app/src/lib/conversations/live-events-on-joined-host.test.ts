@@ -19,6 +19,7 @@ import {
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { FOREIGN_SPEAKER_SILENCE_MS } from "./foreign-turns"
+import { withNeedsYou } from "./host-state-rows"
 import { createScriptedDriver } from "./scripted-driver"
 import type { Conversation, ConversationInPage } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -755,6 +756,25 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await reconnectHost()
 
 		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+	})
+
+	it("drops the Needs you of a conversation answered on another device once the joined host comes back up", async () => {
+		const { roster, writeConversation } = await mountedRoster(HOSTED_ROSTER)
+		await joinHost()
+		await settled()
+		const { id } = await writeConversation("Asked before the cut")
+		await emitOnHost("conversation://state-changed", {
+			spaceId: "personal",
+			conversationId: id,
+			state: "needs_you",
+			pendingPrompt: { promptId: QUESTION.id, kind: "question", text: "Wall" },
+		})
+		const rowOf = () => withNeedsYou([{ id }], roster.getState().hostStates)[0]
+		expect(rowOf()).toMatchObject({ badge: "attention" })
+
+		await reconnectHost()
+
+		await vi.waitFor(() => expect(rowOf()).toEqual({ id }))
 	})
 
 	it("reads nothing of a local roster when the joined host comes back up", async () => {
@@ -2144,6 +2164,110 @@ describe.each([
 				expect(questionRowsIn(shownInstead())).toEqual([])
 				expect(askedIn(shownInstead())).toBeNull()
 				detach()
+			},
+		)
+	},
+)
+
+const LINK_RETURNS = [
+	["the joined host comes back up", reconnectHost],
+	["the relay of the joined Space reopens", () => reopenRelay(JOINED)],
+] as const
+
+describe.each([
+	["a room", openWaitingRoom],
+	["a solo conversation", openWaitingSoloChat],
+] as const)(
+	"the questions waiting in %s once the link of the member comes back",
+	(_, open) => {
+		const openJoined = async (
+			heldAtOpen: (waiting: ScopedEvent) => ScopedEvent[],
+		) => {
+			const read = holdPendingQuestions()
+			await joinHost()
+			const opened = await open()
+			const waiting: ScopedEvent = {
+				scope: { ...foreignScope(opened.conversationId), botId: opened.botId },
+				turn: storedTurn(opened.conversationId),
+				event: ASKED_QUESTION,
+			}
+			await read.answer(heldAtOpen(waiting))
+			return { ...opened, waiting }
+		}
+
+		const NONE_HELD = () => []
+
+		const ONE_HELD = (waiting: ScopedEvent) => [waiting]
+
+		it.each(LINK_RETURNS)(
+			"shows the card of a question asked while away once %s",
+			async (_, comeBack) => {
+				const { waiting, shown, detach } = await openJoined(NONE_HELD)
+				expect(askedIn(shown())).toBeNull()
+				wire.pendingQuestions = () => Promise.resolve([waiting])
+
+				await comeBack()
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(LINK_RETURNS)(
+			"closes the card of a question answered on another device once %s",
+			async (_, comeBack) => {
+				const { shown, detach } = await openJoined(ONE_HELD)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				wire.pendingQuestions = () => Promise.resolve([])
+
+				await comeBack()
+
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(LINK_RETURNS)(
+			"keeps one card and one row for a question still waiting once %s",
+			async (_, comeBack) => {
+				const { waiting, shown, detach } = await openJoined(ONE_HELD)
+				wire.pendingQuestions = () => Promise.resolve([waiting])
+
+				await comeBack()
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(LINK_RETURNS)(
+			"keeps the card of a question asked while the re-read runs once %s",
+			async (_, comeBack) => {
+				const { waiting, shown, detach } = await openJoined(NONE_HELD)
+				const reread = holdPendingQuestions()
+				await comeBack()
+
+				await emitOnHost("agent://event", waiting)
+				await reread.answer([])
+
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(LINK_RETURNS)(
+			"keeps the card and raises a notice when the re-read is refused once %s",
+			async (_, comeBack) => {
+				const opened = await openJoined(ONE_HELD)
+				wire.pendingQuestions = () => Promise.reject("host unreachable")
+
+				await comeBack()
+
+				expect(opened.hasFailed()).toBe(true)
+				expect(askedIn(opened.shown())).toEqual(ASKED_CARD)
+				opened.detach()
 			},
 		)
 	},

@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
-import { Markdown } from "@workspace/ui/components/markdown"
+import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import { RosterProvider } from "@workspace/ui/components/roster"
 import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
@@ -558,5 +559,183 @@ describe("companion mentions", () => {
 		expect(renderInConversation("nothing here <@ or @companion")).not.toContain(
 			'data-slot="bot-mention"',
 		)
+	})
+})
+
+describe("markdown runs", () => {
+	const SOURCE = "The boat leaves the dock right after lunch."
+
+	const runOver = (id: string, text: string, source = SOURCE) => {
+		const start = source.indexOf(text)
+		return { id, start, end: start + text.length }
+	}
+
+	const renderRuns = (runs: MarkdownRun[], source = SOURCE) =>
+		renderToStaticMarkup(
+			createElement(
+				I18nProvider,
+				null,
+				createElement(
+					Markdown,
+					{
+						runs,
+						renderRun: ({ id, isEnd, children }) =>
+							createElement(
+								"mark",
+								{ "data-run": id, "data-end": isEnd || undefined },
+								children,
+							),
+					} as MarkdownProps,
+					source,
+				),
+			),
+		)
+
+	it("draws both of two runs that overlap, each ending on its own last piece", () => {
+		const html = renderRuns([
+			runOver("first", "boat leaves the dock"),
+			runOver("second", "the dock right after"),
+		])
+
+		expect(html).toContain(
+			'The <mark data-run="first">boat leaves </mark>' +
+				'<mark data-run="first" data-end="true"><mark data-run="second">the dock</mark></mark>' +
+				'<mark data-run="second" data-end="true"> right after</mark> lunch.',
+		)
+	})
+
+	it("draws a run that sits inside another", () => {
+		const html = renderRuns([
+			runOver("outer", "boat leaves the dock"),
+			runOver("inner", "leaves"),
+		])
+
+		expect(html).toContain(
+			'<mark data-run="outer">boat </mark>' +
+				'<mark data-run="outer"><mark data-run="inner" data-end="true">leaves</mark></mark>' +
+				'<mark data-run="outer" data-end="true"> the dock</mark>',
+		)
+	})
+
+	it("draws a caret that falls inside a run, and the run around it", () => {
+		const caret = SOURCE.indexOf("leaves")
+		const html = renderRuns([
+			{ id: "caret", start: caret, end: caret },
+			runOver("passage", "boat leaves"),
+		])
+
+		expect(html).toContain(
+			'<mark data-run="passage">boat </mark>' +
+				'<mark data-run="caret" data-end="true"></mark>' +
+				'<mark data-run="passage" data-end="true">leaves</mark>',
+		)
+	})
+
+	it("draws a run over the words that follow a mention", () => {
+		const source = "Ask <@bot-atlas> for the notes."
+		const html = renderRuns([runOver("passage", "the notes", source)], source)
+
+		expect(html).toContain(
+			' for <mark data-run="passage" data-end="true">the notes</mark>.',
+		)
+		expect(html).toContain('data-slot="bot-mention"')
+	})
+
+	const markedIn = (html: string) =>
+		[
+			...html.matchAll(
+				/<mark data-run="passage"( data-end="true")?>(.*?)<\/mark>/gs,
+			),
+		].map(([, end, drawn]) => ({
+			text: drawn.replace(/<[^>]+>/g, ""),
+			isEnd: end !== undefined,
+		}))
+
+	it("draws a run inside a fence over its characters, line by line, with their syntax colours", () => {
+		const source =
+			"```ts\nconst launch = await ship()\nawait announce(launch)\n```"
+		const html = renderRuns(
+			[runOver("passage", "ship()\nawait", source)],
+			source,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "ship()", isEnd: false },
+			{ text: "await", isEnd: true },
+		])
+		expect(html).toMatch(
+			/<mark data-run="passage"><span><span style="--code-token-light/,
+		)
+		expect(html.replace(/<[^>]+>/g, "")).toContain(
+			"const launch = await ship()\nawait announce(launch)",
+		)
+	})
+
+	const NESTED_FENCE =
+		"- Run it:\n\n  ```\n  ship()\n  announce()\n  ```\n\n  Then rest."
+
+	it("draws a run in a fence whose lines are indented under a list item", () => {
+		const html = renderRuns(
+			[runOver("passage", "announce", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([{ text: "announce", isEnd: true }])
+		expect(html.replace(/<[^>]+>/g, "")).toContain("ship()\nannounce()")
+	})
+
+	it("draws a run over two indented lines of a fence without their indentation", () => {
+		const html = renderRuns(
+			[runOver("passage", "ship()\n  announce", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "ship()", isEnd: false },
+			{ text: "announce", isEnd: true },
+		])
+	})
+
+	it("ends a run that enters a fence from the text above it inside the fence alone", () => {
+		const html = renderRuns(
+			[runOver("passage", "Run it:\n\n  ```\n  ship", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "Run it:", isEnd: false },
+			{ text: "ship", isEnd: true },
+		])
+	})
+
+	it("ends a run that leaves a fence on the text below it alone", () => {
+		const html = renderRuns(
+			[runOver("passage", "announce()\n  ```\n\n  Then", NESTED_FENCE)],
+			NESTED_FENCE,
+		)
+
+		expect(markedIn(html)).toEqual([
+			{ text: "announce()", isEnd: false },
+			{ text: "Then", isEnd: true },
+		])
+	})
+
+	it("draws a caret inside a fence where it stands", () => {
+		const caret = NESTED_FENCE.indexOf("announce")
+		const html = renderRuns(
+			[{ id: "caret", start: caret, end: caret }],
+			NESTED_FENCE,
+		)
+
+		expect(html).toMatch(
+			/ship\(\)(<[^>]+>)*\n<mark data-run="caret" data-end="true">(<[^>]+>)*<\/mark>(<[^>]+>)*announce/,
+		)
+	})
+
+	it("draws a run in an indented code block of one line", () => {
+		const source = "Run it:\n\n    ship()"
+		const html = renderRuns([runOver("passage", "ship", source)], source)
+
+		expect(markedIn(html)).toEqual([{ text: "ship", isEnd: true }])
 	})
 })

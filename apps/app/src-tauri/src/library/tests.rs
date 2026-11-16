@@ -40,7 +40,7 @@ fn temp_root() -> RemovedOnDrop {
 	RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-library-{}", Uuid::new_v4())))
 }
 
-fn put(root: &Path, space_id: &str, name: &str, content: &[u8]) {
+pub(crate) fn put(root: &Path, space_id: &str, name: &str, content: &[u8]) {
 	let dir = space_dir(root, space_id);
 	fs::create_dir_all(&dir).expect("the space folder lands");
 	fs::write(dir.join(name), content).expect("the file lands");
@@ -348,13 +348,13 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 	);
 }
 
-fn a_host(name: &str) -> AppOfItsOwn {
+pub(crate) fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("library-{name}"), mock_builder());
 	app.manage(db::bootstrap(app.handle()));
 	app
 }
 
-async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
+pub(crate) async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
 	let state = app.state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	database.spaces().create(name.to_owned()).await.expect("the space lands").id
@@ -2600,7 +2600,7 @@ async fn a_document_attached_to_a_sent_message_reads_back_with_it_and_follows_it
 	);
 }
 
-const A_BOARD: &str = r#"{
+pub(crate) const A_BOARD: &str = r#"{
 	"nodes": [
 		{ "id": "a", "type": "text", "text": "Hello", "x": -40, "y": 10, "width": 100, "height": 50, "color": "3" },
 		{ "id": "b", "type": "group", "label": "Launch", "x": 200, "y": -20, "width": 300, "height": 200 }

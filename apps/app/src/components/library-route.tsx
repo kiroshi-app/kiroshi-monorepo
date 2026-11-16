@@ -38,7 +38,7 @@ const useShowOpening = () => {
 }
 
 export const LibraryRoute = () => {
-	const { rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
+	const { core, rosteredHostSpaceId, rosterView, scopes } = useWorkspace()
 	const opening = openingOf(useSearch({ from: "/library" }))
 	const openInNewTab = useOpenLibraryItemInNewTab()
 	const showOpening = useShowOpening()
@@ -58,6 +58,7 @@ export const LibraryRoute = () => {
 					opening={opening}
 					spaceId={rosteredHostSpaceId}
 					spaceTint={scopes.spaceHue}
+					viewerName={core.preferences.displayName}
 				/>
 			) : (
 				<ScreenLayout header={<BareAppHeader />} />

@@ -340,21 +340,27 @@ const AgentCaret = ({ writer, onStop, onOpenConversation }: AgentCardProps) => {
 
 type LibraryDocumentWrittenRunProps = AgentCardProps & {
 	isEnd: boolean
+	hasPlacedCaret?: boolean
 	children: ReactNode
 }
 
 const LibraryDocumentWrittenRun = ({
 	writer,
 	isEnd,
+	hasPlacedCaret = false,
 	children,
 	onStop,
 	onOpenConversation,
 }: LibraryDocumentWrittenRunProps) => (
 	<span {...agentScopeOf(writer.agent)}>
-		<span className={WRITTEN_RUN_LOOK} data-slot="library-document-run">
+		<span
+			className={WRITTEN_RUN_LOOK}
+			data-passage-end={isEnd && hasPlacedCaret ? writer.agent.id : undefined}
+			data-slot="library-document-run"
+		>
 			{children}
 		</span>
-		{isEnd ? (
+		{isEnd && !hasPlacedCaret ? (
 			<AgentCaret
 				onOpenConversation={onOpenConversation}
 				onStop={onStop}

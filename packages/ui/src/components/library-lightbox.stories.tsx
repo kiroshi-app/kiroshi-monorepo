@@ -29,8 +29,16 @@ import {
 	LIBRARY_ITEMS,
 	LIBRARY_LIGHTBOX_IMAGES,
 } from "@workspace/ui/components/library.fixtures"
+import {
+	COMMENT_COUNTS,
+	OPEN_THREADS,
+} from "@workspace/ui/components/library-comments.fixtures"
+import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
 import type { LibraryItem } from "@workspace/ui/components/library-grid"
-import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
+import type {
+	LibraryBarComments,
+	LibraryItemActions,
+} from "@workspace/ui/components/library-item-menu"
 import {
 	LibraryLightbox,
 	type LibraryLightboxImage,
@@ -46,7 +54,11 @@ type LibraryWithLightboxProps = LibraryItemActions<
 > &
 	Pick<
 		LibraryLightboxProps,
-		"onSaveToLibrary" | "onCopyImage" | "isSavingToLibrary" | "dragRegion"
+		| "onSaveToLibrary"
+		| "onCopyImage"
+		| "isSavingToLibrary"
+		| "dragRegion"
+		| "comments"
 	> & {
 		openedAt: number | null
 		images?: LibraryLightboxImage[]
@@ -67,6 +79,7 @@ const LibraryWithLightbox = ({
 	onCopyImage,
 	isSavingToLibrary,
 	dragRegion,
+	comments,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -91,6 +104,7 @@ const LibraryWithLightbox = ({
 					overlay={
 						<LibraryLightbox
 							{...actions}
+							comments={comments}
 							count={images.length}
 							dragRegion={dragRegion}
 							isSavingToLibrary={isSavingToLibrary}
@@ -348,7 +362,7 @@ export const OverlayFitted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #0B0B0C at 92 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
+					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #080809 at 93 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
 			},
 		},
 	},
@@ -356,7 +370,7 @@ export const OverlayFitted = meta.story({
 		const popup = await lightbox()
 		const overlay = popup.getBoundingClientRect()
 		await expect(getComputedStyle(popup).backgroundColor).toBe(
-			"rgba(11, 11, 12, 0.92)",
+			"oklab(0.13493 0.000670321 -0.00230238 / 0.93)",
 		)
 
 		const bar = await expectStaticHeaderBar(popup)
@@ -460,7 +474,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #0B0B0C at 92 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
+					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #080809 at 93 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
 			},
 		},
 	},
@@ -468,7 +482,7 @@ export const Loading = meta.story({
 		const region = canvas.getByRole("region", { name: "Loading the image…" })
 		const surface = region.getBoundingClientRect()
 		await expect(getComputedStyle(region).backgroundColor).toBe(
-			"rgba(11, 11, 12, 0.92)",
+			"oklab(0.13493 0.000670321 -0.00230238 / 0.93)",
 		)
 
 		const bar = await expectLibrarySkeletonBar(region)
@@ -1547,5 +1561,84 @@ export const BarDragsTheWindow = meta.story({
 				),
 		).toEqual(["Library", "Download", "Copy", "More", "Close"])
 		await expectBarDragsTheWindow(bar)
+	},
+})
+
+const BAR_COMMENTS: LibraryBarComments = {
+	counts: COMMENT_COUNTS,
+	isCommentMode: false,
+	onCommentModeChange: fn(),
+	list: (
+		<LibraryCommentsList
+			counts={COMMENT_COUNTS}
+			onOpenThread={fn()}
+			onTabChange={fn()}
+			tab="open"
+			threads={OPEN_THREADS}
+		/>
+	),
+}
+
+const commentControlsIn = (popup: HTMLElement) => {
+	const controls = slotIn(popup, "library-comment-bar-controls")
+
+	return {
+		controls,
+		counter: within(controls).getByRole("button", { name: "3 open comments" }),
+		toggle: within(controls).getByRole("button", { name: "Comment" }),
+	}
+}
+
+export const WithComments = meta.story({
+	args: { comments: BAR_COMMENTS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar of an image that has comment threads, as artboard Img 1 draws it. Check the counter then the Comment button come first among the actions, before Download, that a press asks for comment mode, and that the counter opens the comments list dark, over the viewer, without closing it.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const popup = await lightbox()
+		const { controls, counter, toggle } = commentControlsIn(popup)
+
+		await expect(toggle).toHaveAttribute("aria-pressed", "false")
+		await expect(
+			controls.compareDocumentPosition(
+				within(popup).getByRole("button", { name: "Download" }),
+			) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		await userEvent.click(toggle)
+		await expect(BAR_COMMENTS.onCommentModeChange).toHaveBeenCalledWith(true)
+
+		await userEvent.click(counter)
+		const tabs = await screen.findByRole("tablist", { name: "Comments" })
+		await expect(tabs.closest(".dark")).not.toBe(null)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(counter).toHaveAttribute("aria-expanded", "false"),
+		)
+		await expect(popup).toBeVisible()
+	},
+})
+
+export const CommentModeOn = meta.story({
+	args: { comments: { ...BAR_COMMENTS, isCommentMode: true } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bar while comment mode is on, as artboard Img 2 draws it. Check the Comment button is pressed.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expect(commentControlsIn(popup).toggle).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
 	},
 })
