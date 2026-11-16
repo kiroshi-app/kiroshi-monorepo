@@ -105,6 +105,16 @@ pub struct NavigationAlone {
 	pub open: (Instant, Instant),
 }
 
+#[derive(Serialize)]
+struct NavigationAloneReading<'a> {
+	attempt: &'static str,
+	window: &'a str,
+	sink_connections: usize,
+	request_bytes_received: usize,
+	handler_denied_it: bool,
+	handler_answers: Vec<&'a HandlerEvent>,
+}
+
 pub struct HostReadings {
 	pub first_view: HostReading,
 	pub second_view: Option<HostReading>,
@@ -305,25 +315,24 @@ impl Observations {
 			json!(ALLOWLIST_HOSTS.map(reports_about).concat());
 		evidence["browser_csp_reports_about_the_other_host"] = json!(reports_about(BLOCKED_HOST));
 		evidence["view_csp_reports_received"] = json!(record.csp_reports.len());
-		let (decisive_allowed, decisive_blocked) = match &self.host_readings {
+		let is_allowlist_followed = match &self.host_readings {
 			Some(host) => {
 				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
-				let view = host.first_view.as_ref().ok();
-				(
-					view.map(|view| view.allowlisted_fetch.as_str()),
-					view.map(|view| view.other_host_fetch.as_str()),
-				)
+				self.has_first_view_reached_its_last_attempts()
+					&& host.first_view.as_ref().is_ok_and(|view| {
+						view.allowlisted_fetch == "ok"
+							&& view.other_host_fetch.starts_with("blocked")
+					})
 			}
-			None => (allowed_fetch, blocked_fetch),
+			None => {
+				allowed_fetch == Some("ok")
+					&& blocked_fetch.is_some_and(|outcome| outcome.starts_with("blocked"))
+			}
 		};
 		Proof {
 			proof: 4,
 			name: "Network egress follows the allowlist",
-			result: (self.are_tripwires_silent()
-				&& decisive_allowed == Some("ok")
-				&& decisive_blocked.is_some_and(|outcome| outcome.starts_with("blocked"))
-				&& self.is_played(&[]))
-			.into(),
+			result: (self.are_tripwires_silent() && is_allowlist_followed).into(),
 			attempts,
 			evidence,
 		}
@@ -345,16 +354,16 @@ impl Observations {
 			"attempts_never_signalled": unobserved,
 		});
 		if let Some(host) = &self.host_readings {
-			let alone: Vec<Value> =
+			let alone: Vec<_> =
 				host.navigations_alone.iter().map(|view| self.navigation_alone(view)).collect();
 			evidence["sink_connections_despite_a_denying_handler"] = alone
 				.iter()
-				.filter(|view| view["sink_connections"] != 0 && view["handler_denied_it"] == true)
+				.filter(|view| view.sink_connections > 0 && view.handler_denied_it)
 				.map(|view| {
 					json!({
-						"attempt": view["attempt"],
-						"sink_connections": view["sink_connections"],
-						"any_request_bytes": view["request_bytes_received"] != 0,
+						"attempt": view.attempt,
+						"sink_connections": view.sink_connections,
+						"any_request_bytes": view.request_bytes_received > 0,
 					})
 				})
 				.collect();
@@ -373,7 +382,7 @@ impl Observations {
 		}
 	}
 
-	fn navigation_alone(&self, view: &NavigationAlone) -> Value {
+	fn navigation_alone<'a>(&'a self, view: &'a NavigationAlone) -> NavigationAloneReading<'a> {
 		let connections: Vec<_> = self
 			.navigation_sink
 			.view_connections()
@@ -387,14 +396,17 @@ impl Observations {
 			.iter()
 			.filter(|event| event.window == view.window && event.url.ends_with(view.attempt))
 			.collect();
-		json!({
-			"attempt": view.attempt,
-			"window": view.window,
-			"sink_connections": connections.len(),
-			"request_bytes_received": connections.iter().map(|connection| connection.bytes_received).sum::<usize>(),
-			"handler_denied_it": answers.iter().any(|event| !event.allowed),
-			"handler_answers": answers,
-		})
+		NavigationAloneReading {
+			attempt: view.attempt,
+			window: &view.window,
+			sink_connections: connections.len(),
+			request_bytes_received: connections
+				.iter()
+				.map(|connection| connection.bytes_received)
+				.sum(),
+			handler_denied_it: answers.iter().any(|event| !event.allowed),
+			handler_answers: answers,
+		}
 	}
 
 	fn main_window_stays_responsive(&self) -> Proof {
