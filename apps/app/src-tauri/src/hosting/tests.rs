@@ -2407,6 +2407,148 @@ fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
 	});
 }
 
+fn device_socket_full(relay_device_id: &str) -> String {
+	let body = json!({ "error": "Device socket is full", "deviceId": relay_device_id });
+	json!({ "id": null, "status": 413, "body": body }).to_string()
+}
+
+async fn relay_refused(member: &mut MemberWire, refusal: String) {
+	member.send(Message::Text(refusal.into())).await.expect("the refusal reaches the host");
+}
+
+async fn resynced(member: &mut MemberWire) -> Value {
+	let resync = next_text(member, |frame| frame.get("resync").is_some());
+	tokio::time::timeout(PATIENCE, resync)
+		.await
+		.expect("the host resyncs the refused device in time")
+}
+
+fn numbers_heard(heard: &mut tokio::sync::broadcast::Receiver<crate::events::Frame>) -> Vec<u64> {
+	std::iter::from_fn(|| heard.try_recv().ok())
+		.map(|event| serde_json::from_str::<Value>(&event).expect("a json event"))
+		.filter_map(|event| event["payload"]["n"].as_u64())
+		.collect()
+}
+
+#[test]
+fn a_device_socket_full_refusal_is_logged_and_the_member_link_hears_what_it_missed_after_the_resync(
+) {
+	run(async {
+		capturing();
+		let mut harness = Harness::signed_in("device-socket-full").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		let link =
+			MemberLink::new(&member.instance_id, "Studio".to_owned(), MEMBER_ACCOUNT.to_owned());
+		let mut heard = link.subscribed().expect("an open link");
+		let applied = next_stamped(&mut member, is_a_members_change).await;
+		assert_eq!(link.received(&applied.to_string()), Resync::InStep);
+		for n in 1..3 {
+			numbered(&harness, n);
+		}
+		numbered_through(&harness, &mut member, 3).await;
+		send(&mut member, r#"{"id": 41, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 41);
+
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let resync = resynced(&mut member).await;
+		let Resync::Resume(resume) = link.received(&resync.to_string()) else {
+			panic!("the resync resumes the member link");
+		};
+		send(&mut member, &resume).await;
+		loop {
+			let frame = next_json(&mut member).await;
+			let is_the_resume_answer = frame["body"]["replayed"].is_u64();
+			link.received(&frame.to_string());
+			if is_the_resume_answer {
+				break;
+			}
+		}
+
+		let logged = warnings_naming(&relay_device_id).await;
+		let refused: Vec<&String> =
+			logged.iter().filter(|line| line.contains("\"Device socket is full\"")).collect();
+		assert_eq!(refused.len(), 1, "{logged:?}");
+		for named in
+			[PERSONAL, &member.instance_id, "status 413", ", 1 call answers, 0 file answers"]
+		{
+			assert!(refused[0].contains(named), "{named} in {}", refused[0]);
+		}
+		assert!(resync["resync"]["answered"]
+			.as_array()
+			.is_some_and(|ids| ids.contains(&json!(41))));
+		assert_eq!(numbers_heard(&mut heard), vec![1, 2, 3]);
+	});
+}
+
+#[test]
+fn a_refusal_the_host_does_not_know_or_naming_a_device_off_the_roster_is_logged_and_the_socket_serves_on(
+) {
+	run(async {
+		capturing();
+		let mut harness = Harness::signed_in("refusal-unknown").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let off_the_roster = uuid::Uuid::new_v4().to_string();
+		let unknown_reason = uuid::Uuid::new_v4().to_string();
+		let unknown = json!({ "id": null, "status": 429, "body": { "error": unknown_reason } });
+
+		relay_refused(&mut member, device_socket_full(&off_the_roster)).await;
+		relay_refused(&mut member, unknown.to_string()).await;
+		send(&mut member, r#"{"id": 42, "command": "agent_models", "args": {}}"#).await;
+
+		assert_eq!(answer(&mut member).await["id"], 42);
+		let absent = warnings_naming(&off_the_roster).await;
+		assert!(absent[0].contains("no device of the roster, nothing changed"), "{absent:?}");
+		let not_known = warnings_naming(&unknown_reason).await;
+		assert!(not_known[0].contains("the host does not know: status 429"), "{not_known:?}");
+	});
+}
+
+#[test]
+fn a_resync_names_no_call_answered_before_the_latest_hello_of_the_device() {
+	run(async {
+		let mut harness = Harness::signed_in("resync-after-hello").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		send(&mut member, r#"{"id": 5, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 5);
+
+		member.greeted().await;
+		send(&mut member, r#"{"id": 1, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 1);
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+
+		assert_eq!(resynced(&mut member).await, json!({ "resync": { "answered": [1] } }));
+	});
+}
+
+#[test]
+fn a_resync_the_relay_refuses_again_is_sent_again_on_the_next_interval() {
+	run(async {
+		let mut harness = Harness::signed_in("resync-again").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		send(&mut member, r#"{"id": 43, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 43);
+
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let first = resynced(&mut member).await;
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let again = resynced(&mut member).await;
+
+		assert_eq!(first, json!({ "resync": { "answered": [43] } }));
+		assert_eq!(again, first);
+	});
+}
+
 fn is_the_question(id: &str) -> impl Fn(&Value) -> bool + '_ {
 	move |frame| {
 		let payload = &frame["event"]["payload"];
