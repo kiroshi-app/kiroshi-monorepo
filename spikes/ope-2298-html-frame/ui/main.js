@@ -1,0 +1,61 @@
+const SENTINEL_KEY = "spike-main-sentinel"
+
+const { invoke } = window.__TAURI_INTERNALS__
+
+const randomHex = () =>
+	Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+		byte.toString(16).padStart(2, "0"),
+	).join("")
+
+const instance = randomHex()
+const secret = randomHex()
+const sentinel = document.getElementById("sentinel")
+const viewSlot = document.getElementById("view")
+
+sentinel.textContent = secret
+localStorage.setItem(SENTINEL_KEY, secret)
+// biome-ignore lint/suspicious/noDocumentCookie: the cookie is one of the sentinels the view tries to alter
+document.cookie = `spike_main_sentinel=${secret}`
+
+const integritySnapshot = () =>
+	JSON.stringify({
+		href: location.href,
+		title: document.title,
+		sentinel: sentinel.outerHTML,
+		sentinelAttached: sentinel.isConnected,
+		storage: localStorage.getItem(SENTINEL_KEY),
+		cookie: document.cookie,
+	})
+
+let sequence = 0
+
+const beat = () => {
+	const payload = { instance, secret, sequence, snapshot: integritySnapshot() }
+	sequence += 1
+	invoke("plugin:event|emit", { event: "spike-heartbeat", payload }).catch(
+		(cause) => {
+			document.title = `heartbeat failed: ${cause}`
+		},
+	)
+}
+
+window.__spikeOpenView = (url) => {
+	const frame = document.createElement("iframe")
+	frame.src = url
+	frame.width = "520"
+	frame.height = "260"
+	viewSlot.replaceChildren(frame)
+}
+
+window.__spikeCloseView = () => {
+	viewSlot.replaceChildren()
+}
+
+invoke("spike_secret").then(
+	() => {
+		window.__spikeBeat = beat
+	},
+	(cause) => {
+		document.title = `control call failed: ${cause}`
+	},
+)
