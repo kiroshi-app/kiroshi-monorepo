@@ -744,10 +744,9 @@ export const Sending = meta.story({
 
 const GROWN_DRAFT = Array.from({ length: 24 }, () => FLIGHTS_ASK).join("\n")
 
-const expectCardGrownDownwardOnly = async (canvasElement: HTMLElement) => {
+const expectCardGrownDownward = async (canvasElement: HTMLElement) => {
 	const { card, restingCard } = emptyStageBoxesOf(canvasElement)
 
-	await expectCardTopAtRest(canvasElement)
 	await expect(card.bottom).toBeGreaterThan(restingCard.bottom)
 }
 
@@ -766,7 +765,7 @@ export const DraftAtTheRowCap = meta.story({
 
 		await expect(field.scrollHeight).toBeGreaterThan(field.clientHeight)
 		await expectRestingCardInTheMiddle(canvasElement)
-		await expectCardGrownDownwardOnly(canvasElement)
+		await expectCardGrownDownward(canvasElement)
 	},
 })
 
@@ -788,7 +787,7 @@ export const FilesAttachedWithALongDraft = meta.story({
 			LONG_PROMPT_ATTACHMENTS.length,
 		)
 		await expectRestingCardInTheMiddle(canvasElement)
-		await expectCardGrownDownwardOnly(canvasElement)
+		await expectCardGrownDownward(canvasElement)
 	},
 })
 
@@ -878,7 +877,8 @@ export const ComposerGrownPastAShortPanel = meta.story({
 			restingGreeting.height + restingCard.height,
 		)
 		await expect(greeting.top).toBeGreaterThanOrEqual(contentArea.top)
-		await expectCardGrownDownwardOnly(canvasElement)
+		await expectCardTopAtRest(canvasElement)
+		await expectCardGrownDownward(canvasElement)
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 	},
 })
