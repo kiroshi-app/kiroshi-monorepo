@@ -2,7 +2,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	HOVER_TOOLTIP_WAIT,
+	findHoverTooltip,
 	isInBrowserRunner,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
@@ -173,11 +173,7 @@ export const ReplyHovered = meta.story({
 		} else {
 			await userEvent.hover(reply)
 		}
-		const tooltip = await screen.findByRole(
-			"tooltip",
-			undefined,
-			HOVER_TOOLTIP_WAIT,
-		)
+		const tooltip = await findHoverTooltip()
 		await expect(tooltip).toHaveTextContent(/^Reply$/)
 		await expect(tooltip.querySelector("kbd")).toBeNull()
 	},

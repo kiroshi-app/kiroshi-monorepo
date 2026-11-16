@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectNoHoverTooltip,
 	FRAME_POLL,
+	findHoverTooltip,
 	HOVER_TOOLTIP_WAIT,
 	isInBrowserRunner,
 	Row,
@@ -99,9 +100,7 @@ export const Default = meta.story({
 		await expect(trigger.parentElement?.tagName).not.toBe("SPAN")
 
 		await userEvent.hover(trigger)
-		await expect(
-			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-		).toHaveTextContent("Copy")
+		await expect(await findHoverTooltip()).toHaveTextContent("Copy")
 	},
 })
 
@@ -163,11 +162,7 @@ export const WithSide = meta.story({
 		const trigger = canvas.getByRole("button", { name: "New bot" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole(
-			"tooltip",
-			undefined,
-			HOVER_TOOLTIP_WAIT,
-		)
+		const hint = await findHoverTooltip()
 
 		await waitFor(async () => {
 			await expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -192,11 +187,7 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Summarise" }))
-		const hint = await screen.findByRole(
-			"tooltip",
-			undefined,
-			HOVER_TOOLTIP_WAIT,
-		)
+		const hint = await findHoverTooltip()
 
 		await expect(hint).toHaveTextContent(LONG_HINT)
 		await waitFor(async () => {
@@ -260,11 +251,7 @@ export const AdjacentHints = meta.story({
 	play: ({ canvas, userEvent }) =>
 		withMotion(async () => {
 			await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
-			const bubble = await screen.findByRole(
-				"tooltip",
-				undefined,
-				HOVER_TOOLTIP_WAIT,
-			)
+			const bubble = await findHoverTooltip()
 			const positioner = bubble.parentElement as HTMLElement
 
 			await waitFor(async () => {
@@ -450,11 +437,7 @@ export const ReducedMotion = meta.story({
 		const trigger = canvas.getByRole("button", { name: "Copy" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole(
-			"tooltip",
-			undefined,
-			HOVER_TOOLTIP_WAIT,
-		)
+		const hint = await findHoverTooltip()
 		const positioner = hint.parentElement as HTMLElement
 
 		await expect(getComputedStyle(hint).animationName).toBe("none")

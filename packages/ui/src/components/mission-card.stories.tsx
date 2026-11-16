@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react"
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -7,7 +7,7 @@ import {
 	companionGlyphsIn,
 	expectClickModifiers,
 	expectNoHoverTooltip,
-	HOVER_TOOLTIP_WAIT,
+	findHoverTooltip,
 	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -1159,11 +1159,7 @@ export const RowWithStatus = meta.story({
 		).toHaveLength(0)
 
 		await userEvent.hover(status)
-		const tip = await screen.findByRole(
-			"tooltip",
-			undefined,
-			HOVER_TOOLTIP_WAIT,
-		)
+		const tip = await findHoverTooltip()
 		await expect(tip).toHaveTextContent(MISSION_STATUS.text)
 		await expect(tip).toHaveTextContent("4 minutes ago")
 
@@ -1201,9 +1197,9 @@ export const RowLongStatus = meta.story({
 		).toBeVisible()
 
 		await userEvent.hover(status)
-		await expect(
-			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-		).toHaveTextContent(LONG_MISSION_STATUS.text)
+		await expect(await findHoverTooltip()).toHaveTextContent(
+			LONG_MISSION_STATUS.text,
+		)
 	},
 })
 

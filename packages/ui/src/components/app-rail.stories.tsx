@@ -5,7 +5,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
-	HOVER_TOOLTIP_WAIT,
+	findHoverTooltip,
 	isInBrowserRunner,
 	probedStyleOf,
 	realPointer,
@@ -553,11 +553,7 @@ const expectHomeHoveredLikeIdlePanel = async (canvasElement: HTMLElement) => {
 	await pointer.hover(home)
 	await waitFor(() => expect(fillOf(home)).toBe(hoverFill))
 	await expect(iconStyleOf(home)).toBe("stroke")
-	const tooltip = await screen.findByRole(
-		"tooltip",
-		undefined,
-		HOVER_TOOLTIP_WAIT,
-	)
+	const tooltip = await findHoverTooltip()
 	await expect(tooltip).toHaveTextContent(HOME)
 	await waitFor(() =>
 		expect(tooltip.getBoundingClientRect().left).toBeGreaterThanOrEqual(
@@ -789,11 +785,7 @@ const expectSearchLikeMissions = async (canvasElement: HTMLElement) => {
 }
 
 const expectSearchTooltipBeside = async (search: HTMLElement) => {
-	const tooltip = await screen.findByRole(
-		"tooltip",
-		undefined,
-		HOVER_TOOLTIP_WAIT,
-	)
+	const tooltip = await findHoverTooltip()
 	await expect(tooltip).toHaveTextContent(SEARCH)
 	const chord = tooltip.querySelector('[data-slot="kbd"]')
 	await expect(chord).toHaveTextContent(SEARCH_CHORD)
@@ -968,9 +960,7 @@ export const SpaceLogoHovered = meta.story({
 			String(BLOT_HUES.blue),
 		)
 		await userEvent.hover(logo)
-		await expect(
-			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-		).toHaveTextContent(SPACE_SETTINGS)
+		await expect(await findHoverTooltip()).toHaveTextContent(SPACE_SETTINGS)
 		await userEvent.click(logo)
 		await expect(args.onOpenSpaceSettings).toHaveBeenCalledTimes(1)
 		await expect(args.onOpenYou).not.toHaveBeenCalled()

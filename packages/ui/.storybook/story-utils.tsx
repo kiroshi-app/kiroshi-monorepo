@@ -1249,11 +1249,12 @@ export const HOVER_TOOLTIP_WAIT = {
 	timeout: TOOLTIP_OPEN_DELAY_MS + SLOW_RUNNER_HEADROOM_MS,
 }
 
+export const findHoverTooltip = () =>
+	screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT)
+
 export const openTooltipOf = async (trigger: HTMLElement) => {
 	await userEvent.hover(trigger)
-	return settled(
-		await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-	)
+	return settled(await findHoverTooltip())
 }
 
 export const expectNoHoverTooltip = async () => {

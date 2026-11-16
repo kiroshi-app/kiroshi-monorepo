@@ -1,12 +1,12 @@
 import { Tabs } from "@base-ui/react/tabs"
 import { renderToStaticMarkup } from "react-dom/server"
-import { expect, screen, waitFor } from "storybook/test"
+import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	animatedTransitionsOf,
 	colourTransitionsOf,
-	HOVER_TOOLTIP_WAIT,
+	findHoverTooltip,
 	hasOverlayScrollbars,
 	isInBrowserRunner,
 	slotsIn,
@@ -220,9 +220,7 @@ export const IconsOnly = meta.story({
 
 		await expect(rail.getBoundingClientRect().width).toBeLessThan(80)
 		await userEvent.hover(appearance)
-		await expect(
-			await screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-		).toHaveTextContent("Appearance")
+		await expect(await findHoverTooltip()).toHaveTextContent("Appearance")
 		await expectIconSwapsWithSelection({ canvas, userEvent })
 	},
 })

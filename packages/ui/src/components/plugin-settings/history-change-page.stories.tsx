@@ -1,9 +1,10 @@
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectHeadingFont,
+	findHoverTooltip,
 	HOVER_TOOLTIP_WAIT,
 	slotIn,
 } from "@workspace/storybook/story-utils"
@@ -80,9 +81,7 @@ export const Default = meta.story({
 		await readsStartAlignedBehindItsGlyph(only)
 
 		await userEvent.hover(only)
-		await expect(
-			screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT),
-		).rejects.toThrow()
+		await expect(findHoverTooltip()).rejects.toThrow()
 		await readsStartAlignedBehindItsGlyph(only)
 
 		const title = canvas.getByRole("heading", {
