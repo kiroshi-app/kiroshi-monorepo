@@ -330,7 +330,7 @@ export const WithTicketActions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Ticket row carrying its two icon buttons, in the 640px thread column. Check that Open the coding session comes first and Edit after it, each a 24px round button with a 14px icon in the muted foreground, that tabbing to one draws a visible ring, that a click reaches its own callback and never the other, and that the pair follows the title 8px after it rather than sitting at the far end. Pick `WithOneTicketAction` for a row given one callback and `LongContent` for the pair pinned to the end of a narrow column. The app passes neither callback today.",
+					"The Ticket row carrying its two icon buttons, in the 640px thread column. Check that Open the coding session comes first and Edit after it, each a 24px round button with a 14px icon in the muted foreground, that tabbing to one draws a visible ring, that a click reaches its own callback and never the other, and that the pair follows the title 8px after it, Edit 8px after Open the coding session, rather than sitting at the far end. Pick `WithOneTicketAction` for a row given one callback and `LongContent` for the pair pinned to the end of a narrow column. The app passes neither callback today.",
 			},
 		},
 	},
@@ -352,6 +352,9 @@ export const WithTicketActions = meta.story({
 		await expect(
 			boxOf(actions).left - boxOf(slotIn(row, "mission-ticket-line")).right,
 		).toBe(CELL_GAP)
+		await expect(boxOf(edit).left - boxOf(openCodingSession).right).toBe(
+			CELL_GAP,
+		)
 
 		await userEvent.tab()
 		await userEvent.tab()

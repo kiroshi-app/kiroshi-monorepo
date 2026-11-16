@@ -98,7 +98,7 @@ const MissionProperties = ({
 						<MissionTicketLine layout="line" ticket={ticket} />
 						{onOpenCodingSession || onEdit ? (
 							<span
-								className="flex shrink-0 items-center gap-0.5 @max-[40rem]:ms-auto"
+								className="flex shrink-0 items-center gap-2 @max-[40rem]:ms-auto"
 								data-slot="mission-ticket-actions"
 							>
 								{onOpenCodingSession ? (
