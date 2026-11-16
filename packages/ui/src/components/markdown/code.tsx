@@ -179,7 +179,7 @@ export const MarkdownFence = ({
 const ANSWER_FENCE_BODY_CLASS =
 	"rounded-none! bg-card-raised! p-3.5! font-mono text-compact leading-5.5 ring-0!"
 
-const AnswerFence = ({ code, language }: MarkdownFenceProps) => {
+export const AnswerFence = ({ code, language }: MarkdownFenceProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(code)
 	const named = language?.trim()

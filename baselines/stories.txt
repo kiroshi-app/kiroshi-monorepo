@@ -277,6 +277,10 @@ conversation-markdown-interactiveview--mode-pick
 conversation-markdown-interactiveview--narrow-long-content
 conversation-markdown-interactiveview--send-values
 conversation-markdown-interactiveview--thumb-focus-ring
+conversation-markdown-livehtmlslot--enlarged
+conversation-markdown-livehtmlslot--live
+conversation-markdown-livehtmlslot--loading
+conversation-markdown-livehtmlslot--unavailable
 conversation-markdown-mapcard--in-narrow-column
 conversation-markdown-mapcard--one-place-without-link
 conversation-markdown-mapcard--with-route
