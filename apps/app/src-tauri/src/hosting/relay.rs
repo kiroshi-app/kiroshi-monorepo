@@ -109,10 +109,9 @@ impl<'a> MeasuredSocket<'a> {
 				frame
 			}
 		};
-		if let Some(Ok(heard)) = &frame {
-			if carries_data(heard) {
-				self.frames.received = Some(heard.len());
-			}
+		match &frame {
+			Some(Ok(heard)) if carries_data(heard) => self.frames.received = Some(heard.len()),
+			_ => {}
 		}
 		frame
 	}
