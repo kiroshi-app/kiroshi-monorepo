@@ -108,17 +108,17 @@ pub(super) struct LastSent {
 
 pub(super) struct Relaying<'a> {
 	pub(super) ring: &'a watch::Sender<Ring>,
-	pub(super) resumed_too_old: &'a Notify,
+	pub(super) member_resumed: &'a Notify,
 	pub(super) last_sent: LastSent,
 }
 
 impl<'a> Relaying<'a> {
 	pub(super) fn from_the_start_of(
 		ring: &'a watch::Sender<Ring>,
-		resumed_too_old: &'a Notify,
+		member_resumed: &'a Notify,
 	) -> Self {
 		let epoch = ring.borrow().epoch.clone();
-		Self { ring, resumed_too_old, last_sent: LastSent { epoch, position: 0 } }
+		Self { ring, member_resumed, last_sent: LastSent { epoch, position: 0 } }
 	}
 }
 
@@ -218,7 +218,6 @@ impl Ring {
 			return Resumed {
 				frames: Vec::new(),
 				answer: bridge::answer(call.id.clone(), StatusCode::OK, body),
-				is_too_old: true,
 			};
 		}
 		let frames: Vec<String> = self
@@ -231,18 +230,13 @@ impl Ring {
 			})
 			.collect();
 		let body = json!({ "token": args.token, "replayed": frames.len() });
-		Resumed {
-			frames,
-			answer: bridge::answer(call.id.clone(), StatusCode::OK, body),
-			is_too_old: false,
-		}
+		Resumed { frames, answer: bridge::answer(call.id.clone(), StatusCode::OK, body) }
 	}
 }
 
 pub(super) struct Resumed {
 	pub(super) frames: Vec<String>,
 	pub(super) answer: String,
-	pub(super) is_too_old: bool,
 }
 
 #[derive(Deserialize)]
@@ -274,7 +268,7 @@ pub(super) async fn recorded<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 	ring: &watch::Sender<Ring>,
-	resumed_too_old: &Notify,
+	member_resumed: &Notify,
 ) {
 	let mut guest_events = GuestEvents::new(space_id);
 	loop {
@@ -287,7 +281,7 @@ pub(super) async fn recorded<R: Runtime>(
 					Err(RecvError::Lagged(missed)) => break missed,
 					Err(RecvError::Closed) => return,
 				},
-				() = resumed_too_old.notified() => {
+				() = member_resumed.notified() => {
 					all_reached(app, &mut guest_events, ring, pending_question_frames(app)).await;
 				}
 			}

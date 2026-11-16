@@ -209,11 +209,11 @@ pub(super) async fn hosted<R: Runtime>(
 		describing.spawn(async move { super::described(&app, &instance_id, &name, colour).await });
 	}
 	let serving = Serving { local: &local, keys: &keys };
-	let resumed_too_old = Notify::new();
-	let relaying = Relaying::from_the_start_of(&ring, &resumed_too_old);
+	let member_resumed = Notify::new();
+	let relaying = Relaying::from_the_start_of(&ring, &member_resumed);
 	tokio::select! {
 		() = attempts(&app, &mut hosted, serving, &mut stop, relaying) => return,
-		() = replay::recorded(&app, &space_id, &ring, &resumed_too_old) => {}
+		() = replay::recorded(&app, &space_id, &ring, &member_resumed) => {}
 	}
 	let closed = HostingState::Failed {
 		failure: HostingFailureKind::LocalEventStreamClosed,
@@ -656,9 +656,7 @@ async fn online<R: Runtime>(
 						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
 							return ended;
 						}
-						if resumed.is_too_old {
-							relaying.resumed_too_old.notify_one();
-						}
+						relaying.member_resumed.notify_one();
 						Outgoing::Answer(sender, resumed.answer)
 					}
 				}
