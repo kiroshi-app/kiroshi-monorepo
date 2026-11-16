@@ -37,11 +37,17 @@ export type ChatError = {
 	isQuestionRunFailure?: boolean
 }
 
+export type StoreRefusal = {
+	messageId: string
+	errorId: string | null
+}
+
 export type OutboxEntry = {
 	id: string
 	text: string
 	replyLinks: ReplyLink[]
 	documents: string[]
+	refusal?: StoreRefusal
 }
 
 export type ChatState = {

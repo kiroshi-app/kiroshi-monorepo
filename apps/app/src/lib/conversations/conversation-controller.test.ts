@@ -8,6 +8,7 @@ import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { KEPT_RUN_GRACE_MS } from "./kept-runs"
 import { readConversation } from "./read-conversation"
+import { RefusedWrite } from "./refused-write"
 import {
 	createScriptedDriver,
 	type ScriptedDriver,
@@ -4107,5 +4108,113 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		expect(room.stopDrops).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("a send whose answer the relay refused", () => {
+	type HostAnswer = "accepted" | "recorded" | "unrecorded"
+
+	const refusingRoom = async () => {
+		const base = createFakeTranscriptStore()
+		let answer: HostAnswer = "accepted"
+		const store: TranscriptStore = {
+			...base,
+			sendUserMessage: async (sent, summoned) => {
+				if (answer === "accepted") {
+					return base.sendUserMessage(sent, summoned)
+				}
+				if (answer === "recorded") {
+					await base.sendUserMessage(sent, summoned)
+				}
+				throw new RefusedWrite(
+					"conversation_send_user_message",
+					undefined,
+					new Error("relay closed"),
+				)
+			},
+		}
+		const bots = await seatBots(store, SPACE, ["Nyx"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		let replay: () => void = () => undefined
+		const driver = createScriptedDriver()
+		const controller = createConversationController(
+			withFakeHostWrites(driver, store),
+			store,
+			{
+				onReconnected: (listener) => {
+					replay = listener
+					return () => undefined
+				},
+			},
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await settled()
+
+		const sent = async (text: string, hostAnswer: HostAnswer) => {
+			answer = hostAnswer
+			await controller.send(text)
+			await settled()
+			answer = "accepted"
+		}
+		const replayed = async () => {
+			replay()
+			await settled()
+		}
+		return {
+			controller,
+			driver,
+			nyx: idOf(conversation, "Nyx"),
+			sent,
+			replayed,
+			detach,
+		}
+	}
+
+	it("shows the message the replay brings back once, as sent, and starts its agent", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([
+			[null, `<@${room.nyx}> hold the line`],
+		])
+		expect(room.controller.getState().refusedMessage).toBeNull()
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("starts nothing and offers each summoned agent its retry when the replay lands during a turn", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx take the walls", "accepted")
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		const state = room.controller.getState()
+		expect(state.refusedMessage).toBeNull()
+		expect(state.failedBotIds).toEqual([room.nyx])
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("keeps the message refused, with its retry, when the replay does not bring it back", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "unrecorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([])
+		expect(room.controller.getState().refusedMessage).toMatchObject({
+			text: "@Nyx hold the line",
+		})
+		expect(submittedIn(room)).toEqual([])
+		room.detach()
 	})
 })

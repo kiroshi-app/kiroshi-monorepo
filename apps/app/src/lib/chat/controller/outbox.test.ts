@@ -16,6 +16,7 @@ import type { ChatDriver } from "../driver"
 import type { FakeChatDriver } from "../fake-driver"
 import type { CancelOutcome, TurnState } from "../../agent/contract"
 import { createFakeTranscriptStore } from "../../conversations/fake-transcript-store"
+import { RefusedWrite } from "../../conversations/refused-write"
 import type { TranscriptStore } from "../../conversations/store-port"
 import type { TranscriptMessage } from "../../conversations/transcript-contract"
 import { botIdentity } from "../../conversations/transcript-fixtures"
@@ -405,6 +406,81 @@ describe("prompts the session cannot take yet", () => {
 		expect(promptsIn(state.messages)).toEqual([["user", "first", "complete"]])
 		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
 		harness.detach()
+	})
+
+	describe("a send whose answer the relay refused", () => {
+		type HostAnswer = "recorded" | "unrecorded" | "accepted"
+
+		const refusingHost = async (first: HostAnswer) => {
+			const base = createFakeTranscriptStore()
+			let answer = first
+			const storedIds: string[] = []
+			const store: TranscriptStore = {
+				...base,
+				sendUserMessage: async (message, summoned) => {
+					storedIds.push(message.id)
+					if (answer === "accepted") {
+						return base.sendUserMessage(message, summoned)
+					}
+					if (answer === "recorded") {
+						answer = "unrecorded"
+						await base.sendUserMessage(message, summoned)
+					}
+					throw new RefusedWrite(
+						"conversation_send_user_message",
+						undefined,
+						new Error("relay closed"),
+					)
+				},
+			}
+			const submits: string[] = []
+			const harness = await bootedHarness({
+				store,
+				driver: submitting(submits),
+			})
+			await harness.controller.send("only")
+			await vi.runAllTimersAsync()
+			const replayed = async () => {
+				answer = "accepted"
+				await harness.controller.open(BOT, null)
+				await vi.runAllTimersAsync()
+			}
+			return { harness, storedIds, submits, replayed }
+		}
+
+		it("shows the message the host recorded once and submits it once", async () => {
+			const { harness, submits, replayed } = await refusingHost("recorded")
+
+			await replayed()
+
+			const state = harness.controller.getState()
+			expect(state.outbox).toEqual([])
+			expect(promptsIn(state.messages)).toEqual([["user", "only", "complete"]])
+			expect(submits).toHaveLength(1)
+			expect(state.errors).toEqual([])
+			harness.detach()
+		})
+
+		it("holds the words and stores them again under the same message id when the host recorded nothing", async () => {
+			const { harness, storedIds, submits, replayed } =
+				await refusingHost("unrecorded")
+			expect(outboxOf(harness.controller)).toEqual(["only"])
+			expect(harness.controller.getState().errors.at(-1)?.error.kind).toBe(
+				"writeFailed",
+			)
+
+			await replayed()
+
+			const state = harness.controller.getState()
+			expect(new Set(storedIds).size).toBe(1)
+			expect(state.outbox).toEqual([])
+			expect(spoken(state.messages)).toEqual([
+				["user", "only", "complete"],
+				["assistant", REPLY, "complete"],
+			])
+			expect(submits).toHaveLength(1)
+			harness.detach()
+		})
 	})
 
 	it("keeps each companion's held prompts to itself", async () => {

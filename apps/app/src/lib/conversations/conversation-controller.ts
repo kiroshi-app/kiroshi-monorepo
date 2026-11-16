@@ -254,6 +254,17 @@ type FailedTurn = Summons & {
 	turn: OpenTurn
 }
 
+type SentRun = {
+	turn: OpenTurn
+	summoned: Summons[]
+	naming: string | null
+}
+
+type RefusedSend = {
+	message: RefusedMessage
+	run: SentRun | null
+}
+
 type HandedMention = {
 	fromBotId: string
 	botId: string
@@ -431,7 +442,7 @@ export const createConversationController = (
 	const speakers = new Map<string, Speaker>()
 	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
-	let refused: RefusedMessage | null = null
+	let refused: RefusedSend | null = null
 	let reportedCauses: ReportedRunsByTurnId = NO_REPORTED_RUNS
 	let latestError: ChatError | null = null
 	let arrivedBotIds: string[] = []
@@ -623,14 +634,14 @@ export const createConversationController = (
 			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			failedBotIds: failedTurns.map(({ botId }) => botId),
-			refusedMessage: refused,
+			refusedMessage: refused?.message ?? null,
 			pendingPrompt: oldestPrompt(),
 			latestError,
 			reportedCauses,
 		})
 	}
 
-	transcript.subscribe(sync)
+	transcript.subscribe(() => syncRecordedRefusal())
 
 	const write = (operation: () => Promise<unknown>, shown?: () => void) => {
 		void enqueue(operation).then(
@@ -1583,15 +1594,22 @@ export const createConversationController = (
 		}
 	}
 
-	const refuse = (said: TranscriptMessage, text: string) => {
+	const refuse = (
+		said: TranscriptMessage,
+		text: string,
+		run: SentRun | null,
+	) => {
 		refused = {
-			id: said.id,
-			text,
-			repliedToMessageId: said.repliedToMessageId,
-			replyLinks: said.replyLinks ?? [],
-			documents: said.documents ?? [],
+			message: {
+				id: said.id,
+				text,
+				repliedToMessageId: said.repliedToMessageId,
+				replyLinks: said.replyLinks ?? [],
+				documents: said.documents ?? [],
+			},
+			run,
 		}
-		sync()
+		syncRecordedRefusal()
 	}
 
 	const interruptRunningTurn = () => {
@@ -1625,27 +1643,40 @@ export const createConversationController = (
 		})
 
 		if (!(await loadLatest())) {
-			refuse(said, trimmed)
+			refuse(said, trimmed, null)
 			return false
 		}
 		if (conversation?.id !== conversationId) {
 			return false
 		}
 
-		const summoned = summonedBy(said, answered)
+		const run: SentRun = {
+			turn,
+			summoned: summonedBy(said, answered),
+			naming: isNamingItself && trimmed.length > 0 ? trimmed : null,
+		}
 		try {
-			await enqueue(() => storePrompt(said, summoned))
+			await enqueue(() => storePrompt(said, run.summoned))
 		} catch {
-			refuse(said, trimmed)
+			refuse(said, trimmed, run)
 			return false
 		}
 
 		refused = null
-		failedTurns = []
-		if (isNamingItself && trimmed.length > 0) {
-			void nameFrom(conversationId, trimmed)
-		}
 		transcript.append(said)
+		startRun(conversationId, said, run)
+		return true
+	}
+
+	const startRun = (
+		conversationId: string,
+		said: TranscriptMessage,
+		{ turn, summoned, naming }: SentRun,
+	) => {
+		failedTurns = []
+		if (naming) {
+			void nameFrom(conversationId, naming)
+		}
 		noteUnseatedIn(said)
 		interruptRunningTurn()
 		dropWaiting("interrupted")
@@ -1653,11 +1684,43 @@ export const createConversationController = (
 		activeTurn = turn
 		sync()
 		drive()
-		return true
+	}
+
+	const isTurnRunning = () => speakers.size > 0 || queue.waiting.length > 0
+
+	const failSummoned = ({ turn, summoned }: SentRun) => {
+		forgetFailedTurns(summoned.map(({ botId }) => botId))
+		failedTurns = [
+			...failedTurns,
+			...summoned.map((summons) => ({ ...summons, turn })),
+		]
+		sync()
+	}
+
+	const continueRecorded = (recorded: TranscriptMessage, run: SentRun) => {
+		if (isTurnRunning()) {
+			failSummoned(run)
+			return
+		}
+		startRun(recorded.conversationId, recorded, run)
+	}
+
+	const recordedRefusal = ({ message }: RefusedSend) =>
+		readTranscript().messages.find(({ id }) => id === message.id)
+
+	const syncRecordedRefusal = () => {
+		const held = refused
+		const recorded = held?.run && recordedRefusal(held)
+		if (!held?.run || !recorded) {
+			sync()
+			return
+		}
+		refused = null
+		continueRecorded(recorded, held.run)
 	}
 
 	const sendAgain = async (messageId: string) => {
-		const held = refused
+		const held = refused?.message
 		if (held?.id === messageId) {
 			await send(held.text, held.replyLinks, held.documents)
 		}

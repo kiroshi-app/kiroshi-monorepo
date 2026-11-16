@@ -13,10 +13,24 @@ import type { SessionRunner } from "./session-runner"
 import type { TranscriptPaging } from "./transcript-paging"
 
 import type { SubmittedAttachment } from "../attachments-contract"
-import { isTurnBusy, toStoreError, toTransportError } from "../chat-state"
-import type { ReplyLink } from "../../bindings"
+import {
+	isTurnBusy,
+	type OutboxEntry,
+	type StoreRefusal,
+	toStoreError,
+	toTransportError,
+} from "../chat-state"
+import type { TranscriptMessage } from "../../conversations/transcript-contract"
 
-type PromptOutcome = "submitted" | "unwritten" | "refused"
+type HeldPrompt = Omit<OutboxEntry, "id">
+
+type PromptOutcome =
+	| { kind: "submitted" }
+	| { kind: "refused" }
+	| { kind: "unwritten"; refusal?: StoreRefusal }
+
+const outcomeOf = (isSubmitted: boolean): PromptOutcome =>
+	isSubmitted ? { kind: "submitted" } : { kind: "refused" }
 
 type PromptSubmissionParts = {
 	startFor: SessionRunner["startFor"]
@@ -96,25 +110,58 @@ export const createPromptSubmission = (
 	const runInOpenThread = async (bot: BotChat) =>
 		!isRunOutsideOpenThread(bot) || (await startFor(bot)) !== null
 
+	const recordedPromptOf = (bot: BotChat, refusal?: StoreRefusal) =>
+		refusal
+			? bot.state.messages.find(({ id }) => id === refusal.messageId)
+			: undefined
+
+	const submitRecorded = async (
+		bot: BotChat,
+		recorded: TranscriptMessage,
+		{ text, refusal }: HeldPrompt,
+	) => {
+		if (refusal?.errorId) {
+			dispatch(bot, { type: "errorDismissed", id: refusal.errorId })
+		}
+		bot.activeTurn = {
+			id: recorded.turnId,
+			promptId: recorded.id,
+			conversationId: recorded.conversationId,
+		}
+		return outcomeOf(await submit(bot, recorded.id, text))
+	}
+
 	const sendPrompt = async (
 		bot: BotChat,
-		trimmed: string,
-		replyLinks: ReplyLink[],
-		documents: string[],
+		prompt: HeldPrompt,
 	): Promise<PromptOutcome> => {
+		const unwritten: PromptOutcome = {
+			kind: "unwritten",
+			refusal: prompt.refusal,
+		}
 		const conversationId = await landedConversationOf(bot)
 		if (!conversationId) {
-			return "unwritten"
+			return unwritten
 		}
 		const isWritable =
 			(await loadLatest(bot)) && bot.state.conversationId === conversationId
 		if (!isWritable || !(await runInOpenThread(bot))) {
-			return "unwritten"
+			return unwritten
 		}
 		await rotateIfDue(bot)
 		dispatch(bot, { type: "promptSubmitted" })
 
-		const said = promptRow(conversationId, trimmed, replyLinks, documents)
+		const recorded = recordedPromptOf(bot, prompt.refusal)
+		if (recorded) {
+			return submitRecorded(bot, recorded, prompt)
+		}
+		const said = promptRow(
+			conversationId,
+			prompt.text,
+			prompt.replyLinks,
+			prompt.documents,
+			prompt.refusal?.messageId,
+		)
 		try {
 			await enqueue(() => storePrompt(said, [bot.id]))
 		} catch (reason) {
@@ -123,12 +170,18 @@ export const createPromptSubmission = (
 				id: null,
 				error: toStoreError(reason),
 			})
-			return "unwritten"
+			return {
+				kind: "unwritten",
+				refusal: {
+					messageId: said.id,
+					errorId: bot.state.errors.at(-1)?.id ?? null,
+				},
+			}
 		}
 
 		showPrompt(said)
 		bot.activeTurn = { id: said.turnId, promptId: said.id, conversationId }
-		return (await submit(bot, said.id, trimmed)) ? "submitted" : "refused"
+		return outcomeOf(await submit(bot, said.id, prompt.text))
 	}
 
 	const retryPrompt = async (bot: BotChat, id: string) => {
