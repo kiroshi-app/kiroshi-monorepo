@@ -17,14 +17,12 @@ use tauri_plugin_process as _;
 use tauri_plugin_updater as _;
 
 use host::HostState;
+use sensors::WRAPPER_CSP;
 
 const USAGE_ERROR: u8 = 2;
 const SANDBOX_DIRECTIVE: &str = "sandbox allow-scripts";
 const INCOGNITO_MITIGATION: &str =
 	"each view window is built with incognito(true), so every view has its own storage";
-const SANDBOX_MITIGATION: &str =
-	"hostile.html is served with the CSP directive sandbox allow-scripts";
-const WRAPPER_MITIGATION: &str = "the view window loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP default-src 'none'; frame-src 'self', the containment the main window frame-src gives in frame mode";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
@@ -70,14 +68,16 @@ impl Mode {
 		self == Self::WindowSandboxed
 	}
 
-	pub fn mitigations(self) -> &'static [&'static str] {
-		match self {
-			Self::Frame | Self::Window => &[],
-			Self::WindowIsolated => &[INCOGNITO_MITIGATION],
-			Self::WindowSandboxed => {
-				&[INCOGNITO_MITIGATION, SANDBOX_MITIGATION, WRAPPER_MITIGATION]
-			}
-		}
+	pub fn mitigations(self) -> Vec<String> {
+		let incognito = self.isolates_view_storage().then(|| INCOGNITO_MITIGATION.to_owned());
+		let directives = self
+			.view_csp_directives()
+			.iter()
+			.map(|directive| format!("hostile.html is served with the CSP directive {directive}"));
+		let wrapper = self.frames_view_documents().then(|| {
+			format!("the view window loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP {WRAPPER_CSP}, the containment the main window frame-src gives in frame mode")
+		});
+		incognito.into_iter().chain(directives).chain(wrapper).collect()
 	}
 
 	pub fn view_csp_directives(self) -> &'static [&'static str] {
