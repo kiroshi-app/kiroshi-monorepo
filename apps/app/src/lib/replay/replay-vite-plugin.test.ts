@@ -158,12 +158,29 @@ describe("the replay plugin", () => {
 })
 
 describe("the replay HTTP surface when the mode is on", () => {
-	it("leaves every other path to the dev server", async () => {
-		const { call } = await startReplayServer()
+	it.each(["/src/main.tsx", `${REPLAY_HTTP_PREFIX}ed/theme`])(
+		"leaves the path %s to the dev server",
+		async (path) => {
+			const { call, sent } = await startReplayServer()
 
-		expect((await call({ path: "/src/main.tsx", method: "GET" })).status).toBe(
-			FELL_THROUGH_STATUS,
-		)
+			const { status } = await call({ path, body: { scheme: "dark" } })
+
+			expect(status).toBe(FELL_THROUGH_STATUS)
+			expect(sent).toEqual([])
+		},
+	)
+
+	it("reads the command name before the query string", async () => {
+		const { call } = await startReplayServer({
+			pages: [answeringWith({ ok: true, result: { scheme: "dark" } })],
+		})
+
+		const { status } = await call({
+			path: `${REPLAY_HTTP_PREFIX}/theme?from=session`,
+			body: { scheme: "dark" },
+		})
+
+		expect(status).toBe(200)
 	})
 
 	it("answers 403 to a request carrying an Origin header", async () => {

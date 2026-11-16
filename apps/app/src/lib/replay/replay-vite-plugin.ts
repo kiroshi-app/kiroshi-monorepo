@@ -92,8 +92,13 @@ const readBody = async (request: IncomingMessage): Promise<ReadBody> => {
 	return { isWithinLimit: true, text: Buffer.concat(chunks).toString("utf8") }
 }
 
-const commandNameOf = (url: string) =>
-	url.slice(REPLAY_HTTP_PREFIX.length + 1).split("?")[0] ?? ""
+const pathOf = (request: IncomingMessage) => request.url?.split("?")[0] ?? ""
+
+const isReplayPath = (path: string) =>
+	path === REPLAY_HTTP_PREFIX || path.startsWith(`${REPLAY_HTTP_PREFIX}/`)
+
+const commandNameOf = (path: string) =>
+	path.slice(REPLAY_HTTP_PREFIX.length + 1)
 
 const parseBody = (name: ReplayCommandName, text: string) => {
 	try {
@@ -123,7 +128,7 @@ const admit = (
 			reason: `send the ${REPLAY_HEADER} header and no Origin header`,
 		})
 	}
-	const name = commandNameOf(request.url ?? "")
+	const name = commandNameOf(pathOf(request))
 	if (!isReplayCommandName(name)) {
 		return refused(404, { command: name, reason: "unknown command" })
 	}
@@ -209,7 +214,7 @@ export const createReplayMiddleware = ({
 		response: ServerResponse,
 		next: (error?: unknown) => void,
 	) => {
-		if (!request.url?.startsWith(REPLAY_HTTP_PREFIX)) {
+		if (!isReplayPath(pathOf(request))) {
 			next()
 			return
 		}
