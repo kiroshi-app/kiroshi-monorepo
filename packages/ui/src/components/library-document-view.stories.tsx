@@ -419,6 +419,7 @@ export const Scrolled = meta.story({
 	play: async ({ canvasElement }) => {
 		const page = slotIn(canvasElement, "library-document-view")
 		const column = slotIn(canvasElement, "library-document-column")
+		await waitFor(() => expect(column).toHaveAttribute("tabindex", "0"))
 		const atRest = (await expectStaticHeaderBar(page)).getBoundingClientRect()
 
 		column.scrollTo({ top: SCROLLED_AWAY })
