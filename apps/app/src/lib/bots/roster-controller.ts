@@ -1481,10 +1481,7 @@ export const createRosterController = (
 				)
 				choose(choiceOf(landOn(state.bots, conversations, null)))
 				holdConversations(state.spaceRowId, conversations)
-			}).catch(async (reason: unknown) => {
-				await reload()
-				throw reason
-			}),
+			}).catch(reloadAndReject),
 
 		discardConversation: (id: string) =>
 			commit(async () => {
