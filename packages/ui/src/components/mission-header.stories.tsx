@@ -27,6 +27,7 @@ import {
 	MissionPropertyAction,
 } from "@workspace/ui/components/mission-properties"
 import {
+	LONG_MISSION_TICKET_TITLE,
 	MISSION_BOT,
 	MISSION_NOW,
 	MISSION_OBJECTIVE,
@@ -53,9 +54,6 @@ const ACTIVITIES = [true, false]
 
 const PILLS_THE_MATRIX_DRAWS = 10
 
-const LONG_TICKET_TITLE =
-	"Release builds ship without the sidecar binary on every desktop target, so the installed app starts with no coding session until the sidecar is fetched by hand"
-
 const LONG_OBJECTIVE =
 	"Rework the mission thread so a reader can follow a run that spans several days without ever losing the ticket it answers"
 
@@ -72,6 +70,18 @@ const LEADING_GAP = 10
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
 const pathLinkIn = (root: Element) => slotIn(root, "app-header-path-link")
+
+const expectLeadingCluster = async (bar: HTMLElement) => {
+	const [avatar, text] = Array.from(slotIn(bar, "app-header-leading").children)
+
+	await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([
+		AVATAR_SIZE,
+		AVATAR_SIZE,
+	])
+	await expect(boxOf(text).left - boxOf(avatar).right).toBe(LEADING_GAP)
+	await expectHeaderTopLineStep(slotIn(bar, "app-header-top-line"))
+	await expectHeaderTitleStep(slotIn(bar, "mission-objective"))
+}
 
 const meta = preview.meta({
 	title: "Conversation/Missions/MissionHeader",
@@ -106,23 +116,14 @@ export const Default = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const header = slotIn(canvasElement, "mission-header")
 		const bar = slotIn(header, "app-header")
-		const [avatar, text] = Array.from(
-			slotIn(bar, "app-header-leading").children,
-		)
 		const path = canvas.getByRole("button", { name: "Missions" })
 
 		await expect(header.children).toHaveLength(1)
 		await expect(slotsIn(header, "header-island")).toHaveLength(0)
 		await expect(boxOf(bar).height).toBe(56)
-		await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([
-			AVATAR_SIZE,
-			AVATAR_SIZE,
-		])
-		await expect(boxOf(text).left - boxOf(avatar).right).toBe(LEADING_GAP)
+		await expectLeadingCluster(bar)
 		await expect(path).toBe(pathLinkIn(bar))
 		await expect(slotsIn(bar, "app-header-path-separator")).toHaveLength(1)
-		await expectHeaderTopLineStep(slotIn(bar, "app-header-top-line"))
-		await expectHeaderTitleStep(slotIn(bar, "mission-objective"))
 		await expect(slotIn(bar, "mission-objective")).toHaveTextContent(
 			MISSION_OBJECTIVE,
 		)
@@ -379,17 +380,10 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 	const column = holderOf(frame, "column")
 	const block = slotIn(column, "mission-properties")
 	const messages = holderOf(column, "messages")
-	const [avatar, text] = Array.from(slotIn(bar, "app-header-leading").children)
 
 	await expect(slotsIn(frame, "header-island")).toHaveLength(0)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
-	await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([
-		AVATAR_SIZE,
-		AVATAR_SIZE,
-	])
-	await expect(boxOf(text).left - boxOf(avatar).right).toBe(LEADING_GAP)
-	await expectHeaderTopLineStep(slotIn(bar, "app-header-top-line"))
-	await expectHeaderTitleStep(slotIn(bar, "mission-objective"))
+	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
 	await expect(boxOf(block).width).toBe(boxOf(column).width)
 	await expect(boxOf(messages).top - boxOf(block).bottom).toBe(
@@ -559,7 +553,10 @@ export const MissionNarrow3e = meta.story({
 			header={<MissionHeader {...args} />}
 			isNarrow
 			properties={{
-				ticket: { ...ARTBOARD_PROPERTIES.ticket, title: LONG_TICKET_TITLE },
+				ticket: {
+					...ARTBOARD_PROPERTIES.ticket,
+					title: LONG_MISSION_TICKET_TITLE,
+				},
 			}}
 		/>
 	),

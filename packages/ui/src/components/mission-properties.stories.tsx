@@ -14,15 +14,13 @@ import {
 } from "@workspace/ui/components/mission-properties"
 import {
 	LONG_MISSION_STATUS,
+	LONG_MISSION_TICKET_TITLE,
 	MISSION_NOW,
 	MISSION_OPENED_AT,
 	MISSION_PULL_REQUEST,
 	MISSION_STATUS,
 	MISSION_TICKET,
 } from "@workspace/ui/components/missions.fixtures"
-
-const LONG_TICKET_TITLE =
-	"Release builds ship without the sidecar binary on every desktop target, so the installed app starts with no coding session until the sidecar is fetched by hand"
 
 const TICKET_ACTIONS = (
 	<>
@@ -363,7 +361,7 @@ export const WithTicketActions = meta.story({
 
 export const LongContent = meta.story({
 	args: {
-		ticket: { ...MISSION_TICKET, title: LONG_TICKET_TITLE },
+		ticket: { ...MISSION_TICKET, title: LONG_MISSION_TICKET_TITLE },
 		status: LONG_MISSION_STATUS,
 		ticketActions: TICKET_ACTIONS,
 	},
