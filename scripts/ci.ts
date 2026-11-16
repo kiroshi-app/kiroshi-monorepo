@@ -756,10 +756,12 @@ const selectIosTests = () => {
 	console.log(`\nci  ios shard ${shard} runs ${tests.join(", ")}`)
 }
 
-const shardTestLog = () => {
-	const log = join(REPO, IOS_SHARD_TEST_LOG)
-	return existsSync(log) ? readFileSync(log, "utf8") : ""
-}
+const SHARD_TEST_LOG_FILE = join(REPO, IOS_SHARD_TEST_LOG)
+
+const shardTestLog = () =>
+	existsSync(SHARD_TEST_LOG_FILE)
+		? readFileSync(SHARD_TEST_LOG_FILE, "utf8")
+		: ""
 
 const reportRunnerFailure = () => {
 	console.error("ci  ios ended before its first test started: runner failure")
@@ -779,7 +781,7 @@ const shardPassed = () => {
 }
 
 const runIosShard = () => {
-	rmSync(join(REPO, IOS_SHARD_TEST_LOG), { force: true })
+	rmSync(SHARD_TEST_LOG_FILE, { force: true })
 	const passed = shardPassed()
 	if (!passed && !startedATest(shardTestLog())) reportRunnerFailure()
 	return passed

@@ -33,13 +33,13 @@ export type SinceGreen =
 	| { kind: "none" }
 	| { kind: "unavailable"; reason: string }
 
-export type RunnerFailureReport = {
+export type FailedRun = {
 	run: Run
 	jobs: Job[]
 	pullRequests: PullRequest[]
 }
 
-export type RunReport = RunnerFailureReport & { sinceGreen: SinceGreen }
+export type RunReport = FailedRun & { sinceGreen: SinceGreen }
 
 export type IssueInput = {
 	teamId: string
@@ -173,7 +173,7 @@ const FILED_IN = {
 	stateId: TODO_STATE_ID,
 }
 
-const commitLines = ({ run, pullRequests }: RunnerFailureReport) => [
+const commitLines = ({ run, pullRequests }: FailedRun) => [
 	`Commit: ${firstLine(run.commitMessage)}`,
 	pullRequestLine(pullRequests),
 	`Commit author: ${run.commitAuthor}`,
@@ -197,7 +197,7 @@ export const redMainIssue = (report: RunReport): IssueInput => {
 	}
 }
 
-export const runnerFailureIssue = (report: RunnerFailureReport): IssueInput => {
+export const runnerFailureIssue = (report: FailedRun): IssueInput => {
 	const { run, jobs } = report
 	const { runnerFailures } = classifiedFailures(jobs)
 	return {
