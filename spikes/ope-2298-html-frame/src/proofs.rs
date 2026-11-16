@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::host::{HandlerEvent, Heartbeat, SecretCall};
 use crate::probe::{self, HostReading};
-use crate::sensors::{TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
+use crate::sensors::{CspReport, TripwireReading, ViewRecord, ALLOWLIST_HOSTS};
 use crate::windows::FIRST_VIEW_LABEL;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
@@ -103,6 +103,7 @@ pub struct NavigationAlone {
 	pub attempt: &'static str,
 	pub window: String,
 	pub open: (Instant, Instant),
+	pub csp_reports: Vec<CspReport>,
 }
 
 #[derive(Serialize)]
@@ -113,6 +114,7 @@ struct NavigationAloneReading<'a> {
 	request_bytes_received: usize,
 	handler_denied_it: bool,
 	handler_answers: Vec<&'a HandlerEvent>,
+	browser_csp_reports_about_the_sink: Vec<&'a CspReport>,
 }
 
 pub struct HostReadings {
@@ -148,26 +150,41 @@ impl Observations {
 			self.storage_not_shared_between_views(),
 		];
 		if self.host_readings.is_some() {
-			let has_ended = self.has_first_view_reached_its_last_attempts();
+			let (by_the_handlers, by_browser_csp_reports) = self.first_view_navigations_seen();
 			for proof in &mut proofs {
-				proof.evidence["first_view_seen_by_the_handlers_reaching_its_last_attempts"] =
-					json!(has_ended);
+				proof.evidence["navigation_attempts_of_the_first_view_seen_by_the_host"] = json!({
+					"by_the_handlers": by_the_handlers,
+					"by_browser_csp_reports": by_browser_csp_reports,
+				});
 			}
 		}
 		proofs
 	}
 
-	fn has_first_view_reached_its_last_attempts(&self) -> bool {
-		NAVIGATION_ATTEMPTS.iter().all(|attempt| {
-			self.handler_events
-				.iter()
-				.any(|event| event.window == FIRST_VIEW_LABEL && event.url.ends_with(attempt))
-		})
+	fn first_view_navigations_seen(&self) -> (usize, usize) {
+		let sink = &self.navigation_sink.address;
+		let by_the_handlers = self
+			.handler_events
+			.iter()
+			.filter(|event| event.window == FIRST_VIEW_LABEL && event.url.contains(sink))
+			.count();
+		let by_browser_csp_reports = self
+			.writer
+			.record
+			.csp_reports
+			.iter()
+			.filter(|report| report.blocked_uri.contains(sink))
+			.count();
+		(by_the_handlers, by_browser_csp_reports)
+	}
+
+	fn has_first_view_reached_its_navigation_attempts(&self) -> bool {
+		self.first_view_navigations_seen() != (0, 0)
 	}
 
 	fn is_played(&self, never_signalled: &[&'static str]) -> bool {
 		match self.host_readings {
-			Some(_) => self.has_first_view_reached_its_last_attempts(),
+			Some(_) => self.has_first_view_reached_its_navigation_attempts(),
 			None => never_signalled.is_empty(),
 		}
 	}
@@ -318,7 +335,7 @@ impl Observations {
 		let is_allowlist_followed = match &self.host_readings {
 			Some(host) => {
 				evidence["first_view_read_by_the_host"] = probe::evidence(&host.first_view);
-				self.has_first_view_reached_its_last_attempts()
+				self.has_first_view_reached_its_navigation_attempts()
 					&& host.first_view.as_ref().is_ok_and(|view| {
 						view.allowlisted_fetch == "ok"
 							&& view.other_host_fetch.starts_with("blocked")
@@ -356,14 +373,15 @@ impl Observations {
 		if let Some(host) = &self.host_readings {
 			let alone: Vec<_> =
 				host.navigations_alone.iter().map(|view| self.navigation_alone(view)).collect();
-			evidence["sink_connections_despite_a_denying_handler"] = alone
+			evidence["attempts_whose_connection_reached_the_sink"] = alone
 				.iter()
-				.filter(|view| view.sink_connections > 0 && view.handler_denied_it)
+				.filter(|view| view.sink_connections > 0)
 				.map(|view| {
 					json!({
 						"attempt": view.attempt,
 						"sink_connections": view.sink_connections,
 						"any_request_bytes": view.request_bytes_received > 0,
+						"handler_denied_it": view.handler_denied_it,
 					})
 				})
 				.collect();
@@ -406,6 +424,11 @@ impl Observations {
 				.sum(),
 			handler_denied_it: answers.iter().any(|event| !event.allowed),
 			handler_answers: answers,
+			browser_csp_reports_about_the_sink: view
+				.csp_reports
+				.iter()
+				.filter(|report| report.blocked_uri.contains(&self.navigation_sink.address))
+				.collect(),
 		}
 	}
 
@@ -431,7 +454,7 @@ impl Observations {
 				evidence["first_view_open_ms"] = json!(settled.duration_since(opened).as_millis());
 				evidence["longest_heartbeat_gap_while_the_first_view_was_open_ms"] =
 					json!(gap.as_millis());
-				gap <= HEARTBEAT_GAP_LIMIT && self.has_first_view_reached_its_last_attempts()
+				gap <= HEARTBEAT_GAP_LIMIT && self.has_first_view_reached_its_navigation_attempts()
 			}
 			None => busy_gap.is_some_and(|gap| gap <= HEARTBEAT_GAP_LIMIT),
 		};
@@ -492,7 +515,7 @@ impl Observations {
 				evidence["stores_where_the_host_found_the_first_view_value"] = json!(stores);
 				stores.is_some_and(|stores| stores.is_empty())
 					&& leaked_cookies.is_empty()
-					&& self.has_first_view_reached_its_last_attempts()
+					&& self.has_first_view_reached_its_navigation_attempts()
 			}
 			None => leaked_reads.is_empty() && leaked_cookies.is_empty() && unobserved.is_empty(),
 		};

@@ -8,9 +8,9 @@ use tauri::WebviewWindow;
 
 const POLL: Duration = Duration::from_millis(100);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(2);
-const READING_TIMEOUT: Duration = Duration::from_secs(12);
-const SLOT_PLACEHOLDER: &str = "__SLOT__";
-const SCRIPT: &str = r#"(() => {
+const READING_TIMEOUT: Duration = Duration::from_secs(8);
+const TRIGGER: &str = "spike-host-probe";
+const READING: &str = r#"(() => {
 	const KEY = "spike-view-value";
 	const STORE = "spike-view";
 	const failure = (cause) => `blocked-${cause?.name ?? cause}`;
@@ -37,7 +37,7 @@ const SCRIPT: &str = r#"(() => {
 		const [first] = await cache.keys();
 		return first ? found(await (await cache.match(first)).text()) : "none";
 	};
-	Promise.all([
+	return Promise.all([
 		outcome(() => found(localStorage.getItem(KEY))),
 		outcome(readDatabase),
 		outcome(() => found(document.cookie)),
@@ -49,7 +49,7 @@ const SCRIPT: &str = r#"(() => {
 		),
 		outcome(() => fetch("https://example.com/", { mode: "no-cors" }).then(() => "ok")),
 	]).then(([localStorage, indexedDb, cookie, cache, allowlistedFetch, otherHostFetch]) => {
-		window.__SLOT__ = JSON.stringify({
+		return JSON.stringify({
 			localStorage,
 			indexedDb,
 			cookie,
@@ -95,9 +95,40 @@ pub fn evidence(reading: &HostReading) -> Value {
 	}
 }
 
-pub fn read(window: &WebviewWindow) -> HostReading {
+#[derive(Clone, Copy)]
+pub enum Target {
+	Document,
+	FirstFrame,
+}
+
+pub fn frame_responder() -> String {
+	format!(
+		r#"addEventListener("message", (event) => {{
+	if (event.data !== "{TRIGGER}") {{
+		return;
+	}}
+	{READING}.then((reading) => event.source.postMessage({{ spikeHostReading: reading }}, "*"));
+}});"#
+	)
+}
+
+fn script(target: Target, slot: &str) -> String {
+	match target {
+		Target::Document => format!("{READING}.then((reading) => {{ window.{slot} = reading; }});"),
+		Target::FirstFrame => format!(
+			r#"addEventListener("message", (event) => {{
+	if (event.data?.spikeHostReading) {{
+		window.{slot} = event.data.spikeHostReading;
+	}}
+}});
+frames[0].postMessage("{TRIGGER}", "*");"#
+		),
+	}
+}
+
+pub fn read(window: &WebviewWindow, target: Target) -> HostReading {
 	let slot = format!("__spikeHostProbe{}", uuid::Uuid::new_v4().simple());
-	window.eval(SCRIPT.replace(SLOT_PLACEHOLDER, &slot)).map_err(|cause| cause.to_string())?;
+	window.eval(script(target, &slot)).map_err(|cause| cause.to_string())?;
 	let deadline = Instant::now() + READING_TIMEOUT;
 	while Instant::now() < deadline {
 		thread::sleep(POLL);

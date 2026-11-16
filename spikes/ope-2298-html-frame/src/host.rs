@@ -68,7 +68,7 @@ pub struct HostState {
 #[derive(Clone, Default)]
 pub struct ViewAddress {
 	pub origin: String,
-	pub url: String,
+	pub urls: Vec<String>,
 }
 
 impl HostState {

@@ -13,6 +13,19 @@ pub const ALLOWLIST_HOSTS: [&str; 1] = ["cdn.jsdelivr.net"];
 const HOSTILE_HTML: &str = include_str!("../hostile.html");
 const TARGETS_PLACEHOLDER: &str = "\"__TARGETS__\"";
 const DOCUMENT_NAME: &str = "hostile.html";
+const WRAPPER_NAME: &str = "view.html";
+const WRAPPER_HTML: &str = r#"<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>OPE-2298 view wrapper</title>
+	</head>
+	<body>
+		<iframe src="hostile.html" title="hostile view" width="520" height="360"></iframe>
+	</body>
+</html>
+"#;
+pub const WRAPPER_CSP: &str = "default-src 'none'; frame-src 'self'";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const ROUTING_PROBE_ADDRESS: (Ipv4Addr, u16) = (Ipv4Addr::new(192, 0, 2, 1), 9);
 const RECORDED_BODY_CHARS: usize = 512;
@@ -178,9 +191,9 @@ pub struct ViewServer {
 }
 
 impl ViewServer {
-	pub fn open(targets: &Targets) -> io::Result<Self> {
+	pub fn open(targets: &Targets, added_directives: &[&str]) -> io::Result<Self> {
 		let token = uuid::Uuid::new_v4().simple().to_string();
-		let csp = view_csp(&token);
+		let csp = view_csp(&token, added_directives);
 		let document = HOSTILE_HTML.replace(TARGETS_PLACEHOLDER, &serde_json::to_string(targets)?);
 		let record = Arc::new(Mutex::new(ViewRecord::default()));
 		let recorded = Arc::clone(&record);
@@ -209,6 +222,10 @@ impl ViewServer {
 		format!("{}/{}/{DOCUMENT_NAME}", self.origin(), self.token)
 	}
 
+	pub fn framed_url(&self) -> String {
+		format!("{}/{}/{WRAPPER_NAME}", self.origin(), self.token)
+	}
+
 	pub fn token(&self) -> &str {
 		&self.token
 	}
@@ -222,11 +239,15 @@ impl ViewServer {
 	}
 }
 
-fn view_csp(token: &str) -> String {
+fn view_csp(token: &str, added_directives: &[&str]) -> String {
 	let allowlist = ALLOWLIST_HOSTS.map(|host| format!("https://{host}")).join(" ");
-	format!(
+	let base = format!(
 		"default-src 'none'; script-src 'unsafe-inline' {allowlist}; connect-src {allowlist}; img-src 'self'; form-action 'none'; base-uri 'none'; report-uri /{token}/csp-report"
-	)
+	);
+	std::iter::once(base.as_str())
+		.chain(added_directives.iter().copied())
+		.collect::<Vec<_>>()
+		.join("; ")
 }
 
 fn answer_view_request(
@@ -259,6 +280,18 @@ fn answer_view_request(
 				body: document.as_bytes().to_vec(),
 			}
 		}
+		("GET", Some(WRAPPER_NAME)) => Response {
+			status: "200 OK",
+			headers: vec![
+				("Content-Type", "text/html; charset=utf-8".to_owned()),
+				(
+					"Content-Security-Policy",
+					format!("{WRAPPER_CSP}; report-uri /{token}/csp-report"),
+				),
+				("Cache-Control", "no-store".to_owned()),
+			],
+			body: WRAPPER_HTML.as_bytes().to_vec(),
+		},
 		("POST", Some("csp-report")) => {
 			match csp_report(&request.body) {
 				Some(report) => record.csp_reports.push(report),

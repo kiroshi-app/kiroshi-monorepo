@@ -21,13 +21,13 @@ const RUN_SIGNAL: &str = "run";
 const BEAT_SCRIPT: &str = "window.__spikeBeat?.()";
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
 const POLL: Duration = Duration::from_millis(50);
-const MAIN_WINDOW_TIMEOUT: Duration = Duration::from_secs(15);
+const MAIN_WINDOW_TIMEOUT: Duration = Duration::from_secs(12);
 const BASELINE: Duration = Duration::from_secs(2);
-const FIRST_VIEW_TIMEOUT: Duration = Duration::from_secs(50);
-const SECOND_VIEW_TIMEOUT: Duration = Duration::from_secs(12);
+const FIRST_VIEW_TIMEOUT: Duration = Duration::from_secs(38);
+const SECOND_VIEW_TIMEOUT: Duration = Duration::from_secs(6);
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(10);
 const SETTLE: Duration = Duration::from_millis(1500);
-const ALONE_TIMEOUT: Duration = Duration::from_secs(8);
+const ALONE_TIMEOUT: Duration = Duration::from_secs(4);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const RUN_LIMIT: Duration = Duration::from_secs(115);
 const HARNESS_FAILURE: i32 = 1;
@@ -60,8 +60,21 @@ impl Sensors {
 	}
 }
 
-fn point_at(host: &HostState, view: &ViewServer) {
-	host.point_at_view(ViewAddress { origin: view.origin(), url: view.url() });
+fn window_url(view: &ViewServer, mode: Mode) -> String {
+	if mode.frames_view_documents() {
+		view.framed_url()
+	} else {
+		view.url()
+	}
+}
+
+fn point_at(host: &HostState, view: &ViewServer, mode: Mode) {
+	let urls = if mode.frames_view_documents() {
+		vec![view.framed_url(), view.url()]
+	} else {
+		vec![view.url()]
+	};
+	host.point_at_view(ViewAddress { origin: view.origin(), urls });
 }
 
 fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
@@ -77,8 +90,8 @@ fn wait_until(timeout: Duration, is_reached: impl Fn() -> bool) -> bool {
 
 pub fn start(app: AppHandle, host: Arc<HostState>, mode: Mode) -> Result<(), Failure> {
 	let sensors = Sensors::open()?;
-	let first_view = ViewServer::open(&sensors.targets(WRITER_ROLE))?;
-	point_at(&host, &first_view);
+	let first_view = ViewServer::open(&sensors.targets(WRITER_ROLE), mode.view_csp_directives())?;
+	point_at(&host, &first_view, mode);
 	let main_window = open_main_window(&app, &host)?;
 	let heartbeat_host = Arc::clone(&host);
 	app.listen(HEARTBEAT_EVENT, move |event| match serde_json::from_str::<Tick>(event.payload()) {
@@ -166,9 +179,10 @@ impl Run {
 			}
 			None => (None, None),
 		};
-		let alone = match self.mode {
-			Mode::WindowIsolated => self.play_navigation_attempts_alone()?,
-			Mode::Frame | Mode::Window => Vec::new(),
+		let alone = if self.mode.decides_from_host_observations() {
+			self.play_navigation_attempts_alone()?
+		} else {
+			Vec::new()
 		};
 
 		let mut window_urls = vec![WindowUrl {
@@ -198,6 +212,7 @@ impl Run {
 					attempt,
 					window: view.label.clone(),
 					open: view.open,
+					csp_reports: view.observation.record.csp_reports.clone(),
 				})
 				.collect(),
 		});
@@ -224,6 +239,7 @@ impl Run {
 				Err(cause) => format!("unavailable: {cause}"),
 			},
 			"duration_ms": self.started.elapsed().as_millis(),
+			"mitigations": self.mode.mitigations(),
 			"main_window_csp_served": self.host.main_window_csps(),
 			"views": views,
 			"proofs": observations.proofs(),
@@ -239,8 +255,9 @@ impl Run {
 	}
 
 	fn open_second_view(&self) -> Result<Option<OpenView>, Failure> {
-		let second_view = ViewServer::open(&self.sensors.targets(READER_ROLE))?;
-		point_at(&self.host, &second_view);
+		let second_view =
+			ViewServer::open(&self.sensors.targets(READER_ROLE), self.mode.view_csp_directives())?;
+		point_at(&self.host, &second_view, self.mode);
 		if self.mode == Mode::Frame && !self.reload_main_window()? {
 			eprintln!(
 				"the main window did not come back after its reload, the second view stays closed"
@@ -254,8 +271,11 @@ impl Run {
 		NAVIGATION_ATTEMPTS
 			.iter()
 			.map(|attempt| {
-				let server = ViewServer::open(&self.sensors.targets(attempt))?;
-				point_at(&self.host, &server);
+				let server = ViewServer::open(
+					&self.sensors.targets(attempt),
+					self.mode.view_csp_directives(),
+				)?;
+				point_at(&self.host, &server, self.mode);
 				let label = format!("alone-{attempt}");
 				let view = self.open_view(&label, server, ALONE_TIMEOUT, ALONE_SETTLE)?;
 				Ok((*attempt, self.close_view(view)?))
@@ -274,10 +294,13 @@ impl Run {
 	}
 
 	fn host_reading(&self, view: &OpenView) -> Option<HostReading> {
-		match (&view.window, self.mode) {
-			(Some(window), Mode::WindowIsolated) => Some(probe::read(window)),
-			_ => None,
-		}
+		let window = view.window.as_ref()?;
+		let target = if self.mode.frames_view_documents() {
+			probe::Target::FirstFrame
+		} else {
+			probe::Target::Document
+		};
+		self.mode.decides_from_host_observations().then(|| probe::read(window, target))
 	}
 
 	fn open_view(
@@ -287,17 +310,14 @@ impl Run {
 		timeout: Duration,
 		settle: Duration,
 	) -> Result<OpenView, Failure> {
-		let url = server.url();
+		let url = window_url(&server, self.mode);
 		self.host.mark_view_open(true);
-		let window = match self.mode {
-			Mode::Frame => {
-				self.main_window
-					.eval(format!("window.__spikeOpenView({})", serde_json::to_string(&url)?))?;
-				None
-			}
-			Mode::Window | Mode::WindowIsolated => {
-				Some(open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?)
-			}
+		let window = if self.mode.shows_views_in_windows() {
+			Some(open_view_window(&self.app, &self.host, self.mode, label, url.parse()?)?)
+		} else {
+			self.main_window
+				.eval(format!("window.__spikeOpenView({})", serde_json::to_string(&url)?))?;
+			None
 		};
 		let opened_at = Instant::now();
 		if !wait_until(timeout, || server.record().outcome(RUN_SIGNAL).is_some()) {
@@ -328,7 +348,7 @@ impl Run {
 				token: view.server.token().to_owned(),
 				record: view.server.record(),
 			},
-			url: view.server.url(),
+			url: window_url(&view.server, self.mode),
 			csp: view.server.csp().to_owned(),
 			window_url_after,
 			open: (view.opened_at, view.settled_at),

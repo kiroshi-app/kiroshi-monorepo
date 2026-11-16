@@ -5,6 +5,7 @@ use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::host::{HandlerEvent, HostState};
+use crate::probe;
 use crate::Mode;
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
@@ -62,7 +63,7 @@ fn guarded<'a>(
 	builder
 		.on_navigation(move |url| {
 			let allowed = url.scheme() == "about"
-				|| url.as_str() == navigation_host.view().url
+				|| navigation_host.view().urls.iter().any(|allowed| allowed == url.as_str())
 				|| (surface == Surface::Main && is_app_url(url));
 			record_navigation(url, allowed);
 			allowed
@@ -120,5 +121,10 @@ pub fn open_view_window(
 		.inner_size(WINDOW_WIDTH, WINDOW_HEIGHT)
 		.always_on_top(true)
 		.incognito(mode.isolates_view_storage());
+	let builder = if mode.frames_view_documents() {
+		builder.initialization_script_for_all_frames(probe::frame_responder())
+	} else {
+		builder
+	};
 	guarded(builder, host, label, Surface::View).build()
 }
