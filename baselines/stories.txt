@@ -1995,6 +1995,7 @@ navigation-librarycommentthread--long-content
 navigation-librarycommentthread--long-content-dark
 navigation-librarycommentthread--long-thread
 navigation-librarycommentthread--long-thread-classic-scrollbar
+navigation-librarycommentthread--long-thread-classic-scrollbar-dark
 navigation-librarycommentthread--long-thread-dark
 navigation-librarycommentthread--long-thread-resolved
 navigation-librarycommentthread--replies

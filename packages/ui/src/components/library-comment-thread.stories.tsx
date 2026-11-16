@@ -203,7 +203,7 @@ const expectCardAtContentHeight = async (card: HTMLElement) => {
 }
 
 const CLASSIC_SCROLLBAR =
-	"contents [&_[data-slot=library-comment-scroller]::-webkit-scrollbar-thumb]:bg-(--scrollbar) [&_[data-slot=library-comment-scroller]::-webkit-scrollbar-track]:bg-muted"
+	"contents [&_[data-slot=library-comment-scroller]::-webkit-scrollbar-thumb]:bg-(--scrollbar)"
 
 const CLASSIC_SCROLLBAR_TAKING_WIDTH = `${CLASSIC_SCROLLBAR} [&_[data-slot=library-comment-scroller]]:[scrollbar-gutter:stable]`
 
@@ -725,7 +725,7 @@ export const LongThreadClassicScrollbar = meta.story({
 		docs: {
 			description: {
 				story:
-					"Thirty two comments, the last one holding an unbreakable link, with the scrollbar of the comments always drawn, thumb and track, as a classic scrollbar that takes width. Its room is held open by the story, so the comments lose that width even in the test runner, which draws no scrollbar. Check every comment keeps its 12 px on the left and on the right of its text, no comment runs under the scrollbar and nothing scrolls sideways.",
+					"Thirty two comments, the last one holding an unbreakable link, with the scrollbar of the comments always drawn as the app draws it on hover, a thumb in the scrollbar colour on a transparent track, as a classic scrollbar that takes width. Its room is held open by the story, so the comments lose that width even in the test runner, which draws no scrollbar. Check every comment keeps its 12 px on the left and on the right of its text, no comment runs under the scrollbar and nothing scrolls sideways.",
 			},
 		},
 	},
@@ -738,6 +738,13 @@ export const LongThreadClassicScrollbar = meta.story({
 		await expect(rowsOffTheirInlinePadding(scroller)).toEqual([])
 		await expect(scroller.scrollWidth).toBe(scroller.clientWidth)
 	},
+})
+
+export const LongThreadClassicScrollbarDark = meta.story({
+	args: LongThreadClassicScrollbar.input.args,
+	globals: { theme: "dark" },
+	decorators: LongThreadClassicScrollbar.input.decorators,
+	play: LongThreadClassicScrollbar.input.play,
 })
 
 export const ShortThreadClassicScrollbar = meta.story({
