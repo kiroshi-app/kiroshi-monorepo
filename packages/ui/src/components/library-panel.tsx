@@ -10,7 +10,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { HeaderIsland } from "@workspace/ui/components/header-island"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryEmptyState,
@@ -23,18 +27,16 @@ import {
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
-import {
-	ScreenLayout,
-	ScreenLayoutFloatingHeader,
-} from "@workspace/ui/components/screen-layout"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import {
 	SlidingTab,
 	SlidingTabCount,
 	SlidingTabs,
 } from "@workspace/ui/components/sliding-tabs"
-import { Button } from "@workspace/ui/components/ui/button"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -128,47 +130,17 @@ const LibraryFilters = ({
 	)
 }
 
-const HEADER_LAYOUTS = {
-	withoutImport: {
-		search: "@max-library-header-row:w-40 @max-library-header-row:min-w-0",
-		actionLabel: "@max-lg:sr-only",
-		filtersBesideTitle: "@max-library-header-row:hidden",
-		filtersRow: "@library-header-row:hidden",
-		content: "@max-library-header-row:pt-26",
-		fade: "@max-library-header-row:h-28 @max-library-header-row:from-[percentage:calc(100%-2rem)]",
-	},
-	withImport: {
-		search:
-			"@max-library-import-header-row:w-40 @max-library-import-header-row:min-w-0",
-		actionLabel: "@max-library-import-header-labels:sr-only",
-		filtersBesideTitle: "@max-library-import-header-row:hidden",
-		filtersRow: "@library-import-header-row:hidden",
-		content: "@max-library-import-header-row:pt-26",
-		fade: "@max-library-import-header-row:h-28 @max-library-import-header-row:from-[percentage:calc(100%-2rem)]",
-	},
-} as const
-
-type HeaderLayout = (typeof HEADER_LAYOUTS)[keyof typeof HEADER_LAYOUTS]
-
 type LibrarySearchProps = {
 	query: string
 	onQueryChange: (query: string) => void
-	layout: HeaderLayout
 }
 
-const LibrarySearch = ({
-	query,
-	onQueryChange,
-	layout,
-}: LibrarySearchProps) => {
+const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 	const { t } = useTranslation("common")
 
 	return (
 		<div
-			className={cn(
-				"group/search relative w-50 min-w-40 shrink",
-				layout.search,
-			)}
+			className="group/search relative min-w-40 max-w-60 flex-1 basis-40 @max-xl:max-w-none @max-xl:basis-full"
 			data-slot="library-search"
 		>
 			<Icons.Search
@@ -187,60 +159,54 @@ const LibrarySearch = ({
 	)
 }
 
-type LibraryHeaderProps = {
-	actions?: ReactNode
-	filters?: ReactNode
-	layout: HeaderLayout
+const FILTERS_STRIP_WITH_FOCUS_RING_ROOM =
+	"scrollbar-hide -m-0.5 max-w-[calc(100%+--spacing(1))] overflow-x-auto p-0.5"
+
+const LABELS_MIN_WIDTH = {
+	withoutImport: { secondary: 512, primary: 340 },
+	withImport: { secondary: 672, primary: 380 },
 }
 
-const LibraryHeader = ({ actions, filters, layout }: LibraryHeaderProps) => {
-	const { t } = useTranslation("common")
+const BAR_ACTION =
+	"flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 font-medium text-compact leading-4 outline-ring transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background in-data-content-card:focus-visible:ring-card [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
 
-	return (
-		<ScreenLayoutFloatingHeader>
-			<header
-				className="flex w-full min-w-0 flex-col gap-2"
-				data-slot="library-header"
-			>
-				<div className="flex justify-between gap-2">
-					<HeaderIsland className="gap-1">
-						<h1 className="flex h-8 items-center px-2 font-medium text-sm leading-4">
-							{t("library.title")}
-						</h1>
-						{filters ? (
-							<div className={cn("contents", layout.filtersBesideTitle)}>
-								{filters}
-							</div>
-						) : null}
-					</HeaderIsland>
-					{actions}
-				</div>
-				{filters ? (
-					<HeaderIsland
-						className={cn(
-							"scrollbar-hide max-w-full self-start overflow-x-auto",
-							layout.filtersRow,
-						)}
-					>
-						{filters}
-					</HeaderIsland>
-				) : null}
-			</header>
-		</ScreenLayoutFloatingHeader>
-	)
+const BAR_ACTION_KIND = {
+	secondary:
+		"border border-foreground/12 text-foreground hover:bg-foreground/5 active:bg-foreground/10 [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground active:[&_svg]:text-foreground",
+	primary:
+		"bg-primary text-primary-foreground hover:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_15%)] active:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_30%)]",
 }
 
-const ISLAND_ACTION =
-	"rounded-header-island-control px-1.75 text-compact leading-4 transition-none focus-visible:ring-4 active:translate-y-px! active:scale-none!"
+type BarActionProps = {
+	kind: keyof typeof BAR_ACTION_KIND
+	icon: ReactNode
+	label: string
+	onClick: () => void
+	isIconOnly?: boolean
+}
 
-const GHOST_ISLAND_ACTION = cn(
-	ISLAND_ACTION,
-	"dark:hover:bg-muted [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground",
-)
-
-const PRIMARY_ISLAND_ACTION = cn(
-	ISLAND_ACTION,
-	"active:bg-[color-mix(in_oklch,var(--primary),var(--foreground)_40%)]",
+const BarAction = ({
+	kind,
+	icon,
+	label,
+	onClick,
+	isIconOnly = false,
+}: BarActionProps) => (
+	<TooltipHint content={isIconOnly ? label : null} side="bottom">
+		<button
+			className={cn(
+				BAR_ACTION,
+				BAR_ACTION_KIND[kind],
+				isIconOnly && "w-8 px-0",
+			)}
+			data-slot="library-action"
+			onClick={onClick}
+			type="button"
+		>
+			{icon}
+			<span className={isIconOnly ? "sr-only" : undefined}>{label}</span>
+		</button>
+	</TooltipHint>
 )
 
 type LibraryPanelProps = LibraryItemActions<LibraryItem> &
@@ -297,51 +263,53 @@ const LibraryPanel = ({
 		boards: items.filter((item) => item.kind === "board").length,
 	}
 
-	const layout = onImport
-		? HEADER_LAYOUTS.withImport
-		: HEADER_LAYOUTS.withoutImport
-
-	const hasActions = Boolean(
-		onSearchQueryChange || onImport || onNewBoard || onNewDocument,
+	const labelsMinWidth = onImport
+		? LABELS_MIN_WIDTH.withImport
+		: LABELS_MIN_WIDTH.withoutImport
+	const hasSecondaryIconsOnly = useIsNarrowerThan(
+		overlayElement,
+		labelsMinWidth.secondary,
+	)
+	const hasPrimaryIconOnly = useIsNarrowerThan(
+		overlayElement,
+		labelsMinWidth.primary,
 	)
 
-	const actions = hasActions ? (
-		<HeaderIsland className="min-w-0 shrink gap-1">
-			{onSearchQueryChange ? (
-				<LibrarySearch
-					layout={layout}
-					onQueryChange={onSearchQueryChange}
-					query={searchQuery}
-				/>
-			) : null}
-			{onImport ? (
-				<Button
-					className={GHOST_ISLAND_ACTION}
-					onClick={onImport}
-					variant="ghost"
-				>
-					<Icons.Import aria-hidden="true" className="size-3.5" />
-					<span className={layout.actionLabel}>{t("library.import")}</span>
-				</Button>
-			) : null}
-			{onNewBoard ? (
-				<Button
-					className={GHOST_ISLAND_ACTION}
-					onClick={onNewBoard}
-					variant="ghost"
-				>
-					<Icons.Board aria-hidden="true" className="size-3.5" />
-					<span className={layout.actionLabel}>{t("library.newBoard")}</span>
-				</Button>
-			) : null}
-			{onNewDocument ? (
-				<Button className={PRIMARY_ISLAND_ACTION} onClick={onNewDocument}>
-					<Icons.Add aria-hidden="true" className="size-3.5" />
-					<span className={layout.actionLabel}>{t("library.newDocument")}</span>
-				</Button>
-			) : null}
-		</HeaderIsland>
-	) : null
+	const actions =
+		onImport || onNewBoard || onNewDocument ? (
+			<div
+				className="flex shrink-0 items-center gap-2"
+				data-slot="library-actions"
+			>
+				{onImport ? (
+					<BarAction
+						icon={<Icons.Import aria-hidden="true" />}
+						isIconOnly={hasSecondaryIconsOnly}
+						kind="secondary"
+						label={t("library.import")}
+						onClick={onImport}
+					/>
+				) : null}
+				{onNewBoard ? (
+					<BarAction
+						icon={<Icons.Board aria-hidden="true" />}
+						isIconOnly={hasSecondaryIconsOnly}
+						kind="secondary"
+						label={t("library.newBoard")}
+						onClick={onNewBoard}
+					/>
+				) : null}
+				{onNewDocument ? (
+					<BarAction
+						icon={<Icons.Add aria-hidden="true" />}
+						isIconOnly={hasPrimaryIconOnly}
+						kind="primary"
+						label={t("library.newDocument")}
+						onClick={onNewDocument}
+					/>
+				) : null}
+			</div>
+		) : null
 
 	const filters = isSkeletonShown ? (
 		<FiltersSkeleton />
@@ -363,21 +331,38 @@ const LibraryPanel = ({
 				<ScreenLayout
 					aria-busy={isAwaiting}
 					className="@container isolate min-h-0 flex-1"
-					contentClassName={cn(
-						"pt-14 pb-6",
-						filters && layout.content,
-						isSkeletonShown && "h-full pb-0",
-					)}
+					contentClassName={cn("gap-4 py-6", isSkeletonShown && "h-full pb-0")}
 					header={
-						<LibraryHeader
-							actions={actions}
-							filters={filters}
-							layout={layout}
+						<AppHeader
+							close={actions}
+							leading={
+								<AppHeaderText
+									topLine={
+										<span className="truncate">{t("library.description")}</span>
+									}
+								>
+									<h1 className={APP_HEADER_TITLE}>{t("library.title")}</h1>
+								</AppHeaderText>
+							}
 						/>
 					}
-					headerFadeClassName={filters ? layout.fade : undefined}
-					isHeaderFloating
 				>
+					{filters ? (
+						<div
+							className="flex flex-wrap items-center justify-between gap-3"
+							data-slot="library-controls"
+						>
+							<div className={FILTERS_STRIP_WITH_FOCUS_RING_ROOM}>
+								{filters}
+							</div>
+							{onSearchQueryChange ? (
+								<LibrarySearch
+									onQueryChange={onSearchQueryChange}
+									query={searchQuery}
+								/>
+							) : null}
+						</div>
+					) : null}
 					{isSkeletonShown ? (
 						<LibraryGridSkeleton />
 					) : isAwaiting ? null : isEmpty ? (

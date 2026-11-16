@@ -1792,11 +1792,20 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
-	it("floats the Library header as islands over the grid", async () => {
+	it("tops the Library with the static bar instead of floating islands", async () => {
 		await openLibrary()
+		const layout = document.querySelector(
+			'[data-slot="library-panel"] [data-slot="screen-layout"]',
+		) as HTMLElement
+		const bar = layout.querySelector('[data-slot="app-header"]') as HTMLElement
 
-		expect(islandsIn(floatingHeader()).length).toBeGreaterThan(0)
-		expect(takesPress(floatingHeader())).toBe(false)
+		expect(layout.firstElementChild).toBe(bar)
+		expect(bar.querySelector("h1")?.textContent).toBe("Library")
+		expect(
+			layout.querySelector('[data-slot="screen-layout-floating-header"]'),
+		).toBeNull()
+		expect(islandsIn(layout)).toEqual([])
+		expect(takesPress(bar)).toBe(true)
 	})
 
 	it("floats the bar of an opened document as islands over its text", async () => {
@@ -1830,9 +1839,7 @@ describe("WorkspaceBody library", () => {
 		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
 			"Library",
 		)
-		expect(
-			within(panel).getByRole("searchbox", { name: "Search the Library" }),
-		).toBeTruthy()
+		expect(within(panel).queryByRole("searchbox")).toBeNull()
 		for (const name of [
 			"New document",
 			"Blank document",
