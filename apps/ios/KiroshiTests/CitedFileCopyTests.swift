@@ -32,8 +32,12 @@ struct CitedFileCopyTests {
             return TestHost.ok(call, answer)
         }
         let connection = makeConnection()
+        let updates = await connection.updates()
         await connection.start()
         await transport.nextOpening().accept(host.socket)
+        for await update in updates {
+            if case .state(let state) = update, state == .online(sharedSpaceId: "s-1") { break }
+        }
 
         let copy = try await CitedFiles(connection: connection).copy(of: notes)
 
