@@ -46,73 +46,72 @@ const HAPPY: AgentsPageAgent = {
 	blot: BLOT_HUES.orange,
 	title: "Project lead",
 	instructions:
-		"You keep the Kiroshi roadmap moving. Turn a request into a mission, hand it to the right agent and report what shipped.",
-	skillsCount: 4,
-	applicationsCount: 2,
-	permissionMode: "acceptEdits",
+		"You frame the work, cut it into tickets and hand each one to the agent whose craft it is.",
+	skillsCount: 9,
+	applicationsCount: 3,
+	permissionMode: "auto",
 	memberships: [KIROSHI.id, PERSO.id],
 }
 
 const SIX_AGENTS: AgentsPageAgent[] = [
 	HAPPY,
 	{
-		id: "juniper",
-		name: "Juniper",
+		id: "ichi",
+		name: "Ichi",
 		blot: BLOT_HUES.purple,
-		title: "Writer",
+		title: "Frontend",
 		instructions:
-			"You write release notes and changelogs. Group changes by area, link every pull request, and keep each entry to one plain sentence.",
-		skillsCount: 3,
+			"You build the screens of the desktop app from a validated artboard.",
+		skillsCount: 6,
 		applicationsCount: 2,
 		permissionMode: "acceptEdits",
 		memberships: [KIROSHI.id],
 	},
 	{
-		id: "atlas",
-		name: "Atlas",
+		id: "ni",
+		name: "Ni",
 		blot: BLOT_HUES.blue,
-		title: "Planner",
+		title: "Systems",
 		instructions:
-			"You turn a goal into a plan the team can run: milestones, owners and the first three steps.",
+			"You own everything that runs under the window: the host, the sidecar and the relay.",
+		skillsCount: 7,
+		applicationsCount: 2,
+		permissionMode: "acceptEdits",
+		memberships: [KIROSHI.id],
+	},
+	{
+		id: "san",
+		name: "San",
+		blot: BLOT_HUES.green,
+		title: "Design system",
+		instructions:
+			"You keep the component library honest, one story per component.",
 		skillsCount: 5,
+		applicationsCount: 1,
+		permissionMode: "default",
+		memberships: [KIROSHI.id, PERSO.id],
+	},
+	{
+		id: "rei",
+		name: "Rei",
+		blot: BLOT_HUES.pink,
+		title: "Product design",
+		instructions:
+			"You draw screens from what the product really does, state by state.",
+		skillsCount: 10,
 		applicationsCount: 1,
 		permissionMode: "plan",
 		memberships: [KIROSHI.id],
 	},
 	{
-		id: "pico",
-		name: "Pico",
-		blot: BLOT_HUES.green,
-		title: "Builder",
-		instructions:
-			"You ship small changes to the site. Run the checks before you say it works.",
-		skillsCount: 8,
-		applicationsCount: 3,
-		permissionMode: "default",
-		memberships: [KIROSHI.id, PERSO.id],
-	},
-	{
-		id: "mira",
-		name: "Mira",
-		blot: BLOT_HUES.pink,
-		title: "Designer",
-		instructions:
-			"You draw screens from what the product really does, and name every state you leave out.",
-		skillsCount: 2,
-		applicationsCount: 0,
-		permissionMode: "acceptEdits",
-		memberships: [KIROSHI.id],
-	},
-	{
-		id: "sol",
-		name: "Sol",
+		id: "yon",
+		name: "Yon",
 		blot: BLOT_HUES.yellow,
-		title: "Researcher",
-		instructions:
-			"You read the sources before you answer, quote what you found and say what you could not confirm.",
-		skillsCount: 1,
-		applicationsCount: 4,
-		permissionMode: "plan",
+		title: "iOS",
+		instructions: "You build the iPhone app with system components first.",
+		skillsCount: 4,
+		applicationsCount: 0,
+		permissionMode: "dontAsk",
 		memberships: [KIROSHI.id],
 	},
 ]
@@ -162,6 +161,12 @@ const PageFrame = ({ className = "w-248", children }: PageFrameProps) => (
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
 const cardsIn = (root: HTMLElement) => slotsIn(root, "companion-card")
+
+const footerOf = (card: HTMLElement) =>
+	Array.from(
+		slotIn(card, "companion-card-mode").parentElement?.children ?? [],
+		(part) => part.textContent,
+	)
 
 const columnsOf = (cards: HTMLElement[]) =>
 	new Set(cards.map((card) => Math.round(boxOf(card).left))).size
@@ -229,7 +234,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard A1: a space holding six agents. Check the header reads Agents, 6 and Create an agent, the caption names the space, the cards sit three to a row at the same width and height, and that a card picks its agent right up to the edges of its actions button, a control of its own beside the card, which does not. Pick `SingleAgent` for a row that is not full, `Narrow` for fewer columns.",
+					"Artboard A1: a space holding six agents, Happy, Ichi, Ni, San, Rei and Yon. Check the header reads Agents, 6 and Create an agent, the caption names the space, the cards sit three to a row at the same width and height, the first footer reads 9 skills · 3 applications and Decide alone, the last 4 skills · no applications and Never ask, and that a card picks its agent right up to the edges of its actions button, a control of its own beside the card, which does not. Pick `SingleAgent` for a row that is not full, `Narrow` for fewer columns.",
 			},
 		},
 	},
@@ -260,6 +265,18 @@ export const Default = meta.story({
 		)
 		await expect(scrollsSideways(body)).toBe(false)
 
+		await expect(
+			cards.map((card) => slotIn(card, "companion-card-name").textContent),
+		).toEqual(SIX_AGENTS.map(({ name }) => name))
+		await expect(footerOf(cards[0])).toEqual([
+			"9 skills · 3 applications",
+			"Decide alone",
+		])
+		await expect(footerOf(cards[5])).toEqual([
+			"4 skills · no applications",
+			"Never ask",
+		])
+
 		for (const [rank, { name }] of SIX_AGENTS.entries()) {
 			const actions = actionsOf(canvasElement, name)
 			const { left, top, bottom, width } = boxOf(actions)
@@ -274,7 +291,7 @@ export const Default = meta.story({
 		await userEvent.click(cards[0])
 		await expect(args.onSelect).toHaveBeenLastCalledWith("happy")
 		await userEvent.click(slotIn(cards[1], "companion-card-excerpt"))
-		await expect(args.onSelect).toHaveBeenLastCalledWith("juniper")
+		await expect(args.onSelect).toHaveBeenLastCalledWith("ichi")
 		await expect(args.onSelect).toHaveBeenCalledTimes(2)
 
 		const create = canvas.getByRole("button", { name: "Create an agent" })
