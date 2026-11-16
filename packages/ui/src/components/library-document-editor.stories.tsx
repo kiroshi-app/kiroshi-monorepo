@@ -20,6 +20,7 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectCommentThreadCapped,
 	hueScopeOf,
 	isInBrowserRunner,
 	realPointer,
@@ -45,6 +46,7 @@ import {
 	DOCUMENT_THREADS,
 	JUNIPER,
 	LONG_NAMED_AGENT,
+	LONG_THREAD_COMMENTS,
 	MARKET_BLOCK,
 	MARKET_PARAGRAPH,
 	MARKET_THREAD,
@@ -3087,6 +3089,27 @@ export const Doc6ThreadOpen = meta.story({
 	parameters: describedAs(
 		"Artboard Doc 6: the thread of a passage open. Check its pin and its passage selected, the passage washed at 16 percent, the 360px thread 8px right of the pin with its top on the pin top, every comment of the thread listed, and Close raising `onClose`.",
 	),
+})
+
+export const CommentThreadLong = meta.story({
+	args: {
+		...commentedDocument(),
+		threads: [
+			{ ...SESSION_THREAD, comments: LONG_THREAD_COMMENTS },
+			MARKET_THREAD,
+			BUDGET_THREAD,
+		],
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"The thread of a passage holding thirty one comments. Check the card stops at 60 percent of the window height with its header and its reply field whole, and the comments scroll between them, the latest one in view, without handing their scroll over to the document.",
+	),
+	play: async ({ canvas }: CommentPlay) => {
+		await expectCommentThreadCapped(
+			canvas.getByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		)
+	},
 })
 
 const edge3 = threadOpen(20)

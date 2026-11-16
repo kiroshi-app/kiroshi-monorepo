@@ -238,6 +238,53 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+const COMMENT_THREAD_CAP = 0.6
+
+export const commentScrollerIn = (card: Element) =>
+	slotIn(card, "library-comment-scroller")
+
+export const expectLatestCommentInView = async (card: Element) => {
+	const scroller = commentScrollerIn(card).getBoundingClientRect()
+	const latest = slotsIn(card, "library-comment").at(-1)
+	if (!latest) throw new Error("This thread holds no comment")
+	const box = latest.getBoundingClientRect()
+	await expect(box.bottom).toBeLessThanOrEqual(Math.ceil(scroller.bottom))
+	await expect(box.bottom).toBeGreaterThan(scroller.top)
+}
+
+export const expectCommentThreadCapped = async (card: HTMLElement) => {
+	const header = card.firstElementChild as HTMLElement
+	const footer = card.lastElementChild as HTMLElement
+	const scroller = commentScrollerIn(card)
+	const box = card.getBoundingClientRect()
+	const scrolled = scroller.getBoundingClientRect()
+
+	await expect(box.height).toBeLessThanOrEqual(
+		Math.ceil(window.innerHeight * COMMENT_THREAD_CAP),
+	)
+	await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+	await expect(scroller.tabIndex).toBe(0)
+	await expect(getComputedStyle(scroller).overscrollBehaviorY).toBe("contain")
+
+	await expect(header.clientHeight).toBeGreaterThan(0)
+	await expect(header.scrollHeight).toBeLessThanOrEqual(header.clientHeight)
+	await expect(header.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+		Math.floor(box.top),
+	)
+	await expect(header.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+		Math.ceil(scrolled.top),
+	)
+	await expect(footer.clientHeight).toBeGreaterThan(0)
+	await expect(footer.scrollHeight).toBeLessThanOrEqual(footer.clientHeight)
+	await expect(footer.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+		Math.floor(scrolled.bottom),
+	)
+	await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+		Math.ceil(box.bottom),
+	)
+	await expectLatestCommentInView(card)
+}
+
 const SPACE_CAROUSEL_SETTLE_MS = 250
 
 export const scrollSpaceCarousel = async (root: Element, step: 1 | -1) => {

@@ -2,9 +2,17 @@ import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { hueScopeOf, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	commentScrollerIn,
+	expectCommentThreadCapped,
+	expectLatestCommentInView,
+	hueScopeOf,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { LibraryCommentPin } from "@workspace/ui/components/library-comment-pin"
 import {
+	type LibraryComment,
 	LibraryCommentThread,
 	type LibraryCommentThreadProps,
 	type ThreadWorkLineAgent,
@@ -18,8 +26,10 @@ import {
 	LONG_COMMENT,
 	LONG_NAMED_AGENT,
 	LONG_NAMED_PERSON,
+	LONG_THREAD_COMMENTS,
 	MEMBER_REPLY,
 	PASSAGE_ANCHOR,
+	SESSION_PARAGRAPH,
 	UNBREAKABLE,
 } from "@workspace/ui/components/library-comments.fixtures"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -100,6 +110,35 @@ const ReturningAgentsThread = (props: LibraryCommentThreadProps) => {
 	)
 }
 
+const ARRIVING_REPLY: LibraryComment = {
+	...MEMBER_REPLY,
+	id: "comment-arriving",
+	time: "Now",
+}
+
+const GrowingThread = (props: LibraryCommentThreadProps) => {
+	const [hasArrived, setHasArrived] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-3">
+			<ThreadOnPage
+				{...props}
+				comments={
+					hasArrived ? [...props.comments, ARRIVING_REPLY] : props.comments
+				}
+			/>
+			<Button onClick={() => setHasArrived(true)} size="sm" variant="outline">
+				Lena replies
+			</Button>
+		</div>
+	)
+}
+
+const SEVERAL_SCREENS_COMMENT: LibraryComment = {
+	...FIRST_COMMENT,
+	body: Array.from({ length: 30 }, () => SESSION_PARAGRAPH).join("\n\n"),
+}
+
 const threadIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "library-comment-thread")
 
@@ -138,6 +177,32 @@ const expectAlignedWithComments = async (canvasElement: HTMLElement) => {
 	).toBe(slotIn(comment, "library-comment-avatar").getBoundingClientRect().left)
 }
 
+const expectInViewOf = async (scroller: HTMLElement, part: HTMLElement) => {
+	const view = scroller.getBoundingClientRect()
+	const box = part.getBoundingClientRect()
+	await expect(scroller).toContainElement(part)
+	await expect(box.top).toBeGreaterThanOrEqual(Math.floor(view.top))
+	await expect(box.bottom).toBeLessThanOrEqual(Math.ceil(view.bottom))
+}
+
+const expectCardAtContentHeight = async (card: HTMLElement) => {
+	const scroller = commentScrollerIn(card)
+	const header = card.firstElementChild as HTMLElement
+	const footer = card.lastElementChild as HTMLElement
+	const body = slotIn(card, "library-comment").querySelector("p:last-child")
+	const renderedLine = Number.parseFloat(
+		getComputedStyle(body as HTMLElement).lineHeight,
+	)
+
+	await expect(scroller.scrollHeight).toBeLessThanOrEqual(scroller.clientHeight)
+	await expect(
+		Math.abs(
+			card.offsetHeight -
+				(header.offsetHeight + scroller.scrollHeight + footer.offsetHeight),
+		),
+	).toBeLessThanOrEqual(renderedLine)
+}
+
 const authorsIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		canvasElement.querySelectorAll('[data-slot="library-comment"]'),
@@ -165,7 +230,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, More drawn only when `onMore` is passed, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgents` draws the agents at work with the work line of a conversation, one line for one agent, the pile and its toggle for several; `workingAgent` alone still draws that agent thinking. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container.",
+					"One comment thread, under its pin: the line naming what it is on, Resolve, More and Close, More drawn only when `onMore` is passed, the first comment and its replies, each with a round avatar for a person and a hexagonal one for an agent, then the reply field. `workingAgents` draws the agents at work with the work line of a conversation, one line for one agent, the pile and its toggle for several; `workingAgent` alone still draws that agent thinking. `resolution` turns the card into its resolved form: no Resolve, the replies folded into one line in the Space colour, and a footer naming who resolved it, with Reopen. An anchor of `{ gone }` words a target that no longer exists. The card is 360 px wide and narrows with its container. It is as tall as its content up to 60 percent of the window height: past it the comments scroll alone, the latest one in view, between the header and the reply field or the resolution footer.",
 			},
 		},
 	},
@@ -394,7 +459,7 @@ export const Replies = meta.story({
 		docs: {
 			description: {
 				story:
-					"A member then an agent replied, as artboards Thread 5 and Edge 3 draw it. Check the three comments in order, round avatars for the two people and a hexagon for the agent, and that typing @ in the reply field opens the mention menu under the card.",
+					"A member then an agent replied, as artboards Thread 5 and Edge 3 draw it. Check the three comments in order, round avatars for the two people and a hexagon for the agent, the card as tall as its content with nothing to scroll, and that typing @ in the reply field opens the mention menu under the card.",
 			},
 		},
 	},
@@ -404,6 +469,7 @@ export const Replies = meta.story({
 			"person",
 			"agent",
 		])
+		await expectCardAtContentHeight(threadIn(canvasElement))
 
 		const field = within(canvasElement).getByRole("textbox", {
 			name: "Reply, @ to mention",
@@ -560,6 +626,84 @@ export const ResolvedWithoutReplies = meta.story({
 		await expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth)
 		await expect(
 			within(thread).getByRole("button", { name: "Reopen" }),
+		).toBeVisible()
+	},
+})
+
+export const LongThread = meta.story({
+	args: {
+		comments: LONG_THREAD_COMMENTS,
+		workingAgents: SEVERAL_AGENTS_AT_WORK,
+	},
+	render: (args) => <GrowingThread {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Thirty one comments, ten times a usual thread, with agents at work on it. Check the card stops at 60 percent of the window height, the header and the reply field stay whole above and under the comments, the comments open on the latest one with the at-work row in view under it, the mention menu still opens under the card, and that Lena replies brings her reply into view from the top of the thread.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const card = threadIn(canvasElement)
+		const scroller = commentScrollerIn(card)
+		await expectCommentThreadCapped(card)
+		await expectInViewOf(scroller, workRowIn(canvasElement))
+
+		const canvas = within(canvasElement)
+		await userEvent.type(
+			canvas.getByRole("textbox", { name: "Reply, @ to mention" }),
+			"@jun",
+		)
+		const menu = await canvas.findByRole("listbox", { name: "Mention" })
+		await expect(menu).toBeVisible()
+		await expect(menu.getBoundingClientRect().top).toBeGreaterThan(
+			card.getBoundingClientRect().bottom,
+		)
+		await userEvent.keyboard("{Enter}")
+
+		scroller.scrollTop = 0
+		await userEvent.click(canvas.getByRole("button", { name: "Lena replies" }))
+		await expect(slotsIn(card, "library-comment")).toHaveLength(
+			LONG_THREAD_COMMENTS.length + 1,
+		)
+		await expectLatestCommentInView(card)
+		await expectCommentThreadCapped(card)
+	},
+})
+
+export const LongThreadDark = meta.story({
+	args: LongThread.input.args,
+	globals: { theme: "dark" },
+	render: LongThread.input.render,
+	play: LongThread.input.play,
+})
+
+export const LongThreadResolved = meta.story({
+	args: {
+		comments: [SEVERAL_SCREENS_COMMENT, MEMBER_REPLY, AGENT_REPLY],
+		resolution: { by: "Steve", time: "1 min" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A resolved thread whose first comment alone runs over several screens. Check the card stops at 60 percent of the window height, the header and the resolution footer stay whole with Reopen in reach, and the comment scrolls between them, open on its end with the replies line in view.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const card = threadIn(canvasElement)
+		await expectCommentThreadCapped(card)
+		await expectInViewOf(
+			commentScrollerIn(card),
+			slotIn(card, "library-comment-replies"),
+		)
+		await expect(card.lastElementChild).toBe(
+			slotIn(card, "library-comment-resolution"),
+		)
+		await expect(
+			within(card).getByRole("button", { name: "Reopen" }),
 		).toBeVisible()
 	},
 })

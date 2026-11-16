@@ -13,6 +13,8 @@ import boardSchema from "@workspace/shared/board/board.schema.json"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
+	commentScrollerIn,
+	expectCommentThreadCapped,
 	isInBrowserRunner,
 	LAPTOP_WINDOW,
 	resolvedRootColor,
@@ -64,6 +66,7 @@ import {
 	FIRST_COMMENT,
 	JUNIPER,
 	LENA,
+	LONG_THREAD_COMMENTS,
 	MEMBER_REPLY,
 	OPEN_THREADS,
 	RESOLVED_THREADS,
@@ -5398,6 +5401,46 @@ export const CommentThreadOpenDark = meta.story({
 	play: async (context) => {
 		await expectDarkSurface(context.canvasElement)
 		await CommentThreadOpen.input.play?.(context)
+	},
+})
+
+export const CommentThreadLong = meta.story({
+	globals: LAPTOP_WINDOW,
+	args: {
+		...COMMENT_ARGS,
+		openCommentThread: {
+			...OPEN_BOAT_THREAD,
+			comments: LONG_THREAD_COMMENTS,
+		},
+	},
+	render: renderCommentedBoard,
+	parameters: commentDocs(
+		"The thread on the Boat shape holding thirty one comments. Check the card stops at 60 percent of the window height with its header and its reply field whole, the comments scroll between them with the latest one in view, a wheel over the comments scrolls them and leaves the board where it is, and the comments take the focus so the arrow keys scroll them.",
+	),
+	play: async ({ canvasElement }) => {
+		const card = slotIn(canvasElement, "library-comment-thread")
+		const scroller = commentScrollerIn(card)
+		const boat = objectNode(canvasElement, BOAT.id) as HTMLElement
+		const still = boat.getBoundingClientRect()
+		await expectCommentThreadCapped(card)
+
+		await expect(wheel(scroller, { deltaY: -120, ...centreOf(scroller) })).toBe(
+			true,
+		)
+		await expect(wheel(scroller, { deltaY: 120, ...centreOf(scroller) })).toBe(
+			true,
+		)
+		await expect(boat.getBoundingClientRect()).toEqual(still)
+
+		scroller.focus()
+		await expect(scroller).toHaveFocus()
+		await expect(scroller).toHaveAccessibleName("Comments")
+		if (!isInBrowserRunner()) return
+		const latestInView = scroller.scrollTop
+		const { userEvent: keys } = await import("vitest/browser")
+		await keys.keyboard("{ArrowUp}")
+		await waitFor(() => expect(scroller.scrollTop).toBeLessThan(latestInView))
+		await expect(boat.getBoundingClientRect()).toEqual(still)
 	},
 })
 

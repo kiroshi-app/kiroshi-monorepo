@@ -90,6 +90,14 @@ const AGENT_REPLY: LibraryComment = {
 	body: "The captain can leave at 17:45, not later. 17:30 works if we're on the dock by 17:20.",
 }
 
+const LONG_THREAD_COMMENTS: [LibraryComment, ...LibraryComment[]] = [
+	FIRST_COMMENT,
+	...Array.from({ length: 30 }, (_, index) => ({
+		...(index % 2 === 0 ? MEMBER_REPLY : AGENT_REPLY),
+		id: `comment-long-thread-${index}`,
+	})),
+]
+
 const UNBREAKABLE = "https://kiroshi.app/library/".concat("offsite-".repeat(18))
 
 const LONG_COMMENT: LibraryComment = {
@@ -278,6 +286,7 @@ export {
 	LONG_COMMENT,
 	LONG_NAMED_AGENT,
 	LONG_NAMED_PERSON,
+	LONG_THREAD_COMMENTS,
 	MARKET_BLOCK,
 	MARKET_PARAGRAPH,
 	MARKET_THREAD,
