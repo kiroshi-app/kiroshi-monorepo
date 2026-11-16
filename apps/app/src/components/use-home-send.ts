@@ -48,6 +48,10 @@ const raiseUnsent = (reason?: unknown) => {
 	)
 }
 
+const logUnreleased = (reason: unknown) => {
+	console.error("home send: the discarded runtime was not released", reason)
+}
+
 const raiseRefused = (refusal: AttachmentStoreError) => {
 	void reportUnsent({
 		title: i18n.t("chat:screen.attachmentsRefused"),
@@ -94,9 +98,9 @@ export const useHomeSend = ({
 		)
 	}
 
-	const releaseAndDiscard = async (conversationId: string) => {
-		await runtimes.release(conversationId)
-		await discardConversation(conversationId)
+	const releaseAndDiscard = (conversationId: string) => {
+		runtimes.release(conversationId).catch(logUnreleased)
+		return discardConversation(conversationId)
 	}
 
 	const deliverOrDiscard = async (conversation: Conversation, text: string) => {

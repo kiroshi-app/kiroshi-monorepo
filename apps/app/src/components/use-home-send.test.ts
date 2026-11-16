@@ -23,6 +23,7 @@ import {
 	type ConversationRuntimes,
 	createConversationRuntimes,
 } from "@/lib/conversations/conversation-runtimes"
+import { createFakeReconnections } from "@/lib/conversations/fake-reconnections"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Conversation } from "@/lib/conversations/store-contract"
@@ -107,28 +108,11 @@ const createWorkspace = (port: Partial<AttachmentsPort> = {}): Workspace => ({
 	openConversation: vi.fn(),
 })
 
-const createRelay = () => {
-	const listeners = new Set<() => void>()
-	return {
-		onReconnected: (listener: () => void) => {
-			listeners.add(listener)
-			return () => {
-				listeners.delete(listener)
-			}
-		},
-		reconnect: () => {
-			for (const listener of [...listeners]) {
-				listener()
-			}
-		},
-	}
-}
-
 const createMemberWorkspace = async () => {
 	const host = createFakeTranscriptStore()
 	const [agent] = await seatBots(host, HOST_SPACE_ID, ["Ada"])
 	const loadPage = vi.fn(host.loadPage)
-	const relay = createRelay()
+	const relay = createFakeReconnections()
 	const driver = createScriptedDriver()
 	const memberRuntimes = createConversationRuntimes(
 		driver,
@@ -386,6 +370,37 @@ describe("a Home send", () => {
 		])
 		expect(workspace.openConversation).toHaveBeenCalledOnce()
 	})
+})
+
+const NEVER_SETTLED = new Promise<void>(() => undefined)
+
+describe("a Home send whose runtime cannot be let go", () => {
+	it.each([
+		["hangs", () => NEVER_SETTLED],
+		["fails", () => Promise.reject(new Error("stuck"))],
+	])(
+		"still discards the conversation and says the send failed when the release %s",
+		async (_outcome, release) => {
+			vi.spyOn(console, "error").mockReturnValue(undefined)
+			const released = vi.fn(release)
+			const workspace = {
+				...createWorkspace({ send: () => false }),
+				runtimes: { ...runtimes, release: released },
+			}
+			const home = mountHome(workspace)
+			act(() => home.result.current.onDraftChange("look"))
+
+			act(() => home.result.current.onSubmit("look"))
+
+			await waitFor(() =>
+				expect(noticeTitles()).toEqual(["Couldn’t send that request"]),
+			)
+			expect(released).toHaveBeenCalledWith(NEW_CONVERSATION_ID)
+			expect(workspace.conversations.conversationIds()).toEqual([])
+			expect(home.result.current.draft).toBe("look")
+			expect(workspace.openConversation).not.toHaveBeenCalled()
+		},
+	)
 })
 
 describe("a Home send on a member device", () => {
