@@ -456,7 +456,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #0B0B0C at 92 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule and no island, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts 16 below the rule and keeps 16 on its four sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image.",
+					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #0B0B0C at 92 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule and no island, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
 			},
 		},
 	},
@@ -471,16 +471,14 @@ export const Loading = meta.story({
 		const rule = bar.getBoundingClientRect().bottom
 		await expect(getComputedStyle(bar).backgroundColor).toBe("rgb(11, 11, 12)")
 
-		const stage = slotIn(
-			region,
-			"library-image-skeleton-stage",
-		).getBoundingClientRect()
+		const stagePlaceholder = slotIn(region, "library-image-skeleton-stage")
+		const stage = stagePlaceholder.getBoundingClientRect()
+		await expect(stage.top).toBe(rule)
 		await expect([
-			stage.top - rule,
 			stage.left - surface.left,
 			surface.right - stage.right,
 			surface.bottom - stage.bottom,
-		]).toEqual([STAGE_INSET, STAGE_INSET, STAGE_INSET, STAGE_INSET])
+		]).toEqual([STAGE_INSET, STAGE_INSET, STAGE_INSET])
 
 		const [previous, next, zoomPill, ...others] = slotsIn(
 			region,
@@ -489,6 +487,15 @@ export const Loading = meta.story({
 		if (!previous || !next || !zoomPill)
 			throw new Error("The skeleton does not draw its steps and its zoom pill")
 		await expect(others).toEqual([])
+		for (const control of [previous, next, zoomPill]) {
+			const fill = getComputedStyle(control).backgroundColor
+			await expect(fill).toBe(
+				tokenStyleIn(control, "bg-input", "backgroundColor"),
+			)
+			await expect(fill).not.toBe(
+				getComputedStyle(stagePlaceholder).backgroundColor,
+			)
+		}
 
 		const stageMiddle = (rule + surface.bottom) / 2
 		for (const step of [previous, next]) {
@@ -502,6 +509,19 @@ export const Loading = meta.story({
 		await expect(surface.right - next.getBoundingClientRect().right).toBe(
 			STAGE_INSET,
 		)
+	},
+})
+
+export const LoadingLight = meta.story({
+	...Loading.input,
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same loading image in the light theme, where the white card shows through the surface. Check that the surface, the bar and every placeholder keep the dark geometry and fills, and that Previous, Next and the zoom pill still read over the stage.",
+			},
+		},
 	},
 })
 

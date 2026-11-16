@@ -2451,6 +2451,7 @@ overlays-librarylightbox--image-menu-saving
 overlays-librarylightbox--image-without-rename
 overlays-librarylightbox--library-path-link
 overlays-librarylightbox--loading
+overlays-librarylightbox--loading-light
 overlays-librarylightbox--member-more-menu
 overlays-librarylightbox--narrow-long-name
 overlays-librarylightbox--only-bar-actions-given

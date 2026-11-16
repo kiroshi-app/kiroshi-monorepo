@@ -335,6 +335,8 @@ const DOCUMENT_COLUMN_WIDTH = 794
 
 const COLUMN_BLOCK_END = 40
 
+const COLUMN_GAP = 14
+
 const expectLoading = async (canvasElement: HTMLElement) => {
 	const region = within(canvasElement).getByRole("region", {
 		name: "Loading the document…",
@@ -349,6 +351,15 @@ const expectLoading = async (canvasElement: HTMLElement) => {
 		region.getBoundingClientRect().bottom - lines.bottom,
 	]).toEqual([DOCUMENT_COLUMN_WIDTH, TITLE_BELOW_BAR, COLUMN_BLOCK_END])
 	await expectSkeletonFilledTo(region, "bottom")
+
+	const [title, firstBlock] = slotsIn(region, "list-skeleton-row")
+	if (!title || !firstBlock)
+		throw new Error("The skeleton does not draw its title and a first block")
+	await expect(slotsIn(title, "skeleton")).toHaveLength(1)
+	await expect(
+		firstBlock.getBoundingClientRect().top -
+			title.getBoundingClientRect().bottom,
+	).toBe(COLUMN_GAP)
 }
 
 export const Loading = meta.story({
@@ -367,7 +378,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule and no island, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the lines start 24 below the bar in the 794 wide column and reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
+					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule and no island, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 24 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
 			},
 		},
 	},
