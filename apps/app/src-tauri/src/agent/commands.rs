@@ -316,17 +316,19 @@ impl<S> Live<S> {
 		}
 	}
 
-	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
-		let asked = self
-			.questions()
+	fn thread_question(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.questions()
 			.iter()
 			.find(|question| question.scope.conversation_id == conversation_id)
 			.map(|question| PendingPrompt {
 				prompt_id: question.request.id.clone(),
 				kind: PendingPromptKind::Question,
 				text: question.request.text(),
-			});
-		asked.or_else(|| {
+			})
+	}
+
+	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.thread_question(conversation_id).or_else(|| {
 			let runs = self.runs();
 			let mut in_thread: Vec<&Run<S>> =
 				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
@@ -424,6 +426,10 @@ impl<S: Clone> Live<S> {
 			})
 			.map(|(held, _)| held.clone())
 			.collect()
+	}
+
+	fn sessions(&self) -> Vec<RunKey> {
+		self.runs.lock().expect("live runs").keys().cloned().collect()
 	}
 
 	fn live_runs(&self) -> Vec<RuntimeScope> {
@@ -814,6 +820,14 @@ impl AgentState {
 
 	pub(crate) fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
 		self.live.thread_prompt(conversation_id)
+	}
+
+	pub(crate) fn thread_question(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.live.thread_question(conversation_id)
+	}
+
+	pub(crate) fn live_sessions(&self) -> Vec<String> {
+		self.live.sessions()
 	}
 
 	pub fn live_session_count(&self) -> usize {
@@ -1817,12 +1831,10 @@ async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeS
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
 	let session = scope.runtime_session_id.clone();
-	match database.conversations().release_prompts_of_session(session).await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
-		Err(failure) => {
-			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
-		}
+	if let Err(failure) = database.conversations().release_prompts_of_session(session).await {
+		log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}");
 	}
+	conversation_state::observe_reporting(app, database, conversation).await;
 }
 
 async fn release_orphan_prompts<R: Runtime>(
@@ -1839,12 +1851,10 @@ async fn release_orphan_prompts<R: Runtime>(
 		live_sessions,
 		asked_before,
 	);
-	match released.await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
-		Err(failure) => {
-			log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}")
-		}
+	if let Err(failure) = released.await {
+		log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}");
 	}
+	conversation_state::observe_reporting(app, database, conversation).await;
 }
 
 pub async fn terminate_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
@@ -3324,6 +3334,32 @@ mod tests {
 			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
 		}
 
+		#[tokio::test]
+		async fn a_pending_question_a_dead_process_left_answers_neither_needs_you_nor_a_question() {
+			let asked = PendingPrompt {
+				runtime_session_id: a_scope().runtime_session_id,
+				prompt_id: "q1".to_owned(),
+				..a_pending_prompt("c1", PromptKind::Question)
+			};
+			let app = an_app_storing("pending-dead-process", vec![asked]).await;
+			a_run_held_by_the_app(app.handle(), a_scope()).emit(question("q1"), the_turn());
+
+			app.state::<AgentState>().live.clear_all();
+			let database = bot_database(app.handle()).expect("the database opens");
+			let observed = conversation_state::observe(app.handle(), database, "c1")
+				.await
+				.expect("the state reads");
+			let questions = pending_in(app.handle(), "c1").await;
+
+			assert_eq!(stored_prompts(&app).await, 1, "the dead process released its rows");
+			assert_eq!(
+				(observed.state == ConversationState::NeedsYou, observed.pending_prompt),
+				(!questions.is_empty(), None),
+				"the state and the question read disagree"
+			);
+			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+		}
+
 		fn another_bot_in_the_room() -> RuntimeScope {
 			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r9".into(), ..a_scope() }
 		}
@@ -3357,10 +3393,9 @@ mod tests {
 
 			assert_eq!(stored_sessions(&app).await, ["r9"]);
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
-			assert_eq!(
-				*heard.lock().expect("the list is kept"),
-				[serde_json::json!("needs_you")],
-				"the pending prompt moved to the live bot's one, the state stayed"
+			assert!(
+				heard.lock().expect("the list is kept").is_empty(),
+				"the dead prompts were never shown, so the live bot's one stayed"
 			);
 		}
 
