@@ -37,6 +37,7 @@ final class MissionThreadStore {
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var seeding: Task<Void, Never>?
     @ObservationIgnored private var isRereadingAfterResync = false
+    @ObservationIgnored private var hasTrailingResync = false
 
     init(
         mission: Mission,
@@ -94,6 +95,8 @@ final class MissionThreadStore {
             rereads.finish()
         }
         self.rereads = nil
+        isRereadingAfterResync = false
+        hasTrailingResync = false
         isOnline = false
         seeding?.cancel()
     }
@@ -178,11 +181,13 @@ final class MissionThreadStore {
         case .state:
             isOnline = false
         case .resynced:
-            guard !isRereadingAfterResync, let relay else { return }
+            guard relay != nil else { return }
+            guard !isRereadingAfterResync else {
+                hasTrailingResync = true
+                return
+            }
             isRereadingAfterResync = true
-            rereads?.yield()
-            seeding?.cancel()
-            seeding = Task { await seedPendingQuestions(through: relay) }
+            rereadAfterResync()
         case .event(let event):
             switch MissionThreadFrame(event, conversationId: mission.threadConversationId) {
             case .stored(let message):
@@ -191,6 +196,13 @@ final class MissionThreadStore {
             case nil: break
             }
         }
+    }
+
+    private func rereadAfterResync() {
+        guard let relay else { return }
+        rereads?.yield()
+        seeding?.cancel()
+        seeding = Task { await seedPendingQuestions(through: relay) }
     }
 
     private func seedPendingQuestions(through relay: MissionsRelay) async {
@@ -216,7 +228,11 @@ final class MissionThreadStore {
                 guard !Task.isCancelled else { return }
                 hasFailed = !hasLoaded
             }
-            if answersResync {
+            guard answersResync else { continue }
+            if hasTrailingResync {
+                hasTrailingResync = false
+                rereadAfterResync()
+            } else {
                 isRereadingAfterResync = false
             }
         }

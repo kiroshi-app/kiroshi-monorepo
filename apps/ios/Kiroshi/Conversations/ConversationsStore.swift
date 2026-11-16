@@ -135,7 +135,7 @@ final class ConversationsStore {
             case .state:
                 isOnline = false
             case .resynced:
-                resyncReread.start { reload() }
+                resyncReread.start { [weak self] in self?.reload() }
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)
@@ -143,6 +143,7 @@ final class ConversationsStore {
         }
         guard isFollowing(connection) else { return }
         isOnline = false
+        resyncReread.cancel()
         for task in [loading, paging, merging, pinning] {
             task?.cancel()
         }

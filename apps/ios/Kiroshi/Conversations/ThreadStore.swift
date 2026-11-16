@@ -200,13 +200,14 @@ final class ThreadStore {
             case .state:
                 isReachable = false
             case .resynced:
-                resyncReread.start { reload() }
+                resyncReread.start { [weak self] in self?.reload() }
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)
             }
         }
         isReachable = false
+        resyncReread.cancel()
         for task in [loading, sending, stopping, loadingOlder, answeringTask] {
             task?.cancel()
         }
