@@ -19,6 +19,7 @@ import {
 	expectQuestionCutInsideTheRow,
 	expectTooltipOnOneLine,
 	expectTooltipPastTheSidebarEdge,
+	expectTooltipWrappedWhole,
 	glyphIn,
 	isInBrowserRunner,
 	openTooltipOf,
@@ -1434,13 +1435,23 @@ const LONG_TITLED_ROOM: AppSidebarConversation = {
 	name: LONG_TITLE,
 }
 
+const renderWithRoomAboveTheRow = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<>
+		<li aria-hidden="true" className="h-40" />
+		<ConversationRosterRow {...args} />
+	</>
+)
+
 export const TooltipCarriesTheTitleAlone = meta.story({
 	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The pointer resting on a conversation of the expanded sidebar whose title the row cuts, with five agents seated and a last message. Check the tooltip holds the title on one line and nothing else, no agents, no message and no date, that a title wider than the bubble ends in an ellipsis inside it, that it sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name. Pick `TooltipOnTheIconRail` for the collapsed sidebar.",
+					"The pointer resting on a conversation of the expanded sidebar whose title the row cuts, with five agents seated and a last message. Check the tooltip holds the whole title and nothing else, no agents, no message and no date, that a title wider than the bubble wraps onto more lines inside it and never ends in an ellipsis, that the row keeps its own ellipsis, that the tooltip sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name. Pick `TooltipWrapsALongTitleOnTheIconRail` for the collapsed sidebar.",
 			},
 		},
 	},
@@ -1450,13 +1461,32 @@ export const TooltipCarriesTheTitleAlone = meta.story({
 		const tooltip = await openTooltipOf(row)
 
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
-		await expect(tooltip.textContent).toBe(LONG_TITLE)
-		await expectTooltipOnOneLine(tooltip)
-		await expect(tooltip.scrollWidth).toBeGreaterThan(tooltip.clientWidth)
-		await expect(getComputedStyle(tooltip).textOverflow).toBe("ellipsis")
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
 		await expectTooltipPastTheSidebarEdge(row, tooltip)
 		await expect(row).not.toHaveAttribute("aria-label")
 		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const TooltipWrapsALongTitleOnTheIconRail = meta.story({
+	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar whose title is wider than the bubble. Check the tooltip holds the whole title, wrapped onto more lines inside the bubble with no ellipsis, and that it sits just past the rail edge and centred on the tile. Pick `TooltipCarriesTheTitleAlone` for the expanded sidebar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(LONG_TITLE)
 	},
 })
 
@@ -1517,6 +1547,49 @@ export const MissionTooltipCarriesTheTitleAlone = meta.story(
 
 export const MissionTooltipOnTheCollapsedSidebar = meta.story(
 	missionTooltipStory(true),
+)
+
+const LONG_MISSION_TITLE =
+	"Ship the release notes with every migration step spelled out for the reader, then check each link against the published changelog"
+
+const LONG_TITLED_MISSION_ROOM: AppSidebarConversation = {
+	...MISSIONS_ROOM,
+	missions: [
+		{
+			...WAITING_MISSION,
+			ticket: { ...WAITING_MISSION.ticket, title: LONG_MISSION_TITLE },
+		},
+	],
+}
+
+const longMissionTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { conversation: LONG_TITLED_MISSION_ROOM },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on a mission whose title the row cuts, in the ${isSidebarCollapsed ? "collapsed" : "expanded"} sidebar. Check the tooltip holds the whole mission title, wrapped onto more lines inside the bubble with no ellipsis, that the mission row keeps its own ellipsis, and that the tooltip sits just past the sidebar edge and centred on the mission.`,
+			},
+		},
+	},
+	render: missionTooltipStory(isSidebarCollapsed).render,
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const mission = slotIn(canvasElement, "mission-capsule")
+		const title = slotIn(mission, "mission-capsule-title")
+		const tooltip = await openTooltipOf(mission)
+
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_MISSION_TITLE)
+		await expectTooltipPastTheSidebarEdge(mission, tooltip)
+	},
+})
+
+export const MissionTooltipWrapsALongTitle = meta.story(
+	longMissionTooltipStory(false),
+)
+
+export const MissionTooltipWrapsALongTitleOnTheCollapsedSidebar = meta.story(
+	longMissionTooltipStory(true),
 )
 
 export const TooltipClosesWhileTheRowMenuIsOpen = meta.story({

@@ -18,20 +18,18 @@ import {
 } from "@workspace/ui/components/ui/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
-const HOVER_INTENT_DELAY_MS = 120
+const TOOLTIP_OPEN_DELAY_MS = 600
+
+const TOOLTIP_GROUPING_WINDOW_MS = 400
 
 const HINT_CLOSE_GRACE_MS = 80
 
 const STILL_UNDER_REDUCED_MOTION = "motion-reduce:animate-none!"
 
-type TooltipHintVariant = "hint" | "line"
-
-const HINT = cn("break-words", STILL_UNDER_REDUCED_MOTION)
-
-const BUBBLE: Record<TooltipHintVariant, string> = {
-	hint: HINT,
-	line: cn("block truncate", STILL_UNDER_REDUCED_MOTION),
-}
+const BUBBLE = cn(
+	"max-w-[min(var(--container-xs),var(--available-width))] wrap-anywhere",
+	STILL_UNDER_REDUCED_MOTION,
+)
 
 type TooltipHintSide = "top" | "right" | "bottom" | "left"
 
@@ -41,7 +39,6 @@ type SharedBubble = {
 	content: ReactNode
 	side: TooltipHintSide
 	sideOffset: TooltipHintSideOffset
-	variant: TooltipHintVariant
 }
 
 const SharedBubbleContext = createContext<
@@ -53,7 +50,6 @@ type TooltipHintProps = {
 	children: ReactElement
 	side?: TooltipHintSide
 	sideOffset?: TooltipHintSideOffset
-	variant?: TooltipHintVariant
 }
 
 const TooltipHint = ({
@@ -61,7 +57,6 @@ const TooltipHint = ({
 	children,
 	side = "top",
 	sideOffset,
-	variant = "hint",
 }: TooltipHintProps) => {
 	const sharedBubble = useContext(SharedBubbleContext)
 
@@ -70,10 +65,10 @@ const TooltipHint = ({
 			<TooltipPrimitive.Trigger
 				closeDelay={HINT_CLOSE_GRACE_MS}
 				data-slot="tooltip-trigger"
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				disabled={!content}
 				handle={sharedBubble}
-				payload={{ content, side, sideOffset, variant }}
+				payload={{ content, side, sideOffset }}
 				render={children}
 			/>
 		)
@@ -81,10 +76,10 @@ const TooltipHint = ({
 
 	return (
 		<Tooltip>
-			<TooltipTrigger delay={HOVER_INTENT_DELAY_MS} render={children} />
+			<TooltipTrigger delay={TOOLTIP_OPEN_DELAY_MS} render={children} />
 			{content ? (
 				<TooltipContent
-					className={BUBBLE[variant]}
+					className={BUBBLE}
 					role="tooltip"
 					side={side}
 					sideOffset={sideOffset}
@@ -106,14 +101,17 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 	)
 
 	return (
-		<TooltipProvider delay={HOVER_INTENT_DELAY_MS}>
+		<TooltipProvider
+			delay={TOOLTIP_OPEN_DELAY_MS}
+			timeout={TOOLTIP_GROUPING_WINDOW_MS}
+		>
 			<SharedBubbleContext.Provider value={sharedBubble}>
 				{children}
 			</SharedBubbleContext.Provider>
 			<TooltipPrimitive.Root handle={sharedBubble}>
 				{({ payload }) => (
 					<TooltipContent
-						className={BUBBLE[payload?.variant ?? "hint"]}
+						className={BUBBLE}
 						role="tooltip"
 						side={payload?.side}
 						sideOffset={payload?.sideOffset}
@@ -127,7 +125,8 @@ const TooltipHintProvider = ({ children }: TooltipHintProviderProps) => {
 }
 
 export {
-	HOVER_INTENT_DELAY_MS,
+	TOOLTIP_GROUPING_WINDOW_MS,
+	TOOLTIP_OPEN_DELAY_MS,
 	TooltipHint,
 	TooltipHintProvider,
 	type TooltipHintSide,

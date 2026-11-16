@@ -2,17 +2,15 @@ import { useNavigate, useRouter } from "@tanstack/react-router"
 
 import { type LibraryOpening, librarySearchOf } from "./library-search"
 
-import { sameUrl } from "../tabs/tab-pages"
-import { currentHrefOf } from "../tabs/tabs-model"
-import { shownTabsOf, type WorkspaceTabs } from "../tabs/workspace-tabs"
+export const useOpenLibraryItem = () => {
+	const navigate = useNavigate()
+	return (opening: LibraryOpening) =>
+		void navigate({ to: "/library", search: librarySearchOf(opening) })
+}
 
 export const useOpenLibraryDocument = () => {
-	const navigate = useNavigate()
-	return (name: string) =>
-		void navigate({
-			to: "/library",
-			search: librarySearchOf({ kind: "document", name }),
-		})
+	const openItem = useOpenLibraryItem()
+	return (name: string) => openItem({ kind: "document", name })
 }
 
 const useLibraryHrefOf = () => {
@@ -27,31 +25,4 @@ export const useOpenLibraryItemInNewTab = () => {
 	const hrefOf = useLibraryHrefOf()
 	return (opening: LibraryOpening) =>
 		router.options.context.tabs.openInNewTab(hrefOf(opening))
-}
-
-const tabShowing = (tabs: WorkspaceTabs, href: string) =>
-	shownTabsOf(tabs.getState()).tabs.find((tab) =>
-		sameUrl(currentHrefOf(tab), href),
-	)
-
-type Router = ReturnType<typeof useRouter>
-
-const openLibraryItemInItsTab = (router: Router, opening: LibraryOpening) => {
-	const { tabs } = router.options.context
-	const href = router.buildLocation({
-		to: "/library",
-		search: librarySearchOf(opening),
-	}).href
-	if (!tabShowing(tabs, href)) {
-		tabs.openInNewTab(href)
-	}
-	const shown = tabShowing(tabs, href)
-	if (shown) {
-		tabs.select(shown.id)
-	}
-}
-
-export const useOpenLibraryItemInItsTab = () => {
-	const router = useRouter()
-	return (opening: LibraryOpening) => openLibraryItemInItsTab(router, opening)
 }

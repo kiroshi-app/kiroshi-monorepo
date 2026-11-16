@@ -268,15 +268,28 @@ describe("opening a conversation no tab shows", () => {
 		expect(hrefsOf(shown(tabs))).toEqual([OTHER_HREF])
 	})
 
-	it("opens it in a new active tab of the Space asked for", () => {
-		const tabs = windowOn(MAIN, HOME, [OTHER_HREF])
+	it("shows it in the unpinned active tab of the Space asked for, one Back away from its page", () => {
+		const tabs = windowOn(MAIN, VOCCA, [OTHER_HREF])
+		tabs.showSpace(HOME)
 		const { opening, selectSpace } = openingOf(tabs)
 
-		opening.openInTab("room", VOCCA)
+		opening.openInSpace("room", VOCCA)
 
 		expect(selectSpace).toHaveBeenCalledExactlyOnceWith(VOCCA)
 		expect(tabs.getState().spaceId).toBe(VOCCA)
-		expect(hrefsOf(shown(tabs))).toEqual(["/", ROOM_HREF])
+		expect(hrefsOf(shown(tabs))).toEqual([ROOM_HREF])
+		tabs.history.back()
+		expect(activeHrefOf(shown(tabs))).toBe(OTHER_HREF)
+	})
+
+	it("opens it in a new active tab when the active tab is pinned, that tab left on its page", () => {
+		const tabs = windowOn(MAIN, HOME, [OTHER_HREF])
+		tabs.pin(shown(tabs).activeId)
+		const { opening } = openingOf(tabs)
+
+		opening.openInSpace("room", HOME)
+
+		expect(hrefsOf(shown(tabs))).toEqual([OTHER_HREF, ROOM_HREF])
 		expect(activeHrefOf(shown(tabs))).toBe(ROOM_HREF)
 	})
 
@@ -285,7 +298,7 @@ describe("opening a conversation no tab shows", () => {
 		tabs.select(shown(tabs).tabs[1]?.id ?? "")
 		const { opening } = openingOf(tabs)
 
-		opening.openInTab("room", HOME)
+		opening.openInSpace("room", HOME)
 
 		expect(hrefsOf(shown(tabs))).toEqual([OTHER_HREF, ROOM_HREF])
 		expect(activeHrefOf(shown(tabs))).toBe(ROOM_HREF)

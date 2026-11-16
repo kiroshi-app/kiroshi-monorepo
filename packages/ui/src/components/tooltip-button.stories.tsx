@@ -1,7 +1,12 @@
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Row } from "@workspace/storybook/story-utils"
+import {
+	expectTooltipWrappedWhole,
+	HOVER_TOOLTIP_WAIT,
+	openTooltipOf,
+	Row,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 
@@ -99,20 +104,19 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A sentence rather than a word. Check that the label wraps inside the viewport instead of running off its edge, which is what a translated string will do to any tooltip sized for English.",
+					"A sentence rather than a word. Check that the label shows the whole sentence, wrapped onto more lines inside the bubble with no ellipsis, and stays inside the viewport instead of running off its edge, which is what a translated string will do to any tooltip sized for English.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: "Send" }))
-		await waitFor(async () => {
-			const label = document.body.querySelector('[role="tooltip"]')
+	play: async ({ canvas }) => {
+		const label = await openTooltipOf(
+			canvas.getByRole("button", { name: "Send" }),
+		)
 
-			await expect(label).toBeVisible()
-			await expect(label?.getBoundingClientRect().right).toBeLessThanOrEqual(
-				window.innerWidth,
-			)
-		})
+		await expectTooltipWrappedWhole(label, LONG_TOOLTIP)
+		await expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(
+			window.innerWidth,
+		)
 	},
 })
 
@@ -144,6 +148,6 @@ export const WithSide = meta.story({
 			await expect(label?.getBoundingClientRect().top).toBeGreaterThanOrEqual(
 				button.getBoundingClientRect().bottom,
 			)
-		})
+		}, HOVER_TOOLTIP_WAIT)
 	},
 })

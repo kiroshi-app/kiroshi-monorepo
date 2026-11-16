@@ -205,7 +205,6 @@ const SidebarMenuRow = ({
 			content={isTooltipHidden ? null : label}
 			side="right"
 			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
-			variant="line"
 		>
 			{row}
 		</TooltipHint>

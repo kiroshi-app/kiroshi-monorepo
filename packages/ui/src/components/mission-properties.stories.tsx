@@ -1,7 +1,8 @@
-import { expect, screen } from "storybook/test"
+import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	findHoverTooltip,
 	holderOf,
 	slotIn,
 	slotsIn,
@@ -407,7 +408,7 @@ export const LongContent = meta.story({
 		).toBeLessThanOrEqual(boxOf(block).right)
 
 		await userEvent.hover(text)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+		await expect(await findHoverTooltip()).toHaveTextContent(
 			LONG_MISSION_STATUS.text,
 		)
 	},

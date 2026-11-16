@@ -14,7 +14,7 @@ import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Kbd } from "@workspace/ui/components/ui/kbd"
@@ -136,7 +136,7 @@ const ActionButton = ({ action, onPress, buttonRef }: ActionButtonProps) => {
 	return (
 		<Tooltip>
 			<TooltipTrigger
-				delay={HOVER_INTENT_DELAY_MS}
+				delay={TOOLTIP_OPEN_DELAY_MS}
 				render={
 					<Toolbar.Button
 						aria-label={name}
