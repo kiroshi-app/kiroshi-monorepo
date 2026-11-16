@@ -45,7 +45,7 @@ struct QuestionThreadTests {
         }
     }
 
-    func follow(_ host: TestHost, _ store: ThreadStore) async -> (
+    func follow(_ host: TestHost, _ store: ThreadStore, isWorkHearing: Bool = true) async -> (
         RelayConnection, Task<Void, Never>
     ) {
         let connection = RelayConnection(
@@ -55,7 +55,7 @@ struct QuestionThreadTests {
         let updates = await connection.updates()
         let work = work
         Task {
-            for await update in updates {
+            for await update in updates where isWorkHearing {
                 work.apply(update)
             }
         }
@@ -323,6 +323,21 @@ struct QuestionThreadTests {
         }
         #expect(store.entries.map(\.id) == ["m1", "m2", "question-q1", "answer-1"])
         #expect(store.entries.last?.bubbles.isEmpty == true)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aQuestionAnsweredOnAnotherDeviceLeavesThePanelInTheStepThatSaysSo() async {
+        let host = waitingHost()
+        let store = makeStore()
+        let (connection, following) = await follow(host, store, isWorkHearing: false)
+        await waitUntil { isAsking(store) }
+
+        host.pushAgent(
+            "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
+        await waitUntil { store.answeredQuestion("q1") != nil }
+
+        #expect(store.asking == nil)
         following.cancel()
         await connection.stop()
     }
