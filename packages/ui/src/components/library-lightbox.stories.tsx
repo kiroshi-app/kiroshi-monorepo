@@ -10,10 +10,14 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectHeaderTitleStep,
+	expectStaticHeaderBar,
 	hueScopeOf,
 	isInBrowserRunner,
+	realPointer,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 	withStoryProps,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -115,6 +119,35 @@ const lightbox = async () => {
 	return popup
 }
 
+const barIn = (popup: HTMLElement) => slotIn(popup, "app-header")
+
+const sizeOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return [box.width, box.height]
+}
+
+const expectBarControls = async (popup: HTMLElement) => {
+	const actions = slotIn(barIn(popup), "library-bar-actions")
+	const capsule = slotIn(actions, "app-header-capsule")
+	const close = within(actions).getByRole("button", { name: "Close" })
+
+	await expect(Array.from(actions.children).slice(0, 2)).toEqual([
+		capsule,
+		close,
+	])
+	await expect(getComputedStyle(actions).columnGap).toBe("8px")
+	await expect(
+		within(capsule)
+			.getAllByRole("button")
+			.map((button) => button.getAttribute("aria-label")),
+	).toEqual(["Download", "Copy", "More"])
+	for (const control of within(capsule).getAllByRole("button"))
+		await expect(sizeOf(control)).toEqual([28, 28])
+	await expect(sizeOf(close)).toEqual([32, 32])
+
+	return { capsule, close }
+}
+
 const expectSoleTooltip = (name: string) =>
 	waitFor(() => {
 		const tooltips = screen.getAllByRole("tooltip")
@@ -205,7 +238,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. Its header is two translucent islands floating over the stage: Back, the image name and its details at the start, the actions then a rule and Close at the end. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next sit outside both islands, floating over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 56 above it and 16 on its three other sides. Back, at the leading edge of the header, closes it like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -219,7 +252,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image open, as artboard 8 draws it. Check the arrows, Download and Copy report to their callbacks, that the third action is More, that every action of the bar is a 32 px button that changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
+					"The second image open, as artboard 8 draws it. Check the arrows, Download and Copy report to their callbacks, that the third action is More, that the three capsule actions are 28 px buttons and Close a 32 px one, that every control of the bar changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
 			},
 		},
 	},
@@ -246,12 +279,9 @@ export const Default = meta.story({
 		await userEvent.unhover(more)
 		await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null))
 
-		for (const name of ["Back", "Download", "Copy", "More", "Close"]) {
-			const action = within(popup).getByRole("button", { name })
-			await expect(action.getBoundingClientRect().width).toBe(32)
-			await expect(action.getBoundingClientRect().height).toBe(32)
-			await expect(getComputedStyle(action).transitionDuration).toBe("0s")
-		}
+		await expectBarControls(popup)
+		for (const control of within(barIn(popup)).getAllByRole("button"))
+			await expect(getComputedStyle(control).transitionDuration).toBe("0s")
 
 		for (const divider of within(popup).getAllByRole("separator")) {
 			const box = divider.getBoundingClientRect()
@@ -297,27 +327,20 @@ export const Default = meta.story({
 	},
 })
 
-const islandsIn = (popup: HTMLElement) => {
-	const [context, actions] = slotsIn(popup, "header-island")
-	if (!context || !actions)
-		throw new Error("The lightbox does not draw its two islands")
-	return { context, actions }
-}
-
-const STAGE_TOP = 56
-
 const STAGE_INSET = 16
 
-const ISLAND_INSET = 8
-
-const CONTROL_SIZE = 32
+const ARTBOARD_IMAGE: LibraryLightboxImage = {
+	...(LIBRARY_LIGHTBOX_IMAGES[1] as LibraryLightboxImage),
+	detail: "PNG · 412 KB · 3 h ago",
+}
 
 export const OverlayFitted = meta.story({
+	args: { images: LIBRARY_LIGHTBOX_IMAGES.with(1, ARTBOARD_IMAGE) },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The image fitted to the stage under the two islands, as artboard 7a draws it. Check that the overlay is #0B0B0C at 92 percent, that each island is #18181A at 85 percent behind a 16 px blur, 8 from the top and from its side, that the name reads #F5F5F5 at 14/16 medium with the details after it in #A3A3A3 at regular weight, that no island, no island control and neither Previous nor Next casts a shadow, that no island control fades its colour in, that the image, its corners rounded by 4, is fitted in a stage starting 56 below the top and 16 from the sides and the bottom, and that Previous and Next float over that stage, outside both islands, 16 from either side at its mid-height.",
+					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #0B0B0C at 92 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent and no island, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
 			},
 		},
 	},
@@ -328,48 +351,54 @@ export const OverlayFitted = meta.story({
 			"rgba(11, 11, 12, 0.92)",
 		)
 
-		const { context, actions } = islandsIn(popup)
-		for (const island of [context, actions]) {
-			const skin = getComputedStyle(island)
-			await expect(skin.backgroundColor).toBe("rgba(24, 24, 26, 0.85)")
-			await expect(skin.backdropFilter).toBe("blur(16px)")
-			await expect(island.getBoundingClientRect().top - overlay.top).toBe(
-				ISLAND_INSET,
-			)
-			await expect(island.getBoundingClientRect().height).toBe(40)
-			await expect(skin.boxShadow).toBe("none")
-		}
-		await expect(context.getBoundingClientRect().left - overlay.left).toBe(
-			ISLAND_INSET,
-		)
-		await expect(overlay.right - actions.getBoundingClientRect().right).toBe(
-			ISLAND_INSET,
-		)
+		const bar = await expectStaticHeaderBar(popup)
+		const rule = bar.getBoundingClientRect().bottom
+		await expect(slotsIn(popup, "header-island")).toHaveLength(0)
+		await expect(getComputedStyle(bar).backgroundColor).toBe("rgb(11, 11, 12)")
 
 		const name = within(popup).getByRole("heading", {
 			name: "dashboard-redesign.png",
 		})
 		await expect(getComputedStyle(name).color).toBe("rgb(245, 245, 245)")
-		await expect(getComputedStyle(name).fontSize).toBe("14px")
-		await expect(getComputedStyle(name).fontWeight).toBe("500")
-		await expect(getComputedStyle(name).lineHeight).toBe("16px")
+		await expectHeaderTitleStep(name)
 		await expect(name.scrollWidth).toBe(name.clientWidth)
 
-		const meta = slotIn(popup, "library-lightbox-meta")
-		await expect(getComputedStyle(meta).color).toBe("rgb(163, 163, 163)")
-		await expect(getComputedStyle(meta).fontSize).toBe("14px")
-		await expect(getComputedStyle(meta).fontWeight).toBe("400")
-		await expect(meta.getBoundingClientRect().left).toBeGreaterThan(
-			name.getBoundingClientRect().right - 1,
+		const topLine = slotIn(bar, "app-header-top-line")
+		const topLineType = getComputedStyle(topLine)
+		await expect(topLine).toHaveTextContent(`Library/${ARTBOARD_IMAGE.detail}`)
+		await expect([topLineType.fontSize, topLineType.lineHeight]).toEqual([
+			"12px",
+			"16px",
+		])
+		await expect(topLine.getBoundingClientRect().bottom).toBe(
+			name.getBoundingClientRect().top,
 		)
-		await expect(elementAt(centreOf(meta))).toBe(meta)
+		const details = slotIn(topLine, "library-bar-meta")
+		for (const muted of [
+			within(topLine).getByRole("button", { name: "Library" }),
+			details,
+		])
+			await expect(getComputedStyle(muted).color).toBe("rgb(163, 163, 163)")
+		await expect(
+			getComputedStyle(slotIn(topLine, "app-header-path-separator")).color,
+		).toBe("rgb(107, 107, 107)")
+		await expect(elementAt(centreOf(details))).toBe(details)
+
+		const { capsule, close } = await expectBarControls(popup)
+		for (const filled of [capsule, close])
+			await expect(getComputedStyle(filled).backgroundColor).toBe(
+				tokenStyleIn(filled, "bg-white/8", "backgroundColor"),
+			)
+		for (const control of [...within(capsule).getAllByRole("button"), close])
+			await expect(getComputedStyle(control).color).toBe("rgb(229, 229, 229)")
 
 		const image = within(popup).getByRole("img", {
 			name: "dashboard-redesign.png",
 		})
 		const drawn = image.getBoundingClientRect()
 		const stage = slotIn(popup, "library-lightbox-zoom").getBoundingClientRect()
-		await expect(drawn.top - overlay.top).toBeGreaterThanOrEqual(STAGE_TOP)
+		await expect(stage.top).toBe(rule)
+		await expect(drawn.top - rule).toBeGreaterThanOrEqual(STAGE_INSET)
 		await expect(stage.left - overlay.left).toBe(STAGE_INSET)
 		await expect(overlay.right - stage.right).toBe(STAGE_INSET)
 		await expect(overlay.bottom - stage.bottom).toBe(STAGE_INSET)
@@ -379,12 +408,11 @@ export const OverlayFitted = meta.story({
 		await expect(
 			drawn.left + drawn.right - stage.left - stage.right,
 		).toBeCloseTo(0, 0)
+		const stageMiddle = (rule + STAGE_INSET + stage.bottom) / 2
+		await expect((drawn.top + drawn.bottom) / 2).toBeCloseTo(stageMiddle, 0)
 		await expect(getComputedStyle(image).borderRadius).toBe("4px")
 
-		for (const control of [
-			...within(context).getAllByRole("button"),
-			...within(actions).getAllByRole("button"),
-		]) {
+		for (const control of within(bar).getAllByRole("button")) {
 			await expect(getComputedStyle(control).transitionDuration).toBe("0s")
 			await expect(getComputedStyle(control).boxShadow).toBe("none")
 		}
@@ -393,9 +421,8 @@ export const OverlayFitted = meta.story({
 			name: "Previous image",
 		})
 		const next = within(popup).getByRole("button", { name: "Next image" })
-		const stageMiddle = (overlay.top + STAGE_TOP + stage.bottom) / 2
 		for (const step of [previous, next]) {
-			await expect(context.contains(step) || actions.contains(step)).toBe(false)
+			await expect(bar.contains(step)).toBe(false)
 			await expect(getComputedStyle(step).boxShadow).toBe("none")
 			const box = step.getBoundingClientRect()
 			await expect(box.top + box.height / 2).toBeCloseTo(stageMiddle, 0)
@@ -409,12 +436,15 @@ export const OverlayFitted = meta.story({
 	},
 })
 
-export const ZoomedUnderTheIslands = meta.story({
+const ZOOMED_AWAY = 56
+
+export const ZoomedCutAtTheBar = meta.story({
+	args: { images: LIBRARY_LIGHTBOX_IMAGES.with(1, ARTBOARD_IMAGE) },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The image zoomed past its fit and scrolled, as artboard 7b draws it. Check that the image passes under both islands, from above each to below it and across the whole width each shares with the stage, that every control of the islands is still the one drawn on top of it, and that Download still reports while the lightbox stays open.",
+					"The image zoomed past its fit and scrolled, as artboard I7b draws it. Check that the bar is the one at rest, that the stage starts at its rule, that the image runs above the rule yet the bar is what is drawn just above it and the image just below, that every control of the bar is still the one drawn at its centre, and that Download still reports while the lightbox stays open.",
 			},
 		},
 	},
@@ -426,50 +456,44 @@ export const ZoomedUnderTheIslands = meta.story({
 		})
 		const zoomIn = within(popup).getByRole("button", { name: "Zoom in" })
 		while (
-			stage.scrollHeight - stage.clientHeight < STAGE_TOP ||
-			stage.scrollWidth - stage.clientWidth < STAGE_TOP
+			stage.scrollHeight - stage.clientHeight < ZOOMED_AWAY ||
+			stage.scrollWidth - stage.clientWidth < ZOOMED_AWAY
 		) {
 			await expect(zoomIn).toBeEnabled()
 			await userEvent.click(zoomIn)
 		}
-		stage.scrollTo({ top: STAGE_TOP, left: STAGE_TOP })
-		await waitFor(() => expect(stage.scrollTop).toBe(STAGE_TOP))
+		stage.scrollTo({ top: ZOOMED_AWAY, left: ZOOMED_AWAY })
+		await waitFor(() => expect(stage.scrollTop).toBe(ZOOMED_AWAY))
 
-		const { context, actions } = islandsIn(popup)
-		for (const island of [context, actions]) {
-			island.scrollIntoView({ block: "nearest", inline: "nearest" })
-			const drawn = image.getBoundingClientRect()
-			const room = stage.getBoundingClientRect()
-			const box = island.getBoundingClientRect()
-			await expect(drawn.top).toBeLessThanOrEqual(box.top)
-			await expect(drawn.bottom).toBeGreaterThanOrEqual(box.bottom)
-			await expect(drawn.left).toBeLessThanOrEqual(
-				Math.max(room.left, box.left),
-			)
-			await expect(drawn.right).toBeGreaterThanOrEqual(
-				Math.min(room.right, box.right),
-			)
-			for (const control of within(island).getAllByRole("button"))
-				await expect(control.contains(elementAt(centreOf(control)))).toBe(true)
+		const bar = await expectStaticHeaderBar(popup)
+		const rule = bar.getBoundingClientRect().bottom
+		const room = stage.getBoundingClientRect()
+		const drawn = image.getBoundingClientRect()
+		await expect(room.top).toBe(rule)
+		await expect(drawn.top).toBeLessThan(rule)
+		const across =
+			(Math.max(drawn.left, room.left) + Math.min(drawn.right, room.right)) / 2
+		await expect(bar.contains(elementAt({ x: across, y: rule - 2 }))).toBe(true)
+		await expect(elementAt({ x: across, y: rule + 2 })).toBe(image)
+
+		for (const control of within(bar).getAllByRole("button")) {
+			control.scrollIntoView({ block: "nearest", inline: "nearest" })
+			await expect(control.contains(elementAt(centreOf(control)))).toBe(true)
 		}
 
-		await userEvent.click(
-			within(actions).getByRole("button", { name: "Download" }),
-		)
-		await expect(args.onDownload).toHaveBeenCalledWith(
-			LIBRARY_LIGHTBOX_IMAGES[1],
-		)
+		await userEvent.click(within(bar).getByRole("button", { name: "Download" }))
+		await expect(args.onDownload).toHaveBeenCalledWith(ARTBOARD_IMAGE)
 		await expect(args.onClose).not.toHaveBeenCalled()
 		await expect(popup).toBeVisible()
 	},
 })
 
 const LONG_NAMED_IMAGE: LibraryLightboxImage = {
-	...(LIBRARY_LIGHTBOX_IMAGES[1] as LibraryLightboxImage),
+	...ARTBOARD_IMAGE,
 	name: "dashboard-redesign-spring-launch-final-export-for-review-v12.png",
 }
 
-export const NarrowMetaHiddenLongName = meta.story({
+export const NarrowLongName = meta.story({
 	args: {
 		images: LIBRARY_LIGHTBOX_IMAGES.with(1, LONG_NAMED_IMAGE),
 		isNarrow: true,
@@ -478,40 +502,33 @@ export const NarrowMetaHiddenLongName = meta.story({
 		docs: {
 			description: {
 				story:
-					"A long image name in a 440 wide overlay, as artboard 7c draws it. Check that the details are not drawn at all while the name is, on one line ending with an ellipsis, that every control of the actions island keeps its 32 px, and that the two islands keep a gap between them.",
+					"A long image name in a 440 wide overlay, as artboard I7c draws it. Check that the name ends with an ellipsis on its one 18 px line, that the top line still reads Library, the separator and the whole details, drawn on top, and that the three 28 px capsule buttons and the 32 px Close all stay, 12 from the end of the bar.",
 			},
 		},
 	},
 	play: async () => {
 		const popup = await lightbox()
-		const { context, actions } = islandsIn(popup)
+		const bar = await expectStaticHeaderBar(popup)
 		const name = within(popup).getByRole("heading", {
 			name: LONG_NAMED_IMAGE.name,
 		})
-		const meta = slotIn(popup, "library-lightbox-meta")
-		const shown = (name.parentElement as HTMLElement).getBoundingClientRect()
-
-		await expect(meta.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-			shown.bottom,
-		)
-		await expect(meta.contains(elementAt(centreOf(meta)))).toBe(false)
-
-		const drawn = name.getBoundingClientRect()
-		await expect(drawn.top).toBe(shown.top)
-		await expect(drawn.bottom).toBe(shown.bottom)
-		await expect(drawn.width).toBeGreaterThan(0)
-		await expect(elementAt(centreOf(name))).toBe(name)
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(name.getBoundingClientRect().height).toBe(18)
+		await expect(elementAt(centreOf(name))).toBe(name)
 
-		for (const control of within(actions).getAllByRole("button")) {
-			const box = control.getBoundingClientRect()
-			await expect(box.width).toBe(CONTROL_SIZE)
-			await expect(box.height).toBe(CONTROL_SIZE)
-		}
+		const topLine = slotIn(bar, "app-header-top-line")
+		const details = slotIn(topLine, "library-bar-meta")
+		await expect(topLine).toHaveTextContent(
+			`Library/${LONG_NAMED_IMAGE.detail}`,
+		)
+		await expect(details.scrollWidth).toBe(details.clientWidth)
+		await expect(elementAt(centreOf(details))).toBe(details)
+
+		await expectBarControls(popup)
 		await expect(
-			actions.getBoundingClientRect().left -
-				context.getBoundingClientRect().right,
-		).toBeGreaterThanOrEqual(ISLAND_INSET)
+			bar.getBoundingClientRect().right -
+				slotIn(bar, "library-bar-actions").getBoundingClientRect().right,
+		).toBe(12)
 	},
 })
 
@@ -746,26 +763,59 @@ export const DeleteConfirmation = meta.story({
 	},
 })
 
-export const BackButton = meta.story({
+const expectRingOnEachBarControl = async (bar: HTMLElement) => {
+	if (!isInBrowserRunner()) return
+	const keys = await realPointer()
+
+	for (const control of within(bar).getAllByRole("button")) {
+		await keys.tab()
+		await expect(control).toHaveFocus()
+		await expect(control.matches(":focus-visible")).toBe(true)
+		const ring = getComputedStyle(control)
+		await expect([ring.outlineStyle, ring.outlineWidth]).toEqual([
+			"solid",
+			"2px",
+		])
+		await expect(ring.outlineColor).toBe(
+			tokenStyleIn(control, "border border-ring", "borderTopColor"),
+		)
+		if (control.hasAttribute("data-kind"))
+			await expect(ring.boxShadow).toBe(
+				tokenStyleIn(control, "ring-2 ring-lightbox-bar", "boxShadow"),
+			)
+	}
+}
+
+export const BarKeyboardFocus = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The header with its back button at the leading edge, before the image name. Check that it names itself Back in a tooltip and that pressing it closes the lightbox.",
+					"The image bar walked with Tab from the open lightbox. Check that the Library path link, Download, Copy, More then Close each take focus in that order and wear a 2 px ring in the Space colour on the dark bar while they hold it, the four round controls over a 2 px halo in the #0B0B0C of the bar, never the card colour. The play drives the real keyboard, in the Vitest browser runner only.",
+			},
+		},
+	},
+	play: async () => expectRingOnEachBarControl(barIn(await lightbox())),
+})
+
+export const LibraryPathLink = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bar with its Library path link at the start of the top line, over the image name. Check that it reads Library and that pressing it closes the lightbox.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
-		const back = within(popup).getByRole("button", { name: "Back" })
-		await expect(back.getBoundingClientRect().right).toBeLessThan(
-			within(popup).getByRole("heading").getBoundingClientRect().left,
+		const path = within(popup).getByRole("button", { name: "Library" })
+		await expect(path).toHaveTextContent("Library")
+		await expect(path.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			within(popup).getByRole("heading").getBoundingClientRect().top,
 		)
-		await userEvent.hover(back)
-		await expectSoleTooltip("Back")
-		await userEvent.unhover(back)
 
-		await userEvent.click(back)
+		await userEvent.click(path)
 		await expect(args.onClose).toHaveBeenCalledOnce()
 		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
 	},
@@ -792,11 +842,11 @@ const cornerOf = (element: Element): Point => {
 const besideImage = (stage: Element, image: Element): Point => {
 	const room = stage.getBoundingClientRect()
 	const drawn = image.getBoundingClientRect()
-	const belowIslands =
+	const belowBar =
 		room.top + Number.parseFloat(getComputedStyle(stage).paddingTop)
-	return drawn.left - room.left > drawn.top - belowIslands
+	return drawn.left - room.left > drawn.top - belowBar
 		? { x: (room.left + drawn.left) / 2, y: drawn.top + 8 }
-		: { x: room.left + 8, y: (belowIslands + drawn.top) / 2 }
+		: { x: room.left + 8, y: (belowBar + drawn.top) / 2 }
 }
 
 const SCROLLBAR_BAND = 16
@@ -827,7 +877,7 @@ export const BackdropClick = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the classic scrollbar of the zoomed stage, its room held by a stable gutter so a headless browser keeps it, either island of the header, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image or on that scrollbar released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
+					"The first image, so Previous is disabled. Check that a click on the backdrop closes the lightbox once, beside the image in fit and in zoomed mode and in the bottom strip outside the zoom pill, and that a click on the image, the classic scrollbar of the zoomed stage, its room held by a stable gutter so a headless browser keeps it, the header bar, the zoom pill or Previous and Next, disabled or not, keeps it open. A press on the image or on that scrollbar released on the backdrop keeps it open too, and while the More menu or the delete confirmation is open, a click outside never closes the lightbox.",
 			},
 		},
 	},
@@ -864,11 +914,9 @@ export const BackdropClick = meta.story({
 		await userEvent.click(image)
 		await expect(args.onClose).not.toHaveBeenCalled()
 
-		const headerActions = within(popup).getByRole("button", { name: "Close" })
-			.parentElement as HTMLElement
 		await userEvent.click(within(popup).getByRole("heading"))
 		await userEvent.click(within(popup).getByText("PNG · 1600 × 1000 · 248 KB"))
-		await userEvent.click(headerActions)
+		await userEvent.click(barIn(popup))
 		await expect(args.onClose).not.toHaveBeenCalled()
 
 		const zoomBar = zoomBarIn(popup)
@@ -1040,7 +1088,7 @@ export const WithoutItemActions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The lightbox with no item action given. Check that the bar draws neither Download, Copy nor More, keeping Back and Close.",
+					"The lightbox with no item action given. Check that the bar draws neither Download, Copy nor More, keeping the Library path link and Close.",
 			},
 		},
 	},
@@ -1053,7 +1101,7 @@ export const WithoutItemActions = meta.story({
 				.filter((name) => ["Download", "Copy", "More"].includes(name ?? "")),
 		).toEqual([])
 		await expect(
-			within(popup).getByRole("button", { name: "Back" }),
+			within(popup).getByRole("button", { name: "Library" }),
 		).toBeVisible()
 		await expect(
 			within(popup).getByRole("button", { name: "Close" }),

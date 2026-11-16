@@ -1364,7 +1364,12 @@ describe("an image opened from the Library grid", () => {
 })
 
 const librarySidebarButton = () =>
-	screen.getByRole("button", {
+	within(
+		screen.getByRole("navigation", {
+			name: i18n.t("bots:rail.label"),
+			hidden: true,
+		}),
+	).getByRole("button", {
 		name: i18n.t("bots:rail.library"),
 		hidden: true,
 	})

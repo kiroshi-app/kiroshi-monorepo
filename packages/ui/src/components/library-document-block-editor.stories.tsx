@@ -283,13 +283,12 @@ const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 				header={
 					<LibraryDocumentBar
 						item={{ name: LIBRARY_AGENT_DOCUMENT.name }}
+						meta={LIBRARY_AGENT_DOCUMENT.detail}
 						onBack={fn()}
 					/>
 				}
-				isHeaderFloating
 				scroller={() => (
 					<LibraryDocumentColumn
-						detail={LIBRARY_AGENT_DOCUMENT.detail}
 						heading={
 							<h1 className={DOCUMENT_TITLE}>{LIBRARY_AGENT_DOCUMENT.name}</h1>
 						}

@@ -92,7 +92,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one static bar above a screen, in the layout flow: 56px tall on the content surface, a 1px rule under it, never a fade or a shadow. Its leading cluster grows and truncates, an avatar or a subject icon then `AppHeaderText`, a title under an optional top line; its trailing slot wraps its icon buttons in one capsule and never shrinks; `close` holds the round control that leaves the screen. `isFloating` is still accepted from the app and changes nothing.",
+					"The one static bar above a screen, in the layout flow: 56px tall on the content surface, a 1px rule under it, never a fade or a shadow. Its leading cluster grows and truncates, an avatar or a subject icon then `AppHeaderText`, a title under an optional top line; its trailing slot wraps its icon buttons in one capsule and never shrinks; `close` holds the round control that leaves the screen. `AppHeaderCapsule` is that capsule on its own, for a bar whose `close` slot groups it with presence and the round control 8 apart, as the Library bars do. `isFloating` is still accepted from the app and changes nothing.",
 			},
 		},
 	},

@@ -4,7 +4,12 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { HeaderIsland } from "@workspace/ui/components/header-island"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderPathLink,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ImageMenu,
@@ -15,15 +20,12 @@ import {
 	handlersFor,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
-	LIBRARY_ISLAND_CONTEXT,
-	LIBRARY_ISLAND_TITLE,
 	LIBRARY_OVERLAY_ISLAND,
-	LibraryIslandButton,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
 import { useLibraryOverlayContainer } from "@workspace/ui/components/library-panel"
-import { FLOATING_HEADER } from "@workspace/ui/components/screen-layout"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import {
 	Dialog,
@@ -53,8 +55,7 @@ const STEP = cn(
 	"size-10 border border-selection-toolbar-border hover:bg-header-island-control-hover dark:hover:bg-header-island-control-hover",
 )
 
-const STEP_OVER_STAGE =
-	"absolute top-[calc(50%_+_--spacing(5))] flex -translate-y-1/2"
+const STEP_OVER_STAGE = "absolute top-1/2 flex -translate-y-1/2"
 
 const ZOOMED_CLEAR_OF_CONTROLS = "px-10 pb-10"
 
@@ -134,7 +135,7 @@ const ZoomStage = ({ image, position, count, menu }: ZoomStageProps) => {
 		<>
 			<div
 				className={cn(
-					"flex min-h-0 flex-1 overflow-auto rounded-md pt-14 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					"flex min-h-0 flex-1 overflow-auto rounded-b-md pt-4 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
 					zoom !== null && ZOOMED_CLEAR_OF_CONTROLS,
 				)}
 				data-lightbox-backdrop
@@ -301,43 +302,37 @@ const LibraryLightbox = ({
 						}}
 						ref={surfaceRef}
 					>
-						<div className={FLOATING_HEADER}>
-							<HeaderIsland
-								className={cn(LIBRARY_OVERLAY_ISLAND, LIBRARY_ISLAND_CONTEXT)}
-							>
-								<DialogClose
-									render={
-										<LibraryIslandButton
-											aria-label={t("library.lightbox.back")}
-										/>
+						<AppHeader
+							className="bg-lightbox-bar"
+							close={
+								<LibraryItemBarActions
+									actions={handlers}
+									item={image}
+									onClose={onClose}
+									onConfirmingDeleteChange={setConfirmingDelete}
+									onMenuOpenChange={recordMenuToggle}
+									surface="lightbox"
+								/>
+							}
+							leading={
+								<AppHeaderText
+									topLine={
+										<>
+											<DialogClose
+												render={<AppHeaderPathLink className="shrink-0" />}
+											>
+												{t("library.lightbox.back")}
+											</DialogClose>
+											<LibraryBarMeta meta={image.detail} />
+										</>
 									}
 								>
-									<Icons.Previous aria-hidden="true" />
-								</DialogClose>
-								<div className="flex h-8 min-w-0 flex-wrap content-start overflow-hidden">
-									<DialogTitle
-										className={LIBRARY_ISLAND_TITLE}
-										title={image.name}
-									>
+									<DialogTitle className={APP_HEADER_TITLE} title={image.name}>
 										{image.name}
 									</DialogTitle>
-									<p
-										className="whitespace-nowrap py-2 pe-2 text-muted-foreground text-sm leading-4 tabular-nums"
-										data-slot="library-lightbox-meta"
-									>
-										{image.detail}
-									</p>
-								</div>
-							</HeaderIsland>
-							<LibraryItemBarActions
-								actions={handlers}
-								item={image}
-								onClose={onClose}
-								onConfirmingDeleteChange={setConfirmingDelete}
-								onMenuOpenChange={recordMenuToggle}
-								surface="lightbox"
-							/>
-						</div>
+								</AppHeaderText>
+							}
+						/>
 						<div
 							className="relative flex min-h-0 flex-1 px-4 pb-4"
 							data-lightbox-backdrop

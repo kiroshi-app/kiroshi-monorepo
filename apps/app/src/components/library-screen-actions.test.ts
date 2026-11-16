@@ -241,18 +241,27 @@ const pickInLightboxMore = async (action: MenuAction) => {
 	await press(await screen.findByRole("menuitem", { name: menuItemOf(action) }))
 }
 
+const lightboxBack = () =>
+	screen
+		.queryAllByRole("button", { name: common("library.lightbox.back") })
+		.find((button) => button.closest('[data-slot="library-lightbox"]')) ?? null
+
+const findLightboxBack = () =>
+	waitFor(() => {
+		const back = lightboxBack()
+		if (!back) throw new Error("The image viewer is not open")
+		return back
+	})
+
 const openImage = async () => {
 	await press(await tileOf("diagram.png"))
-	return screen.findByRole("button", { name: common("library.lightbox.back") })
+	return findLightboxBack()
 }
 
 const titleField = async () =>
 	(await screen.findByRole("textbox", {
 		name: common("library.editor.title"),
 	})) as HTMLInputElement
-
-const lightboxBack = () =>
-	screen.queryByRole("button", { name: common("library.lightbox.back") })
 
 const callsOf = (command: string) =>
 	harness.calls
@@ -319,11 +328,7 @@ describe("Open in the menu of a Library item", () => {
 
 		await pickInMenuOf("diagram.png", "open")
 
-		expect(
-			await screen.findByRole("button", {
-				name: common("library.lightbox.back"),
-			}),
-		).toBeInstanceOf(HTMLElement)
+		expect(await findLightboxBack()).toBeInstanceOf(HTMLElement)
 	})
 })
 
@@ -436,11 +441,7 @@ describe("a tab opening a Library item", () => {
 			await waitFor(() => expect(skeletonShown("loadingImage")).toBe(true))
 
 			await releaseList()
-			expect(
-				await screen.findByRole("button", {
-					name: common("library.lightbox.back"),
-				}),
-			).toBeInstanceOf(HTMLElement)
+			expect(await findLightboxBack()).toBeInstanceOf(HTMLElement)
 		},
 	)
 

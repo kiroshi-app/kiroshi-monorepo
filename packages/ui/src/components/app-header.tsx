@@ -71,6 +71,18 @@ const AppHeaderPathSeparator = () => (
 	</span>
 )
 
+const AppHeaderCapsule = ({ className, ...props }: ComponentProps<"div">) => (
+	<div
+		className={cn(
+			"flex shrink-0 items-center gap-0.5 rounded-full p-0.5 empty:hidden",
+			APP_HEADER_CAPSULE_FILL,
+			className,
+		)}
+		data-slot="app-header-capsule"
+		{...props}
+	/>
+)
+
 type AppHeaderTextProps = {
 	topLine?: ReactNode
 	children: ReactNode
@@ -129,15 +141,7 @@ const AppHeader = ({
 				</div>
 			) : null}
 			{trailing ? (
-				<div
-					className={cn(
-						"ms-auto flex shrink-0 items-center gap-0.5 rounded-full p-0.5 empty:hidden",
-						APP_HEADER_CAPSULE_FILL,
-					)}
-					data-slot="app-header-capsule"
-				>
-					{trailing}
-				</div>
+				<AppHeaderCapsule className="ms-auto">{trailing}</AppHeaderCapsule>
 			) : null}
 			{close}
 			{windowControls ? (
@@ -157,6 +161,7 @@ export {
 	APP_HEADER_TITLE,
 	AppHeader,
 	AppHeaderButton,
+	AppHeaderCapsule,
 	AppHeaderPathLink,
 	AppHeaderPathSeparator,
 	AppHeaderText,
