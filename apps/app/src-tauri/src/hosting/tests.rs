@@ -2351,6 +2351,29 @@ fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
 }
 
 #[test]
+fn a_question_asked_outside_the_shared_space_is_kept_off_its_relay_with_a_warning() {
+	run(async {
+		crate::test_log::capturing();
+		let mut guest = Guest::of_two_spaces("question-kept-off").await;
+		let scope = a_held_scope_in("c-theirs", "b-theirs");
+		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+			.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
+
+		let heard = guest.events_until_the_marker().await;
+		let warned = crate::test_log::warnings_naming("c-theirs").await;
+
+		assert!(heard.is_empty(), "{heard:?}");
+		assert_eq!(
+			warned,
+			vec![format!(
+				"the questionRequested frame of conversation c-theirs was kept off the relay \
+				 of space {PERSONAL}: it failed the Conversation check"
+			)]
+		);
+	});
+}
+
+#[test]
 fn a_reopened_host_socket_first_sends_the_frames_recorded_while_it_was_down_in_seq_order() {
 	run(async {
 		let mut harness = Harness::signed_in("outage-pushed").await;

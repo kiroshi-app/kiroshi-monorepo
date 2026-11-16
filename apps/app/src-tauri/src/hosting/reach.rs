@@ -602,6 +602,17 @@ const CONVERSATION_POINTERS: [&str; 3] =
 
 const CONVERSATION_LIST_POINTER: &str = "/conversationIds";
 
+const QUESTION_REQUESTED: &str = "questionRequested";
+
+fn question_asked_in(published: &Published) -> Option<&str> {
+	let kind = published.payload.pointer("/event/type").and_then(Value::as_str);
+	if published.event != crate::agent::commands::EVENT_CHANNEL || kind != Some(QUESTION_REQUESTED)
+	{
+		return None;
+	}
+	published.payload.pointer("/scope/conversationId").and_then(Value::as_str)
+}
+
 #[derive(Clone, Copy)]
 enum Naming {
 	One(&'static str),
@@ -705,6 +716,13 @@ impl GuestEvents {
 			}
 		};
 		if !self.holds_the_guest(app, &published).await {
+			if let Some(conversation_id) = question_asked_in(&published) {
+				log::warn!(
+					"the {QUESTION_REQUESTED} frame of conversation {conversation_id} was kept off \
+					 the relay of space {}: it failed the Conversation check",
+					self.shared_space_id
+				);
+			}
 			return Vec::new();
 		}
 		if let Some(Value::Array(listed)) = published.payload.pointer(CONVERSATION_LIST_POINTER) {
