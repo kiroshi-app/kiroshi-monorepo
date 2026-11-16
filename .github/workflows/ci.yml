@@ -254,7 +254,14 @@ jobs:
         run: brew install xcodegen
 
       - name: Gate
+        id: gate
         run: bun scripts/ci.ts ios-build
+
+      - name: Runner failure
+        if: failure() && steps.gate.conclusion == 'skipped'
+        run: |
+          echo "::error title=Runner failure::This job failed in its setup, before its build started: no build and no test failed."
+          exit 1
 
       - name: Pack the build products
         run: tar -czf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build Build/Products

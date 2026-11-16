@@ -194,8 +194,35 @@ describe("a runner failure", () => {
 		expect(isRunnerFailure(failedOnATest("ios (2)"))).toBe(false)
 	})
 
-	it("is not an ios-build job whose gate failed", () => {
-		expect(isRunnerFailure(job("ios-build", "failure"))).toBe(false)
+	it("is an ios-build job whose setup failed before its gate, the Runner failure step saying so", () => {
+		const lostXcodeGen = job("ios-build", "failure", [
+			step("Set up job", "success"),
+			step("Install XcodeGen", "failure"),
+			step("Gate", "skipped"),
+			step("Runner failure", "failure"),
+			step("Pack the build products", "skipped"),
+		])
+
+		expect(isRunnerFailure(lostXcodeGen)).toBe(true)
+	})
+
+	it("is not an ios-build job whose gate failed, a red like any failed build", () => {
+		const brokeTheBuild = job("ios-build", "failure", [
+			step("Install XcodeGen", "success"),
+			step("Gate", "failure"),
+			step("Runner failure", "skipped"),
+			step("Pack the build products", "skipped"),
+		])
+
+		expect(isRunnerFailure(brokeTheBuild)).toBe(false)
+		expect(
+			redMainIssue({
+				run: redRun,
+				jobs: [brokeTheBuild, job("verify", "failure")],
+				pullRequests: [mergedBy],
+				sinceGreen,
+			}).title,
+		).toBe("Red main: ios-build at 8a7919a")
 	})
 
 	it("is never another job, zero completed steps or not", () => {

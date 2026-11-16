@@ -1182,6 +1182,30 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
+	it.each([
+		["a step before its gate failed and the gate was skipped", "skipped", true],
+		["its gate failed", "failure", false],
+	])(
+		"fails the Runner failure step of ios-build only when %s",
+		(_, conclusion, runs) => {
+			const steps = runStepsOf(IOS_BUILD_JOB).map((step) => step.name)
+			const runnerFailure = stepNamed(IOS_BUILD_JOB, "Runner failure")
+
+			expect(stepNamed(IOS_BUILD_JOB, "Gate")?.id).toBe("gate")
+			expect(steps.indexOf("Runner failure")).toBeGreaterThan(
+				steps.indexOf("Gate"),
+			)
+			expect(runnerFailure?.if).toStartWith("failure() && ")
+			expect(
+				evaluate(runnerFailure?.if ?? "false", {
+					steps: { gate: { conclusion } },
+				}),
+			).toBe(runs)
+			expect(runnerFailure?.run).toContain("::error title=Runner failure::")
+			expect(runnerFailure?.run?.trim()).toEndWith("exit 1")
+		},
+	)
+
 	it("splits ios over four jobs, each told its shard out of the matrix size", () => {
 		expect(workflow.jobs.ios?.strategy).toEqual({
 			"fail-fast": false,
