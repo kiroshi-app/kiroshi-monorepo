@@ -81,18 +81,32 @@ const reachableModules = (graph: ImportGraph, testFile: string) => {
 	return reached
 }
 
-export const testImportersByModule = (repo: string) => {
+export type TestImports = {
+	importers: Map<string, number>
+	directTestImporters: Map<string, string[]>
+}
+
+export const testImports = (repo: string): TestImports => {
 	const graph: ImportGraph = { repo, importsOf: new Map() }
 	const importers = new Map<string, number>()
+	const directTestImporters = new Map<string, string[]>()
 	const testFiles = TEST_SOURCE_ROOTS.flatMap((root) => [
 		...new Bun.Glob(`${root}**/*.test.{ts,tsx}`).scanSync(repo),
 	])
 	for (const testFile of testFiles) {
-		for (const module of reachableModules(graph, join(repo, testFile))) {
+		const absoluteTestFile = join(repo, testFile)
+		for (const module of reachableModules(graph, absoluteTestFile)) {
 			if (TEST_FILE.test(module)) continue
 			const path = relative(repo, module)
 			importers.set(path, (importers.get(path) ?? 0) + 1)
 		}
+		for (const module of directImports(graph, absoluteTestFile)) {
+			const path = relative(repo, module)
+			directTestImporters.set(path, [
+				...(directTestImporters.get(path) ?? []),
+				testFile,
+			])
+		}
 	}
-	return importers
+	return { importers, directTestImporters }
 }

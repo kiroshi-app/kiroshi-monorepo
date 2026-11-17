@@ -6,6 +6,7 @@ import {
 	compareItems,
 	compareStories,
 	mergeVerdicts,
+	runOptionsOf,
 	splitByOwner,
 	TESTS,
 	testedStoryIds,
@@ -312,5 +313,48 @@ describe("unit test files changed since origin/main", () => {
 	])("finds none on a branch that changes only %s", (_, paths) => {
 		expect(changedTestFiles({ root: "apps/app", paths })).toEqual([])
 		expect(changedTestFiles({ root: "packages/ui", paths })).toEqual([])
+	})
+})
+
+describe("the run options of a baseline check", () => {
+	it("reads the test timeout and the extra test files of the changed scope", () => {
+		expect(
+			runOptionsOf([
+				"changed",
+				"--test-file=packages/ui/src/lib/i18n-vocabulary.test.ts",
+				"--test-file=apps/app/src/lib/account/use-account.test.ts",
+				"--test-timeout=30000",
+			]),
+		).toEqual({
+			retries: 0,
+			testTimeoutMs: 30_000,
+			testFiles: [
+				"packages/ui/src/lib/i18n-vocabulary.test.ts",
+				"apps/app/src/lib/account/use-account.test.ts",
+			],
+		})
+	})
+
+	it("keeps the vitest default timeout when no test timeout is given", () => {
+		expect(runOptionsOf(["vitest", "--retry"])).toEqual({
+			retries: 1,
+			testTimeoutMs: undefined,
+			testFiles: [],
+		})
+	})
+
+	it.each([["--test-timeout=0"], ["--test-timeout=5s"]])(
+		"refuses %s",
+		(flag) => {
+			expect(() => runOptionsOf(["unit", flag])).toThrow(
+				"--test-timeout takes one positive number of milliseconds",
+			)
+		},
+	)
+
+	it("refuses an extra test file outside the changed scope", () => {
+		expect(() =>
+			runOptionsOf(["unit", "--test-file=packages/ui/src/a.test.ts"]),
+		).toThrow("--test-file runs only with the changed scope")
 	})
 })
