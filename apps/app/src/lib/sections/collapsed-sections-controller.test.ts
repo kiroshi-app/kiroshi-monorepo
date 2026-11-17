@@ -5,14 +5,28 @@ import {
 	collapsedIn,
 	createCollapsedSectionsController,
 } from "./collapsed-sections-controller"
+import type { ReportFailure } from "./space-write-refusal"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-const entered = async (store: TranscriptStore, spaceId = "personal") => {
-	const controller = createCollapsedSectionsController(store, (id) => id)
+type Entering = {
+	isOnScreen?: () => boolean
+	reportFailure?: ReportFailure
+}
+
+const entered = async (
+	store: TranscriptStore,
+	spaceId = "personal",
+	{ isOnScreen = () => true, reportFailure = vi.fn() }: Entering = {},
+) => {
+	const controller = createCollapsedSectionsController(
+		store,
+		{ hostSpaceIdOf: (id) => id, isOnScreen },
+		{ reportFailure },
+	)
 	await controller.enter(spaceId)
 	return controller
 }
@@ -113,6 +127,46 @@ describe("createCollapsedSectionsController", () => {
 		await settled()
 
 		expect(shutIn(controller)).toEqual([])
+	})
+
+	it("reports a collapse refused in the Space on screen", async () => {
+		const store = createFakeTranscriptStore()
+		const writers = await store.createSection("personal", "Writers")
+		const reportFailure = vi.fn()
+		const controller = await entered(store, "personal", { reportFailure })
+		const refusal = { kind: "storage" }
+		vi.spyOn(store, "setSpacePreferences").mockRejectedValue(refusal)
+
+		controller.collapse("personal", writers.id, true)
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledWith(expect.anything(), {
+				reason: refusal,
+				space: "personal",
+			}),
+		)
+	})
+
+	it("logs a collapse refused in a Space not on screen and raises no notice", async () => {
+		const warned = vi.spyOn(console, "warn").mockReturnValue(undefined)
+		const store = createFakeTranscriptStore()
+		const writers = await store.createSection("personal", "Writers")
+		const reportFailure = vi.fn()
+		const controller = await entered(store, "personal", {
+			isOnScreen: () => false,
+			reportFailure,
+		})
+		vi.spyOn(store, "setSpacePreferences").mockRejectedValue({
+			kind: "storage",
+		})
+
+		controller.collapse("personal", writers.id, true)
+
+		await vi.waitFor(() => expect(shutIn(controller)).toEqual([]))
+		expect(reportFailure).not.toHaveBeenCalled()
+		expect(warned).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining("space: personal"),
+		)
 	})
 
 	it("drops the sections of a space the roster no longer carries", async () => {

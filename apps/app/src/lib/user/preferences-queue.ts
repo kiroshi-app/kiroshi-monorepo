@@ -15,11 +15,6 @@ export const changePreferences = (
 		userPreferencesStore.write(change(await userPreferencesStore.read())),
 	)
 
-export const changeProfilePicture = (
-	bytes: Uint8Array,
-): Promise<UserPreferences> =>
-	enqueue(() => userPreferencesStore.setProfilePicture(bytes))
-
 export const changeOnboardingStep = (
 	step: OnboardingStep,
 ): Promise<UserPreferences> =>

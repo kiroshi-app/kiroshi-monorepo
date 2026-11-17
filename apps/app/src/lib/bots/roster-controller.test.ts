@@ -220,40 +220,6 @@ describe("createRosterController", () => {
 		expect(listed).not.toHaveBeenCalled()
 	})
 
-	it("seats a drafted companion without moving the reader to it", async () => {
-		const controller = await loaded(createFakeTranscriptStore())
-
-		const written = await controller.createFromDraft({
-			name: "Scout",
-			job: "a research assistant",
-			description: "Dig into the questions I bring.",
-		})
-
-		expect(names(controller.getState().bots)).toEqual(["Claude", "Scout"])
-		expect(controller.getState().selectedBotId).toBe("default")
-		expect(written.title).toBe("a research assistant")
-	})
-
-	it("refuses a drafted companion while the roster is in no space", async () => {
-		const controller = mountRoster(createFakeTranscriptStore())
-
-		await expect(
-			controller.createFromDraft({
-				name: "Scout",
-				job: "a research assistant",
-				description: "Dig into the questions I bring.",
-			}),
-		).rejects.toEqual({ kind: "unknownSpace", id: "" })
-	})
-
-	it("refuses a drafted companion the store turns down", async () => {
-		const controller = await loaded(createFakeTranscriptStore())
-
-		await expect(
-			controller.createFromDraft({ name: " ", job: "", description: "" }),
-		).rejects.toEqual({ kind: "namelessBot" })
-	})
-
 	it("opens on nothing when the record holds no companion", async () => {
 		const controller = await loaded(await anEmptyStore())
 
@@ -963,80 +929,6 @@ describe("createRosterController on a space", () => {
 		expect(state.selectedBotId).toBe("default")
 		expect(state.rosters[elsewhere.id]).toEqual([])
 		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
-	})
-
-	it("hands the companion over to the space it is moved to and opens that space on it", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const section = await store.createSection("personal", "Writers")
-		await store.moveBotToSection("default", section.id)
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-
-		const moved = await controller.moveToSpace("default", elsewhere.id)
-
-		const state = controller.getState()
-		expect(moved?.id).toBe("default")
-		expect(state.spaceRowId).toBe(elsewhere.id)
-		expect(state.selectedBotId).toBe("default")
-		expect(state.rosters.personal).toEqual([])
-		expect(state.rosters[elsewhere.id].map((bot) => bot.id)).toEqual([
-			"default",
-		])
-		expect(state.rosters[elsewhere.id][0].sectionId).toBeNull()
-		expect((await store.bots(elsewhere.id)).map((bot) => bot.id)).toEqual([
-			"default",
-		])
-	})
-
-	it("rejects a refused move to another space and reads the rosters again", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-		vi.spyOn(store, "moveBotToSpace").mockRejectedValue(new Error("no room"))
-
-		await expect(
-			controller.moveToSpace("default", elsewhere.id),
-		).rejects.toThrow("no room")
-
-		const state = controller.getState()
-		expect(state.spaceRowId).toBe("personal")
-		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
-		expect(state.rosters[elsewhere.id]).toEqual([])
-	})
-
-	it("writes nothing when the companion is already in the space it is moved to", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = mountRoster(store)
-		await controller.load(opening())
-		const write = vi.spyOn(store, "moveBotToSpace")
-
-		const moved = await controller.moveToSpace("default", "personal")
-
-		expect(moved).toBeNull()
-		expect(write).not.toHaveBeenCalled()
-	})
-
-	it("empties the seats a moved companion held in the space it leaves", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const room = await store.createConversation({
-			spaceId: "personal",
-			sectionId: null,
-			title: "Launch",
-			botIds: ["default"],
-		})
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-
-		await controller.moveToSpace("default", elsewhere.id)
-
-		const left = controller.getState().conversationRosters.personal[0]
-		expect(seatedIn(left)).toEqual([])
-		expect(left.participants.map((seat) => seat.botId)).toContain("default")
-		expect(seatedIn((await store.conversations("personal"))[0])).toEqual([])
-		expect(room.id).toBe(left.id)
 	})
 
 	it("leaves the roster of the other spaces untouched when a companion is deleted", async () => {

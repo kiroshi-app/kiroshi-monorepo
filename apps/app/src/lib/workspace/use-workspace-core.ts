@@ -100,19 +100,20 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	)
 	const openedRoutine = useMemo(createOpenedRoutineController, [])
 	const messageLandings = useMemo(createMessageLandingController, [])
+	const isOnScreen = (spaceRowId: string) =>
+		roster.controller.getState().spaceRowId === spaceRowId
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
 		pin: roster.controller.pin,
 		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
-		isOnScreen: (spaceRowId) =>
-			roster.controller.getState().spaceRowId === spaceRowId,
+		isOnScreen,
 		reload: roster.controller.reload,
 	})
-	const collapsedSections = useCollapsedSections(
-		store,
-		roster.controller.hostSpaceIdOf,
-	)
+	const collapsedSections = useCollapsedSections(store, {
+		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
+		isOnScreen,
+	})
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const spaces = useSpaces(store)

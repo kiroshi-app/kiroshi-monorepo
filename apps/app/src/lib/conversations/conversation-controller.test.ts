@@ -120,6 +120,7 @@ type Harness = {
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
+	reportFailure: ReturnType<typeof vi.fn>
 }
 
 const settled = async () => {
@@ -204,6 +205,7 @@ const createHarness = async (
 	})
 	const named: [string, ConversationNaming][] = []
 	let minted = 0
+	const reportFailure = vi.fn()
 	const controller = createConversationController(
 		withFakeHostWrites(driver, store),
 		store,
@@ -214,6 +216,7 @@ const createHarness = async (
 			},
 			now: () => minted,
 			onNamed: (conversationId, naming) => named.push([conversationId, naming]),
+			reportFailure,
 		},
 	)
 	const detach = controller.attach()
@@ -229,6 +232,7 @@ const createHarness = async (
 		detach,
 		settled,
 		refuseNextWrite,
+		reportFailure,
 	}
 }
 
@@ -1129,11 +1133,8 @@ describe("createConversationController", () => {
 			)
 		})
 
-		it("leaves the companion removed when the release fails", async () => {
+		it("leaves the companion removed and reports it when the release fails", async () => {
 			holdTheClock()
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			vi.spyOn(harness.driver, "shutdown").mockRejectedValue({
 				kind: "transitionInProgress",
 			})
@@ -1147,17 +1148,16 @@ describe("createConversationController", () => {
 				[null, `<@${nyx}> take the walls`],
 				[nyx, "walls are held"],
 			])
-			expect(reported).toHaveBeenCalledWith(
-				"conversation controller: agent_shutdown failed",
-				{ kind: "transitionInProgress" },
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					reason: { kind: "transitionInProgress" },
+					botId: nyx,
+				}),
 			)
-			reported.mockRestore()
 		})
 
 		it("releases the scopes left when one release rejects on shutdown", async () => {
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			const nyx = idOf(harness.conversation, "Nyx")
 			const iris = idOf(harness.conversation, "Iris")
 			await harness.controller.send("@Nyx then @Iris")
@@ -1175,7 +1175,10 @@ describe("createConversationController", () => {
 
 			expect(released).toEqual([iris])
 			expect(harness.controller.getState().latestError).toBeNull()
-			reported.mockRestore()
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ reason: new Error("refused"), botId: nyx }),
+			)
 		})
 
 		it("resumes the next turn of a companion from the session its closed scope stored", async () => {

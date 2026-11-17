@@ -1,15 +1,11 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query"
 
-import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { sectionQueryKeys } from "./section-query-keys"
+import { type ReportFailure, spaceWriteRefusalOf } from "./space-write-refusal"
 
-import {
-	describeFailure,
-	failureReporterIn,
-	type ReporterFacts,
-} from "../failure-report"
+import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -45,7 +41,6 @@ export type SectionsController = {
 	rename: (id: string, name: string) => void
 	pin: (spaceId: string, pins: RosterPin[]) => Promise<void>
 	remove: (id: string) => Promise<void>
-	moveBot: (botId: string, sectionId: string | null) => Promise<void>
 }
 
 type SectionsChoice = { spaceIds: string[] }
@@ -83,7 +78,7 @@ const sectionsStateOf = (
 
 type SectionsControllerOptions = {
 	queryClient: QueryClient
-	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
+	reportFailure?: ReportFailure
 }
 
 export const sectionsIn = (state: SectionsState, spaceId: string) =>
@@ -93,16 +88,6 @@ export const spaceOfSection = (state: SectionsState, id: string) =>
 	Object.keys(state.sections).find((spaceId) =>
 		sectionsIn(state, spaceId).some((section) => section.id === id),
 	)
-
-const logRefusalOffScreen = (spaceId: string, reason: unknown) => {
-	console.warn(
-		[
-			"sections-controller: a write was refused in a Space not on screen",
-			`space: ${spaceId}`,
-			`reason: ${describeFailure(reason)}`,
-		].join(" | "),
-	)
-}
 
 const repositioned = (sections: Section[], pins: RosterPin[]) =>
 	sections
@@ -124,16 +109,11 @@ export const createSectionsController = (
 
 	const enqueue = createQueue()
 
-	const refuse = (reason: unknown, spaceId: string | undefined) => {
-		if (spaceId !== undefined && !bots.isOnScreen(spaceId)) {
-			logRefusalOffScreen(spaceId, reason)
-			return
-		}
-		reportFailure(
-			{ title: i18n.t("chat:screen.notice.failed") },
-			{ reason, space: spaceId },
-		)
-	}
+	const refuse = spaceWriteRefusalOf({
+		raisedIn: "sections-controller",
+		isOnScreen: bots.isOnScreen,
+		reportFailure,
+	})
 
 	const commit = <Result>(
 		spaceId: string | undefined,
@@ -280,11 +260,5 @@ export const createSectionsController = (
 				)
 				bots.clear(id)
 			}).catch(reloadAll),
-
-		moveBot: (botId: string, sectionId: string | null) =>
-			commit(sectionId === null ? undefined : spaceOf(sectionId), async () => {
-				await store.moveBotToSection(botId, sectionId)
-				bots.move(botId, sectionId)
-			}).catch(bots.reload),
 	}
 }

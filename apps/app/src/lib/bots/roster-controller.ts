@@ -48,12 +48,10 @@ import type { ConversationNaming } from "../agent/contract"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import {
 	isNameless,
-	presentParticipants,
 	toConversationSettingsValue,
 } from "../conversations/roster-conversations"
 import type {
 	Bot,
-	BotDraft,
 	Chat,
 	Conversation,
 	ConversationInPage,
@@ -61,7 +59,6 @@ import type {
 	Participant,
 	RosterPin,
 	SoloState,
-	SpaceError,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type {
@@ -214,7 +211,6 @@ export type RosterController = {
 	selectConversation: (id: string) => void
 	showList: () => void
 	create: () => Promise<void>
-	createFromDraft: (draft: BotDraft) => Promise<Bot>
 	createConversation: (botIds?: string[]) => Promise<Conversation | null>
 	createUnselectedConversation: (
 		botIds: string[],
@@ -226,7 +222,6 @@ export type RosterController = {
 	remember: (id: string, memory: string) => Promise<void>
 	moveToSection: (botId: string, sectionId: string | null) => void
 	pin: (pins: RosterPin[]) => void
-	moveToSpace: (botId: string, spaceRowId: string) => Promise<Bot | null>
 	addToSpace: (botId: string, spaceRowId: string) => Promise<void>
 	removeFromSpace: (botId: string, spaceRowId: string) => Promise<void>
 	clearSection: (sectionId: string) => void
@@ -329,11 +324,6 @@ const faceOf = (bot: Bot): Partial<Participant> => ({
 	avatarImagePath: bot.avatarImagePath,
 })
 
-const seats = (conversation: Conversation, botId: string) =>
-	presentParticipants(conversation).some(
-		(participant) => participant.botId === botId,
-	)
-
 const firstRowId = (bots: Bot[], conversations: Conversation[]) =>
 	bots[0]?.id ?? conversations[0]?.id ?? null
 
@@ -341,8 +331,6 @@ const NOTHING_SELECTED: Landing = {
 	selectedBotId: null,
 	selectedConversationId: null,
 }
-
-const NO_SPACE = { kind: "unknownSpace", id: "" } satisfies SpaceError
 
 const NO_TITLE = ""
 
@@ -758,9 +746,6 @@ export const createRosterController = (
 		})
 	}
 
-	const enrol = (written: Bot, spaceRowId: string) =>
-		holdBots(spaceRowId, [...rosterIn(current().rosters, spaceRowId), written])
-
 	const enrolConversation = (written: Conversation, spaceRowId: string) =>
 		holdConversations(spaceRowId, [
 			...rosterIn(current().conversationRosters, spaceRowId),
@@ -1015,18 +1000,6 @@ export const createRosterController = (
 			return created
 		})
 
-	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
-		const seated = rosterIn(current().conversationRosters, spaceRowId)
-		const emptied = await Promise.all(
-			seated.map((conversation) =>
-				seats(conversation, botId)
-					? store.removeConversationParticipant(conversation.id, botId)
-					: Promise.resolve(conversation),
-			),
-		)
-		holdConversations(spaceRowId, emptied)
-	}
-
 	const catchUpOnLeftConversation = () => {
 		const { spaceRowId, selectedConversationId: left } = current()
 		if (spaceRowId !== null && left !== null) {
@@ -1234,20 +1207,6 @@ export const createRosterController = (
 				admit(written, current().spaceRowId)
 			}).catch(reloadAndReject),
 
-		createFromDraft: (draft: BotDraft) =>
-			commit(async () => {
-				const spaceRowId = current().spaceRowId
-				if (!spaceRowId) {
-					throw NO_SPACE
-				}
-				const written = await store.createBotFromDraft(
-					draft,
-					hostSpaceIdOf(spaceRowId),
-				)
-				enrol(written, spaceRowId)
-				return written
-			}),
-
 		createConversation: (botIds = NOBODY_SEATED) =>
 			writeConversation(botIds, admitConversation).catch(reloadAndReject),
 
@@ -1289,25 +1248,6 @@ export const createRosterController = (
 		remember: (id: string, memory: string) =>
 			commit(async () => {
 				apply(await store.setBotMemory(id, memory))
-			}).catch(reloadAndReject),
-
-		moveToSpace: (botId: string, spaceRowId: string) =>
-			commit(async () => {
-				const [home] = spacesOfBot(botId)
-				const moved = home
-					? rosterIn(current().rosters, home).find((bot) => bot.id === botId)
-					: undefined
-				if (!home || !moved || home === spaceRowId) {
-					return null
-				}
-				await emptySeatsIn(home, botId)
-				await store.moveBotToSpace(botId, hostSpaceIdOf(spaceRowId))
-				holdBots(
-					home,
-					rosterIn(current().rosters, home).filter((bot) => bot.id !== botId),
-				)
-				admit({ ...moved, sectionId: null }, spaceRowId)
-				return moved
 			}).catch(reloadAndReject),
 
 		addToSpace: (botId: string, spaceRowId: string) =>
