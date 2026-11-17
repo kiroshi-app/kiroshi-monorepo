@@ -221,18 +221,16 @@ export const createAgentQuestions = (
 	const respond = (bot: BotChat, id: string, decision: PermissionDecision) =>
 		replyOnce(id, () => sendDecision(bot, id, decision))
 
-	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
+	const answer = (bot: BotChat, id: string, answers: QuestionAnswers) => {
 		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
-			await replyOnce(id, () => answerForeignQuestion(bot, foreign, answers))
-			return
+			return replyOnce(id, () => answerForeignQuestion(bot, foreign, answers))
 		}
 		const posted = pendingPostOf(bot, id)
 		if (posted) {
-			await answerPosted(bot, posted, answers)
-			return
+			return answerPosted(bot, posted, answers)
 		}
-		await replyOnce(id, () => answerAsked(bot, id, answers))
+		return replyOnce(id, () => answerAsked(bot, id, answers))
 	}
 
 	return { respond, answer }
