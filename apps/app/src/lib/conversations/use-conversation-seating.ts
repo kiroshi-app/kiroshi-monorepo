@@ -110,7 +110,7 @@ export const useSuggestedBots = (conversationId: string | null) => {
 		}
 		seating.botsByPresence(conversationId).then(
 			(bots) => land(toBotRows(bots).slice(0, SUGGESTED_BOTS_SHOWN)),
-			() => {
+			(reason: unknown) => {
 				land(NO_BOTS)
 				raiseReportedFailure(
 					{
@@ -119,6 +119,7 @@ export const useSuggestedBots = (conversationId: string | null) => {
 					{
 						raisedIn: "use-conversation-seating",
 						conversation: conversationId,
+						reason,
 					},
 				)
 			},

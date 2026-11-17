@@ -180,7 +180,10 @@ describe("opening a conversation a tab of another window shows", () => {
 			expect.objectContaining({
 				title: i18n.t("common:titleBar.revealTabFailed.title"),
 			}),
-			{ raisedIn: "conversation-tab-opening" },
+			{
+				raisedIn: "conversation-tab-opening",
+				reason: new Error("the other window could not come forward"),
+			},
 		)
 		expect(hrefsOf(shown(here))).toEqual([OTHER_HREF])
 		expect(openInPlace).not.toHaveBeenCalled()

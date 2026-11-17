@@ -17,7 +17,7 @@ const reportFailure = (title: string) =>
 export const performAccountCommand = async (command: AccountCommand) => {
 	const result = await command()
 	if (result.status === "error") {
-		throw new Error(result.error.kind)
+		throw result.error
 	}
 }
 
