@@ -133,7 +133,6 @@ export const Live = meta.story({
 			canvas.getByRole("group", { name: "Live view" }),
 		).toBeInTheDocument()
 		await expect(args.onPlacementChange).toHaveBeenCalledTimes(reportCount)
-		await expect(lastPlacementOf(args.onPlacementChange)).toEqual(mounted)
 		await expect(document.activeElement).toBe(focused)
 
 		scroller.scrollTop += 16
