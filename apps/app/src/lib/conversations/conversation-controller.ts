@@ -1966,7 +1966,7 @@ export const createConversationController = (
 		)
 	}
 
-	const answeredQuestionIds = new Set<string>()
+	const claimedRequestIds = new Set<string>()
 
 	const speakerAsked = (id: string) =>
 		[...speakers.values()].find((held) => held.pending?.request.id === id)
@@ -2045,37 +2045,48 @@ export const createConversationController = (
 		return true
 	}
 
-	const answer = async (id: string, answers: QuestionAnswers) => {
-		if (answeredQuestionIds.has(id)) {
-			return
-		}
-		answeredQuestionIds.add(id)
-		if (!(await sendAnswer(id, answers))) {
-			answeredQuestionIds.delete(id)
-		}
-	}
-
-	const respond = async (id: string, decision: PermissionDecision) => {
+	const sendDecision = async (id: string, decision: PermissionDecision) => {
 		const foreign = foreignTurns.scopeAsking(id)
 		if (foreign) {
-			await answerForeign(foreign, id, () =>
+			return answerForeign(foreign, id, () =>
 				driver.respondToPermission(foreign, id, decision),
 			)
-			return
 		}
 		const held = speakerAsked(id)
 		if (!held?.scope) {
-			return
+			return false
 		}
 		try {
 			await driver.respondToPermission(held.scope, id, decision)
 		} catch (reason) {
 			noteSpeakerFailure(held.botId, toTransportError(reason))
 			sync()
-			return
+			return false
 		}
 		releasePrompt(held, id)
+		return true
 	}
+
+	const replyOnce = async (id: string, send: () => Promise<boolean>) => {
+		if (claimedRequestIds.has(id)) {
+			return
+		}
+		claimedRequestIds.add(id)
+		try {
+			if (!(await send())) {
+				claimedRequestIds.delete(id)
+			}
+		} catch (reason) {
+			claimedRequestIds.delete(id)
+			throw reason
+		}
+	}
+
+	const answer = (id: string, answers: QuestionAnswers) =>
+		replyOnce(id, () => sendAnswer(id, answers))
+
+	const respond = (id: string, decision: PermissionDecision) =>
+		replyOnce(id, () => sendDecision(id, decision))
 
 	const settleStop = (
 		{ conversationId }: RuntimeScope,

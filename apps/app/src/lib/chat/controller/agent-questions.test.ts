@@ -12,10 +12,16 @@ import {
 	spoken,
 } from "./controller-fixtures"
 
+import type { ChatController } from "../chat-controller"
 import { questionMessageIdOf } from "../question-message"
 import type { QuestionRequest, ScopedEvent } from "../../agent/contract"
-import { createFakeTranscriptStore } from "../../conversations/fake-transcript-store"
+import {
+	createFakeTranscriptStore,
+	FAKE_CHAT_ID,
+} from "../../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../../conversations/store-port"
+import { TRANSCRIPT_WINDOW_SIZE } from "../../conversations/transcript-contract"
+import { message as storedMessage } from "../../conversations/transcript-fixtures"
 
 const ASKED: QuestionRequest = {
 	id: "ask-1",
@@ -38,6 +44,52 @@ const askedInAThreadLeftBehind = async (store: TranscriptStore) => {
 	await harness.controller.open(BOT, elsewhere)
 	await vi.runAllTimersAsync()
 	return { ...harness, asked }
+}
+
+const LANDED_SEQ = 20
+
+const refusingLatestOnceGated = () => {
+	const base = createFakeTranscriptStore({
+		messages: Array.from({ length: TRANSCRIPT_WINDOW_SIZE * 2 }, (_, index) =>
+			storedMessage({
+				id: `m-${index + 1}`,
+				seq: index + 1,
+				conversationId: FAKE_CHAT_ID,
+			}),
+		),
+	})
+	let release: () => void = () => undefined
+	const gate = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	let isGating = false
+	const store: TranscriptStore = {
+		...base,
+		loadPage: async (conversationId, cursor) => {
+			if (cursor || !isGating) {
+				return base.loadPage(conversationId, cursor)
+			}
+			isGating = false
+			await gate
+			throw new Error("refused")
+		},
+		loadWindow: async (conversationId, seq) => {
+			isGating = true
+			return base.loadWindow(conversationId, seq)
+		},
+	}
+	return { store, release }
+}
+
+const throwingOnFirstFailure = (controller: ChatController) => {
+	let hasThrown = false
+	return () => {
+		if (hasThrown || controller.getState().errors.length === 0) {
+			return
+		}
+		hasThrown = true
+		throw new Error("listener")
+	}
 }
 
 describe("createChatController", () => {
@@ -65,6 +117,22 @@ describe("createChatController", () => {
 		expect(state.permission).toBeNull()
 		expect(state.turn).toBe("idle")
 		expect(state.messages.at(-1)?.completion).toBe("complete")
+	})
+
+	it("sends one decision when the approval is decided twice before the first lands", async () => {
+		const { controller, driver } = await bootedHarness()
+		const respondToPermission = vi.spyOn(driver, "respondToPermission")
+		await controller.send("list the files /permission")
+		await vi.runAllTimersAsync()
+		const asked = controller.getState().permission?.id ?? ""
+
+		const first = controller.respond(asked, "allowOnce")
+		const second = controller.respond(asked, "allowOnce")
+		await vi.runAllTimersAsync()
+		await Promise.all([first, second])
+
+		expect(respondToPermission).toHaveBeenCalledTimes(1)
+		expect(controller.getState().errors).toEqual([])
 	})
 
 	it("cancels the turn when the permission is denied", async () => {
@@ -130,6 +198,33 @@ describe("createChatController", () => {
 
 		expect(answerQuestion).toHaveBeenCalledTimes(1)
 		expect(controller.getState().errors).toEqual([])
+	})
+
+	it("drops the answer sent beside one in flight, then takes a new one once the first threw", async () => {
+		const { store, release } = refusingLatestOnceGated()
+		const { controller, driver } = await bootedHarness({ store })
+		const answerQuestion = vi.spyOn(driver, "answerQuestion")
+		await controller.send("pick one /question")
+		await vi.runAllTimersAsync()
+		const asked = controller.getState().question?.id ?? ""
+		await controller.landOn(LANDED_SEQ)
+		const answers = { "Which framework should it use?": "React" }
+		const stop = controller.subscribe(throwingOnFirstFailure(controller))
+
+		const first = controller.answer(asked, answers)
+		const second = controller.answer(asked, answers)
+		release()
+		await expect(first).rejects.toThrow("listener")
+		await vi.runAllTimersAsync()
+		await second
+		stop()
+
+		expect(answerQuestion).not.toHaveBeenCalled()
+
+		await controller.answer(asked, answers)
+		await vi.runAllTimersAsync()
+
+		expect(answerQuestion).toHaveBeenCalledTimes(1)
 	})
 
 	it("answers a pending question with what the reader typed in the composer", async () => {

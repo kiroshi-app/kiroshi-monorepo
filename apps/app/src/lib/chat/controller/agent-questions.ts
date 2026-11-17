@@ -46,7 +46,7 @@ export const createAgentQuestions = (
 	}: ChatContext,
 	{ loadLatest, answerPosted }: AgentQuestionsParts,
 ) => {
-	const answeredQuestionIds = new Set<string>()
+	const claimedRequestIds = new Set<string>()
 
 	const answerForeign = async (
 		bot: BotChat,
@@ -65,25 +65,28 @@ export const createAgentQuestions = (
 		}
 	}
 
-	const respond = async (
+	const sendDecision = async (
 		bot: BotChat,
 		id: string,
 		decision: PermissionDecision,
 	) => {
 		const foreign = foreignTurns.scopeAsking(id)
 		if (foreign) {
-			await answerForeign(bot, foreign, id, () =>
+			return answerForeign(bot, foreign, id, () =>
 				driver.respondToPermission(foreign, id, decision),
 			)
-			return
 		}
 		const runtime = bot.state.runtime
 		if (!runtime) {
-			return
+			return false
 		}
-		await driver
-			.respondToPermission(runtime, id, decision)
-			.catch((reason) => report(bot, reason))
+		try {
+			await driver.respondToPermission(runtime, id, decision)
+			return true
+		} catch (reason) {
+			report(bot, reason)
+			return false
+		}
 	}
 
 	const issuedAskingOf = (bot: BotChat, request: QuestionRequest) => {
@@ -200,20 +203,28 @@ export const createAgentQuestions = (
 		}
 	}
 
-	const answerOnce = async (id: string, send: () => Promise<boolean>) => {
-		if (answeredQuestionIds.has(id)) {
+	const replyOnce = async (id: string, send: () => Promise<boolean>) => {
+		if (claimedRequestIds.has(id)) {
 			return
 		}
-		answeredQuestionIds.add(id)
-		if (!(await send())) {
-			answeredQuestionIds.delete(id)
+		claimedRequestIds.add(id)
+		try {
+			if (!(await send())) {
+				claimedRequestIds.delete(id)
+			}
+		} catch (reason) {
+			claimedRequestIds.delete(id)
+			throw reason
 		}
 	}
+
+	const respond = (bot: BotChat, id: string, decision: PermissionDecision) =>
+		replyOnce(id, () => sendDecision(bot, id, decision))
 
 	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
 		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
-			await answerOnce(id, () => answerForeignQuestion(bot, foreign, answers))
+			await replyOnce(id, () => answerForeignQuestion(bot, foreign, answers))
 			return
 		}
 		const posted = pendingPostOf(bot, id)
@@ -221,7 +232,7 @@ export const createAgentQuestions = (
 			await answerPosted(bot, posted, answers)
 			return
 		}
-		await answerOnce(id, () => answerAsked(bot, id, answers))
+		await replyOnce(id, () => answerAsked(bot, id, answers))
 	}
 
 	return { respond, answer }

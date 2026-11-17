@@ -1535,6 +1535,20 @@ describe("createConversationController", () => {
 			})
 		})
 
+		it("sends one decision when the approval is decided twice before the first lands", async () => {
+			const nyx = await permittedIn(harness)
+
+			await Promise.all([
+				harness.controller.respond("let-1", "allowOnce"),
+				harness.controller.respond("let-1", "allowOnce"),
+			])
+			await harness.settled()
+
+			expect(harness.driver.decided).toEqual([
+				{ botId: nyx, id: "let-1", decision: "allowOnce" },
+			])
+		})
+
 		it("keeps the permission and holds the failure of the companion when its runtime rejects the decision", async () => {
 			const nyx = await permittedIn(harness)
 			vi.spyOn(harness.driver, "respondToPermission").mockRejectedValue(
@@ -3145,6 +3159,42 @@ describe("a conversation landed away from its newest end", () => {
 		}
 	}
 
+	const refusingLatestOnceGated = () => {
+		const base = createFakeTranscriptStore()
+		let release: () => void = () => undefined
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let newestReads = 0
+		const store: TranscriptStore = {
+			...base,
+			loadPage: async (conversationId, cursor) => {
+				if (cursor) {
+					return base.loadPage(conversationId, cursor)
+				}
+				newestReads += 1
+				if (newestReads === 2) {
+					await gate
+					throw new Error("refused")
+				}
+				return base.loadPage(conversationId, null)
+			},
+		}
+		return { store, release }
+	}
+
+	const throwingOnFirstReadFailure = (controller: ConversationController) => {
+		let hasThrown = false
+		return () => {
+			const failure = controller.getState().latestError?.error
+			if (hasThrown || failure?.kind !== "readFailed") {
+				return
+			}
+			hasThrown = true
+			throw new Error("listener")
+		}
+	}
+
 	const refusingOlder = (): TranscriptStore => {
 		const base = createFakeTranscriptStore()
 		return {
@@ -3299,6 +3349,28 @@ describe("a conversation landed away from its newest end", () => {
 		const second = controller.answer("ask-1", { "Which wall?": "the north" })
 		release()
 		await Promise.all([first, second])
+		await settled()
+
+		expect(driver.answered).toHaveLength(1)
+		detach()
+	})
+
+	it("drops the answer sent beside one in flight, then takes a new one once the first threw", async () => {
+		const { store, release } = refusingLatestOnceGated()
+		const { controller, detach, driver } = await askedOn(store)
+		const stop = controller.subscribe(throwingOnFirstReadFailure(controller))
+
+		const first = controller.answer("ask-1", { "Which wall?": "the north" })
+		const second = controller.answer("ask-1", { "Which wall?": "the north" })
+		release()
+		await expect(first).rejects.toThrow("listener")
+		await second
+		await settled()
+		stop()
+
+		expect(driver.answered).toEqual([])
+
+		await controller.answer("ask-1", { "Which wall?": "the north" })
 		await settled()
 
 		expect(driver.answered).toHaveLength(1)
