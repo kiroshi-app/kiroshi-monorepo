@@ -69,7 +69,7 @@ apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiros
 
 The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs every test on that simulator, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
 
-CI splits the plan over three `ios` jobs, since one job running it all ran past its 60 minutes: `IOS_SHARD=k/3` gives job k every third UI test class in name order, from the k-th, and the first job the unit tests too. `IOS_SHARD=2/3 bun run ci ios` runs here what the second job runs; unset, `bun run ci ios` runs the whole plan. A UI class lives in a file named after it, or no job runs it (`scripts/ci.test.ts` checks it).
+CI builds the app once, in the `ios-build` job, then splits the plan over four `ios` jobs that test its products, since one job running it all ran past its 60 minutes. `IOS_SHARD=k/4` names job k: the first job gets the unit tests, counted at their median duration on main, then each UI test class goes to the job with the lightest load so far, longest class first, by the median duration `scripts/ci.ts` records for it, 110 seconds for a class it has none for. `bun run ci ios-build`, then `IOS_SHARD=2/4 bun run ci ios`, runs here what the second job runs, on the products the first command built; unset, `bun run ci ios` builds and runs the whole plan. A UI class lives in a file named after it, or no job runs it (`scripts/ci.test.ts` checks it).
 
 At the end of the mission, shut down and delete that simulator only, never `xcrun simctl shutdown all`, which stops every other agent's:
 

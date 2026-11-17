@@ -1,4 +1,11 @@
-import { appendFileSync, mkdtempSync, readdirSync, readFileSync } from "node:fs"
+import {
+	appendFileSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -34,6 +41,35 @@ const UI_TESTS = join(REPO, "apps/ios/KiroshiUITests")
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
+
+const IOS_SHARD_TEST_LOG = "apps/ios/build/shard-test.log"
+
+const IOS_GENERATE: Step = { name: "Generate", command: "bun run ios:generate" }
+
+const IOS_BUILD_FOR_TESTING: Step = {
+	name: "Build for testing",
+	command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build build-for-testing`,
+	heavy: true,
+}
+
+const IOS_SWIFT_FORMAT: Step = {
+	name: "Swift format",
+	command: "swift format lint --recursive --strict apps/ios",
+}
+
+export const IOS_BUILD_STEPS: Step[] = [
+	IOS_GENERATE,
+	IOS_BUILD_FOR_TESTING,
+	IOS_SWIFT_FORMAT,
+]
+
+export const IOS_SHARD_STEPS: Step[] = [
+	{
+		name: "Test on the simulator",
+		command: `set -o pipefail; apps/ios/scripts/xcodebuild.sh -xctestrun apps/ios/build/Build/Products/*.xctestrun ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building $IOS_ONLY_TESTING | tee ${IOS_SHARD_TEST_LOG}`,
+		heavy: true,
+	},
+]
 
 const RUSTFMT: Step = {
 	name: "Rustfmt",
@@ -200,21 +236,14 @@ export const GATE = {
 		},
 	],
 	ios: [
-		{ name: "Generate", command: "bun run ios:generate" },
-		{
-			name: "Build for testing",
-			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build build-for-testing`,
-			heavy: true,
-		},
+		IOS_GENERATE,
+		IOS_BUILD_FOR_TESTING,
 		{
 			name: "Test on the simulator",
 			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building $IOS_ONLY_TESTING`,
 			heavy: true,
 		},
-		{
-			name: "Swift format",
-			command: "swift format lint --recursive --strict apps/ios",
-		},
+		IOS_SWIFT_FORMAT,
 	],
 } satisfies Record<string, Step[]>
 
@@ -234,7 +263,7 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a push to main and on a v* tag",
 	storybook:
 		"on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
-	ios: "on a push to main only",
+	ios: "on a push to main and on a pull_request labelled ci:ios",
 }
 
 // ci:fast is the pre-push check and must stay green and under 120 s with a
@@ -642,12 +671,74 @@ export const uiTestClasses = (directory = UI_TESTS) =>
 		.map((name) => name.slice(0, -".swift".length))
 		.sort()
 
-export const shardTests = ({ index, count }: Shard, classes: string[]) => [
-	...(index === 1 ? ["KiroshiTests"] : []),
-	...classes
-		.filter((_, position) => position % count === index - 1)
-		.map((name) => `KiroshiUITests/${name}`),
-]
+const MEDIAN_SECONDS_OF_UI_TEST_CLASS: Record<string, number> = {
+	AppearanceTests: 21,
+	CitedFilesTests: 122,
+	ConversationMissionsTests: 71,
+	ConversationsAccessibilityTests: 342,
+	ConversationsRecoveryTests: 37,
+	DeleteAccountTests: 73,
+	DeviceApprovalAccessibilityTests: 125,
+	DeviceKeysAccessibilityTests: 48,
+	GroupThreadTests: 215,
+	HomeTabBarTests: 103,
+	InvitationAccessibilityTests: 328,
+	MarkdownMessageTests: 302,
+	MessageConsentTests: 129,
+	MissionOpeningTests: 19,
+	MissionsAccessibilityTests: 170,
+	NewConversationTests: 44,
+	PagingTests: 40,
+	PhotoSendingTests: 63,
+	PinnedStripTests: 110,
+	QuestionPanelTests: 546,
+	SettingsAccessibilityTests: 159,
+	SettingsLargestTextTests: 73,
+	SignInAccessibilityTests: 249,
+	SoloConversationTests: 17,
+	SpaceAccentTests: 90,
+	SpaceHeaderTests: 17,
+	SpaceSelectorTests: 121,
+	ThreadAccessibilityTests: 236,
+	ThreadHeaderTests: 143,
+	ThreadOpeningTests: 46,
+	ThreadSendingTests: 162,
+}
+
+const SECONDS_OF_AN_UNMEASURED_UI_TEST_CLASS = 110
+
+const secondsOf = (name: string) =>
+	MEDIAN_SECONDS_OF_UI_TEST_CLASS[name] ??
+	SECONDS_OF_AN_UNMEASURED_UI_TEST_CLASS
+
+const MEDIAN_SECONDS_OF_KIROSHI_TESTS = 15
+
+type ShardLoad = { seconds: number; tests: string[] }
+
+const balancedShards = (count: number, classes: string[]) => {
+	const shards: ShardLoad[] = Array.from({ length: count }, (_, position) =>
+		position === 0
+			? { seconds: MEDIAN_SECONDS_OF_KIROSHI_TESTS, tests: ["KiroshiTests"] }
+			: { seconds: 0, tests: [] },
+	)
+	const longestFirst = [...classes].sort(
+		(a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
+	)
+	for (const name of longestFirst) {
+		const lightest = shards.reduce((lightest, shard) =>
+			shard.seconds < lightest.seconds ? shard : lightest,
+		)
+		lightest.tests.push(`KiroshiUITests/${name}`)
+		lightest.seconds += secondsOf(name)
+	}
+	return shards.map((shard) => shard.tests)
+}
+
+export const shardTests = ({ index, count }: Shard, classes: string[]) =>
+	balancedShards(count, classes)[index - 1] ?? []
+
+export const startedATest = (log: string) =>
+	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
 
 const selectIosTests = () => {
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
@@ -664,11 +755,48 @@ const selectIosTests = () => {
 	console.log(`\nci  ios shard ${shard} runs ${tests.join(", ")}`)
 }
 
-const runGroup = (group: Group) => {
-	if (group === "ios") {
+const SHARD_TEST_LOG_FILE = join(REPO, IOS_SHARD_TEST_LOG)
+
+const shardTestLog = () =>
+	existsSync(SHARD_TEST_LOG_FILE)
+		? readFileSync(SHARD_TEST_LOG_FILE, "utf8")
+		: ""
+
+const reportRunnerFailure = () => {
+	console.error("ci  ios ended before its first test started: runner failure")
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const output = process.env.GITHUB_OUTPUT
+	if (output) appendFileSync(output, "runner-failure=true\n")
+}
+
+const shardPassed = () => {
+	try {
 		ensureSimulator()
-		selectIosTests()
+		return runSteps("ios", IOS_SHARD_STEPS)
+	} catch (failure) {
+		console.error(`ci  ${(failure as Error).message}`)
+		return false
 	}
+}
+
+const runIosShard = () => {
+	rmSync(SHARD_TEST_LOG_FILE, { force: true })
+	const passed = shardPassed()
+	if (!passed && !startedATest(shardTestLog())) reportRunnerFailure()
+	return passed
+}
+
+const runIosBuild = () => {
+	ensureSimulator()
+	return runSteps("ios-build", IOS_BUILD_STEPS)
+}
+
+const runGroup = (group: Group) => {
+	if (group !== "ios") return runSteps(group, GATE[group])
+	selectIosTests()
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	if (process.env.IOS_SHARD) return runIosShard()
+	ensureSimulator()
 	return runSteps(group, GATE[group])
 }
 
@@ -710,9 +838,10 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === "changed") return runChangedUnitTests()
 	if (argument === "rust-pr")
 		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
+	if (argument === "ios-build") return runIosBuild()
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed, rust-pr or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed, rust-pr, ios-build or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 
