@@ -41,12 +41,29 @@ const FRAME = "h-72 w-[32rem]"
 
 const NO_SCROLL_ANCHORING = "[overflow-anchor:none]"
 
+const GROWING_RANK = 20
+
+const BLOCK_CHANGE = 120
+
+const GROWTH_FRAMES = 12
+
+const GROWTH_STEP = 20
+
+const GROWING_BLOCK = "h-40 rounded-xl border border-border bg-muted"
+
 type ThreadProps = {
 	lines: string[]
 	viewportClassName?: string
+	growingRank?: number
+	behavior?: ScrollBehavior
 }
 
-const Thread = ({ lines, viewportClassName }: ThreadProps) => (
+const Thread = ({
+	lines,
+	viewportClassName,
+	growingRank,
+	behavior = "auto",
+}: ThreadProps) => (
 	<MessageScrollerProvider autoScroll defaultScrollPosition="end">
 		<div className={FRAME}>
 			<MessageScroller className="min-h-0">
@@ -67,12 +84,15 @@ const Thread = ({ lines, viewportClassName }: ThreadProps) => (
 								scrollAnchor={rank === lines.length - 1}
 							>
 								<p className={BUBBLE}>{line}</p>
+								{rank === growingRank ? (
+									<div className={GROWING_BLOCK} data-slot="growing-block" />
+								) : null}
 							</MessageScrollerItem>
 						))}
 					</MessageScrollerContent>
 				</MessageScrollerViewport>
 				<MessageScrollerButton
-					behavior="auto"
+					behavior={behavior}
 					className="rounded-full shadow-xl tabular-nums"
 					size="sm"
 					variant="secondary"
@@ -110,6 +130,61 @@ const nextFrames = () =>
 	new Promise<void>((resolve) => {
 		requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
 	})
+
+const growingBlockIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "growing-block")
+
+const lineHeightIn = (canvasElement: HTMLElement) => {
+	const bubble = canvasElement.querySelector("p")
+	if (!bubble) throw new Error("the thread rendered no bubble")
+	return Number.parseFloat(getComputedStyle(bubble).lineHeight)
+}
+
+const topOf = (element: Element) => element.getBoundingClientRect().top
+
+const expectInPlace = async (
+	canvasElement: HTMLElement,
+	element: Element,
+	formerTop: number,
+) =>
+	expect(Math.abs(topOf(element) - formerTop)).toBeLessThanOrEqual(
+		lineHeightIn(canvasElement),
+	)
+
+const releaseFollow = async (viewport: HTMLElement) => {
+	await waitFor(async () => {
+		await expect(viewport).not.toHaveAttribute("data-autoscrolling")
+	}, FRAME_POLL)
+	viewport.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
+}
+
+const placeBlockAt = async (
+	viewport: HTMLElement,
+	block: HTMLElement,
+	offset: number,
+) => {
+	await releaseFollow(viewport)
+	viewport.scrollTop += topOf(block) - topOf(viewport) - offset
+	await nextFrames()
+}
+
+const resize = async (block: HTMLElement, by: number) => {
+	block.style.height = `${block.getBoundingClientRect().height + by}px`
+	await nextFrames()
+}
+
+const growEachFrame = async (block: HTMLElement) => {
+	for (let frame = 0; frame < GROWTH_FRAMES; frame += 1) {
+		await new Promise(requestAnimationFrame)
+		block.style.height = `${block.getBoundingClientRect().height + GROWTH_STEP}px`
+	}
+}
+
+const itemAfter = (block: HTMLElement) => {
+	const next = block.closest("[data-message-id]")?.nextElementSibling
+	if (!next) throw new Error("the growing block has no item below it")
+	return next
+}
 
 const meta = preview.meta({
 	title: "Conversation/Message/MessageScroller",
@@ -246,5 +321,181 @@ export const HoldsTheReaderWhileScrollingBack = meta.story({
 				0,
 			)
 		}
+	},
+})
+
+export const HoldsTheReaderWhenABlockCutAtTheTopGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A block of an earlier turn is cut by the top edge of the viewport and gets taller after its first paint, the way a live HTML view, a late image or a reply settling its height does. Check that the message under it stays where the reader sees it: the block grows into the part of the thread already scrolled past, not over what is being read.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(viewport, block, -block.offsetHeight / 2)
+		const reader = itemAfter(block)
+		const readerTop = topOf(reader)
+
+		await resize(block, BLOCK_CHANGE)
+
+		await expectInPlace(canvasElement, reader, readerTop)
+	},
+})
+
+export const HoldsTheReaderWhenABlockCutAtTheTopShrinks = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same block cut by the top edge gets shorter instead. Check that the message under it stays where the reader sees it rather than climbing by the height the block lost.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(viewport, block, -block.offsetHeight / 2)
+		const reader = itemAfter(block)
+		const readerTop = topOf(reader)
+
+		await resize(block, -block.offsetHeight / 4)
+
+		await expectInPlace(canvasElement, reader, readerTop)
+	},
+})
+
+export const HoldsTheReaderWhenABlockAboveGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A block of an earlier turn, already scrolled past entirely, gets taller. Check that nothing on screen moves.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(viewport, block, -block.offsetHeight - BLOCK_CHANGE)
+		const reader = firstItemInView(canvasElement)
+		const readerTop = topOf(reader)
+
+		await resize(block, BLOCK_CHANGE)
+
+		await expectInPlace(canvasElement, reader, readerTop)
+	},
+})
+
+export const HoldsTheContentAboveWhenABlockInViewGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A block fully on screen gets taller while the reader is scrolled back. Check that what sits above it stays put and the block grows downwards, the way a reader expects a card to open.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(
+			viewport,
+			block,
+			(viewport.clientHeight - block.offsetHeight) / 2,
+		)
+		const above = block.previousElementSibling
+		if (!above) throw new Error("the growing block has nothing above it")
+		const aboveTop = topOf(above)
+
+		await resize(block, BLOCK_CHANGE)
+
+		await expectInPlace(canvasElement, above, aboveTop)
+	},
+})
+
+export const KeepsFollowingWhenABlockGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader follows the newest message and a block of the last turn gets taller than the viewport. Check that the thread keeps following: the end of the block stays at the bottom of the viewport.",
+			},
+		},
+	},
+	render: () => (
+		<Thread growingRank={SCROLLED_THREAD.length - 1} lines={SCROLLED_THREAD} />
+	),
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+		const line = lineHeightIn(canvasElement)
+
+		await waitFor(async () => {
+			await expect(viewport).not.toHaveAttribute("data-autoscrolling")
+		}, FRAME_POLL)
+
+		await resize(block, viewport.clientHeight)
+
+		await waitFor(async () => {
+			await expect(
+				viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight,
+			).toBeLessThanOrEqual(line)
+		}, FRAME_POLL)
+	},
+})
+
+export const ReachesTheEndWhileABlockGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader is scrolled back and presses the jump button, which scrolls smoothly, while a block of the thread gets taller on every frame of the scroll the way a streaming reply or a settling live HTML view does. Check that the scroll is never cut short: the reader lands on the end of the thread.",
+			},
+		},
+	},
+	render: () => (
+		<Thread
+			behavior="smooth"
+			growingRank={GROWING_RANK}
+			lines={SCROLLED_THREAD}
+		/>
+	),
+	play: async ({ canvasElement, userEvent }) => {
+		const viewport = viewportIn(canvasElement)
+		const button = buttonIn(canvasElement)
+		const line = lineHeightIn(canvasElement)
+
+		await releaseFollow(viewport)
+		viewport.scrollTop = 0
+		await waitFor(async () => {
+			await expect(button.dataset.active).toBe("true")
+		}, FRAME_POLL)
+
+		await userEvent.click(button)
+		await growEachFrame(growingBlockIn(canvasElement))
+
+		await waitFor(async () => {
+			await expect(
+				viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight,
+			).toBeLessThanOrEqual(line)
+		}, FRAME_POLL)
 	},
 })

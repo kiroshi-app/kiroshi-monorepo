@@ -4,6 +4,7 @@ import {
 	useMessageScrollerScrollable,
 } from "@shadcn/react/message-scroller"
 import type * as React from "react"
+import { useEffect, useState } from "react"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -53,7 +54,7 @@ function MessageScrollerViewport({
 				onPointerDown?.(event)
 			}}
 			className={cn(
-				"size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
+				"size-full min-h-0 min-w-0 scroll-fade-b [overflow-anchor:none] scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible",
 				className,
 			)}
 			{...props}
@@ -61,14 +62,79 @@ function MessageScrollerViewport({
 	)
 }
 
+type HeldReader = {
+	element: Element
+	offset: number
+	scrollTop: number
+}
+
+const firstStartingInView = (
+	parent: Element,
+	top: number,
+	bottom: number,
+): Element | null => {
+	for (const child of parent.children) {
+		const box = child.getBoundingClientRect()
+		if (box.bottom <= top || box.top >= bottom) continue
+		if (box.top >= top) return child
+		const inner = firstStartingInView(child, top, bottom)
+		if (inner) return inner
+	}
+	return null
+}
+
+const holdReaderInPlace = (content: HTMLDivElement | null) => {
+	const viewport = content?.closest<HTMLElement>(
+		'[data-slot="message-scroller-viewport"]',
+	)
+	if (!content || !viewport) return
+	let held: HeldReader | null = null
+
+	const pickReader = () => {
+		const { top, bottom } = viewport.getBoundingClientRect()
+		const element = firstStartingInView(content, top, bottom)
+		held = element
+			? {
+					element,
+					offset: element.getBoundingClientRect().top - top,
+					scrollTop: viewport.scrollTop,
+				}
+			: null
+	}
+
+	const restoreReader = () => {
+		if (held?.element.isConnected && viewport.scrollTop === held.scrollTop) {
+			const drift =
+				held.element.getBoundingClientRect().top -
+				viewport.getBoundingClientRect().top -
+				held.offset
+			if (drift !== 0) viewport.scrollTop += drift
+		}
+		pickReader()
+	}
+
+	const resizes = new ResizeObserver(restoreReader)
+	resizes.observe(content)
+	viewport.addEventListener("scroll", pickReader, { passive: true })
+	return () => {
+		resizes.disconnect()
+		viewport.removeEventListener("scroll", pickReader)
+	}
+}
+
 function MessageScrollerContent({
 	className,
 	...props
-}: React.ComponentProps<typeof MessageScrollerPrimitive.Content>) {
+}: Omit<React.ComponentProps<typeof MessageScrollerPrimitive.Content>, "ref">) {
+	const [content, setContent] = useState<HTMLDivElement | null>(null)
+
+	useEffect(() => holdReaderInPlace(content), [content])
+
 	return (
 		<MessageScrollerPrimitive.Content
 			data-slot="message-scroller-content"
 			className={cn("flex h-max min-h-full flex-col gap-8", className)}
+			ref={setContent}
 			{...props}
 		/>
 	)

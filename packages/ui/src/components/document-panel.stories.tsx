@@ -262,7 +262,7 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation scrolled up while the panel is open, then the panel closed with Close and opened again from the file chip. Check that the thread keeps the same transcript and the same scroll position through both changes: the panel must never remount the thread beside it.",
+					"A conversation scrolled up while the panel is open, then the panel closed with Close and opened again from the file chip. Check that the thread keeps the same transcript and the message being read stays where it was through both changes, while the rows above it reflow to the new width: the panel must never remount the thread beside it.",
 			},
 		},
 	},
@@ -281,12 +281,24 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		)
 		viewport.scrollTop = SCROLLED_TOP
 		await waitFor(() => expect(viewport.scrollTop).toBe(SCROLLED_TOP))
+		await afterTwoFrames()
+
+		const reader = slotsIn(canvasElement, "message-scroller-item").find(
+			(item) =>
+				item.getBoundingClientRect().top >=
+				viewport.getBoundingClientRect().top,
+		)
+		if (!reader) throw new Error("No message in view")
+		const readerOffset = () =>
+			reader.getBoundingClientRect().top - viewport.getBoundingClientRect().top
+		const offset = readerOffset()
+		const line = Number.parseFloat(getComputedStyle(reader).lineHeight)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Close" }))
 		await expect(canvas.queryByRole("complementary")).toBeNull()
 		await afterTwoFrames()
 		await expect(viewportOf()).toBe(viewport)
-		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
+		await expect(Math.abs(readerOffset() - offset)).toBeLessThanOrEqual(line)
 
 		canvas.getByRole("button", { name: DOCUMENT_TITLE }).click()
 		await expect(
@@ -294,7 +306,7 @@ export const KeepsTheThreadWhenToggled = meta.story({
 		).toBeVisible()
 		await afterTwoFrames()
 		await expect(viewportOf()).toBe(viewport)
-		await expect(viewport.scrollTop).toBe(SCROLLED_TOP)
+		await expect(Math.abs(readerOffset() - offset)).toBeLessThanOrEqual(line)
 	},
 })
 
