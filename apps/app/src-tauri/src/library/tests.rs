@@ -12,11 +12,12 @@ use yrs::updates::decoder::Decode;
 use yrs::{Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
 
 use super::commands::{
-	library_apply_update, library_board_summary, library_copy, library_create_board,
-	library_create_document, library_delete, library_import, library_import_paths, library_list,
-	library_open_document, library_read_document, library_read_file, library_read_image,
-	library_read_picked_image, library_read_thumbnail, library_rename_board,
-	library_rename_document, library_reveal, library_save, library_save_message, library_templates,
+	library_apply_update, library_board_summary, library_comment_create, library_comment_threads,
+	library_copy, library_create_board, library_create_document, library_delete, library_duplicate,
+	library_import, library_import_paths, library_list, library_open_document,
+	library_read_document, library_read_file, library_read_image, library_read_picked_image,
+	library_read_thumbnail, library_rename_board, library_rename_document, library_reveal,
+	library_save, library_save_message, library_templates,
 };
 use super::contract::{
 	LibraryBoardBounds, LibraryBoardNode, LibraryBoardSummary, LibraryChanged,
@@ -2852,4 +2853,237 @@ fn every_fixture_board_is_summarised_with_its_node_count() {
 		assert_eq!(summary.nodes.len(), count.min(200), "{}", fixture.display());
 		assert_eq!(summary.bounds.is_some(), count > 0, "{}", fixture.display());
 	}
+}
+
+async fn duplicated_by_the_host(
+	app: &App<MockRuntime>,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	library_duplicate(app.handle().clone(), app.state(), space_id.to_owned(), name.to_owned()).await
+}
+
+fn copied(documents: &Documents, root: &Path, name: &str) -> String {
+	duplicated(documents, root, SPACE, name).expect("the copy lands").name
+}
+
+#[tokio::test]
+async fn a_duplicate_answers_the_copy_as_a_listed_item() {
+	let app = a_host("duplicate-item");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "report.md", b"# Report");
+
+	let copy = duplicated_by_the_host(&app, &space_id, "report.md").await.expect("the copy lands");
+
+	let listed = list(&root, &space_id).expect("the library lists");
+	assert_eq!((copy.name.as_str(), copy.kind), ("report copy.md", LibraryItemKind::Document));
+	assert!(listed.contains(&copy), "{listed:?}");
+}
+
+#[tokio::test]
+async fn a_document_copy_holds_the_text_of_its_open_and_edited_original() {
+	let app = a_host("duplicate-edited");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "report.md", b"base");
+	let member = YjsClient::of(&opened(&app, &space_id, "report.md").await);
+	let edit = member.inserted(4, " edited");
+	applied(&app, &space_id, "report.md", &edit).await.expect("the edit applies");
+
+	let copy = duplicated_by_the_host(&app, &space_id, "report.md").await.expect("the copy lands");
+
+	assert_eq!(member.text(), "base edited");
+	assert_eq!(on_disk(&root, &space_id, &copy.name), "base edited");
+}
+
+const AN_EDITED_BOARD: &str = r#"{"nodes":[{"id":"a","type":"text","text":"Edited","x":0,"y":0,"width":10,"height":10},{"id":"c","type":"text","text":"Added","x":40,"y":0,"width":10,"height":10}],"edges":[]}"#;
+
+#[tokio::test(start_paused = true)]
+async fn a_board_copy_holds_the_nodes_of_its_open_board_before_they_are_written() {
+	let root = temp_root();
+	let documents = Documents::default();
+	put(&root, SPACE, "plan.canvas", A_BOARD.as_bytes());
+	let served = documents.open(&root, SPACE, "plan.canvas").expect("the board opens").state;
+	let member = Doc::new();
+	member
+		.transact_mut()
+		.apply_update(Update::decode_v1(&served).expect("the state decodes"))
+		.expect("the state applies");
+	let before = member.transact().state_vector();
+	let edited = crate::board::import_canvas(AN_EDITED_BOARD).expect("the edited board imports");
+	crate::board::write_board(&member, &edited);
+	let edit = member.transact().encode_state_as_update_v1(&before);
+	documents.apply(&root, SPACE, "plan.canvas", &edit, |_| {}).expect("the edit applies");
+
+	let copy = copied(&documents, &root, "plan.canvas");
+
+	assert_eq!(copy, "plan copy.canvas");
+	assert_eq!(on_disk(&root, SPACE, "plan.canvas"), A_BOARD);
+	let landed = crate::board::import_canvas(&on_disk(&root, SPACE, &copy));
+	assert_eq!(landed.expect("the copy imports"), edited);
+}
+
+#[test]
+fn an_image_copy_holds_the_bytes_of_its_original() {
+	let root = temp_root();
+	let documents = Documents::default();
+	let bytes = picture(4, 4, 7);
+	put(&root, SPACE, "cover.png", &bytes);
+
+	let copy = duplicated(&documents, &root, SPACE, "cover.png").expect("the copy lands");
+
+	assert_eq!((copy.name.as_str(), copy.kind), ("cover copy.png", LibraryItemKind::Image));
+	assert_eq!(fs::read(space_dir(&root, SPACE).join(&copy.name)).expect("the copy reads"), bytes);
+}
+
+#[test]
+fn the_first_copy_of_report_md_is_report_copy_md() {
+	let root = temp_root();
+	let documents = Documents::default();
+	put(&root, SPACE, "report.md", b"text");
+
+	assert_eq!(copied(&documents, &root, "report.md"), "report copy.md");
+}
+
+#[test]
+fn a_taken_copy_name_lands_under_the_next_number_from_two() {
+	let root = temp_root();
+	let documents = Documents::default();
+	put(&root, SPACE, "report.md", b"text");
+	put(&root, SPACE, "report copy.md", b"an older copy");
+
+	let second = copied(&documents, &root, "report.md");
+	let third = copied(&documents, &root, "report.md");
+
+	assert_eq!((second.as_str(), third.as_str()), ("report copy 2.md", "report copy 3.md"));
+	assert_eq!(
+		read(&root, "report copy.md").expect("the older copy reads").content,
+		"an older copy"
+	);
+}
+
+#[test]
+fn concurrent_duplicates_of_one_item_each_land_under_their_own_name() {
+	let root = temp_root();
+	let documents = Documents::default();
+	put(&root, SPACE, "report.md", b"text");
+	let start = std::sync::Barrier::new(8);
+
+	let mut landed: Vec<String> = std::thread::scope(|scope| {
+		let copies: Vec<_> = (0..8)
+			.map(|_| {
+				let (documents, root, start) = (&documents, &root, &start);
+				scope.spawn(move || {
+					start.wait();
+					copied(documents, root, "report.md")
+				})
+			})
+			.collect();
+		copies.into_iter().map(|copy| copy.join().expect("the duplicate ends")).collect()
+	});
+
+	landed.sort_unstable();
+	landed.dedup();
+	assert_eq!(landed.len(), 8);
+	for name in &landed {
+		assert_eq!(read(&root, name).expect("the copy reads").content, "text");
+	}
+	assert_eq!(read(&root, "report.md").expect("the original reads").content, "text");
+	assert_eq!(entries(&root).len(), 9);
+}
+
+#[tokio::test]
+async fn the_original_keeps_its_bytes_and_threads_and_the_copy_has_no_thread() {
+	let app = a_host("duplicate-untouched");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	let originals: [(&str, Vec<u8>); 3] = [
+		("report.md", b"# Launch ^head01\n".to_vec()),
+		("plan.canvas", A_BOARD.as_bytes().to_vec()),
+		("cover.png", picture(4, 4, 3)),
+	];
+	for (name, bytes) in &originals {
+		put(&root, &space_id, name, bytes);
+	}
+	library_comment_create(
+		app.handle().clone(),
+		Caller::Host,
+		app.state(),
+		space_id.clone(),
+		"report.md".to_owned(),
+		contract::LibraryCommentAnchor::Block { block_id: "head01".to_owned() },
+		"Tighten this".to_owned(),
+		Vec::new(),
+	)
+	.await
+	.expect("the thread opens");
+	let threads_of = |name: &str| {
+		library_comment_threads(
+			app.handle().clone(),
+			app.state(),
+			space_id.clone(),
+			name.to_owned(),
+		)
+	};
+
+	for (name, bytes) in &originals {
+		let copy = duplicated_by_the_host(&app, &space_id, name).await.expect("the copy lands");
+		let kept = fs::read(space_dir(&root, &space_id).join(name)).expect("the original reads");
+		assert_eq!(&kept, bytes, "{name}");
+		assert_eq!(threads_of(&copy.name).await.expect("the threads read"), [], "{name}");
+	}
+	assert_eq!(threads_of("report.md").await.expect("the threads read").len(), 1);
+}
+
+#[tokio::test]
+async fn a_landed_copy_is_announced_as_a_created_item_is() {
+	let app = a_host("duplicate-announced");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "report.md", b"text");
+	let heard = heard_changes(&app);
+
+	duplicated_by_the_host(&app, &space_id, "report.md").await.expect("the copy lands");
+
+	let announced = heard.recv_timeout(Duration::from_secs(5)).expect("the copy is announced");
+	assert_eq!(announced, LibraryChanged { space_id: space_id.clone(), overwritten: None });
+	assert!(heard.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn an_unknown_space_or_a_missing_item_is_refused_and_writes_nothing() {
+	let app = a_host("duplicate-refused");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "report.md", b"text");
+	let heard = heard_changes(&app);
+
+	let elsewhere = duplicated_by_the_host(&app, "nowhere", "report.md").await;
+	let missing = duplicated_by_the_host(&app, &space_id, "absent.md").await;
+
+	assert_eq!(elsewhere, Err(LibraryError::UnknownSpace { id: "nowhere".to_owned() }));
+	assert_eq!(missing, Err(LibraryError::Missing { name: "absent.md".to_owned() }));
+	let mut left: Vec<String> = fs::read_dir(space_dir(&root, &space_id))
+		.expect("the space folder reads")
+		.map(|entry| entry.expect("the entry reads").file_name().to_string_lossy().into_owned())
+		.collect();
+	left.sort();
+	assert_eq!(left, ["report.md"]);
+	assert!(!space_dir(&root, "nowhere").exists());
+	assert!(heard.try_recv().is_err());
+}
+
+#[test]
+fn a_copy_that_cannot_land_is_refused_and_leaves_no_staged_file() {
+	let root = temp_root();
+	let documents = Documents::default();
+	let longest = format!("{}.md", "a".repeat(252));
+	put(&root, SPACE, &longest, b"kept");
+
+	let refused = duplicated(&documents, &root, SPACE, &longest);
+
+	assert!(matches!(refused, Err(LibraryError::Unwritable { .. })), "{refused:?}");
+	assert_eq!(entries(&root), [longest.as_str()]);
+	assert_eq!(read(&root, &longest).expect("the original reads").content, "kept");
 }

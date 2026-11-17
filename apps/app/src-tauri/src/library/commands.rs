@@ -21,11 +21,11 @@ use super::presence::{seated_identity, share_presence, unseat_writer, Identity, 
 use super::url_import::{admission_for, import_url};
 use super::{
 	apply_update, clipboard_payload, clipboard_payload_of_bytes, comment_agent_turns,
-	comment_threads, create_board, create_document, delete_item, import, import_paths, list,
-	open_comment_thread, open_document, person_calling, read_document, read_file, read_image,
-	read_picked_image, read_thumbnail, rename_board, rename_linked_document, reopen_comment_thread,
-	reply_to_comment_thread, resolve, resolve_comment_thread, root, save, save_bytes, save_message,
-	summarise_board, templates, ClipboardPayload, Said,
+	comment_threads, create_board, create_document, delete_item, duplicate_item, import,
+	import_paths, list, open_comment_thread, open_document, person_calling, read_document,
+	read_file, read_image, read_picked_image, read_thumbnail, rename_board, rename_linked_document,
+	reopen_comment_thread, reply_to_comment_thread, resolve, resolve_comment_thread, root, save,
+	save_bytes, save_message, summarise_board, templates, ClipboardPayload, Said,
 };
 use crate::agent::commands::cancel_session_turn;
 use crate::agent::contract::CancelOutcome;
@@ -126,6 +126,18 @@ pub async fn library_create_board<R: Runtime>(
 ) -> Result<LibraryItem, LibraryError> {
 	known_space(&state, &space_id).await?;
 	create_board(&root(&app)?, &space_id, &name)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_duplicate<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	name: String,
+) -> Result<LibraryItem, LibraryError> {
+	known_space(&state, &space_id).await?;
+	duplicate_item(&app, &root(&app)?, &space_id, &name)
 }
 
 #[tauri::command]

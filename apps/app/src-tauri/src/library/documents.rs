@@ -14,8 +14,8 @@ use super::blocks::Splice;
 use super::contract::{LibraryDocumentFormat, LibraryError};
 use super::{
 	accepted_type, discarded, document_text, is_plain_name, is_the_item_itself,
-	linked_under_free_name, read_bytes, resolve, space_dir, stored_thumbnail, thumbnail_name,
-	thumbnails_dir, undecodable, unwritable, AcceptedType, ResolvedItem,
+	linked_under_free_name, numbered, read_bytes, resolve, space_dir, stored_thumbnail,
+	thumbnail_name, thumbnails_dir, undecodable, unwritable, AcceptedType, ResolvedItem,
 };
 use crate::board::{Board, BoardEdit};
 use crate::private_files;
@@ -288,6 +288,21 @@ impl Documents {
 		let file = held.located(root, space_id, name)?;
 		let doc = held.board_doc(root, space_id, &file, &self.board_write_hooks)?;
 		board::read(doc, &file.name)
+	}
+
+	pub(crate) fn content(
+		&self,
+		root: &Path,
+		space_id: &str,
+		name: &str,
+	) -> Result<Vec<u8>, LibraryError> {
+		let item = resolve(root, space_id, name)?;
+		match item.accepted {
+			AcceptedType::Board => {
+				board::canvas_of(&self.board(root, space_id, name)?, name).map(String::into_bytes)
+			}
+			AcceptedType::Document(_) | AcceptedType::Image { .. } => read_bytes(&item, name),
+		}
 	}
 
 	pub(crate) fn edit_board<T, E: From<LibraryError>>(
@@ -714,7 +729,7 @@ fn relinked(
 	new_name: &str,
 ) -> Result<String, LibraryError> {
 	let dir = space_dir(root, space_id);
-	let landed = linked_under_free_name(&item.path, &dir, new_name)?;
+	let landed = linked_under_free_name(&item.path, &dir, new_name, numbered)?;
 	if let Err(error) = moved_from(root, space_id, name, &landed, || fs::remove_file(&item.path)) {
 		discarded(&dir.join(&landed));
 		return Err(unwritable(error));
