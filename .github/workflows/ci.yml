@@ -302,6 +302,8 @@ jobs:
         run: |
           simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
           echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
+          echo "SIMULATOR_BOOTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          nohup scripts/ios-sampler.sh "$simulator" >> "$RUNNER_TEMP/ios-sampler.txt" 2>&1 &
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
 
       - name: Download the build products
@@ -323,6 +325,32 @@ jobs:
         run: |
           echo "::error title=Runner failure::This job ended before its first test started: no test failed."
           exit 1
+
+      - name: Upload the runner and simulator samples
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-sampler-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ios-sampler.txt
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
+
+      - name: Collect the simulator log
+        if: failure() && steps.gate.conclusion == 'failure'
+        timeout-minutes: 5
+        continue-on-error: true
+        run: xcrun simctl spawn "$SIMULATOR" log collect --start "@$SIMULATOR_BOOTED_AT" --output "$RUNNER_TEMP/ios-simulator.logarchive"
+
+      - name: Upload the simulator log
+        if: failure() && steps.gate.conclusion == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-simulator-log-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ios-simulator.logarchive
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
 
   verify:
     needs: [changes, lint, vitest, website, rust, storybook, ios-build, ios]
