@@ -55,6 +55,28 @@ if [ "$mergeable" = "CONFLICTING" ]; then
 	fail "PR #$number conflicts with $base, rebase it first"
 fi
 
+git fetch --quiet origin "$head_sha" "+refs/heads/$base:refs/remotes/origin/$base" "+refs/heads/main:refs/remotes/origin/main"
+is_catch_up=false
+for merge in $(git rev-list --merges "origin/$base..$head_sha"); do
+	for parent in $(git rev-list --no-walk --parents "$merge" | cut -d ' ' -f 2-); do
+		if git merge-base --is-ancestor "$parent" origin/main; then
+			is_catch_up=true
+		fi
+	done
+done
+
+if [ "$is_catch_up" = "true" ]; then
+	if ! git merge-base --is-ancestor "origin/$base" "$head_sha"; then
+		fail "PR #$number carries a merge of main but $base moved past it: run git merge origin/$base on $branch, push it, wait for its checks, then run scripts/pr-merge-integration.sh again"
+	fi
+	if ! git push origin "$head_sha:refs/heads/$base"; then
+		fail "PR #$number carries a merge of main and $base refused the fast-forward to $head_sha: if $base moved, run git merge origin/$base on $branch and push it, otherwise have a maintainer run git push origin $head_sha:refs/heads/$base, never a squash, a rebase merge or the merge button"
+	fi
+	state=$(gh pr view "$number" --repo "$REPOSITORY" --json state --jq '.state')
+	echo "pr-merge-integration.sh: PR #$number is $state, $base fast-forwarded to $head_sha"
+	exit 0
+fi
+
 gh pr merge "$number" --repo "$REPOSITORY" --squash --match-head-commit "$head_sha"
 state=$(gh pr view "$number" --repo "$REPOSITORY" --json state --jq '.state')
 if [ "$state" != "MERGED" ]; then

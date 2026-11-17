@@ -20,7 +20,14 @@ const REPOSITORY = "kiroshi-app/kiroshi-monorepo"
 
 const BRANCH = "feature/ope-1-fix"
 
-const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
+const BASE = "feature/home"
+
+const COMMITTER = {
+	GIT_AUTHOR_NAME: "Kiroshi",
+	GIT_AUTHOR_EMAIL: "ci@kiroshi.test",
+	GIT_COMMITTER_NAME: "Kiroshi",
+	GIT_COMMITTER_EMAIL: "ci@kiroshi.test",
+}
 
 const ARGUMENT_SEPARATOR = "\u001f"
 
@@ -60,6 +67,8 @@ if [ -n "$filter" ]; then jq -r "$filter" <<<"$response"; else echo "$response";
 
 let stub: string
 let repository: string
+let origin: string
+let headSha: string
 
 type CheckRun = {
 	__typename: "CheckRun"
@@ -78,6 +87,12 @@ type Check = CheckRun | StatusContext
 
 type Mergeable = "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 
+type History =
+	| "ordinary"
+	| "merge of its base"
+	| "catch-up"
+	| "catch-up behind its base"
+
 type Scenario = {
 	arguments?: string[]
 	branch?: string
@@ -87,6 +102,8 @@ type Scenario = {
 	checks?: Check[]
 	isMergeRefused?: boolean
 	stateAfterMerge?: string
+	history?: History
+	isPushRefused?: boolean
 }
 
 const completed = (name: string, conclusion: string): CheckRun => ({
@@ -131,7 +148,8 @@ const ghCalls = () => {
 
 const LIST = `pr list --repo ${REPOSITORY} --head ${BRANCH} --state open --json number`
 const READ_PULL_REQUEST = `pr view 42 --repo ${REPOSITORY} --json baseRefName,headRefOid,mergeable,statusCheckRollup`
-const MERGE = `pr merge 42 --repo ${REPOSITORY} --squash --match-head-commit ${HEAD_SHA}`
+const merge = () =>
+	`pr merge 42 --repo ${REPOSITORY} --squash --match-head-commit ${headSha}`
 const READ_STATE = `pr view 42 --repo ${REPOSITORY} --json state`
 
 const withoutGitContext = () => {
@@ -144,16 +162,75 @@ const withoutGitContext = () => {
 	return environment
 }
 
+const git = (directory: string, ...gitArguments: string[]) => {
+	const run = Bun.spawnSync({
+		cmd: ["git", "-C", directory, ...gitArguments],
+		env: { ...withoutGitContext(), ...COMMITTER },
+	})
+	if (run.exitCode !== 0) {
+		throw new Error(
+			`git ${gitArguments.join(" ")} failed: ${run.stderr.toString()}`,
+		)
+	}
+	return run.stdout.toString().trim()
+}
+
+const seedOrigin = (history: History) => {
+	const tree = git(origin, "mktree")
+	const commit = (message: string, ...parents: string[]) =>
+		git(
+			origin,
+			"commit-tree",
+			tree,
+			...parents.flatMap((parent) => ["-p", parent]),
+			"-m",
+			message,
+		)
+	const root = commit("root")
+	const feature = commit("feature", root)
+	const work = commit("work", feature)
+	const movedMain = commit("main moved", root)
+	const movedFeature = commit("feature moved", feature)
+	const catchUp = commit("merge main", work, movedMain)
+	const branches = {
+		ordinary: { base: feature, head: work },
+		"merge of its base": {
+			base: movedFeature,
+			head: commit("merge feature/home", work, movedFeature),
+		},
+		"catch-up": { base: feature, head: catchUp },
+		"catch-up behind its base": { base: movedFeature, head: catchUp },
+	}[history]
+	git(origin, "update-ref", "refs/heads/main", movedMain)
+	git(origin, "update-ref", `refs/heads/${BASE}`, branches.base)
+	git(origin, "update-ref", `refs/heads/${BRANCH}`, branches.head)
+	return branches
+}
+
+const originBaseHead = () => git(origin, "rev-parse", `refs/heads/${BASE}`)
+
 const runPrMergeIntegration = async ({
 	arguments: scriptArguments = [],
 	branch = BRANCH,
 	pullRequestNumbers = [42],
-	base = "feature/home",
+	base = BASE,
 	mergeable = "MERGEABLE",
 	checks = PASSING_CHECKS,
 	isMergeRefused = false,
 	stateAfterMerge = "MERGED",
+	history = "ordinary",
+	isPushRefused = false,
 }: Scenario) => {
+	const seeded = seedOrigin(history)
+	headSha = seeded.head
+	if (isPushRefused) {
+		const preReceive = join(origin, "hooks", "pre-receive")
+		writeFileSync(
+			preReceive,
+			`#!/bin/sh\necho "${BASE} is locked" >&2\nexit 1\n`,
+		)
+		chmodSync(preReceive, 0o755)
+	}
 	const initialised = Bun.spawnSync({
 		cmd: ["git", "init", "--quiet", "--initial-branch", branch, repository],
 		env: withoutGitContext(),
@@ -161,6 +238,7 @@ const runPrMergeIntegration = async ({
 	if (initialised.exitCode !== 0) {
 		throw new Error(`git init failed: ${initialised.stderr.toString()}`)
 	}
+	git(repository, "remote", "add", "origin", origin)
 	writeFileSync(
 		join(stub, "pull-requests.json"),
 		JSON.stringify(pullRequestNumbers.map((number) => ({ number }))),
@@ -169,7 +247,7 @@ const runPrMergeIntegration = async ({
 		join(stub, "pull-request.json"),
 		JSON.stringify({
 			baseRefName: base,
-			headRefOid: HEAD_SHA,
+			headRefOid: headSha,
 			mergeable,
 			statusCheckRollup: checks,
 		}),
@@ -191,6 +269,7 @@ const runPrMergeIntegration = async ({
 		stderr: "pipe",
 	})
 	return {
+		seededBase: seeded.base,
 		exitCode: await running.exited,
 		stdout: await new Response(running.stdout).text(),
 		stderr: await new Response(running.stderr).text(),
@@ -202,6 +281,8 @@ beforeEach(() => {
 	repository = mkdtempSync(
 		join(tmpdir(), "kiroshi-pr-merge-integration-repository-"),
 	)
+	origin = mkdtempSync(join(tmpdir(), "kiroshi-pr-merge-integration-origin-"))
+	git(origin, "init", "--quiet", "--bare")
 	mkdirSync(join(stub, "bin"))
 	writeFileSync(join(stub, "bin", "gh"), STUB_GH)
 	chmodSync(join(stub, "bin", "gh"), 0o755)
@@ -210,6 +291,7 @@ beforeEach(() => {
 afterEach(() => {
 	rmSync(stub, { recursive: true, force: true })
 	rmSync(repository, { recursive: true, force: true })
+	rmSync(origin, { recursive: true, force: true })
 })
 
 describe("scripts/pr-merge-integration.sh", () => {
@@ -220,7 +302,7 @@ describe("scripts/pr-merge-integration.sh", () => {
 		expect(result.stdout).toBe(
 			"pr-merge-integration.sh: PR #42 merged into feature/home\n",
 		)
-		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, MERGE, READ_STATE])
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, merge(), READ_STATE])
 	})
 
 	it("refuses a PR that has no check run at all, pointing at a base older than the feature/** trigger, and merges nothing", async () => {
@@ -303,7 +385,7 @@ describe("scripts/pr-merge-integration.sh", () => {
 		expect(result.stderr).toBe(
 			"pr-merge-integration.sh: PR #42 is OPEN after gh pr merge --squash\n",
 		)
-		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, MERGE, READ_STATE])
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, merge(), READ_STATE])
 	})
 
 	it("fails with the refusal of gh and reads nothing back when gh refuses the merge", async () => {
@@ -311,7 +393,7 @@ describe("scripts/pr-merge-integration.sh", () => {
 
 		expect(result.exitCode).not.toBe(0)
 		expect(result.stderr).toBe("GraphQL: head commit moved\n")
-		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, MERGE])
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, merge()])
 	})
 
 	it("fails naming the branch and merges nothing when the branch has no open PR", async () => {
@@ -332,6 +414,66 @@ describe("scripts/pr-merge-integration.sh", () => {
 			`pr-merge-integration.sh: branch ${BRANCH} has several open PRs: 42 43\n`,
 		)
 		expect(ghCalls()).toEqual([LIST])
+	})
+
+	it("fast-forwards the base to a catch-up of main, keeping both parents of the merge, reads the state back and squashes nothing", async () => {
+		const result = await runPrMergeIntegration({ history: "catch-up" })
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(
+			`pr-merge-integration.sh: PR #42 is MERGED, ${BASE} fast-forwarded to ${headSha}\n`,
+		)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, READ_STATE])
+		const [baseHead, ...parents] = git(
+			origin,
+			"rev-list",
+			"--parents",
+			"-n",
+			"1",
+			BASE,
+		).split(" ")
+		expect(baseHead).toBe(headSha)
+		expect(parents).toHaveLength(2)
+	})
+
+	it("refuses a catch-up whose base moved past it, printing the merge of the base to run, and pushes nothing", async () => {
+		const result = await runPrMergeIntegration({
+			history: "catch-up behind its base",
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toBe(
+			`pr-merge-integration.sh: PR #42 carries a merge of main but ${BASE} moved past it: run git merge origin/${BASE} on ${BRANCH}, push it, wait for its checks, then run scripts/pr-merge-integration.sh again\n`,
+		)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST])
+		expect(originBaseHead()).toBe(result.seededBase)
+	})
+
+	it("fails with the refusal of git and the manual path when the fast-forward push is refused, and squashes nothing", async () => {
+		const result = await runPrMergeIntegration({
+			history: "catch-up",
+			isPushRefused: true,
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toContain(`${BASE} is locked`)
+		expect(result.stderr).toContain("[remote rejected]")
+		expect(result.stderr).toEndWith(
+			`pr-merge-integration.sh: PR #42 carries a merge of main and ${BASE} refused the fast-forward to ${headSha}: if ${BASE} moved, run git merge origin/${BASE} on ${BRANCH} and push it, otherwise have a maintainer run git push origin ${headSha}:refs/heads/${BASE}, never a squash, a rebase merge or the merge button\n`,
+		)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST])
+		expect(originBaseHead()).toBe(result.seededBase)
+	})
+
+	it("squash-merges a sub-PR that merged its base but not main, as before, and pushes nothing", async () => {
+		const result = await runPrMergeIntegration({ history: "merge of its base" })
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(
+			`pr-merge-integration.sh: PR #42 merged into ${BASE}\n`,
+		)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, merge(), READ_STATE])
+		expect(originBaseHead()).toBe(result.seededBase)
 	})
 
 	it("refuses to run on main and calls gh not at all", async () => {
