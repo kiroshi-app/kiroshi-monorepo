@@ -2,6 +2,7 @@ const bots = {
 	roster: {
 		label: "Conversations",
 		create: "Créer un agent",
+		createFailed: "Impossible de créer l’agent. Réessayez.",
 		createMenu: "Créer",
 		conversation: {
 			create: "Démarrer une conversation",
@@ -39,6 +40,7 @@ const bots = {
 		openInNewTab: "Ouvrir dans un nouvel onglet",
 		settings: "Ouvrir les réglages",
 		duplicate: "Dupliquer",
+		duplicateFailed: "Impossible de dupliquer cet agent. Réessayez.",
 		spaces: {
 			label: "Espaces",
 			lastSpace:
@@ -91,6 +93,7 @@ const bots = {
 		label: "Navigation",
 		home: "Accueil",
 		newConversation: "Nouveau",
+		agents: "Agents",
 		conversations: "Conversations",
 		missions: "Missions",
 		library: "Bibliothèque",
@@ -121,6 +124,9 @@ const bots = {
 			up: "En ligne",
 			connecting: "Connexion…",
 			down: "Non connecté",
+		},
+		add: {
+			failed: "Impossible d’ajouter cet agent à l’espace. Réessayez.",
 		},
 		remove: {
 			lastSpace: "Un agent a besoin d’au moins un espace.",

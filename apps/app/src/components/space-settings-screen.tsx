@@ -10,17 +10,12 @@ import {
 	MembersPanel,
 	type MembersPanelProps,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
-import {
-	COMPANIONS_ENTRY,
-	SPACE_ENTRY,
-} from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import { SPACE_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
 import { openedServerScope } from "@/lib/applications/application-settings"
 import type { AccountState, JoinedSpace } from "@/lib/bindings"
-import { toCompanionSummary } from "@/lib/bots/bot-settings"
-import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import type { HostedSpace } from "@/lib/host/hosting-transport"
 import { useHosting } from "@/lib/host/use-hosting"
@@ -40,7 +35,6 @@ import {
 } from "@/lib/spaces/use-left-space-notice"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
@@ -109,7 +103,6 @@ type SpaceSettingsScreenProps = {
 	page: ShownSpacePage
 	panels: SettingsPanels
 	rosterLines: RosterLines
-	rosterView: RosterView
 	scopes: ApplicationScopes
 	search: SettingsSearch
 	spaceId: string
@@ -124,7 +117,6 @@ export const SpaceSettingsScreen = ({
 	page,
 	panels,
 	rosterLines,
-	rosterView,
 	scopes,
 	search,
 	spaceId,
@@ -159,9 +151,6 @@ export const SpaceSettingsScreen = ({
 		isHostOffline,
 		isSignedOut: isSignedOutOf(account.state),
 	})
-	const countsOf = useCompanionCounts(
-		search.entry === COMPANIONS_ENTRY && isCurrent ? ownedSpace?.id : undefined,
-	)
 	useLeftSpaceNotice(
 		joinedSpaces.controller,
 		joinedSpace && leftSpaceOf(joinedSpace, joinedSpaces.controller),
@@ -173,9 +162,6 @@ export const SpaceSettingsScreen = ({
 		selectSpace: rosterLines.sidebarActions.onSelectSpace,
 		openConversations: navigation.openConversations,
 	})
-
-	const openCompanion = (id: string) =>
-		navigation.openCompanionSettings(id, { isFromSpaceSettings: true })
 
 	const hostingProps = hosting
 		? { ...hosting, onSignIn: openAccountSettings }
@@ -226,15 +212,6 @@ export const SpaceSettingsScreen = ({
 		onValueChange: (value: SpaceSettingsValue) =>
 			spaces.controller.describe(spaceId, value),
 		...spaceSkills,
-		companions: {
-			companions: isCurrent
-				? rosterView.bots.map((bot) =>
-						toCompanionSummary(bot, countsOf(bot.id)),
-					)
-				: [],
-			onSelect: openCompanion,
-			onCreate: rosterLines.sidebarActions.onCreateBot,
-		},
 	}
 
 	if (page.state === "invitation") {

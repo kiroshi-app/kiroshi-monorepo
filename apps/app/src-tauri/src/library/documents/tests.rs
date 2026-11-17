@@ -78,9 +78,12 @@ fn applied(documents: &Documents, root: &Path, update: &[u8]) {
 fn recording() -> (Documents, Replaced) {
 	let replaced = Replaced::default();
 	let heard = Arc::clone(&replaced);
-	let documents = Documents::new(move |space_id, name| {
-		heard.lock().expect("the record locks").push((space_id.to_owned(), name.to_owned()));
-	});
+	let documents = Documents::new(
+		move |space_id, name| {
+			heard.lock().expect("the record locks").push((space_id.to_owned(), name.to_owned()));
+		},
+		|_, _, _| {},
+	);
 	(documents, replaced)
 }
 

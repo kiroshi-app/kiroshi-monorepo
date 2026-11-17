@@ -391,6 +391,7 @@ const useExpandedRows = ({ conversations, sections }: ExpandedRowsSource) => {
 		shiftOf: drag.isLifting ? drag.rowShiftOf : NO_SHIFT,
 		spaceId,
 		spaces: NO_SPACES,
+		wrapMission: sidebarMissions.wrapSidebarRow,
 	}
 
 	const { rowsOf, sortedConversations, topLevel } = entries

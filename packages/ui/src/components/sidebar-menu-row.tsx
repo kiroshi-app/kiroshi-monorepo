@@ -1,11 +1,12 @@
 "use client"
 
-import type {
-	AriaAttributes,
-	ComponentProps,
-	HTMLAttributes,
-	MouseEvent,
-	ReactNode,
+import {
+	type AriaAttributes,
+	type ComponentProps,
+	type HTMLAttributes,
+	type MouseEvent,
+	type ReactNode,
+	useRef,
 } from "react"
 
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
@@ -50,8 +51,28 @@ const NAVIGATION_ICON_SLOT =
 const NAVIGATION_LABEL =
 	"text-soft-foreground group-data-active/menu-button:text-foreground"
 
+const COMPACT_ROW = cn(
+	NAVIGATION_ROW,
+	"text-muted-foreground hover:text-sidebar-foreground data-active:text-sidebar-foreground",
+)
+
 const LABEL_SLOT =
 	"min-w-0 flex-1 truncate group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:flex-none"
+
+const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
+
+const GAP_PAST_SIDEBAR_EDGE = 4
+
+const offsetPastSidebarEdge = (row: HTMLElement | null) => {
+	const sidebar = row?.closest(SIDEBAR_BOX)
+	if (!row || !sidebar) return GAP_PAST_SIDEBAR_EDGE
+
+	return (
+		sidebar.getBoundingClientRect().right -
+		row.getBoundingClientRect().right +
+		GAP_PAST_SIDEBAR_EDGE
+	)
+}
 
 type SidebarClickModifiers = ClickModifiers
 
@@ -61,7 +82,23 @@ type SidebarMenuRowElementProps = AriaAttributes &
 		"onPointerCancel" | "onPointerDown" | "onPointerMove" | "onPointerUp"
 	>
 
-type SidebarMenuRowVariant = "row" | "navigation"
+type SidebarMenuRowVariant = "row" | "navigation" | "compact"
+
+type VariantClasses = {
+	row?: string
+	iconSlot: string
+	label?: string
+}
+
+const VARIANT: Record<SidebarMenuRowVariant, VariantClasses> = {
+	row: { iconSlot: ICON_SLOT },
+	navigation: {
+		row: NAVIGATION_ROW,
+		iconSlot: NAVIGATION_ICON_SLOT,
+		label: NAVIGATION_LABEL,
+	},
+	compact: { row: COMPACT_ROW, iconSlot: NAVIGATION_ICON_SLOT },
+}
 
 interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	label: string
@@ -73,6 +110,8 @@ interface SidebarMenuRowProps extends SidebarMenuRowElementProps {
 	isIconDecorative?: boolean
 	isActive?: boolean
 	isMiddleClickSelectable?: boolean
+	hasRowTooltip?: boolean
+	isTooltipHidden?: boolean
 	onSelect?: (modifiers: SidebarClickModifiers) => void
 	className?: string
 	render?: ComponentProps<typeof SidebarMenuButton>["render"]
@@ -88,14 +127,17 @@ const SidebarMenuRow = ({
 	isIconDecorative = true,
 	isActive = false,
 	isMiddleClickSelectable = false,
+	hasRowTooltip = false,
+	isTooltipHidden = false,
 	onSelect,
 	className,
 	render,
 	...elementProps
 }: SidebarMenuRowProps) => {
 	const { isMobile, setOpenMobile, state } = useSidebar()
+	const rowRef = useRef<HTMLButtonElement>(null)
 	const isCollapsed = !isMobile && state === "collapsed"
-	const isNavigation = variant === "navigation"
+	const classes = VARIANT[variant]
 
 	const select = (event: MouseEvent) => {
 		onSelect?.(modifiersOf(event))
@@ -107,15 +149,12 @@ const SidebarMenuRow = ({
 			{icon ? (
 				<span
 					aria-hidden={isIconDecorative || undefined}
-					className={isNavigation ? NAVIGATION_ICON_SLOT : ICON_SLOT}
+					className={classes.iconSlot}
 				>
 					{icon}
 				</span>
 			) : null}
-			<span
-				aria-hidden={isCollapsed}
-				className={cn(LABEL_SLOT, isNavigation && NAVIGATION_LABEL)}
-			>
+			<span aria-hidden={isCollapsed} className={cn(LABEL_SLOT, classes.label)}>
 				{children}
 			</span>
 			{trailing}
@@ -131,13 +170,14 @@ const SidebarMenuRow = ({
 				ROW,
 				icon && ROW_WITH_ICON,
 				below && ROW_STACKED,
-				isNavigation && NAVIGATION_ROW,
+				classes.row,
 				className,
 			)}
 			data-slot="sidebar-menu-button"
 			{...(isMiddleClickSelectable ? middleClickHandlers(select) : {})}
 			isActive={isActive}
 			onClick={select}
+			ref={rowRef}
 			render={render}
 		>
 			{below ? (
@@ -153,8 +193,19 @@ const SidebarMenuRow = ({
 		</SidebarMenuButton>
 	)
 
+	if (!hasRowTooltip)
+		return (
+			<TooltipHint content={isCollapsed ? label : null} side="right">
+				{row}
+			</TooltipHint>
+		)
+
 	return (
-		<TooltipHint content={isCollapsed ? label : null} side="right">
+		<TooltipHint
+			content={isTooltipHidden ? null : label}
+			side="right"
+			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
+		>
 			{row}
 		</TooltipHint>
 	)
@@ -162,6 +213,7 @@ const SidebarMenuRow = ({
 
 export {
 	NO_CLICK_MODIFIERS,
+	offsetPastSidebarEdge,
 	SIDEBAR_AVATAR_SIDE,
 	SIDEBAR_COLUMN,
 	SIDEBAR_GLYPH_BOX,

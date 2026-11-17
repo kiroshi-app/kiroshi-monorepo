@@ -12,6 +12,7 @@ import type {
 } from "@workspace/ui/components/bot-badge"
 import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identity-avatar"
 import type { ConversationParticipant } from "@workspace/ui/components/conversation-bot-pile"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import type { SidebarClickModifiers } from "@workspace/ui/components/sidebar-menu-row"
@@ -90,6 +91,7 @@ interface AppSidebarConversation {
 	missions?: AppSidebarRowMission[]
 	icon?: string
 	color?: number | null
+	naming?: ConversationNaming
 }
 
 const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"

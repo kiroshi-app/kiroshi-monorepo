@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   pull-requests: read
 

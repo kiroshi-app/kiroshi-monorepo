@@ -71,6 +71,18 @@ describe("the face of a tab", () => {
 		},
 	)
 
+	it.each(["pending", "arrived", "failed"] as const)(
+		"carries the %s naming of a room to its tab",
+		(naming) => {
+			const face = tabFaceOf("/?conversation=room", {
+				...SOURCES,
+				conversations: [{ ...ROOM, naming }],
+			})
+
+			expect(face.naming).toBe(naming)
+		},
+	)
+
 	it("draws the glyph of a room with a colour in that hue, with no tile, and follows a change of colour", () => {
 		const iconAt = (color: number) =>
 			rootOf(
@@ -164,6 +176,15 @@ describe("the face of a tab", () => {
 
 		expect(face.title).toBe(i18n.t("bots:rail.newConversation"))
 		expect(markupOf(face.icon)).toBe(plusGlyph)
+	})
+
+	it("draws the Companions icon and the Agents name for the Agents page", () => {
+		const face = tabFaceOf("/agents", SOURCES)
+		const companionsGlyph = markupOf(createElement(Icons.Companions))
+		cleanup()
+
+		expect(face.title).toBe(i18n.t("bots:rail.agents"))
+		expect(markupOf(face.icon)).toBe(companionsGlyph)
 	})
 
 	it("draws the Library icon and the Library name for the Library page", () => {

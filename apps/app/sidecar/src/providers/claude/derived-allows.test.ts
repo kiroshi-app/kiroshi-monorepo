@@ -7,6 +7,7 @@ import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
 import { BUNDLE_WRITE_TOOL_NAME } from "./bundle-tools"
+import { commentTools } from "./comment-tools"
 import { libraryTools } from "./document-tools"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { KIROSHI_SERVER } from "./kiroshi-server"
@@ -112,6 +113,23 @@ describe("derived allows", () => {
 
 		expect(names).toHaveLength(28)
 		expect(names).toContain("screenshot")
+		for (const name of names) {
+			expect(settled(permissions, `mcp__${KIROSHI_SERVER}__${name}`)).toBe(
+				"allow",
+			)
+		}
+	})
+
+	it("settles the three comment tool calls as allow by a rule, before any classifier step", () => {
+		const options = buildOptions(requestFor(), undefined, undefined, {
+			servers: { kiroshi: server },
+			rejections: [],
+		})
+		const permissions = (options.settings as Settings).permissions
+
+		const names = commentTools(undefined).map((held) => held.name)
+
+		expect(names).toEqual(["comment_list", "comment_read", "comment_reply"])
 		for (const name of names) {
 			expect(settled(permissions, `mcp__${KIROSHI_SERVER}__${name}`)).toBe(
 				"allow",

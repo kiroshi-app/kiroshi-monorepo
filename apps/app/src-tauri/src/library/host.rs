@@ -12,9 +12,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{watch, OwnedMutexGuard};
 
-use super::blocks::{
-	self, backfill, blocks_of, preview, removal, separated, Block, BlockKind, Splice,
-};
+use super::blocks::{self, blocks_of, preview, removal, separated, Block, BlockKind, Splice};
 use super::canvas::board_holds;
 use super::contract::{
 	LibraryBoardPoint, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
@@ -23,10 +21,11 @@ use super::contract::{
 use super::documents::{carets_at, text_of_state, BoardTarget, RemoveStep, WriteStep};
 use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Seated};
 use super::{
-	a_document, announce, announce_change, create_board, create_document, delete_item,
-	document_text, documents, encoded_content, import_path, item_at, list, overwrite_path,
-	read_document, rename_linked_document, resolve, root, space_dir, AcceptedType,
-	OverwriteRefusal,
+	a_document, announce, announce_change, briefed_comment_thread, create_board, create_document,
+	delete_item, document_text, documents, encoded_content, import_path, item_at, list,
+	listed_comment_threads, marked, opened_state, overwrite_path, read_document,
+	rename_linked_document, reply_to_comment_thread, resolve, root, space_dir, AcceptedType,
+	OverwriteRefusal, Said,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
@@ -38,6 +37,7 @@ use crate::board::{
 use crate::conversations::commands::{post_document, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db::repositories::keyset::{self, Keyset};
+use crate::db::repositories::library::ThreadOfItem;
 use crate::{db, events};
 use screenshot::{render, Rendered, Scale, ScreenshotBlock, ScreenshotTarget, Shot};
 
@@ -192,6 +192,9 @@ pub enum Operation {
 	BoardFind,
 	BoardView,
 	Screenshot,
+	CommentList,
+	CommentRead,
+	CommentReply,
 }
 
 #[derive(Debug, Deserialize)]
@@ -337,6 +340,21 @@ struct BlockNamed {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ThreadNamed {
+	name: String,
+	thread_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ThreadReplied {
+	name: String,
+	thread_id: String,
+	text: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BlocksInserted {
 	name: String,
 	after: Option<String>,
@@ -401,6 +419,13 @@ enum ItemRead {
 #[serde(rename_all = "camelCase")]
 struct Deleted {
 	name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommentReplied {
+	thread_id: String,
+	comments: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -637,11 +662,7 @@ impl<R: Runtime> LibraryHost<R> {
 	}
 
 	fn opened(&self, root: &Path, space_id: &str, name: &str) -> Result<Outline, LibraryError> {
-		let opened = documents(&self.app).open(root, space_id, name)?;
-		if let Some(host_edit) = opened.host_edit {
-			announce(&self.app, space_id, name, &host_edit);
-		}
-		Outline::of(opened.state, name)
+		Outline::of(opened_state(&self.app, root, space_id, name)?, name)
 	}
 
 	fn outline(
@@ -656,12 +677,9 @@ impl<R: Runtime> LibraryHost<R> {
 		for id in wanted {
 			outline.index_of(id)?;
 		}
-		if backfill(&outline.text).is_empty() {
+		if !marked(&self.app, root, space_id, name, client_id_of(&agent.id), &outline.text)? {
 			return Ok(outline);
 		}
-		let writer = client_id_of(&agent.id);
-		let applied = documents(&self.app).spliced(root, space_id, name, writer, backfill)?;
-		announce(&self.app, space_id, &applied.name, &applied.change);
 		Ok(self.opened(root, space_id, name)?)
 	}
 
@@ -829,7 +847,7 @@ impl<R: Runtime> Host for LibraryHost<R> {
 			}
 			Operation::Delete => {
 				let asked: Named = Self::read(payload)?;
-				delete_item(&self.app, &root, &space_id, &asked.name)?;
+				delete_item(&self.app, database, &root, &space_id, &asked.name).await?;
 				Self::answered(Deleted { name: asked.name })
 			}
 			Operation::PostDocument => {
@@ -1043,6 +1061,27 @@ impl<R: Runtime> Host for LibraryHost<R> {
 						Self::answered(self.document_shot(database, &root, &space_id, asked).await?)
 					}
 				}
+			}
+			Operation::CommentList => {
+				let Named { name } = Self::read(payload)?;
+				let listed = listed_comment_threads(&self.app, database, &root, &space_id, &name);
+				Self::answered(listed.await?)
+			}
+			Operation::CommentRead => {
+				let ThreadNamed { name, thread_id } = Self::read(payload)?;
+				let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+				Self::answered(briefed_comment_thread(&self.app, database, &root, thread).await?)
+			}
+			Operation::CommentReply => {
+				let ThreadReplied { name, thread_id, text } = Self::read(payload)?;
+				let said = Said::by_the_agent(self.agent(database).await?.id, text);
+				let thread = ThreadOfItem { space_id, item_name: name, id: thread_id };
+				let replied =
+					reply_to_comment_thread(&self.app, database, &root, thread, said).await?;
+				Self::answered(CommentReplied {
+					thread_id: replied.id,
+					comments: replied.comments.len(),
+				})
 			}
 		}
 	}
@@ -1546,6 +1585,10 @@ async fn turn_of<'a, R: Runtime>(
 	let queue = writes(app).held().entry(key).or_default().clone();
 	let held = queue.lock_owned().await;
 	Turn { _held: held, enlisted }
+}
+
+pub(crate) fn is_agent_on<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str) -> bool {
+	writes(app).writing().keys().any(|(space, document, _)| space == space_id && document == name)
 }
 
 pub(crate) async fn stop_writers<R: Runtime>(

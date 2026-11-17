@@ -13,6 +13,7 @@ import {
 import {
 	handlersFor,
 	LIBRARY_BAR,
+	type LibraryBarComments,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	type LibraryMenuSubject,
@@ -47,6 +48,7 @@ type GrowingFieldProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 	value: string
 	placeholder?: string
 	hint?: string
+	passages?: ReactNode
 	className: string
 	fieldClassName: string
 	fieldRef?: Ref<HTMLTextAreaElement>
@@ -56,6 +58,7 @@ const GrowingField = ({
 	value,
 	placeholder,
 	hint,
+	passages,
 	className,
 	fieldClassName,
 	fieldRef,
@@ -81,6 +84,14 @@ const GrowingField = ({
 				/>
 			</span>
 		) : null}
+		{passages ? (
+			<span
+				aria-hidden="true"
+				className="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap text-transparent"
+			>
+				{passages}
+			</span>
+		) : null}
 		<textarea
 			className={cn(
 				"col-start-1 row-start-1 resize-none overflow-hidden bg-transparent outline-none",
@@ -101,6 +112,7 @@ type LibraryDocumentBarProps<Item extends LibraryMenuSubject> =
 		onBack: () => void
 		presence?: ReactNode
 		isReadOnly?: boolean
+		comments?: LibraryBarComments
 		menuFinalFocus?: () => HTMLElement | boolean
 	}
 
@@ -123,6 +135,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 	onBack,
 	presence,
 	isReadOnly = false,
+	comments,
 	menuFinalFocus,
 	...actions
 }: LibraryDocumentBarProps<Item>) => {
@@ -156,6 +169,7 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 			</nav>
 			<LibraryItemBarActions
 				actions={handlersFor(actions, item)}
+				comments={comments}
 				item={item}
 				leading={
 					<>
@@ -268,6 +282,7 @@ type LibraryDocumentViewProps = WriterActions &
 		writers?: LibraryDocumentWriter[]
 		onStopAll?: () => void
 		resolveImage?: ResolveImage
+		comments?: LibraryBarComments
 	}
 
 const LibraryDocumentView = ({

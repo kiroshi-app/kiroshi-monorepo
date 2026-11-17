@@ -38,13 +38,13 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
-use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::events::{self, CallOrigin, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
 use crate::library::host::LibraryHost;
 use crate::logging;
 use crate::mcp_oauth::refresh;
-use crate::mcp_oauth::reports::StandingHost;
+use crate::mcp_oauth::reports::{ApplicationReports, StandingHost};
 use crate::missions::commands::announce_thread_moved;
 use crate::missions::contract::LivenessSigns;
 use crate::missions::host::MissionHost;
@@ -84,6 +84,12 @@ fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
 	}
 }
 
+fn announce_answered<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent, by: &CallOrigin) {
+	if let Err(failure) = events::emit_from(app, AGENT_EVENT, scoped, Some(by)) {
+		log::warn!("an answered question was not announced: {failure}");
+	}
+}
+
 pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
 	app: &AppHandle<R>,
 ) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
@@ -91,7 +97,18 @@ pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
 		return (Vec::new(), events::subscribed(app));
 	};
 	let (pending, heard) = state.live.questions_pending_at(|| events::subscribed(app));
-	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
+	(framed_questions(pending), heard)
+}
+
+pub(crate) fn pending_question_frames<R: Runtime>(app: &AppHandle<R>) -> Vec<Frame> {
+	let Some(state) = app.try_state::<AgentState>() else {
+		return Vec::new();
+	};
+	framed_questions(state.live.pending_questions())
+}
+
+fn framed_questions(pending: Vec<PendingQuestion>) -> Vec<Frame> {
+	pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect()
 }
 
 fn framed_question(asked: ScopedEvent) -> Option<Frame> {
@@ -130,6 +147,7 @@ struct PendingQuestion {
 	scope: RuntimeScope,
 	turn: Option<EventTurn>,
 	request: QuestionRequest,
+	answered_by: Option<CallOrigin>,
 }
 
 impl PendingQuestion {
@@ -212,9 +230,22 @@ impl<S> Live<S> {
 		self.questions.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn release_question(&self, scope: &RuntimeScope, id: &str) {
+	fn release_question(&self, scope: &RuntimeScope, id: &str) -> Option<CallOrigin> {
 		self.questions()
-			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
+			.extract_if(.., |question| question.asked_by(scope) && question.request.id == id)
+			.collect::<Vec<_>>()
+			.into_iter()
+			.find_map(|question| question.answered_by)
+	}
+
+	fn note_answerer(&self, scope: &RuntimeScope, id: &str, answerer: Option<CallOrigin>) {
+		let mut questions = self.questions();
+		let asked = questions
+			.iter_mut()
+			.find(|question| question.asked_by(scope) && question.request.id == id);
+		if let Some(asked) = asked {
+			asked.answered_by = answerer;
+		}
 	}
 
 	fn drop_questions(&self, scope: &RuntimeScope) -> Vec<PendingQuestion> {
@@ -305,17 +336,19 @@ impl<S> Live<S> {
 		}
 	}
 
-	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
-		let asked = self
-			.questions()
+	fn thread_question(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.questions()
 			.iter()
 			.find(|question| question.scope.conversation_id == conversation_id)
 			.map(|question| PendingPrompt {
 				prompt_id: question.request.id.clone(),
 				kind: PendingPromptKind::Question,
 				text: question.request.text(),
-			});
-		asked.or_else(|| {
+			})
+	}
+
+	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.thread_question(conversation_id).or_else(|| {
 			let runs = self.runs();
 			let mut in_thread: Vec<&Run<S>> =
 				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
@@ -415,6 +448,10 @@ impl<S: Clone> Live<S> {
 			.collect()
 	}
 
+	fn sessions(&self) -> Vec<RunKey> {
+		self.runs.lock().expect("live runs").keys().cloned().collect()
+	}
+
 	fn live_runs(&self) -> Vec<RuntimeScope> {
 		self.runs
 			.lock()
@@ -474,12 +511,16 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		}
 		let moves_the_thread = self.live.moved_by(&self.scope, &event);
 		if let AgentEvent::QuestionRequested { request } = &event {
-			let asked =
-				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
+			let asked = PendingQuestion {
+				scope: self.scope.clone(),
+				turn,
+				request: request.clone(),
+				answered_by: None,
+			};
 			self.live.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
 			return retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
-		self.release_questions_settled_by(&event);
+		let answered_by = self.release_questions_settled_by(&event);
 		if moves_the_thread {
 			retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
@@ -488,7 +529,11 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		}
 		let pending_write = matches!(event, AgentEvent::TurnEnded { .. })
 			.then(|| self.pending_writes.register(&self.scope.bot_id));
-		announce_in_turn(&self.app, Some(self.scope.clone()), turn, event);
+		let scoped = ScopedEvent { scope: Some(self.scope.clone()), turn, event };
+		match answered_by {
+			Some(by) => announce_answered(&self.app, scoped, &by),
+			None => announce_scoped(&self.app, scoped),
+		}
 		if let Some(pending_write) = pending_write {
 			self.record_writes(pending_write);
 		}
@@ -504,11 +549,14 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 }
 
 impl<R: Runtime> RunSink<R> {
-	fn release_questions_settled_by(&self, event: &AgentEvent) {
+	fn release_questions_settled_by(&self, event: &AgentEvent) -> Option<CallOrigin> {
 		match prompts_settled_by(event) {
 			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
-			Some(SettledPrompts::Every) => self.drop_questions(),
-			None => {}
+			Some(SettledPrompts::Every) => {
+				self.drop_questions();
+				None
+			}
+			None => None,
 		}
 	}
 
@@ -803,6 +851,14 @@ impl AgentState {
 
 	pub(crate) fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
 		self.live.thread_prompt(conversation_id)
+	}
+
+	pub(crate) fn thread_question(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.live.thread_question(conversation_id)
+	}
+
+	pub(crate) fn live_sessions(&self) -> Vec<String> {
+		self.live.sessions()
 	}
 
 	pub fn live_session_count(&self) -> usize {
@@ -1310,6 +1366,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		attachments.clone(),
 		announcing,
 	));
+	let opened = app.try_state::<ApplicationReports>().map(|reports| reports.opening());
 	let identity = match runtime_identity(&app, database, &scope, &sidecar).await {
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
@@ -1341,6 +1398,7 @@ pub(crate) async fn start_run<R: Runtime>(
 			app.clone(),
 			scope.bot_id.clone(),
 			Some(identity.space_id),
+			opened,
 		)))
 		.hosting(hosted(ApplicationHost::new(
 			app.clone(),
@@ -1719,12 +1777,14 @@ pub async fn agent_respond_to_permission(
 #[specta::specta]
 pub async fn agent_answer_question(
 	state: State<'_, AgentState>,
+	caller: Caller,
 	scope: RuntimeScope,
 	id: String,
 	answers: HashMap<String, String>,
 	annotations: Option<JsonValue>,
 ) -> Result<(), TransportError> {
 	let annotations = annotations.map(JsonValue::into);
+	state.live.note_answerer(&scope, &id, caller.origin());
 	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
 }
 
@@ -1806,12 +1866,10 @@ async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeS
 		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
 	let session = scope.runtime_session_id.clone();
-	match database.conversations().release_prompts_of_session(session).await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
-		Err(failure) => {
-			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
-		}
+	if let Err(failure) = database.conversations().release_prompts_of_session(session).await {
+		log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}");
 	}
+	conversation_state::observe_reporting(app, database, conversation).await;
 }
 
 async fn release_orphan_prompts<R: Runtime>(
@@ -1828,12 +1886,10 @@ async fn release_orphan_prompts<R: Runtime>(
 		live_sessions,
 		asked_before,
 	);
-	match released.await {
-		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
-		Err(failure) => {
-			log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}")
-		}
+	if let Err(failure) = released.await {
+		log::warn!("the orphan prompts of conversation {conversation} stay: {failure:?}");
 	}
+	conversation_state::observe_reporting(app, database, conversation).await;
 }
 
 pub async fn terminate_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
@@ -3313,6 +3369,32 @@ mod tests {
 			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
 		}
 
+		#[tokio::test]
+		async fn a_pending_question_a_dead_process_left_answers_neither_needs_you_nor_a_question() {
+			let asked = PendingPrompt {
+				runtime_session_id: a_scope().runtime_session_id,
+				prompt_id: "q1".to_owned(),
+				..a_pending_prompt("c1", PromptKind::Question)
+			};
+			let app = an_app_storing("pending-dead-process", vec![asked]).await;
+			a_run_held_by_the_app(app.handle(), a_scope()).emit(question("q1"), the_turn());
+
+			app.state::<AgentState>().live.clear_all();
+			let database = bot_database(app.handle()).expect("the database opens");
+			let observed = conversation_state::observe(app.handle(), database, "c1")
+				.await
+				.expect("the state reads");
+			let questions = pending_in(app.handle(), "c1").await;
+
+			assert_eq!(stored_prompts(&app).await, 1, "the dead process released its rows");
+			assert_eq!(
+				(observed.state == ConversationState::NeedsYou, observed.pending_prompt),
+				(!questions.is_empty(), None),
+				"the state and the question read disagree"
+			);
+			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+		}
+
 		fn another_bot_in_the_room() -> RuntimeScope {
 			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r9".into(), ..a_scope() }
 		}
@@ -3346,10 +3428,9 @@ mod tests {
 
 			assert_eq!(stored_sessions(&app).await, ["r9"]);
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
-			assert_eq!(
-				*heard.lock().expect("the list is kept"),
-				[serde_json::json!("needs_you")],
-				"the pending prompt moved to the live bot's one, the state stayed"
+			assert!(
+				heard.lock().expect("the list is kept").is_empty(),
+				"the dead prompts were never shown, so the live bot's one stayed"
 			);
 		}
 

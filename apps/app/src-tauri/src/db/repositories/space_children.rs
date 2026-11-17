@@ -54,7 +54,8 @@ impl SpaceChildrenRepository {
 				Ok(connection
 					.prepare_cached(
 						"SELECT EXISTS (SELECT 1 FROM conversations
-							WHERE id = ?1 AND space_id = ?2 AND (owner IS NULL OR owner = ?3))",
+							WHERE id = ?1 AND space_id = ?2 AND kind <> 'comment'
+								AND (owner IS NULL OR owner = ?3))",
 					)?
 					.query_row(params![conversation_id, space_id, reader], |row| row.get(0))?)
 			})

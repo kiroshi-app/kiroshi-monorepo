@@ -18,6 +18,7 @@ use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 use crate::db::{Database, DatabaseError};
+use crate::events::CallOrigin;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 
 const MEMBERS_READ_BOUND: Duration = Duration::from_secs(3);
@@ -27,10 +28,16 @@ pub struct RelayedMember {
 	pub(super) space_id: String,
 	pub(super) user_id: String,
 	pub(super) computer: Option<String>,
+	pub(super) origin: Option<CallOrigin>,
+}
+
+struct Vouching {
+	member: RelayedMember,
+	running_in: Option<tokio::task::Id>,
 }
 
 #[derive(Default)]
-pub(super) struct RelayedMembers(Mutex<HashMap<String, RelayedMember>>);
+pub(super) struct RelayedMembers(Mutex<HashMap<String, Vouching>>);
 
 pub(super) struct Vouched<'a> {
 	members: &'a RelayedMembers,
@@ -40,12 +47,23 @@ pub(super) struct Vouched<'a> {
 impl RelayedMembers {
 	pub(super) fn vouch(&self, member: RelayedMember) -> Vouched<'_> {
 		let nonce = Uuid::new_v4().to_string();
-		self.held().insert(nonce.clone(), member);
+		self.held().insert(nonce.clone(), Vouching { member, running_in: None });
 		Vouched { members: self, nonce }
 	}
 
-	fn vouched(&self, nonce: &str) -> Option<RelayedMember> {
-		self.held().get(nonce).cloned()
+	pub(super) fn vouched_in_this_task(&self, nonce: &str) -> Option<RelayedMember> {
+		let mut held = self.held();
+		let vouching = held.get_mut(nonce)?;
+		vouching.running_in = tokio::task::try_id();
+		Some(vouching.member.clone())
+	}
+
+	fn keyed_call_running_in(&self, task: tokio::task::Id) -> Option<CallOrigin> {
+		self.held()
+			.values()
+			.find(|vouching| vouching.running_in == Some(task))
+			.and_then(|vouching| vouching.member.origin.clone())
+			.filter(|origin| origin.call_key.is_some())
 	}
 
 	#[cfg(test)]
@@ -53,7 +71,7 @@ impl RelayedMembers {
 		self.held().is_empty()
 	}
 
-	fn held(&self) -> MutexGuard<'_, HashMap<String, RelayedMember>> {
+	fn held(&self) -> MutexGuard<'_, HashMap<String, Vouching>> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
@@ -79,9 +97,14 @@ impl<'de, R: Runtime> CommandArg<'de, R> for Caller {
 			.to_str()
 			.ok()
 			.zip(webview.try_state::<Hosting>())
-			.and_then(|(nonce, hosting)| hosting.relayed.vouched(nonce));
+			.and_then(|(nonce, hosting)| hosting.relayed.vouched_in_this_task(nonce));
 		Ok(Caller::Relayed(member))
 	}
+}
+
+pub(crate) fn keyed_call_of_this_task<R: Runtime>(app: &AppHandle<R>) -> Option<CallOrigin> {
+	let task = tokio::task::try_id()?;
+	app.try_state::<Hosting>()?.relayed.keyed_call_running_in(task)
 }
 
 impl FunctionArg for Caller {
@@ -107,6 +130,13 @@ impl Caller {
 			Caller::Host => Some(ChatOwner::Host),
 			Caller::Relayed(None) => None,
 			Caller::Relayed(Some(member)) => Some(person_of(app, &member.user_id)),
+		}
+	}
+
+	pub fn origin(&self) -> Option<CallOrigin> {
+		match self {
+			Caller::Relayed(Some(member)) => member.origin.clone(),
+			_ => None,
 		}
 	}
 
@@ -140,11 +170,29 @@ fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
 	})
 }
 
-pub(super) fn person_of<R: Runtime>(app: &AppHandle<R>, account_id: &str) -> ChatOwner {
+pub(crate) fn person_of<R: Runtime>(app: &AppHandle<R>, account_id: &str) -> ChatOwner {
 	match signed_in_account(app) {
 		Some(host) if host.id == account_id => ChatOwner::Host,
 		_ => ChatOwner::Member(account_id.to_owned()),
 	}
+}
+
+pub(crate) async fn name_of<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	space_id: &str,
+	person: &ChatOwner,
+) -> Result<Option<String>, DatabaseError> {
+	let user_id = match person {
+		ChatOwner::Host => return Ok(host_author(app, database).await?.name),
+		ChatOwner::Member(account_id) => account_id.clone(),
+	};
+	if app.try_state::<Hosting>().is_none() {
+		return Ok(None);
+	}
+	let member =
+		RelayedMember { space_id: space_id.to_owned(), user_id, computer: None, origin: None };
+	Ok(member_author(app, database, member).await?.name)
 }
 
 pub(super) fn account_of<R: Runtime>(app: &AppHandle<R>, owner: &ChatOwner) -> Option<String> {

@@ -783,13 +783,10 @@ describe("leaving Account with nothing imported", () => {
 
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith(
-			{
-				title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
-				description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
-			},
-			{ reason: expect.anything() },
-		)
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
+		})
 	})
 
 	it("greets once when Shoto already greeted", async () => {
@@ -1076,13 +1073,10 @@ describe("landing after an import", () => {
 
 		expect(world.opened).toEqual([])
 		expect(world.sent).toEqual([])
-		expect(reportFailure).toHaveBeenCalledWith(
-			{
-				title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
-				description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
-			},
-			{ reason: expect.anything() },
-		)
+		expect(reportFailure).toHaveBeenCalledWith({
+			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
+		})
 	})
 
 	it("names Shoto when he couldn't say hello", async () => {

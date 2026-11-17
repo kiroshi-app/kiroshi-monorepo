@@ -74,7 +74,7 @@ export const FourCompanions = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard H01: four companions in two columns of 312. Check the counts, the approval mode on the right of each footer, cards of one row at the same height, and that a card and Create an agent each report themselves.",
+					"Artboard H01: four companions in two columns of 312. Check the counts, the approval mode on the right of each footer, cards of one row at the same height, that a card and Create an agent each report themselves, and that no card carries the actions button the Agents page adds.",
 			},
 		},
 	},
@@ -83,6 +83,12 @@ export const FourCompanions = meta.story({
 		const cards = cardsIn(canvasElement)
 
 		await expect(cards).toHaveLength(4)
+		await expect(slotsIn(canvasElement, "companion-card-actions")).toHaveLength(
+			0,
+		)
+		await expect(
+			canvas.getAllByRole("button").map((button) => button.dataset.slot),
+		).toEqual(["button", ...cards.map(() => "companion-card")])
 		await expect(
 			canvas.getByRole("heading", { level: 2, name: "Agents" }),
 		).toBeVisible()

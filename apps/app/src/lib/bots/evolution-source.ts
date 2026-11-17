@@ -1,8 +1,8 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { failureReporterIn } from "../failure-report"
-import type { EvolvedBundle, RuntimeScope } from "../agent/contract"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
+import type { AgentEvent, EvolvedBundle, RuntimeScope } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 import {
 	botPlugin,
@@ -21,8 +21,10 @@ export type EvolutionSourceOptions = {
 	driver: Pick<ChatDriver, "subscribe">
 	roster: RosterPanel
 	rereadPlugin: (scope: PluginScope) => void
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
+
+type EvolutionFailed = Extract<AgentEvent, { type: "botEvolutionFailed" }>
 
 export const startEvolutionSource = ({
 	driver,
@@ -52,13 +54,19 @@ export const startEvolutionSource = ({
 		return readCompanionPanels(scope.botId)
 	}
 
-	const reportUnrecorded = (bundle: EvolvedBundle, detail: string) =>
-		reportFailure({
-			title: i18n.t(`bots:history.recordFailed.title.${bundle}`),
-			description: i18n.t("bots:history.recordFailed.description", {
-				detail,
-			}),
-		})
+	const reportUnrecorded = (failed: EvolutionFailed) =>
+		reportFailure(
+			{
+				title: i18n.t(`bots:history.recordFailed.title.${failed.bundle}`),
+				description: i18n.t("bots:history.recordFailed.description", {
+					detail: failed.detail,
+				}),
+			},
+			{ reason: failed },
+		)
+
+	const reportUnsubscribed = (reason: unknown) =>
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
 
 	const detach = driver
 		.subscribe(({ scope, event }) => {
@@ -69,10 +77,10 @@ export const startEvolutionSource = ({
 				readPanels(scope, event.bundle)
 			}
 			if (event.type === "botEvolutionFailed") {
-				reportUnrecorded(event.bundle, event.detail)
+				reportUnrecorded(event)
 			}
 		})
-		.catch(() => undefined)
+		.catch(reportUnsubscribed)
 
 	return () => {
 		void detach.then((stop) => stop?.())

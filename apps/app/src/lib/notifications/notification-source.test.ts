@@ -207,7 +207,7 @@ const createFakeRoster = (
 
 const createFakeConversations = () => ({
 	open: vi.fn(async ({ openInPlace }: ConversationTarget) => openInPlace()),
-	openInTab: vi.fn(),
+	openInSpace: vi.fn(),
 	showOverHome: vi.fn(),
 })
 
@@ -276,6 +276,7 @@ const start = async (
 		conversations: tabOpening,
 		missions,
 		spokenWords,
+		namings: () => ({}),
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
@@ -682,6 +683,8 @@ describe("startNotificationSource on the liveness of a mission", () => {
 	})
 })
 
+const nameless = [conversation("room-one", "", [seatOf("bot-one", "Nyx")])]
+
 describe("startNotificationSource on a conversation", () => {
 	it("names the conversation whose round has finished", async () => {
 		const harness = await start()
@@ -691,6 +694,36 @@ describe("startNotificationSource on a conversation", () => {
 
 		expect(harness.notifications.sent).toEqual([
 			{ target: ROOM, title: "Release", body: "Finished its turn" },
+		])
+	})
+
+	it("names a conversation being named as a new conversation, never by its agent", async () => {
+		const harness = await start(
+			{ namings: () => ({ "room-one": "pending" }) },
+			undefined,
+			nameless,
+		)
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "New conversation", body: "Finished its turn" },
+		])
+	})
+
+	it("names a conversation left without a title as untitled, never by its agent", async () => {
+		const harness = await start({}, undefined, nameless)
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{
+				target: ROOM,
+				title: "Untitled conversation",
+				body: "Finished its turn",
+			},
 		])
 	})
 
@@ -765,7 +798,7 @@ describe("startNotificationSource on a conversation", () => {
 		expect(harness.playChime).toHaveBeenCalledTimes(1)
 	})
 
-	it("shows the window and opens the conversation the click carries in a new tab of its Space", async () => {
+	it("shows the window and opens the conversation the click carries in its Space", async () => {
 		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 
@@ -775,7 +808,7 @@ describe("startNotificationSource on a conversation", () => {
 		expect(harness.conversations.open).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ conversationId: "room-one" }),
 		)
-		expect(harness.conversations.openInTab).toHaveBeenCalledExactlyOnceWith(
+		expect(harness.conversations.openInSpace).toHaveBeenCalledExactlyOnceWith(
 			"room-one",
 			SPACE,
 		)
@@ -789,7 +822,7 @@ describe("startNotificationSource on a conversation", () => {
 		harness.notifications.activate(ROOM)
 
 		expect(harness.conversations.open).toHaveBeenCalledOnce()
-		expect(harness.conversations.openInTab).not.toHaveBeenCalled()
+		expect(harness.conversations.openInSpace).not.toHaveBeenCalled()
 	})
 
 	it("shows the window and opens no tab for a conversation that is gone", async () => {
@@ -800,7 +833,7 @@ describe("startNotificationSource on a conversation", () => {
 		harness.notifications.activate(ROOM)
 
 		expect(raiseWindow).toHaveBeenCalled()
-		expect(harness.conversations.openInTab).not.toHaveBeenCalled()
+		expect(harness.conversations.openInSpace).not.toHaveBeenCalled()
 	})
 
 	it("forgets the round of a conversation whose runtime was let go", async () => {
@@ -1116,6 +1149,23 @@ describe("startNotificationSource on missions", () => {
 
 		expect(harness.notifications.sent).toEqual([
 			{ target: ROOM, title: "Release", body: "Nyx said something" },
+		])
+	})
+
+	it("titles a spoken word in a conversation being named as a new conversation, still naming who spoke", async () => {
+		const harness = await start(
+			{ namings: () => ({ "room-one": "pending" }) },
+			undefined,
+			nameless,
+		)
+
+		harness.spokenWords.announce({
+			conversationId: "room-one",
+			authorBotId: "bot-one",
+		})
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "New conversation", body: "Nyx said something" },
 		])
 	})
 

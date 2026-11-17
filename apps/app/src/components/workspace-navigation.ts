@@ -67,6 +67,7 @@ export const useWorkspaceNavigation = ({
 				onOpenSpaceSettings,
 				onOpenSettings: () => navigation.openUserSettings(),
 				onNewConversation: navigation.openHome,
+				onSelectAgents: navigation.openAgents,
 				onSelectLibrary: navigation.openLibrary,
 				onSelectMissions: navigation.openMissions,
 				onOpenConversation: (id) => {

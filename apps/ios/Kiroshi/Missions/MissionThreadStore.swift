@@ -17,12 +17,16 @@ final class MissionThreadStore {
     var draft = ""
     var attachments: [PickedAttachment] = []
     private(set) var messages: [MissionThreadMessage] = [] {
-        didSet { transcribe() }
+        didSet {
+            transcribe()
+            settleRefusedSend()
+        }
     }
     private(set) var transcript = MissionTranscript()
     private(set) var hasLoaded = false
     private(set) var hasFailed = false
     private(set) var isOnline = false
+    private(set) var isHostOffline = false
     private(set) var isSending = false
     private(set) var sendProblem: MissionSendProblem?
     private(set) var lastSentId: ThreadMessage.ID?
@@ -35,7 +39,10 @@ final class MissionThreadStore {
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
+    @ObservationIgnored private var refusedSend: Outgoing?
     @ObservationIgnored private var seeding: Task<Void, Never>?
+    @ObservationIgnored private var isRelayRereading = false
+    @ObservationIgnored private var hasTrailingRelayReread = false
 
     init(
         mission: Mission,
@@ -85,15 +92,14 @@ final class MissionThreadStore {
             group.addTask { await self.reread(signals, through: relay) }
             for await update in updates {
                 apply(update)
-                if case .state(.online) = update {
-                    seeding?.cancel()
-                    seeding = Task { await seedPendingQuestions(through: relay) }
-                }
             }
             rereads.finish()
         }
         self.rereads = nil
+        isRelayRereading = false
+        hasTrailingRelayReread = false
         isOnline = false
+        isHostOffline = false
         seeding?.cancel()
     }
 
@@ -104,10 +110,15 @@ final class MissionThreadStore {
             sendProblem = rejection == .tooMany ? .tooMany : .tooLarge
             return nil
         }
-        let id = newId()
-        lastSentId = id
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let outgoing =
+            refusedSend.flatMap { $0.repeats(text, with: attachments) ? $0 : nil }
+            ?? Outgoing(
+                in: mission.threadConversationId, written: text, content: text,
+                picked: attachments, sentAt: now(), makeId: newId)
+        lastSentId = outgoing.id
         isSending = true
-        let task = Task { await deliver(id, through: relay) }
+        let task = Task { await deliver(outgoing, through: relay) }
         sending = task
         return task
     }
@@ -126,23 +137,17 @@ final class MissionThreadStore {
             time: ConversationTime(now: now(), calendar: calendar), authorship: authorship)
     }
 
-    private func deliver(_ id: String, through relay: MissionsRelay) async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let picked = attachments
+    private func deliver(_ outgoing: Outgoing, through relay: MissionsRelay) async {
+        var outgoing = outgoing
         sendProblem = nil
+        refusedSend = nil
         defer { isSending = false }
         do {
-            let sentAt = now()
-            var content = text
-            if !picked.isEmpty {
-                let paths = try await relay.store(
-                    await ConversationAttachments.encoding(
-                        picked, in: mission.threadConversationId))
-                content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
-            }
+            let content = try await outgoing.prompt(
+                storingFilesBy: { try await relay.store($0, callKey: $1) }, makeId: newId)
             let message = MissionAnswer.Message(
-                id: id, conversationId: mission.threadConversationId, turnId: newId(),
-                content: content, createdAt: Int(sentAt.timeIntervalSince1970 * 1000))
+                id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
+                content: content, createdAt: Int(outgoing.sentAt.timeIntervalSince1970 * 1000))
             try await relay.answer(MissionAnswer(message: message, summoned: [mission.botId]))
             messages = MissionTranscript.upserting(
                 MissionThreadMessage(
@@ -150,32 +155,66 @@ final class MissionThreadStore {
                     role: .user, content: content, createdAt: message.createdAt, authorBotId: nil,
                     authorAccountId: authorship.accountId),
                 into: messages)
-            if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
-                draft = ""
-            }
-            if attachments == picked {
-                attachments = []
-            }
+            clearDraft(sent: outgoing.written, picked: outgoing.picked)
         } catch is CancellationError {
             return
-        } catch MissionsCallError.refused(status: 413) {
-            sendProblem = .tooLarge
-        } catch MissionsCallError.unknownToTheHost {
-            sendProblem = .olderHost
-        } catch RelayCallError.hostOffline {
-            sendProblem = .offline
+        } catch RelayCallError.alreadyRan {
+            clearDraft(sent: outgoing.written, picked: outgoing.picked)
         } catch {
-            sendProblem = .couldNotSend
+            guard !messages.contains(where: { $0.id == outgoing.id }) else {
+                clearDraft(sent: outgoing.written, picked: outgoing.picked)
+                return
+            }
+            sendProblem =
+                switch error {
+                case MissionsCallError.refused(status: 413): .tooLarge
+                case MissionsCallError.unknownToTheHost: .olderHost
+                case RelayCallError.hostOffline: .offline
+                default: .couldNotSend
+                }
+            refusedSend = outgoing
         }
+    }
+
+    private func clearDraft(sent text: String, picked: [PickedAttachment]) {
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
+            draft = ""
+        }
+        if attachments == picked {
+            attachments = []
+        }
+    }
+
+    private func settleRefusedSend() {
+        guard let refusedSend, messages.contains(where: { $0.id == refusedSend.id }) else {
+            return
+        }
+        self.refusedSend = nil
+        sendProblem = nil
+        clearDraft(sent: refusedSend.written, picked: refusedSend.picked)
     }
 
     private func apply(_ update: RelayUpdate) {
         switch update {
         case .state(.online):
             isOnline = true
-            rereads?.yield()
-        case .state:
+            isHostOffline = false
+            if hasFailed {
+                rereads?.yield()
+            }
+        case .state(.connecting):
             isOnline = false
+        case .state(let state):
+            isOnline = false
+            isHostOffline = state == .hostOffline
+        case .reread:
+            guard relay != nil else { return }
+            guard !isRelayRereading else {
+                hasTrailingRelayReread = true
+                return
+            }
+            isRelayRereading = true
+            relayReread()
         case .event(let event):
             switch MissionThreadFrame(event, conversationId: mission.threadConversationId) {
             case .stored(let message):
@@ -184,6 +223,13 @@ final class MissionThreadStore {
             case nil: break
             }
         }
+    }
+
+    private func relayReread() {
+        guard let relay else { return }
+        rereads?.yield()
+        seeding?.cancel()
+        seeding = Task { await seedPendingQuestions(through: relay) }
     }
 
     private func seedPendingQuestions(through relay: MissionsRelay) async {
@@ -197,6 +243,7 @@ final class MissionThreadStore {
 
     private func reread(_ signals: AsyncStream<Void>, through relay: MissionsRelay) async {
         for await _ in signals {
+            let answersResync = isRelayRereading
             do {
                 let page = try await relay.thread(conversationId: mission.threadConversationId)
                 for message in page.messages {
@@ -207,6 +254,13 @@ final class MissionThreadStore {
             } catch {
                 guard !Task.isCancelled else { return }
                 hasFailed = !hasLoaded
+            }
+            guard answersResync else { continue }
+            if hasTrailingRelayReread {
+                hasTrailingRelayReread = false
+                relayReread()
+            } else {
+                isRelayRereading = false
             }
         }
     }
@@ -237,7 +291,7 @@ extension MissionThreadStore: ThreadModel {
     }
 
     var problem: String? {
-        if !isOnline, hasLoaded {
+        if isHostOffline, hasLoaded {
             return String(
                 localized: "The host’s computer is offline. You can send again once it’s back.")
         }

@@ -5,6 +5,7 @@ import {
 	type ComponentProps,
 	type MouseEvent,
 	type Ref,
+	useEffect,
 	useEffectEvent,
 	useImperativeHandle,
 	useLayoutEffect,
@@ -16,6 +17,8 @@ import { useTranslation } from "react-i18next"
 
 import type { LibraryGalleryImage } from "@workspace/ui/components/library-block-gallery"
 import type { LibraryLinkPreview } from "@workspace/ui/components/library-block-web-page"
+import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
+import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
 import {
 	type LibraryDocumentPerson,
 	LibraryDocumentPresence,
@@ -28,7 +31,16 @@ import {
 	type LibraryDocumentFormat,
 	type LibraryDocumentPlaceholder,
 } from "@workspace/ui/components/library-document-block-editor"
-import { shiftedOffset } from "@workspace/ui/components/library-document-blocks"
+import {
+	blockIdsOf,
+	foundAnchorIn,
+	parseBlocks,
+	shiftedOffset,
+} from "@workspace/ui/components/library-document-blocks"
+import {
+	type LibraryDocumentCommentProps,
+	LibraryDocumentThreadCard,
+} from "@workspace/ui/components/library-document-comments"
 import {
 	DOCUMENT_TITLE,
 	GrowingField,
@@ -36,6 +48,7 @@ import {
 	LibraryDocumentColumn,
 } from "@workspace/ui/components/library-document-view"
 import type {
+	LibraryBarComments,
 	LibraryItemActions,
 	LibraryMenuSubject,
 } from "@workspace/ui/components/library-item-menu"
@@ -178,6 +191,7 @@ type LibraryDocumentEditorHandle = {
 
 type LibraryDocumentEditorProps = WriterActions &
 	SelectionActions &
+	LibraryDocumentCommentProps &
 	LibraryItemActions<LibraryMenuSubject> & {
 		title: string
 		body: string
@@ -198,6 +212,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		>["resolveImage"]
 		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 		menuFinalFocus?: () => HTMLElement | boolean
+		comments?: LibraryBarComments
 		ref?: Ref<LibraryDocumentEditorHandle>
 	}
 
@@ -228,6 +243,13 @@ const LibraryDocumentEditor = ({
 	onHeading,
 	onList,
 	menuFinalFocus,
+	comments,
+	threads,
+	openThread,
+	commentDraft,
+	commentParticipants,
+	onOpenThread,
+	onStartComment,
 	ref,
 	...actions
 }: LibraryDocumentEditorProps) => {
@@ -239,6 +261,7 @@ const LibraryDocumentEditor = ({
 	const titleField = useRef<HTMLTextAreaElement>(null)
 	const titleAtEditStart = useRef<string>(undefined)
 	const blocks = useRef<LibraryDocumentBlockEditorHandle>(null)
+	const editor = useRef<HTMLDivElement>(null)
 	const [placeholders] = useState(() => placeholdersOf(template, body, t))
 
 	const focusTitleAtEnd = () => {
@@ -330,13 +353,54 @@ const LibraryDocumentEditor = ({
 
 	const barItem = useMemo(() => ({ name: title }), [title])
 
+	const isCommentMode = comments?.isCommentMode ?? false
+	const openedThread =
+		openThread && threads?.find(({ id }) => id === openThread.id)
+	const isOpenedThreadGone = useMemo(
+		() =>
+			openedThread !== undefined &&
+			!foundAnchorIn(
+				parseBlocks(body, blockIdsOf()).blocks,
+				openedThread.anchor,
+			),
+		[body, openedThread],
+	)
+
+	const closeCommentLayer = useEffectEvent(() =>
+		closeInnermostCommentLayer({
+			draft: commentDraft,
+			openThread,
+			leaveCommentMode: isCommentMode
+				? () => comments?.onCommentModeChange(false)
+				: undefined,
+		}),
+	)
+	const hasCommentLayer =
+		isCommentMode || commentDraft !== undefined || openThread !== undefined
+
+	useEffect(() => {
+		if (!hasCommentLayer) return
+
+		const answerEscape = (event: KeyboardEvent) => {
+			const isAnsweredAlready = event.defaultPrevented || event.isComposing
+			if (event.key !== "Escape" || isAnsweredAlready) return
+			const focused = event.target as Node
+			if (focused === document.body || editor.current?.contains(focused))
+				closeCommentLayer()
+		}
+		window.addEventListener("keydown", answerEscape)
+		return () => window.removeEventListener("keydown", answerEscape)
+	}, [hasCommentLayer])
+
 	return (
 		<div
 			className="relative flex size-full min-h-0 flex-col"
 			data-slot="library-document-editor"
+			ref={editor}
 		>
 			<LibraryDocumentBar
 				{...actions}
+				comments={comments}
 				item={barItem}
 				menuFinalFocus={menuFinalFocus}
 				onBack={onBack}
@@ -382,20 +446,42 @@ const LibraryDocumentEditor = ({
 			>
 				<LibraryDocumentBlockEditor
 					body={body}
+					commentDraft={commentDraft}
+					commentParticipants={commentParticipants}
 					format={format}
+					isCommentMode={isCommentMode}
 					onAddImages={onAddImages}
 					onBodyChange={onBodyChange}
 					onCaretChange={onCaretChange}
 					onLinkPreview={onLinkPreview}
 					onOpenConversation={onOpenConversation}
+					onOpenThread={onOpenThread}
+					onStartComment={onStartComment}
 					onStop={onStop}
+					openThread={openThread}
 					people={people}
 					placeholders={placeholders}
 					ref={blocks}
 					resolveImage={resolveImage}
+					threads={threads}
 					writers={writers}
 				/>
 			</LibraryDocumentColumn>
+			{openThread && openedThread && isOpenedThreadGone ? (
+				<LibraryDocumentThreadCard
+					anchor={{ gone: "text" }}
+					className="absolute end-[12.625rem] top-12 z-10"
+					open={openThread}
+					participants={commentParticipants ?? []}
+					thread={openedThread}
+				/>
+			) : null}
+			{isCommentMode ? (
+				<LibraryCommentModeHint
+					className="pointer-events-none absolute inset-x-0 bottom-6 z-10 mx-auto"
+					surface="document"
+				/>
+			) : null}
 		</div>
 	)
 }

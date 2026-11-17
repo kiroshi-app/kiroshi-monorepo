@@ -35,10 +35,15 @@ pub struct LiveViews {
 }
 
 pub(crate) struct ViewToMount {
+	#[cfg(target_os = "macos")]
 	pub id: String,
+	#[cfg(target_os = "macos")]
 	pub url: String,
+	#[cfg(target_os = "macos")]
 	pub allowed: [String; 2],
+	#[cfg(target_os = "macos")]
 	pub scripts: Vec<String>,
+	#[cfg(target_os = "macos")]
 	pub watch: Arc<dyn ViewWatch>,
 }
 
@@ -72,10 +77,15 @@ impl LiveViews {
 		let server = ContentServer::open(&id, html, Arc::clone(&self.watch))
 			.map_err(|failure| LiveHtmlError::Unserved { detail: failure.to_string() })?;
 		let view = ViewToMount {
+			#[cfg(target_os = "macos")]
 			id: id.clone(),
+			#[cfg(target_os = "macos")]
 			url: server.wrapper_url(),
+			#[cfg(target_os = "macos")]
 			allowed: [server.wrapper_url(), server.content_url()],
+			#[cfg(target_os = "macos")]
 			scripts: self.watch.initialization_scripts(),
+			#[cfg(target_os = "macos")]
 			watch: Arc::clone(&self.watch),
 		};
 		native::mount(main_window, view, placement).await?;

@@ -284,6 +284,16 @@ export const HomeEmptyStage = ({
 	return (
 		<ScreenLayout ref={page} width="full">
 			<HomeLayout
+				above={
+					<>
+						<HomeGreeting
+							agent={homeAgentOf(agent)}
+							firstName={firstNameOf(readerName)}
+							period={periodAt(Date.now())}
+						/>
+						{notice}
+					</>
+				}
 				below={
 					<HomeTodayList
 						agentName={agent.name}
@@ -293,12 +303,6 @@ export const HomeEmptyStage = ({
 				}
 				stage="empty"
 			>
-				<HomeGreeting
-					agent={homeAgentOf(agent)}
-					firstName={firstNameOf(readerName)}
-					period={periodAt(Date.now())}
-				/>
-				{notice}
 				{isReadOnly ? null : (
 					<HomeDraftComposer
 						{...send}

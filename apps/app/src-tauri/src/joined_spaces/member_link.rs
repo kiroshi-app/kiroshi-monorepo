@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::time::{timeout, Instant};
@@ -16,7 +17,19 @@ const HELD_FRAMES: usize = 1024;
 
 pub(super) const LEARN_BOUND: Duration = Duration::from_secs(30);
 
+const OK: u64 = 200;
+
+const PAYLOAD_TOO_LARGE: u16 = 413;
+
+const ANSWER_REFUSED_BY_THE_RELAY: &str =
+	"the relay refused the host's answer: Device socket is full";
+
 pub(super) const BUFFERED_EVENTS: usize = 2 * HELD_FRAMES;
+
+#[derive(Deserialize)]
+struct CallId {
+	id: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Presence {
@@ -45,6 +58,7 @@ struct Applied {
 }
 
 struct Resuming {
+	call: u64,
 	token: String,
 	deadline: Instant,
 	held: BTreeMap<u64, String>,
@@ -185,8 +199,12 @@ impl MemberLink {
 		let token = uuid::Uuid::new_v4().to_string();
 		let args = json!({ "epoch": applied.epoch, "since": applied.seq, "token": token });
 		let frame = json!({ "id": id, "command": RESUME_COMMAND, "args": args }).to_string();
-		let resuming =
-			Resuming { token, deadline: Instant::now() + CALL_BOUND, held: BTreeMap::new() };
+		let resuming = Resuming {
+			call: id,
+			token,
+			deadline: Instant::now() + CALL_BOUND,
+			held: BTreeMap::new(),
+		};
 		(resuming, frame)
 	}
 
@@ -218,6 +236,9 @@ impl MemberLink {
 			);
 			return Resync::InStep;
 		};
+		if let Some(resync) = frame.get("resync") {
+			return self.resynced(resync);
+		}
 		if let Some(event) = frame.get("event") {
 			let epoch = frame.get("epoch").and_then(Value::as_str);
 			let seq = frame
@@ -236,8 +257,7 @@ impl MemberLink {
 		if let Some(body) = frame.get("body").filter(|body| is_a_resume_answer(body)) {
 			return self.resume_answered(body);
 		}
-		self.answered(&frame);
-		Resync::InStep
+		self.refused_or_answered(&frame)
 	}
 
 	fn sequenced(&self, stamped: Stamped<'_>) -> Resync {
@@ -281,6 +301,28 @@ impl MemberLink {
 		}
 	}
 
+	fn resynced(&self, resync: &Value) -> Resync {
+		let answered = resync.get("answered").and_then(Value::as_array);
+		for id in answered.into_iter().flatten().filter_map(Value::as_u64) {
+			if self.pending().contains_key(&id) {
+				log::warn!(
+					"the member relay of instance {} ended call {id}: the relay refused its answer",
+					self.instance_id
+				);
+				let refused = json!({ "id": id, "status": PAYLOAD_TOO_LARGE, "body": ANSWER_REFUSED_BY_THE_RELAY });
+				self.answered(&refused);
+			}
+		}
+		let mut sequence = self.sequence();
+		let (Sequence::Applied(applied) | Sequence::Resuming(applied, _)) = &*sequence else {
+			return Resync::Reread;
+		};
+		let applied = applied.clone();
+		let (resuming, frame) = self.resume_from(&applied);
+		*sequence = Sequence::Resuming(applied, resuming);
+		Resync::Resume(frame)
+	}
+
 	fn adopted(&self, sequence: &mut Sequence, stamped: Stamped<'_>) {
 		*sequence =
 			Sequence::Applied(Applied { epoch: stamped.epoch.to_owned(), seq: stamped.seq });
@@ -306,6 +348,46 @@ impl MemberLink {
 		}
 		*sequence = Sequence::Applied(caught_up);
 		Resync::InStep
+	}
+
+	pub(super) fn refused_as_too_large(&self, call: &str, refusal: String) -> Resync {
+		let Ok(CallId { id }) = serde_json::from_str(call) else {
+			log::warn!(
+				"the member relay of instance {} refused a frame that names no call: {refusal}",
+				self.instance_id
+			);
+			return Resync::InStep;
+		};
+		self.refused_or_answered(&json!({ "id": id, "status": PAYLOAD_TOO_LARGE, "body": refusal }))
+	}
+
+	fn refused_or_answered(&self, frame: &Value) -> Resync {
+		if self.resume_refused(frame) {
+			return Resync::Reread;
+		}
+		self.answered(frame);
+		Resync::InStep
+	}
+
+	fn resume_refused(&self, frame: &Value) -> bool {
+		let mut sequence = self.sequence();
+		let Sequence::Resuming(_, resuming) = &*sequence else {
+			return false;
+		};
+		let (Some(id), Some(status)) =
+			(frame.get("id").and_then(Value::as_u64), frame.get("status").and_then(Value::as_u64))
+		else {
+			return false;
+		};
+		if id != resuming.call || status == OK {
+			return false;
+		}
+		log::warn!(
+			"the member relay of instance {} refused resume call {id} with status {status}",
+			self.instance_id
+		);
+		*sequence = Sequence::Unknown;
+		true
 	}
 
 	fn answered(&self, frame: &Value) {
@@ -436,13 +518,21 @@ mod tests {
 		json!({ "event": event, "epoch": epoch, "seq": seq, "token": token }).to_string()
 	}
 
-	fn resume_args(resync: &Resync) -> Value {
+	fn resume_frame(resync: &Resync) -> Value {
 		let Resync::Resume(frame) = resync else {
 			panic!("a resume, not {resync:?}");
 		};
 		let frame: Value = serde_json::from_str(frame).expect("a json resume");
 		assert_eq!(frame["command"], RESUME_COMMAND);
-		frame["args"].clone()
+		frame
+	}
+
+	fn resume_args(resync: &Resync) -> Value {
+		resume_frame(resync)["args"].clone()
+	}
+
+	fn refusal(id: &Value) -> String {
+		json!({ "id": id, "status": 500, "body": "the host refused" }).to_string()
 	}
 
 	fn resume_answer(args: &Value, body: Value) -> String {
@@ -653,6 +743,100 @@ mod tests {
 	}
 
 	#[test]
+	fn a_refused_resume_answer_rereads_and_forgets_the_epoch() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
+
+		let refused = link.received(&refusal(&resume["id"]));
+
+		assert_eq!(refused, Resync::Reread);
+		assert!(matches!(*link.sequence(), Sequence::Unknown));
+	}
+
+	#[test]
+	fn a_refused_resume_holds_no_deadline() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
+		assert!(link.resume_deadline().is_some());
+
+		link.received(&refusal(&resume["id"]));
+
+		assert_eq!(link.resume_deadline(), None);
+	}
+
+	#[test]
+	fn the_frame_after_a_refused_resume_is_adopted_and_delivered() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
+		link.received(&refusal(&resume["id"]));
+
+		let next = [9, 10, 10].map(|seq| link.received(&stamped("e-2", seq)));
+
+		assert_eq!(next, [Resync::InStep, Resync::InStep, Resync::InStep]);
+		assert_eq!(delivered(&mut heard), vec![9, 10]);
+	}
+
+	#[test]
+	fn a_refusal_of_another_call_leaves_the_resume_and_its_held_frames() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let args = resume_args(&link.received(&stamped("e-1", 3)));
+
+		let foreign = link.received(&refusal(&json!(4242)));
+		let is_still_resuming = link.resume_deadline().is_some();
+		link.received(&replayed("e-1", 2, &args["token"]));
+		link.received(&resume_answer(&args, json!({ "replayed": 1 })));
+
+		assert_eq!(foreign, Resync::InStep);
+		assert!(is_still_resuming);
+		assert_eq!(delivered(&mut heard), vec![2, 3]);
+	}
+
+	#[test]
+	fn a_refusal_of_a_resume_that_a_later_one_replaced_leaves_the_later_one_pending() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let first = resume_frame(&link.received(&stamped("e-1", 3)));
+		let fresh = resume_args(&link.received(&resync(json!([]))));
+
+		let stale = link.received(&refusal(&first["id"]));
+		link.received(&replayed("e-1", 2, &fresh["token"]));
+		link.received(&replayed("e-1", 3, &fresh["token"]));
+		link.received(&resume_answer(&fresh, json!({ "replayed": 2 })));
+
+		assert_eq!(stale, Resync::InStep);
+		assert_eq!(delivered(&mut heard), vec![2, 3]);
+	}
+
+	#[test]
+	fn a_resume_frame_the_relay_refuses_as_too_large_rereads_and_drops_the_resume() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
+
+		let refused = link.refused_as_too_large(&resume.to_string(), "over the ceiling".to_owned());
+
+		assert_eq!(refused, Resync::Reread);
+		assert_eq!(link.resume_deadline(), None);
+	}
+
+	#[test]
+	fn a_resume_answered_with_200_on_its_own_id_releases_the_held_frames() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let resume = resume_frame(&link.received(&stamped("e-1", 3)));
+		let token = &resume["args"]["token"];
+		let answer =
+			json!({ "id": resume["id"], "status": 200, "body": { "token": token, "replayed": 1 } });
+
+		link.received(&replayed("e-1", 2, token));
+		let answered = link.received(&answer.to_string());
+
+		assert_eq!(answered, Resync::InStep);
+		assert_eq!(delivered(&mut heard), vec![2, 3]);
+	}
+
+	#[test]
 	fn a_link_that_awaits_no_replay_drops_one_meant_for_another_member_and_adopts_the_live_frame() {
 		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
 		let (calls, _sent) = mpsc::channel(4);
@@ -678,5 +862,81 @@ mod tests {
 
 		assert_eq!((foreign, own), (Resync::InStep, Resync::InStep));
 		assert_eq!(delivered(&mut heard), vec![3, 4]);
+	}
+
+	fn resync(answered: Value) -> String {
+		json!({ "resync": { "answered": answered } }).to_string()
+	}
+
+	#[tokio::test]
+	async fn a_resync_ends_each_call_whose_answer_it_names_and_leaves_the_others_waiting() {
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
+		let (calls, mut sent) = mpsc::channel(4);
+		link.opened(calls);
+
+		let answering = async {
+			let mut ids = Vec::new();
+			for _ in 0..2 {
+				let frame: Value = serde_json::from_str(&sent.recv().await.expect("a frame"))
+					.expect("a json frame");
+				ids.push(frame["id"].clone());
+			}
+			link.received(&resync(json!([ids[0], 4242])));
+			link.received(&json!({ "id": ids[1], "status": 200, "body": "kept" }).to_string());
+			ids
+		};
+		let (refused, kept, ids) = tokio::join!(
+			link.called("space_list", json!({})),
+			link.called("space_list", json!({})),
+			answering
+		);
+
+		let (refused, kept) = (refused.expect("an answer"), kept.expect("an answer"));
+		assert_eq!(ids[0], json!(1));
+		assert_eq!((refused.status, refused.body), (413, json!(ANSWER_REFUSED_BY_THE_RELAY)));
+		assert_eq!((kept.status, kept.body), (200, json!("kept")));
+	}
+
+	#[test]
+	fn a_resync_resumes_from_the_last_applied_seq_and_delivers_every_missed_event_once_in_order() {
+		let link = an_open_link_applied_to("e-1", 3);
+		let mut heard = link.subscribed().expect("an open session");
+
+		let args = resume_args(&link.received(&resync(json!([]))));
+		let live = link.received(&stamped("e-1", 6));
+		for seq in [4, 5, 6] {
+			link.received(&replayed("e-1", seq, &args["token"]));
+		}
+		let answered = link.received(&resume_answer(&args, json!({ "replayed": 3 })));
+		let again = link.received(&stamped("e-1", 5));
+
+		assert_eq!(args["since"], 3);
+		assert_eq!((live, answered, again), (Resync::InStep, Resync::InStep, Resync::InStep));
+		assert_eq!(delivered(&mut heard), vec![4, 5, 6]);
+	}
+
+	#[test]
+	fn a_resync_during_a_resume_starts_a_fresh_one_and_drops_the_replay_of_the_first() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let first = resume_args(&link.received(&stamped("e-1", 3)));
+
+		let fresh = resume_args(&link.received(&resync(json!([]))));
+		let stale = link.received(&replayed("e-1", 2, &first["token"]));
+		link.received(&replayed("e-1", 2, &fresh["token"]));
+		link.received(&replayed("e-1", 3, &fresh["token"]));
+		link.received(&resume_answer(&fresh, json!({ "replayed": 2 })));
+
+		assert_ne!(first["token"], fresh["token"]);
+		assert_eq!(fresh["since"], 1);
+		assert_eq!(stale, Resync::InStep);
+		assert_eq!(delivered(&mut heard), vec![2, 3]);
+	}
+
+	#[test]
+	fn a_resync_of_a_link_holding_no_epoch_rereads() {
+		let link = MemberLink::new("instance-1", "Studio".to_owned(), "bob".to_owned());
+
+		assert_eq!(link.received(&resync(json!([1]))), Resync::Reread);
 	}
 }

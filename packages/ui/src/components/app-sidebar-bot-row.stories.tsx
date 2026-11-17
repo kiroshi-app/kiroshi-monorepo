@@ -1,14 +1,25 @@
-import { expect, fn, within } from "storybook/test"
+import type { ComponentProps } from "react"
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectAnswered,
+	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTooltipOnOneLine,
+	expectTooltipPastTheSidebarEdge,
+	expectTooltipWrappedWhole,
+	openTooltipOf,
+	rightClick,
 	SidebarFrame,
+	shown,
 	slotIn,
+	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
 	ATLAS,
 	BEACON,
@@ -19,6 +30,9 @@ import {
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
+import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
+import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 
@@ -27,8 +41,8 @@ const meta = preview.meta({
 	component: BotRosterRow,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story) => (
-			<SidebarFrame>
+		(Story, { parameters }) => (
+			<SidebarFrame isCollapsed={parameters.isSidebarCollapsed}>
 				<SidebarMenu>
 					<Story />
 				</SidebarMenu>
@@ -190,4 +204,272 @@ export const BotLongQuestionStaysOnOneLine = meta.story({
 	},
 	play: ({ canvasElement }) =>
 		expectQuestionCutInsideTheRow(slotIn(canvasElement, "sidebar-menu-button")),
+})
+
+const AT_REST_BOT: AppSidebarBot = { ...ATLAS, id: "at-rest", name: "At rest" }
+
+const HOVERED_BOT: AppSidebarBot = { ...ATLAS, id: "hovered", name: "Hovered" }
+
+const ACTIVE_BOT: AppSidebarBot = { ...ATLAS, id: "active", name: "Active" }
+
+const renderCompactRowStates = (args: ComponentProps<typeof BotRosterRow>) => (
+	<CompactRowsContext.Provider value>
+		{[AT_REST_BOT, HOVERED_BOT, ACTIVE_BOT].map((bot) => (
+			<BotRosterRow
+				{...args}
+				bot={bot}
+				isSelected={bot === ACTIVE_BOT}
+				key={bot.id}
+			/>
+		))}
+	</CompactRowsContext.Provider>
+)
+
+const avatarPartsOf = (row: HTMLElement) => {
+	const avatar = slotIn(row, "bot-identity-avatar")
+	return [avatar, ...avatar.querySelectorAll("*")]
+}
+
+const compactRowStatesStory = (globals?: { theme: "dark" }) => ({
+	globals,
+	render: renderCompactRowStates,
+	parameters: {
+		pseudo: { hover: 'li:nth-child(2) [data-slot="sidebar-menu-button"]' },
+		docs: {
+			description: {
+				story:
+					"Three agents as the expanded sidebar lists them: one at rest, one under the pointer, one open. Check the name sits in `--muted-foreground` at rest and in `--sidebar-foreground` under the pointer and on the open row, that the colour switches with no fade, and that the avatar reads `--muted-foreground` from its slot on all three, under the pointer included.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const [atRest, hovered, active] = slotsIn(
+			canvasElement,
+			"sidebar-menu-button",
+		) as HTMLElement[]
+
+		await expect(active).toHaveAttribute("aria-current", "page")
+		await expectMutedUntilHoveredOrActive({
+			states: { atRest, hovered, active },
+			inkedPartsOf: (row) => [slotIn(row, "roster-row-name")],
+			steadyPartsOf: avatarPartsOf,
+			fullInk: "text-sidebar-foreground",
+		})
+		for (const row of [atRest, hovered, active])
+			await expect(
+				getComputedStyle(slotIn(row, "bot-identity-avatar")).color,
+			).toBe(tokenStyleIn(atRest, "text-muted-foreground", "color"))
+	},
+})
+
+export const CompactRowAtRestHoveredAndActive = meta.story(
+	compactRowStatesStory(),
+)
+
+export const CompactRowAtRestHoveredAndActiveDark = meta.story(
+	compactRowStatesStory({ theme: "dark" }),
+)
+
+export const TooltipCarriesTheAgentNameAlone = meta.story({
+	args: { isSelected: false },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on an agent row of the expanded sidebar, whose name the row shows whole. Check the tooltip holds the agent name on one line and nothing else, without the title the row wears as a badge, that it sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(slotIn(row, "roster-row-badge")).toHaveTextContent("Research")
+		await expect(tooltip.textContent).toBe(ATLAS.name)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const TooltipOnTheCollapsedSidebar = meta.story({
+	args: { isSelected: false },
+	parameters: {
+		isSidebarCollapsed: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on an agent row while the sidebar is collapsed and its rows are drawn compact, as the sidebar peeking over the page lists them. Check the tooltip is the one the expanded sidebar shows, the agent name alone on one line, and that the row keeps the agent name as its accessible name with no description.",
+			},
+		},
+	},
+	render: (args) => (
+		<CompactRowsContext.Provider value>
+			<li aria-hidden="true" className="h-40" />
+			<BotRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(tooltip.textContent).toBe(ATLAS.name)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(ATLAS.name)
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+const LONG_AGENT_NAME =
+	"Atlas, the research agent who reads every customer interview and files each finding under its theme"
+
+const LONG_NAMED_AGENT: AppSidebarBot = { ...ATLAS, name: LONG_AGENT_NAME }
+
+const longAgentNameTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { bot: LONG_NAMED_AGENT, isSelected: false },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on an agent row whose name the row cuts, in the ${isSidebarCollapsed ? "collapsed sidebar, its rows drawn compact" : "expanded sidebar"}. Check the tooltip holds the whole agent name, wrapped onto more lines inside the bubble with no ellipsis, that the row keeps its own ellipsis, and that the tooltip sits just past the sidebar edge and centred on the row.`,
+			},
+		},
+	},
+	render: (args: ComponentProps<typeof BotRosterRow>) => (
+		<CompactRowsContext.Provider value={isSidebarCollapsed}>
+			<li aria-hidden="true" className="h-40" />
+			<BotRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const name = slotIn(row, "roster-row-name")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_AGENT_NAME)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+	},
+})
+
+export const TooltipWrapsALongAgentName = meta.story(
+	longAgentNameTooltipStory(false),
+)
+
+export const TooltipWrapsALongAgentNameOnTheCollapsedSidebar = meta.story(
+	longAgentNameTooltipStory(true),
+)
+
+const WORKING_MISSION = {
+	id: "m-working",
+	state: "working",
+	ticket: {
+		platform: "linear",
+		externalId: "OPE-513",
+		title: "Rebuild the bundle",
+	},
+} as const
+
+const MISSION_AGENT: AppSidebarBot = { ...ATLAS, missions: [WORKING_MISSION] }
+
+const WORKING_MISSION_ENTRIES = [
+	"Open mission",
+	"Open PR",
+	"Copy",
+	"Message the coding session",
+	"Stop the coding session",
+	"Close",
+]
+
+const menuOnAWorkingMission: MissionTreeRowWrap = (row) => (
+	<MissionMenu
+		hasBranch
+		hasPullRequest
+		hasWorkspacePath
+		onAnswer={fn()}
+		onClose={fn()}
+		onCopy={fn()}
+		onMessageAgent={fn()}
+		onOpen={fn()}
+		onOpenPullRequest={fn()}
+		onReopen={fn()}
+		onStopAgent={fn()}
+		state="working"
+	>
+		{row}
+	</MissionMenu>
+)
+
+const renderCompactRow = (args: ComponentProps<typeof BotRosterRow>) => (
+	<CompactRowsContext.Provider value>
+		<BotRosterRow {...args} />
+	</CompactRowsContext.Provider>
+)
+
+const closeMenu = async () => {
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+}
+
+export const MissionRowOpensTheMissionMenu = meta.story({
+	args: {
+		bot: MISSION_AGENT,
+		isSelected: false,
+		wrapMission: menuOnAWorkingMission,
+		onOpenMission: fn(),
+		onDelete: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission under its agent in the expanded sidebar, right clicked. Check the menu that opens is the mission menu, with the entries of a mission the agent is working on, that no agent entry is drawn beside it, that the agent row keeps its resting look while the mission menu is open, that a plain click on the mission still opens it, and that a right click on the agent row itself still opens the agent menu.",
+			},
+		},
+	},
+	render: renderCompactRow,
+	play: async ({ args, canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const surface = slotIn(canvasElement, "context-menu-trigger")
+		const mission = slotIn(canvasElement, "mission-capsule")
+		rightClick(mission)
+		const missionMenu = await shown(
+			await screen.findByRole("menu", { name: "Mission actions" }),
+		)
+
+		await expect(
+			within(missionMenu)
+				.getAllByRole("menuitem")
+				.map((item) => item.textContent),
+		).toEqual(WORKING_MISSION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([missionMenu])
+		await expect(surface).not.toHaveAttribute("data-popup-open")
+		await closeMenu()
+		await userEvent.click(mission)
+		await expect(args.onOpenMission).toHaveBeenCalledWith(WORKING_MISSION.id)
+
+		rightClick(row)
+		const agentMenu = await shown(
+			await screen.findByRole("menu", { name: `Actions for ${ATLAS.name}` }),
+		)
+		await expect(screen.getAllByRole("menu")).toEqual([agentMenu])
+		await closeMenu()
+	},
+})
+
+export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
+	tags: ["test-only"],
+	args: { bot: MISSION_AGENT, isSelected: false },
+	render: renderCompactRow,
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(canvasElement, "mission-capsule"))
+		await new Promise(requestAnimationFrame)
+		await new Promise(requestAnimationFrame)
+
+		await expect(
+			slotIn(canvasElement, "context-menu-trigger"),
+		).not.toHaveAttribute("data-popup-open")
+		await expect(screen.queryByRole("menu")).toBeNull()
+	},
 })

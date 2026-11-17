@@ -26,6 +26,7 @@ type LaunchLoaderProps = ComponentProps<typeof AppBootScreen>
 const harness = vi.hoisted(() => ({
 	store: null as TranscriptStore | null,
 	revealWindow: vi.fn(async () => undefined),
+	loaderRenders: [] as LaunchLoaderProps[],
 }))
 
 vi.mock("@/lib/host", async (importOriginal) => ({
@@ -51,21 +52,15 @@ vi.mock("@workspace/ui/components/app-boot-screen", async (importOriginal) => ({
 	...(await importOriginal<
 		typeof import("@workspace/ui/components/app-boot-screen")
 	>()),
-	AppBootScreen: ({
-		agents = [],
-		isExiting,
-		onExitComplete,
-	}: LaunchLoaderProps) =>
-		createElement(
-			"button",
-			{
-				"data-phase": isExiting ? "leaving" : "running",
-				"data-slot": "app-boot-screen",
-				onClick: onExitComplete,
-				type: "button",
-			},
-			agents.map(({ name }) => name).join(", "),
-		),
+	AppBootScreen: (props: LaunchLoaderProps) => {
+		harness.loaderRenders.push(props)
+		return createElement("button", {
+			"data-phase": props.isExiting ? "leaving" : "running",
+			"data-slot": "app-boot-screen",
+			onClick: props.onExitComplete,
+			type: "button",
+		})
+	},
 }))
 
 const { App } = await import("@/App")
@@ -76,6 +71,7 @@ const LATE_REVEAL_MS = 3000
 afterEach(() => {
 	cleanup()
 	harness.revealWindow.mockClear()
+	harness.loaderRenders = []
 	localStorage.clear()
 	vi.useRealTimers()
 })
@@ -114,6 +110,8 @@ const shownLaunchLoader = () => {
 	}
 	return loader
 }
+
+const withoutExitPhase = ({ isExiting, ...props }: LaunchLoaderProps) => props
 
 const completeLoaderExit = async () => {
 	fireEvent.click(shownLaunchLoader())
@@ -173,11 +171,10 @@ it("keeps the launch loader running, with no shell behind it, while the first ro
 	await mountApp(store)
 
 	expect(shownLaunchLoader().dataset.phase).toBe("running")
-	expect(shownLaunchLoader().textContent).toBe("")
 	expect(sidebar()).toBeNull()
 })
 
-it("hands the loader the agents of the Space and starts its exit once the first roster page answers", async () => {
+it("hands the loader no agents, and the same props but its exit, when the first roster page answers with agents", async () => {
 	const store = createFakeTranscriptStore()
 	const { agents, answerFirstRosterPage } = await holdFirstRosterPage(store)
 	await mountApp(store)
@@ -185,10 +182,13 @@ it("hands the loader the agents of the Space and starts its exit once the first 
 	answerFirstRosterPage()
 	await settle()
 
+	expect(agents.length).toBeGreaterThan(0)
 	expect(shownLaunchLoader().dataset.phase).toBe("leaving")
-	expect(shownLaunchLoader().textContent).toBe(
-		agents.map(({ name }) => name).join(", "),
-	)
+	expect(harness.loaderRenders.flatMap(({ agents = [] }) => agents)).toEqual([])
+	const [firstRender, ...laterRenders] = harness.loaderRenders
+	for (const render of laterRenders) {
+		expect(withoutExitPhase(render)).toEqual(withoutExitPhase(firstRender))
+	}
 })
 
 it("mounts the shell, its agents already in the sidebar, only once the loader reports its exit complete", async () => {

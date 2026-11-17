@@ -49,7 +49,7 @@ export const useCompanionAnnouncements = (
 						title: i18n.t("bots:roster.seedRefused"),
 						description: reason,
 					},
-					{ raisedIn: "use-companion-announcements" },
+					{ raisedIn: "use-companion-announcements", reason },
 				),
 			)
 

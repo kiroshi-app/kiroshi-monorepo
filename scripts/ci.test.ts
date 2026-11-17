@@ -14,17 +14,30 @@ import { SCOPES, UNIT_SUITES } from "./baseline"
 import {
 	CHANGED_UNIT_TESTS,
 	elapsedText,
+	FAST_LIMIT_SECONDS,
 	FAST_STEP_NAMES,
+	FAST_TEST_TIMEOUT_MS,
+	type FastUnitTestScope,
 	FULL_UNIT_TESTS,
 	failedRustTargets,
+	fastScopeLines,
 	fastSteps,
+	fastUnitTestScope,
+	fastUnitTestStep,
 	GATE,
 	GROUP_ORDER,
 	type Group,
+	IOS_BUILD_STEPS,
+	IOS_SHARD_STEPS,
 	loggedCargoStep,
+	measuredIosTimings,
+	measuredTestSeconds,
 	offPullRequestNote,
+	parsedRunIds,
 	parsedShard,
+	plannedShards,
 	RUST_PULL_REQUEST_STEPS,
+	readIosTimings,
 	retriedTestAnnotation,
 	retriedTestSummary,
 	retryOf,
@@ -34,14 +47,19 @@ import {
 	SIMULATOR_LOOKUP,
 	type Step,
 	scopeLine,
-	shardTests,
+	shardOverPlanWarning,
+	shardTimingSummary,
 	skipReason,
 	spawnedCommand,
+	startedATest,
 	type UnitTestScope,
 	uiTestClasses,
+	uiTestSuite,
 	unitTestScope,
 	unitTestSteps,
+	unmeasuredTestWarnings,
 	vitestRetryStep,
+	wallTimeLines,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
 import { TEST_SOURCE_ROOTS } from "./test-importers"
@@ -53,6 +71,7 @@ type WorkflowStep = {
 	run?: string
 	if?: string
 	"timeout-minutes"?: number
+	"continue-on-error"?: boolean
 	env?: Record<string, string>
 	with?: Record<string, unknown>
 }
@@ -69,6 +88,7 @@ type Workflow = {
 			outputs?: Record<string, string>
 			needs?: string | string[]
 			permissions?: Record<string, string>
+			"runs-on"?: string
 			"timeout-minutes"?: number
 			strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }
 			steps?: WorkflowStep[]
@@ -94,11 +114,17 @@ const SETUP_STEPS = new Set([
 	"Select the Xcode pinned in .xcode-version",
 	"Read the Rust version pinned in rust-toolchain.toml",
 	"Install XcodeGen",
-	"Boot the simulator while the app builds",
+	"Pack the build products",
+	"Boot the simulator while the build products download",
+	"Unpack the build products",
+	"Runner failure",
+	"Collect the simulator log",
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
+
+const IOS_BUILD_JOB = "ios-build"
 
 const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
 
@@ -157,6 +183,7 @@ const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 				(path) => JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
+			.replace("failure()", "true")
 			.replace(
 				/startsWith\(/g,
 				"((value, prefix) => String(value).startsWith(prefix))(",
@@ -252,9 +279,20 @@ const pullRequest = (number: number, runId: number): GitHubContext => ({
 
 const A_PULL_REQUEST = pullRequest(7, 11)
 
+const A_PULL_REQUEST_INTO_A_FEATURE_BRANCH: GitHubContext = {
+	...pullRequest(9, 13),
+	base_ref: "feature/conversation-feed",
+	event: { pull_request: { base: { sha: "feature-branch-tip" } } },
+}
+
 const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
 	...pullRequest(8, 12),
 	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
+}
+
+const A_PULL_REQUEST_OPTED_INTO_IOS: GitHubContext = {
+	...pullRequest(10, 14),
+	event: { pull_request: { labels: [{ name: "ci:ios" }] } },
 }
 
 const storybookEnvOn = (github: GitHubContext) =>
@@ -269,6 +307,7 @@ const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
 	"ios",
+	"ios-build",
 	"lint",
 	"rust",
 	"storybook",
@@ -330,15 +369,14 @@ describe("the gate", () => {
 			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
 			"bun run --filter sidecar build",
 			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib --test '*'",
 			"git diff --exit-code apps/app/src/lib/bindings.ts",
 		])
 		expect(
 			RUST_PULL_REQUEST_STEPS.filter((step) => step.heavy).map(
 				(step) => step.name,
 			),
-		).toEqual(["Build sidecar", "Clippy", "Library tests", "Integration tests"])
+		).toEqual(["Build sidecar", "Clippy", "Library and integration tests"])
 	})
 
 	it("checks the colour set names against tokens.json before tokens:build rewrites the catalogue", () => {
@@ -407,7 +445,7 @@ describe("the gate", () => {
 			"storybook skips a pull_request, CI runs it on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
 		)
 		expect(offPullRequestNote("ios")).toBe(
-			"ios skips a pull_request, CI runs it on a push to main only",
+			"ios skips a pull_request, CI runs it on a push to main and on a pull_request labelled ci:ios",
 		)
 	})
 
@@ -492,15 +530,11 @@ describe("ci:fast", () => {
 			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
 		],
 		[
-			"the importer threshold",
-			{ scope: "full", path: "apps/app/src/a.ts", importers: 20, graphMs: 5 },
-		],
-		[
 			"an import graph failure",
 			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
 		],
-	] satisfies [string, UnitTestScope][]
-	const BASELINE_SCOPE = /^bun run baseline (\w+)$/
+	] satisfies [string, FastUnitTestScope][]
+	const BASELINE_SCOPE = /^bun run baseline (\w+)/
 	const baselineScopesOf = (steps: Step[]) =>
 		steps.flatMap((step) => {
 			const scope = BASELINE_SCOPE.exec(step.command)?.[1]
@@ -515,7 +549,12 @@ describe("ci:fast", () => {
 				(name) => SCOPES[name].suites,
 			)
 
-			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([FULL_UNIT_TESTS])
+			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([
+				{
+					...FULL_UNIT_TESTS,
+					command: `bun run baseline unit --test-timeout=${FAST_TEST_TIMEOUT_MS}`,
+				},
+			])
 			expect(steps.filter((step) => step.heavy)).toEqual([])
 			for (const step of GATE.vitest) expect(steps).not.toContainEqual(step)
 			expect(baselineScopesOf(steps)).toEqual(["lint", "unit"])
@@ -745,15 +784,15 @@ describe("the unit test scope of a pull request", () => {
 	it.each([
 		[
 			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
-			"ci  unit test scope: full suite: baselines/a.json is shared (baselines/**)",
+			"ci  unit test scope: the app and ui unit projects: baselines/a.json is shared (baselines/**)",
 		],
 		[
 			{ scope: "full", path: SHARED_MODULE, importers: 24, graphMs: 812 },
-			`ci  unit test scope: full suite: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
+			`ci  unit test scope: the app and ui unit projects: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
 		],
 		[
 			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
-			"ci  unit test scope: full suite: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
+			"ci  unit test scope: the app and ui unit projects: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
 		],
 		[
 			{ scope: "changed", graphMs: 640 },
@@ -778,8 +817,266 @@ describe("the unit test scope of a pull request", () => {
 	})
 })
 
+const CATALOGUE_PATHS = [
+	"packages/ui/src/lib/i18n-en.ts",
+	"packages/ui/src/lib/i18n-fr.ts",
+]
+
+const CHAT_CATALOGUE_PATHS = [
+	"packages/ui/src/lib/i18n-en/chat.ts",
+	"packages/ui/src/lib/i18n-fr/chat.ts",
+]
+
+const VOCABULARY_TEST = "packages/ui/src/lib/i18n-vocabulary.test.ts"
+
+const I18N_TEST = "packages/ui/src/lib/i18n.test.ts"
+
+const ACCOUNT_TEST = "apps/app/src/lib/account/use-account.test.ts"
+
+const TOOL_QUESTION_TEST = "packages/ui/src/components/tool-question.test.tsx"
+
+const catalogueRepo = () => {
+	const repo = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-catalogue-"))
+	const write = (path: string, source: string) => {
+		mkdirSync(dirname(join(repo, path)), { recursive: true })
+		writeFileSync(join(repo, path), source)
+	}
+	write(CHAT_CATALOGUE_PATHS[0], 'export const chat = { send: "Send" }\n')
+	write(CHAT_CATALOGUE_PATHS[1], 'export const chat = { send: "Envoyer" }\n')
+	write(
+		CATALOGUE_PATHS[0],
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\n\nconst en = { chat } as const\n\nexport { en }\n',
+	)
+	write(
+		CATALOGUE_PATHS[1],
+		'import type { en } from "@workspace/ui/lib/i18n-en"\nimport { chat } from "@workspace/ui/lib/i18n-fr/chat"\n\nconst fr = { chat } as const satisfies Record<keyof typeof en, unknown>\n\nexport { fr }\n',
+	)
+	write(
+		"packages/ui/src/lib/i18n.ts",
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\n\nexport const i18n = { en, fr }\n\nexport const languageOf = (language: string) => (language in i18n ? language : "en")\n',
+	)
+	write(I18N_TEST, 'import { i18n } from "@workspace/ui/lib/i18n"\ni18n\n')
+	write(
+		VOCABULARY_TEST,
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\nen\nfr\n',
+	)
+	write(
+		TOOL_QUESTION_TEST,
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\nchat\n',
+	)
+	write(ACCOUNT_TEST, 'import { en } from "@workspace/ui/lib/i18n-en"\nen\n')
+	for (let index = 0; index < SHARED_IMPORTER_THRESHOLD; index++)
+		write(
+			`apps/app/src/screen-${index}.test.ts`,
+			'import { i18n } from "@workspace/ui/lib/i18n"\ni18n\n',
+		)
+	return repo
+}
+
+describe("the ci:fast unit test scope", () => {
+	const repos: string[] = []
+	const decidedIn = (repo: string, changedPaths: string[]) => {
+		repos.push(repo)
+		return fastUnitTestScope({ changedPaths, repo })
+	}
+	const FAST_TIMEOUT = `--test-timeout=${FAST_TEST_TIMEOUT_MS}`
+
+	afterAll(() => {
+		for (const repo of repos) rmSync(repo, { recursive: true, force: true })
+	})
+
+	it("runs the test files importing the catalogue entry, and the own test of the module consuming it, never the whole unit projects", () => {
+		const scope = decidedIn(catalogueRepo(), CATALOGUE_PATHS)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: CATALOGUE_PATHS[0],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [ACCOUNT_TEST, VOCABULARY_TEST, I18N_TEST],
+				},
+				{
+					path: CATALOGUE_PATHS[1],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+		expect(fastSteps(CATALOGUE_PATHS, scope).at(-1)).toEqual({
+			name: "Unit tests changed since origin/main or importing a shared changed module, against the baseline",
+			command: `bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
+		})
+	})
+
+	it("walks up the re-export catalogue entries from a changed catalogue sub-file to the vocabulary and i18n tests, never to the tests importing the i18n runtime", () => {
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: CHAT_CATALOGUE_PATHS[0],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [
+						ACCOUNT_TEST,
+						TOOL_QUESTION_TEST,
+						VOCABULARY_TEST,
+						I18N_TEST,
+					],
+				},
+				{
+					path: CHAT_CATALOGUE_PATHS[1],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+		expect(fastSteps(CHAT_CATALOGUE_PATHS, scope).at(-1)?.command).toBe(
+			`bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${TOOL_QUESTION_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
+		)
+	})
+
+	it("prints every test file the unit step runs for each shared catalogue path", () => {
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
+
+		expect(fastScopeLines(scope).slice(1)).toEqual([
+			`ci    ${CHAT_CATALOGUE_PATHS[0]} is shared (packages/ui/src/lib/**), runs ${ACCOUNT_TEST}, ${TOOL_QUESTION_TEST}, ${VOCABULARY_TEST}, ${I18N_TEST}`,
+			`ci    ${CHAT_CATALOGUE_PATHS[1]} is shared (packages/ui/src/lib/**), runs ${VOCABULARY_TEST}, ${I18N_TEST}`,
+		])
+	})
+
+	it("keeps the pull request job on the whole unit projects, without the ci:fast timeout, for the same catalogue change", () => {
+		const repo = catalogueRepo()
+		repos.push(repo)
+
+		expect(
+			unitTestSteps(unitTestScope({ changedPaths: CATALOGUE_PATHS, repo })),
+		).toEqual([FULL_UNIT_TESTS])
+		expect(FULL_UNIT_TESTS.command).toBe("bun run baseline unit")
+		expect(CHANGED_UNIT_TESTS.command).toBe("bun run baseline changed")
+		for (const step of GROUP_ORDER.flatMap((group) => GATE[group]))
+			expect(step.command).not.toContain("--test-timeout")
+	})
+
+	it(`runs the test files importing it directly or through a re-export module when ${SHARED_IMPORTER_THRESHOLD} test files reach a changed module, naming them`, () => {
+		const scope = decidedIn(
+			fixtureRepo({
+				directImporters: 1,
+				relayImporters: SHARED_IMPORTER_THRESHOLD,
+			}),
+			[SHARED_MODULE],
+		)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: SHARED_MODULE,
+					reason: `${SHARED_IMPORTER_THRESHOLD + 1} test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}`,
+					testFiles: [
+						"packages/ui/src/components/direct-0.test.ts",
+						...Array.from(
+							{ length: SHARED_IMPORTER_THRESHOLD },
+							(_, index) => `apps/app/src/relay-${index}.test.ts`,
+						),
+					].sort(),
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it("runs a changed test file under a shared path as a changed test file, not as a shared module", () => {
+		expect(
+			fastUnitTestScope({
+				changedPaths: [VOCABULARY_TEST],
+				repo: NO_REPO,
+			}),
+		).toEqual({ scope: "changed" })
+	})
+
+	it("runs the changed test files when no changed module is shared", () => {
+		expect(
+			decidedIn(fixtureRepo({ directImporters: 1, relayImporters: 0 }), [
+				SHARED_MODULE,
+			]),
+		).toEqual({ scope: "changed", graphMs: expect.any(Number) })
+	})
+
+	it.each([
+		["apps/app/vitest.config.ts", "apps/app/vitest.config.ts"],
+		["baselines/tests.txt", "baselines/**"],
+		["packages/ui/src/styles/globals.css", "packages/ui/src/styles/**"],
+	])(
+		"runs the app and ui unit projects when %s, a shared path outside the import graph, changed",
+		(path, rule) => {
+			const scope = fastUnitTestScope({
+				changedPaths: [...CATALOGUE_PATHS, path],
+				repo: NO_REPO,
+			})
+
+			expect(scope).toEqual({ scope: "full", path, rule })
+			expect(fastScopeLines(scope)).toEqual([
+				`ci  unit test scope: the app and ui unit projects: ${path} is shared (${rule})`,
+			])
+		},
+	)
+
+	it("runs the app and ui unit projects and carries the error when building the import graph throws", () => {
+		expect(
+			fastUnitTestScope({ changedPaths: CATALOGUE_PATHS, repo: NO_REPO }),
+		).toEqual({
+			scope: "full",
+			error: expect.stringContaining("ENOENT"),
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it("gives every unit test of ci:fast a timeout a loaded machine does not reach, on every scope", () => {
+		expect(FAST_TEST_TIMEOUT_MS).toBe(30_000)
+		expect(fastUnitTestStep({ scope: "changed" })).toEqual({
+			...CHANGED_UNIT_TESTS,
+			command: `bun run baseline changed ${FAST_TIMEOUT}`,
+		})
+		expect(
+			fastUnitTestStep({ scope: "full", path: "baselines/a", rule: "x" }),
+		).toEqual({
+			...FULL_UNIT_TESTS,
+			command: `bun run baseline unit ${FAST_TIMEOUT}`,
+		})
+	})
+})
+
+describe("the ci:fast wall time", () => {
+	it(`prints the total next to its ${FAST_LIMIT_SECONDS} s limit`, () => {
+		expect(
+			wallTimeLines([
+				{ name: "the unit test scope decision", ms: 4_000 },
+				{ name: "fast / Types", ms: 60_000 },
+			]),
+		).toEqual(["ci  ci:fast took 1m 4s, limit 120 s"])
+	})
+
+	it("names its slowest step and its duration when it went past its limit, and reports it without failing", () => {
+		expect(
+			wallTimeLines([
+				{ name: "the unit test scope decision", ms: 4_000 },
+				{ name: "fast / Types", ms: 100_000 },
+				{ name: "fast / Unit", ms: 30_000 },
+				{ name: "fast / After", ms: 1_000 },
+			]),
+		).toEqual([
+			"ci  ci:fast took 2m 15s, limit 120 s",
+			"ci  ci:fast went past 120 s, its slowest step fast / Types took 1m 40s: reported, the duration alone refuses no push",
+		])
+	})
+})
+
 describe("the push to main retry", () => {
-	const FULL_SCOPE: UnitTestScope = {
+	const FULL_SCOPE: FastUnitTestScope = {
 		scope: "full",
 		path: "baselines/a.json",
 		rule: "baselines/**",
@@ -788,15 +1085,17 @@ describe("the push to main retry", () => {
 		["the changed scope", CHANGED_SCOPE],
 		["the full scope", FULL_SCOPE],
 	] as const
-	const everyStep = (scope: UnitTestScope) => [
+	const everyStep = (scope: FastUnitTestScope) => [
 		...new Set([
 			...GROUP_ORDER.flatMap((group) => GATE[group]),
 			...RUST_PULL_REQUEST_STEPS,
+			...IOS_BUILD_STEPS,
+			...IOS_SHARD_STEPS,
 			CHANGED_UNIT_TESTS,
 			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
 		]),
 	]
-	type RetriedOn = { ref: string | undefined; scope: UnitTestScope }
+	type RetriedOn = { ref: string | undefined; scope: FastUnitTestScope }
 	const retried = ({ ref, scope }: RetriedOn) =>
 		everyStep(scope).flatMap((step) => {
 			const retry = retryOf(step, ref)
@@ -968,9 +1267,9 @@ Caused by:
 })
 
 describe("the jobs of ci.yml", () => {
-	it("gate every group of scripts/ci.ts but the local rust-check, one job per group", () => {
+	it("gate every group of scripts/ci.ts but the local rust-check, one job per group, ios-build beside them", () => {
 		const gatedJobs = Object.keys(workflow.jobs).filter(
-			(job) => !UNGATED_JOBS.has(job),
+			(job) => !UNGATED_JOBS.has(job) && job !== IOS_BUILD_JOB,
 		)
 
 		expect(gatedJobs.sort()).toEqual([...CI_JOBS].sort())
@@ -1084,10 +1383,147 @@ describe("the jobs of ci.yml", () => {
 		expect(stepNamed("ios", "Gate")?.["timeout-minutes"]).toBe(45)
 	})
 
-	it("splits ios over three jobs, each told its shard out of the matrix size", () => {
+	it("builds ios once in ios-build, selected like ios, and uploads the products packed in one archive", () => {
+		const build = workflow.jobs[IOS_BUILD_JOB]
+		const gateSteps = runStepsOf(IOS_BUILD_JOB).filter(
+			(step) => !SETUP_STEPS.has(step.name ?? ""),
+		)
+		const upload = (build?.steps ?? []).find(
+			(step) => step.name === "Upload the build products",
+		)
+
+		expect(build?.if).toBe(workflow.jobs.ios?.if)
+		expect(build?.["runs-on"]).toBe("xcode-27")
+		expect(build?.["timeout-minutes"]).toBe(45)
+		expect(gateSteps.map((step) => step.run?.trim())).toEqual([
+			"bun scripts/ci.ts ios-build",
+		])
+		expect(stepNamed(IOS_BUILD_JOB, "Pack the build products")?.run).toBe(
+			'tar -czf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build Build/Products',
+		)
+		expect(upload?.with).toMatchObject({
+			name: "ios-build-products",
+			"if-no-files-found": "error",
+			overwrite: true,
+		})
+	})
+
+	it("has ios wait on ios-build, download its products and unpack them where the shard reads them", () => {
+		const steps = [
+			...(workflow.jobs[IOS_BUILD_JOB]?.steps ?? []),
+			...(workflow.jobs.ios?.steps ?? []),
+		]
+		const upload = steps.find(
+			(step) => step.name === "Upload the build products",
+		)
+		const download = steps.find(
+			(step) => step.name === "Download the build products",
+		)
+
+		expect(workflow.jobs.ios?.needs).toEqual(["changes", IOS_BUILD_JOB])
+		expect(workflow.jobs.ios?.["runs-on"]).toBe("xcode-27")
+		expect(download?.with?.name).toBe(upload?.with?.name)
+		expect(upload?.with?.path).toBe(
+			`${download?.with?.path}/ios-build-products.tar.gz`,
+		)
+		expect(stepNamed("ios", "Unpack the build products")?.run).toBe(
+			'mkdir -p apps/ios/build && tar -xzf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build',
+		)
+		expect(IOS_SHARD_STEPS[0]?.command).toContain(
+			"-xctestrun apps/ios/build/Build/Products/*.xctestrun",
+		)
+	})
+
+	it("samples the runner and the simulator from the boot step, uploads the samples after every gate and the simulator log after a failed one", () => {
+		const steps = workflow.jobs.ios?.steps ?? []
+		const indexOf = (name: string) =>
+			steps.findIndex((step) => step.name === name)
+		const boot =
+			stepNamed("ios", "Boot the simulator while the build products download")
+				?.run ?? ""
+		const samples = steps[indexOf("Upload the runner and simulator samples")]
+		const collect = stepNamed("ios", "Collect the simulator log")
+		const log = steps[indexOf("Upload the simulator log")]
+		const runnerTemp = steps[indexOf("Download the build products")]?.with?.path
+		const shardThree = { matrix: { shard: 3 } }
+		const gateEndedIn = (conclusion: string) => ({
+			steps: { gate: { conclusion, outputs: {} } },
+		})
+
+		expect(boot).toContain(
+			'nohup scripts/ios-sampler.sh "$simulator" >> "$RUNNER_TEMP/ios-sampler.txt" 2>&1 &',
+		)
+		expect(boot.indexOf("ios-sampler.sh")).toBeLessThan(
+			boot.indexOf("simctl boot"),
+		)
+		expect(samples?.if).toContain("!cancelled()")
+		expect(interpolate(String(samples?.with?.name), shardThree)).toBe(
+			"ios-sampler-3",
+		)
+		expect(samples?.with?.path).toBe(`${runnerTemp}/ios-sampler.txt`)
+		expect(boot).toContain(
+			'echo "SIMULATOR_BOOTED_AT=$(date +%s)" >> "$GITHUB_ENV"',
+		)
+		expect(samples?.with?.["if-no-files-found"]).toBe("warn")
+		expect(log?.with?.["if-no-files-found"]).toBe("warn")
+		expect(collect?.["timeout-minutes"]).toBe(5)
+		expect(collect?.["continue-on-error"]).toBe(true)
+		expect(collect?.run).toBe(
+			'xcrun simctl spawn "$SIMULATOR" log collect --start "@$SIMULATOR_BOOTED_AT" --output "$RUNNER_TEMP/ios-simulator.logarchive"',
+		)
+		expect(interpolate(String(log?.with?.name), shardThree)).toBe(
+			"ios-simulator-log-3",
+		)
+		expect(log?.with?.path).toBe(`${runnerTemp}/ios-simulator.logarchive`)
+		for (const step of [collect, log]) {
+			expect(evaluate(step?.if ?? "true", gateEndedIn("failure"))).toBe(true)
+			expect(evaluate(step?.if ?? "true", gateEndedIn("success"))).toBe(false)
+		}
+		for (const name of [
+			"Upload the runner and simulator samples",
+			"Collect the simulator log",
+			"Upload the simulator log",
+		]) {
+			expect(indexOf(name)).toBeGreaterThan(indexOf("Gate"))
+		}
+	})
+
+	it.each([
+		["ios", "its setup failed and the gate was skipped", "skipped", "", true],
+		["ios", "the gate reported no test started", "failure", "true", true],
+		["ios", "the gate failed on a test", "failure", "", false],
+		[
+			IOS_BUILD_JOB,
+			"its setup failed and the gate was skipped",
+			"skipped",
+			"",
+			true,
+		],
+		[IOS_BUILD_JOB, "its gate failed", "failure", "", false],
+	])(
+		"decides the Runner failure step of %s when %s",
+		(job, _, conclusion, reported, runs) => {
+			const steps = runStepsOf(job).map((step) => step.name)
+			const runnerFailure = stepNamed(job, "Runner failure")
+			const gate = { conclusion, outputs: { "runner-failure": reported } }
+
+			expect(stepNamed(job, "Gate")?.id).toBe("gate")
+			expect(steps.indexOf("Runner failure")).toBeGreaterThan(
+				steps.indexOf("Gate"),
+			)
+			expect(runnerFailure?.if).toStartWith("failure() && ")
+			expect(evaluate(runnerFailure?.if ?? "false", { steps: { gate } })).toBe(
+				runs,
+			)
+			expect(runnerFailure?.run).toContain("::error title=Runner failure::")
+			expect(runnerFailure?.run?.trim()).toEndWith("exit 1")
+		},
+	)
+
+	it("splits ios over eleven jobs, each told its shard out of the matrix size", () => {
 		expect(workflow.jobs.ios?.strategy).toEqual({
 			"fail-fast": false,
-			matrix: { shard: [1, 2, 3] },
+			matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
 		})
 		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
 
@@ -1098,7 +1534,7 @@ describe("the jobs of ci.yml", () => {
 					strategy: { "job-total": shards.length },
 				}),
 			),
-		).toEqual(["1/3", "2/3", "3/3"])
+		).toEqual(Array.from({ length: 11 }, (_, position) => `${position + 1}/11`))
 	})
 
 	it.each([
@@ -1109,11 +1545,40 @@ describe("the jobs of ci.yml", () => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push and a pull_request only", () => {
+	it("triggers on a push to main, a v* tag and a pull_request into main or a feature/** branch only", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main"], tags: ["v*"] },
-			pull_request: { branches: ["main"] },
+			pull_request: { branches: ["main", "feature/**"] },
 		})
+	})
+
+	it("runs on a pull_request into a feature/** branch the jobs of one into main, on the same path filter, reading no base branch name", () => {
+		const github = A_PULL_REQUEST_INTO_A_FEATURE_BRANCH
+		const paths = ["packages/ui/src/components/markdown/answer-block.tsx"]
+
+		expect(ciEventOf(github)).toBe("pull_request")
+		expect(jobsRunningOn(github)).toEqual(PULL_REQUEST_JOB_SET)
+		expect(outputsOn(github, paths)).toEqual(outputsOn(A_PULL_REQUEST, paths))
+		expect(failingVerifySteps(github, resultsByRule(github))).toEqual([])
+		expect(JSON.stringify(workflow)).not.toMatch(/base_ref|base\.ref/)
+	})
+
+	it("diffs a pull_request against the head of its base branch, main or not", () => {
+		const scope = scopeOf(A_PULL_REQUEST_INTO_A_FEATURE_BRANCH)
+		const fetchStep = stepNamed("changes", "Fetch the base to diff against")
+		const decideStep = stepNamed("changes", "Decide the jobs to run")
+
+		expect(evaluate(fetchStep?.if ?? "false", scope)).toBe(true)
+		expect(interpolate(fetchStep?.env?.BASE ?? "", scope)).toBe(
+			"feature-branch-tip",
+		)
+		expect(fetchStep?.run).toBe('git fetch --depth=1 origin "$BASE"')
+		expect(interpolate(decideStep?.env?.BASE ?? "", scope)).toBe(
+			"feature-branch-tip",
+		)
+		expect(decideStep?.run).toStartWith(
+			'bun scripts/ci-changes.ts "$CI_EVENT" "$BASE"',
+		)
 	})
 
 	it("runs only changes, lint, vitest and rust on a pull_request", () => {
@@ -1124,6 +1589,21 @@ describe("the jobs of ci.yml", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST_OPTED_INTO_STORYBOOK)).toEqual(
 			[...PULL_REQUEST_JOB_SET, "storybook"].sort(),
 		)
+	})
+
+	it("adds ios-build and ios on a pull_request labelled ci:ios, and has verify require them", () => {
+		const github = A_PULL_REQUEST_OPTED_INTO_IOS
+		const passed = resultsByRule(github)
+
+		expect(jobsRunningOn(github)).toEqual(
+			[...PULL_REQUEST_JOB_SET, "ios", IOS_BUILD_JOB].sort(),
+		)
+		expect(failingVerifySteps(github, passed)).toEqual([])
+		for (const job of ["ios", IOS_BUILD_JOB]) {
+			expect(
+				failingVerifySteps(github, { ...passed, [job]: "failure" }),
+			).not.toEqual([])
+		}
 	})
 
 	it("has verify require storybook to succeed on a pull_request labelled ci:storybook", () => {
@@ -1219,7 +1699,7 @@ describe("the jobs of ci.yml", () => {
 				rust: { result: "skipped" },
 				changes: {
 					result: "success",
-					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/src/main.tsx"]),
+					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/vite.config.ts"]),
 				},
 			},
 		}
@@ -1237,7 +1717,7 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced", () => {
+	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced nor a cancelled run", () => {
 		const changes = workflow.jobs.changes
 		const steps = changes?.steps ?? []
 		const greenIndex = steps.findIndex((step) => step.id === "green")
@@ -1356,6 +1836,11 @@ describe("the jobs of ci.yml", () => {
 		[pushToMain(7), "CI-refs/heads/main", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
 		[releaseTag(9), "CI-9", "false"],
+		[
+			{ event_name: "workflow_dispatch", ref: "refs/heads/main", run_id: "12" },
+			"CI-refs/heads/main",
+			"false",
+		],
 	])(
 		"puts %p in the concurrency group %s, cancel-in-progress %s",
 		(github, group, cancelsInProgress) => {
@@ -1363,7 +1848,7 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("queues a push to main behind the run of an earlier push to main", () => {
+	it("queues a push to main behind the run of an earlier push to main still in progress", () => {
 		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
 		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("false")
 	})
@@ -1393,6 +1878,7 @@ describe("the jobs of ci.yml", () => {
 			"website",
 			"rust",
 			"storybook",
+			"ios-build",
 			"ios",
 		])
 	})
@@ -1460,7 +1946,8 @@ describe("the jobs of ci.yml", () => {
 
 	it("boots the simulator bun run ci looks up", () => {
 		expect(
-			stepNamed("ios", "Boot the simulator while the app builds")?.run,
+			stepNamed("ios", "Boot the simulator while the build products download")
+				?.run,
 		).toContain(SIMULATOR_LOOKUP)
 	})
 })
@@ -1468,7 +1955,6 @@ describe("the jobs of ci.yml", () => {
 describe("the ios shards", () => {
 	const UI_TESTS = new URL("../apps/ios/KiroshiUITests/", import.meta.url)
 	const TEST_PLAN = new URL("../apps/ios/Kiroshi.xctestplan", import.meta.url)
-	const CLASSES = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"]
 
 	it("reads k/n and refuses anything else", () => {
 		expect(parsedShard("2/3")).toEqual({ index: 2, count: 3 })
@@ -1477,29 +1963,277 @@ describe("the ios shards", () => {
 		}
 	})
 
-	it("gives the unit tests to the first shard and deals the UI classes in turn", () => {
-		expect(shardTests({ index: 1, count: 2 }, CLASSES)).toEqual([
-			"KiroshiTests",
-			"KiroshiUITests/Alpha",
-			"KiroshiUITests/Charlie",
-			"KiroshiUITests/Echo",
+	const SUITE = [
+		{ name: "Alpha", methods: ["testOne", "testTwo"] },
+		{ name: "Bravo", methods: ["testOne"] },
+		{ name: "Charlie", methods: ["testOne", "testNew"] },
+	]
+	const TIMINGS = {
+		overheadSeconds: 300,
+		testSeconds: {
+			KiroshiTests: 20,
+			"KiroshiUITests/Alpha/testOne": 500,
+			"KiroshiUITests/Alpha/testTwo": 450,
+			"KiroshiUITests/Bravo/testOne": 300,
+			"KiroshiUITests/Charlie/testOne": 100,
+		},
+	}
+	const fixtureShards = () =>
+		plannedShards({ count: 2, suite: SUITE, timings: TIMINGS })
+	const workflowShardCount = () =>
+		(workflow.jobs.ios?.strategy?.matrix?.shard ?? []).length
+	const workflowShards = (count: number) =>
+		plannedShards({ count, suite: uiTestSuite(), timings: readIosTimings() })
+	const largestWholeJobSeconds = (count: number) =>
+		Math.max(...workflowShards(count).map((shard) => shard.wholeJobSeconds))
+
+	it("reads the test methods of each UI class from its source", () => {
+		const directory = mkdtempSync(join(tmpdir(), "ui-tests-"))
+		writeFileSync(
+			join(directory, "AlphaTests.swift"),
+			"final class AlphaTests: XCTestCase {\n\tfunc testOne() {}\n\tfunc testTwo() throws {}\n\tprivate func helper() {}\n}\n",
+		)
+		writeFileSync(join(directory, "Helpers.swift"), "func testLike() {}\n")
+
+		expect(uiTestSuite(directory)).toEqual([
+			{ name: "AlphaTests", methods: ["testOne", "testTwo"] },
 		])
-		expect(shardTests({ index: 2, count: 2 }, CLASSES)).toEqual([
-			"KiroshiUITests/Bravo",
-			"KiroshiUITests/Delta",
+		rmSync(directory, { recursive: true })
+	})
+
+	it("splits a class that cannot fit one whole job into its methods, dealt across shards", () => {
+		expect(
+			fixtureShards().map(({ tests, testSeconds, wholeJobSeconds }) => [
+				tests.map(({ id }) => id),
+				testSeconds,
+				wholeJobSeconds,
+			]),
+		).toEqual([
+			[
+				[
+					"KiroshiTests",
+					"KiroshiUITests/Alpha/testTwo",
+					"KiroshiUITests/Bravo",
+				],
+				770,
+				1070,
+			],
+			[["KiroshiUITests/Alpha/testOne", "KiroshiUITests/Charlie"], 700, 1000],
 		])
 	})
 
-	it("runs every UI class once over the three shards", () => {
-		const classes = uiTestClasses()
-		const dealt = [1, 2, 3].flatMap((index) =>
-			shardTests({ index, count: 3 }, classes),
+	it("plans a method with no measured time at the median of its class, warning with the refresh", () => {
+		const [first, second] = fixtureShards()
+
+		expect(second?.tests[1]).toEqual({
+			id: "KiroshiUITests/Charlie",
+			seconds: 200,
+			unmeasured: ["KiroshiUITests/Charlie/testNew"],
+		})
+		expect(
+			[first, second].map((planned) =>
+				unmeasuredTestWarnings({
+					planned: planned ?? { tests: [], testSeconds: 0, wholeJobSeconds: 0 },
+					run: "42",
+				}),
+			),
+		).toEqual([
+			[],
+			[
+				"::warning title=ios test not measured::Charlie/testNew has no entry in scripts/ios-shard-seconds.json, planned at the median of its class. Refresh it with bun scripts/ci.ts ios-timings 42",
+			],
+		])
+	})
+
+	it("runs KiroshiTests and every UI test method of the directory exactly once over the shards of the workflow", () => {
+		const suite = uiTestSuite()
+		const methodsOf = (id: string) => {
+			const uiClass = suite.find(({ name }) => `KiroshiUITests/${name}` === id)
+			return uiClass ? uiClass.methods.map((method) => `${id}/${method}`) : [id]
+		}
+		const dealt = workflowShards(workflowShardCount()).flatMap((shard) =>
+			shard.tests.flatMap(({ id }) => methodsOf(id)),
 		)
 
-		expect(dealt.filter((test) => test === "KiroshiTests")).toHaveLength(1)
-		expect(dealt.filter((test) => test !== "KiroshiTests").sort()).toEqual(
-			classes.map((name) => `KiroshiUITests/${name}`).sort(),
+		expect(suite.length).toBeGreaterThan(0)
+		expect(dealt.sort()).toEqual(
+			[
+				"KiroshiTests",
+				...suite.flatMap(({ name, methods }) =>
+					methods.map((method) => `KiroshiUITests/${name}/${method}`),
+				),
+			].sort(),
 		)
+	})
+
+	it("plans no shard of the workflow above 20 minutes of whole job", () => {
+		expect(largestWholeJobSeconds(workflowShardCount())).toBeLessThanOrEqual(
+			20 * 60,
+		)
+	})
+
+	it("runs the fewest shards that keep every whole job within 20 minutes", () => {
+		expect(largestWholeJobSeconds(workflowShardCount() - 1)).toBeGreaterThan(
+			20 * 60,
+		)
+	})
+
+	it("measures each UI test method from its test case line and KiroshiTests from its test run", () => {
+		const log = [
+			"ios (5)\tUNKNOWN STEP\t2026-11-17T09:25:00.1Z ✔ Test run with 769 tests in 85 suites passed after 18.348 seconds.",
+			"Test Case '-[KiroshiUITests.PagingTests testA]' started.",
+			"Test Case '-[KiroshiUITests.PagingTests testA]' passed (41.234 seconds).",
+			"Test Case '-[KiroshiUITests.GroupThreadTests testB]' failed (12.06 seconds).",
+			"Test Case '-[KiroshiTests.ParserTests testC]' passed (1.0 seconds).",
+		].join("\n")
+
+		expect(measuredTestSeconds(log)).toEqual({
+			"KiroshiUITests/GroupThreadTests/testB": 12.1,
+			KiroshiTests: 18.3,
+			"KiroshiUITests/PagingTests/testA": 41.2,
+		})
+	})
+
+	it("plans each test at the highest time measured and the time outside the tests at the highest job", () => {
+		const timings = measuredIosTimings({
+			suite: [
+				{ name: "Alpha", methods: ["testOne"] },
+				{ name: "Bravo", methods: ["testOne"] },
+			],
+			jobs: [
+				{
+					wholeJobSeconds: 900,
+					testSeconds: {
+						KiroshiTests: 20,
+						"KiroshiUITests/Alpha/testOne": 500,
+						"KiroshiUITests/Gone/testOne": 40,
+					},
+				},
+				{
+					wholeJobSeconds: 1000,
+					testSeconds: {
+						"KiroshiUITests/Alpha/testOne": 520,
+						"KiroshiUITests/Bravo/testOne": 300,
+					},
+				},
+			],
+		})
+
+		expect(timings).toEqual({
+			overheadSeconds: 380,
+			testSeconds: {
+				KiroshiTests: 20,
+				"KiroshiUITests/Alpha/testOne": 520,
+				"KiroshiUITests/Bravo/testOne": 300,
+			},
+		})
+	})
+
+	it("reads the run ids the timings are measured from", () => {
+		expect(parsedRunIds(["44050574038", "7"])).toEqual([44050574038, 7])
+		for (const texts of [[], ["abc"], ["-1"], ["1.5"]]) {
+			expect(() => parsedRunIds(texts)).toThrow(
+				"expected the id of one or more GitHub Actions runs",
+			)
+		}
+	})
+
+	describe("when a shard ends", () => {
+		const shardRun = (measured: Record<string, number>) => ({
+			shard: "2/2",
+			planned: fixtureShards()[1] ?? {
+				tests: [],
+				testSeconds: 0,
+				wholeJobSeconds: 0,
+			},
+			timings: TIMINGS,
+			measured,
+			run: "42",
+		})
+
+		it("summarises each test planned against measured, marking an unmeasured plan, and the ratio of the shard", () => {
+			expect(
+				shardTimingSummary(
+					shardRun({
+						"KiroshiUITests/Alpha/testOne": 510.4,
+						"KiroshiUITests/Charlie/testOne": 90,
+					}),
+				),
+			).toBe(
+				[
+					"### ios shard 2/2: 600 s of tests measured for 700 s planned, ratio 0.86",
+					"",
+					"Planned whole job: 1000 s, 300 s of it outside the tests.",
+					"",
+					"| Test | Planned s | Measured s |",
+					"| --- | ---: | ---: |",
+					"| Alpha/testOne | 500 | 510 |",
+					"| Charlie | 200 (not measured) | 90 |",
+					"",
+					"",
+				].join("\n"),
+			)
+		})
+
+		it("warns only past 25 percent over the planned test time, naming the refresh", () => {
+			const measured = (charlie: number) =>
+				shardRun({
+					"KiroshiUITests/Alpha/testOne": 600,
+					"KiroshiUITests/Charlie/testOne": charlie,
+				})
+
+			expect(shardOverPlanWarning(measured(275))).toBeUndefined()
+			expect(shardOverPlanWarning(measured(276))).toBe(
+				"::warning title=ios shard over its plan::ios shard 2/2 ran its tests in 876 s for 700 s planned. Refresh scripts/ios-shard-seconds.json with bun scripts/ci.ts ios-timings 42",
+			)
+		})
+	})
+
+	it("tests a shard from the built products alone, keeping the log that tells whether a test started", () => {
+		expect(IOS_BUILD_STEPS.map((step) => step.name)).toEqual([
+			"Generate",
+			"Build for testing",
+			"Swift format",
+		])
+		expect(IOS_SHARD_STEPS.map((step) => step.name)).toEqual([
+			"Test on the simulator",
+		])
+		expect(IOS_SHARD_STEPS[0]?.heavy).toBe(true)
+		expect(IOS_SHARD_STEPS[0]?.command).toStartWith("set -o pipefail; ")
+		expect(IOS_SHARD_STEPS[0]?.command).toEndWith(
+			"test-without-building $IOS_ONLY_TESTING | tee apps/ios/build/shard-test.log",
+		)
+	})
+
+	it.each([
+		[
+			"an XCTest case",
+			"Test Case '-[KiroshiUITests.PagingTests testPaging]' started.",
+		],
+		[
+			"a Swift Testing test",
+			"◇ Test deleteAccountAsksForConfirmationFirst() started.",
+		],
+	])("reads %s as a started test", (_, line) => {
+		expect(startedATest(`Testing started\n${line}\n`)).toBe(true)
+	})
+
+	it.each([
+		["an empty log", ""],
+		[
+			"a simulator runtime that is not available",
+			"Testing failed:\n\tKiroshiUITests-Runner encountered an error (Failed to prepare device 'iPhone 17' for impending launch. (Underlying Error: The iOS 27.0 simulator runtime is not available.))\n** TEST EXECUTE FAILED **\nTesting started\n",
+		],
+		[
+			"a launch server that died",
+			"Testing failed:\n\tThe operation couldn’t be completed. (Mach error -308 - (ipc/mig) server died)\n** TEST EXECUTE FAILED **\n",
+		],
+		[
+			"a test run that started no test",
+			"Test Suite 'All tests' started at 2026-11-16 10:07:27.842.\n◇ Test run started.\n",
+		],
+	])("reads %s as no started test", (_, log) => {
+		expect(startedATest(log)).toBe(false)
 	})
 
 	it("names each UI class after its file, every other test class being skipped by the plan", () => {

@@ -3,15 +3,13 @@ import { useCommandShortcut } from "@workspace/ui/hooks/use-command-shortcut"
 export type WorkspaceShortcuts = {
 	isEnabled: boolean
 	onOpenUserSettings: () => void
-	selectedBotId: string | null
-	onStartConversation: (botIds: string[]) => void
+	onNewConversation: () => void
 }
 
 export const useWorkspaceShortcuts = ({
 	isEnabled,
-	selectedBotId,
 	onOpenUserSettings,
-	onStartConversation,
+	onNewConversation,
 }: WorkspaceShortcuts) => {
 	useCommandShortcut({
 		chordKey: ",",
@@ -22,6 +20,6 @@ export const useWorkspaceShortcuts = ({
 	useCommandShortcut({
 		chordKey: "n",
 		isEnabled,
-		onPress: () => onStartConversation(selectedBotId ? [selectedBotId] : []),
+		onPress: onNewConversation,
 	})
 }

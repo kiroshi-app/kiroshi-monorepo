@@ -233,7 +233,7 @@ Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash ca
 
 Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
-A PR whose base is a `feature/*` integration branch is merged by running `scripts/pr-merge-integration.sh` alone in its own Bash call once its checks pass, never `pr-enqueue.sh`.
+A PR whose base is a `feature/*` integration branch is merged by running `scripts/pr-merge-integration.sh` alone in its own Bash call once its checks pass, never `pr-enqueue.sh`. A catch-up of main into a `feature/*` branch takes the same path: merge `origin/main` into the sub-PR branch as a real merge commit, open the sub-PR, then run `scripts/pr-merge-integration.sh`, which fast-forwards the base to that merge instead of squashing it. Never the merge button, never a squash or a rebase merge.
 
 Every push to main runs the full verify: lint, then vitest, website, rust and storybook on the paths it changed, then ios. A red run opens the Red main ticket. A fix PR merges on its own fast gate whatever the state of main.
 

@@ -73,7 +73,7 @@ const bodyRowCountOf = (node?: TableNode) =>
 const CELL_CLASS =
 	"[&_td]:border-foreground/10 [&_td]:border-r [&_td]:border-b [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:border-foreground/10 [&_th]:border-r [&_th]:border-b [&_th]:bg-foreground/5 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_tbody_tr:last-child>*]:border-b-0 [&_tr>*:last-child]:border-r-0"
 
-const TABLE_CLASS = `w-max border-collapse tabular-nums ${CELL_CLASS}`
+const TABLE_CLASS = `border-collapse tabular-nums ${CELL_CLASS}`
 
 const FRAME_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} group/markdown-table relative my-2 w-fit max-w-full`
 

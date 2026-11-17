@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
@@ -19,6 +19,7 @@ import { onboardingStepOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { onboardingScreenStepOf } from "@/lib/onboarding/onboarding-screen"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
+import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 import { haveLaunchReadsSettled } from "@/lib/workspace/launch-reads"
 import { useWorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
@@ -50,6 +51,9 @@ export const WorkspaceLayout = () => {
 		!roster.state.isRosterPending
 
 	useInvokePhaseEnd("boot", hasLeftLaunchLoader ? "startup screen gone" : null)
+	useEffect(() => {
+		if (hasLeftLaunchLoader) warmCodeHighlighter()
+	}, [hasLeftLaunchLoader])
 	useInvokePhaseEnd(
 		"space switch",
 		isOpenSpaceRostered ? scopes.openRowId : null,
@@ -58,7 +62,6 @@ export const WorkspaceLayout = () => {
 	if (!hasLeftLaunchLoader) {
 		return (
 			<StartupScreen
-				agents={rosterView.bots}
 				hasFailed={spaces.state.hasFailedToLoad}
 				isExiting={haveLaunchReadsSettled({
 					hasLoadedPreferences: user.state.hasLoaded,

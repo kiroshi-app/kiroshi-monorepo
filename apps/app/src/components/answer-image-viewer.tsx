@@ -37,13 +37,19 @@ const reportFailure = failureReporterIn("answer-image-viewer")
 
 const copyAddress = ({ src }: LibraryLightboxImage) =>
 	navigator.clipboard.writeText(src).catch((error: unknown) => {
-		reportFailure({ title: i18n.t("chat:answerBlock.image.copyFailed") })
+		reportFailure(
+			{ title: i18n.t("chat:answerBlock.image.copyFailed") },
+			{ reason: error },
+		)
 		throw error
 	})
 
 const openOriginal = ({ src }: LibraryLightboxImage) => {
-	void openInBrowser(src).catch(() =>
-		reportFailure({ title: i18n.t("chat:answerBlock.image.openFailed") }),
+	void openInBrowser(src).catch((reason: unknown) =>
+		reportFailure(
+			{ title: i18n.t("chat:answerBlock.image.openFailed") },
+			{ reason },
+		),
 	)
 }
 

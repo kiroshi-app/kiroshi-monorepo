@@ -13,8 +13,10 @@ import {
 	checklistRowsOf,
 	checklistSourceOf,
 	codeLanguageOf,
+	codeSpansOf,
 	conversionsOf,
 	convertSource,
+	foundAnchorIn,
 	galleryItemsOf,
 	keepIds,
 	type LibraryBlock,
@@ -22,11 +24,14 @@ import {
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
+	passageQuoteOf,
 	relaid,
 	rowAfter,
 	serializeBlocks,
 	shiftedAcross,
 	shiftedOffset,
+	tableCellRangesOf,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,
@@ -287,6 +292,19 @@ describe("library rich block sources", () => {
 		expect(tableRowsOf("| a \\| b | c |")).toEqual([["a \\| b", "c"]])
 	})
 
+	it("finds each table cell where its source wrote it", () => {
+		const source = "| Day | Day |\n| --- | --- |\n|  | a \\| b |"
+		expect(
+			tableCellRangesOf(source).map((cells) =>
+				cells.map(({ from, to }) => source.slice(from, to)),
+			),
+		).toEqual(tableRowsOf(source))
+		expect(tableCellRangesOf(source)[0]).toEqual([
+			{ from: 2, to: 5 },
+			{ from: 8, to: 11 },
+		])
+	})
+
 	it("writes the language and the body of a code fence", () => {
 		const fence = "```ts title=launch\nconst launch = await ship()\n```"
 
@@ -319,6 +337,33 @@ describe("library rich block sources", () => {
 			"```web-page\nurl: https://example.org/a\ntitle: A\nsite: Example\n```",
 		)
 		expect(webPageFieldsOf("```web-page\n```")).toEqual({})
+	})
+})
+
+describe("codeSpansOf", () => {
+	const spanOf = (source: string, from: string, to: string) => ({
+		from: source.indexOf(from),
+		to: source.lastIndexOf(to) + to.length,
+	})
+
+	it("spans a block that is a fence, from its opening to its closing", () => {
+		const source = "```ts\nship()\n```"
+
+		expect(codeSpansOf(source)).toEqual([{ from: 0, to: source.length }])
+	})
+
+	it("spans a fence indented under a list item, and none of the item text", () => {
+		const source = "- Run it:\n\n  ```\n  ship()\n  ```\n\n  Then rest."
+
+		expect(codeSpansOf(source)).toEqual([spanOf(source, "```", "```")])
+	})
+
+	it("spans nothing in a block that holds no code", () => {
+		expect(codeSpansOf("- Run `ship()` first")).toEqual([])
+	})
+
+	it("leaves out a fence drawn as a gallery", () => {
+		expect(codeSpansOf("```gallery\n- src: a.jpg\n```")).toEqual([])
 	})
 })
 
@@ -783,5 +828,204 @@ describe("unmarked", () => {
 
 		expect(gapsOf(unmarked(document))).toEqual(gapsOf(marked(document, ids)))
 		expect(plainOf(text)).toBe("```\ncode\n```\n\nAfter.")
+	})
+})
+
+describe("foundAnchorIn", () => {
+	const { blocks } = parseBlocks(
+		"# Plan ^aaaaaa\n\nThe boat leaves at 17:30, the boat is late. ^bbbbbb",
+		blockIdsOf(),
+	)
+
+	it("finds a block by its id", () => {
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb" })).toEqual({
+			blockId: "bbbbbb",
+		})
+	})
+
+	it("finds nothing for a block that left the document", () => {
+		expect(foundAnchorIn(blocks, { blockId: "cccccc" })).toBeUndefined()
+	})
+
+	it("keeps a passage whose text still sits at its range", () => {
+		const passage = { start: 26, end: 34, text: "the boat" }
+
+		expect(foundAnchorIn(blocks, { blockId: "bbbbbb", passage })).toEqual({
+			blockId: "bbbbbb",
+			passage,
+		})
+	})
+
+	it("follows a passage whose text moved inside its block", () => {
+		const passage = { start: 9, end: 15, text: "leaves" }
+
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { ...passage, start: 2, end: 8 },
+			}),
+		).toEqual({ blockId: "bbbbbb", passage })
+	})
+
+	it("finds nothing for a passage whose text left its block", () => {
+		expect(
+			foundAnchorIn(blocks, {
+				blockId: "bbbbbb",
+				passage: { start: 4, end: 9, text: "ferry" },
+			}),
+		).toBeUndefined()
+	})
+})
+
+describe("passageOfShown", () => {
+	const source =
+		"The **boat** leaves from [the dock](https://example.com/dock), then the boat waits."
+	const shown = "The boat leaves from the dock, then the boat waits."
+
+	const selected = (text: string, from = 0) => {
+		const start = shown.indexOf(text, from)
+		return { shown, start, end: start + text.length }
+	}
+
+	it("maps selected words to their place in the markdown", () => {
+		expect(passageOfShown(source, selected("leaves"))).toEqual({
+			start: 13,
+			end: 19,
+			text: "leaves",
+		})
+	})
+
+	it("keeps the occurrence that was selected", () => {
+		const start = source.lastIndexOf("boat")
+
+		expect(passageOfShown(source, selected("boat", 10))).toEqual({
+			start,
+			end: start + 4,
+			text: "boat",
+		})
+	})
+
+	it("maps a selection that spans bold text to the markdown it covers", () => {
+		expect(passageOfShown(source, selected("The boat leaves"))).toEqual({
+			start: 0,
+			end: 19,
+			text: "The **boat** leaves",
+		})
+	})
+
+	it("maps a selection that ends inside a link to the markdown it covers", () => {
+		const text = "boat** leaves from [the dock"
+
+		expect(
+			passageOfShown(source, selected("boat leaves from the dock")),
+		).toEqual({ start: 6, end: 6 + text.length, text })
+	})
+
+	it("leaves the blanks around the selected words out", () => {
+		const { start, end } = selected("leaves")
+
+		expect(
+			passageOfShown(source, { shown, start: start - 1, end: end + 1 }),
+		).toEqual({ start: 13, end: 19, text: "leaves" })
+	})
+
+	it("maps a list item past its marker and across its lines", () => {
+		expect(
+			passageOfShown("- one *two*\n- three", {
+				shown: "one two\nthree",
+				start: 4,
+				end: 13,
+			}),
+		).toEqual({ start: 7, end: 19, text: "two*\n- three" })
+	})
+
+	it("gives up when the block draws text its markdown does not write", () => {
+		expect(
+			passageOfShown("> [!NOTE]\n> Bring a coat.", {
+				shown: "Note Bring a coat.",
+				start: 5,
+				end: 10,
+			}),
+		).toBeUndefined()
+	})
+
+	it("gives up on a selection of blanks", () => {
+		const start = shown.indexOf(" boat")
+
+		expect(
+			passageOfShown(source, { shown, start, end: start + 1 }),
+		).toBeUndefined()
+	})
+})
+
+describe("passageOfShown over a mention", () => {
+	const source = "Ask <@bot-atlas> for the **notes**."
+	const shown = "Ask <> for the notes."
+
+	it("maps a selection that covers a mention to the markdown it covers", () => {
+		expect(passageOfShown(source, { shown, start: 0, end: 10 })).toEqual({
+			start: 0,
+			end: 20,
+			text: "Ask <@bot-atlas> for",
+		})
+	})
+
+	it("keeps a mention the selection ends on", () => {
+		expect(passageOfShown(source, { shown, start: 0, end: 6 })).toEqual({
+			start: 0,
+			end: 16,
+			text: "Ask <@bot-atlas>",
+		})
+	})
+
+	it("reads a mention written in code as the words it draws", () => {
+		expect(
+			passageOfShown("Write `<@bot-atlas>` here", {
+				shown: "Write <@bot-atlas> here",
+				start: 6,
+				end: 18,
+			}),
+		).toEqual({ start: 7, end: 19, text: "<@bot-atlas>" })
+	})
+})
+
+describe("passageQuoteOf", () => {
+	const nameOf = (id: string) => (id === "bot-atlas" ? "Atlas" : "Unknown")
+
+	const quoteOf = (source: string, text: string) => {
+		const start = source.indexOf(text)
+		return passageQuoteOf(
+			source,
+			{ start, end: start + text.length, text },
+			nameOf,
+		)
+	}
+
+	it("reads the words a passage across bold, a link and a mention draws", () => {
+		const source =
+			'The **boat** leaves from [the dock](https://example.com/dock "Pier") with <@bot-atlas> at 17:30.'
+
+		expect(
+			quoteOf(
+				source,
+				'boat** leaves from [the dock](https://example.com/dock "Pier") with <@bot-atlas>',
+			),
+		).toBe("boat leaves from the dock with Atlas")
+	})
+
+	it("reads a line break as one space, past the marker of the next line", () => {
+		expect(quoteOf("- one *two*\n- three", "two*\n- three")).toBe("two three")
+	})
+
+	it("keeps an escaped character without its backslash", () => {
+		expect(quoteOf("It costs 5\\* more.", "costs 5\\* more")).toBe(
+			"costs 5* more",
+		)
+	})
+
+	it("keeps a mention written in code as it is written", () => {
+		expect(quoteOf("Write `<@bot-atlas>` here.", "`<@bot-atlas>` here")).toBe(
+			"<@bot-atlas> here",
+		)
 	})
 })

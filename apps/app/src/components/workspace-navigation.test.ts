@@ -385,7 +385,7 @@ describe("the Home page", () => {
 		return { router, store, first, second, firstOfSpace }
 	}
 
-	type SidebarEntry = "newConversation" | "missions" | "library"
+	type SidebarEntry = "newConversation" | "agents" | "missions" | "library"
 
 	const sidebarEntry = (name: SidebarEntry) =>
 		within(sidebarOf()).getByRole("button", {
@@ -460,7 +460,7 @@ describe("the Home page", () => {
 		).toEqual({ [PERSONAL_SPACE_ID]: second.id })
 	})
 
-	it.each<SidebarEntry>(["missions", "library"])(
+	it.each<SidebarEntry>(["agents", "missions", "library"])(
 		"leaves the Home for %s, the sidebar marking that entry",
 		async (entry) => {
 			await mountAppWithTwoAgents()

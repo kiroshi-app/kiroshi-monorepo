@@ -39,10 +39,14 @@ final class ThreadStore {
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var sending: Task<Void, Never>?
+    @ObservationIgnored private var refusedSend: Outgoing?
     @ObservationIgnored private var stopping: Task<Void, Never>?
     @ObservationIgnored private var loadingOlder: Task<Void, Never>?
     @ObservationIgnored private var answeringTask: Task<Void, Never>?
+    @ObservationIgnored private var heldAnswer: HeldAnswer?
+    @ObservationIgnored private var answersResolvedHere: Set<String> = []
     @ObservationIgnored private var askedRequests: [String: QuestionRequest] = [:]
     @ObservationIgnored private var oldestSeq: Int?
     @ObservationIgnored private var generation = 0
@@ -152,40 +156,78 @@ final class ThreadStore {
         else { return nil }
         answering = waiting
         failedAnswerId = nil
-        let task = Task {
-            await answer(waiting, with: draft.answers, lines: draft.lines, through: relay)
-        }
+        let held =
+            heldAnswer.flatMap { $0.isRepeated(by: draft, to: waiting) ? $0 : nil }
+            ?? newHeldAnswer(draft, to: waiting)
+        heldAnswer = held
+        let task = Task { await answer(held, through: relay) }
         answeringTask = task
         return task
     }
 
-    private func answer(
-        _ waiting: WaitingQuestion, with answers: [String: String], lines: [QuestionAnswerLine],
-        through relay: ConversationRelay
-    ) async {
-        let id = waiting.request.id
+    private func newHeldAnswer(_ draft: QuestionDraft, to waiting: WaitingQuestion) -> HeldAnswer {
+        let content = QuestionDraft.content(of: draft.answers, to: waiting.request)
+        let record =
+            content.isEmpty
+            ? nil
+            : SentMessage(
+                id: makeId(), conversationId: waiting.conversationId,
+                turnId: waiting.turnId ?? makeId(), content: content,
+                createdAt: now().milliseconds, repliedToMessageId: waiting.request.messageId)
+        return HeldAnswer(
+            waiting: waiting, answers: draft.answers, lines: draft.lines, callKey: makeId(),
+            record: record)
+    }
+
+    private func answer(_ held: HeldAnswer, through relay: ConversationRelay) async {
+        let id = held.questionId
         do {
-            try await relay.answerQuestion(id, askedIn: waiting.scope, with: answers)
+            try await relay.answerQuestion(
+                id, askedIn: held.waiting.scope, with: held.answers, callKey: held.callKey)
         } catch is CancellationError {
             answering = nil
             return
+        } catch RelayCallError.alreadyRan {
         } catch {
             answering = nil
-            failedAnswerId = id
-            isAnswerRefusedByOlderHost = error as? ConversationCallError == .unknownToTheHost
-            return
+            guard answersResolvedHere.contains(id) else {
+                failedAnswerId = id
+                isAnswerRefusedByOlderHost = error as? ConversationCallError == .unknownToTheHost
+                return
+            }
         }
         answering = nil
-        answeredHere[id] = QuestionAnswered(by: .you, lines: lines)
+        guard let record = settle(held) else { return }
+        try? await relay.recordAnswer(record)
+    }
+
+    private func settle(_ held: HeldAnswer) -> SentMessage? {
+        guard heldAnswer?.callKey == held.callKey else { return nil }
+        let id = held.questionId
+        heldAnswer = nil
+        if failedAnswerId == id {
+            failedAnswerId = nil
+        }
+        answeredHere[id] = QuestionAnswered(by: .you, lines: held.lines)
         answeredElsewhereIds.remove(id)
         work.settleQuestion(id)
-        let content = QuestionDraft.content(of: answers, to: waiting.request)
-        guard !content.isEmpty else { return }
-        let message = SentMessage(
-            id: makeId(), conversationId: waiting.conversationId,
-            turnId: waiting.turnId ?? makeId(), content: content, createdAt: now().milliseconds,
-            repliedToMessageId: waiting.request.messageId)
-        try? await relay.recordAnswer(message)
+        return held.record
+    }
+
+    private func isFromThisDevice(_ heard: RelayEvent) -> Bool {
+        guard let relay, let caller = heard.caller else { return false }
+        return caller.deviceId == relay.deviceId
+    }
+
+    private func resolvedHere(_ id: String) {
+        answersResolvedHere.insert(id)
+        guard answering?.request.id != id else { return }
+        guard let held = heldAnswer, held.questionId == id, let relay else {
+            work.settleQuestion(id)
+            return
+        }
+        guard let record = settle(held) else { return }
+        answeringTask = Task { try? await relay.recordAnswer(record) }
     }
 
     func follow(_ connection: RelayConnection) async {
@@ -195,16 +237,23 @@ final class ThreadStore {
             case .state(.online(let sharedSpaceId)):
                 isReachable = true
                 spaceId = sharedSpaceId
-                reload()
+                if phase == .failed {
+                    reload()
+                }
             case .state:
                 isReachable = false
-            case .event(let event):
-                guard let event = ConversationEvent(event) else { continue }
-                apply(event)
+            case .reread where phase == .loaded:
+                resyncReread.start { [weak self] in self?.reload() }
+            case .reread:
+                reload()
+            case .event(let heard):
+                guard let event = ConversationEvent(heard) else { continue }
+                apply(event, heard: heard)
             }
         }
         isReachable = false
-        for task in [loading, sending, stopping, loadingOlder, answeringTask] {
+        resyncReread.cancel()
+        for task in [loading, loadingOlder] {
             task?.cancel()
         }
     }
@@ -259,14 +308,18 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
+        let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repeated = refusedSend.flatMap { $0.repeats(written, with: attachments) ? $0 : nil }
+        refusedSend = nil
         if let rejection = AttachmentRejection.of(attachments) {
             sendFailure = SendFailure(rejection)
             return nil
         }
-        let outgoing = Outgoing(
-            id: makeId(), turnId: makeId(), conversationId: conversationId,
-            written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
-            sentAt: now())
+        let outgoing =
+            repeated
+            ?? Outgoing(
+                in: conversationId, written: written, content: content(of: written),
+                picked: attachments, sentAt: now(), makeId: makeId)
         lastSentId = outgoing.id
         draft = ""
         attachments = []
@@ -302,15 +355,11 @@ final class ThreadStore {
 
     private func deliver(_ outgoing: Outgoing, through relay: ConversationRelay) async {
         defer { isSending = false }
+        var outgoing = outgoing
         do {
-            var content = content(of: outgoing.written)
-            if !outgoing.picked.isEmpty {
-                let paths = try await relay.storeAttachments(
-                    await ConversationAttachments.encoding(
-                        outgoing.picked, in: outgoing.conversationId))
-                content = AttachmentBlock.prompt(
-                    text: content, paths: paths, sentAt: outgoing.sentAt)
-            }
+            let content = try await outgoing.prompt(
+                storingFilesBy: { try await relay.storeAttachments($0, callKey: $1) },
+                makeId: makeId)
             let message = SentMessage(
                 id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
                 content: content, createdAt: outgoing.sentAt.milliseconds,
@@ -323,7 +372,10 @@ final class ThreadStore {
                     sentAt: message.createdAt))
         } catch is CancellationError {
             return
+        } catch RelayCallError.alreadyRan {
+            return
         } catch {
+            guard !entries.contains(where: { $0.id == outgoing.id }) else { return }
             if draft.isEmpty {
                 draft = outgoing.written
             }
@@ -331,6 +383,19 @@ final class ThreadStore {
                 attachments = outgoing.picked
             }
             sendFailure = SendFailure(error)
+            refusedSend = outgoing
+        }
+    }
+
+    private func settleRefusedSend() {
+        guard let refusedSend, entries.contains(where: { $0.id == refusedSend.id }) else { return }
+        self.refusedSend = nil
+        sendFailure = nil
+        if draft == refusedSend.written {
+            draft = ""
+        }
+        if attachments == refusedSend.picked {
+            attachments = []
         }
     }
 
@@ -408,6 +473,7 @@ final class ThreadStore {
         }
         olderFailed = false
         layOut()
+        settleRefusedSend()
     }
 
     private func threadMessage(_ message: TranscriptMessage) -> ThreadMessage {
@@ -429,12 +495,12 @@ final class ThreadStore {
         layOut()
     }
 
-    private func apply(_ event: ConversationEvent) {
+    private func apply(_ event: ConversationEvent, heard: RelayEvent) {
         switch event {
         case .messageStored(let message) where message.conversationId == conversationId:
             insert(threadMessage(message))
         case .agent(let agent) where agent.scope?.conversationId == conversationId:
-            apply(agent.change, by: agent.scope?.botId)
+            apply(agent.change, by: agent.scope?.botId, heard: heard)
         case .groupUpdated(let group) where subject.isGroup(group.id):
             subject = .group(group)
         case .groupDeleted(let id) where subject.isGroup(id):
@@ -445,7 +511,9 @@ final class ThreadStore {
         }
     }
 
-    private func apply(_ change: AgentEvent.Change, by authorId: Companion.ID?) {
+    private func apply(
+        _ change: AgentEvent.Change, by authorId: Companion.ID?, heard: RelayEvent
+    ) {
         switch change {
         case .messageStarted(let message):
             insert(
@@ -463,11 +531,14 @@ final class ThreadStore {
             }
         case .questionRequested(let request):
             hold(request, askedBy: authorId)
+        case .permissionResolved(let id) where isFromThisDevice(heard):
+            resolvedHere(id)
         case .permissionResolved(let id):
             guard answering?.request.id != id, answeredHere[id] == nil,
                 askedRequests[id] != nil || entries.contains(where: { $0.askedQuestionId == id })
             else { return }
             answeredElsewhereIds.insert(id)
+            work.settleQuestion(id)
         case .turn, .activity, .permissionRequested, .turnEnded, .failed, .other:
             break
         }
@@ -477,6 +548,7 @@ final class ThreadStore {
         guard !updateMessage(message.id, { $0.replaceText(message.text) }) else { return }
         entries.append(message)
         layOut()
+        settleRefusedSend()
     }
 
     @discardableResult
@@ -499,13 +571,20 @@ final class ThreadStore {
     }
 }
 
-private struct Outgoing {
-    let id: String
-    let turnId: String
-    let conversationId: String
-    let written: String
-    let picked: [PickedAttachment]
-    let sentAt: Date
+private struct HeldAnswer {
+    let waiting: WaitingQuestion
+    let answers: [String: String]
+    let lines: [QuestionAnswerLine]
+    let callKey: String
+    let record: SentMessage?
+
+    var questionId: String {
+        waiting.request.id
+    }
+
+    func isRepeated(by draft: QuestionDraft, to question: WaitingQuestion) -> Bool {
+        question.request.id == questionId && draft.answers == answers
+    }
 }
 
 extension ThreadStore: ThreadModel {

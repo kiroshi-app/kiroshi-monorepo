@@ -164,12 +164,17 @@ const raiseNoticeOnce = (
 	drag: Noticed,
 	notice: () => Parameters<typeof raiseReportedFailure>[0],
 	command?: string,
+	reason?: unknown,
 ) => {
 	if (drag.isNoticed) {
 		return
 	}
 	drag.isNoticed = true
-	void raiseReportedFailure(notice(), { raisedIn: "tab-tear-off", command })
+	void raiseReportedFailure(notice(), {
+		raisedIn: "tab-tear-off",
+		command,
+		reason,
+	})
 }
 
 const ghostFailureNotice = () => ({
@@ -178,7 +183,7 @@ const ghostFailureNotice = () => ({
 
 const failGhost = (drag: Noticed, command: string, reason: unknown) => {
 	reportGhostFailure(reason)
-	raiseNoticeOnce(drag, ghostFailureNotice, command)
+	raiseNoticeOnce(drag, ghostFailureNotice, command, reason)
 	return false
 }
 

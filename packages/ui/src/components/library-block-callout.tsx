@@ -16,6 +16,8 @@ import {
 	withCalloutTone,
 } from "@workspace/ui/components/library-document-blocks"
 import { AnswerBlockFrame } from "@workspace/ui/components/markdown/answer-block"
+import type { MarkdownRunRenderer } from "@workspace/ui/components/markdown/run"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import {
 	ToggleGroup,
 	ToggleGroupItem,
@@ -24,13 +26,32 @@ import {
 type LibraryCalloutEditorProps = {
 	source: string
 	onEdit: SourceEdit
+	runs?: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
 }
 
 const TONES: readonly CalloutTone[] = ["note", "tip", "warning"]
 
+const NO_RUNS: MarkdownRun[] = []
+
+const textOffsetOf = (source: string, offset: number) =>
+	calloutTextOf(source.slice(0, offset)).length
+
+const textRunsOf = (source: string, runs: MarkdownRun[]) =>
+	runs.flatMap(({ id, start, end }) => {
+		const run = {
+			id,
+			start: textOffsetOf(source, start),
+			end: textOffsetOf(source, end),
+		}
+		return run.start < run.end ? [run] : []
+	})
+
 const LibraryCalloutEditor = ({
 	source,
 	onEdit,
+	runs = NO_RUNS,
+	renderRun,
 }: LibraryCalloutEditorProps) => {
 	const { t } = useTranslation("common")
 	const { t: tChat } = useTranslation("chat")
@@ -50,6 +71,8 @@ const LibraryCalloutEditor = ({
 						onEdit={(text) =>
 							onEdit((current) => withCalloutText(current, text))
 						}
+						renderRun={renderRun}
+						runs={textRunsOf(source, runs)}
 						source={calloutTextOf(source)}
 						type="paragraph"
 					/>

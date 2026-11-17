@@ -32,7 +32,7 @@ export const useMessageLanding = ({
 	const shown = landing?.conversationId === conversationId ? landing : null
 
 	const giveUp = useCallback(
-		(taken: MessageLanding) => {
+		(taken: MessageLanding, reason?: unknown) => {
 			onTaken(taken)
 			raiseReportedFailure(
 				{
@@ -42,6 +42,7 @@ export const useMessageLanding = ({
 				{
 					raisedIn: "use-message-landing",
 					conversation: taken.conversationId,
+					reason,
 				},
 			)
 		},
@@ -65,11 +66,11 @@ export const useMessageLanding = ({
 				}
 				giveUp(shown)
 			},
-			() => {
+			(reason: unknown) => {
 				if (isSuperseded()) {
 					return
 				}
-				giveUp(shown)
+				giveUp(shown, reason)
 			},
 		)
 	}, [shown, landOn, giveUp])

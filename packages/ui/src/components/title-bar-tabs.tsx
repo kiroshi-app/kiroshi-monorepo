@@ -16,7 +16,13 @@ import { createPortal, flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
+import {
+	type ConversationNaming,
+	conversationLabelOf,
+} from "@workspace/ui/components/conversation-naming"
+import { ConversationTabIcon } from "@workspace/ui/components/conversation-tab-icon"
 import { Icons } from "@workspace/ui/components/icons"
+import { TextSwap } from "@workspace/ui/components/motion/text-swap"
 import { NEEDS_YOU_GLYPH } from "@workspace/ui/components/row-anatomy"
 import { useSidebarPeekTrigger } from "@workspace/ui/components/sidebar-peek"
 import {
@@ -67,12 +73,17 @@ type TitleBarTab = {
 	descriptor?: TitleBarTabDescriptor
 	isPinned?: boolean
 	isNeedingYou?: boolean
+	naming?: ConversationNaming
 }
 
-const titleOf = (tab: TitleBarTab, t: TFunction<"common">) =>
-	tab.descriptor ? libraryDisplayName(tab.descriptor.name, t) : tab.title
+const titleOf = (tab: TitleBarTab, t: TFunction<["common", "chat"]>) =>
+	tab.descriptor
+		? libraryDisplayName(tab.descriptor.name, t)
+		: conversationLabelOf(t, tab.title, tab.naming)
 
-const iconOf = ({ icon, descriptor }: TitleBarTab) => {
+const iconOf = ({ icon, descriptor, naming }: TitleBarTab) => {
+	if (naming === "pending") return <ConversationTabIcon isPending />
+	if (naming === "failed") return <ConversationTabIcon />
 	if (!descriptor) return icon
 	const Glyph = Icons[descriptor.icon]
 	return <Glyph />
@@ -166,10 +177,10 @@ const TAB_ICON =
 	"pointer-events-none grid size-4 shrink-0 place-items-center [&>svg]:size-3.75"
 
 const TAB =
-	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-tab-hover aria-selected:bg-title-bar-tab-selected"
+	"relative flex h-7 touch-none select-none items-center gap-1.5 rounded-md bg-title-bar-tab ps-2 pe-7.25 text-muted-foreground hover:bg-title-bar-tab-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 data-pointer-within:bg-title-bar-tab-hover data-pointer-within:text-foreground aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const PINNED_TAB =
-	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-foreground hover:bg-title-bar-tab-hover focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected"
+	"relative grid touch-none select-none place-items-center rounded-md bg-title-bar-pinned text-muted-foreground hover:bg-title-bar-tab-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 aria-selected:bg-title-bar-tab-selected aria-selected:text-foreground"
 
 const LIFTED_SURFACE =
 	"pointer-events-none z-10 bg-title-bar-menu text-foreground drop-shadow-md"
@@ -525,7 +536,7 @@ const useTabLift = ({
 	onTearOffMove,
 	onTearOffCancel,
 }: TabLiftSource) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 	const isPinned = (id: string) => pinned.some((tab) => tab.id === id)
 	const zoneOf = (id: string) => (isPinned(id) ? pinned : kept)
 	const rankOf = (id: string) => zoneOf(id).findIndex((tab) => tab.id === id)
@@ -668,7 +679,7 @@ const TitleBarTabItem = ({
 	onCloseOtherTabs,
 	onMoveTabToNewWindow,
 }: TitleBarTabItemProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 	const needsYou = Boolean(tab.isNeedingYou) && !isActive
 	const isLifted = lift.lift?.id === tab.id
 	const shift = useLiftLanding(lift, (landing) => shiftOf(tab.id, landing))
@@ -678,6 +689,11 @@ const TitleBarTabItem = ({
 	)
 	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
 	const title = titleOf(tab, t)
+	const titleClass = cn(
+		TAB_TITLE,
+		tab.naming === "pending" && "text-muted-foreground",
+		needsYou && "text-warning",
+	)
 
 	return (
 		<ContextMenu>
@@ -730,9 +746,11 @@ const TitleBarTabItem = ({
 								data-slot="title-bar-tab-needs-you"
 							/>
 						) : null}
-						<span className={cn(TAB_TITLE, needsYou && "text-warning")}>
-							{title}
-						</span>
+						{tab.naming ? (
+							<TextSwap className={titleClass} text={title} />
+						) : (
+							<span className={titleClass}>{title}</span>
+						)}
 					</>
 				)}
 			</ContextMenuTrigger>
@@ -852,7 +870,7 @@ type IncomingTabProps = {
 }
 
 const IncomingTab = ({ tab, widthClass, box }: IncomingTabProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 
 	return (
 		<TitleBarTabChip
@@ -931,7 +949,7 @@ type OverflowChipProps = {
 }
 
 const OverflowChip = ({ tabs, onSelectTab }: OverflowChipProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 
 	return (
 		<ContextMenu>
@@ -996,7 +1014,7 @@ const TitleBarTabs = ({
 	onToggleSidebar,
 	onOpenSearch,
 }: TitleBarTabsProps) => {
-	const { t } = useTranslation("common")
+	const { t } = useTranslation(["common", "chat"])
 	const sidebarPeekTrigger = useSidebarPeekTrigger()
 	const searchLabel = t("open", { ns: "search" })
 	const pinned = tabs.filter((tab) => tab.isPinned)

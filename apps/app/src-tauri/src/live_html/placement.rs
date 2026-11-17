@@ -1,5 +1,6 @@
 use super::contract::LiveHtmlRectangle;
 
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Frame {
 	pub x: f64,
@@ -8,6 +9,7 @@ pub struct Frame {
 	pub height: f64,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Frames {
 	pub holder: Frame,
@@ -21,12 +23,14 @@ pub struct Placement {
 	pub top_inset: f64,
 }
 
+#[cfg(target_os = "macos")]
 pub struct ContentView {
 	pub height: f64,
 	pub is_flipped: bool,
 	pub backing_scale: f64,
 }
 
+#[cfg(target_os = "macos")]
 impl Placement {
 	pub fn frames(self, content: &ContentView) -> Frames {
 		let on_the_grid =
@@ -57,6 +61,7 @@ impl Placement {
 	}
 }
 
+#[cfg(target_os = "macos")]
 impl Frame {
 	fn on_the_pixel_grid(self, backing_scale: f64) -> Frame {
 		let snapped = |length: f64| (length * backing_scale).round() / backing_scale;
@@ -70,6 +75,7 @@ impl Frame {
 	}
 }
 
+#[cfg(target_os = "macos")]
 fn intersection(first: Frame, second: Frame) -> Frame {
 	let left = first.x.max(second.x);
 	let top = first.y.max(second.y);
@@ -78,7 +84,7 @@ fn intersection(first: Frame, second: Frame) -> Frame {
 	Frame { x: left, y: top, width: (right - left).max(0.0), height: (bottom - top).max(0.0) }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
 	use super::*;
 

@@ -25,7 +25,6 @@ import {
 	reopenSecondaryWindows,
 } from "@/lib/tabs/workspace-tabs"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
-import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
 forwardConsoleToLogFile()
 installInvokeTally()
@@ -92,5 +91,3 @@ if (isDesktopHost()) {
 } else {
 	renderApp()
 }
-
-warmCodeHighlighter()

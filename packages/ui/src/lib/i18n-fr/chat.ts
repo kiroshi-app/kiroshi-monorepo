@@ -749,6 +749,9 @@ const chat = {
 				"Impossible d’enregistrer les fichiers ({{detail}}). Joignez-les à nouveau.",
 		},
 	},
+	conversationNaming: {
+		pending: "Nouvelle conversation",
+	},
 	namelessConversation: {
 		separator: ", ",
 	},

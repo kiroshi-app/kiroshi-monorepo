@@ -5,11 +5,11 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Runtime};
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 
 use super::bridge;
 use super::reach::GuestEvents;
-use crate::agent::commands::subscribed_with_pending_questions;
+use crate::agent::commands::{pending_question_frames, subscribed_with_pending_questions};
 use crate::events::{Frame, BUFFERED_FRAMES};
 
 pub(crate) const RESUME_COMMAND: &str = "relay_resume";
@@ -108,13 +108,17 @@ pub(super) struct LastSent {
 
 pub(super) struct Relaying<'a> {
 	pub(super) ring: &'a watch::Sender<Ring>,
+	pub(super) member_resumed: &'a Notify,
 	pub(super) last_sent: LastSent,
 }
 
 impl<'a> Relaying<'a> {
-	pub(super) fn from_the_start_of(ring: &'a watch::Sender<Ring>) -> Self {
+	pub(super) fn from_the_start_of(
+		ring: &'a watch::Sender<Ring>,
+		member_resumed: &'a Notify,
+	) -> Self {
 		let epoch = ring.borrow().epoch.clone();
-		Self { ring, last_sent: LastSent { epoch, position: 0 } }
+		Self { ring, member_resumed, last_sent: LastSent { epoch, position: 0 } }
 	}
 }
 
@@ -264,25 +268,37 @@ pub(super) async fn recorded<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 	ring: &watch::Sender<Ring>,
+	member_resumed: &Notify,
 ) {
 	let mut guest_events = GuestEvents::new(space_id);
 	loop {
 		let (pending, mut heard) = subscribed_with_pending_questions(app);
-		for frame in pending {
-			let addressed = guest_events.reach_the_guest(app, &frame).await;
-			ring.send_modify(|ring| ring.all_recorded(addressed));
-		}
+		all_reached(app, &mut guest_events, ring, pending).await;
 		let missed = loop {
-			match heard.recv().await {
-				Ok(frame) => {
-					let addressed = guest_events.reach_the_guest(app, &frame).await;
-					ring.send_modify(|ring| ring.all_recorded(addressed));
+			tokio::select! {
+				frame = heard.recv() => match frame {
+					Ok(frame) => all_reached(app, &mut guest_events, ring, [frame]).await,
+					Err(RecvError::Lagged(missed)) => break missed,
+					Err(RecvError::Closed) => return,
+				},
+				() = member_resumed.notified() => {
+					all_reached(app, &mut guest_events, ring, pending_question_frames(app)).await;
 				}
-				Err(RecvError::Lagged(missed)) => break missed,
-				Err(RecvError::Closed) => return,
 			}
 		};
 		ring.send_modify(|ring| ring.restarted(missed));
+	}
+}
+
+async fn all_reached<R: Runtime>(
+	app: &AppHandle<R>,
+	guest_events: &mut GuestEvents,
+	ring: &watch::Sender<Ring>,
+	frames: impl IntoIterator<Item = Frame>,
+) {
+	for frame in frames {
+		let addressed = guest_events.reach_the_guest(app, &frame).await;
+		ring.send_modify(|ring| ring.all_recorded(addressed));
 	}
 }
 

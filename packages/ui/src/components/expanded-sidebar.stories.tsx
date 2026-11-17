@@ -2194,7 +2194,7 @@ const currentControlsIn = (sidebar: HTMLElement) =>
 const gearOf = (person: Element) =>
 	person.lastElementChild?.querySelector("svg") as Element
 
-const expectRestingRow = async (row: HTMLElement) => {
+const expectRowLanes = async (row: HTMLElement) => {
 	const title = slotIn(row, "roster-row-name")
 	const meta = slotIn(row, "roster-row-meta")
 	await expect(boxOf(row).height).toBe(ROW_HEIGHT)
@@ -2206,9 +2206,6 @@ const expectRestingRow = async (row: HTMLElement) => {
 		getComputedStyle(title).lineHeight,
 		getComputedStyle(title).fontWeight,
 	]).toEqual(["14px", "18px", "400"])
-	await expect(colourOf(title)).toBe(
-		tokenStyleIn(row, "text-soft-foreground", "color"),
-	)
 	await expect([
 		getComputedStyle(meta).fontSize,
 		getComputedStyle(meta).lineHeight,
@@ -2218,6 +2215,13 @@ const expectRestingRow = async (row: HTMLElement) => {
 		tokenStyleIn(row, "text-sidebar-muted-foreground", "color"),
 	)
 	await expect(boxOf(meta).width).toBe(META_LANE_WIDTH)
+}
+
+const expectRestingRow = async (row: HTMLElement) => {
+	await expectRowLanes(row)
+	await expect(colourOf(slotIn(row, "roster-row-name"))).toBe(
+		tokenStyleIn(row, "text-muted-foreground", "color"),
+	)
 }
 
 const COMPACT_DESCRIPTION =
@@ -2232,7 +2236,7 @@ export const CompactRestExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides, a mission 8 at its start, with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in soft foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 14px mark, its identifier in 13/18 medium and its title, with no lane and no meta, and that the person button rests, unmarked, with its outline gear.`,
+				story: `${COMPACT_DESCRIPTION} Check every agent, conversation and mission row is one 30px line padded 6 on all four sides, a mission 8 at its start, with a 6px radius and an 8px gap, rows of a group 1px apart and groups 24px apart. Check the 18px lead, the 14/18 regular title in muted foreground and the 64px meta lane in 11/16 tabular muted foreground sit in the same lanes on every row, that an agent row holds its 18px avatar, its name and its time with no pile, that a conversation with no colour strokes its subject icon 1.75 wide in muted foreground with no fill and no tile behind it, that the pile steps its 14px avatars by 9px, 6px before a time at least 22px wide, that each mission holds a 14px mark, its identifier in 13/18 medium and its title, with no lane and no meta, and that the person button rests, unmarked, with its outline gear.`,
 			},
 		},
 	},
@@ -2318,7 +2322,7 @@ export const CompactHoverExpanded = meta.story({
 		pseudo: { hover: ROADMAP_ROW_SELECTOR },
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} The pointer rests on Q3 roadmap review. Check the row lights the sidebar hover fill at once, with no colour transition, its title, icon and meta keeping their resting colours and columns.`,
+				story: `${COMPACT_DESCRIPTION} The pointer rests on Q3 roadmap review. Check the row lights the sidebar hover fill at once, with no colour transition, its title and its icon going from muted foreground to the sidebar foreground, its meta keeping its resting colour, and every part keeping its column.`,
 			},
 		},
 	},
@@ -2327,7 +2331,7 @@ export const CompactHoverExpanded = meta.story({
 		if (!isInBrowserRunner()) return
 		const title = slotIn(row, "roster-row-name")
 		const meta = slotIn(row, "roster-row-meta")
-		const resting = [colourOf(title), colourOf(meta)]
+		const restingMeta = colourOf(meta)
 		const pointer = await realPointer()
 		await withMotionAllowed(async () => {
 			try {
@@ -2335,8 +2339,11 @@ export const CompactHoverExpanded = meta.story({
 				await expect(row.matches(":hover")).toBe(true)
 				await expect(fillOf(row)).toBe(hoverFillOf(row))
 				await expect(colourTransitionsOf(row)).toEqual([])
-				await expect([colourOf(title), colourOf(meta)]).toEqual(resting)
-				await expectRestingRow(row)
+				await expect([colourOf(title), colourOf(subjectIconOf(row))]).toEqual(
+					Array(2).fill(tokenStyleIn(row, "text-sidebar-foreground", "color")),
+				)
+				await expect(colourOf(meta)).toBe(restingMeta)
+				await expectRowLanes(row)
 			} finally {
 				await pointer.unhover(row)
 			}
@@ -2350,7 +2357,7 @@ export const CompactSelectedExpanded = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${COMPACT_DESCRIPTION} Q3 roadmap review is the open conversation. Check it alone reports itself as the current page, wears the sidebar selected fill and draws its title in foreground at regular weight, its meta unchanged. Check its subject icon is the filled drawing, in the muted foreground it has at rest, next to the three resting conversations that keep their outline icon.`,
+				story: `${COMPACT_DESCRIPTION} Q3 roadmap review is the open conversation. Check it alone reports itself as the current page, wears the sidebar selected fill and draws its title in foreground at regular weight, its meta unchanged. Check its subject icon is the filled drawing, in the sidebar foreground like its title, next to the three resting conversations that keep their outline icon.`,
 			},
 		},
 	},
@@ -2380,7 +2387,7 @@ export const CompactSelectedExpanded = meta.story({
 		).toEqual(conversations.map((candidate) => candidate === row))
 		await expect(boxOf(pictogramOf(row)).width).toBe(COMPACT_LEAD_SIDE)
 		await expect(colourOf(subjectIconOf(row))).toBe(
-			tokenStyleIn(row, "text-muted-foreground", "color"),
+			tokenStyleIn(row, "text-sidebar-foreground", "color"),
 		)
 		await expect(colourTransitionsOf(row)).toEqual([])
 	},
@@ -2603,6 +2610,84 @@ export const CompactSelectedDestinationExpanded = meta.story({
 		await expect(boxOf(glyphOf(missions)).width).toBe(COMPACT_LEAD_SIDE)
 		await expect(colourOf(glyphOf(missions))).toBe(colourOf(glyphOf(resting)))
 		await expect(colourTransitionsOf(missions)).toEqual([])
+	},
+})
+
+const AGENTS_ROW = { missionCount: 5, onSelectAgents: fn() }
+
+const DESTINATIONS_WITH_AGENTS = ["New", "Agents", /^Missions/, "Library"]
+
+const destinationRowsIn = (canvasElement: HTMLElement) => {
+	const menu = navigationMenuIn(sidebarIn(canvasElement))
+	return {
+		rows: slotsIn(menu, "sidebar-menu-button"),
+		named: DESTINATIONS_WITH_AGENTS.map((name) =>
+			within(menu).getByRole("button", { name }),
+		),
+	}
+}
+
+const glyphOf = (row: HTMLElement) => row.querySelector("svg") as Element
+
+export const AgentsSelectedExpanded = meta.story({
+	name: "A5 Agents selected",
+	args: { ...AGENTS_ROW, destination: "agents" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard A5: the Agents page is on screen. Check the destinations read New, Agents, Missions with its count of 5, then Library, that Agents alone reports itself as the current page, wears the sidebar selected fill with no colour transition and draws the filled hexagons at the size of its sibling glyphs, and that pressing it reports the request. Pick `AgentsAtRestExpanded` for the row while another page is open.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const { rows, named } = destinationRowsIn(canvasElement)
+		const [, agents, missions, library] = named
+		await expect(rows).toEqual(named)
+		await expect(missions).toHaveTextContent(/5$/)
+		await expect(named.map((row) => row.getAttribute("aria-current"))).toEqual([
+			null,
+			"page",
+			null,
+			null,
+		])
+		await expect(named.map((row) => isDrawnFilled(glyphOf(row)))).toEqual([
+			false,
+			true,
+			false,
+			false,
+		])
+		await expect(fillOf(agents)).toBe(selectedFillOf(agents))
+		await expect(boxOf(glyphOf(agents)).width).toBe(
+			boxOf(glyphOf(library)).width,
+		)
+		await expect(colourTransitionsOf(agents)).toEqual([])
+
+		await userEvent.click(agents)
+		await expect(args.onSelectAgents).toHaveBeenCalledOnce()
+	},
+})
+
+export const AgentsAtRestExpanded = meta.story({
+	name: "A5 Agents at rest",
+	args: { ...AGENTS_ROW, destination: "missions" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Agents row while the Missions page is open, a state A5 does not draw: it follows its sibling rows. Check the order stays New, Agents, Missions, Library, that Agents draws the outline hexagons on no fill, and that its label and glyph take the colours of Library at rest. Pick `AgentsSelectedExpanded` for the drawn state.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { rows, named } = destinationRowsIn(canvasElement)
+		const [, agents, , library] = named
+		await expect(rows).toEqual(named)
+		await expect(agents).not.toHaveAttribute("aria-current")
+		await expect(isDrawnFilled(glyphOf(agents))).toBe(false)
+		await expect(fillOf(agents)).toBe(fillOf(library))
+		await expect(colourOf(agents)).toBe(colourOf(library))
+		await expect(colourOf(glyphOf(agents))).toBe(colourOf(glyphOf(library)))
 	},
 })
 

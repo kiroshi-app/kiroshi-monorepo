@@ -4,6 +4,7 @@ import {
 	useEffect,
 	useEffectEvent,
 	useRef,
+	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -93,6 +94,13 @@ const exitTransitionsUnder = (content: HTMLElement | null) => {
 		.filter((animation) => animation instanceof CSSTransition)
 }
 
+const entranceUnder = (stage: HTMLElement | null) => {
+	if (typeof stage?.getAnimations !== "function") return []
+	return [
+		...stage.querySelectorAll<HTMLElement>('[data-slot="app-boot-cell"]'),
+	].flatMap((cell) => cell.getAnimations())
+}
+
 type ClusterHexagonProps = {
 	agent: AppBootAgent
 	index: number
@@ -157,6 +165,9 @@ const AppBootScreen = ({
 	const { t } = useTranslation("common")
 	const isStill = usePrefersReducedMotion()
 	const content = useRef<HTMLDivElement>(null)
+	const stage = useRef<HTMLDivElement>(null)
+	const [hasEntered, setHasEntered] = useState(false)
+	const isLeaving = isExiting && (isStill || hasEntered)
 	const reportExitComplete = useEffectEvent(() => onExitComplete?.())
 	const status = t("boot.status")
 	const cast = clusterCast(agents)
@@ -164,7 +175,20 @@ const AppBootScreen = ({
 	const pivot = centroidOf(cells.map(({ centre }) => centre))
 
 	useEffect(() => {
-		if (!isExiting) return
+		if (isStill) return
+		let isCurrentEntrance = true
+		Promise.allSettled(
+			entranceUnder(stage.current).map(({ finished }) => finished),
+		).then(() => {
+			if (isCurrentEntrance) setHasEntered(true)
+		})
+		return () => {
+			isCurrentEntrance = false
+		}
+	}, [isStill])
+
+	useEffect(() => {
+		if (!isLeaving) return
 		let isCurrentExit = true
 		Promise.allSettled(
 			exitTransitionsUnder(content.current).map(({ finished }) => finished),
@@ -174,12 +198,12 @@ const AppBootScreen = ({
 		return () => {
 			isCurrentExit = false
 		}
-	}, [isExiting])
+	}, [isLeaving])
 
 	return (
 		<FullWindowLayout
 			className={cn("group/launch", className)}
-			data-phase={isExiting ? "leaving" : "running"}
+			data-phase={isLeaving ? "leaving" : "running"}
 			data-slot="app-boot-screen"
 			data-still={isStill ? "" : undefined}
 			{...props}
@@ -192,6 +216,7 @@ const AppBootScreen = ({
 						!isStill && CLUSTER_EXIT,
 					)}
 					data-slot="app-boot-stage"
+					ref={stage}
 					style={{ width: CLUSTER_SIZE, height: CLUSTER_SIZE }}
 				>
 					<div
@@ -207,6 +232,7 @@ const AppBootScreen = ({
 						{cells.map((cell, index) => (
 							<div
 								className={cn("absolute", !isStill && "animate-launch-arrive")}
+								data-slot="app-boot-cell"
 								key={cell.id}
 								style={{
 									...hiveCellOrigin(cell),

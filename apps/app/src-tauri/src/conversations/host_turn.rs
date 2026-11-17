@@ -17,7 +17,7 @@ use super::summons::{self, SummonsDropReason, SummonsRun, MAX_SUMMONS_PER_CHAIN}
 use super::turn_run_deadline::{arm_start_deadlines, drop_awaited_run, suspend_start_deadline};
 use crate::agent::commands::{
 	agent_shutdown, announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of,
-	run_is_idle, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
+	live_runs, run_is_idle, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
@@ -154,10 +154,73 @@ impl HostTurns {
 	}
 }
 
-pub(crate) async fn retire_idle_run<R: Runtime>(
+pub(crate) async fn retire_once_idle<R: Runtime>(
 	app: &AppHandle<R>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
+	let (reading, heard) = listening_to(app, &scope);
+	if retire_idle_run(app, scope.clone()).await? == Release::Done {
+		return Ok(());
+	}
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move {
+		if let Err(reason) = retired_when_settled(&app, &scope, reading, heard).await {
+			log::warn!(
+				"the session of {} keeps the servers it opened with: {reason}",
+				scope.bot_id
+			);
+		}
+	});
+	Ok(())
+}
+
+async fn retired_when_settled<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: &RuntimeScope,
+	mut reading: RelayReader,
+	mut heard: mpsc::UnboundedReceiver<ScopedEvent>,
+) -> Result<(), String> {
+	loop {
+		if !settles_or_ends(&mut heard).await {
+			match reading.failure().await {
+				ReadFailure::Lagged { .. } => (reading, heard) = listening_to(app, scope),
+				ReadFailure::Ended(reason) => return Err(reason),
+			}
+		}
+		if !live_runs(app).contains(scope) {
+			return Ok(());
+		}
+		match retire_idle_run(app, scope.clone()).await {
+			Ok(Release::Kept) => {}
+			Ok(Release::Done) => return Ok(()),
+			Err(error) => return Err(format!("{error:?}")),
+		}
+	}
+}
+
+fn listening_to<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: &RuntimeScope,
+) -> (RelayReader, mpsc::UnboundedReceiver<ScopedEvent>) {
+	let (events, heard) = mpsc::unbounded_channel();
+	let watched = scope.clone();
+	(listen(app, move |heard| *heard == watched, events), heard)
+}
+
+async fn settles_or_ends(heard: &mut mpsc::UnboundedReceiver<ScopedEvent>) -> bool {
+	while let Some(scoped) = heard.recv().await {
+		let ends = matches!(scoped.event, AgentEvent::ConnectionChanged { .. });
+		if ends || prompts_settled_by(&scoped.event).is_some() {
+			return true;
+		}
+	}
+	false
+}
+
+async fn retire_idle_run<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: RuntimeScope,
+) -> Result<Release, TransportError> {
 	let agent = managed::<R, AgentState>(app, NO_AGENT).map_err(missing)?;
 	let host_turns = agent.host_turns();
 	let order = host_turns.order_of(&ParticipantKey {
@@ -166,10 +229,11 @@ pub(crate) async fn retire_idle_run<R: Runtime>(
 	});
 	let _in_order = order.lock().await;
 	if !run_is_idle(&agent, &scope).await {
-		return Ok(());
+		return Ok(Release::Kept);
 	}
 	host_turns.forget_started(&scope);
-	agent_shutdown(app.clone(), agent.clone(), scope).await
+	agent_shutdown(app.clone(), agent.clone(), scope).await?;
+	Ok(Release::Done)
 }
 
 pub(crate) fn merged(outcomes: Vec<CancelOutcome>) -> CancelOutcome {
@@ -2214,7 +2278,8 @@ mod tests {
 	mod in_a_session_queue {
 		use super::*;
 		use crate::agent::stub_session::{
-			a_session_held_for, a_session_running, HeldSession, OPENING_SIDECAR,
+			a_busy_session, a_session_held_for, a_session_running, until, HeldSession,
+			OPENING_SIDECAR,
 		};
 		use crate::removed_on_drop::RemovedOnDrop;
 
@@ -2308,6 +2373,27 @@ mod tests {
 			};
 			assert_eq!(live_run_of(&agent, &seat(&ada)), None);
 			assert_eq!(live_run_of(&agent, &seat(&grace)), Some(grace.clone()));
+		}
+
+		#[tokio::test]
+		async fn a_busy_run_is_kept_through_its_turn_and_retired_once_that_turn_ends() {
+			let app = an_app_of_its_own("host-turn-retire-busy", mock_builder());
+			app.manage(db::bootstrap(app.handle()));
+			app.manage(AgentState::default());
+			let room = a_room_running(app.handle(), &["Ada"]).await;
+			let ada = scope_in(&room, &room.bot_ids[0]);
+			let busy = a_busy_session(app.handle(), &ada).await;
+			let agent = app.state::<AgentState>();
+			let seat = ParticipantKey {
+				conversation_id: ada.conversation_id.clone(),
+				bot_id: ada.bot_id.clone(),
+			};
+
+			retire_once_idle(app.handle(), ada.clone()).await.expect("the retirement is armed");
+
+			assert_eq!(live_run_of(&agent, &seat), Some(ada.clone()), "the busy run was cut");
+			busy.ends_its_turn().await;
+			until(|| live_run_of(&agent, &seat).is_none()).await;
 		}
 
 		#[tokio::test]

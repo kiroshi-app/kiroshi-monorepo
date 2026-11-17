@@ -111,6 +111,7 @@ pub async fn conversation_agent_rooms(
 pub async fn conversation_create<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	_caller: Caller,
 	space_id: String,
 	section_id: Option<String>,
 	title: String,

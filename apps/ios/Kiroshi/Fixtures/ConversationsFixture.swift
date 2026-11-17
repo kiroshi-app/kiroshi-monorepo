@@ -28,6 +28,10 @@
             UserDefaults.standard.bool(forKey: "paged")
         }
 
+        static var repliesUntilStopped: Bool {
+            UserDefaults.standard.bool(forKey: "replyUntilStopped")
+        }
+
         nonisolated static var laterPageDelay: Duration {
             let seconds = UserDefaults.standard.double(forKey: "pageDelay")
             return .milliseconds(Int((seconds > 0 ? seconds : 1) * 1000))
@@ -502,7 +506,9 @@
                 daysAgo: 1, hour: 17, minute: 12),
         ]
 
-        static let longReplyParagraphs = (1...12).map { section in
+        static let longReplyParagraphs = (1...12).map(longReplyParagraph)
+
+        nonisolated static func longReplyParagraph(_ section: Int) -> String {
             "Section \(section) of the notes lists what moved since 0.42: the changelog entry, the pull requests behind it, who reviewed them and what still needs a check before the tag goes out tonight."
         }
 
@@ -623,6 +629,7 @@
                 script.messages[juniper.id] = longThread
                 script.replyParagraphs = longReplyParagraphs
                 script.wordsPerDelta = 6
+                script.repliesUntilStopped = repliesUntilStopped
             case .slowGroup:
                 script.messages[releaseCrew.id] = longGroupThread
                 script.threadAnswersAfter = .seconds(2)
@@ -784,6 +791,7 @@
             var threadAnswersAfter = Duration.zero
             var replyParagraphs: [String] = []
             var wordsPerDelta = 1
+            var repliesUntilStopped = false
             var laterPagesAnswerAfter = Duration.zero
             var listPageSize = Int.max
             var threadPageSize = Int.max
@@ -1034,6 +1042,7 @@
         private let leaving = Mutex<Task<Void, Never>?>(nil)
         private let isQuestionAnswered = Mutex(false)
         private let answeringElsewhere = Mutex<Task<Void, Never>?>(nil)
+        private let replyingUntilStopped = Mutex<[String: Task<Void, Never>]>([:])
 
         init(script: FixtureHost.Script, companionsRefusal: FixtureOnce, pins: FixturePins) {
             self.script = script
@@ -1120,6 +1129,9 @@
             playingGroupChanges?.cancel()
             leaving.withLock { $0?.cancel() }
             answeringElsewhere.withLock { $0?.cancel() }
+            replyingUntilStopped.withLock { replying in
+                for task in replying.values { task.cancel() }
+            }
             listed.finish()
             launchPlanOpened.finish()
             push(.close(1000))
@@ -1265,6 +1277,7 @@
                 reply(id, "[\(paths.joined(separator: ","))]")
             case "agent_cancel_turn":
                 reply(id, "null")
+                stopTheReply()
             case "agent_pending_questions":
                 guard let question = script.question,
                     args["conversationId"] as? String == question.conversationId,
@@ -1539,6 +1552,10 @@
                 .frame(
                     event(FixtureHost.chatMessage(replyId, "", "messageStarted")),
                     after: .milliseconds(400)))
+            guard !script.repliesUntilStopped else {
+                streamUntilStopped(replyId, in: conversationId)
+                return
+            }
             let words = reply.split(separator: " ")
             for start in stride(from: 0, to: words.count, by: script.wordsPerDelta) {
                 let delta = words[start..<min(start + script.wordsPerDelta, words.count)]
@@ -1568,6 +1585,57 @@
                     event(#"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)))
             push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
             push(.frame(FixtureHost.stateChanged(conversationId, "idle")))
+        }
+
+        private func streamUntilStopped(_ replyId: String, in conversationId: String) {
+            replyingUntilStopped.withLock { replying in
+                let task = Task { [weak self] in
+                    let clock = ContinuousClock()
+                    for section in 1... {
+                        let paragraph = ConversationsFixture.longReplyParagraph(section)
+                        let words = ((section == 1 ? "" : #"\n\n"#) + paragraph).split(
+                            separator: " ")
+                        for start in stride(from: 0, to: words.count, by: 6) {
+                            let delta = words[start..<min(start + 6, words.count)]
+                                .joined(separator: " ")
+                            guard (try? await clock.sleep(for: .milliseconds(120))) != nil,
+                                self?.push(
+                                    whileReplyingIn: conversationId,
+                                    FixtureHost.agentEvent(
+                                        conversationId,
+                                        #"{"type":"messageDelta","id":"\#(replyId)","seq":1,"text":"\#(delta) "}"#
+                                    )) == true
+                            else { return }
+                        }
+                    }
+                }
+                replying[conversationId] = task
+            }
+        }
+
+        private func push(whileReplyingIn conversationId: String, _ frame: String) -> Bool {
+            replyingUntilStopped.withLock { replying in
+                guard replying[conversationId] != nil else { return false }
+                push(.frame(frame))
+                return true
+            }
+        }
+
+        private func stopTheReply() {
+            replyingUntilStopped.withLock { replying in
+                for (conversationId, task) in replying {
+                    task.cancel()
+                    let event = { (event: String) in FixtureHost.agentEvent(conversationId, event) }
+                    push(
+                        .frame(
+                            event(
+                                #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#
+                            )))
+                    push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
+                    push(.frame(FixtureHost.stateChanged(conversationId, "idle")))
+                }
+                replying = [:]
+            }
         }
     }
 #endif

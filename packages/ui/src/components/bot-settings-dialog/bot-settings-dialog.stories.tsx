@@ -11,6 +11,7 @@ import {
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectNoHoverTooltip,
 	pictureOf,
 	shown,
 	slotsIn,
@@ -132,11 +133,6 @@ const avatarIn = (dialog: HTMLElement) => {
 	if (!avatar) throw new Error("The breadcrumb is missing its avatar")
 	return avatar
 }
-
-const TOOLTIP_SETTLES_MS = 300
-
-const settle = () =>
-	new Promise((resolve) => setTimeout(resolve, TOOLTIP_SETTLES_MS))
 
 const openTab = async (
 	dialog: HTMLElement,
@@ -261,8 +257,7 @@ export const Rail = meta.story({
 		).toBeVisible()
 
 		await userEvent.hover(appearance)
-		await settle()
-		await expect(document.body.querySelector('[role="tooltip"]')).toBe(null)
+		await expectNoHoverTooltip()
 		await expect(appearance).not.toHaveAttribute("aria-describedby")
 	},
 })

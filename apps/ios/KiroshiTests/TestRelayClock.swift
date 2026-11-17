@@ -1,8 +1,11 @@
 @testable import Kiroshi
 
 final class TestRelayClock: RelayClock {
+    @TaskLocal static var isTimingOut = false
+
     struct Sleep: Sendable {
         let duration: Duration
+        let isTimingOut: Bool
         let wake: AsyncStream<Void>.Continuation
     }
 
@@ -15,8 +18,9 @@ final class TestRelayClock: RelayClock {
 
     func sleep(for duration: Duration) async throws {
         let (wake, wakeContinuation) = AsyncStream<Void>.makeStream()
+        let sleep = Sleep(duration: duration, isTimingOut: Self.isTimingOut, wake: wakeContinuation)
         try await withTaskCancellationHandler {
-            sleepsContinuation.yield(Sleep(duration: duration, wake: wakeContinuation))
+            sleepsContinuation.yield(sleep)
             for await _ in wake {
                 return
             }
@@ -39,6 +43,14 @@ final class TestRelayClock: RelayClock {
     func wakeNextSleep(of duration: Duration) async {
         while let sleep = await nextSleep(of: duration) {
             if case .enqueued = sleep.wake.yield() {
+                return
+            }
+        }
+    }
+
+    func wakeTimingOutSleep(of duration: Duration) async {
+        while let sleep = await nextSleep(of: duration) {
+            if sleep.isTimingOut, case .enqueued = sleep.wake.yield() {
                 return
             }
         }

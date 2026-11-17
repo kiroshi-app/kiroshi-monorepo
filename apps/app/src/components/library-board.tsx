@@ -26,6 +26,10 @@ import {
 	linkCardOf,
 } from "@/lib/library/library-board-objects"
 import type { LibraryBoardPresence } from "@/lib/library/library-board-presence"
+import {
+	type LibraryBoardComments,
+	useLibraryBoardComments,
+} from "@/lib/library/use-library-board-comments"
 import { useLibraryBoardKeys } from "@/lib/library/use-library-board-keys"
 import { useLibraryBoardPointerShare } from "@/lib/library/use-library-board-pointer-share"
 import { useLibraryBoardPresence } from "@/lib/library/use-library-board-presence"
@@ -34,12 +38,14 @@ import {
 	type LibraryBoardShelf,
 	useLibraryBoardShelf,
 } from "@/lib/library/use-library-board-shelf"
+import type { LibraryCommentPeople } from "@/lib/library/use-library-comment-people"
 import { useStopLibraryBoardDrawers } from "@/lib/library/use-stop-library-writers"
 
 type LibraryBoardProps = {
 	spaceId: string
 	isJoined: boolean
 	bots: Bot[]
+	commentPeople: LibraryCommentPeople
 	name: string
 	title: string
 	summary: LibraryBoardSummary | undefined
@@ -93,6 +99,7 @@ type LibraryBoardCanvasProps = {
 	library: LibraryBoardShelf
 	presence?: LibraryBoardPresence
 	pointerShare?: ReturnType<typeof useLibraryBoardPointerShare>
+	comments?: LibraryBoardComments["canvas"]
 }
 
 export const LibraryBoardCanvas = ({
@@ -101,6 +108,7 @@ export const LibraryBoardCanvas = ({
 	library,
 	presence,
 	pointerShare,
+	comments,
 }: LibraryBoardCanvasProps) => {
 	const [viewport, setViewport] = useState<BoardViewport | null>(null)
 	const { tool, pickTool } = useLibraryBoardKeys(board)
@@ -113,6 +121,7 @@ export const LibraryBoardCanvas = ({
 
 	return (
 		<BoardCanvas
+			{...comments}
 			isConnecting={tool === "connector"}
 			libraryItems={library.pickableItems}
 			onDropFiles={additions.dropFiles}
@@ -143,6 +152,7 @@ export const LibraryBoard = ({
 	spaceId,
 	isJoined,
 	bots,
+	commentPeople,
 	name,
 	title,
 	summary,
@@ -154,6 +164,12 @@ export const LibraryBoard = ({
 	const pointerShare = useLibraryBoardPointerShare(spaceId, name)
 	const { stopAll } = useStopLibraryBoardDrawers(spaceId)
 	const library = useLibraryBoardShelf({ spaceId, isJoined, name })
+	const comments = useLibraryBoardComments({
+		spaceId,
+		name,
+		people: commentPeople,
+		view: board.view,
+	})
 
 	if (board.hasFailedToOpen) {
 		return (
@@ -169,6 +185,7 @@ export const LibraryBoard = ({
 		<ScreenLayout
 			header={
 				<LibraryDocumentBar
+					comments={comments.bar}
 					item={{ name: title }}
 					onBack={onBack}
 					onDelete={onDelete}
@@ -185,6 +202,7 @@ export const LibraryBoard = ({
 			scroller={() => (
 				<LibraryBoardCanvas
 					board={board}
+					comments={comments.canvas}
 					library={library}
 					pointerShare={pointerShare}
 					presence={presence}

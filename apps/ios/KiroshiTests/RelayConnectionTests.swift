@@ -320,6 +320,116 @@ struct RelayConnectionTests {
         await connection.stop()
     }
 
+    @Test func aSocketThatDropsBeforeTheSharedSpaceAnswerTriesAgainAfterTheBackoffNotItsDeadline()
+        async throws
+    {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let silent = ScriptedRelaySocket()
+        let (closed, closing) = AsyncStream.makeStream(of: Void.self)
+        await transport.nextOpening().accept(ClosingSocket(plain: silent, closing: closing))
+        var sent = silent.sent.makeAsyncIterator()
+        let sharedSpace = try JSONDecoder().decode(
+            SentCall.self, from: Data(try #require(await sent.next()).utf8))
+        #expect(sharedSpace.command == "relay_shared_space")
+        var thirtySecondSleeps: [TestRelayClock.Sleep] = []
+        while thirtySecondSleeps.count < 2,
+            let sleep = await clock.nextSleep(of: RelayConnection.sharedSpaceDeadline)
+        {
+            thirtySecondSleeps.append(sleep)
+        }
+
+        silent.push(.close(1006))
+        for await _ in closed {
+            break
+        }
+        _ = await connection.state
+        let stillRunning = thirtySecondSleeps.filter {
+            if case .enqueued = $0.wake.yield() { true } else { false }
+        }
+
+        #expect(stillRunning.isEmpty)
+        await waitFor(.unreachable, in: updates)
+        await clock.wakeNextSleep(of: .seconds(1))
+        _ = await transport.nextOpening()
+        await connection.stop()
+    }
+
+    @Test func aCallWhoseCallerIsCancelledEndsAtOnceAndLeavesNothingBehind() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+        let answer = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        _ = try await sentCall(socket)
+        let deadline = try #require(await clock.nextSleep(of: RelayConnection.callDeadline))
+
+        answer.cancel()
+        let ending = await answer.ending
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(await connection.heldCallCount == 0)
+        #expect(deadline.hasEnded)
+        await connection.stop()
+    }
+
+    @Test func aCallMadeByACallerAlreadyCancelledEndsAtOnceAndSendsNothing() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+
+        let answer = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        let ending = await answer.ending
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(await connection.heldCallCount == 0)
+        let missions = Task { try await connection.call("mission_list", args: ["spaceId": "s-1"]) }
+        let next = try await sentCall(socket)
+        #expect(next.command == "mission_list")
+        socket.push(.frame(#"{"id":\#(next.id),"status":200,"body":"missions"}"#))
+        #expect(try await missions.value.body(as: String.self) == "missions")
+        await connection.stop()
+    }
+
+    @Test func anAnswerToACallItsCallerGaveUpOnChangesNothing() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+        let givenUp = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        let givenUpCall = try await sentCall(socket)
+        async let missions = connection.call("mission_list", args: ["spaceId": "s-1"])
+        let missionCall = try await sentCall(socket)
+
+        givenUp.cancel()
+        let ending = await givenUp.ending
+        socket.push(.frame(#"{"id":\#(givenUpCall.id),"status":200,"body":"conversations"}"#))
+        socket.push(.frame(#"{"id":\#(missionCall.id),"status":200,"body":"missions"}"#))
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(try await missions.body(as: String.self) == "missions")
+        #expect(await connection.heldCallCount == 0)
+        await connection.stop()
+    }
+
     @Test func aCallWithoutASocketFailsAtOnce() async {
         let connection = makeConnection()
 
@@ -416,6 +526,48 @@ struct RelayConnectionTests {
 
         _ = await transport.nextOpening()
         await connection.stop()
+    }
+}
+
+private struct ClosingSocket: RelaySocket {
+    let plain: ScriptedRelaySocket
+    let closing: AsyncStream<Void>.Continuation
+
+    func send(_ text: String) async throws {
+        try await plain.send(text)
+    }
+
+    func receive() async throws -> String {
+        try await plain.receive()
+    }
+
+    func ping() async throws {
+        try await plain.ping()
+    }
+
+    func close() {
+        plain.close()
+        closing.yield()
+    }
+}
+
+extension Task {
+    var ending: Result<Success, Failure>? {
+        get async {
+            let (endings, end) = AsyncStream.makeStream(of: Result<Success, Failure>.self)
+            let waiting = Task<Void, Never> { end.yield(await self.result) }
+            defer { waiting.cancel() }
+            for await ending in endings {
+                return ending
+            }
+            return nil
+        }
+    }
+}
+
+extension TestRelayClock.Sleep {
+    var hasEnded: Bool {
+        if case .terminated = wake.yield() { true } else { false }
     }
 }
 

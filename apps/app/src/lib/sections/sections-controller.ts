@@ -3,7 +3,9 @@ import { type QueryClient, queryOptions } from "@tanstack/react-query"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { sectionQueryKeys } from "./section-query-keys"
+import { type ReportFailure, spaceWriteRefusalOf } from "./space-write-refusal"
 
+import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -17,6 +19,7 @@ export type BotSections = {
 	clear: (sectionId: string) => void
 	pin: (pins: RosterPin[]) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
+	isOnScreen: (spaceRowId: string) => boolean
 	reload: () => Promise<void>
 }
 
@@ -38,7 +41,6 @@ export type SectionsController = {
 	rename: (id: string, name: string) => void
 	pin: (spaceId: string, pins: RosterPin[]) => Promise<void>
 	remove: (id: string) => Promise<void>
-	moveBot: (botId: string, sectionId: string | null) => Promise<void>
 }
 
 type SectionsChoice = { spaceIds: string[] }
@@ -76,6 +78,7 @@ const sectionsStateOf = (
 
 type SectionsControllerOptions = {
 	queryClient: QueryClient
+	reportFailure?: ReportFailure
 }
 
 export const sectionsIn = (state: SectionsState, spaceId: string) =>
@@ -97,14 +100,29 @@ const repositioned = (sections: Section[], pins: RosterPin[]) =>
 export const createSectionsController = (
 	store: TranscriptStore,
 	bots: BotSections,
-	{ queryClient }: SectionsControllerOptions,
+	{
+		queryClient,
+		reportFailure = failureReporterIn("sections-controller"),
+	}: SectionsControllerOptions,
 ): SectionsController => {
 	const choiceStore = createStore(initialSectionsChoice)
 
 	const enqueue = createQueue()
 
-	const commit = <Result>(write: () => Promise<Result>) =>
-		enqueue(() => runMutation(queryClient, write))
+	const refuse = spaceWriteRefusalOf({
+		raisedIn: "sections-controller",
+		isOnScreen: bots.isOnScreen,
+		reportFailure,
+	})
+
+	const commit = <Result>(
+		spaceId: string | undefined,
+		write: () => Promise<Result>,
+	) =>
+		enqueue(() => runMutation(queryClient, write)).catch((reason: unknown) => {
+			refuse(reason, spaceId)
+			throw reason
+		})
 
 	const listQuery = (spaceId: string) => {
 		const hostSpaceId = bots.hostSpaceIdOf(spaceId)
@@ -157,7 +175,8 @@ export const createSectionsController = (
 		write: (id, name) =>
 			runMutation(queryClient, () => store.renameSection(id, name)),
 		apply: (_id, written) => apply(written),
-		onRefused: () => {
+		onRefused: (id, reason) => {
+			refuse(reason, spaceOf(id))
 			void reloadAll()
 		},
 	})
@@ -194,7 +213,7 @@ export const createSectionsController = (
 		},
 
 		create: (spaceId: string, name: string, botId: string | null = null) =>
-			commit(async () => {
+			commit(spaceId, async () => {
 				const created = await store.createSection(
 					bots.hostSpaceIdOf(spaceId),
 					name,
@@ -222,13 +241,13 @@ export const createSectionsController = (
 		pin: (spaceId: string, pins: RosterPin[]) => {
 			hold(spaceId, repositioned(sectionsIn(current(), spaceId), pins))
 			bots.pin(pins)
-			return commit(() =>
+			return commit(spaceId, () =>
 				store.pinRoster(bots.hostSpaceIdOf(spaceId), pins),
 			).catch(() => reload(spaceId))
 		},
 
 		remove: (id: string) =>
-			commit(async () => {
+			commit(spaceOf(id), async () => {
 				const spaceId = spaceOf(id)
 				if (!spaceId) {
 					return
@@ -241,11 +260,5 @@ export const createSectionsController = (
 				)
 				bots.clear(id)
 			}).catch(reloadAll),
-
-		moveBot: (botId: string, sectionId: string | null) =>
-			commit(async () => {
-				await store.moveBotToSection(botId, sectionId)
-				bots.move(botId, sectionId)
-			}).catch(bots.reload),
 	}
 }
