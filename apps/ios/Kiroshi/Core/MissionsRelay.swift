@@ -43,13 +43,14 @@ struct MissionsRelay: Sendable {
     }
 
     func answer(_ answer: MissionAnswer) async throws {
-        let _: Int = try await ok("conversation_send_turn", args: answer)
+        let _: Int = try await ok(
+            "conversation_send_turn", args: answer, callKey: answer.message.id)
     }
 
-    private func ok<Body: Decodable>(_ command: String, args: some Encodable & Sendable)
-        async throws -> Body
-    {
-        let answer = try await connection.call(command, args: args)
+    private func ok<Body: Decodable>(
+        _ command: String, args: some Encodable & Sendable, callKey: String? = nil
+    ) async throws -> Body {
+        let answer = try await connection.call(command, args: args, callKey: callKey)
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
         return try answer.body(as: Body.self)
     }

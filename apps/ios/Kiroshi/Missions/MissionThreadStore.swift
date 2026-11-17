@@ -110,10 +110,15 @@ final class MissionThreadStore {
             sendProblem = rejection == .tooMany ? .tooMany : .tooLarge
             return nil
         }
-        let id = newId()
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repeated = refusedSend.flatMap {
+            $0.text == text && $0.picked == attachments ? $0 : nil
+        }
+        let id = repeated?.id ?? newId()
+        let turnId = repeated?.turnId ?? newId()
         lastSentId = id
         isSending = true
-        let task = Task { await deliver(id, through: relay) }
+        let task = Task { await deliver(id, turnId: turnId, through: relay) }
         sending = task
         return task
     }
@@ -132,7 +137,7 @@ final class MissionThreadStore {
             time: ConversationTime(now: now(), calendar: calendar), authorship: authorship)
     }
 
-    private func deliver(_ id: String, through relay: MissionsRelay) async {
+    private func deliver(_ id: String, turnId: String, through relay: MissionsRelay) async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let picked = attachments
         sendProblem = nil
@@ -148,7 +153,7 @@ final class MissionThreadStore {
                 content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
             }
             let message = MissionAnswer.Message(
-                id: id, conversationId: mission.threadConversationId, turnId: newId(),
+                id: id, conversationId: mission.threadConversationId, turnId: turnId,
                 content: content, createdAt: Int(sentAt.timeIntervalSince1970 * 1000))
             try await relay.answer(MissionAnswer(message: message, summoned: [mission.botId]))
             messages = MissionTranscript.upserting(
@@ -172,7 +177,7 @@ final class MissionThreadStore {
                 case RelayCallError.hostOffline: .offline
                 default: .couldNotSend
                 }
-            refusedSend = RefusedSend(id: id, text: text, picked: picked)
+            refusedSend = RefusedSend(id: id, turnId: turnId, text: text, picked: picked)
         }
     }
 
@@ -268,6 +273,7 @@ final class MissionThreadStore {
 
 private struct RefusedSend {
     let id: String
+    let turnId: String
     let text: String
     let picked: [PickedAttachment]
 }
