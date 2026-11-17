@@ -33,7 +33,7 @@ type LibraryImagePresenceInput = {
 	isJoined: boolean
 }
 
-export const IMAGE_PRESENCE_RENEWAL_MS = 20_000
+const IMAGE_PRESENCE_RENEWAL_MS = 20_000
 
 const NOBODY_ELSE: HeldPeople = { watched: null, people: [] }
 
