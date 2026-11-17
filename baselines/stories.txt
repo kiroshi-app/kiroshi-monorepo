@@ -3194,6 +3194,9 @@ settings-space-settingsscreen--rail-space-host-dark
 settings-space-settingsscreen--short-window
 settings-space-settingsscreen--space-companions
 settings-space-settingsscreen--space-form-page
+settings-space-settingsscreen--space-form-page-dark
+settings-space-settingsscreen--space-form-page-in-narrow-card
+settings-space-settingsscreen--space-form-page-scrolled
 settings-space-settingsscreen--yours-not-shared
 settings-space-spacecolourfield--colourless
 settings-space-spacecolourfield--preset

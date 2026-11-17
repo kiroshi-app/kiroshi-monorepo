@@ -753,9 +753,41 @@ export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 	return bar
 }
 
-const SETTINGS_FIRST_ROW = { top: 88, inline: 24 }
+const SETTINGS_FIRST_ROW_TOP: Record<ScreenLayoutWidth, number> = {
+	column: 80,
+	full: 88,
+}
 
-export const COLUMN_WIDTH_CAP = 800
+const SETTINGS_FIRST_ROW_INLINE = 24
+
+export const COLUMN_WIDTH = 640
+
+const COLUMN_GUTTER = 24
+
+export const columnContentOf = (column: Element) => {
+	const box = column.getBoundingClientRect()
+	const style = getComputedStyle(column)
+	const left = box.left + Number.parseFloat(style.paddingLeft)
+	const right = box.right - Number.parseFloat(style.paddingRight)
+
+	return { left, width: right - left }
+}
+
+export const expectCentredColumn = async (layout: Element) => {
+	const card = (
+		layout.closest("[data-content-card]") ?? layout
+	).getBoundingClientRect()
+	const room = slotIn(layout, "screen-layout-scroller").clientWidth
+	const width = Math.min(COLUMN_WIDTH, room - 2 * COLUMN_GUTTER)
+	const column = columnContentOf(slotIn(layout, "screen-layout-column"))
+
+	await expect(Math.round(column.width)).toBe(width)
+	await expect(
+		Math.abs(column.left - card.left - (card.width - width) / 2),
+	).toBeLessThanOrEqual(1)
+
+	return column
+}
 
 export const expectSettingsPage = async (
 	root: Element,
@@ -778,15 +810,15 @@ export const expectSettingsPage = async (
 	await expect(hasOverlayScrollbars(scroller)).toBe(true)
 	await expect(
 		Math.round(firstRowBox.top - pageBox.top + scroller.scrollTop),
-	).toBe(SETTINGS_FIRST_ROW.top)
+	).toBe(SETTINGS_FIRST_ROW_TOP[width])
 	await expect(Math.round(firstRowBox.left - columnBox.left)).toBe(
-		SETTINGS_FIRST_ROW.inline,
+		SETTINGS_FIRST_ROW_INLINE,
 	)
-	await expect(Math.round(columnBox.width)).toBe(
-		width === "column"
-			? Math.min(COLUMN_WIDTH_CAP, scroller.clientWidth)
-			: scroller.clientWidth,
-	)
+	if (width === "column") {
+		await expectCentredColumn(page)
+		return
+	}
+	await expect(Math.round(columnBox.width)).toBe(scroller.clientWidth)
 }
 
 export const expectCentredInWindow = async (root: Element) => {

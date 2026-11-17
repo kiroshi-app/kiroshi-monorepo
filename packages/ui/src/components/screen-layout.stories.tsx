@@ -3,7 +3,8 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	COLUMN_WIDTH_CAP,
+	COLUMN_WIDTH,
+	expectCentredColumn,
 	expectStaticHeaderBar,
 	probedStyleOf,
 	slotIn,
@@ -36,7 +37,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; `column` caps it at 800px and centres it in a wider card.",
+					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; `column` lays the content in a 640px column centred in the card, 24px from the bar and from both card edges, and shrinks it to the card less those 24px in a card narrower than 688px.",
 			},
 		},
 	},
@@ -151,17 +152,12 @@ export const ColumnWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a form or reading page in a card wider than the column cap. Check that the column stops at 800px with equal room on both sides, and that the frame wears the card surface.",
+					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, and that the frame wears the card surface.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const { card, column } = boxesIn(canvasElement)
-		const leftGap = column.left - card.left
-		const rightGap = card.right - column.right
-
-		await expect(column.width).toBe(COLUMN_WIDTH_CAP)
-		await expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(1)
+		await expectCentredColumn(layoutIn(canvasElement))
 		await expect(
 			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
 		).toBe(probedStyleOf("bg-card", "backgroundColor"))
@@ -175,7 +171,7 @@ export const FullWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a list or grid page in a card wider than the column cap. Check that the column takes the whole width of the card, past the 800px cap of the column width.",
+					"Reach for this for a list or grid page in a card wider than the column cap. Check that the column takes the whole width of the card, past the 640px of the column width.",
 			},
 		},
 	},
@@ -183,7 +179,7 @@ export const FullWidthInWideCard = meta.story({
 		const { column, scroller } = boxesIn(canvasElement)
 
 		await expect(Math.round(column.width)).toBe(scroller.clientWidth)
-		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH_CAP)
+		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH)
 	},
 })
 
