@@ -7,11 +7,13 @@ use tokio::sync::watch;
 
 pub(super) const ANSWERS_KEPT_PER_DEVICE: usize = 1024;
 
-const REFUSED_BEFORE_INVOKE: [StatusCode; 4] = [
+const FAILED_BEFORE_STORING: [StatusCode; 6] = [
 	StatusCode::BAD_REQUEST,
+	StatusCode::UNAUTHORIZED,
 	StatusCode::FORBIDDEN,
 	StatusCode::NOT_FOUND,
 	StatusCode::PAYLOAD_TOO_LARGE,
+	StatusCode::BAD_GATEWAY,
 ];
 
 const FIRST_RUN_LOST: &str = "the first run of this call ended without an answer";
@@ -38,7 +40,7 @@ struct DeviceCalls {
 
 impl DeviceCalls {
 	fn kept(&mut self, key: String, answered: Answered) {
-		if REFUSED_BEFORE_INVOKE.contains(&answered.0) {
+		if FAILED_BEFORE_STORING.contains(&answered.0) {
 			return;
 		}
 		self.oldest_first.push_back(key.clone());
@@ -165,14 +167,25 @@ mod tests {
 	}
 
 	#[test]
-	fn a_call_refused_before_invoke_keeps_no_answer() {
+	fn a_call_that_failed_before_storing_keeps_no_answer() {
 		let calls = Arc::new(KeyedCalls::default());
-		for status in REFUSED_BEFORE_INVOKE {
+		for status in FAILED_BEFORE_STORING {
 			let key = status.to_string();
 			first(calls.claim(a_device(), key.clone())).settle((status, json!("refused")));
 
 			assert!(matches!(calls.claim(a_device(), key), Claim::First(_)), "{status}");
 		}
+	}
+
+	#[test]
+	fn a_failure_the_command_raised_is_kept_and_answers_the_repeat() {
+		let calls = Arc::new(KeyedCalls::default());
+		let failed = (StatusCode::INTERNAL_SERVER_ERROR, json!("stored, then failed"));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(failed.clone());
+
+		let repeated = calls.claim(a_device(), "k1".to_owned());
+
+		assert!(matches!(repeated, Claim::Answered(answered) if answered == failed));
 	}
 
 	#[test]
@@ -200,6 +213,21 @@ mod tests {
 		running.settle(ok("one"));
 
 		assert_eq!(waiting.await.expect("the repeat answers"), ok("one"));
+	}
+
+	#[tokio::test]
+	async fn a_repeat_held_while_the_first_run_is_in_flight_gets_its_answer_even_unkept() {
+		let calls = Arc::new(KeyedCalls::default());
+		let running = first(calls.claim(a_device(), "k1".to_owned()));
+		let Claim::Running(held) = calls.claim(a_device(), "k1".to_owned()) else {
+			panic!("the repeat was not held");
+		};
+		let unreached = (StatusCode::BAD_GATEWAY, json!("not reached"));
+
+		running.settle(unreached.clone());
+
+		assert_eq!(answered_by_the_first_run(held).await, unreached);
+		assert!(matches!(calls.claim(a_device(), "k1".to_owned()), Claim::First(_)));
 	}
 
 	#[tokio::test]

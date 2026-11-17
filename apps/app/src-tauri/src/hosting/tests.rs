@@ -10857,6 +10857,18 @@ impl Authoring {
 		let messages = page["messages"].as_array().expect("a page of messages");
 		messages.iter().filter(|message| message["role"] == json!("user")).cloned().collect()
 	}
+
+	async fn answered_while_the_local_host_api_is_down(&self, frame: Value) -> Value {
+		let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = closed.local_addr().expect("the port is named");
+		drop(closed);
+		let down = LocalApi::new(format!("http://{address}"), LOCAL_TOKEN.to_owned())
+			.expect("the local client builds");
+		let call = bridge::member_call(&frame.to_string(), GUEST, GUEST_DEVICE).expect("a call");
+		let answer =
+			bridge::bridged(self.app.handle().clone(), down, PERSONAL.to_owned(), call).await;
+		serde_json::from_str(&answer).expect("a json answer")
+	}
 }
 
 #[test]
@@ -10906,6 +10918,27 @@ fn the_same_send_twice_with_one_call_key_leaves_one_message_and_runs_its_turn_on
 		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
 		assert_eq!(stored[0]["callKey"], json!("send-1"));
 		assert_eq!(stored[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn a_send_that_never_reached_the_local_host_api_runs_when_repeated_with_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let unreached = host
+			.answered_while_the_local_host_api_is_down(keyed(host.send(1, "m1"), "send-1"))
+			.await;
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(unreached["status"], json!(502), "{unreached}");
+		assert_eq!(repeated["status"], json!(200), "{repeated}");
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "{stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
 	});
 }
 

@@ -113,8 +113,12 @@ being the relay device id that sent the call:
   command again.
 - A repeat that arrives while the first run is still in flight waits for it, then
   gets the same answer.
-- A call refused before the host ran it (400, 403, 404, 413) leaves no answer
-  behind: its repeat is checked again, and runs if it now passes.
+- What a call left behind decides whether its answer is kept. A call that failed
+  before it could store anything leaves no answer behind, and its repeat runs
+  again: a call refused before the host ran it (400, 401, 403, 404, 413), and a
+  call the host could not run on its side (502). Every other answer is kept,
+  success or failure, a 500 included, since the command may have stored something
+  before it failed: its repeat gets that answer and the command never runs twice.
 - The host keeps the last 1024 answers of each device in each shared space and
   forgets older ones, and it forgets them all when it restarts. A repeat of a
   forgotten key runs as a new call.
