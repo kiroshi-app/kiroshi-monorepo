@@ -159,7 +159,7 @@ function ThreadLayout({
 					className={cn(
 						"relative",
 						THREAD_WIDTHS,
-						opening && !skeleton && OPENING_THREAD_WIDTH,
+						opening && OPENING_THREAD_WIDTH,
 						aside && "min-w-0 flex-1",
 						className,
 					)}

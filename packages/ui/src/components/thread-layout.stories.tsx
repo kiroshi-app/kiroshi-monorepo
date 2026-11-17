@@ -668,8 +668,11 @@ export const ForwardedRegion = meta.story({
 
 const PROMPT_OVERHANG = 20
 
-const overhangOf = (frame: HTMLElement) => {
-	const column = slotIn(frame, "message-scroller-content")
+const overhangOf = (
+	frame: HTMLElement,
+	columnSlot = "message-scroller-content",
+) => {
+	const column = slotIn(frame, columnSlot)
 	const { paddingLeft, paddingRight } = getComputedStyle(column)
 	const columnBox = column.getBoundingClientRect()
 	const promptBox = slotIn(frame, "prompt-input").getBoundingClientRect()
@@ -683,8 +686,11 @@ const overhangOf = (frame: HTMLElement) => {
 	}
 }
 
-const columnWidthOf = (frame: HTMLElement) => {
-	const column = slotIn(frame, "message-scroller-content")
+const columnWidthOf = (
+	frame: HTMLElement,
+	columnSlot = "message-scroller-content",
+) => {
+	const column = slotIn(frame, columnSlot)
 	const { paddingLeft, paddingRight } = getComputedStyle(column)
 	return Math.round(
 		column.getBoundingClientRect().width -
@@ -1467,17 +1473,30 @@ export const OpeningThatRendersNothing = meta.story({
 
 export const OpeningHeldBackBySkeleton = meta.story({
 	args: { ...Opening.input.args, skeleton: <MissionDetailSkeleton /> },
+	globals: LAPTOP_WINDOW,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A thread given an `opening` while its `skeleton` still stands in for the transcript. Check that the skeleton holds the surface alone and that the opening is not drawn over it: it comes with the transcript, as `Opening` shows. Nothing in `apps/app` passes `opening` yet.",
+					"A thread given an `opening` while its `skeleton` still stands in for the transcript. Check that the skeleton holds the surface alone and that the opening is not drawn over it: it comes with the transcript, as `Opening` shows. Check too that the skeleton already lays the 640 column of `PromptOverhangsTheMissionThread`, under a prompt 680 wide overhanging it by 20 on each side, so the thread does not narrow when the transcript lands.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+
 		await expect(slotsIn(canvasElement, "thread-skeleton")).toHaveLength(1)
 		await expect(slotsIn(canvasElement, "transcript-opening")).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "mission-properties")).toHaveLength(0)
+		await expect(columnWidthOf(layout, "thread-skeleton-column")).toBe(
+			MISSION_COLUMN_WIDTH,
+		)
+		await expect(overhangOf(layout, "thread-skeleton-column")).toEqual({
+			start: PROMPT_OVERHANG,
+			end: PROMPT_OVERHANG,
+		})
+		await expect(
+			slotIn(layout, "prompt-input").getBoundingClientRect().width,
+		).toBe(MISSION_COLUMN_WIDTH + 2 * PROMPT_OVERHANG)
 	},
 })
