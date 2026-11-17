@@ -197,7 +197,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = crate::db::open(&dir);
 		let answers = database.member_call_answers();
-		ran(&answers, a_key("k1"), json!({ "id": "g1" }), 8).await;
+		ran(answers, a_key("k1"), json!({ "id": "g1" }), 8).await;
 
 		let kept = answers.kept(a_key("k1")).await.expect("read");
 		let unknown = answers.kept(a_key("k2")).await.expect("read");
@@ -212,10 +212,10 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let answers = database.member_call_answers();
 		for n in 0..=2 {
-			ran(&answers, a_key(&format!("k{n}")), json!(n), 2).await;
+			ran(answers, a_key(&format!("k{n}")), json!(n), 2).await;
 		}
 		let elsewhere = MemberCallKey { device_id: "r2".to_owned(), ..a_key("k0") };
-		ran(&answers, elsewhere.clone(), json!("other"), 2).await;
+		ran(answers, elsewhere.clone(), json!("other"), 2).await;
 
 		assert_eq!(answers.kept(a_key("k0")).await.expect("read"), Some(KeptCall::Unanswered));
 		let kept = answers.kept(a_key("k1")).await.expect("read");
@@ -233,8 +233,8 @@ mod tests {
 		relay.rostered(SPACE.to_owned(), a_roster_row("r2")).await.expect("rostered");
 		let answers = database.member_call_answers();
 		let staying = MemberCallKey { device_id: "r2".to_owned(), ..a_key("k1") };
-		ran(&answers, a_key("k1"), json!(1), 8).await;
-		ran(&answers, staying.clone(), json!(2), 8).await;
+		ran(answers, a_key("k1"), json!(1), 8).await;
+		ran(answers, staying.clone(), json!(2), 8).await;
 
 		relay
 			.device_removed(SPACE.to_owned(), "device-of-r1".to_owned(), 2)
@@ -252,7 +252,7 @@ mod tests {
 		let space = database.spaces().create("Writers".to_owned()).await.expect("the space");
 		let answers = database.member_call_answers();
 		let key = MemberCallKey { space_id: space.id.clone(), ..a_key("k1") };
-		ran(&answers, key.clone(), json!(1), 8).await;
+		ran(answers, key.clone(), json!(1), 8).await;
 
 		database.spaces().delete(space.id).await.expect("deleted");
 
