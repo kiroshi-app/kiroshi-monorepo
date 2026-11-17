@@ -15,6 +15,7 @@ import {
 	SCANNED_MODULE,
 	TEST_FILE,
 	TEST_SOURCE_ROOTS,
+	type TestImports,
 	testImports,
 } from "./test-importers"
 
@@ -400,9 +401,7 @@ export type FastUnitTestScope =
 	| Exclude<UnitTestScope, { importers: number }>
 	| { scope: "importers"; shared: SharedModule[]; graphMs: number }
 
-type ImportersByModule = ReturnType<typeof testImports>["importers"]
-
-const sharedReason = (path: string, importers: ImportersByModule) => {
+const sharedReason = (path: string, importers: TestImports["importers"]) => {
 	const rule = sharedRuleOf(path)
 	if (rule !== undefined) return rule
 	const count = importers.get(path) ?? 0
@@ -465,7 +464,9 @@ const withFastTestTimeout = (step: Step): Step => ({
 export const fastUnitTestStep = (scope: FastUnitTestScope): Step => {
 	if (scope.scope === "changed") return withFastTestTimeout(CHANGED_UNIT_TESTS)
 	if (scope.scope === "full") return withFastTestTimeout(FULL_UNIT_TESTS)
-	const testFiles = [...new Set(scope.shared.flatMap((m) => m.testFiles))]
+	const testFiles = [
+		...new Set(scope.shared.flatMap((shared) => shared.testFiles)),
+	]
 	return withFastTestTimeout({
 		name: "Unit tests changed since origin/main or importing a shared changed module, against the baseline",
 		command: [
