@@ -1252,7 +1252,7 @@ export const createRosterController = (
 			writeConversation(botIds, admitConversation).catch(reloadAndReject),
 
 		createUnselectedConversation: (botIds) =>
-			writeConversation(botIds, enrolConversation).catch(reloadAndYield),
+			writeConversation(botIds, enrolConversation).catch(reloadAndReject),
 
 		duplicate: (id: string, spaceRowId?: string) =>
 			commit(async () => {

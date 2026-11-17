@@ -2004,16 +2004,17 @@ describe("createRosterController on conversations", () => {
 		expect(state.selectedConversationId).toBe(room.id)
 	})
 
-	it("answers nothing for a refused unselected conversation and keeps the roster", async () => {
+	it("rejects a refused unselected conversation and keeps the roster", async () => {
 		const { store, room } = await aStoreWithARoom()
 		const controller = await loaded(store)
 		vi.spyOn(store, "createConversation").mockRejectedValue(
 			new Error("no room"),
 		)
 
-		const created = await controller.createUnselectedConversation(["default"])
+		await expect(
+			controller.createUnselectedConversation(["default"]),
+		).rejects.toThrow("no room")
 
-		expect(created).toBeNull()
 		expect(controller.getState().conversations.map((held) => held.id)).toEqual([
 			room.id,
 		])

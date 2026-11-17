@@ -105,6 +105,8 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		clear: roster.controller.clearSection,
 		pin: roster.controller.pin,
 		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
+		isOnScreen: (spaceRowId) =>
+			roster.controller.getState().spaceRowId === spaceRowId,
 		reload: roster.controller.reload,
 	})
 	const collapsedSections = useCollapsedSections(
