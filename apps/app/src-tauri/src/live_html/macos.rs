@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{msg_send, sel, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::NSView;
+use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
+use objc2_app_kit::{NSApplication, NSEventType, NSView};
 use objc2_foundation::{NSEdgeInsets, NSPoint, NSRect, NSSize, NSString};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 use tokio::sync::oneshot;
@@ -33,6 +33,32 @@ const SCRIPT_ANSWER: Deadline = Deadline {
 	missed: "the view did not answer the script in time",
 };
 pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
+const EVENTS_FOR_THE_MAIN_WEBVIEW: [NSEventType; 2] =
+	[NSEventType::ScrollWheel, NSEventType::Magnify];
+
+define_class!(
+	#[unsafe(super(NSView))]
+	#[thread_kind = MainThreadOnly]
+	#[name = "KiroshiLiveHtmlHolder"]
+	struct Holder;
+
+	impl Holder {
+		#[unsafe(method_id(hitTest:))]
+		fn hit_test(&self, point: NSPoint) -> Option<Retained<NSView>> {
+			if is_for_the_main_webview(self.mtm()) {
+				None
+			} else {
+				unsafe { msg_send![super(self), hitTest: point] }
+			}
+		}
+	}
+);
+
+fn is_for_the_main_webview(marker: MainThreadMarker) -> bool {
+	NSApplication::sharedApplication(marker)
+		.currentEvent()
+		.is_some_and(|event| EVENTS_FOR_THE_MAIN_WEBVIEW.contains(&event.r#type()))
+}
 
 struct Deadline {
 	limit: Duration,
@@ -358,7 +384,9 @@ fn holder_of(view: &NSView, marker: MainThreadMarker) -> Result<Retained<NSView>
 		return Ok(holder);
 	}
 	let parent = unsafe { view.superview() }.ok_or("the webview is in no view")?;
-	let holder = NSView::initWithFrame(NSView::alloc(marker), NSRect::ZERO);
+	let holder: Retained<Holder> = unsafe {
+		msg_send![super(Holder::alloc(marker).set_ivars(())), initWithFrame: NSRect::ZERO]
+	};
 	let identifier = NSString::from_str(HOLDER_IDENTIFIER);
 	unsafe {
 		let _: () = msg_send![&*holder, setIdentifier: &*identifier];
@@ -379,7 +407,7 @@ fn holder_of(view: &NSView, marker: MainThreadMarker) -> Result<Retained<NSView>
 	}
 	parent.addSubview(&holder);
 	holder.addSubview(view);
-	Ok(holder)
+	Ok(holder.into_super())
 }
 
 fn native_rectangle(frame: Frame) -> NSRect {
