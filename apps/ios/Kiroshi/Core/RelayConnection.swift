@@ -106,6 +106,10 @@ actor RelayConnection {
         eventsAfterTheReread.count
     }
 
+    var heldCallCount: Int {
+        Set(pendingCalls.keys).union(flights.keys).union(callTasks.keys).count
+    }
+
     func start() {
         guard run == nil else { return }
         backoff.reset()
@@ -142,20 +146,28 @@ actor RelayConnection {
         let id = nextCallId
         nextCallId += 1
         let frame = try JSONEncoder().encode(RelayCallFrame(id: id, command: command, args: args))
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingCalls[id] = continuation
-            flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
-            if challenge != nil {
-                queue(id)
-            }
-            callTasks[id] = Task { [clock] in
-                do {
-                    try await clock.sleep(for: deadline)
-                } catch {
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
                     return
                 }
-                self.settle(id, with: .failure(RelayCallError.timedOut))
+                pendingCalls[id] = continuation
+                flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
+                if challenge != nil {
+                    queue(id)
+                }
+                callTasks[id] = Task { [clock] in
+                    do {
+                        try await clock.sleep(for: deadline)
+                    } catch {
+                        return
+                    }
+                    self.settle(id, with: .failure(RelayCallError.timedOut))
+                }
             }
+        } onCancel: {
+            Task { await self.settle(id, with: .failure(CancellationError())) }
         }
     }
 
