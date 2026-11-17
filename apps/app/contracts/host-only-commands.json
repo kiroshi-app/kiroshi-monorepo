@@ -11,6 +11,7 @@
 	{ "command": "library_save_bytes" },
 	{ "command": "library_copy_bytes" },
 	{ "command": "library_read_link_preview" },
+	{ "command": "save_csv_file" },
 	{ "command": "agent_account" },
 	{ "command": "agent_sign_in" },
 	{ "command": "agent_sign_in_code" },
