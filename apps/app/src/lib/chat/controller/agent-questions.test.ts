@@ -115,6 +115,23 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
+	it("sends one answer when the card is answered twice before the first lands", async () => {
+		const { controller, driver } = await bootedHarness()
+		const answerQuestion = vi.spyOn(driver, "answerQuestion")
+		await controller.send("pick one /question")
+		await vi.runAllTimersAsync()
+		const asked = controller.getState().question?.id ?? ""
+		const answers = { "Which framework should it use?": "React" }
+
+		const first = controller.answer(asked, answers)
+		const second = controller.answer(asked, answers)
+		await vi.runAllTimersAsync()
+		await Promise.all([first, second])
+
+		expect(answerQuestion).toHaveBeenCalledTimes(1)
+		expect(controller.getState().errors).toEqual([])
+	})
+
 	it("answers a pending question with what the reader typed in the composer", async () => {
 		const { controller, driver } = await bootedHarness()
 		const answerQuestion = vi.spyOn(driver, "answerQuestion")

@@ -1966,8 +1966,17 @@ export const createConversationController = (
 		)
 	}
 
+	const answeredQuestionIds = new Set<string>()
+
 	const speakerAsked = (id: string) =>
 		[...speakers.values()].find((held) => held.pending?.request.id === id)
+
+	const releaseAsked = (id: string) => {
+		const held = speakerAsked(id)
+		if (held) {
+			releasePrompt(held, id)
+		}
+	}
 
 	const answerForeign = async (
 		scope: RuntimeScope,
@@ -1978,6 +1987,7 @@ export const createConversationController = (
 			await send()
 			foreignTurns.release(scope, id)
 			keptRuns.settle(scope, id)
+			releaseAsked(id)
 			return true
 		} catch (reason) {
 			noteSpeakerFailure(scope.botId, toTransportError(reason))
@@ -1987,7 +1997,7 @@ export const createConversationController = (
 		}
 	}
 
-	const answer = async (id: string, answers: QuestionAnswers) => {
+	const sendAnswer = async (id: string, answers: QuestionAnswers) => {
 		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
 			const isAccepted = await answerForeign(foreign.scope, id, () =>
@@ -2003,25 +2013,25 @@ export const createConversationController = (
 					answers,
 				)
 			}
-			return
+			return isAccepted
 		}
 		const held = speakerAsked(id)
 		const pending = held?.pending
 		if (!held?.scope || pending?.kind !== "question") {
-			return
+			return false
 		}
 		const conversationId = conversation?.id
 		const isAnswerable =
 			(await loadLatest()) && conversation?.id === conversationId
 		if (!isAnswerable) {
-			return
+			return false
 		}
 		try {
 			await driver.answerQuestion(held.scope, id, answers)
 		} catch (reason) {
 			noteSpeakerFailure(held.botId, toTransportError(reason))
 			sync()
-			return
+			return false
 		}
 		const openId = conversation?.id
 		if (openId) {
@@ -2032,6 +2042,17 @@ export const createConversationController = (
 			)
 		}
 		releasePrompt(held, id)
+		return true
+	}
+
+	const answer = async (id: string, answers: QuestionAnswers) => {
+		if (answeredQuestionIds.has(id)) {
+			return
+		}
+		answeredQuestionIds.add(id)
+		if (!(await sendAnswer(id, answers))) {
+			answeredQuestionIds.delete(id)
+		}
 	}
 
 	const respond = async (id: string, decision: PermissionDecision) => {
