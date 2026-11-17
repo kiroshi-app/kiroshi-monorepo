@@ -56,7 +56,7 @@ jobs:
 
   disarm:
     needs: find
-    if: ${{ !cancelled() && needs.find.outputs.owned != '0' }}
+    if: ${{ !cancelled() && (needs.find.result != 'success' || format('{0}', needs.find.outputs.owned) != '0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
