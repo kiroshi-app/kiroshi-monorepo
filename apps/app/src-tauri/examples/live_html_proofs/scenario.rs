@@ -16,12 +16,13 @@ use tauri::{AppHandle, Listener as _, WebviewWindow};
 use crate::host::{HostState, Tick};
 use crate::probe::{self, HostReading, MountedView};
 use crate::proofs::{
-	AttemptAlone, GridObservation, HostReadings, Observations, ViewObservation, WindowUrl,
-	LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS,
-	LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS,
+	AttemptAlone, GridObservation, HostReadings, Observations, RescaledFrames, ViewObservation,
+	WindowUrl, LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS,
+	LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS, SCALES_FORCED_IN_TURN,
 };
 use crate::sensors::{
-	drawn_frames, non_loopback_ipv4, Targets, Tripwire, ViewRecord, READER_ROLE, WRITER_ROLE,
+	drawn_frames, force_backing_scale, non_loopback_ipv4, Targets, Tripwire, ViewRecord,
+	READER_ROLE, WRITER_ROLE,
 };
 
 pub const FIRST_VIEW_LABEL: &str = "view-1";
@@ -47,7 +48,7 @@ const SETTLE: Duration = Duration::from_millis(1500);
 const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const RUN_LIMIT: Duration = Duration::from_secs(240);
-const PROOFS: usize = 8;
+const PROOFS: usize = 9;
 const HARNESS_FAILURE: i32 = 1;
 const RED_PROOFS: i32 = 3;
 const DECISIONS: [&str; 6] = [
@@ -183,6 +184,19 @@ impl OpenView {
 		match &self.mounted {
 			Ok(mounted) => host.view_record(&self.label, &mounted.token),
 			Err(_) => ViewRecord::default(),
+		}
+	}
+}
+
+struct NativeScaleRestored<'a> {
+	main_window: &'a WebviewWindow,
+	native_scale: f64,
+}
+
+impl Drop for NativeScaleRestored<'_> {
+	fn drop(&mut self) {
+		if let Err(cause) = force_backing_scale(self.main_window, self.native_scale) {
+			eprintln!("the native backing scale {} was not restored: {cause}", self.native_scale);
 		}
 	}
 }
@@ -357,11 +371,37 @@ impl Run {
 			);
 			block_on(placing).map_err(|failure| format!("{failure:?}"))
 		});
-		GridObservation {
-			rectangle: FRACTIONAL_SLOT,
-			clip: FRACTIONAL_CLIP,
-			drawn: placed.and_then(|()| drawn_frames(&self.main_window)),
-		}
+		let drawn = placed.clone().and_then(|()| drawn_frames(&self.main_window));
+		let rescaled = match placed {
+			Ok(()) => self.frames_after_each_forced_scale(),
+			Err(_) => Vec::new(),
+		};
+		GridObservation { rectangle: FRACTIONAL_SLOT, clip: FRACTIONAL_CLIP, drawn, rescaled }
+	}
+
+	fn frames_after_each_forced_scale(&self) -> Vec<RescaledFrames> {
+		let native_scale = match self.main_window.scale_factor() {
+			Ok(scale) => scale,
+			Err(cause) => {
+				let unforced = format!("the native backing scale is unreadable: {cause}");
+				return SCALES_FORCED_IN_TURN
+					.map(|forced_scale| RescaledFrames {
+						forced_scale,
+						drawn: Err(unforced.clone()),
+					})
+					.into();
+			}
+		};
+		let _restored = NativeScaleRestored { main_window: &self.main_window, native_scale };
+		SCALES_FORCED_IN_TURN
+			.map(|forced_scale| RescaledFrames {
+				forced_scale,
+				drawn: force_backing_scale(&self.main_window, forced_scale).and_then(|()| {
+					thread::sleep(SETTLE);
+					drawn_frames(&self.main_window)
+				}),
+			})
+			.into()
 	}
 
 	fn host_reading(&self, view: &OpenView) -> HostReading {

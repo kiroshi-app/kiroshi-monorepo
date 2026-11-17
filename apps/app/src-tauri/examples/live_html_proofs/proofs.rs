@@ -13,6 +13,7 @@ use crate::sensors::{Connection, CspReport, DrawnFrames, TripwireReading, ViewRe
 use kiroshi_app::live_html::contract::LiveHtmlRectangle;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
+pub const SCALES_FORCED_IN_TURN: [f64; 3] = [1.0, 2.0, 1.0];
 const BLOCKED_HOST: &str = "example.com";
 const SECOND_VIEW_NEVER_OPENED: &str = "the second view never opened, so the host read no view";
 
@@ -133,6 +134,31 @@ pub struct GridObservation {
 	pub rectangle: LiveHtmlRectangle,
 	pub clip: LiveHtmlRectangle,
 	pub drawn: Result<Vec<DrawnFrames>, String>,
+	pub rescaled: Vec<RescaledFrames>,
+}
+
+pub struct RescaledFrames {
+	pub forced_scale: f64,
+	pub drawn: Result<Vec<DrawnFrames>, String>,
+}
+
+impl RescaledFrames {
+	fn holder_in_points(&self) -> Option<[f64; 4]> {
+		let [frames] = self.drawn.as_deref().ok()? else {
+			return None;
+		};
+		Some(frames.holder_in_device_pixels.map(|edge| edge / frames.backing_scale))
+	}
+
+	fn is_on_the_grid_of_the_forced_scale(&self) -> bool {
+		self.drawn.as_deref().is_ok_and(|drawn| {
+			drawn.len() == 1
+				&& drawn.iter().all(|frames| {
+					frames.backing_scale == self.forced_scale
+						&& frames.edges_off_the_grid().is_empty()
+				})
+		})
+	}
 }
 
 pub struct AttemptAlone {
@@ -255,6 +281,7 @@ impl Observations {
 			self.main_window_stays_responsive(),
 			self.storage_not_shared_between_views(),
 			self.drawn_on_the_device_pixel_grid(),
+			self.replaced_on_a_backing_scale_change(),
 		];
 		if self.host_readings.is_some() {
 			let (by_the_handlers, by_browser_csp_reports) = self.first_view_navigations_seen();
@@ -895,6 +922,31 @@ impl Observations {
 			result: is_on_the_grid.into(),
 			attempts: Vec::new(),
 			evidence,
+		}
+	}
+
+	fn replaced_on_a_backing_scale_change(&self) -> Proof {
+		let rescaled = &self.grid.rescaled;
+		let holder_at = |scale: f64| {
+			rescaled.iter().find(|reading| reading.forced_scale == scale)?.holder_in_points()
+		};
+		let has_moved_to_the_finer_grid =
+			holder_at(1.0).zip(holder_at(2.0)).is_some_and(|(at_1, at_2)| at_1 != at_2);
+		let is_on_every_grid =
+			rescaled.iter().all(RescaledFrames::is_on_the_grid_of_the_forced_scale);
+		Proof {
+			proof: 9,
+			name: "A placed view is re-placed on the device pixel grid of the new scale when the backing scale changes",
+			result: (rescaled.len() == SCALES_FORCED_IN_TURN.len() && is_on_every_grid && has_moved_to_the_finer_grid).into(),
+			attempts: Vec::new(),
+			evidence: json!({
+				"scales_forced_in_turn": SCALES_FORCED_IN_TURN,
+				"frames_read_after_each_change": rescaled.iter().map(|reading| json!({
+					"forced_scale": reading.forced_scale,
+					"drawn": probe::evidence(&reading.drawn),
+				})).collect::<Vec<_>>(),
+				"holder_moved_to_the_finer_grid_at_scale_2": has_moved_to_the_finer_grid,
+			}),
 		}
 	}
 }
