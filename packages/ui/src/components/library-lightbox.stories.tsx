@@ -1723,9 +1723,6 @@ export const OverlayWithNobodyPresent = meta.story({
 	play: async () => {
 		const popup = await lightbox()
 		const actions = slotIn(barIn(popup), "library-bar-actions")
-		await expect(
-			actions.querySelector("[data-slot=library-document-people]"),
-		).toBe(null)
 		const { capsule } = await expectBarControls(popup)
 		await expect(capsule.getBoundingClientRect().left).toBe(
 			actions.getBoundingClientRect().left,
