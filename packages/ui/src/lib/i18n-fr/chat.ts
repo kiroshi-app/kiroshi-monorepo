@@ -388,6 +388,7 @@ const chat = {
 		enlargeName: "Agrandir la vue en direct",
 		shrink: "Réduire",
 		shrinkName: "Réduire la vue en direct",
+		failed: "Impossible d’afficher la vue en direct. Voici le code à la place.",
 	},
 	table: {
 		label: "Tableau",
