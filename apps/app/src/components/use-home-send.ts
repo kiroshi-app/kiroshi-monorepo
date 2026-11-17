@@ -24,6 +24,7 @@ import { useControllerState } from "@/lib/use-controller"
 
 export type HomeConversationStart = {
 	startConversation: (botIds: string[]) => Promise<Conversation | null>
+	beginNaming: (conversationId: string) => void
 	discardConversation: (conversationId: string) => Promise<void>
 	openConversation: (conversationId: string) => void
 }
@@ -72,6 +73,7 @@ export const useHomeSend = ({
 	drafts,
 	runtimes,
 	startConversation,
+	beginNaming,
 	discardConversation,
 	openConversation,
 }: HomeSendOptions): HomeSend => {
@@ -126,6 +128,9 @@ export const useHomeSend = ({
 		const conversation = await startConversation([agentId])
 		if (!conversation) {
 			return null
+		}
+		if (text.trim()) {
+			beginNaming(conversation.id)
 		}
 		const isSent = await deliverOrDiscard(conversation, text)
 		return isSent ? conversation.id : null

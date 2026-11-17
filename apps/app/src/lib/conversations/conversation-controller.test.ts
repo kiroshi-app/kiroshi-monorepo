@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	type ConversationController,
 	createConversationController,
+	NAMING_TIMEOUT_MS,
 } from "./conversation-controller"
+import {
+	type ConversationNamings,
+	createConversationNamings,
+} from "./conversation-namings"
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { KEPT_RUN_GRACE_MS } from "./kept-runs"
@@ -117,6 +122,7 @@ type Harness = {
 	controller: ConversationController
 	conversation: Conversation
 	named: [string, ConversationNaming][]
+	namings: ConversationNamings
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
@@ -204,6 +210,7 @@ const createHarness = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const named: [string, ConversationNaming][] = []
+	const namings = createConversationNamings()
 	let minted = 0
 	const reportFailure = vi.fn()
 	const controller = createConversationController(
@@ -216,6 +223,7 @@ const createHarness = async (
 			},
 			now: () => minted,
 			onNamed: (conversationId, naming) => named.push([conversationId, naming]),
+			namings,
 			reportFailure,
 		},
 	)
@@ -229,6 +237,7 @@ const createHarness = async (
 		controller,
 		conversation,
 		named,
+		namings,
 		detach,
 		settled,
 		refuseNextWrite,
@@ -2180,6 +2189,23 @@ describe("naming a conversation from its first message", () => {
 	const namelessWith = (namingFor: () => Promise<ConversationNaming | null>) =>
 		createHarness(["Ada"], { title: "", namingFor })
 
+	const namelessAnsweredLater = async () => {
+		let answer: (naming: ConversationNaming | null) => void = () => undefined
+		const harness = await namelessWith(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		return {
+			harness,
+			answer: (naming: ConversationNaming | null) => answer(naming),
+		}
+	}
+
+	const namingOf = (harness: Harness) =>
+		harness.namings.getState()[harness.conversation.id]
+
 	it("keeps the title and the icon the runtime reads in the first message", async () => {
 		const harness = await namelessWith(() =>
 			Promise.resolve({ title: "Holding the walls", icon: "Shield" }),
@@ -2215,6 +2241,67 @@ describe("naming a conversation from its first message", () => {
 		await harness.settled()
 
 		expect(harness.named).toEqual([])
+	})
+
+	it("is pending while the runtime names it, then arrived with the title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+		expect(harness.named).toEqual([])
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+
+		expect(namingOf(harness)).toBe("arrived")
+		expect(harness.named).toEqual([
+			[harness.conversation.id, { title: "Holding the walls", icon: null }],
+		])
+	})
+
+	it.each([
+		{ answered: "no title", namingFor: () => Promise.resolve(null) },
+		{
+			answered: "an empty title",
+			namingFor: () => Promise.resolve({ title: "", icon: null }),
+		},
+		{
+			answered: "a refusal",
+			namingFor: () => Promise.reject(new Error("runtime gone")),
+		},
+	])(
+		"fails without a notice when the runtime answers $answered",
+		async ({ namingFor }) => {
+			const harness = await namelessWith(namingFor)
+
+			await harness.controller.send("how do we hold the walls?")
+			await harness.settled()
+
+			expect(namingOf(harness)).toBe("failed")
+			expect(harness.named).toEqual([])
+			expect(harness.reportFailure).not.toHaveBeenCalled()
+		},
+	)
+
+	it("fails once the runtime stays silent past the timeout, and drops a late title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+		holdTheClock()
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		vi.advanceTimersByTime(NAMING_TIMEOUT_MS - 1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+
+		vi.advanceTimersByTime(1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("failed")
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+		expect(harness.named).toEqual([])
+		expect(namingOf(harness)).toBe("failed")
 	})
 
 	it("leaves alone the name of a conversation that has one", async () => {

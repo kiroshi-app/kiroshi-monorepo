@@ -44,6 +44,7 @@ export const HomeRoute = () => {
 					onSelectAgent: pickAgent,
 					startConversation:
 						core.roster.controller.createUnselectedConversation,
+					beginNaming: core.conversationNamings.begin,
 					discardConversation: core.roster.controller.discardConversation,
 					openConversation,
 				}}

@@ -88,6 +88,7 @@ type HomeWorkspace = {
 		"startConversation" | "discardConversation"
 	>
 	openConversation: (conversationId: string) => void
+	beginNaming: (conversationId: string) => void
 }
 
 type Workspace = HomeWorkspace & {
@@ -107,6 +108,7 @@ const createWorkspace = (port: Partial<AttachmentsPort> = {}): Workspace => ({
 	runtimes,
 	conversations: createConversationStore(),
 	openConversation: vi.fn(),
+	beginNaming: vi.fn(),
 })
 
 const createMemberWorkspace = async () => {
@@ -149,6 +151,7 @@ const createMemberWorkspace = async () => {
 			discardConversation: host.deleteConversation,
 		},
 		openConversation: vi.fn(),
+		beginNaming: vi.fn(),
 		startedIds,
 		listedIds: async () =>
 			(await host.conversations(HOST_SPACE_ID)).map(({ id }) => id),
@@ -173,6 +176,7 @@ const mountHome = (workspace: HomeWorkspace, spaceId = SPACE_ID) =>
 			drafts: workspace.drafts,
 			runtimes: workspace.runtimes,
 			startConversation: workspace.conversations.startConversation,
+			beginNaming: workspace.beginNaming,
 			discardConversation: workspace.conversations.discardConversation,
 			openConversation: workspace.openConversation,
 		}),
@@ -370,6 +374,37 @@ describe("a Home send", () => {
 			NEW_CONVERSATION_ID,
 		])
 		expect(workspace.openConversation).toHaveBeenCalledOnce()
+	})
+})
+
+describe("the name of the conversation a Home send starts", () => {
+	it("is being asked for as soon as the conversation exists", async () => {
+		const workspace = createWorkspace()
+		const home = mountHome(workspace)
+
+		act(() => home.result.current.onSubmit("look"))
+
+		await waitFor(() =>
+			expect(workspace.openConversation).toHaveBeenCalledWith(
+				NEW_CONVERSATION_ID,
+			),
+		)
+		expect(workspace.beginNaming).toHaveBeenCalledWith(NEW_CONVERSATION_ID)
+	})
+
+	it("is not asked for when the send carries files and no text", async () => {
+		const workspace = createWorkspace()
+		const home = mountHome(workspace)
+		act(() => home.result.current.onAttach([screenshot()]))
+
+		act(() => home.result.current.onSubmit(" "))
+
+		await waitFor(() =>
+			expect(workspace.openConversation).toHaveBeenCalledWith(
+				NEW_CONVERSATION_ID,
+			),
+		)
+		expect(workspace.beginNaming).not.toHaveBeenCalled()
 	})
 })
 

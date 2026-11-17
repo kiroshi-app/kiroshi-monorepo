@@ -140,11 +140,17 @@ const countingBots = (store: TranscriptStore) => {
 	return { count: () => count }
 }
 
+const openedConversation = async (controller: RosterController) => {
+	const created = await controller.createUnselectedConversation([])
+	controller.selectConversation(created?.id ?? "")
+	return created
+}
+
 const seatedConversation = async (
 	controller: RosterController,
 	botIds: string[],
 ) => {
-	const created = await controller.createConversation()
+	const created = await openedConversation(controller)
 	for (const botId of botIds) {
 		await controller.recruitToConversation(created?.id ?? "", botId)
 	}
@@ -1337,37 +1343,10 @@ describe("createRosterController on conversations", () => {
 		])
 	})
 
-	it("shows a created conversation in the roster and selects it", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-
-		const created = await controller.createConversation()
-
-		const state = controller.getState()
-		expect(created?.title).toBe("")
-		expect(created ? seatedIn(created) : null).toEqual([])
-		expect(state.conversations.map((held) => held.id)).toEqual([created?.id])
-		expect(state.selectedConversationId).toBe(created?.id)
-		expect(state.selectedBotId).toBeNull()
-	})
-
-	it("seats the companions it is handed in the conversation it creates and selects", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		controller.select("default")
-
-		const created = await controller.createConversation(["default"])
-
-		const state = controller.getState()
-		expect(created ? seatedIn(created) : null).toEqual(["default"])
-		expect(state.selectedConversationId).toBe(created?.id)
-		expect(state.selectedBotId).toBeNull()
-	})
-
 	it("keeps a created conversation after a reload", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await controller.createUnselectedConversation([])
 
 		const state = await reloaded(store)
 
@@ -1377,7 +1356,7 @@ describe("createRosterController on conversations", () => {
 	it("leaves no companion selected while a conversation is selected", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.select("default")
 		expect(controller.getState().selectedConversationId).toBeNull()
@@ -1390,7 +1369,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.moveConversationToSection(created?.id ?? "", section.id)
 
@@ -1404,7 +1383,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		vi.spyOn(store, "updateConversation").mockRejectedValue(
 			new Error("no record"),
 		)
@@ -1420,7 +1399,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		await controller.moveConversationToSection(created?.id ?? "", section.id)
 
 		controller.clearSection(section.id)
@@ -1431,7 +1410,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the name and the instructions that are written", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.describeConversation(created?.id ?? "", {
 			name: "Menu",
@@ -1449,7 +1428,7 @@ describe("createRosterController on conversations", () => {
 	it("keeps the icon and the colour a conversation wears when it is renamed or moved", async () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
-		const created = await (await loaded(store)).createConversation()
+		const created = await openedConversation(await loaded(store))
 		const id = created?.id ?? ""
 		await store.updateConversation(id, {
 			title: "Launch",
@@ -1483,7 +1462,7 @@ describe("createRosterController on conversations", () => {
 	it("shows at once and stores the icon and the colour picked, beside the name and the instructions", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 		controller.describeConversation(id, {
 			name: "Menu",
 			instructions: "Stay short.",
@@ -1510,7 +1489,7 @@ describe("createRosterController on conversations", () => {
 	it("stores a hue outside the presets unchanged and reads it back after a reload", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.styleConversation(id, { color: 210 })
 
@@ -1522,7 +1501,7 @@ describe("createRosterController on conversations", () => {
 
 	it("stores no colour when none is picked", async () => {
 		const store = createFakeTranscriptStore()
-		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		const id = (await openedConversation(await loaded(store)))?.id ?? ""
 		await store.updateConversation(id, {
 			title: "Launch",
 			instructions: "",
@@ -1551,7 +1530,7 @@ describe("createRosterController on conversations", () => {
 			updateConversation: () =>
 				Promise.reject({ kind: "storage", failure: { kind: "staleWrite" } }),
 		})
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.styleConversation(id, { icon: "Rocket" })
 		expect(controller.getState().conversations[0].icon).toBe("Rocket")
@@ -1571,7 +1550,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the icon a naming carries with the title, in one write", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 		const sent = vi.spyOn(store, "updateConversation")
 
 		controller.nameConversation(id, { title: "Menu", icon: "Rocket" })
@@ -1592,7 +1571,7 @@ describe("createRosterController on conversations", () => {
 
 	it("keeps the icon a conversation wears when a naming brings another", async () => {
 		const store = createFakeTranscriptStore()
-		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		const id = (await openedConversation(await loaded(store)))?.id ?? ""
 		await store.updateConversation(id, {
 			title: "",
 			instructions: "",
@@ -1616,7 +1595,7 @@ describe("createRosterController on conversations", () => {
 	it("stores no icon when a naming brings none", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.nameConversation(id, { title: "Menu", icon: null })
 
@@ -1632,7 +1611,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the name a nameless conversation is given", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.nameConversation(created?.id ?? "", {
 			title: "Menu",
@@ -1649,7 +1628,7 @@ describe("createRosterController on conversations", () => {
 	it("leaves alone the name of a conversation that has one", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		controller.nameConversation(created?.id ?? "", {
 			title: "Launch",
 			icon: null,
@@ -1742,7 +1721,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const second = await store.createBot(newBotIdentity([]), "personal")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.recruitToConversation(created?.id ?? "", second.id)
 		await controller.recruitToConversation(created?.id ?? "", "default")
@@ -1763,7 +1742,7 @@ describe("createRosterController on conversations", () => {
 			{ reportFailure },
 		)
 		await refusing.load(opening())
-		const created = await refusing.createConversation()
+		const created = await openedConversation(refusing)
 
 		const seated = await refusing.recruitToConversation(
 			created?.id ?? "",
@@ -1842,7 +1821,7 @@ describe("createRosterController on conversations", () => {
 	it("drops a deleted conversation and lands on the first row of the roster", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.removeConversation(created?.id ?? "")
 
@@ -1879,21 +1858,6 @@ describe("createRosterController on conversations", () => {
 		expect(state.conversations.map((held) => held.id)).toContain(created?.id)
 		expect(state.selectedConversationId).toBe(room.id)
 		expect(state.selectedBotId).toBeNull()
-	})
-
-	it("rejects a refused conversation and keeps the roster and the selected row", async () => {
-		const { store, room } = await aStoreWithARoom()
-		const controller = await loaded(store)
-		controller.selectConversation(room.id)
-		vi.spyOn(store, "createConversation").mockRejectedValue(
-			new Error("no room"),
-		)
-
-		await expect(controller.createConversation()).rejects.toThrow("no room")
-
-		const state = controller.getState()
-		expect(state.conversations.map((held) => held.id)).toEqual([room.id])
-		expect(state.selectedConversationId).toBe(room.id)
 	})
 
 	it("rejects a refused unselected conversation and keeps the roster", async () => {
@@ -1942,7 +1906,7 @@ describe("createRosterController on conversations", () => {
 	it("rejects a refused deletion and keeps the conversation shown", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		const id = created?.id ?? ""
 		vi.spyOn(store, "deleteConversation").mockRejectedValue(
 			new Error("no record"),

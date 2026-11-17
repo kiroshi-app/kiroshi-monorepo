@@ -21,6 +21,7 @@ import { createChatDriver } from "../chat/create-driver"
 import { createDraftsController } from "../chat/drafts-controller"
 import { useChat } from "../chat/use-chat"
 import { withSettledSettings } from "../chat/with-settled-settings"
+import { createConversationNamings } from "../conversations/conversation-namings"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createTranscriptStore } from "../conversations/create-store"
 import { pluginScopeOf } from "../conversations/plugin-scope"
@@ -61,14 +62,16 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		isListedInOpenSpace: (botId) =>
 			roster.controller.getState().bots.some((bot) => bot.id === botId),
 	})
+	const conversationNamings = useMemo(createConversationNamings, [])
 	const conversationRuntimes = useMemo(
 		() =>
 			createConversationRuntimes(driver, store, {
 				onNamed: roster.controller.nameConversation,
+				namings: conversationNamings,
 				rereadConversation: roster.controller.rereadConversationRow,
 				senderAccountId,
 			}),
-		[driver, store, roster.controller, senderAccountId],
+		[driver, store, roster.controller, conversationNamings, senderAccountId],
 	)
 
 	useEffect(
@@ -180,6 +183,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		collapsedSections,
 		companionPlugin,
 		conversationOpening,
+		conversationNamings,
 		conversationRuntimes,
 		drafts,
 		driver,

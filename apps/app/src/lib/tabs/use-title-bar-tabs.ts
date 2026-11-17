@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react"
 
+import { conversationLabelOf } from "@workspace/ui/components/conversation-naming"
 import type { TitleBarTabsProps } from "@workspace/ui/components/title-bar-tabs"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { TabDock } from "./tab-dock"
 import {
@@ -44,11 +46,13 @@ const tabConversationOf = ({
 	name,
 	icon,
 	color,
+	naming,
 }: TabConversation): TabConversation => ({
 	id,
 	name,
 	icon,
 	color,
+	naming,
 })
 
 const reportUnwatchedDrag = (reason: unknown) => {
@@ -101,8 +105,16 @@ export const useTitleBarTabs = ({
 			if (!torn) {
 				return
 			}
-			const { title } = tabFaceOf(torn.href, faceSources)
-			const ghost = { tabId: torn.id, href: torn.href, title }
+			const { title, naming } = tabFaceOf(torn.href, faceSources)
+			const ghost = {
+				tabId: torn.id,
+				href: torn.href,
+				title: conversationLabelOf(
+					i18n.getFixedT(null, ["common", "chat"]),
+					title,
+					naming,
+				),
+			}
 			tabs.tearOffSession.start(tearOff, () => ghost)
 		}
 		return {

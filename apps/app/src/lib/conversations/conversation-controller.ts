@@ -1,6 +1,7 @@
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { NamingProgress } from "./conversation-namings"
 import { createArrivalsListener } from "./create-arrivals-listener"
 import {
 	createMessageStoredListener,
@@ -204,6 +205,16 @@ export type ConversationController = {
 	shutdown: () => Promise<void>
 }
 
+export const NAMING_TIMEOUT_MS = 30_000
+
+const answeredInTime = (asked: Promise<ConversationNaming | null>) => {
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	const unanswered = new Promise<null>((resolve) => {
+		timeout = setTimeout(() => resolve(null), NAMING_TIMEOUT_MS)
+	})
+	return Promise.race([asked, unanswered]).finally(() => clearTimeout(timeout))
+}
+
 export type CompanionArrivalListener = (
 	listener: (arrival: CompanionArrival) => void,
 ) => Promise<() => void>
@@ -212,6 +223,7 @@ export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	onNamed?: (conversationId: string, naming: ConversationNaming) => void
+	namings?: NamingProgress
 	readReportedRuns?: ReportedRunsReader
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
@@ -1592,10 +1604,16 @@ export const createConversationController = (
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
-		const naming = await driver.namingFor(text).catch(() => null)
-		if (naming?.title) {
-			options.onNamed?.(conversationId, naming)
+		options.namings?.begin(conversationId)
+		const naming = await answeredInTime(driver.namingFor(text)).catch(
+			() => null,
+		)
+		if (!naming?.title) {
+			options.namings?.fail(conversationId)
+			return
 		}
+		options.onNamed?.(conversationId, naming)
+		options.namings?.arrive(conversationId)
 	}
 
 	const refuse = (

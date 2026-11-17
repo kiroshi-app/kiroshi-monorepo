@@ -440,10 +440,6 @@ const ROSTER_WRITES: WriteCases<RosterController, RosterRig> = {
 		refuses: "createBot",
 		run: ({ controller }) => controller.create(),
 	},
-	createConversation: {
-		refuses: "createConversation",
-		run: ({ controller }) => controller.createConversation(),
-	},
 	createUnselectedConversation: {
 		refuses: "createConversation",
 		run: ({ controller }) =>
