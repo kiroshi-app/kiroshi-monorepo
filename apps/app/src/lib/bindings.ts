@@ -1393,7 +1393,7 @@ export type LibraryWriter = {
 
 export type LibraryWriterKind = "agent" | "person" | "member";
 
-export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unmounted"; detail: string } | { kind: "unplaced"; detail: string };
+export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string };
 
 export type LiveHtmlRectangle = {
 	x: number | null,

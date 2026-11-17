@@ -36,10 +36,6 @@ pub enum LiveHtmlError {
 		detail: String,
 	},
 	#[serde(rename_all = "camelCase")]
-	Unmounted {
-		detail: String,
-	},
-	#[serde(rename_all = "camelCase")]
 	Unplaced {
 		detail: String,
 	},
