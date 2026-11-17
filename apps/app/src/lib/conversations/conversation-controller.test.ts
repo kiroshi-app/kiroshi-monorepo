@@ -1770,10 +1770,6 @@ describe("createConversationController", () => {
 			text: "and this?",
 			repliedToMessageId: said.id,
 		})
-		expect(harness.reportFailure).toHaveBeenCalledWith(expect.anything(), {
-			reason: new Error("refused"),
-			conversation: harness.conversation.id,
-		})
 	})
 
 	it("sends again a refused message with the same reply links in the same order", async () => {

@@ -1661,12 +1661,8 @@ export const createConversationController = (
 		}
 		try {
 			await enqueue(() => storePrompt(said, run.summoned))
-		} catch (reason) {
+		} catch {
 			refuse(said, trimmed, run)
-			void reportFailure(
-				{ title: i18n.t("chat:screen.notice.failed") },
-				{ reason, conversation: conversationId },
-			)
 			return false
 		}
 

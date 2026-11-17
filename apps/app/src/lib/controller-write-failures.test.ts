@@ -1409,6 +1409,9 @@ const adaAsking =
 const conversationShowsAnError = ({ controller }: ConversationRig) =>
 	controller.getState().latestError !== null
 
+const conversationShowsTheRefusedMessage = ({ controller }: ConversationRig) =>
+	controller.getState().refusedMessage !== null
+
 const CONVERSATION_WRITES: WriteCases<ConversationController, ConversationRig> =
 	{
 		getState: NOT_A_WRITE,
@@ -1426,6 +1429,7 @@ const CONVERSATION_WRITES: WriteCases<ConversationController, ConversationRig> =
 		send: {
 			refuses: "sendUserMessage",
 			run: ({ controller }) => controller.send("Hello"),
+			showsIt: conversationShowsTheRefusedMessage,
 		},
 		sendAgain: {
 			refuses: "sendUserMessage",
@@ -1437,6 +1441,7 @@ const CONVERSATION_WRITES: WriteCases<ConversationController, ConversationRig> =
 			},
 			run: ({ controller }) =>
 				controller.sendAgain(controller.getState().refusedMessage?.id ?? ""),
+			showsIt: conversationShowsTheRefusedMessage,
 		},
 		retryTurn: {
 			refuses: "startOrResumeSession",
