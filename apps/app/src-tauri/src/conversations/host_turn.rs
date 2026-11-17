@@ -164,41 +164,36 @@ pub(crate) async fn retire_once_idle<R: Runtime>(
 	}
 	let app = app.clone();
 	tauri::async_runtime::spawn(async move {
-		retire_when_settled(&app, scope, reading, heard).await;
+		if let Err(reason) = retired_when_settled(&app, &scope, reading, heard).await {
+			log::warn!(
+				"the session of {} keeps the servers it opened with: {reason}",
+				scope.bot_id
+			);
+		}
 	});
 	Ok(())
 }
 
-async fn retire_when_settled<R: Runtime>(
+async fn retired_when_settled<R: Runtime>(
 	app: &AppHandle<R>,
-	scope: RuntimeScope,
+	scope: &RuntimeScope,
 	mut reading: RelayReader,
 	mut heard: mpsc::UnboundedReceiver<ScopedEvent>,
-) {
+) -> Result<(), String> {
 	loop {
 		if !settles_or_ends(&mut heard).await {
 			match reading.failure().await {
-				ReadFailure::Lagged { .. } => (reading, heard) = listening_to(app, &scope),
-				ReadFailure::Ended(reason) => {
-					return log::warn!(
-						"the session of {} keeps the servers it opened with: {reason}",
-						scope.bot_id
-					);
-				}
+				ReadFailure::Lagged { .. } => (reading, heard) = listening_to(app, scope),
+				ReadFailure::Ended(reason) => return Err(reason),
 			}
 		}
-		if !live_runs(app).contains(&scope) {
-			return;
+		if !live_runs(app).contains(scope) {
+			return Ok(());
 		}
 		match retire_idle_run(app, scope.clone()).await {
 			Ok(Release::Kept) => {}
-			Ok(Release::Done) => return,
-			Err(error) => {
-				return log::warn!(
-					"the session of {} keeps the servers it opened with: {error:?}",
-					scope.bot_id
-				);
-			}
+			Ok(Release::Done) => return Ok(()),
+			Err(error) => return Err(format!("{error:?}")),
 		}
 	}
 }
@@ -222,7 +217,7 @@ async fn settles_or_ends(heard: &mut mpsc::UnboundedReceiver<ScopedEvent>) -> bo
 	false
 }
 
-pub(crate) async fn retire_idle_run<R: Runtime>(
+async fn retire_idle_run<R: Runtime>(
 	app: &AppHandle<R>,
 	scope: RuntimeScope,
 ) -> Result<Release, TransportError> {
@@ -541,7 +536,7 @@ impl Speaker {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Release {
+enum Release {
 	Done,
 	Kept,
 }
