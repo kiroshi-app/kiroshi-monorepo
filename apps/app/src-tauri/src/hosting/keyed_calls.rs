@@ -25,7 +25,7 @@ const REFUSED_BEFORE_INVOKE: [StatusCode; 5] = [
 
 const FIRST_RUN_LOST: &str = "the first run of this call ended without an answer";
 
-pub(super) const RECORD_UNUSABLE: &str = "the host could not use its record of this call";
+const RECORD_UNUSABLE: &str = "the host could not use its record of this call";
 
 pub(super) type Answered = (StatusCode, Value);
 
@@ -112,9 +112,9 @@ impl FirstRun {
 		let ran = run.await;
 		let recorded = match &ran {
 			Ran::Answered((status, body)) if !REFUSED_BEFORE_INVOKE.contains(status) => {
-				let kept = body.clone();
+				let status = status.as_u16();
 				answers
-					.answered(self.key.clone(), status.as_u16(), kept, ANSWERS_KEPT_PER_DEVICE)
+					.answered(self.key.clone(), status, body.clone(), ANSWERS_KEPT_PER_DEVICE)
 					.await
 			}
 			_ => answers.unclaimed(self.key.clone()).await,
