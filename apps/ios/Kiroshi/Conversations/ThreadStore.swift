@@ -308,9 +308,7 @@ final class ThreadStore {
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
         let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let repeated = refusedSend.flatMap {
-            $0.written == written && $0.picked == attachments ? $0 : nil
-        }
+        let repeated = refusedSend.flatMap { $0.repeats(written, with: attachments) ? $0 : nil }
         refusedSend = nil
         if let rejection = AttachmentRejection.of(attachments) {
             sendFailure = SendFailure(rejection)
@@ -319,9 +317,8 @@ final class ThreadStore {
         let outgoing =
             repeated
             ?? Outgoing(
-                id: makeId(), turnId: makeId(), conversationId: conversationId, written: written,
-                picked: attachments, storeCallKey: attachments.isEmpty ? nil : makeId(),
-                sentAt: now())
+                in: conversationId, written: written, content: content(of: written),
+                picked: attachments, sentAt: now(), makeId: makeId)
         lastSentId = outgoing.id
         draft = ""
         attachments = []
@@ -357,13 +354,17 @@ final class ThreadStore {
 
     private func deliver(_ outgoing: Outgoing, through relay: ConversationRelay) async {
         defer { isSending = false }
+        var outgoing = outgoing
         do {
-            var content = content(of: outgoing.written)
-            if let storeCallKey = outgoing.storeCallKey {
+            var content = outgoing.content
+            if let storeCallKey = outgoing.storeCallKey, outgoing.storedPaths == nil {
                 let paths = try await relay.storeAttachments(
                     await ConversationAttachments.encoding(
                         outgoing.picked, in: outgoing.conversationId),
                     callKey: storeCallKey)
+                outgoing.storedPaths = paths
+            }
+            if let paths = outgoing.storedPaths {
                 content = AttachmentBlock.prompt(
                     text: content, paths: paths, sentAt: outgoing.sentAt)
             }
@@ -574,16 +575,6 @@ final class ThreadStore {
             answerRows = rows
         }
     }
-}
-
-private struct Outgoing {
-    let id: String
-    let turnId: String
-    let conversationId: String
-    let written: String
-    let picked: [PickedAttachment]
-    let storeCallKey: String?
-    let sentAt: Date
 }
 
 private struct HeldAnswer {
