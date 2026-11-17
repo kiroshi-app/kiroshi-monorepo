@@ -13,20 +13,25 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::{self, RelayedMember};
+use super::keyed_calls::{self, Answered, Claim, Ran};
 use super::reach::{self, Reach};
 use super::Hosting;
 
 use crate::account::session::{trimmed_to, DEVICE_NAME_LIMIT};
 use crate::attachments;
 use crate::avatars::Avatars;
+use crate::db::repositories::member_call_answers::MemberCallKey;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::db::{Database, DatabaseState};
+use crate::events::CallOrigin;
 use crate::file_store::FileStore;
 use crate::host_api::files::{plain, ATTACHMENT_PATH, AVATAR_PATH};
 use crate::host_api::invoke::{names_an_app_command, RELAYED_MEMBER_HEADER};
 use crate::missions::github::installed_tls_provider;
 
 const INVOKE_BOUND: Duration = Duration::from_secs(300);
+
+const CALL_KEY_LIMIT: usize = 128;
 
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
@@ -81,10 +86,12 @@ pub(super) struct MemberCall {
 	command: String,
 	args: Value,
 	sender: String,
+	device: String,
 	computer: Option<String>,
+	call_key: Option<String>,
 }
 
-pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
+pub(super) fn member_call(text: &str, sender: &str, device: &str) -> Result<MemberCall, String> {
 	let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
 	let id = frame.get("id").filter(|id| id.is_string() || id.is_number()).cloned();
 	let command = frame
@@ -95,23 +102,35 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 		None => Some(Value::Object(Map::new())),
 		Some(args) => Some(args.clone()).filter(Value::is_object),
 	};
-	match (id, command, args) {
-		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
+	match (id, command, args, call_key_of(&frame)) {
+		(Some(id), Some(command), Some(_), _) if reach::reach_of(command).is_none() => {
 			log::warn!("a member called {command}, a command this host does not know");
 			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
 			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
 		}
-		(Some(id), Some(command), Some(args)) if belongs_to_the_host(command, &args) => {
+		(Some(id), Some(command), Some(args), _) if belongs_to_the_host(command, &args) => {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
 		}
-		(Some(id), Some(command), Some(args)) => Ok(MemberCall {
+		(Some(id), Some(command), Some(args), Some(call_key)) => Ok(MemberCall {
 			id,
 			command: command.to_owned(),
 			args,
 			sender: sender.to_owned(),
+			device: device.to_owned(),
 			computer: computer_of(&frame),
+			call_key,
 		}),
-		(id, _, _) => Err(refused(id)),
+		(id, ..) => Err(refused(id)),
+	}
+}
+
+fn call_key_of(frame: &Value) -> Option<Option<String>> {
+	match frame.get("callKey") {
+		None => Some(None),
+		Some(Value::String(key)) if !key.is_empty() && key.len() <= CALL_KEY_LIMIT => {
+			Some(Some(key.clone()))
+		}
+		Some(_) => None,
 	}
 }
 
@@ -238,6 +257,47 @@ pub(super) async fn bridged<R: Runtime>(
 	shared_space_id: String,
 	call: MemberCall,
 ) -> String {
+	let id = call.id.clone();
+	let (status, body) = match call.call_key.clone() {
+		None => ran(app, local, shared_space_id, call).await.into_answered(),
+		Some(key) => ran_once(app, local, shared_space_id, call, key).await,
+	};
+	answer(id, status, body)
+}
+
+async fn ran_once<R: Runtime>(
+	app: AppHandle<R>,
+	local: LocalApi,
+	shared_space_id: String,
+	call: MemberCall,
+	call_key: String,
+) -> Answered {
+	let key = MemberCallKey {
+		space_id: shared_space_id.clone(),
+		device_id: call.device.clone(),
+		call_key,
+	};
+	let claimed = app.state::<Hosting>().keyed_calls.claim(key);
+	let watching = match claimed {
+		Claim::Running(watching) => watching,
+		Claim::First(first) => {
+			let watching = first.watching();
+			tauri::async_runtime::spawn(async move {
+				let run = ran(app.clone(), local, shared_space_id, call);
+				first.answered_once(&app.state::<DatabaseState>(), run).await;
+			});
+			watching
+		}
+	};
+	keyed_calls::answered_by_the_first_run(watching).await
+}
+
+async fn ran<R: Runtime>(
+	app: AppHandle<R>,
+	local: LocalApi,
+	shared_space_id: String,
+	call: MemberCall,
+) -> Ran {
 	let caller = authorship::person_of(&app, &call.sender);
 	let reached = reach::stays_in_the_shared_space(
 		&app,
@@ -253,48 +313,60 @@ pub(super) async fn bridged<R: Runtime>(
 			reach::Refusal::NotOwned { .. } => OTHER_PERSON_REFUSAL,
 			_ => OTHER_SPACE_REFUSAL,
 		};
-		return answer(call.id, StatusCode::FORBIDDEN, json!(reason));
+		return Ran::Answered((StatusCode::FORBIDDEN, json!(reason)));
 	}
 	let hosting = app.state::<Hosting>();
 	let member = RelayedMember {
 		space_id: shared_space_id.clone(),
 		user_id: call.sender.clone(),
 		computer: call.computer.clone(),
+		origin: Some(CallOrigin {
+			device_id: call.device.clone(),
+			call_key: call.call_key.clone(),
+		}),
 	};
 	let vouched = hosting.relayed.vouch(member);
 	let (status, body) = match invoked(&local, &call, &vouched.nonce).await {
-		Ok(answered) => answered,
-		Err(reason) => return answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
+		Ran::Answered(answered) => answered,
+		unreached => return unreached,
 	};
 	if !status.is_success() {
-		return answer(call.id, status, body);
+		return Ran::Answered((status, body));
 	}
 	match reach::answer_shown_to(&app, &shared_space_id, &caller, &call.command, body).await {
-		Some(shown) => answer(call.id, status, shown),
-		None => answer(call.id, StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER)),
+		Some(shown) => Ran::Answered((status, shown)),
+		None => Ran::Answered((StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER))),
 	}
 }
 
-async fn invoked(
-	local: &LocalApi,
-	call: &MemberCall,
-	relayed_member: &str,
-) -> Result<(StatusCode, Value), String> {
+async fn invoked(local: &LocalApi, call: &MemberCall, relayed_member: &str) -> Ran {
 	let request = local
 		.client
 		.post(format!("{}/api/invoke/{}", local.origin, call.command))
 		.bearer_auth(&local.token)
 		.header(RELAYED_MEMBER_HEADER, relayed_member)
 		.json(&call.args);
-	let answered = request.send().await.map_err(|error| {
-		format!("the local host api could not be reached: {}", error.without_url())
-	})?;
+	let answered = match request.send().await {
+		Ok(answered) => answered,
+		Err(error) => {
+			let never_connected = error.is_connect();
+			let reason =
+				format!("the local host api could not be reached: {}", error.without_url());
+			let failed = (StatusCode::BAD_GATEWAY, json!(reason));
+			if never_connected {
+				return Ran::Unreached(failed);
+			}
+			return Ran::Answered(failed);
+		}
+	};
 	let status = answered.status();
-	let body = answered
-		.bytes()
-		.await
-		.map_err(|error| format!("the local host api answer was cut: {}", error.without_url()))?;
-	Ok((status, body_of(&body)))
+	match answered.bytes().await {
+		Ok(body) => Ran::Answered((status, body_of(&body))),
+		Err(error) => {
+			let reason = format!("the local host api answer was cut: {}", error.without_url());
+			Ran::Answered((StatusCode::BAD_GATEWAY, json!(reason)))
+		}
+	}
 }
 
 pub(super) struct FileAnswer {
@@ -480,6 +552,7 @@ pub(super) fn answer(id: Value, status: StatusCode, body: Value) -> String {
 
 #[cfg(test)]
 mod tests {
+	use std::collections::BTreeSet;
 	use std::path::Path;
 	use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -495,13 +568,15 @@ mod tests {
 	#[test]
 	fn a_call_without_args_invokes_with_none() {
 		assert_eq!(
-			member_call(r#"{"id": 3, "command": "agent_models"}"#, "a1"),
+			member_call(r#"{"id": 3, "command": "agent_models"}"#, "a1", "d1"),
 			Ok(MemberCall {
 				id: json!(3),
 				command: "agent_models".to_owned(),
 				args: json!({}),
 				sender: "a1".to_owned(),
+				device: "d1".to_owned(),
 				computer: None,
+				call_key: None,
 			})
 		);
 	}
@@ -509,7 +584,7 @@ mod tests {
 	#[test]
 	fn a_call_carries_the_computer_the_member_named_trimmed_and_none_when_blank_or_absent() {
 		let computer =
-			|frame: Value| member_call(&frame.to_string(), "a1").map(|call| call.computer);
+			|frame: Value| member_call(&frame.to_string(), "a1", "d1").map(|call| call.computer);
 
 		assert_eq!(
 			computer(json!({ "id": 1, "command": "agent_models", "computer": "  Studio  " })),
@@ -535,8 +610,31 @@ mod tests {
 	}
 
 	#[test]
+	fn a_call_carries_the_key_its_device_chose_and_a_malformed_key_refuses_the_frame() {
+		let keyed =
+			|frame: Value| member_call(&frame.to_string(), "a1", "d1").map(|call| call.call_key);
+		let longest = "k".repeat(CALL_KEY_LIMIT);
+
+		assert_eq!(
+			keyed(json!({ "id": 1, "command": "agent_models", "callKey": "k1" })),
+			Ok(Some("k1".to_owned()))
+		);
+		assert_eq!(
+			keyed(json!({ "id": 2, "command": "agent_models", "callKey": longest })),
+			Ok(Some(longest))
+		);
+		assert_eq!(keyed(json!({ "id": 3, "command": "agent_models" })), Ok(None));
+		for malformed in [json!(""), json!(7), json!(null), json!("k".repeat(CALL_KEY_LIMIT + 1))] {
+			let frame = json!({ "id": 4, "command": "agent_models", "callKey": malformed });
+			let refusal = keyed(frame).expect_err("a malformed key");
+			assert_eq!(status_of(&refusal), (json!(4), json!(400)), "{malformed}");
+		}
+	}
+
+	#[test]
 	fn the_sender_is_the_roster_account_even_when_the_plaintext_carries_another_sender() {
-		let sent = |frame: Value| member_call(&frame.to_string(), "roster").map(|call| call.sender);
+		let sent =
+			|frame: Value| member_call(&frame.to_string(), "roster", "d1").map(|call| call.sender);
 
 		assert_eq!(
 			sent(json!({ "id": 1, "command": "agent_models", "sender": { "accountId": "a1" } })),
@@ -570,7 +668,7 @@ mod tests {
 			(r#"{"id": "b", "command": "space_list", "args": [1]}"#, json!("b")),
 			(r#"{"id": 9}"#, json!(9)),
 		] {
-			let refusal = member_call(frame, "a1").expect_err(frame);
+			let refusal = member_call(frame, "a1", "d1").expect_err(frame);
 			assert_eq!(status_of(&refusal), (id, json!(400)), "{frame}");
 		}
 	}
@@ -583,7 +681,7 @@ mod tests {
 			.map(|(command, _)| *command);
 		for command in host_only {
 			let frame = json!({ "id": "m", "command": command, "args": { "spaceId": "s" } });
-			let refusal = member_call(&frame.to_string(), "a1").expect_err(command);
+			let refusal = member_call(&frame.to_string(), "a1", "d1").expect_err(command);
 			assert_eq!(
 				serde_json::from_str::<Value>(&refusal).expect("a json answer"),
 				json!({ "id": "m", "status": 403, "body": HOST_ONLY_REFUSAL }),
@@ -596,7 +694,7 @@ mod tests {
 	fn a_member_command_this_host_does_not_know_is_refused_with_404_naming_it() {
 		let frame = json!({ "id": "m", "command": "a_command_nobody_classified" });
 
-		let refusal = member_call(&frame.to_string(), "a1").expect_err("an unknown command");
+		let refusal = member_call(&frame.to_string(), "a1", "d1").expect_err("an unknown command");
 
 		assert_eq!(
 			serde_json::from_str::<Value>(&refusal).expect("a json answer"),
@@ -618,7 +716,7 @@ mod tests {
 			"args": { "spaceId": "an-argument-kept-out-of-the-log" },
 		});
 
-		member_call(&frame.to_string(), sender).expect_err("an unknown command");
+		member_call(&frame.to_string(), sender, "d1").expect_err("an unknown command");
 
 		assert_eq!(
 			logged_naming("a_command_logged"),
@@ -639,7 +737,7 @@ mod tests {
 		];
 
 		for frame in &refused {
-			member_call(&frame.to_string(), sender).expect_err("a refused frame");
+			member_call(&frame.to_string(), sender, "d1").expect_err("a refused frame");
 		}
 
 		assert_eq!(logged_naming(sender), Vec::<String>::new());
@@ -647,96 +745,78 @@ mod tests {
 
 	const HOST_ONLY_SCREENS: &[(&str, &str)] = &[("mcp_oauth_connect", "Applications")];
 
-	const LOCAL_COMMANDS_OPENING: &str = "LOCAL_COMMANDS: ReadonlySet<string> = new Set([";
+	const HOST_ONLY_COMMANDS: &str = "host-only-commands.json";
 
-	struct AppSources {
-		sources: Vec<String>,
-		kept_on_this_mac: Vec<String>,
+	const REGENERATE: &str = "bun run snapshots";
+
+	#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+	struct HostOnlyCommand {
+		command: String,
+		screen: Option<String>,
 	}
 
-	impl AppSources {
-		fn read() -> Self {
-			let sources: Vec<String> =
-				app_source_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../src"))
+	fn host_only_commands_path() -> std::path::PathBuf {
+		Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts").join(HOST_ONLY_COMMANDS)
+	}
+
+	fn host_only_commands_live() -> Vec<HostOnlyCommand> {
+		reach::REACHES
+			.iter()
+			.filter(|(_, reach)| *reach == Reach::HostOnly)
+			.map(|(command, _)| HostOnlyCommand {
+				command: (*command).to_owned(),
+				screen: HOST_ONLY_SCREENS
 					.iter()
-					.map(|path| std::fs::read_to_string(path).expect("the app source reads"))
-					.collect();
-			let kept_on_this_mac = sources
-				.iter()
-				.find_map(|source| source.split_once(LOCAL_COMMANDS_OPENING))
-				.and_then(|(_, rest)| rest.split_once("])"))
-				.expect("the app declares LOCAL_COMMANDS")
-				.0
-				.split(',')
-				.map(str::trim)
-				.filter(|entry| !entry.is_empty())
-				.map(|entry| match entry.strip_prefix('"') {
-					Some(quoted) => quoted.trim_end_matches('"').to_owned(),
-					None => text_constant(&sources, entry),
-				})
-				.collect();
-			Self { sources, kept_on_this_mac }
-		}
-
-		fn sends_to_a_joined_host(&self, command: &str) -> bool {
-			let named = format!("\"{command}\"");
-			!self.kept_on_this_mac.iter().any(|kept| kept == command)
-				&& self.sources.iter().any(|source| source.contains(&named))
-		}
-	}
-
-	fn app_source_files(dir: &Path) -> Vec<std::path::PathBuf> {
-		std::fs::read_dir(dir)
-			.expect("the app source dir reads")
-			.map(|entry| entry.expect("an entry").path())
-			.flat_map(|path| match path.is_dir() {
-				true => app_source_files(&path),
-				false => vec![path],
-			})
-			.filter(|path| {
-				let name = path.to_string_lossy();
-				(name.ends_with(".ts") || name.ends_with(".tsx"))
-					&& !name.contains(".test.")
-					&& !path.ends_with("lib/bindings.ts")
+					.find(|(shown, _)| shown == command)
+					.map(|(_, screen)| (*screen).to_owned()),
 			})
 			.collect()
 	}
 
-	fn text_constant(sources: &[String], name: &str) -> String {
-		let declared = format!("const {name} = \"");
-		sources
+	fn host_only_commands_file(entries: &[HostOnlyCommand]) -> String {
+		let lines: Vec<String> = entries
 			.iter()
-			.find_map(|source| source.split_once(&declared))
-			.and_then(|(_, rest)| rest.split('"').next())
-			.unwrap_or_else(|| panic!("the app declares no text constant {name}"))
-			.to_owned()
-	}
-
-	#[test]
-	fn the_app_sources_tell_a_command_kept_on_this_mac_from_one_sent_to_a_joined_host() {
-		let app = AppSources::read();
-
-		assert!(!app.sends_to_a_joined_host("space_list"));
-		assert!(!app.sends_to_a_joined_host("conversation_local_ids"));
-		assert!(!app.sends_to_a_joined_host("a_command_no_screen_names"));
-		assert!(app.sends_to_a_joined_host("conversation_today_of_agent"));
-	}
-
-	#[test]
-	fn a_host_only_command_the_app_sends_to_a_joined_host_is_listed_with_its_host_only_screen() {
-		let app = AppSources::read();
-		let mut sent: Vec<&str> = reach::REACHES
-			.iter()
-			.filter(|(command, reach)| {
-				*reach == Reach::HostOnly && app.sends_to_a_joined_host(command)
+			.map(|HostOnlyCommand { command, screen }| match screen {
+				Some(screen) => format!(
+					"\t{{ \"command\": {}, \"screen\": {} }}",
+					Value::from(command.as_str()),
+					Value::from(screen.as_str())
+				),
+				None => format!("\t{{ \"command\": {} }}", Value::from(command.as_str())),
 			})
-			.map(|(command, _)| *command)
 			.collect();
-		let mut listed: Vec<&str> = HOST_ONLY_SCREENS.iter().map(|(command, _)| *command).collect();
-		sent.sort_unstable();
-		listed.sort_unstable();
+		format!("[\n{}\n]\n", lines.join(",\n"))
+	}
 
-		assert_eq!(sent, listed);
+	fn differing_commands(held: &str, live: Vec<HostOnlyCommand>) -> String {
+		let held: BTreeSet<HostOnlyCommand> =
+			serde_json::from_str(held).expect("the host-only commands file is a json list");
+		let live: BTreeSet<HostOnlyCommand> = live.into_iter().collect();
+		let differing: BTreeSet<&str> =
+			held.symmetric_difference(&live).map(|entry| entry.command.as_str()).collect();
+		match differing.is_empty() {
+			true => "no command, only its order or layout".to_owned(),
+			false => differing.into_iter().collect::<Vec<_>>().join(", "),
+		}
+	}
+
+	#[test]
+	fn the_committed_host_only_commands_are_the_reach_table_ones_with_their_screens() {
+		let live = host_only_commands_live();
+		let written = host_only_commands_file(&live);
+		if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+			std::fs::write(host_only_commands_path(), &written)
+				.expect("the host-only commands file is written");
+			return;
+		}
+		let held = std::fs::read_to_string(host_only_commands_path())
+			.expect("the host-only commands file reads");
+
+		assert!(
+			held == written,
+			"apps/app/contracts/{HOST_ONLY_COMMANDS} differs from reach::REACHES and HOST_ONLY_SCREENS on {}, regenerate it with `{REGENERATE}`",
+			differing_commands(&held, live)
+		);
 	}
 
 	fn registered_commands() -> Vec<String> {
@@ -821,13 +901,13 @@ mod tests {
 		for command in &plugin_commands {
 			let person =
 				json!({ "id": "m", "command": command, "args": { "scope": { "kind": "user" } } });
-			let refusal = member_call(&person.to_string(), "a1").expect_err(command);
+			let refusal = member_call(&person.to_string(), "a1", "d1").expect_err(command);
 			assert_eq!(status_of(&refusal), (json!("m"), json!(403)), "{command}");
 			for scope in
 				[json!({ "kind": "space", "id": "s" }), json!({ "kind": "bot", "id": "b" })]
 			{
 				let frame = json!({ "id": "m", "command": command, "args": { "scope": scope } });
-				assert!(member_call(&frame.to_string(), "a1").is_ok(), "{command} {scope}");
+				assert!(member_call(&frame.to_string(), "a1", "d1").is_ok(), "{command} {scope}");
 			}
 		}
 	}

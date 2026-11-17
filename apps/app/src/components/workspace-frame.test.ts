@@ -3,6 +3,7 @@
 import { RouterProvider } from "@tanstack/react-router"
 import {
 	act,
+	type ByRoleOptions,
 	cleanup,
 	fireEvent,
 	render,
@@ -163,7 +164,13 @@ const { createWorkspaceRouter } = await import("@/workspace-router")
 
 const SETTLE_MS = 200
 
-type RoutedPath = "/" | "/home" | "/missions" | "/library" | "/settings/user"
+type RoutedPath =
+	| "/"
+	| "/home"
+	| "/agents"
+	| "/missions"
+	| "/library"
+	| "/settings/user"
 
 afterEach(() => {
 	cleanup()
@@ -256,6 +263,7 @@ const toggleSidebarButton = () =>
 
 const SEARCH = i18n.t("search:open")
 const NEW_CONVERSATION = i18n.t("bots:rail.newConversation")
+const AGENTS = i18n.t("bots:rail.agents")
 const MISSIONS = i18n.t("bots:rail.missions")
 const MISSIONS_ENTRY = new RegExp(`^${MISSIONS}( \\d+)?$`)
 const LIBRARY = i18n.t("bots:rail.library")
@@ -265,11 +273,15 @@ const titleBarSearchButton = () =>
 		name: SEARCH,
 	})
 
+const titleBarTab = (options: ByRoleOptions) =>
+	within(slotOf("app-title-bar") as HTMLElement).getByRole("tab", options)
+
 describe("the workspace frame", () => {
 	it("keeps one navigation sidebar and one title bar mounted across every page, and no rail", async () => {
 		const { router } = await mountApp()
 		const paths: RoutedPath[] = [
 			"/home",
+			"/agents",
 			"/missions",
 			"/library",
 			"/settings/user",
@@ -287,6 +299,7 @@ describe("the workspace frame", () => {
 
 	it.each<{ path: RoutedPath; current: (string | RegExp)[] }>([
 		{ path: "/home", current: [NEW_CONVERSATION] },
+		{ path: "/agents", current: [AGENTS] },
 		{ path: "/missions", current: [MISSIONS_ENTRY] },
 		{ path: "/library", current: [LIBRARY] },
 		{ path: "/", current: [] },
@@ -317,6 +330,7 @@ describe("the workspace frame", () => {
 
 	it.each<{ name: string | RegExp; path: RoutedPath }>([
 		{ name: NEW_CONVERSATION, path: "/home" },
+		{ name: AGENTS, path: "/agents" },
 		{ name: MISSIONS_ENTRY, path: "/missions" },
 		{ name: LIBRARY, path: "/library" },
 	])("opens $path from $name", async ({ name, path }) => {
@@ -325,6 +339,80 @@ describe("the workspace frame", () => {
 		await press(entry(name))
 
 		expect(router.state.location.pathname).toBe(path)
+	})
+
+	it("lists New, Agents, Missions and Library in that order", async () => {
+		await mountApp()
+		const rows = [NEW_CONVERSATION, AGENTS, MISSIONS_ENTRY, LIBRARY].map(entry)
+
+		const rowsAsDrawn = within(sidebar())
+			.getAllByRole("button")
+			.filter((button) => rows.includes(button))
+
+		expect(rowsAsDrawn).toEqual(rows)
+	})
+
+	it("shows the Agents page of the current Space in the main area, its tab titled Agents", async () => {
+		await mountApp()
+
+		await press(entry(AGENTS))
+
+		expect(slotOf("agents-page")).not.toBeNull()
+		expect(
+			screen.getByRole("heading", {
+				level: 1,
+				name: i18n.t("settings:space.agents.title"),
+			}),
+		).toBeTruthy()
+		expect(slotsOf("companion-card").length).toBeGreaterThan(0)
+		expect(titleBarTab({ name: AGENTS, selected: true })).toBeTruthy()
+	})
+
+	it("opens the Agents page in a background tab on a new-tab click and stays on the page", async () => {
+		const { router } = await mountApp()
+		const tabsBefore = screen.getAllByRole("tab").length
+
+		await act(async () => {
+			fireEvent.click(entry(AGENTS), { detail: 1, metaKey: true })
+		})
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/")
+		expect(screen.getAllByRole("tab").length).toBe(tabsBefore + 1)
+		expect(titleBarTab({ name: AGENTS, selected: false })).toBeTruthy()
+	})
+
+	it("walks back and forward through the Agents page", async () => {
+		const { router } = await mountApp()
+		await press(entry(AGENTS))
+		await press(entry(LIBRARY))
+
+		await act(async () => router.history.back())
+		await settle()
+		expect(router.state.location.pathname).toBe("/agents")
+
+		await act(async () => router.history.forward())
+		await settle()
+		expect(router.state.location.pathname).toBe("/library")
+	})
+
+	it("lands on the Agents page from a Space settings address carrying the former Agents entry", async () => {
+		let spaceId = ""
+		const { router } = await mountApp(async (held) => {
+			spaceId = held.spaceId
+		})
+
+		await act(async () => {
+			await router.navigate({
+				to: "/settings/space/$spaceId",
+				params: { spaceId },
+				search: { entry: "companions" },
+			})
+		})
+		await settle()
+
+		expect(router.state.location.pathname).toBe("/agents")
+		expect(slotOf("agents-page")).not.toBeNull()
 	})
 
 	it("shows the Missions page of the current Space in the main area", async () => {

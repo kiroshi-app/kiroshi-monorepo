@@ -255,7 +255,7 @@ export const ThemesHover = meta.story({
 		const pointer = await realPointer()
 		const triggers = triggersIn(canvasElement)
 		for (const trigger of triggers) {
-			const rest = getComputedStyle(trigger).borderTopColor
+			const rest = tokenStyleIn(trigger, "border-input", "borderTopColor")
 			await pointer.hover(trigger)
 			await waitFor(() =>
 				expect(getComputedStyle(trigger).borderTopColor).toBe(

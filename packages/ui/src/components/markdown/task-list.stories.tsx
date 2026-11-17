@@ -4,6 +4,10 @@ import preview from "@workspace/storybook/preview"
 import { isInBrowserRunner, slotIn } from "@workspace/storybook/story-utils"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MarkdownTaskCheckbox } from "@workspace/ui/components/markdown/task-list"
+import {
+	MessageBubble,
+	MessageBubbleContent,
+} from "@workspace/ui/components/message-bubble"
 
 const TASKS = [
 	"- [x] Read the nest",
@@ -36,6 +40,26 @@ const LINKED_TASKS = [
 	"- [ ] Notify the owner",
 ].join("\n")
 
+const LONG_ITEM =
+	"Archive the record once every occupant has confirmed the move, then send the owner the summary with the occupants list attached"
+
+const LONG_SUB_ITEM =
+	"Ask the caterer to hold the tasting until the venue confirms the date, and keep the deposit receipt with the booking"
+
+const WRAPPING_TASKS = [
+	`- [ ] ${LONG_ITEM}`,
+	`  - [x] ${LONG_SUB_ITEM}`,
+	"- [x] Notify the owner",
+].join("\n")
+
+const LOOSE_WRAPPING_TASKS = [
+	"Here is where the move stands.",
+	"",
+	`- [ ] ${LONG_ITEM}`,
+	"",
+	"- [x] Notify the owner",
+].join("\n")
+
 const BOX_SIZE = 16
 
 const LABEL_GAP = 10
@@ -65,6 +89,39 @@ const gapToLabelOf = (box: HTMLElement) => {
 }
 
 const labelOf = (box: HTMLElement) => getComputedStyle(labelElementOf(box))
+
+const lineStartsOf = (box: HTMLElement) => {
+	const words = box.closest('[data-slot="markdown-task-checkbox"]')?.nextSibling
+	if (!words) throw new Error("No words follow the box")
+	const range = document.createRange()
+	range.setStart(words, words.textContent?.search(/\S/) ?? 0)
+	range.setEndAfter(labelElementOf(box))
+	const lines = new Map<number, number>()
+	for (const { top, left, width } of range.getClientRects()) {
+		const line = Math.round(top)
+		if (width > 0) lines.set(line, Math.min(left, lines.get(line) ?? left))
+	}
+	return [...lines.values()]
+}
+
+const expectHangingUnderFirstWord = async (box: HTMLElement) => {
+	const [first, ...following] = lineStartsOf(box)
+
+	await expect(following.length).toBeGreaterThan(0)
+	for (const start of following) {
+		await expect(start).toBeCloseTo(first ?? Number.NaN, 0)
+	}
+}
+
+const renderInReply = (source: string) => (
+	<div className="w-[44rem] max-w-full">
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown>{source}</Markdown>
+			</MessageBubbleContent>
+		</MessageBubble>
+	</div>
+)
 
 const isStruckFromAnyAncestor = (element: HTMLElement) => {
 	for (
@@ -291,7 +348,10 @@ export const OpensALinkInTheLabelWithoutTicking = meta.story({
 		await expect(box).not.toBeChecked()
 		await expect(labelOf(box).textDecorationLine).toBe("none")
 
-		await pointer.click(canvas.getByText(/before the call$/))
+		const label = labelElementOf(box)
+		await pointer.click(label, {
+			position: { x: label.offsetWidth - 2, y: label.offsetHeight / 2 },
+		})
 		await expect(box).toBeChecked()
 	},
 })
@@ -394,5 +454,44 @@ export const TicksASubTaskAlone = meta.story({
 			canvas.getByRole("checkbox", { name: "Draft the guest list" }),
 		).not.toBeChecked()
 		await expect(sendInvites).not.toBeChecked()
+	},
+})
+
+export const LongItemHangsUnderItsWords = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A checklist in an agent reply whose item and sub-task run longer than the bubble is wide. Check that every wrapped line starts under the first word of its item, never under the box, that the box still sits centred on the first line 10 before the text, and that the ticked sub-task keeps its strike across every line.",
+			},
+		},
+	},
+	render: () => renderInReply(WRAPPING_TASKS),
+	play: async ({ canvas }) => {
+		const box = canvas.getByRole("checkbox", { name: LONG_ITEM })
+		const subTask = canvas.getByRole("checkbox", { name: LONG_SUB_ITEM })
+
+		await expect(box.getBoundingClientRect().width).toBe(BOX_SIZE)
+		await expect(gapToLabelOf(box)).toBeCloseTo(LABEL_GAP, 0)
+		await expectHangingUnderFirstWord(box)
+		await expectHangingUnderFirstWord(subTask)
+		await expect(labelOf(subTask).textDecorationLine).toBe("line-through")
+	},
+})
+
+export const LongLooseItemHangsUnderItsWords = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same long item in a loose checklist, its label a paragraph. Check that every wrapped line starts under the first word of the item, never under the box.",
+			},
+		},
+	},
+	render: () => renderInReply(LOOSE_WRAPPING_TASKS),
+	play: async ({ canvas }) => {
+		await expectHangingUnderFirstWord(
+			canvas.getByRole("checkbox", { name: LONG_ITEM }),
+		)
 	},
 })

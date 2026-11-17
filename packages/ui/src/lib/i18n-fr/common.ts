@@ -530,6 +530,73 @@ const common = {
 			stillImporting_other:
 				"{{count}} fichiers sont encore en cours d’importation.",
 		},
+		comments: {
+			pin: {
+				open: "Commentaire de {{name}}",
+				resolved: "Commentaire résolu de {{name}}",
+			},
+			composer: {
+				placeholder: "Commenter, @ pour mentionner",
+				reply: "Répondre, @ pour mentionner",
+				mention: "Mentionner quelqu’un",
+				send: "Envoyer",
+				shortcut: {
+					mac: "⌘⌥M",
+					other: "Ctrl+Shift+M",
+				},
+			},
+			mentions: {
+				label: "Mentionner",
+				agents: "Agents",
+				people: "Personnes",
+			},
+			thread: {
+				resolve: "Résoudre",
+				more: "Plus",
+				close: "Fermer",
+				comments: "Commentaires",
+				working_one: "{{names}} y travaille",
+				working_many: "{{names}} y travaillent",
+				working_other: "{{names}} y travaillent",
+				replies_one: "{{count}} réponse, {{names}}",
+				replies_many: "{{count}} réponses, {{names}}",
+				replies_other: "{{count}} réponses, {{names}}",
+				resolvedBy: "Résolu par {{name}}",
+				reopen: "Rouvrir",
+			},
+			list: {
+				label: "Commentaires",
+				open: "Ouverts",
+				resolved: "Résolus",
+				replies_one: "{{count}} réponse",
+				replies_many: "{{count}} réponses",
+				replies_other: "{{count}} réponses",
+				emptyOpen: "Aucun commentaire ouvert",
+				emptyResolved: "Aucun commentaire résolu",
+			},
+			bar: {
+				comment: "Commenter",
+				shortcut: "C",
+				count_one: "{{count}} commentaire ouvert",
+				count_many: "{{count}} commentaires ouverts",
+				count_other: "{{count}} commentaires ouverts",
+			},
+			hint: {
+				document:
+					"Cliquez sur un bloc pour commenter, sélectionnez du texte pour un passage",
+				board: "Cliquez sur une forme ou sur le tableau pour commenter",
+				image: "Cliquez pour un point, faites glisser pour une zone",
+				escape: "Échap",
+			},
+			anchor: {
+				block: "Sur ce paragraphe",
+				passage: "Sur « {{text}} »",
+				goneText: "Sur un texte qui n’est plus dans le document",
+				goneShape: "Sur une forme qui n’est plus sur le tableau",
+				imagePoint: "Sur un point de l’image",
+				imageZone: "Sur une zone de l’image",
+			},
+		},
 		itemMenu: {
 			label: "Actions pour {{name}}",
 			open: "Ouvrir",
@@ -637,6 +704,25 @@ const common = {
 			copy: "Impossible de copier l’image",
 			reveal: "Impossible d’afficher le fichier dans son dossier",
 			delete: "Impossible de supprimer l’élément",
+			comment: {
+				list: "Impossible d’afficher les commentaires. Rouvrez l’élément depuis la Bibliothèque.",
+				send: "Impossible d’envoyer le commentaire. Appuyez sur Envoyer pour réessayer.",
+				reply:
+					"Impossible d’envoyer la réponse. Appuyez sur Envoyer pour réessayer.",
+				resolve:
+					"Impossible de résoudre le commentaire. Appuyez sur Résoudre pour réessayer.",
+				reopen:
+					"Impossible de rouvrir le commentaire. Appuyez sur Rouvrir pour réessayer.",
+				agentTurns:
+					"Impossible d’afficher les agents qui travaillent sur les commentaires. Rouvrez l’élément depuis la Bibliothèque.",
+				mentionedThreadGone:
+					"Le commentaire où vous étiez mentionné n’est plus sur {{name}}.",
+				turnFailedOn:
+					"{{agent}} n’a pas pu répondre au commentaire sur {{item}}. Mentionnez-le à nouveau pour réessayer.",
+				turnFailed:
+					"{{agent}} n’a pas pu répondre à un commentaire. Mentionnez-le à nouveau pour réessayer.",
+				unnamedAgent: "Un agent",
+			},
 			document: {
 				create:
 					"Impossible de créer le document. Réessayez depuis Nouveau document.",
@@ -738,6 +824,12 @@ const common = {
 			label: "Tableau",
 			loading: "Chargement du tableau…",
 			objects: "Éléments du tableau",
+		},
+		comments: {
+			anchor: {
+				node: "Sur « {{title}} »",
+				board: "Sur le tableau",
+			},
 		},
 		object: {
 			named: "{{kind}} : {{text}}",

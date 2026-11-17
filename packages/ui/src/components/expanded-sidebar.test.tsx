@@ -120,6 +120,45 @@ describe("ExpandedSidebar list", () => {
 	})
 })
 
+describe("ExpandedSidebar destinations", () => {
+	afterEach(cleanup)
+
+	const destinations = (container: Element) =>
+		Array.from(
+			slot(container, "sidebar-menu")?.querySelectorAll(
+				'[data-slot="sidebar-menu-button"]',
+			) ?? [],
+			(row) => row.textContent,
+		)
+
+	it("renders no Agents row without an onSelectAgents handler", () => {
+		const { container } = renderSidebar({})
+		expect(destinations(container)).toEqual(["New", "Missions", "Library"])
+	})
+
+	it("renders the Agents row between New and Missions and reports its press", () => {
+		const onSelectAgents = vi.fn()
+		const { container } = renderSidebar({ onSelectAgents })
+		expect(destinations(container)).toEqual([
+			"New",
+			"Agents",
+			"Missions",
+			"Library",
+		])
+		screen.getByRole("button", { name: "Agents" }).click()
+		expect(onSelectAgents).toHaveBeenCalledOnce()
+	})
+
+	it("marks Agents as the current page while the destination is agents", () => {
+		renderSidebar({ destination: "agents", onSelectAgents: vi.fn() })
+		expect(
+			screen
+				.getByRole("button", { name: "Agents" })
+				.getAttribute("aria-current"),
+		).toBe("page")
+	})
+})
+
 describe("NavigationSidebar", () => {
 	afterEach(cleanup)
 

@@ -154,12 +154,14 @@ const COMPACT_NEEDS_YOU_GLYPH = cn(NEEDS_YOU_GLYPH, "bg-needs-you")
 
 type CompactRowTitleProps = {
 	name: string
+	content?: ReactNode
 	isWorking?: boolean
 	isNeedingYou?: boolean
 }
 
 const CompactRowTitle = ({
 	name,
+	content,
 	isWorking = false,
 	isNeedingYou = false,
 }: CompactRowTitleProps) => {
@@ -173,13 +175,15 @@ const CompactRowTitle = ({
 		>
 			{isShimmering ? (
 				<>
-					<ShimmerText className="inline" isHeldUnderReducedMotion>
-						{name}
-					</ShimmerText>{" "}
+					{content ?? (
+						<ShimmerText className="inline" isHeldUnderReducedMotion>
+							{name}
+						</ShimmerText>
+					)}{" "}
 					<span className="sr-only">{t("roster.pose.working")}</span>
 				</>
 			) : (
-				name
+				(content ?? name)
 			)}
 		</span>
 	)

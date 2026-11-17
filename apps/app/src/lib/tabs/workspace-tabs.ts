@@ -169,26 +169,28 @@ const missionOfTab = (tab: Tab) => pageOf(currentHrefOf(tab)).thread.mission
 
 const raiseWindowFailure = (
 	notice: UnreportedFailureNotice,
+	reason: unknown,
 	command?: string,
 ) => {
-	raiseReportedFailure(notice, { raisedIn: "workspace-tabs", command })
+	raiseReportedFailure(notice, { raisedIn: "workspace-tabs", command, reason })
 }
 
-const raiseCloseFailure = () =>
-	raiseWindowFailure({
-		title: i18n.t("common:windowControls.failure.close"),
-	})
+const raiseCloseFailure = (reason: unknown) =>
+	raiseWindowFailure(
+		{ title: i18n.t("common:windowControls.failure.close") },
+		reason,
+	)
 
 const closeThisWindow = () =>
 	closeWindow().then(
 		() => true,
-		() => {
-			raiseCloseFailure()
+		(reason: unknown) => {
+			raiseCloseFailure(reason)
 			return false
 		},
 	)
 
-type WindowOpening = { isOpened: true } | { isOpened: false; reason?: string }
+type WindowOpening = { isOpened: true } | { isOpened: false; error: unknown }
 
 const reasonOf = (error: unknown) =>
 	error == null ? undefined : describeFailure(error).trim() || undefined
@@ -203,8 +205,8 @@ const openWindowOn = (
 		(opened) =>
 			opened.status === "ok"
 				? { isOpened: true }
-				: { isOpened: false, reason: reasonOf(opened.error) },
-		(error: unknown) => ({ isOpened: false, reason: reasonOf(error) }),
+				: { isOpened: false, error: opened.error },
+		(error: unknown) => ({ isOpened: false, error }),
 	)
 
 const moveFailureOf = (reason: string | undefined) => ({
@@ -218,7 +220,7 @@ const moveFailureOf = (reason: string | undefined) => ({
 })
 
 const raiseTornOffFailure = (reason: unknown) =>
-	raiseWindowFailure(moveFailureOf(reasonOf(reason)))
+	raiseWindowFailure(moveFailureOf(reasonOf(reason)), reason)
 
 export const openNewWindow = async () => {
 	const opening = await openWindowOn(EMPTY_LIST_HREF)
@@ -227,6 +229,7 @@ export const openNewWindow = async () => {
 	}
 	raiseWindowFailure(
 		{ title: i18n.t("common:titleBar.moveTabFailed.title") },
+		opening.error,
 		"window_open",
 	)
 }
@@ -279,7 +282,11 @@ const reopenWindow = async (predecessor: string) => {
 		return
 	}
 	forgetWindow(predecessor)
-	raiseWindowFailure(reopenFailureOf(opening.reason), "window_open")
+	raiseWindowFailure(
+		reopenFailureOf(reasonOf(opening.error)),
+		opening.error,
+		"window_open",
+	)
 }
 
 export const reopenSecondaryWindows = async () => {
@@ -599,7 +606,11 @@ export const createWorkspaceTabs = (
 			removeMoved(spaceId, id)
 			return
 		}
-		raiseWindowFailure(moveFailureOf(opening.reason), "window_open")
+		raiseWindowFailure(
+			moveFailureOf(reasonOf(opening.error)),
+			opening.error,
+			"window_open",
+		)
 	}
 
 	const moveToWindowAt = (id: string, position: ScreenPosition | null) =>

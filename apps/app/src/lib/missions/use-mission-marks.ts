@@ -8,6 +8,7 @@ import { missionQueryKeys } from "./mission-query-keys"
 import type { MissionEntry } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
+import { onHostReconnected } from "@/lib/host"
 import { isHostOffline } from "@/lib/host/host-offline"
 import { isHostRefused } from "@/lib/host/host-refused"
 import { LOCAL_HOST, useReachableHost } from "@/lib/host/use-reachable-host"
@@ -64,6 +65,21 @@ const useRereadOnMissionChange = () => {
 	}, [queryClient])
 }
 
+const useRereadOnReconnect = () => {
+	const queryClient = useQueryClient()
+
+	useEffect(
+		() =>
+			onHostReconnected(() => {
+				void queryClient.refetchQueries(
+					{ queryKey: missionQueryKeys.marks(), type: "active" },
+					{ cancelRefetch: false },
+				)
+			}),
+		[queryClient],
+	)
+}
+
 export const useMissionMarks = (
 	shownSpaceId: string | null,
 ): MissionEntry[] => {
@@ -80,10 +96,12 @@ export const useMissionMarks = (
 			raisedIn: "use-mission-marks",
 			isSilentOn: isHostUnreachable,
 			raisesOncePerOutage: true,
+			rereadsItselfOnReconnect: true,
 		},
 	})
 
 	useRereadOnMissionChange()
+	useRereadOnReconnect()
 
 	return isError ? NO_MARKS : data
 }

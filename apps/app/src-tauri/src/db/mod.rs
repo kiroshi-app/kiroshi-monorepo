@@ -14,10 +14,10 @@ use connection::Located as _;
 use repositories::{
 	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
 	JoinedSpaceMembersRepository, JoinedSpaceRelayRepository, JoinedSpacesRepository,
-	MessagesRepository, MissionsRepository, RelayDevicesRepository, RoutinesRepository,
-	RuntimeContextRepository, SearchRepository, SectionsRepository, SpaceChildrenRepository,
-	SpaceHostingRepository, SpaceRelayRepository, SpaceRowsRepository, SpaceSettingsRepository,
-	SpacesRepository, UserRepository,
+	LibraryRepository, MemberCallAnswersRepository, MessagesRepository, MissionsRepository,
+	RelayDevicesRepository, RoutinesRepository, RuntimeContextRepository, SearchRepository,
+	SectionsRepository, SpaceChildrenRepository, SpaceHostingRepository, SpaceRelayRepository,
+	SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -75,6 +75,8 @@ pub struct Database {
 	joined_space_members: JoinedSpaceMembersRepository,
 	joined_space_relay: JoinedSpaceRelayRepository,
 	joined_spaces: JoinedSpacesRepository,
+	library: LibraryRepository,
+	member_call_answers: MemberCallAnswersRepository,
 	messages: MessagesRepository,
 	missions: MissionsRepository,
 	relay_devices: RelayDevicesRepository,
@@ -104,6 +106,8 @@ impl Database {
 			joined_space_members: JoinedSpaceMembersRepository::new(access.clone()),
 			joined_space_relay: JoinedSpaceRelayRepository::new(access.clone()),
 			joined_spaces: JoinedSpacesRepository::new(access.clone()),
+			library: LibraryRepository::new(access.clone()),
+			member_call_answers: MemberCallAnswersRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			missions: MissionsRepository::new(access.clone()),
 			relay_devices: RelayDevicesRepository::new(access.clone()),
@@ -162,8 +166,16 @@ impl Database {
 		&self.joined_spaces
 	}
 
+	pub fn library(&self) -> &LibraryRepository {
+		&self.library
+	}
+
 	pub fn messages(&self) -> &MessagesRepository {
 		&self.messages
+	}
+
+	pub fn member_call_answers(&self) -> &MemberCallAnswersRepository {
+		&self.member_call_answers
 	}
 
 	pub fn missions(&self) -> &MissionsRepository {

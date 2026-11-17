@@ -27,9 +27,21 @@ const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
 
 const IOS_ROOT_FILES = [".swift-format", ".xcode-version"]
 
-const FILES_SRC_TAURI_EMBEDS = [
+export const PATHS_RUST_READS_OUTSIDE_SRC_TAURI = [
 	".claude/settings.json",
+	"apps/app/contracts",
+	"apps/app/shared/filter-vocabulary.json",
+	"apps/app/src/lib/bindings.ts",
+	"apps/app/src/lib/conversations/transcript-contract.ts",
 	"apps/app/src/lib/host/index.ts",
+	"apps/app/src/lib/routines/routine-contract.ts",
+	"docs/chat/rich-answer-blocks.md",
+	"docs/relay/member-socket.schema.json",
+	"packages/shared/board/board.schema.json",
+	"packages/shared/board/fixtures",
+	"packages/shared/conversation-icons.json",
+	"packages/shared/permission-modes.json",
+	"packages/ui/src/components/markdown",
 ]
 
 const EVERY_JOB: FilteredJobs = {
@@ -51,6 +63,9 @@ const NO_JOB: FilteredJobs = {
 const isUnder = (path: string, directories: string[]) =>
 	directories.some((directory) => path.startsWith(directory))
 
+const isAtOrUnder = (path: string, roots: string[]) =>
+	roots.some((root) => path === root || path.startsWith(`${root}/`))
+
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1)
 
 const isShared = (path: string) =>
@@ -62,7 +77,7 @@ const touchesRust = (path: string) =>
 		"apps/app/sidecar/",
 		"packages/shared/",
 	]) ||
-	FILES_SRC_TAURI_EMBEDS.includes(path) ||
+	isAtOrUnder(path, PATHS_RUST_READS_OUTSIDE_SRC_TAURI) ||
 	["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"].includes(fileName(path))
 
 const touchesVitest = (path: string) =>

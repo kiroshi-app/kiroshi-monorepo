@@ -698,6 +698,9 @@ const chat = {
 			unwritable: "Couldn’t save the files ({{detail}}). Attach them again.",
 		},
 	},
+	conversationNaming: {
+		pending: "New conversation",
+	},
 	namelessConversation: {
 		separator: ", ",
 	},

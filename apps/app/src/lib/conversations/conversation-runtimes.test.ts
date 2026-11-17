@@ -5,6 +5,7 @@ import {
 	createConversationRuntimes,
 } from "./conversation-runtimes"
 import { withFakeHostWrites } from "./fake-host-writes"
+import { createFakeReconnections } from "./fake-reconnections"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { leadOf } from "./roster-conversations"
 import {
@@ -67,6 +68,9 @@ type Reader = {
 	openRoom: (title: string, names: string[]) => Promise<Conversation>
 	enter: (conversation: Conversation) => Promise<Screen>
 	answer: (botId: string, events: AgentEvent[]) => Promise<void>
+	reconnect: () => Promise<void>
+	pageReadIds: () => string[]
+	forgetPageReads: () => void
 	transcriptOf: (conversation: Conversation) => [string | null, string][]
 	completionsIn: (conversation: Conversation) => Promise<string[][]>
 }
@@ -74,9 +78,12 @@ type Reader = {
 const createReader = (): Reader => {
 	const driver = createScriptedDriver()
 	const store = createFakeTranscriptStore()
+	const loadPage = vi.spyOn(store, "loadPage")
+	const relay = createFakeReconnections()
 	const runtimes = createConversationRuntimes(
 		withFakeHostWrites(driver, store),
 		store,
+		{ onReconnected: relay.onReconnected },
 	)
 
 	const settled = async () => {
@@ -114,6 +121,11 @@ const createReader = (): Reader => {
 		await settled()
 	}
 
+	const reconnect = async () => {
+		relay.reconnect()
+		await settled()
+	}
+
 	const transcriptOf = (conversation: Conversation) =>
 		runtimes
 			.runtimeFor(conversation.id)
@@ -134,6 +146,9 @@ const createReader = (): Reader => {
 		openRoom,
 		enter,
 		answer,
+		reconnect,
+		pageReadIds: () => loadPage.mock.calls.map(([id]) => id),
+		forgetPageReads: () => loadPage.mockClear(),
 		transcriptOf,
 		completionsIn,
 	}
@@ -263,6 +278,24 @@ describe("createConversationRuntimes", () => {
 			[null, "and now?"],
 			[ada, "walls "],
 		])
+	})
+
+	it("stops rereading a deleted room on reconnection while its runtime is still shutting down", async () => {
+		const reader = createReader()
+		vi.spyOn(reader.driver, "shutdown").mockReturnValue(
+			new Promise(() => undefined),
+		)
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+		await screen.send("and now?")
+		await reader.answer(ada, [started(ada), wrote(ada, "walls ")])
+
+		void reader.runtimes.release(room.id)
+		reader.forgetPageReads()
+		await reader.reconnect()
+
+		expect(reader.pageReadIds()).toEqual([])
 	})
 
 	it("builds a fresh runtime when a released room is opened again", async () => {

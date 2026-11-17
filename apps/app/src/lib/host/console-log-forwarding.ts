@@ -20,14 +20,16 @@ const textOf = (part: unknown): string => {
 	return serialized(part)
 }
 
+export const writeToLogFile = (level: ForwardedLevel, message: string) =>
+	invoke("plugin:log|log", { level: LOG_LEVELS[level], message })
+
 const forwardToLogFile = (level: ForwardedLevel) => {
 	const print = console[level].bind(console)
 	console[level] = (...parts: unknown[]) => {
 		print(...parts)
-		invoke("plugin:log|log", {
-			level: LOG_LEVELS[level],
-			message: parts.map(textOf).join(" "),
-		}).catch((reason: unknown) => print("log file write failed", reason))
+		writeToLogFile(level, parts.map(textOf).join(" ")).catch(
+			(reason: unknown) => print("log file write failed", reason),
+		)
 	}
 }
 

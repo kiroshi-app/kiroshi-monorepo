@@ -13,9 +13,10 @@ import {
 	useState,
 } from "react"
 
-import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
+
+const PEEK_OPEN_DELAY_MS = 120
 
 const PEEK_CLOSE_DELAY_MS = 150
 
@@ -132,7 +133,7 @@ const SidebarPeekProvider = ({
 			hover: {
 				onPointerEnter: () => {
 					isHovered.current = true
-					settleAfter(true, HOVER_INTENT_DELAY_MS)
+					settleAfter(true, PEEK_OPEN_DELAY_MS)
 				},
 				onPointerLeave: () => {
 					isHovered.current = false

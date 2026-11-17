@@ -3,6 +3,10 @@ import type {
 	AppSidebarBot,
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
+import {
+	conversationLabelOf,
+	type ConversationNaming as NamingState,
+} from "@workspace/ui/components/conversation-naming"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
 import type { ConversationIconName } from "@workspace/ui/components/icons"
@@ -11,6 +15,7 @@ import type { MentionBot as PromptMentionBot } from "@workspace/ui/components/pr
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { NamingStates } from "./conversation-namings"
 import { type MentionBot, toMentionNames } from "./mentions"
 import type {
 	Bot,
@@ -140,12 +145,29 @@ export const mentionableBots = (
 export const isNameless = (conversation: Conversation): boolean =>
 	conversation.title.trim().length === 0
 
-export const conversationName = (conversation: Conversation): string =>
-	conversation.title.trim() ||
-	presentParticipants(conversation)
-		.map((participant) => participant.name)
-		.join(i18n.t("chat:namelessConversation.separator")) ||
-	i18n.t("chat:conversationSettings.untitled")
+export const namingOf = (
+	conversation: Conversation,
+	namings: NamingStates,
+): NamingState | undefined => {
+	const naming = namings[conversation.id]
+	if (naming === "pending") {
+		return naming
+	}
+	if (isNameless(conversation)) {
+		return "failed"
+	}
+	return naming === "arrived" ? naming : undefined
+}
+
+export const conversationName = (
+	conversation: Conversation,
+	namings: NamingStates,
+): string =>
+	conversationLabelOf(
+		i18n.getFixedT(null, ["common", "chat"]),
+		conversation.title.trim(),
+		namingOf(conversation, namings),
+	)
 
 export const toConversationSettingsValue = (
 	conversation: Conversation,
@@ -172,6 +194,7 @@ export type ConversationRosterActivity = {
 	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
 	notSent: Record<string, boolean>
+	namings: NamingStates
 	personOf: (person: LastWordAuthor) => string | undefined
 }
 
@@ -235,7 +258,8 @@ export const toRosterConversations = (
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
-			name: conversationName(conversation),
+			name: conversation.title.trim(),
+			naming: namingOf(conversation, activity.namings),
 			...toConversationLook(conversation),
 			sectionId: conversation.sectionId,
 			pinPosition: conversation.pinPosition,

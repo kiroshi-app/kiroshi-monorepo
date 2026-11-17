@@ -26,6 +26,8 @@ const USER_SETTINGS = "/settings/user"
 
 const HOME = "/home"
 
+const AGENTS = "/agents"
+
 const MIDDLE_CLICK = { ...NO_CLICK_MODIFIERS, middle: true }
 
 const MOD_CLICK = { ...NO_CLICK_MODIFIERS, meta: true }
@@ -62,8 +64,9 @@ const settingsRouterOn = (
 		validateSearch: validateSettingsSearch,
 	})
 	const home = createRoute({ getParentRoute: () => root, path: HOME })
+	const agents = createRoute({ getParentRoute: () => root, path: AGENTS })
 	return createRouter({
-		routeTree: root.addChildren([userSettings, spaceSettings, home]),
+		routeTree: root.addChildren([userSettings, spaceSettings, home, agents]),
 		history: createMemoryHistory({
 			initialEntries,
 			initialIndex: initialEntries.length - 1,
@@ -211,6 +214,39 @@ describe("useSettingsNavigation", () => {
 		await act(async () => navigation.showApplication(null))
 
 		expect(shownHref()).toBe(`${USER_SETTINGS}?entry=mcp`)
+	})
+
+	it("opens the Agents page in place, on a path of its own", async () => {
+		const { navigation, openInNewTab, shownHref } =
+			await renderSettingsNavigation()
+
+		await act(async () => navigation.openAgents())
+
+		expect(openInNewTab).not.toHaveBeenCalled()
+		expect(shownHref()).toBe(AGENTS)
+	})
+
+	it("walks back to the Agents page on Back to Agents", async () => {
+		const { navigation, router, shownHref } = await renderSettingsNavigation([
+			AGENTS,
+			USER_SETTINGS,
+		])
+		const historyLength = router.history.length
+
+		await act(async () => navigation.backToAgents())
+
+		expect(shownHref()).toBe(AGENTS)
+		expect(router.history.length).toBe(historyLength)
+	})
+
+	it("lands on the Agents page on Back to Agents when no page comes before, without a new history entry", async () => {
+		const { navigation, router, shownHref } = await renderSettingsNavigation()
+		const historyLength = router.history.length
+
+		await act(async () => navigation.backToAgents())
+
+		expect(shownHref()).toBe(AGENTS)
+		expect(router.history.length).toBe(historyLength)
 	})
 
 	it("opens a Space settings in a background tab on a new-tab click, leaving the shown page", async () => {

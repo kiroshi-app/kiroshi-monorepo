@@ -1,22 +1,24 @@
 use std::collections::hash_map::RandomState;
+use std::collections::VecDeque;
 use std::future::Future;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::stream::SplitSink;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::http::{header, HeaderValue};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpStream;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{watch, Mutex, Notify};
 use tokio::task::JoinSet;
-use tokio::time::{interval_at, sleep, timeout, Instant};
+use tokio::time::{interval_at, sleep, sleep_until, timeout, Instant};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::{CloseCode, Data, OpCode};
+use tokio_tungstenite::tungstenite::protocol::frame::Frame;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
@@ -25,6 +27,7 @@ use super::bridge::{self, LocalApi};
 use super::contract::{HostingFailureKind, HostingState};
 use super::devices::Revocation;
 use super::handover::{self, Handover};
+use super::refusals::{self, Deliveries, RelayRefusal, Resync, SentKind};
 use super::replay::{self, Addressee, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
@@ -52,6 +55,8 @@ const CONNECT_BOUND: Duration = Duration::from_secs(20);
 
 const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
 
+const FRAGMENT_BYTES: usize = 16 * 1024;
+
 const HOST_REPLACED: u16 = 4001;
 
 const SERVER_RESTARTING: u16 = 4005;
@@ -63,28 +68,82 @@ pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 pub(crate) type Sink = SplitSink<Socket, Message>;
 
 #[derive(Default, Clone, Copy)]
-struct LastFrames {
+pub(crate) struct LastFrames {
 	received: Option<usize>,
 	sent: Option<usize>,
 }
 
-struct MeasuredSink<'a> {
+type Heard = Option<Result<Message, SocketError>>;
+
+pub(crate) struct MeasuredSocket<'a> {
 	sink: Sink,
+	stream: SplitStream<Socket>,
+	heard_while_sending: VecDeque<Heard>,
+	is_ending: bool,
+	heard_at: Instant,
 	frames: &'a mut LastFrames,
 }
 
-impl MeasuredSink<'_> {
-	fn heard(&mut self, frame: &Message) {
-		if carries_data(frame) {
-			self.frames.received = Some(frame.len());
+impl<'a> MeasuredSocket<'a> {
+	pub(crate) fn over(socket: Socket, frames: &'a mut LastFrames) -> Self {
+		let (sink, stream) = socket.split();
+		Self {
+			sink,
+			stream,
+			heard_while_sending: VecDeque::new(),
+			is_ending: false,
+			heard_at: Instant::now(),
+			frames,
 		}
 	}
 
-	async fn sent(&mut self, message: Message) -> Result<(), String> {
+	pub(crate) fn silent_at(&self) -> Instant {
+		self.heard_at + SILENCE_BOUND
+	}
+
+	pub(crate) async fn next(&mut self) -> Heard {
+		let frame = match self.heard_while_sending.pop_front() {
+			Some(frame) => frame,
+			None => {
+				let frame = self.stream.next().await;
+				self.heard_at = Instant::now();
+				frame
+			}
+		};
+		match &frame {
+			Some(Ok(heard)) if carries_data(heard) => self.frames.received = Some(heard.len()),
+			_ => {}
+		}
+		frame
+	}
+
+	pub(crate) async fn sent(&mut self, message: Message) -> Result<(), String> {
 		if carries_data(&message) {
 			self.frames.sent = Some(message.len());
 		}
-		sent(&mut self.sink, message).await
+		for fragment in fragments(message) {
+			if self.is_ending {
+				return Ok(());
+			}
+			fragment_sent(&mut self.sink, fragment).await?;
+			self.hears_what_arrived();
+		}
+		Ok(())
+	}
+
+	fn hears_what_arrived(&mut self) {
+		while !self.is_ending && self.held_bytes() <= RELAY_FRAME_CEILING_BYTES {
+			let Some(frame) = self.stream.next().now_or_never() else {
+				return;
+			};
+			self.heard_at = Instant::now();
+			self.is_ending = !matches!(&frame, Some(Ok(heard)) if !heard.is_close());
+			self.heard_while_sending.push_back(frame);
+		}
+	}
+
+	fn held_bytes(&self) -> usize {
+		self.heard_while_sending.iter().flatten().flatten().map(Message::len).sum()
 	}
 }
 
@@ -92,7 +151,7 @@ fn carries_data(frame: &Message) -> bool {
 	frame.is_text() || frame.is_binary()
 }
 
-fn dropped_reason(reason: &str, frames: LastFrames) -> String {
+pub(crate) fn dropped_reason(reason: &str, frames: LastFrames) -> String {
 	let weighed = |frame: Option<usize>| {
 		frame.map_or_else(|| "none".to_owned(), |bytes| format!("{bytes} bytes"))
 	};
@@ -209,9 +268,11 @@ pub(super) async fn hosted<R: Runtime>(
 		describing.spawn(async move { super::described(&app, &instance_id, &name, colour).await });
 	}
 	let serving = Serving { local: &local, keys: &keys };
+	let member_resumed = Notify::new();
+	let relaying = Relaying::from_the_start_of(&ring, &member_resumed);
 	tokio::select! {
-		() = attempts(&app, &mut hosted, serving, &mut stop, &ring) => return,
-		() = replay::recorded(&app, &space_id, &ring) => {}
+		() = attempts(&app, &mut hosted, serving, &mut stop, relaying) => return,
+		() = replay::recorded(&app, &space_id, &ring, &member_resumed) => {}
 	}
 	let closed = HostingState::Failed {
 		failure: HostingFailureKind::LocalEventStreamClosed,
@@ -225,11 +286,10 @@ async fn attempts<R: Runtime>(
 	hosted: &mut Hosted,
 	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
-	ring: &watch::Sender<Ring>,
+	mut relaying: Relaying<'_>,
 ) {
 	let mut backoff = Backoff::first();
 	let mut replaced = None;
-	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
 		let next =
 			attempted(app, hosted, serving, stop, &mut backoff, &mut replaced, &mut relaying).await;
@@ -565,12 +625,14 @@ async fn online<R: Runtime>(
 	if let Err(failure) = devices::settled_turn(app, ids.space_id).await {
 		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 	}
-	let (sink, mut stream) = socket.split();
-	let mut sink = MeasuredSink { sink, frames };
+	let mut sink = MeasuredSocket::over(socket, frames);
+	let mut deliveries = Deliveries::default();
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
 	let unsent = recorded.borrow_and_update().rejoined(last_sent);
-	if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
+	let sending =
+		all_recorded_sent(&mut sink, &mut wire, &mut deliveries, &hosted, unsent, last_sent);
+	if let Err(ended) = sending.await {
 		return ended;
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
@@ -581,17 +643,13 @@ async fn online<R: Runtime>(
 	let mut admissions = JoinSet::new();
 	admissions.spawn(admission());
 	let file_turn = Arc::new(Mutex::new(()));
-	let silence = sleep(SILENCE_BOUND);
-	tokio::pin!(silence);
 	loop {
 		let mut held_turn = None;
+		let silent_at = sink.silent_at();
+		let resync_at = deliveries.next_resync_at();
 		let outgoing = tokio::select! {
 			_ = stop.changed() => return closed(&mut sink, ids).await,
-			frame = stream.next() => {
-				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
-				if let Some(Ok(heard)) = &frame {
-					sink.heard(heard);
-				}
+			frame = sink.next() => {
 				let text = match frame {
 					Some(Ok(Message::Text(text))) => text,
 					unread => match unread_ended(unread, ids) {
@@ -610,13 +668,19 @@ async fn online<R: Runtime>(
 						}
 						continue;
 					}
+					Some(RelayEvent::Refused(refusal)) => {
+						if let Err(ended) = refusal_handled(&mut sink, &mut wire, &mut deliveries, &hosted, &refusal).await {
+							return ended;
+						}
+						continue;
+					}
 					None => {}
 				}
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
 						log::warn!("{}", wire::dropped_line(ids.space_id, ids.instance_id, &refusal));
-						if let Err(ended) = rekey_answered(&mut sink, &hosted, &refusal).await {
+						if let Err(ended) = rekey_answered(&mut sink, &mut deliveries, &hosted, &refusal).await {
 							return ended;
 						}
 						continue;
@@ -644,7 +708,8 @@ async fn online<R: Runtime>(
 							"hosted space {} (instance {}) heard a hello from relay device {}",
 							ids.space_id, ids.instance_id, sender.relay_device_id
 						);
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Device(&sender.relay_device_id)).await {
+						deliveries.forget_sent_to(&sender.relay_device_id);
+						if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Device(&sender.relay_device_id)).await {
 							return ended;
 						}
 						Outgoing::Hello(sender)
@@ -652,9 +717,10 @@ async fn online<R: Runtime>(
 					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
 						let resumed = recorded.borrow().resumed(&call, last_sent.position, &sender.account_id);
-						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
+						if let Err(ended) = all_sent(&mut sink, &mut wire, &mut deliveries, &sender, resumed.frames).await {
 							return ended;
 						}
+						relaying.member_resumed.notify_one();
 						Outgoing::Answer(sender, resumed.answer)
 					}
 				}
@@ -669,7 +735,7 @@ async fn online<R: Runtime>(
 			Some(admitted) = admissions.join_next(), if !admissions.is_empty() => {
 				match admitted {
 					Ok(Ok(admitted)) if !admitted.is_empty() => {
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Everyone).await {
 							return ended;
 						}
 					}
@@ -686,7 +752,7 @@ async fn online<R: Runtime>(
 			Some(answer) = files.join_next(), if !files.is_empty() => match answer {
 				Ok((sender, answer)) => {
 					held_turn = Some(answer.turn);
-					Outgoing::Answer(sender, answer.frame)
+					Outgoing::FileAnswer(sender, answer.frame)
 				}
 				Err(failure) => {
 					log::error!("a relayed file of space {} ended abnormally: {failure}", ids.space_id);
@@ -702,24 +768,31 @@ async fn online<R: Runtime>(
 					Ok(unsent) => unsent,
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
-				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, &hosted, unsent, last_sent).await {
+				let sending = all_recorded_sent(&mut sink, &mut wire, &mut deliveries, &hosted, unsent, last_sent);
+				if let Err(ended) = sending.await {
 					return ended;
 				}
 				continue;
 			}
 			Ok(()) = rotations.changed() => {
 				rotations.borrow_and_update();
-				if let Err(ended) = rekeys_sent(&mut sink, &hosted, Recipients::Everyone).await {
+				if let Err(ended) = rekeys_sent(&mut sink, &mut deliveries, &hosted, Recipients::Everyone).await {
+					return ended;
+				}
+				continue;
+			}
+			_ = sleep_until(resync_at.unwrap_or_else(Instant::now)), if resync_at.is_some() => {
+				if let Err(ended) = resyncs_sent(&mut sink, &mut wire, &mut deliveries, &hosted).await {
 					return ended;
 				}
 				continue;
 			}
 			_ = pings.tick() => Outgoing::Ping,
-			_ = &mut silence => {
+			_ = sleep_until(silent_at) => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
 			}
 		};
-		if let Err(ended) = delivered(&mut sink, &mut wire, outgoing).await {
+		if let Err(ended) = delivered(&mut sink, &mut wire, &mut deliveries, outgoing).await {
 			return ended;
 		}
 		drop(held_turn);
@@ -738,6 +811,7 @@ enum Received {
 
 enum Outgoing {
 	Answer(Rostered, String),
+	FileAnswer(Rostered, String),
 	Hello(Rostered),
 	Rechallenge(Rostered),
 	Ping,
@@ -770,7 +844,7 @@ fn received(wire: &Wire<'_>, opened: OpenedFrame, ids: Ids<'_>) -> Received {
 		Some(Err(refusal)) => return Received::Answer(sender, refusal),
 		None => {}
 	}
-	match bridge::member_call(text, &sender.account_id) {
+	match bridge::member_call(text, &sender.account_id, &sender.relay_device_id) {
 		Ok(call) => Received::Call(sender, call),
 		Err(refusal) => Received::Answer(sender, refusal),
 	}
@@ -808,7 +882,7 @@ fn closed_by_relay(frame: Option<CloseFrame>, ids: Ids<'_>) -> Ended {
 	}
 }
 
-async fn closed(sink: &mut MeasuredSink<'_>, ids: Ids<'_>) -> Ended {
+async fn closed(sink: &mut MeasuredSocket<'_>, ids: Ids<'_>) -> Ended {
 	let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 	match sink.sent(Message::Close(Some(close))).await {
 		Ok(()) => log::info!(
@@ -832,6 +906,8 @@ enum RelayEvent {
 	DeviceRevoked { device_id: String, user_id: String },
 	#[serde(rename = "device.approved")]
 	DeviceApproved,
+	#[serde(skip)]
+	Refused(RelayRefusal),
 }
 
 fn relay_event_of(text: &str) -> Option<RelayEvent> {
@@ -839,7 +915,112 @@ fn relay_event_of(text: &str) -> Option<RelayEvent> {
 	if envelope.get("from").is_some() {
 		return None;
 	}
+	if let Some(refusal) = refusals::refusal_of(&envelope) {
+		return Some(RelayEvent::Refused(refusal));
+	}
 	serde_json::from_value(envelope).ok()
+}
+
+async fn refusal_handled(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	hosted: &HostedSpace<'_>,
+	refusal: &RelayRefusal,
+) -> Result<(), Ended> {
+	let line =
+		|sequel: &str| refusals::refusal_line(hosted.space_id, hosted.instance_id, refusal, sequel);
+	let Some(relay_device_id) = refusal.backlogged_device() else {
+		log::warn!("{}", line(""));
+		return Ok(());
+	};
+	let unconfirmed = deliveries.unconfirmed_line(relay_device_id);
+	let device = match rostered_device(hosted, relay_device_id).await {
+		Ok(Some(device)) => device,
+		Ok(None) => {
+			log::warn!(
+				"{}",
+				line(&format!("{unconfirmed}; no device of the roster, nothing changed"))
+			);
+			return Ok(());
+		}
+		Err(reason) => {
+			log::warn!("{}", line(&format!("{unconfirmed}; nothing changed: {reason}")));
+			return Ok(());
+		}
+	};
+	log::warn!("{}", line(&format!("{unconfirmed}; the device is behind")));
+	if deliveries.refused(relay_device_id) {
+		resync_sent(sink, wire, deliveries, hosted, &device).await?;
+	}
+	Ok(())
+}
+
+async fn resyncs_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	hosted: &HostedSpace<'_>,
+) -> Result<(), Ended> {
+	for resync in deliveries.resyncs_due(Instant::now()) {
+		let relay_device_id = match resync {
+			Resync::Due(relay_device_id) => relay_device_id,
+			Resync::Settled(relay_device_id) => {
+				resync_logged(hosted, &relay_device_id, "took its resync and is no longer behind");
+				continue;
+			}
+		};
+		match rostered_device(hosted, &relay_device_id).await {
+			Ok(Some(device)) => resync_sent(sink, wire, deliveries, hosted, &device).await?,
+			Ok(None) => {
+				deliveries.left(&relay_device_id);
+				resync_logged(
+					hosted,
+					&relay_device_id,
+					"left the roster and is no longer resynced",
+				);
+			}
+			Err(reason) => {
+				deliveries.refused(&relay_device_id);
+				resync_logged(hosted, &relay_device_id, &format!("was sent no resync: {reason}"));
+			}
+		}
+	}
+	Ok(())
+}
+
+async fn resync_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	hosted: &HostedSpace<'_>,
+	to: &Rostered,
+) -> Result<(), Ended> {
+	if deliveries.has_unconfirmed_rekeys(&to.relay_device_id) {
+		rekeys_sent(sink, deliveries, hosted, Recipients::Device(&to.relay_device_id)).await?;
+	}
+	let resync = deliveries.resync_frame(&to.relay_device_id);
+	sealed_sent(sink, wire, &resync, Some(to)).await?;
+	resync_logged(hosted, &to.relay_device_id, "was sent a resync");
+	Ok(())
+}
+
+fn resync_logged(hosted: &HostedSpace<'_>, relay_device_id: &str, what: &str) {
+	log::info!(
+		"hosted space {} (instance {}): relay device {} {what}",
+		hosted.space_id,
+		hosted.instance_id,
+		json!(relay_device_id)
+	);
+}
+
+async fn rostered_device(
+	hosted: &HostedSpace<'_>,
+	relay_device_id: &str,
+) -> Result<Option<Rostered>, String> {
+	roster::sender_of(hosted.database, hosted.space_id, &hosted.keys.device, relay_device_id)
+		.await
+		.map_err(|failure| format!("the roster did not read: {failure:?}"))
 }
 
 async fn revocation_handled<R: Runtime>(
@@ -861,7 +1042,8 @@ async fn revocation_handled<R: Runtime>(
 }
 
 async fn rekey_answered(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	refusal: &Refusal,
 ) -> Result<(), Ended> {
@@ -869,7 +1051,9 @@ async fn rekey_answered(
 		return Ok(());
 	};
 	match refusal.cause {
-		Dropped::StaleKey(_) => rekeys_sent(sink, hosted, Recipients::Device(from)).await,
+		Dropped::StaleKey(_) => {
+			rekeys_sent(sink, deliveries, hosted, Recipients::Device(from)).await
+		}
 		Dropped::NotAdmitted => {
 			let refused = handover::not_admitted_frame(hosted.instance_id, from);
 			sink.sent(Message::text(refused)).await.map_err(Ended::Dropped)
@@ -920,7 +1104,8 @@ fn recipients_of<'a>(
 }
 
 async fn rekeys_sent(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	recipients: Recipients<'_>,
 ) -> Result<(), Ended> {
@@ -935,6 +1120,7 @@ async fn rekeys_sent(
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => {
 				sink.sent(Message::text(frame)).await.map_err(Ended::Dropped)?;
+				deliveries.sent(&member.relay_device_id, SentKind::Rekey);
 				log::info!(
 					"hosted space {} (instance {}) sent a rekey to relay device {}: space key_id {}",
 					hosted.space_id,
@@ -951,7 +1137,7 @@ async fn rekeys_sent(
 	Ok(())
 }
 
-async fn fell_behind(sink: &mut MeasuredSink<'_>, missed: u64) -> Ended {
+async fn fell_behind(sink: &mut MeasuredSocket<'_>, missed: u64) -> Ended {
 	let close = CloseFrame { code: CloseCode::Again, reason: FELL_BEHIND.into() };
 	let reason = match sink.sent(Message::Close(Some(close))).await {
 		Ok(()) => format!("it fell {missed} events behind and closed with code 1013"),
@@ -963,14 +1149,18 @@ async fn fell_behind(sink: &mut MeasuredSink<'_>, missed: u64) -> Ended {
 }
 
 async fn delivered(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	outgoing: Outgoing,
 ) -> Result<(), Ended> {
 	let message = match outgoing {
 		Outgoing::Ping => Message::Ping(Vec::new().into()),
 		Outgoing::Answer(to, answer) => {
-			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(sealing_failed)?)
+			return answer_sent(sink, wire, deliveries, &to, &answer, SentKind::CallAnswer).await
+		}
+		Outgoing::FileAnswer(to, answer) => {
+			return answer_sent(sink, wire, deliveries, &to, &answer, SentKind::FileAnswer).await
 		}
 		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(sealing_failed)?),
 		Outgoing::Rechallenge(to) => {
@@ -980,8 +1170,21 @@ async fn delivered(
 	sink.sent(message).await.map_err(Ended::Dropped)
 }
 
+async fn answer_sent(
+	sink: &mut MeasuredSocket<'_>,
+	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
+	to: &Rostered,
+	answer: &str,
+	kind: SentKind,
+) -> Result<(), Ended> {
+	sealed_sent(sink, wire, answer, Some(to)).await?;
+	deliveries.answered(&to.relay_device_id, kind, answer);
+	Ok(())
+}
+
 async fn sealed_sent(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
 	plaintext: &str,
 	to: Option<&Rostered>,
@@ -991,31 +1194,38 @@ async fn sealed_sent(
 }
 
 async fn all_sent(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	to: &Rostered,
 	frames: Vec<String>,
 ) -> Result<(), Ended> {
 	for frame in frames {
 		sealed_sent(sink, wire, &frame, Some(to)).await?;
+		deliveries.sent(&to.relay_device_id, SentKind::Event);
 	}
 	Ok(())
 }
 
 async fn all_recorded_sent(
-	sink: &mut MeasuredSink<'_>,
+	sink: &mut MeasuredSocket<'_>,
 	wire: &mut Wire<'_>,
+	deliveries: &mut Deliveries,
 	hosted: &HostedSpace<'_>,
 	unsent: Vec<Stamped>,
 	last_sent: &mut LastSent,
 ) -> Result<(), Ended> {
 	for stamped in unsent {
 		match &stamped.addressee {
-			Addressee::Everyone => sealed_sent(sink, wire, &stamped.to_everyone(), None).await?,
+			Addressee::Everyone => {
+				sealed_sent(sink, wire, &stamped.to_everyone(), None).await?;
+				deliveries.sent_to_everyone();
+			}
 			addressee => {
 				for device in devices_of(hosted, addressee).await? {
 					let frame = stamped.to_account(&device.account_id);
 					sealed_sent(sink, wire, &frame, Some(&device)).await?;
+					deliveries.sent(&device.relay_device_id, SentKind::Event);
 				}
 			}
 		}
@@ -1040,11 +1250,49 @@ async fn devices_of(
 }
 
 pub(crate) async fn sent(sink: &mut Sink, message: Message) -> Result<(), String> {
-	match timeout(SEND_PATIENCE, sink.send(message)).await {
+	for fragment in fragments(message) {
+		fragment_sent(sink, fragment).await?;
+	}
+	Ok(())
+}
+
+async fn fragment_sent(sink: &mut Sink, fragment: Message) -> Result<(), String> {
+	match timeout(SEND_PATIENCE, sink.send(fragment)).await {
 		Ok(Ok(())) => Ok(()),
 		Ok(Err(error)) => Err(format!("the relay socket refused a frame: {error}")),
 		Err(_) => Err(format!("the relay socket stalled on a frame for {SEND_PATIENCE:?}")),
 	}
+}
+
+pub(crate) fn over_the_frame_ceiling(sealed: &str) -> Option<String> {
+	let bytes = sealed.len();
+	(bytes > RELAY_FRAME_CEILING_BYTES).then(|| {
+		format!(
+			"the call seals into a frame of {bytes} bytes, over the relay limit of {RELAY_FRAME_CEILING_BYTES} bytes"
+		)
+	})
+}
+
+fn fragments(message: Message) -> Vec<Message> {
+	let opcode = match &message {
+		Message::Text(_) => Data::Text,
+		Message::Binary(_) => Data::Binary,
+		_ => return vec![message],
+	};
+	if message.len() <= FRAGMENT_BYTES {
+		return vec![message];
+	}
+	let payload = message.into_data();
+	let count = payload.len().div_ceil(FRAGMENT_BYTES);
+	(0..count)
+		.map(|index| {
+			let start = index * FRAGMENT_BYTES;
+			let end = payload.len().min(start + FRAGMENT_BYTES);
+			let opcode = if index == 0 { opcode } else { Data::Continue };
+			let is_last = index + 1 == count;
+			Message::Frame(Frame::message(payload.slice(start..end), OpCode::Data(opcode), is_last))
+		})
+		.collect()
 }
 
 pub(crate) async fn until_stopped<F: Future>(
@@ -1103,6 +1351,82 @@ mod tests {
 		assert!(warned[0].contains("instance i-1"), "{}", warned[0]);
 	}
 
+	async fn a_socket_hearing(frames: Vec<axum::extract::ws::Message>) -> Socket {
+		use axum::extract::ws::WebSocketUpgrade;
+
+		let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+			.await
+			.expect("the relay binds");
+		let address = listener.local_addr().expect("the relay is named");
+		let upgraded = move |upgrade: WebSocketUpgrade| async move {
+			upgrade.on_upgrade(move |mut socket| async move {
+				for frame in frames {
+					socket.send(frame).await.expect("the frame leaves");
+				}
+				while socket.recv().await.is_some() {}
+			})
+		};
+		let router = axum::Router::new().route("/", axum::routing::get(upgraded));
+		tokio::spawn(async move { axum::serve(listener, router).await.expect("the relay serves") });
+		let url = format!("ws://{address}/");
+		let (socket, _) = connect_async_with_config(url, Some(relay_socket_config()), false)
+			.await
+			.expect("the socket opens");
+		socket
+	}
+
+	#[tokio::test]
+	async fn frames_and_a_close_arriving_while_a_frame_leaves_are_heard_in_order_after_it() {
+		use axum::extract::ws::{CloseFrame as Closing, Message as Arriving};
+
+		let closing = Closing { code: HOST_REPLACED, reason: "".into() };
+		let arriving = vec![
+			Arriving::Text("first".into()),
+			Arriving::Text("second".into()),
+			Arriving::Close(Some(closing)),
+		];
+		let mut frames = LastFrames::default();
+		let mut socket = MeasuredSocket::over(a_socket_hearing(arriving).await, &mut frames);
+		let leaving = Message::text("s".repeat(4 * FRAGMENT_BYTES));
+
+		let until_the_close_is_heard = async {
+			while !socket.is_ending {
+				socket.sent(leaving.clone()).await.expect("the frame leaves");
+				sleep(Duration::from_millis(10)).await;
+			}
+		};
+		timeout(Duration::from_secs(60), until_the_close_is_heard).await.expect("a close in time");
+		let held = socket.heard_while_sending.len();
+		let after_the_close = socket.sent(leaving).await;
+		let mut heard = Vec::new();
+		for _ in 0..held {
+			heard.push(socket.next().await.and_then(Result::ok));
+		}
+
+		let close = CloseFrame { code: CloseCode::from(HOST_REPLACED), reason: "".into() };
+		assert_eq!(after_the_close, Ok(()));
+		assert_eq!(
+			heard,
+			[
+				Some(Message::text("first")),
+				Some(Message::text("second")),
+				Some(Message::Close(Some(close))),
+			]
+		);
+	}
+
+	#[test]
+	fn a_frame_under_the_relay_ceiling_is_let_through_and_one_over_it_names_both_sizes() {
+		let largest = "s".repeat(RELAY_FRAME_CEILING_BYTES);
+		let over = format!("{largest}s");
+
+		assert_eq!(over_the_frame_ceiling(&largest), None);
+		assert_eq!(
+			over_the_frame_ceiling(&over).as_deref(),
+			Some("the call seals into a frame of 67108865 bytes, over the relay limit of 67108864 bytes")
+		);
+	}
+
 	#[test]
 	fn a_dropped_line_carries_the_reason_and_the_size_of_the_last_frames_both_ways() {
 		let measured = LastFrames { received: Some(10_485_760), sent: Some(412) };
@@ -1115,6 +1439,51 @@ mod tests {
 			dropped_reason("the relay socket ended", LastFrames::default()),
 			"the relay socket ended (last frame received: none, last frame sent: none)"
 		);
+	}
+
+	fn frame_of(message: &Message) -> &Frame {
+		let Message::Frame(frame) = message else {
+			panic!("a fragment is a raw frame: {message:?}");
+		};
+		frame
+	}
+
+	fn fragment_of(message: &Message) -> (OpCode, bool, usize) {
+		let frame = frame_of(message);
+		(frame.header().opcode, frame.header().is_final, frame.payload().len())
+	}
+
+	#[test]
+	fn a_frame_over_a_fragment_leaves_in_fragments_that_join_back_into_its_bytes() {
+		let text = "s".repeat(2 * FRAGMENT_BYTES + 1);
+
+		let sent = fragments(Message::text(text.clone()));
+
+		let shapes: Vec<_> = sent.iter().map(fragment_of).collect();
+		assert_eq!(
+			shapes,
+			[
+				(OpCode::Data(Data::Text), false, FRAGMENT_BYTES),
+				(OpCode::Data(Data::Continue), false, FRAGMENT_BYTES),
+				(OpCode::Data(Data::Continue), true, 1),
+			]
+		);
+		let joined: Vec<u8> =
+			sent.iter().flat_map(|fragment| frame_of(fragment).payload().to_vec()).collect();
+		assert_eq!(joined, text.as_bytes());
+		let binary = fragments(Message::binary(vec![1u8; FRAGMENT_BYTES + 1]));
+		assert_eq!(fragment_of(&binary[0]).0, OpCode::Data(Data::Binary));
+		assert_eq!(fragment_of(&binary[1]), (OpCode::Data(Data::Continue), true, 1));
+	}
+
+	#[test]
+	fn a_frame_within_a_fragment_or_carrying_no_data_leaves_whole() {
+		let small = Message::text("s".repeat(FRAGMENT_BYTES));
+		let ping = Message::Ping(vec![0u8; 8].into());
+
+		assert_eq!(fragments(small.clone()), [small]);
+		assert_eq!(fragments(ping.clone()), [ping]);
+		assert_eq!(fragments(Message::Close(None)), [Message::Close(None)]);
 	}
 
 	#[test]

@@ -1,5 +1,10 @@
 import { OverlayScrollbars } from "overlayscrollbars"
-import type { ComponentType, CSSProperties, ReactNode } from "react"
+import {
+	type ComponentType,
+	type CSSProperties,
+	type ReactNode,
+	useState,
+} from "react"
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
@@ -9,6 +14,8 @@ import {
 	fireEvent,
 	fn,
 	type Mock,
+	screen,
+	userEvent,
 	waitFor,
 	within,
 } from "storybook/test"
@@ -17,6 +24,7 @@ import {
 	BLOT_HUES,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import {
 	COMPACT_EDGE,
 	edgeWidthOf,
@@ -40,6 +48,7 @@ import {
 import { OnboardingConnectScreen } from "@workspace/ui/components/onboarding-connect-screen"
 import type { ScreenLayoutWidth } from "@workspace/ui/components/screen-layout"
 import { spaceAvatarStateOf } from "@workspace/ui/components/space-avatar"
+import { TOOLTIP_OPEN_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
 	Sidebar,
 	SidebarContent,
@@ -201,10 +210,16 @@ export const expectAnswerInsideFrame = async (root: HTMLElement) => {
 type SidebarFrameProps = {
 	children: ReactNode
 	width?: number
+	isCollapsed?: boolean
 }
 
-export const SidebarFrame = ({ children, width }: SidebarFrameProps) => (
+export const SidebarFrame = ({
+	children,
+	width,
+	isCollapsed = false,
+}: SidebarFrameProps) => (
 	<SidebarProvider
+		defaultOpen={!isCollapsed}
 		style={
 			width === undefined
 				? undefined
@@ -236,6 +251,49 @@ export const slotIn = (root: Element, slot: string) => {
 	const node = root.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
 	if (!node) throw new Error(`Nothing here draws a ${slot}`)
 	return node
+}
+
+const COMMENT_THREAD_CAP = 0.6
+
+export const commentScrollerIn = (card: Element) =>
+	slotIn(card, "library-comment-scroller")
+
+export const expectCommentThreadCapped = async (card: HTMLElement) => {
+	const header = card.firstElementChild as HTMLElement
+	const footer = card.lastElementChild as HTMLElement
+	const scroller = commentScrollerIn(card)
+	const box = card.getBoundingClientRect()
+	const scrolled = scroller.getBoundingClientRect()
+
+	await expect(box.height).toBeLessThanOrEqual(
+		Math.ceil(window.innerHeight * COMMENT_THREAD_CAP),
+	)
+	await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+	await expect(scroller.tabIndex).toBe(0)
+	await expect(getComputedStyle(scroller).overscrollBehaviorY).toBe("none")
+
+	await expect(header.clientHeight).toBeGreaterThan(0)
+	await expect(header.scrollHeight).toBeLessThanOrEqual(header.clientHeight)
+	await expect(header.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+		Math.floor(box.top),
+	)
+	await expect(header.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+		Math.ceil(scrolled.top),
+	)
+	await expect(footer.clientHeight).toBeGreaterThan(0)
+	await expect(footer.scrollHeight).toBeLessThanOrEqual(footer.clientHeight)
+	await expect(footer.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+		Math.floor(scrolled.bottom),
+	)
+	await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+		Math.ceil(box.bottom),
+	)
+
+	const latest = slotsIn(card, "library-comment").at(-1)
+	if (!latest) throw new Error("This thread holds no comment")
+	const latestBottom = latest.getBoundingClientRect().bottom
+	await expect(latestBottom).toBeLessThanOrEqual(Math.ceil(scrolled.bottom))
+	await expect(latestBottom).toBeGreaterThan(scrolled.top)
 }
 
 const SPACE_CAROUSEL_SETTLE_MS = 250
@@ -813,6 +871,52 @@ export const expectInverseAtRest = async (button: HTMLElement) => {
 export const realPointer = async () =>
 	(await import("vitest/browser")).userEvent
 
+type InkStates = {
+	atRest: HTMLElement
+	hovered: HTMLElement
+	active: HTMLElement
+}
+
+type MutedUntilHoveredOrActive = {
+	states: InkStates
+	inkedPartsOf: (owner: HTMLElement) => Element[]
+	steadyPartsOf?: (owner: HTMLElement) => Element[]
+	fullInk: "text-foreground" | "text-sidebar-foreground"
+}
+
+const inksOf = (parts: Element[]) =>
+	parts.map((part) => getComputedStyle(part).color)
+
+export const expectMutedUntilHoveredOrActive = async ({
+	states: { atRest, hovered, active },
+	inkedPartsOf,
+	steadyPartsOf = () => [],
+	fullInk,
+}: MutedUntilHoveredOrActive) => {
+	const muted = tokenStyleIn(atRest, "text-muted-foreground", "color")
+	const full = tokenStyleIn(atRest, fullInk, "color")
+	const everyPartIn = (ink: string, owner: HTMLElement) =>
+		inkedPartsOf(owner).map(() => ink)
+	const steadyInks = [hovered, active].map((owner) =>
+		inksOf(steadyPartsOf(owner)),
+	)
+
+	await expect(full).not.toBe(muted)
+	await expect(inkedPartsOf(atRest).length).toBeGreaterThan(0)
+	for (const owner of [atRest, hovered, active])
+		await expect(colourTransitionsOf(owner)).toEqual([])
+	await expect(inksOf(inkedPartsOf(atRest))).toEqual(everyPartIn(muted, atRest))
+	await expect(inksOf(inkedPartsOf(active))).toEqual(everyPartIn(full, active))
+	if (!isInBrowserRunner()) return
+	const pointer = await realPointer()
+	for (const [index, owner] of [hovered, active].entries()) {
+		await pointer.hover(owner)
+		await expect(inksOf(inkedPartsOf(owner))).toEqual(everyPartIn(full, owner))
+		await expect(inksOf(steadyPartsOf(owner))).toEqual(steadyInks[index])
+	}
+	await pointer.unhover(active)
+}
+
 export const botIdentityAvatars = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-identity-avatar")
 
@@ -1186,4 +1290,166 @@ export const expectQuestionCutInsideTheRow = async (row: HTMLElement) => {
 		label.getBoundingClientRect().width + 1,
 	)
 	await expect(sidesOf(slotIn(line, "needs-you-glyph"))).toEqual([12, 12])
+}
+
+const SLOW_RUNNER_HEADROOM_MS = 900
+
+export const HOVER_TOOLTIP_WAIT = {
+	timeout: TOOLTIP_OPEN_DELAY_MS + SLOW_RUNNER_HEADROOM_MS,
+}
+
+export const findHoverTooltip = () =>
+	screen.findByRole("tooltip", undefined, HOVER_TOOLTIP_WAIT)
+
+export const openTooltipOf = async (trigger: HTMLElement) => {
+	await userEvent.hover(trigger)
+	return settled(await findHoverTooltip())
+}
+
+export const expectNoHoverTooltip = async () => {
+	await new Promise((resolve) =>
+		setTimeout(resolve, HOVER_TOOLTIP_WAIT.timeout),
+	)
+	await expect(screen.queryByRole("tooltip")).toBeNull()
+}
+
+const SIDEBAR_BOX = '[data-slot="sidebar-container"], [data-slot="sidebar"]'
+
+const GAP_PAST_SIDEBAR_EDGE = 4
+
+const expectTooltipBesideTheSidebar = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	const sidebar = row.closest(SIDEBAR_BOX)
+	if (!sidebar) throw new Error("The row sits in no sidebar")
+	await waitFor(
+		() =>
+			expect(
+				tooltip.getBoundingClientRect().left -
+					sidebar.getBoundingClientRect().right,
+			).toBeCloseTo(GAP_PAST_SIDEBAR_EDGE, 0),
+		FRAME_POLL,
+	)
+}
+
+export const expectTooltipPastTheSidebarEdge = async (
+	row: HTMLElement,
+	tooltip: HTMLElement,
+) => {
+	await expectTooltipBesideTheSidebar(row, tooltip)
+	await waitFor(async () => {
+		const bubble = tooltip.getBoundingClientRect()
+		const held = row.getBoundingClientRect()
+		await expect(bubble.top + bubble.height / 2).toBeCloseTo(
+			held.top + held.height / 2,
+			0,
+		)
+	}, FRAME_POLL)
+}
+
+export const expectTooltipOnOneLine = async (tooltip: HTMLElement) => {
+	const style = getComputedStyle(tooltip)
+	await expect(tooltip.getBoundingClientRect().height).toBeCloseTo(
+		Number.parseFloat(style.lineHeight) +
+			Number.parseFloat(style.paddingTop) +
+			Number.parseFloat(style.paddingBottom),
+		0,
+	)
+}
+
+export const expectTooltipWrappedWhole = async (
+	tooltip: HTMLElement,
+	text: string,
+) => {
+	const style = getComputedStyle(tooltip)
+	const rendered = document.createRange()
+	rendered.selectNodeContents(tooltip)
+	const lines = [...rendered.getClientRects()]
+	const lineWidth =
+		tooltip.clientWidth -
+		Number.parseFloat(style.paddingLeft) -
+		Number.parseFloat(style.paddingRight)
+	const textWidth = lines.reduce((total, { width }) => total + width, 0)
+
+	await expect(tooltip.textContent).toBe(text)
+	await expect(style.textOverflow).not.toBe("ellipsis")
+	await expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth)
+	await expect(lines.length).toBeGreaterThan(1)
+	await expect(lines.length).toBeLessThanOrEqual(
+		Math.ceil(textWidth / lineWidth) + 1,
+	)
+}
+
+type TitleArrivalProps = {
+	children: (naming: ConversationNaming, arrive: () => void) => ReactNode
+}
+
+export const TitleArrival = ({ children }: TitleArrivalProps) => {
+	const [naming, setNaming] = useState<ConversationNaming>("pending")
+	return children(naming, () => setNaming("arrived"))
+}
+
+const KEYFRAME_TIMING = new Set([
+	"offset",
+	"computedOffset",
+	"easing",
+	"composite",
+])
+
+const TEXT_SWAP_PROPERTIES = ["filter", "opacity", "transform"]
+
+const animatedPropertiesOf = (element: Element) =>
+	element
+		.getAnimations()
+		.flatMap((animation) =>
+			animation.effect instanceof KeyframeEffect
+				? animation.effect.getKeyframes().flatMap(Object.keys)
+				: [],
+		)
+		.filter((property) => !KEYFRAME_TIMING.has(property))
+
+type TitleSwap = {
+	host: HTMLElement
+	arrive: HTMLElement
+	title: string
+}
+
+export const expectTitleSwappedIn = async ({
+	host,
+	arrive,
+	title,
+}: TitleSwap) => {
+	if (!isInBrowserRunner()) return
+	const height = host.getBoundingClientRect().height
+	const phases: string[] = []
+	const animated = new Set<string>()
+	const record = (event: AnimationEvent) => {
+		if (!(event.target instanceof HTMLElement)) return
+		if (event.target.dataset.slot !== "text-swap") return
+		phases.push(event.animationName)
+		for (const property of animatedPropertiesOf(event.target))
+			animated.add(property)
+	}
+
+	host.addEventListener("animationstart", record)
+	try {
+		await withMotionAllowed(async () => {
+			await userEvent.click(arrive)
+			await waitFor(() =>
+				expect(phases).toEqual(["ui-text-swap-exit", "ui-text-swap-enter"]),
+			)
+		})
+	} finally {
+		host.removeEventListener("animationstart", record)
+	}
+
+	const swap = slotIn(host, "text-swap")
+	await expect(swap).toHaveTextContent(title)
+	await expect([...animated].sort()).toEqual(TEXT_SWAP_PROPERTIES)
+	await expect(getComputedStyle(swap).textOverflow).toBe("ellipsis")
+	await expect(host.getBoundingClientRect().height).toBe(height)
+	await expect(
+		getComputedStyle(swap).getPropertyValue("--text-swap-dur").trim(),
+	).toBe("0.01ms")
 }

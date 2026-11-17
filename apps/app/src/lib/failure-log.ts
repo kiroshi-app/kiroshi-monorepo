@@ -5,6 +5,8 @@ import type { FailureLog } from "@workspace/ui/components/notice-surface"
 import { commands } from "./bindings"
 import { scrubFailureText } from "./failure-text-scrubber"
 
+import { writeToLogFile } from "./host/console-log-forwarding"
+
 const LOG_FILE = "kiroshi.log"
 
 const REPORTED_LOG_LINES = 200
@@ -19,11 +21,20 @@ const readLogTail = async () => {
 	return tail.data
 }
 
-export const readFailureLog = async (): Promise<FailureLog> => {
+const readFailureLog = async (): Promise<FailureLog> => {
 	const [lines, path] = await Promise.all([readLogTail(), logPath()])
 	return {
 		lines: lines.map(scrubFailureText),
 		path: scrubFailureText(path),
 		lineCount: lines.length,
 	}
+}
+
+export const readFailureLogAfterWriting = async (
+	line: string,
+): Promise<FailureLog> => {
+	await writeToLogFile("error", line).catch((reason: unknown) =>
+		console.warn(`kiroshi.log refused the line: ${line}`, reason),
+	)
+	return readFailureLog()
 }

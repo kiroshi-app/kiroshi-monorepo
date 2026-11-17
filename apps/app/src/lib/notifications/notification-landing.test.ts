@@ -219,6 +219,7 @@ const aWorld = async ({
 				...landing,
 				runtimes: idleRuntimes,
 				spokenWords,
+				namings: () => ({}),
 				switches: () => ALL_ON,
 				hasFocus: () => false,
 				watchFocus: async () => () => undefined,

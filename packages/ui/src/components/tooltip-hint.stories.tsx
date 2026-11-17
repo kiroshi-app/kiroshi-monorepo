@@ -1,11 +1,22 @@
+import type { ComponentProps } from "react"
 import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { FRAME_POLL, Row } from "@workspace/storybook/story-utils"
+import {
+	expectNoHoverTooltip,
+	expectTooltipWrappedWhole,
+	FRAME_POLL,
+	findHoverTooltip,
+	HOVER_TOOLTIP_WAIT,
+	isInBrowserRunner,
+	openTooltipOf,
+	Row,
+	withMotionAllowed,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	TOOLTIP_GROUPING_WINDOW_MS,
 	TooltipHint,
-	TooltipHintProvider,
 } from "@workspace/ui/components/tooltip-hint"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -18,6 +29,49 @@ const COPY_BUTTON = (
 const LONG_HINT =
 	"Reads every file the run touched, then writes the summary back to the conversation"
 
+const DELETE_BUTTON = (
+	<Button aria-label="Delete" size="icon-sm" variant="ghost">
+		<Icons.Delete />
+	</Button>
+)
+
+const COPY_BESIDE_DELETE = {
+	args: { content: "Delete", children: DELETE_BUTTON },
+	render: (args: ComponentProps<typeof TooltipHint>) => (
+		<Row>
+			<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
+			<TooltipHint {...args} />
+		</Row>
+	),
+}
+
+const STILL_HIDDEN_AT_MS = 300
+
+const HANDED_OFF_BY_MS = 300
+
+const PAST_THE_GROUPING_WINDOW_MS = TOOLTIP_GROUPING_WINDOW_MS * 2
+
+const elapse = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const expectHintAfterTheDelay = async (label: string) => {
+	await elapse(STILL_HIDDEN_AT_MS)
+	await expect(screen.queryByRole("tooltip")).toBeNull()
+	await expect(
+		await screen.findByRole("tooltip", undefined, {
+			timeout: HOVER_TOOLTIP_WAIT.timeout - STILL_HIDDEN_AT_MS,
+		}),
+	).toHaveTextContent(label)
+}
+
+const expectHintWithoutDelay = (label: string) =>
+	waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent(label), {
+		...FRAME_POLL,
+		timeout: HANDED_OFF_BY_MS,
+	})
+
+const withMotion = (run: () => Promise<void>) =>
+	isInBrowserRunner() ? withMotionAllowed(run) : run()
+
 const meta = preview.meta({
 	title: "Overlays/TooltipHint",
 	component: TooltipHint,
@@ -26,7 +80,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					'The registry tooltip closed down to what a call site needs: a piece of content, one element to hang it on, a side. It renders no wrapper of its own — the child stays the element the layout around it sees — and the bubble carries `role="tooltip"`. A `content` of nothing draws no bubble while keeping the child mounted, so a caller that only sometimes has a name to give never swaps the control it wraps. Nothing links the bubble to its child: the registry writes no `aria-describedby` on the trigger, so a screen reader never reads the bubble and its text has to live in the child\'s accessible name as well.',
+					'The registry tooltip closed down to what a call site needs: a piece of content, one element to hang it on, a side. It renders no wrapper of its own — the child stays the element the layout around it sees — and the bubble carries `role="tooltip"`. A `content` of nothing draws no bubble while keeping the child mounted, so a caller that only sometimes has a name to give never swaps the control it wraps. Under `TooltipHintProvider`, which the app mounts at its root, every hint feeds one shared bubble, and that is what lets the bubble travel from a control to its neighbour. Nothing links the bubble to its child: the registry writes no `aria-describedby` on the trigger, so a screen reader never reads the bubble and its text has to live in the child\'s accessible name as well.',
 			},
 		},
 	},
@@ -48,7 +102,7 @@ export const Default = meta.story({
 		await expect(trigger.parentElement?.tagName).not.toBe("SPAN")
 
 		await userEvent.hover(trigger)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+		await expect(await findHoverTooltip()).toHaveTextContent("Copy")
 	},
 })
 
@@ -66,7 +120,7 @@ export const WithoutContent = meta.story({
 		const trigger = canvas.getByRole("button", { name: "Copy" })
 
 		await userEvent.hover(trigger)
-		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await expectNoHoverTooltip()
 	},
 })
 
@@ -110,7 +164,7 @@ export const WithSide = meta.story({
 		const trigger = canvas.getByRole("button", { name: "New bot" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole("tooltip")
+		const hint = await findHoverTooltip()
 
 		await waitFor(async () => {
 			await expect(hint.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -135,7 +189,7 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Summarise" }))
-		const hint = await screen.findByRole("tooltip")
+		const hint = await findHoverTooltip()
 
 		await expect(hint).toHaveTextContent(LONG_HINT)
 		await waitFor(async () => {
@@ -147,6 +201,56 @@ export const LongContent = meta.story({
 				2 * Number.parseFloat(getComputedStyle(hint).lineHeight),
 			)
 		}, FRAME_POLL)
+	},
+})
+
+const UNBREAKABLE_HINT =
+	"https://kiroshi.example/spaces/perso/conversations/launch-readiness-review/documents/autumn-release-notes"
+
+export const LongWordBreaksInsideTheBubble = meta.story({
+	tags: ["test-only"],
+	args: {
+		content: UNBREAKABLE_HINT,
+		children: <Button variant="outline">Open</Button>,
+	},
+	play: async ({ canvas }) => {
+		const hint = await openTooltipOf(
+			canvas.getByRole("button", { name: "Open" }),
+		)
+
+		await expectTooltipWrappedWhole(hint, UNBREAKABLE_HINT)
+	},
+})
+
+const NARROW_WINDOW_WIDTH = 320
+
+export const LongContentInANarrowWindow = meta.story({
+	tags: ["test-only"],
+	args: {
+		content: LONG_HINT,
+		children: <Button variant="outline">Summarise</Button>,
+	},
+	globals: { viewport: { value: "narrow" } },
+	parameters: {
+		viewport: {
+			options: {
+				narrow: {
+					name: `${NARROW_WINDOW_WIDTH}px wide window`,
+					styles: { width: `${NARROW_WINDOW_WIDTH}px`, height: "568px" },
+				},
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const hint = await openTooltipOf(
+			canvas.getByRole("button", { name: "Summarise" }),
+		)
+		const box = hint.getBoundingClientRect()
+
+		await expect(window.innerWidth).toBe(NARROW_WINDOW_WIDTH)
+		await expectTooltipWrappedWhole(hint, LONG_HINT)
+		await expect(box.left).toBeGreaterThanOrEqual(0)
+		await expect(box.right).toBeLessThanOrEqual(NARROW_WINDOW_WIDTH)
 	},
 })
 
@@ -186,39 +290,188 @@ export const InRow = meta.story({
 })
 
 export const AdjacentHints = meta.story({
+	...COPY_BESIDE_DELETE,
 	name: "Adjacent hints",
-	args: {
-		content: "Delete",
-		children: (
-			<Button aria-label="Delete" size="icon-sm" variant="ghost">
-				<Icons.Delete />
-			</Button>
-		),
-	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Two hinted controls side by side under one `TooltipHintProvider`, the way the app mounts it at its root. Check that the pointer leaving the first control for its neighbour swaps one hint for the other, with a single bubble on screen and the second label in it. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
+					"Two hinted controls side by side under the one `TooltipHintProvider` the app mounts at its root, which this Storybook mounts around every story too. Check that the pointer leaving the first control for its neighbour keeps the one bubble on screen: a short grace holds it open across the gap, it glides over to the second control with the second label in it, and it neither closes nor fades in again on the way. Pick `InRow` for a disabled neighbour, this one for a toolbar the pointer travels across.",
 			},
 		},
 	},
-	render: (args) => (
-		<TooltipHintProvider>
-			<Row>
-				<TooltipHint content="Copy">{COPY_BUTTON}</TooltipHint>
-				<TooltipHint {...args} />
-			</Row>
-		</TooltipHintProvider>
-	),
+	play: ({ canvas, userEvent }) =>
+		withMotion(async () => {
+			await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
+			const bubble = await findHoverTooltip()
+			const positioner = bubble.parentElement as HTMLElement
+
+			await waitFor(async () => {
+				await expect(getComputedStyle(bubble).opacity).toBe("1")
+			}, FRAME_POLL)
+			const travel = getComputedStyle(positioner)
+			await expect(travel.transitionProperty).toBe("transform")
+			await expect(travel.transitionDuration).toBe("0.16s")
+			await expect(travel.transitionTimingFunction).toBe(
+				"cubic-bezier(0.22, 1, 0.36, 1)",
+			)
+
+			let hasTravelled = false
+			positioner.addEventListener("transitionrun", (event) => {
+				hasTravelled ||=
+					event.target === positioner && event.propertyName === "transform"
+			})
+			const flipped: string[] = []
+			const watch = new MutationObserver((records) => {
+				for (const { attributeName } of records) {
+					if (attributeName) flipped.push(attributeName)
+				}
+			})
+			watch.observe(bubble, {
+				attributeFilter: [
+					"data-open",
+					"data-closed",
+					"data-starting-style",
+					"data-ending-style",
+				],
+			})
+
+			const remove = canvas.getByRole("button", { name: "Delete" })
+			await userEvent.hover(remove)
+
+			await waitFor(async () => {
+				await expect(bubble).toHaveTextContent("Delete")
+				await expect(hasTravelled).toBe(true)
+			}, FRAME_POLL)
+			watch.disconnect()
+			await expect(screen.getByRole("tooltip")).toBe(bubble)
+			await expect(flipped).toEqual([])
+			await expect(bubble).toHaveAttribute("data-open")
+			await expect(getComputedStyle(bubble).opacity).toBe("1")
+
+			await waitFor(async () => {
+				const over = bubble.getBoundingClientRect()
+				const under = remove.getBoundingClientRect()
+
+				await expect(over.left + over.width / 2).toBeCloseTo(
+					under.left + under.width / 2,
+					0,
+				)
+			}, FRAME_POLL)
+		}),
+})
+
+export const OpensAfterTheDelay = meta.story({
+	name: "Opens after the delay",
+	args: { content: "Copy", children: COPY_BUTTON },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first hint of a hover, with no other hint shown just before. Check that the pointer resting on the control shows nothing for the first 300 ms, and that the bubble is there 1.5 s after the pointer came in: the app waits 600 ms, and the two bounds leave room on each side for a slow machine. Pick `Hands off without delay` for the hint that follows another one.",
+			},
+		},
+	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent("Copy")
+
+		await expectHintAfterTheDelay("Copy")
+	},
+})
+
+export const HandsOffWithoutDelay = meta.story({
+	...COPY_BESIDE_DELETE,
+	name: "Hands off without delay",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer going from a control whose hint is shown to its neighbour. Check that the neighbour's label is in the bubble within 300 ms, half the delay a first hint waits: once one hint is up, the next one owes no wait. Pick `Adjacent hints` for how the bubble travels, this one for when it arrives.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
+		await expectHintAfterTheDelay("Copy")
 
 		await userEvent.hover(canvas.getByRole("button", { name: "Delete" }))
-		await waitFor(async () => {
-			await expect(screen.getByRole("tooltip")).toHaveTextContent("Delete")
-		}, FRAME_POLL)
+
+		await expectHintWithoutDelay("Delete")
+	},
+})
+
+export const HandsOffJustAfterClosing = meta.story({
+	...COPY_BESIDE_DELETE,
+	name: "Hands off just after closing",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer leaving a hinted control, the bubble closing, then the pointer landing on the neighbour inside the 400 ms grouping window. Check that the neighbour's hint is there within 300 ms instead of waiting the full delay again. Pick `Waits again after the grouping window` for a pointer that stayed away longer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const copy = canvas.getByRole("button", { name: "Copy" })
+		await userEvent.hover(copy)
+		await expectHintAfterTheDelay("Copy")
+
+		await userEvent.unhover(copy)
+		await waitFor(
+			() => expect(screen.queryByRole("tooltip")).toBeNull(),
+			FRAME_POLL,
+		)
+		await userEvent.hover(canvas.getByRole("button", { name: "Delete" }))
+
+		await expectHintWithoutDelay("Delete")
+	},
+})
+
+export const WaitsAgainAfterTheGroupingWindow = meta.story({
+	...COPY_BESIDE_DELETE,
+	name: "Waits again after the grouping window",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer leaving every hinted control for longer than the 400 ms grouping window, then coming back. Check that the next hint waits like a first one: nothing for the first 300 ms, the bubble there 1.5 s after the pointer came in. Pick `Hands off just after closing` for a pointer that came back sooner.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const copy = canvas.getByRole("button", { name: "Copy" })
+		await userEvent.hover(copy)
+		await expectHintAfterTheDelay("Copy")
+
+		await userEvent.unhover(copy)
+		await elapse(PAST_THE_GROUPING_WINDOW_MS)
+		await userEvent.hover(canvas.getByRole("button", { name: "Delete" }))
+
+		await expectHintAfterTheDelay("Delete")
+	},
+})
+
+export const SweepOpensNothing = meta.story({
+	...COPY_BESIDE_DELETE,
+	name: "Sweep opens nothing",
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer crossing two hinted controls on its way elsewhere, resting on neither. Check that no bubble shows on either control, and that none turns up once the pointer is gone, even 1.5 s after the last control was crossed.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const remove = canvas.getByRole("button", { name: "Delete" })
+
+		await userEvent.hover(canvas.getByRole("button", { name: "Copy" }))
+		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await userEvent.hover(remove)
+		await expect(screen.queryByRole("tooltip")).toBeNull()
+		await userEvent.unhover(remove)
+
+		await expectNoHoverTooltip()
 	},
 })
 
@@ -228,7 +481,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same hint for a reader who asked the system to stop moving things. The registry bubble zooms and fades in and out; the composed one drops the animation under `prefers-reduced-motion`, so the bubble is simply there and then simply gone. Check that the open bubble reports no animation at all, and that it still leaves the document when the pointer does - nothing here waits on an animation end, so dropping it outright costs the hint nothing. The app assembles it at `apps/app/src/App.tsx:935`.",
+					"The same hint for a reader who asked the system to stop moving things. The bubble keeps its fade and drops everything that moves: it does not grow in and it does not glide to a neighbour. Check that the open bubble transitions its opacity alone, sits at full size from its first frame, and that the layer placing it carries no transition; then that it still leaves the document when the pointer does. The app assembles it at `apps/app/src/App.tsx:935`.",
 			},
 		},
 	},
@@ -236,9 +489,15 @@ export const ReducedMotion = meta.story({
 		const trigger = canvas.getByRole("button", { name: "Copy" })
 
 		await userEvent.hover(trigger)
-		const hint = await screen.findByRole("tooltip")
+		const hint = await findHoverTooltip()
+		const positioner = hint.parentElement as HTMLElement
 
 		await expect(getComputedStyle(hint).animationName).toBe("none")
+		await expect(getComputedStyle(hint).scale).toBe("none")
+		await waitFor(async () => {
+			await expect(getComputedStyle(hint).transitionProperty).toBe("opacity")
+		}, FRAME_POLL)
+		await expect(getComputedStyle(positioner).transitionDuration).toBe("0s")
 
 		await userEvent.unhover(trigger)
 		await waitFor(async () => {

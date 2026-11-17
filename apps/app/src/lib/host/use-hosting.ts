@@ -22,7 +22,7 @@ import {
 import { isDesktopHost } from "./index"
 
 import { HOSTING_CHANGED_EVENT, type HostingState } from "../bindings"
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 export type HostingProps = {
@@ -33,7 +33,7 @@ export type HostingProps = {
 
 type HostingOptions = {
 	transport?: HostingTransport
-	reportFailure?: (message: NoticeMessage) => void
+	reportFailure?: (message: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const SPACE_HOSTING: Record<HostingState["kind"], SpaceHosting> = {
@@ -70,7 +70,9 @@ export const useHosting = (
 			next.kind === "failed" &&
 			isFailureToReport(previous, next, attempt.current)
 		) {
-			reportFailure(hostingFailureOf(space, next.failure))
+			reportFailure(hostingFailureOf(space, next.failure), {
+				reason: { kind: next.failure },
+			})
 		}
 		return next
 	}

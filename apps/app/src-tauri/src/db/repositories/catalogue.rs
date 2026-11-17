@@ -40,7 +40,8 @@ fn chats() -> String {
 			WHERE messages.conversation_id = conversations.id
 			ORDER BY messages.seq DESC LIMIT 1),
 			conversations.created_at) AS spoken_at
-	FROM conversations WHERE conversations.archived_at IS NULL)
+	FROM conversations
+	WHERE conversations.archived_at IS NULL AND conversations.kind <> 'comment')
 	SELECT id, kind, title, space_id FROM chat"
 	)
 }

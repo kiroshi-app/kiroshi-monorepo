@@ -31,6 +31,7 @@ import {
 	selectIsFirstLoadPending,
 	selectMessages,
 } from "../../conversations/transcript-state"
+import { failureReporterIn } from "../../failure-report"
 import { createQueue } from "../../queue"
 import { createReportedRunsReader } from "../../routines/create-run-port"
 
@@ -52,6 +53,9 @@ export const createChatContext = (
 	const announceReportTurn =
 		options.announceReportTurn ?? createReportTurnAnnouncer()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
+	const isListedInOpenSpace = options.isListedInOpenSpace ?? (() => true)
+	const reportFailure =
+		options.reportFailure ?? failureReporterIn("chat-controller")
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		botsShowing(conversationId).forEach(showForeignTurn)
@@ -170,6 +174,8 @@ export const createChatContext = (
 		onMessageStored,
 		announceReportTurn,
 		onReconnected,
+		isListedInOpenSpace,
+		reportFailure,
 		transcript,
 		foreignTurns,
 		bots,

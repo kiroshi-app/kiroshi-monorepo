@@ -4,9 +4,14 @@ import preview from "@workspace/storybook/preview"
 import {
 	elementNode,
 	MarkdownProse,
+	slotIn,
 	textNode,
 } from "@workspace/storybook/story-utils"
 import { MarkdownTable } from "@workspace/ui/components/markdown/table"
+import {
+	MessageBubble,
+	MessageBubbleContent,
+} from "@workspace/ui/components/message-bubble"
 
 interface TableFixture {
 	headers: string[]
@@ -37,22 +42,33 @@ const WIDE_TABLE: TableFixture = {
 		[
 			"nest_42",
 			"3",
-			"2026-01-04",
+			"2026-01-04T08:30:00Z",
 			"—",
 			"resident",
 			"nest_01",
-			"2026-08-18 09:12",
+			"2026-08-18T09:12:44Z",
 			"rejoined after the archive pass",
 		],
 		[
 			"nest_43",
 			"0",
-			"2025-11-27",
-			"2026-02-02",
+			"2025-11-27T17:05:00Z",
+			"2026-02-02T10:41:00Z",
 			"visitor",
 			"nest_42",
-			"2026-08-18 09:12",
+			"2026-08-18T09:12:44Z",
 			"last occupant left before the sync",
+		],
+	],
+}
+
+const LONG_CELL_TABLE: TableFixture = {
+	headers: ["step", "outcome"],
+	rows: [
+		["Archive", "Done"],
+		[
+			"Notify",
+			"The owner gets the summary by mail once the archive pass ends, with the occupants list attached and a link back to this conversation.",
 		],
 	],
 }
@@ -127,7 +143,18 @@ export const Default = meta.story({
 		},
 	},
 	render: () => renderTable(NEST_TABLE),
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("group", { name: "Table" })
+		const table = viewport.querySelector("table")
+		const frame = slotIn(canvasElement, "markdown-table")
+		if (!table || !frame.parentElement)
+			throw new Error("The frame holds no table")
+
+		await expect(viewport.clientWidth).toBe(table.offsetWidth)
+		await expect(frame.offsetWidth).toBeLessThan(
+			frame.parentElement.clientWidth,
+		)
+
 		const writeText = spyOn(
 			navigator.clipboard,
 			"writeText",
@@ -149,7 +176,7 @@ export const WiderThanTheBlock = meta.story({
 		docs: {
 			description: {
 				story:
-					"Eight columns, one of them holding a sentence. Every column keeps its natural width, so the table overflows and the viewport scrolls rather than squeezing each cell into a column of wrapped fragments. Check that the block does not widen, that the copy control stays pinned to the frame while the rows scroll under it, and that tabbing reaches the viewport before the control. The columns are whatever the author declared, handed over by `packages/ui/src/components/markdown/components.tsx:18`.",
+					"Eight columns, one of them holding a sentence. Cells wrap at word boundaries first, and these eight columns still do not fit once wrapped, so the table overflows and the viewport scrolls on its own axis. Check that the block does not widen, that the copy control stays pinned to the frame while the rows scroll under it, and that tabbing reaches the viewport before the control. The columns are whatever the author declared, handed over by `packages/ui/src/components/markdown/components.tsx:18`.",
 			},
 		},
 	},
@@ -158,6 +185,36 @@ export const WiderThanTheBlock = meta.story({
 		const viewport = canvas.getByRole("group", { name: "Table" })
 
 		await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
+	},
+})
+
+export const LongCellWrapsInAReply = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two columns in an agent reply, the last cell holding a sentence longer than the bubble is wide. The cell wraps at word boundaries inside the reply width, so every word reads without scrolling. Check that the frame ends at the bubble padding, that the rules stay drawn around the wrapped cell, and that no empty band sits under the last row. The bubble hands every GFM table to this renderer through `packages/ui/src/components/markdown/components.tsx:18`.",
+			},
+		},
+	},
+	render: () => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				{renderTable(LONG_CELL_TABLE)}
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvas }) => {
+		const viewport = canvas.getByRole("group", { name: "Table" })
+		const table = viewport.querySelector("table")
+		const cell = canvas.getByText(/^The owner gets the summary/)
+		if (!table) throw new Error("The viewport holds no table")
+
+		await expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth)
+		await expect(viewport.clientHeight).toBe(table.offsetHeight)
+		const words = document.createRange()
+		words.selectNodeContents(cell)
+		await expect(words.getClientRects().length).toBeGreaterThan(1)
 	},
 })
 

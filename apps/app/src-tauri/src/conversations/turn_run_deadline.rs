@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::future::Future;
+use std::mem;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -19,9 +22,22 @@ const NO_DEADLINES: &str = "the host holds no turn run deadlines";
 
 type TurnRun = (String, String);
 
+type Expiry = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+type PendingExpiries = Arc<Mutex<Vec<Expiry>>>;
+
 pub struct TurnRunDeadlines {
-	start_within: Duration,
+	firing: Firing,
 	armed: Arc<Mutex<Armed>>,
+}
+
+enum Firing {
+	After(Duration),
+	ByHand(PendingExpiries),
+}
+
+pub struct DeadlineTrigger {
+	pending: PendingExpiries,
 }
 
 #[derive(Default)]
@@ -38,7 +54,22 @@ impl Default for TurnRunDeadlines {
 
 impl TurnRunDeadlines {
 	pub fn after(start_within: Duration) -> Self {
-		Self { start_within, armed: Arc::default() }
+		Self { firing: Firing::After(start_within), armed: Arc::default() }
+	}
+
+	pub fn fired_by_hand() -> (Self, DeadlineTrigger) {
+		let pending = PendingExpiries::default();
+		let deadlines = Self { firing: Firing::ByHand(pending.clone()), armed: Arc::default() };
+		(deadlines, DeadlineTrigger { pending })
+	}
+}
+
+impl DeadlineTrigger {
+	pub async fn fire_armed(&self) {
+		let due = mem::take(&mut *locked(&self.pending));
+		for expiry in due {
+			expiry.await;
+		}
 	}
 }
 
@@ -94,16 +125,24 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 			.map(|bot_id| (bot_id.clone(), held_runs.hold((turn_id.to_owned(), bot_id.clone()))))
 			.collect()
 	};
-	let start_within = deadlines.start_within;
-	tauri::async_runtime::spawn(async move {
-		time::sleep(start_within).await;
+	let expiry = async move {
 		for (bot_id, hold) in holds {
 			let run = (held.turn_id.clone(), bot_id);
 			if locked(&armed).disarm(&run, hold) {
 				held.release(&run.1).await;
 			}
 		}
-	});
+	};
+	match &deadlines.firing {
+		Firing::After(start_within) => {
+			let start_within = *start_within;
+			tauri::async_runtime::spawn(async move {
+				time::sleep(start_within).await;
+				expiry.await;
+			});
+		}
+		Firing::ByHand(pending) => locked(pending).push(Box::pin(expiry)),
+	}
 }
 
 pub(crate) fn suspend_start_deadline<R: Runtime>(app: &AppHandle<R>, turn_id: &str, bot_id: &str) {
@@ -115,8 +154,8 @@ pub(crate) fn suspend_start_deadline<R: Runtime>(app: &AppHandle<R>, turn_id: &s
 	}
 }
 
-fn locked(armed: &Mutex<Armed>) -> MutexGuard<'_, Armed> {
-	armed.lock().unwrap_or_else(PoisonError::into_inner)
+fn locked<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
+	held.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 struct HeldTurn<R: Runtime> {
@@ -290,6 +329,42 @@ mod tests {
 		};
 		assert_eq!(first, Some(never_started));
 		time::sleep(Duration::from_millis(100)).await;
+		assert!(drops.try_recv().is_err(), "the drop was announced twice");
+	}
+
+	#[tokio::test]
+	async fn a_turn_run_held_by_hand_is_dropped_only_once_its_deadline_is_fired() {
+		let app = an_app_of_its_own("turn-run-deadline-by-hand", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		let (deadlines, trigger) = TurnRunDeadlines::fired_by_hand();
+		app.manage(deadlines);
+		let database = database(app.handle()).expect("the database opens");
+		database.conversations().ensure_default_bot().await.expect("the bot is seeded");
+		let chat = database
+			.conversations()
+			.ensure_chat(DEFAULT_BOT_ID.to_owned(), None, ChatOwner::Host)
+			.await
+			.expect("the chat is seeded");
+		let messages = database.messages();
+		let turn = NewTurn { id: "t1".to_owned(), conversation_id: chat.id.clone(), started_at: 1 };
+		messages.start_turn(turn).await.expect("the turn opens");
+		let late = vec!["late".to_owned()];
+		messages.await_runs("t1".to_owned(), late.clone()).await.expect("the run waits");
+		let (announced, mut drops) = mpsc::unbounded_channel();
+		app.handle().listen(SUMMONS_DROPPED_EVENT, move |event| {
+			let dropped: SummonsDropped =
+				serde_json::from_str(event.payload()).expect("a dropped summons");
+			announced.send(dropped).expect("the test listens");
+		});
+
+		arm_start_deadlines(app.handle(), &chat.id, "t1", &late);
+		let before_the_fire = drops.try_recv().ok();
+		trigger.fire_armed().await;
+		let fired = drops.try_recv().ok();
+		trigger.fire_armed().await;
+
+		assert_eq!(before_the_fire, None, "the deadline fired before the trigger");
+		assert_eq!(fired.map(|dropped| dropped.reason), Some(SummonsDropReason::NeverStarted));
 		assert!(drops.try_recv().is_err(), "the drop was announced twice");
 	}
 }

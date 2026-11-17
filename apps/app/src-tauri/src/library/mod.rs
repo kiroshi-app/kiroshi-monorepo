@@ -1,6 +1,7 @@
 mod blocks;
 mod canvas;
 pub mod commands;
+mod comments;
 pub mod contract;
 mod documents;
 pub mod host;
@@ -22,14 +23,23 @@ use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 
+use blocks::backfill;
 use contract::{
 	LibraryBoardFileReplaced, LibraryChanged, LibraryDocument, LibraryDocumentFormat,
 	LibraryDocumentRenamed, LibraryDocumentState, LibraryDocumentUpdated, LibraryError,
 	LibraryFile, LibraryImage, LibraryImport, LibraryItem, LibraryItemKind, LibraryOverwritten,
 };
-use documents::Documents;
+use documents::{text_of_state, Documents};
 
 pub(crate) use canvas::{create_board, rename_board, summarise_board};
+use comments::{board_written, written_boards_followed};
+pub(crate) use comments::{
+	briefed_comment_thread, comment_agent_turns, comment_threads, fail_comment_turns_cut_by_a_quit,
+	listed_comment_threads, open_comment_thread, person_calling, raised_for, reopen_comment_thread,
+	reply_to_comment_thread, resolve_comment_thread, PersonHere, Said,
+};
+#[cfg(test)]
+pub(crate) use comments::{CommentTurn, CommentTurns};
 
 use crate::attachments::{self, attached_content, Attachments};
 use crate::db;
@@ -38,6 +48,8 @@ use crate::file_store::FileStore;
 use crate::{events, private_files};
 
 const DIR_NAME: &str = "library";
+
+const MARKER_WRITER: u64 = 0x4b49_524f;
 
 const MAX_DOCUMENT_BYTES: u64 = 5 * 1024 * 1024;
 
@@ -446,11 +458,47 @@ pub(crate) fn open_document<R: Runtime>(
 	space_id: &str,
 	name: &str,
 ) -> Result<LibraryDocumentState, LibraryError> {
+	let mut state = opened_state(app, root, space_id, name)?;
+	let is_markdown = matches!(
+		accepted_type(name),
+		Some(AcceptedType::Document(LibraryDocumentFormat::Markdown))
+	);
+	if is_markdown
+		&& !host::is_agent_on(app, space_id, name)
+		&& marked(app, root, space_id, name, MARKER_WRITER, &text_of_state(&state, name)?)?
+	{
+		state = opened_state(app, root, space_id, name)?;
+	}
+	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(state) })
+}
+
+pub(crate) fn opened_state<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<Vec<u8>, LibraryError> {
 	let opened = documents(app).open(root, space_id, name)?;
 	if let Some(host_edit) = opened.host_edit {
 		announce(app, space_id, name, &host_edit);
 	}
-	Ok(LibraryDocumentState { name: name.to_owned(), update: BASE64_STANDARD.encode(opened.state) })
+	Ok(opened.state)
+}
+
+pub(crate) fn marked<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+	writer: u64,
+	text: &str,
+) -> Result<bool, LibraryError> {
+	if backfill(text).is_empty() {
+		return Ok(false);
+	}
+	let applied = documents(app).spliced(root, space_id, name, writer, backfill)?;
+	announce(app, space_id, &applied.name, &applied.change);
+	Ok(true)
 }
 
 pub(crate) fn apply_update<R: Runtime>(
@@ -491,8 +539,8 @@ pub(crate) async fn rename_linked_document<R: Runtime>(
 	let renamed = rename_document(app, root, space_id, name, new_name)?;
 	if renamed.name != name {
 		database
-			.messages()
-			.rename_document_links(space_id.to_owned(), name.to_owned(), renamed.name.clone())
+			.library()
+			.item_renamed(space_id.to_owned(), name.to_owned(), renamed.name.clone())
 			.await?;
 	}
 	Ok(renamed)
@@ -659,14 +707,16 @@ fn name_safe(title: &str) -> String {
 	cut.trim_end().trim_end_matches('.').to_owned()
 }
 
-pub(crate) fn delete_item<R: Runtime>(
+pub(crate) async fn delete_item<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &db::Database,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 ) -> Result<(), LibraryError> {
 	documents(app).delete(root, space_id, name)?;
 	announce_change(app, space_id);
+	database.library().item_deleted(space_id.to_owned(), name.to_owned()).await?;
 	Ok(())
 }
 
@@ -723,10 +773,11 @@ fn announce_board_file_replaced<R: Runtime>(app: &AppHandle<R>, space_id: &str, 
 
 fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 	if app.try_state::<Documents>().is_none() {
-		let announcing = app.clone();
-		app.manage(Documents::new(move |space_id, name| {
-			announce_board_file_replaced(&announcing, space_id, name);
-		}));
+		let (announcing, commented) = (app.clone(), app.clone());
+		app.manage(Documents::new(
+			move |space_id, name| announce_board_file_replaced(&announcing, space_id, name),
+			move |space_id, name, board| board_written(&commented, space_id, name, board),
+		));
 	}
 	app.state::<Documents>()
 }
@@ -734,6 +785,7 @@ fn documents<R: Runtime>(app: &AppHandle<R>) -> State<'_, Documents> {
 pub fn write_pending_boards<R: Runtime>(app: &AppHandle<R>) {
 	if let Some(documents) = app.try_state::<Documents>() {
 		documents.write_pending_boards();
+		tauri::async_runtime::block_on(written_boards_followed(app));
 	}
 }
 

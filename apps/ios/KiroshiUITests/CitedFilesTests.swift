@@ -30,11 +30,7 @@ final class CitedFilesTests: XCTestCase {
 
         notes.tap()
 
-        let title = app.staticTexts.matching(identifier: Self.notes)
-        XCTAssertTrue(
-            app.otherElements["QLPreviewControllerView"].waitForExistence(timeout: 10)
-                || title.count > 1)
-        XCTAssertTrue(app.staticTexts["Release notes 4.2"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.otherElements["QLPreviewControllerView"].waitForExistence(timeout: 10))
         capture("2-quick-look-pdf")
     }
 

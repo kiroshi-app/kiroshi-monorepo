@@ -23,6 +23,11 @@
 	--popover-shadow:
 		0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06),
 		0 12px 28px rgb(0 0 0 / 0.12);
+	--tooltip: #ffffff;
+	--tooltip-foreground: #2f2f2f;
+	--tooltip-shadow:
+		0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 6px 0 rgb(0 0 0 / 0.05),
+		0 4px 42px 0 rgb(0 0 0 / 0.06);
 	--tab-thumbnail-header: var(--background);
 	--tab-thumbnail-shadow:
 		0 0 0 1px #00000012, 0 2px 4px #00000014, 0 16px 40px #00000033;
@@ -49,6 +54,11 @@
 	--popover-shadow:
 		0 0 0 1px rgb(255 255 255 / 0.1), 0 0 1px rgb(255 255 255 / 0.16),
 		0 12px 28px rgb(0 0 0 / 0.7);
+	--tooltip: #222222;
+	--tooltip-foreground: #f0f0f0;
+	--tooltip-shadow:
+		inset 0 0 0 1px rgb(255 255 255 / 0.03), 0 1px 1px 0 rgb(0 0 0 / 0.08),
+		0 2px 6px 0 rgb(0 0 0 / 0.15);
 	--tab-thumbnail-header: #101011;
 	--tab-thumbnail-shadow: 0 0 0 1px #ffffff1a, 0 16px 40px #000000b3;
 	--tab-chip-shadow: 0 8px 24px #00000066, 0 2px 6px #00000040;
@@ -84,6 +94,7 @@
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);
+	--color-primary-soft: var(--primary-soft);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-muted: var(--muted);
@@ -157,6 +168,7 @@
 	--color-faint-foreground: var(--faint-foreground);
 	--color-disabled-foreground: var(--disabled-foreground);
 	--color-on-foreground: var(--on-foreground);
+	--color-on-foreground-muted: var(--on-foreground-muted);
 	--color-waiting-foreground: var(--waiting-foreground);
 	--color-mission-list-faint-foreground: var(--mission-list-faint-foreground);
 	--color-mission-list-group: var(--mission-list-group);
@@ -203,6 +215,22 @@
 	--shadow-board-sticky: var(--board-sticky-shadow);
 	--shadow-board-card: var(--board-card-shadow);
 	--shadow-board-card-dragging: var(--board-card-dragging-shadow);
+	--color-comment-card: var(--comment-card);
+	--color-comment-pin: var(--comment-pin);
+	--color-comment-pin-stage: var(--comment-pin-stage);
+	--color-comment-cursor-ring: var(--comment-cursor-ring);
+	--color-comment-cursor-stage-ring: var(--comment-cursor-stage-ring);
+	--color-lightbox-stage: var(--lightbox-stage);
+	--shadow-comment-pin: var(--comment-pin-shadow);
+	--shadow-comment-pin-selected: var(--comment-pin-selected-shadow);
+	--shadow-comment-pin-stage: var(--comment-pin-stage-shadow);
+	--shadow-comment-pin-agent: var(--comment-pin-agent-shadow);
+	--shadow-comment-pin-resolved: var(--comment-pin-resolved-shadow);
+	--shadow-comment-cursor: var(--comment-cursor-shadow);
+	--shadow-comment-cursor-stage: var(--comment-cursor-stage-shadow);
+	--shadow-comment-card: var(--comment-card-shadow);
+	--shadow-comment-list: var(--comment-list-shadow);
+	--shadow-comment-hint: var(--comment-hint-shadow);
 	--color-question-segment-foreground: var(--question-segment-foreground);
 	--color-board-surface: var(--board-surface);
 	--color-board-dot: var(--board-dot);
@@ -332,6 +360,7 @@
 		--color-border: var(--border);
 		--color-primary: var(--primary);
 		--color-primary-strong: var(--primary-strong);
+		--color-primary-soft: var(--primary-soft);
 		--color-ring: var(--ring);
 	}
 }
@@ -558,6 +587,43 @@
 	}
 }
 
+/* Text states swap, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/cli/free/text-states-swap.md */
+@keyframes ui-text-swap-exit {
+	to {
+		opacity: 0;
+		filter: blur(var(--text-swap-blur));
+		transform: translateY(calc(-1 * var(--text-swap-translate-y)));
+	}
+}
+
+@keyframes ui-text-swap-enter {
+	from {
+		opacity: 0;
+		filter: blur(var(--text-swap-blur));
+		transform: translateY(var(--text-swap-translate-y));
+	}
+}
+
+@utility text-swap {
+	--text-swap-dur: 150ms;
+	--text-swap-translate-y: 4px;
+	--text-swap-blur: 2px;
+	--text-swap-ease: ease-in-out;
+
+	&[data-phase="exit"] {
+		animation: ui-text-swap-exit var(--text-swap-dur) var(--text-swap-ease)
+			forwards;
+	}
+
+	&[data-phase="enter"] {
+		animation: ui-text-swap-enter var(--text-swap-dur) var(--text-swap-ease);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		--text-swap-dur: 0.01ms;
+	}
+}
+
 @keyframes ui-launch-arrive {
 	from {
 		opacity: 0;
@@ -677,8 +743,66 @@
 	animation: none;
 }
 
+/* Tooltip open/close, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/skills/transitions-dev/17-tooltip.md */
+:root {
+	--tt-in-dur: 150ms;
+	--tt-out-dur: 50ms;
+	--tt-scale: 0.98;
+	--tt-in-ease: ease-out;
+	--tt-out-ease: ease-out;
+	--tt-move-dur: 160ms;
+	--tt-move-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 [data-slot="tooltip-content"] {
 	animation: none;
+	border-radius: var(--radius-lg);
+	background-color: var(--tooltip);
+	box-shadow: var(--tooltip-shadow);
+	padding: calc(var(--spacing) * 2);
+	color: var(--tooltip-foreground);
+	font-weight: var(--font-weight-normal);
+	font-size: var(--text-compact);
+	line-height: calc(var(--spacing) * 4.5);
+	transition: var(--tt-out-dur) var(--tt-out-ease);
+	transition-property: opacity, scale;
+
+	& > [data-side] {
+		display: none;
+	}
+
+	& [data-slot="kbd"] {
+		background-color: var(--muted);
+		color: var(--muted-foreground);
+	}
+
+	&[data-open] {
+		transition-duration: var(--tt-in-dur);
+		transition-timing-function: var(--tt-in-ease);
+	}
+
+	&:is([data-starting-style], [data-ending-style]) {
+		opacity: 0;
+		scale: var(--tt-scale);
+	}
+
+	&[data-instant="delay"] {
+		transition-property: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition-property: opacity;
+
+		&:is([data-starting-style], [data-ending-style]) {
+			scale: none;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	:has(> [data-slot="tooltip-content"][data-open]:not([data-starting-style])) {
+		transition: transform var(--tt-move-dur) var(--tt-move-ease);
+	}
 }
 
 :is(

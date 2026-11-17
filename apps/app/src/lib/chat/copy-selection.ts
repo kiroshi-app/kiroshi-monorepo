@@ -7,7 +7,10 @@ const reportFailure = failureReporterIn("copy-selection")
 export const copySelection = (text: string) => {
 	navigator.clipboard
 		.writeText(text)
-		.catch(() =>
-			reportFailure({ title: i18n.t("chat:missions.menu.failed.copy") }),
+		.catch((reason: unknown) =>
+			reportFailure(
+				{ title: i18n.t("chat:missions.menu.failed.copy") },
+				{ reason },
+			),
 		)
 }

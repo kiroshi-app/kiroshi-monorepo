@@ -103,6 +103,9 @@ const factsOf = (
 		: {}),
 })
 
+const reasonOf = (thrown: unknown) =>
+	isRefusedWrite(thrown) ? thrown.cause : thrown
+
 export const startCompanionSpokeDriver = ({
 	runtimes,
 	roster,
@@ -122,7 +125,7 @@ export const startCompanionSpokeDriver = ({
 					detail: describeFailure(thrown),
 				}),
 			},
-			{ ...facts, reason: thrown },
+			{ ...facts, reason: reasonOf(thrown) },
 		)
 	}
 
