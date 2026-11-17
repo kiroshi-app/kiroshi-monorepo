@@ -53,6 +53,7 @@ type LibraryBoardProps = {
 	onBack: () => void
 	onDownload: () => void
 	onCopy: () => Promise<void>
+	onDuplicate: () => void
 	onDelete: () => void
 }
 
@@ -163,6 +164,7 @@ export const LibraryBoard = ({
 	onBack,
 	onDownload,
 	onCopy,
+	onDuplicate,
 	onDelete,
 }: LibraryBoardProps) => {
 	const board = useLibraryBoardSession(spaceId, name)
@@ -199,6 +201,7 @@ export const LibraryBoard = ({
 					onCopy={onCopy}
 					onDelete={onDelete}
 					onDownload={onDownload}
+					onDuplicate={onDuplicate}
 					presence={
 						<LibraryDocumentPresence
 							activity="drawing"

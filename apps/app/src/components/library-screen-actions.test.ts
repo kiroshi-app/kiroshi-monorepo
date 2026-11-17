@@ -85,6 +85,15 @@ const renameListed = ({ name, newName }: RenameCall) => {
 	return renamed
 }
 
+const copyNameOf = (name: string) => name.replace(/(\.[^.]+)$/, " copy$1")
+
+const duplicateListed = ({ name }: NamedCall) => {
+	const original = harness.listed.find((item) => item.name === name)
+	const copy = itemNamed(copyNameOf(name), original?.kind ?? "document")
+	harness.listed = [...harness.listed, copy]
+	return copy
+}
+
 const stateWith = (markdown: string) => {
 	const doc = new Y.Doc()
 	doc.getText("markdown").insert(0, markdown)
@@ -111,6 +120,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_apply_update: () => null,
 	library_share_presence: () => null,
 	library_rename_document: (args) => renameListed(args as RenameCall),
+	library_duplicate: duplicateListed,
 	library_delete: ({ name }) => {
 		harness.listed = harness.listed.filter((item) => item.name !== name)
 		return null
@@ -976,7 +986,7 @@ describe("the Back button of the lightbox", () => {
 	})
 })
 
-type DocumentBarButton = "download" | "more"
+type DocumentBarButton = "download" | "duplicate" | "more"
 
 const documentBarButton = (button: DocumentBarButton) =>
 	screen.getByRole("button", { name: common(`library.document.${button}`) })
@@ -1588,5 +1598,71 @@ describe("the presence of an open Library image", () => {
 		expect(lightboxBack()).toBeInstanceOf(HTMLElement)
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 		expect(raiseTransientNotice).not.toHaveBeenCalled()
+	})
+})
+
+const lightboxDuplicate = () =>
+	screen
+		.getAllByRole("button", { name: common("library.lightbox.duplicate") })
+		.find((button) =>
+			button.closest('[data-slot="library-lightbox"]'),
+		) as HTMLElement
+
+describe("Duplicate in the bar of an open Library item", () => {
+	it.each(SPACES)(
+		"duplicates the open document on %s, keeps it open and lists the copy",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			await press(documentBarButton("duplicate"))
+
+			await waitFor(() =>
+				expect(callsOf("library_duplicate")).toEqual([
+					{ spaceId: SPACE_ID, name: "notes.txt" },
+				]),
+			)
+			expect(shownTitle()).toBe("notes")
+			await leaveDocument()
+			await waitFor(() => expect(tileShown("notes copy")).toBe(true))
+		},
+	)
+
+	it.each(SPACES)(
+		"duplicates the open image on %s, keeps it open and lists the copy",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openImage()
+
+			await press(lightboxDuplicate())
+
+			await waitFor(() =>
+				expect(callsOf("library_duplicate")).toEqual([
+					{ spaceId: SPACE_ID, name: "diagram.png" },
+				]),
+			)
+			await press(await findLightboxBack())
+			await waitFor(() => expect(tileShown("diagram copy.png")).toBe(true))
+		},
+	)
+
+	it("raises the duplicate notice naming the document and keeps it open when the host refuses", async () => {
+		harness.refused = "library_duplicate"
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await press(documentBarButton("duplicate"))
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.itemMenu.duplicateFailure", {
+						name: "notes",
+					}),
+				}),
+			),
+		)
+		expect(shownTitle()).toBe("notes")
+		expect(tileShown("notes copy")).toBe(false)
 	})
 })

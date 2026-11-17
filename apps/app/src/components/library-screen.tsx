@@ -280,6 +280,7 @@ type LibraryOpeningStateProps = {
 	onBackToLibrary: () => void
 	onDownload: () => void
 	onCopy: () => Promise<void>
+	onDuplicate: () => void
 	onDelete: () => void
 }
 
@@ -295,6 +296,7 @@ type LibraryBoardOpeningProps = Pick<
 	| "onBackToLibrary"
 	| "onDownload"
 	| "onCopy"
+	| "onDuplicate"
 	| "onDelete"
 >
 
@@ -309,6 +311,7 @@ const LibraryBoardOpening = ({
 	onBackToLibrary,
 	onDownload,
 	onCopy,
+	onDuplicate,
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
@@ -322,6 +325,7 @@ const LibraryBoardOpening = ({
 		onCopy={onCopy}
 		onDelete={onDelete}
 		onDownload={onDownload}
+		onDuplicate={onDuplicate}
 		spaceId={spaceId}
 		summary={boardSummary}
 		title={titleOf({ kind: "board", name })}
@@ -414,6 +418,8 @@ export const LibraryScreen = ({
 		: ({ id }: NamedItem) => localActions.reveal(id)
 	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const copyAndWait = ({ id }: NamedItem) => actions.copyAndWait(id)
+	const duplicateImage = ({ id }: NamedItem) =>
+		actions.duplicate({ kind: "image", name: id })
 	const remove = ({ id }: NamedItem) => actions.remove(id)
 	const saveImage = useLibraryImageSave()
 	const saveToLibrary = ({ id }: NamedItem) =>
@@ -607,6 +613,9 @@ export const LibraryScreen = ({
 				onCopy={() => copyAndWait(openedItem)}
 				onDelete={() => deleteDocument(openedDocument)}
 				onDownload={() => save(openedItem)}
+				onDuplicate={() =>
+					actions.duplicate({ kind: "document", name: openedDocument.name })
+				}
 				onLinkPreview={readLinkPreview}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onRename={pickRename}
@@ -641,6 +650,7 @@ export const LibraryScreen = ({
 				onCopy={() => copyAndWait(openingItem)}
 				onDelete={() => deleteAndClose(openingItem)}
 				onDownload={() => save(openingItem)}
+				onDuplicate={() => actions.duplicate(opening)}
 				opening={opening}
 				skeleton={openingWait.skeleton}
 				spaceId={spaceId}
@@ -680,6 +690,7 @@ export const LibraryScreen = ({
 						onCopyImage={copyAndWait}
 						onDelete={deleteAndClose}
 						onDownload={save}
+						onDuplicate={duplicateImage}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
 						onOpenInNewTab={openImageInNewTab}
