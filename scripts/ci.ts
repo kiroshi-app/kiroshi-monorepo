@@ -1,4 +1,12 @@
-import { appendFileSync, mkdtempSync, readdirSync, readFileSync } from "node:fs"
+import {
+	appendFileSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -6,8 +14,11 @@ import { fileURLToPath } from "node:url"
 import { touchedJobs } from "./ci-changes"
 import {
 	SCANNED_MODULE,
+	TEST_FILE,
 	TEST_SOURCE_ROOTS,
-	testImportersByModule,
+	type TestImports,
+	testFilesGuarding,
+	testImports,
 } from "./test-importers"
 
 type Retry = "vitest" | "cargo"
@@ -34,6 +45,35 @@ const UI_TESTS = join(REPO, "apps/ios/KiroshiUITests")
 
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
+
+const IOS_SHARD_TEST_LOG = "apps/ios/build/shard-test.log"
+
+const IOS_GENERATE: Step = { name: "Generate", command: "bun run ios:generate" }
+
+const IOS_BUILD_FOR_TESTING: Step = {
+	name: "Build for testing",
+	command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build build-for-testing`,
+	heavy: true,
+}
+
+const IOS_SWIFT_FORMAT: Step = {
+	name: "Swift format",
+	command: "swift format lint --recursive --strict apps/ios",
+}
+
+export const IOS_BUILD_STEPS: Step[] = [
+	IOS_GENERATE,
+	IOS_BUILD_FOR_TESTING,
+	IOS_SWIFT_FORMAT,
+]
+
+export const IOS_SHARD_STEPS: Step[] = [
+	{
+		name: "Test on the simulator",
+		command: `set -o pipefail; apps/ios/scripts/xcodebuild.sh -xctestrun apps/ios/build/Build/Products/*.xctestrun ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building $IOS_ONLY_TESTING | tee ${IOS_SHARD_TEST_LOG}`,
+		heavy: true,
+	},
+]
 
 const RUSTFMT: Step = {
 	name: "Rustfmt",
@@ -98,16 +138,9 @@ export const RUST_PULL_REQUEST_STEPS: Step[] = [
 	BUILD_SIDECAR,
 	CLIPPY,
 	{
-		name: "Library tests",
+		name: "Library and integration tests",
 		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
-		cwd: APP,
-		heavy: true,
-	},
-	{
-		name: "Integration tests",
-		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib --test '*'",
 		cwd: APP,
 		heavy: true,
 	},
@@ -130,6 +163,14 @@ export const GATE = {
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
 		PR_MERGE_INTEGRATION_UNIT_TESTS,
+		{
+			name: "CODEOWNERS matcher unit tests",
+			command: "bun run test:code-owners",
+		},
+		{
+			name: "iOS stall detector unit tests",
+			command: "bun test scripts/ios-stalls.test.ts",
+		},
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -200,21 +241,14 @@ export const GATE = {
 		},
 	],
 	ios: [
-		{ name: "Generate", command: "bun run ios:generate" },
-		{
-			name: "Build for testing",
-			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build build-for-testing`,
-			heavy: true,
-		},
+		IOS_GENERATE,
+		IOS_BUILD_FOR_TESTING,
 		{
 			name: "Test on the simulator",
 			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building $IOS_ONLY_TESTING`,
 			heavy: true,
 		},
-		{
-			name: "Swift format",
-			command: "swift format lint --recursive --strict apps/ios",
-		},
+		IOS_SWIFT_FORMAT,
 	],
 } satisfies Record<string, Step[]>
 
@@ -234,19 +268,24 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a push to main and on a v* tag",
 	storybook:
 		"on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
-	ios: "on a push to main only",
+	ios: "on a push to main and on a pull_request labelled ci:ios",
 }
 
 // ci:fast is the pre-push check and must stay green and under 120 s with a
 // dozen agents loading the machine, which the full unit set cannot do. It
-// runs the format, Biome and knip against the baseline, the types, the unit
-// test step bun scripts/ci.ts changed picks for the same diff, and the
+// runs the format, Biome and knip against the baseline, the types, the
 // pr-dequeue or pr-enqueue script tests when the diff touches that script
-// or its tests. That unit test step runs the changed test files, or the
-// whole unit project of the app and ui suites when a changed path is shared,
-// and never the app perf project. bun run ci and the CI jobs keep the rest:
-// the perf set, the stories, the website and sidecar suites, rust, the
-// website build and ios.
+// or its tests, then the changed test files. A shared changed module adds
+// the test files importing it directly, then walks up the modules that only
+// gather imports and re-export them, adding the tests importing each and
+// the own test file of each module consuming one, never the whole unit
+// projects, which only a shared path outside the import graph or a failed
+// graph build brings back. Its unit tests time out after FAST_TEST_TIMEOUT_MS so
+// a loaded machine slows them without failing them, and it reports its
+// wall time against FAST_LIMIT_SECONDS without failing on it. The pull
+// request job keeps the widening of bun scripts/ci.ts changed, and bun run
+// ci and the CI jobs keep the rest: the perf set, the stories, the website
+// and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
 	"Biome and knip against the baseline",
@@ -262,6 +301,10 @@ export const FULL_UNIT_TESTS: Step = {
 	name: "App and ui unit projects against the baseline",
 	command: "bun run baseline unit",
 }
+
+export const FAST_LIMIT_SECONDS = 120
+
+export const FAST_TEST_TIMEOUT_MS = 30_000
 
 export const SHARED_IMPORTER_THRESHOLD = 20
 
@@ -302,7 +345,7 @@ const scopeFromImportGraph = ({
 	const started = performance.now()
 	const elapsed = () => Math.round(performance.now() - started)
 	try {
-		const importers = testImportersByModule(repo)
+		const { importers } = testImports(repo)
 		const graphMs = elapsed()
 		for (const path of changedPaths) {
 			const count = importers.get(path) ?? 0
@@ -328,19 +371,22 @@ export const unitTestScope = ({
 	return scopeFromImportGraph({ changedPaths: graphed, repo })
 }
 
-const graphTime = (scope: UnitTestScope) =>
+const graphTime = (scope: UnitTestScope | FastUnitTestScope) =>
 	"graphMs" in scope && scope.graphMs !== undefined
 		? `, import graph build took ${scope.graphMs} ms`
 		: ""
+
+const importerReason = (importers: number) =>
+	`${importers} test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}`
 
 const scopeReason = (scope: UnitTestScope) => {
 	if (scope.scope === "changed")
 		return "changed test files: no changed path is shared"
 	if ("rule" in scope)
-		return `full suite: ${scope.path} is shared (${scope.rule})`
+		return `the app and ui unit projects: ${scope.path} is shared (${scope.rule})`
 	if ("importers" in scope)
-		return `full suite: ${scope.path} is shared (${scope.importers} test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD})`
-	return `full suite: building the import graph failed: ${scope.error}`
+		return `the app and ui unit projects: ${scope.path} is shared (${importerReason(scope.importers)})`
+	return `the app and ui unit projects: building the import graph failed: ${scope.error}`
 }
 
 export const scopeLine = (scope: UnitTestScope) =>
@@ -349,6 +395,105 @@ export const scopeLine = (scope: UnitTestScope) =>
 export const unitTestSteps = (scope: UnitTestScope) => [
 	scope.scope === "changed" ? CHANGED_UNIT_TESTS : FULL_UNIT_TESTS,
 ]
+
+export type SharedModule = { path: string; reason: string; testFiles: string[] }
+
+export type FastUnitTestScope =
+	| Exclude<UnitTestScope, { importers: number }>
+	| { scope: "importers"; shared: SharedModule[]; graphMs: number }
+
+const sharedReason = (path: string, importers: TestImports["importers"]) => {
+	const rule = sharedRuleOf(path)
+	if (rule !== undefined) return rule
+	const count = importers.get(path) ?? 0
+	return count >= SHARED_IMPORTER_THRESHOLD ? importerReason(count) : undefined
+}
+
+const sharedModulesOf = ({ changedPaths, repo }: ScopeInputs) => {
+	const imports = testImports(repo)
+	return changedPaths.flatMap((path) => {
+		const reason = sharedReason(path, imports.importers)
+		if (reason === undefined) return []
+		const testFiles = testFilesGuarding({ repo, imports, path })
+		return [{ path, reason, testFiles }]
+	})
+}
+
+export const fastUnitTestScope = ({
+	changedPaths,
+	repo,
+}: ScopeInputs): FastUnitTestScope => {
+	for (const path of changedPaths) {
+		const rule = sharedRuleOf(path)
+		if (rule !== undefined && !isGraphedModule(path))
+			return { scope: "full", path, rule }
+	}
+	const graphed = changedPaths.filter(
+		(path) => isGraphedModule(path) && !TEST_FILE.test(path),
+	)
+	if (graphed.length === 0) return { scope: "changed" }
+	const started = performance.now()
+	const elapsed = () => Math.round(performance.now() - started)
+	try {
+		const shared = sharedModulesOf({ changedPaths: graphed, repo })
+		const graphMs = elapsed()
+		if (shared.length === 0) return { scope: "changed", graphMs }
+		return { scope: "importers", shared, graphMs }
+	} catch (failure) {
+		return { scope: "full", error: String(failure), graphMs: elapsed() }
+	}
+}
+
+export const fastScopeLines = (scope: FastUnitTestScope) => {
+	if (scope.scope !== "importers") return [scopeLine(scope)]
+	return [
+		`ci  unit test scope: changed test files and the test files importing a shared changed module directly or through re-export modules${graphTime(scope)}`,
+		...scope.shared.map(
+			({ path, reason, testFiles }) =>
+				`ci    ${path} is shared (${reason}), runs ${testFiles.join(", ") || "no test file"}`,
+		),
+	]
+}
+
+const FAST_TEST_TIMEOUT = `--test-timeout=${FAST_TEST_TIMEOUT_MS}`
+
+const withFastTestTimeout = (step: Step): Step => ({
+	...step,
+	command: `${step.command} ${FAST_TEST_TIMEOUT}`,
+})
+
+export const fastUnitTestStep = (scope: FastUnitTestScope): Step => {
+	if (scope.scope === "changed") return withFastTestTimeout(CHANGED_UNIT_TESTS)
+	if (scope.scope === "full") return withFastTestTimeout(FULL_UNIT_TESTS)
+	const testFiles = [
+		...new Set(scope.shared.flatMap((shared) => shared.testFiles)),
+	]
+	return withFastTestTimeout({
+		name: "Unit tests changed since origin/main or importing a shared changed module, against the baseline",
+		command: [
+			CHANGED_UNIT_TESTS.command,
+			...testFiles.map((file) => shellQuoted(`--test-file=${file}`)),
+		].join(" "),
+	})
+}
+
+export type StepTiming = { name: string; ms: number }
+
+const slowestStep = (timings: StepTiming[]) =>
+	timings.reduce((slowest, timing) =>
+		timing.ms > slowest.ms ? timing : slowest,
+	)
+
+export const wallTimeLines = (timings: StepTiming[]) => {
+	const total = timings.reduce((sum, { ms }) => sum + ms, 0)
+	const wallTime = `ci  ci:fast took ${elapsedText(total)}, limit ${FAST_LIMIT_SECONDS} s`
+	if (total <= FAST_LIMIT_SECONDS * 1000) return [wallTime]
+	const slowest = slowestStep(timings)
+	return [
+		wallTime,
+		`ci  ci:fast went past ${FAST_LIMIT_SECONDS} s, its slowest step ${slowest.name} took ${elapsedText(slowest.ms)}: reported, the duration alone refuses no push`,
+	]
+}
 
 export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \\(' | grep -oE '[0-9A-F-]{36}'`
 
@@ -361,7 +506,7 @@ const touchedQueueScriptUnitTests = (changedPaths: string[]) =>
 
 export const fastSteps = (
 	changedPaths: string[],
-	scope: UnitTestScope,
+	scope: FastUnitTestScope,
 ): Step[] => [
 	...FAST_STEP_NAMES.map((name) => {
 		const step = gateSteps().find((candidate) => candidate.name === name)
@@ -369,7 +514,7 @@ export const fastSteps = (
 		return step
 	}),
 	...touchedQueueScriptUnitTests(changedPaths),
-	...unitTestSteps(scope),
+	fastUnitTestStep(scope),
 ]
 
 const isGroup = (name: string): name is Group => name in GATE
@@ -642,33 +787,444 @@ export const uiTestClasses = (directory = UI_TESTS) =>
 		.map((name) => name.slice(0, -".swift".length))
 		.sort()
 
-export const shardTests = ({ index, count }: Shard, classes: string[]) => [
-	...(index === 1 ? ["KiroshiTests"] : []),
-	...classes
-		.filter((_, position) => position % count === index - 1)
-		.map((name) => `KiroshiUITests/${name}`),
-]
+const IOS_TIMINGS = "scripts/ios-shard-seconds.json"
 
-const selectIosTests = () => {
+const IOS_TIMINGS_REFRESH = "bun scripts/ci.ts ios-timings"
+
+const KIROSHI_TESTS = "KiroshiTests"
+
+const OVER_PLAN_RATIO = 1.25
+
+const WHOLE_JOB_CAP_SECONDS = 20 * 60
+
+const UI_TEST_TARGET = "KiroshiUITests"
+
+const TEST_METHOD = /func (test\w+)\s*\(/g
+
+type UiTestClass = { name: string; methods: string[] }
+
+export const uiTestSuite = (directory = UI_TESTS): UiTestClass[] =>
+	uiTestClasses(directory).map((name) => ({
+		name,
+		methods: [
+			...new Set(
+				[
+					...readFileSync(join(directory, `${name}.swift`), "utf8").matchAll(
+						TEST_METHOD,
+					),
+				].map(([, method = ""]) => method),
+			),
+		],
+	}))
+
+type IosTimings = {
+	overheadSeconds: number
+	testSeconds: Record<string, number>
+}
+
+export const readIosTimings = (): IosTimings =>
+	JSON.parse(readFileSync(join(REPO, IOS_TIMINGS), "utf8"))
+
+const classTestId = (className: string) => `${UI_TEST_TARGET}/${className}`
+
+const methodTestId = (className: string, method: string) =>
+	`${classTestId(className)}/${method}`
+
+const measuredSecondsUnder = (timings: IosTimings, prefix: string) =>
+	Object.entries(timings.testSeconds)
+		.filter(([id]) => id.startsWith(`${prefix}/`))
+		.map(([, seconds]) => seconds)
+
+const unmeasuredMethodSeconds = (timings: IosTimings, className: string) => {
+	const ofClass = measuredSecondsUnder(timings, classTestId(className))
+	return median(
+		ofClass.length > 0
+			? ofClass
+			: measuredSecondsUnder(timings, UI_TEST_TARGET),
+	)
+}
+
+type PlannedTest = { id: string; seconds: number; unmeasured: string[] }
+
+const plannedMethod = (
+	timings: IosTimings,
+	className: string,
+	method: string,
+): PlannedTest => {
+	const id = methodTestId(className, method)
+	const seconds = timings.testSeconds[id]
+	return seconds === undefined
+		? {
+				id,
+				seconds: unmeasuredMethodSeconds(timings, className),
+				unmeasured: [id],
+			}
+		: { id, seconds, unmeasured: [] }
+}
+
+const plannedUnitsOf = (
+	timings: IosTimings,
+	{ name, methods }: UiTestClass,
+): PlannedTest[] => {
+	const planned = methods.map((method) => plannedMethod(timings, name, method))
+	const seconds = sumOf(planned.map((method) => method.seconds))
+	if (timings.overheadSeconds + seconds > WHOLE_JOB_CAP_SECONDS) return planned
+	return [
+		{
+			id: classTestId(name),
+			seconds,
+			unmeasured: planned.flatMap((method) => method.unmeasured),
+		},
+	]
+}
+
+const plannedKiroshiTests = (timings: IosTimings): PlannedTest => {
+	const seconds = timings.testSeconds[KIROSHI_TESTS]
+	return seconds === undefined
+		? {
+				id: KIROSHI_TESTS,
+				seconds: median(measuredSecondsUnder(timings, UI_TEST_TARGET)),
+				unmeasured: [KIROSHI_TESTS],
+			}
+		: { id: KIROSHI_TESTS, seconds, unmeasured: [] }
+}
+
+type ShardPlanning = {
+	count: number
+	suite: UiTestClass[]
+	timings: IosTimings
+}
+
+type ShardLoad = { testSeconds: number; tests: PlannedTest[] }
+
+type PlannedShard = ShardLoad & { wholeJobSeconds: number }
+
+export const plannedShards = ({
+	count,
+	suite,
+	timings,
+}: ShardPlanning): PlannedShard[] => {
+	const kiroshiTests = plannedKiroshiTests(timings)
+	const shards: ShardLoad[] = Array.from({ length: count }, (_, position) =>
+		position === 0
+			? { testSeconds: kiroshiTests.seconds, tests: [kiroshiTests] }
+			: { testSeconds: 0, tests: [] },
+	)
+	const longestFirst = suite
+		.flatMap((uiClass) => plannedUnitsOf(timings, uiClass))
+		.sort((a, b) => b.seconds - a.seconds || a.id.localeCompare(b.id))
+	for (const unit of longestFirst) {
+		const lightest = shards.reduce((lightest, shard) =>
+			shard.testSeconds < lightest.testSeconds ? shard : lightest,
+		)
+		lightest.tests.push(unit)
+		lightest.testSeconds += unit.seconds
+	}
+	return shards.map((shard) => ({
+		...shard,
+		wholeJobSeconds: timings.overheadSeconds + shard.testSeconds,
+	}))
+}
+
+const TEST_CASE_ENDED =
+	/Test Case '-\[KiroshiUITests\.(\w+) (\w+)\]' (?:passed|failed|skipped) \(([\d.]+) seconds\)/g
+
+const UNIT_TEST_RUN =
+	/Test run with \d+ tests? in \d+ suites? (?:passed|failed) after ([\d.]+) seconds/
+
+const tenthsOf = (seconds: number) => Math.round(seconds * 10) / 10
+
+export const measuredTestSeconds = (log: string) => {
+	const seconds: Record<string, number> = {}
+	for (const [, className = "", method = "", taken = ""] of log.matchAll(
+		TEST_CASE_ENDED,
+	))
+		seconds[methodTestId(className, method)] = tenthsOf(Number(taken))
+	const unitTestRun = UNIT_TEST_RUN.exec(log)
+	if (unitTestRun) seconds[KIROSHI_TESTS] = tenthsOf(Number(unitTestRun[1]))
+	return seconds
+}
+
+const median = (values: number[]) => {
+	const sorted = [...values].sort((a, b) => a - b)
+	const middle = Math.floor(sorted.length / 2)
+	const upper = sorted[middle] ?? 0
+	const lower = sorted[sorted.length % 2 === 0 ? middle - 1 : middle] ?? 0
+	return tenthsOf((lower + upper) / 2)
+}
+
+type MeasuredShardJob = {
+	wholeJobSeconds: number
+	testSeconds: Record<string, number>
+}
+
+type IosMeasurement = {
+	jobs: MeasuredShardJob[]
+	suite: UiTestClass[]
+}
+
+const sumOf = (values: number[]) =>
+	values.reduce((total, value) => total + value, 0)
+
+export const measuredIosTimings = ({
+	jobs,
+	suite,
+}: IosMeasurement): IosTimings => {
+	const planned = new Set([
+		KIROSHI_TESTS,
+		...suite.flatMap(({ name, methods }) =>
+			methods.map((method) => methodTestId(name, method)),
+		),
+	])
+	const plannedSecondsOf = (job: MeasuredShardJob) =>
+		Object.entries(job.testSeconds).filter(([id]) => planned.has(id))
+	const highest: Record<string, number> = {}
+	for (const [id, seconds] of jobs.flatMap(plannedSecondsOf))
+		highest[id] = Math.max(highest[id] ?? 0, seconds)
+	return {
+		overheadSeconds: Math.max(
+			...jobs.map((job) =>
+				Math.round(
+					job.wholeJobSeconds -
+						sumOf(plannedSecondsOf(job).map(([, seconds]) => seconds)),
+				),
+			),
+		),
+		testSeconds: Object.fromEntries(
+			Object.entries(highest).sort(([a], [b]) => a.localeCompare(b)),
+		),
+	}
+}
+
+type RunJob = {
+	databaseId: number
+	name: string
+	conclusion: string
+	startedAt: string
+	completedAt: string
+}
+
+const IOS_SHARD_JOB = /^ios \(\d+\)$/
+
+const measuredShardJob = (job: RunJob): MeasuredShardJob => ({
+	wholeJobSeconds: Math.round(
+		(Date.parse(job.completedAt) - Date.parse(job.startedAt)) / 1000,
+	),
+	testSeconds: measuredTestSeconds(
+		captured({
+			command: ["gh", "run", "view", "--log", "--job", `${job.databaseId}`],
+			operation: `reading the log of ${job.name}`,
+		}),
+	),
+})
+
+const measuredShardJobsOf = (run: number) => {
+	const { jobs } = JSON.parse(
+		captured({
+			command: ["gh", "run", "view", `${run}`, "--json", "jobs"],
+			operation: `listing the jobs of run ${run}`,
+		}),
+	) as { jobs: RunJob[] }
+	const shardJobs = jobs.filter(
+		(job) => IOS_SHARD_JOB.test(job.name) && job.conclusion === "success",
+	)
+	if (shardJobs.length === 0)
+		throw new Error(`run ${run} has no ios shard job that succeeded`)
+	return shardJobs.map(measuredShardJob)
+}
+
+export const parsedRunIds = (texts: string[]) => {
+	const runs = texts.map(Number)
+	if (
+		runs.length === 0 ||
+		!runs.every((run) => Number.isSafeInteger(run) && run > 0)
+	)
+		throw new Error(
+			`ios-timings is given "${texts.join(" ")}", expected the id of one or more GitHub Actions runs`,
+		)
+	return runs
+}
+
+const refreshIosTimings = (texts: string[]) => {
+	const runs = parsedRunIds(texts)
+	const timings = measuredIosTimings({
+		jobs: runs.flatMap(measuredShardJobsOf),
+		suite: uiTestSuite(),
+	})
+	writeFileSync(
+		join(REPO, IOS_TIMINGS),
+		`${JSON.stringify(timings, null, "\t")}\n`,
+	)
+	console.log(
+		`ci  ${IOS_TIMINGS} now plans ${Object.keys(timings.testSeconds).length} tests and ${timings.overheadSeconds} s outside the tests, from runs ${runs.join(", ")}`,
+	)
+	return true
+}
+
+type ShardRun = {
+	shard: string
+	planned: PlannedShard
+	timings: IosTimings
+	measured: Record<string, number>
+	run: string
+}
+
+const measuredSecondsOf = (
+	measured: Record<string, number>,
+	{ id }: PlannedTest,
+) => {
+	const samples = Object.entries(measured)
+		.filter(([test]) => test === id || test.startsWith(`${id}/`))
+		.map(([, seconds]) => seconds)
+	return samples.length === 0 ? undefined : sumOf(samples)
+}
+
+const measuredShardSeconds = ({ planned, measured }: ShardRun) =>
+	Math.round(
+		sumOf(planned.tests.map((test) => measuredSecondsOf(measured, test) ?? 0)),
+	)
+
+const shownId = (id: string) => id.replace(`${UI_TEST_TARGET}/`, "")
+
+export const shardTimingSummary = (shardRun: ShardRun) => {
+	const { shard, planned, timings, measured } = shardRun
+	const testSeconds = measuredShardSeconds(shardRun)
+	const plannedSeconds = Math.round(planned.testSeconds)
+	const ratio = (testSeconds / planned.testSeconds).toFixed(2)
+	const rows = planned.tests.map((test) => {
+		const marker = test.unmeasured.length > 0 ? " (not measured)" : ""
+		const ran = measuredSecondsOf(measured, test)
+		return `| ${shownId(test.id)} | ${Math.round(test.seconds)}${marker} | ${ran === undefined ? "not measured" : Math.round(ran)} |`
+	})
+	return [
+		`### ios shard ${shard}: ${testSeconds} s of tests measured for ${plannedSeconds} s planned, ratio ${ratio}`,
+		"",
+		`Planned whole job: ${Math.round(planned.wholeJobSeconds)} s, ${timings.overheadSeconds} s of it outside the tests.`,
+		"",
+		"| Test | Planned s | Measured s |",
+		"| --- | ---: | ---: |",
+		...rows,
+		"",
+		"",
+	].join("\n")
+}
+
+export const shardOverPlanWarning = (shardRun: ShardRun) => {
+	const { shard, planned, run } = shardRun
+	const testSeconds = measuredShardSeconds(shardRun)
+	if (testSeconds <= planned.testSeconds * OVER_PLAN_RATIO) return undefined
+	return `::warning title=ios shard over its plan::${escapedAnnotationData(
+		`ios shard ${shard} ran its tests in ${testSeconds} s for ${Math.round(planned.testSeconds)} s planned. Refresh ${IOS_TIMINGS} with ${IOS_TIMINGS_REFRESH} ${run}`,
+	)}`
+}
+
+export const unmeasuredTestWarnings = ({
+	planned,
+	run,
+}: Pick<ShardRun, "planned" | "run">) =>
+	planned.tests.flatMap(({ unmeasured }) =>
+		unmeasured.map(
+			(test) =>
+				`::warning title=ios test not measured::${escapedAnnotationData(
+					`${shownId(test)} has no entry in ${IOS_TIMINGS}, planned at the median of its class. Refresh it with ${IOS_TIMINGS_REFRESH} ${run}`,
+				)}`,
+		),
+	)
+
+const currentRun = () =>
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	process.env.GITHUB_RUN_ID ?? "<run id>"
+
+export const startedATest = (log: string) =>
+	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
+
+type SelectedShard = {
+	shard: string
+	planned: PlannedShard
+	timings: IosTimings
+}
+
+const selectIosTests = (): SelectedShard | undefined => {
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
 	const shard = process.env.IOS_SHARD
 	if (!shard) {
 		process.env.IOS_ONLY_TESTING = ""
 		console.log("\nci  ios runs every test of the Kiroshi plan")
-		return
+		return undefined
 	}
-	const tests = shardTests(parsedShard(shard), uiTestClasses())
-	process.env.IOS_ONLY_TESTING = tests
-		.map((test) => `-only-testing:${test}`)
+	const { index, count } = parsedShard(shard)
+	const timings = readIosTimings()
+	const planned = plannedShards({ count, suite: uiTestSuite(), timings })[
+		index - 1
+	]
+	if (!planned) throw new Error(`ios shard ${shard} has no plan`)
+	process.env.IOS_ONLY_TESTING = planned.tests
+		.map(({ id }) => `-only-testing:${id}`)
 		.join(" ")
-	console.log(`\nci  ios shard ${shard} runs ${tests.join(", ")}`)
+	console.log(
+		`\nci  ios shard ${shard} runs ${planned.tests.map(({ id }) => id).join(", ")}, planned ${Math.round(planned.wholeJobSeconds)} s of whole job`,
+	)
+	for (const warning of unmeasuredTestWarnings({ planned, run: currentRun() }))
+		console.log(warning)
+	return { shard, planned, timings }
+}
+
+const SHARD_TEST_LOG_FILE = join(REPO, IOS_SHARD_TEST_LOG)
+
+const shardTestLog = () =>
+	existsSync(SHARD_TEST_LOG_FILE)
+		? readFileSync(SHARD_TEST_LOG_FILE, "utf8")
+		: ""
+
+const reportRunnerFailure = () => {
+	console.error("ci  ios ended before its first test started: runner failure")
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const output = process.env.GITHUB_OUTPUT
+	if (output) appendFileSync(output, "runner-failure=true\n")
+}
+
+const shardPassed = () => {
+	try {
+		ensureSimulator()
+		return runSteps("ios", IOS_SHARD_STEPS)
+	} catch (failure) {
+		console.error(`ci  ${(failure as Error).message}`)
+		return false
+	}
+}
+
+const reportShardTimings = (selected: SelectedShard, log: string) => {
+	const shardRun: ShardRun = {
+		...selected,
+		measured: measuredTestSeconds(log),
+		run: currentRun(),
+	}
+	const warning = shardOverPlanWarning(shardRun)
+	if (warning) console.log(warning)
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const summary = process.env.GITHUB_STEP_SUMMARY
+	if (summary) appendFileSync(summary, shardTimingSummary(shardRun))
+}
+
+const runIosShard = (selected: SelectedShard) => {
+	rmSync(SHARD_TEST_LOG_FILE, { force: true })
+	const passed = shardPassed()
+	const log = shardTestLog()
+	reportShardTimings(selected, log)
+	if (!passed && !startedATest(log)) reportRunnerFailure()
+	return passed
+}
+
+const runIosBuild = () => {
+	ensureSimulator()
+	return runSteps("ios-build", IOS_BUILD_STEPS)
 }
 
 const runGroup = (group: Group) => {
-	if (group === "ios") {
-		ensureSimulator()
-		selectIosTests()
-	}
+	if (group !== "ios") return runSteps(group, GATE[group])
+	const selected = selectIosTests()
+	if (selected) return runIosShard(selected)
+	ensureSimulator()
 	return runSteps(group, GATE[group])
 }
 
@@ -697,11 +1253,24 @@ const runChangedUnitTests = () =>
 	)
 
 const runFast = () => {
+	const started = performance.now()
 	const changedPaths = pathsChangedSinceMain()
-	return runSteps(
-		"fast",
-		fastSteps(changedPaths, decidedUnitTestScope(changedPaths)),
-	)
+	const scope = fastUnitTestScope({ changedPaths, repo: REPO })
+	console.log(`\n${fastScopeLines(scope).join("\n")}`)
+	const timings: StepTiming[] = [
+		{ name: "the unit test scope decision", ms: performance.now() - started },
+	]
+	const passed = fastSteps(changedPaths, scope).every((step) => {
+		const stepStarted = performance.now()
+		const stepPassed = runWithRetry({ label: "fast", step })
+		timings.push({
+			name: `fast / ${step.name}`,
+			ms: performance.now() - stepStarted,
+		})
+		return stepPassed
+	})
+	console.log(`\n${wallTimeLines(timings).join("\n")}`)
+	return passed
 }
 
 const runRequested = (argument: string | undefined) => {
@@ -710,9 +1279,12 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === "changed") return runChangedUnitTests()
 	if (argument === "rust-pr")
 		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
+	if (argument === "ios-build") return runIosBuild()
+	if (argument === "ios-timings")
+		return refreshIosTimings(process.argv.slice(3))
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed, rust-pr or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed, rust-pr, ios-build, ios-timings or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 

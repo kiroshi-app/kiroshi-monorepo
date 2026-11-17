@@ -314,6 +314,7 @@ async fn a_block_id_absent_from_the_document_is_refused_by_name_and_writes_nothi
 	let (app, root) = a_host("absent").await;
 	put(&root, SPACE, "notes.md", "# Plan\n\nBody.");
 	open_document(app.handle(), &root, SPACE, "notes.md").expect("opens");
+	let marked_on_open = on_disk(&root, "notes.md");
 	let published = heard_in_order(&app);
 	let updates = heard::<Value>(&app, events::LIBRARY_DOCUMENT_UPDATED.name());
 	let host = the_host(&app);
@@ -338,7 +339,7 @@ async fn a_block_id_absent_from_the_document_is_refused_by_name_and_writes_nothi
 		assert_eq!(refusal_of(host.served(operation, asked).await), absent);
 	}
 
-	assert_eq!(on_disk(&root, "notes.md"), "# Plan\n\nBody.");
+	assert_eq!(on_disk(&root, "notes.md"), marked_on_open);
 	assert_eq!(all_of(&published), []);
 	assert_eq!(all_of(&updates), Vec::<Value>::new());
 }
@@ -849,13 +850,13 @@ async fn a_read_answers_a_document_text_an_image_or_what_an_image_too_large_to_s
 #[tokio::test]
 async fn a_read_answers_the_text_as_it_stands_in_the_shared_document() {
 	let (app, root) = a_host("read-shared").await;
-	put(&root, SPACE, "notes.md", "Base.");
+	put(&root, SPACE, "notes.md", "Base. ^aaaaaa");
 	person_typed_at_the_end(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
 
 	let answer =
 		the_host(&app).served(Operation::Read, json!({ "name": "notes.md" })).await.expect("reads");
 
-	assert_eq!(answer["text"], "Base.#");
+	assert_eq!(answer["text"], "Base. ^aaaaaa#");
 }
 
 #[tokio::test]
@@ -909,9 +910,9 @@ async fn an_import_copies_the_file_with_its_thumbnail_and_tells_the_library_it_c
 #[tokio::test]
 async fn a_rename_moves_the_document_and_its_shared_state_as_the_person_rename_does() {
 	let (app, root) = a_host("rename").await;
-	put(&root, SPACE, "notes.md", "Base.");
+	put(&root, SPACE, "notes.md", "Base. ^aaaaaa");
 	put_bytes(&root, "cover.png", &png_of(4));
-	person_typed_at_the_end(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
+	person_typed_at_the_start(&app, &root, &Doc::with_client_id(PERSON_CLIENT));
 	let renames = heard::<LibraryDocumentRenamed>(&app, events::LIBRARY_DOCUMENT_RENAMED.name());
 	let changes = heard::<LibraryChanged>(&app, events::LIBRARY_CHANGED.name());
 	let host = the_host(&app);
@@ -926,14 +927,14 @@ async fn a_rename_moves_the_document_and_its_shared_state_as_the_person_rename_d
 
 	assert_eq!(renamed["name"], "final.md");
 	assert!(!root.join(SPACE).join("notes.md").exists());
-	assert_eq!(on_disk(&root, "final.md"), "Base.#");
+	assert_eq!(on_disk(&root, "final.md"), "#Base. ^aaaaaa");
 	assert!(state_file(&root, "final.md").exists());
 	assert!(!state_file(&root, "notes.md").exists());
 	let opened = open_document(app.handle(), &root, SPACE, "final.md").expect("opens");
 	let doc = Doc::new();
 	let update = BASE64_STANDARD.decode(opened.update).expect("base64");
 	doc.transact_mut().apply_update(Update::decode_v1(&update).expect("yjs")).expect("applies");
-	assert_eq!(doc.get_or_insert_text("markdown").get_string(&doc.transact()), "Base.#");
+	assert_eq!(doc.get_or_insert_text("markdown").get_string(&doc.transact()), "#Base. ^aaaaaa");
 	assert_eq!(
 		all_of(&renames),
 		[LibraryDocumentRenamed {
@@ -974,12 +975,12 @@ async fn a_delete_removes_the_item_its_thumbnail_and_its_shared_state() {
 	assert_eq!(refusal_kind(again), "missing");
 	let changed = LibraryChanged { space_id: SPACE.to_owned(), overwritten: None };
 	assert_eq!(all_of(&changes), [changed.clone(), changed]);
-	put(&root, SPACE, "notes.md", "Fresh.");
+	put(&root, SPACE, "notes.md", "Fresh. ^aaaaaa");
 	assert_eq!(
 		open_document(app.handle(), &root, SPACE, "notes.md").map(|opened| opened.name),
 		Ok("notes.md".to_owned())
 	);
-	assert_eq!(on_disk(&root, "notes.md"), "Fresh.");
+	assert_eq!(on_disk(&root, "notes.md"), "Fresh. ^aaaaaa");
 }
 
 fn an_open_editor(app: &App<MockRuntime>, root: &Path, name: &str) -> Doc {

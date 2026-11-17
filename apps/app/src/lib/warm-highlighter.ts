@@ -19,8 +19,12 @@ const whenIdle = (task: () => void) => {
 	afterNextPaint(task)
 }
 
-export const warmCodeHighlighter = () => {
-	for (const language of CODE_LANGUAGES) {
-		whenIdle(() => warmCodeLanguage(language))
-	}
+const warmInTurn = ([language, ...nextLanguages]: readonly string[]) => {
+	if (language === undefined) return
+	whenIdle(() => {
+		warmCodeLanguage(language)
+		warmInTurn(nextLanguages)
+	})
 }
+
+export const warmCodeHighlighter = () => warmInTurn(CODE_LANGUAGES)

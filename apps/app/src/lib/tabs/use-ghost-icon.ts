@@ -9,6 +9,7 @@ import {
 import { isListPage, pageOf } from "./tab-pages"
 import { tabQueryKeys } from "./tab-query-keys"
 
+import type { NamingStates } from "../conversations/conversation-namings"
 import {
 	conversationName,
 	toBotRows,
@@ -34,6 +35,8 @@ const NO_BOTS: TabBot[] = []
 
 const NO_CONVERSATIONS: TabConversation[] = []
 
+const NO_NAMINGS: NamingStates = {}
+
 const INLINE_FAILURE = { rendersErrorInline: true } as const
 
 const rowOf = (href: string): GhostRow => {
@@ -49,7 +52,7 @@ const toTabConversations = (conversations: Conversation[]) =>
 	conversations.map(
 		(conversation): TabConversation => ({
 			id: conversation.id,
-			name: conversationName(conversation),
+			name: conversationName(conversation, NO_NAMINGS),
 			...toConversationLook(conversation),
 		}),
 	)

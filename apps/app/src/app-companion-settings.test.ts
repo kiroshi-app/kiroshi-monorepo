@@ -437,13 +437,15 @@ const cardOf = (name: string) => {
 	return card
 }
 
-const openCompanionsOfSpace = async () => {
-	await openSpaceSettingsByRail()
-	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
-}
+const agentsEntryOf = () =>
+	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.agents") })
+
+const agentsPageOf = () => document.querySelector('[data-slot="agents-page"]')
+
+const openAgentsOfSpace = () => press(agentsEntryOf())
 
 const openCompanionScreenOf = async (name: string) => {
-	await openCompanionsOfSpace()
+	await openAgentsOfSpace()
 	await press(cardOf(name))
 }
 
@@ -508,10 +510,10 @@ const pressInstallCard = () =>
 		}),
 	)
 
-it("shows one card per companion of the Space under Companions, with its identity, title, instructions and approval mode", async () => {
+it("shows one card per agent of the Space on the Agents page, with its identity, title, instructions and approval mode", async () => {
 	const { companionCount } = await mountApp()
 
-	await openCompanionsOfSpace()
+	await openAgentsOfSpace()
 
 	expect(
 		companionCards().map(
@@ -531,9 +533,9 @@ it("shows one card per companion of the Space under Companions, with its identit
 	).toBe(i18n.t("bots:approvals.mode.option.acceptEdits.label"))
 })
 
-it("opens the screen of a pressed card with Back to Companions, and Back returns to the cards", async () => {
+it("opens the screen of a pressed card with Back to Agents, and Back returns to the Agents page", async () => {
 	const { companionCount } = await mountApp()
-	await openCompanionsOfSpace()
+	await openAgentsOfSpace()
 
 	await press(cardOf(ATLAS))
 
@@ -541,19 +543,31 @@ it("opens the screen of a pressed card with Back to Companions, and Back returns
 		...ON_GENERAL,
 		back: i18n.t("settings:screen.backToAgents"),
 	})
+	expect(agentsEntryOf().getAttribute("aria-current")).toBeNull()
 
 	await pressBack(i18n.t("settings:screen.backToAgents"))
 
-	expect(shownScreenOf()).toEqual({
-		subtitle: "space",
-		entry: expect.stringContaining(i18n.t("settings:rail.agents")),
-	})
+	expect(settingsMenuOf()).toBeNull()
+	expect(agentsPageOf()).not.toBeNull()
+	expect(agentsEntryOf().getAttribute("aria-current")).toBe("page")
 	expect(companionCards()).toHaveLength(companionCount)
 })
 
-it("creates a companion from Create a companion, as the roster create does", async () => {
+it("returns to the Agents page once an agent opened from it is deleted", async () => {
 	const { companionCount } = await mountApp()
-	await openCompanionsOfSpace()
+	await openCompanionScreenOf(ATLAS)
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.danger")))
+
+	await deleteFromDangerZone()
+
+	expect(settingsMenuOf()).toBeNull()
+	expect(agentsPageOf()).not.toBeNull()
+	expect(companionCards()).toHaveLength(companionCount - 1)
+})
+
+it("creates an agent from Create an agent, as the roster create does", async () => {
+	const { companionCount } = await mountApp()
+	await openAgentsOfSpace()
 
 	await press(
 		screen.getByRole("button", {
@@ -729,6 +743,35 @@ it("keeps the companion screen open on the Danger zone and raises a notice when 
 		entry: i18n.t("bots:dialog.tab.danger"),
 		back: i18n.t("settings:screen.backToAgents"),
 	})
+})
+
+const holdingAMemoryItRefusesToChange: StoreChange = (store) => ({
+	...store,
+	createBot: async (identity, spaceId) => {
+		const created = await store.createBot(identity, spaceId)
+		return store.setBotMemory(created.id, "They bake on Sundays.")
+	},
+	setBotMemory: () => Promise.reject({ kind: "storage" }),
+})
+
+it("raises one notice when the memory of an agent cannot be saved", async () => {
+	await mountApp(holdingAMemoryItRefusesToChange)
+	await openCompanionScreenOf(ATLAS)
+	await press(menuEntryOf(i18n.t("bots:dialog.tab.instructions")))
+	fireEvent.change(
+		screen.getByRole("textbox", { name: i18n.t("bots:dialog.memory.label") }),
+		{ target: { value: "They ski." } },
+	)
+
+	await press(
+		screen.getByRole("button", { name: i18n.t("bots:dialog.memory.save") }),
+	)
+
+	expect(
+		raisedNoticeTitles().filter(
+			(title) => title === i18n.t("bots:roster.settingsUnsaved"),
+		),
+	).toHaveLength(1)
 })
 
 it("brings back the open mission thread and its draft on Back to conversations", async () => {

@@ -4,6 +4,7 @@ import type { ChatDriver } from "./driver"
 import type { PostedAnswerHandler, PostedRequest } from "./posted-question"
 
 import type { ReplyLink } from "../bindings"
+import type { ReporterFacts, UnreportedFailureNotice } from "../failure-report"
 import type {
 	CheckReport,
 	PermissionDecision,
@@ -53,7 +54,6 @@ export type ChatController = {
 	attach: () => () => void
 	check: () => Promise<CheckReport | null>
 	start: (resume?: string) => Promise<SessionHandle | null>
-	preflight: (resume?: string) => Promise<SessionHandle | null>
 	open: (botId: string, spaceId: string | null) => Promise<SessionHandle | null>
 	openAside: (
 		botId: string,
@@ -87,7 +87,6 @@ export type ChatController = {
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
 	stop: () => Promise<void>
-	stopFor: (botId: string) => Promise<void>
 	discard: (id: string) => void
 	sendNow: (id: string) => Promise<void>
 	dismissError: (id: string) => void
@@ -112,6 +111,11 @@ export type ChatControllerOptions = {
 	onMessageStored?: MessageStoredListener
 	announceReportTurn?: ReportTurnAnnouncer
 	onReconnected?: ReconnectionListener
+	isListedInOpenSpace?: (botId: string) => boolean
+	reportFailure?: (
+		notice: UnreportedFailureNotice,
+		facts?: ReporterFacts,
+	) => unknown
 	rereadConversation?: (conversationId: string) => void
 }
 
@@ -132,6 +136,7 @@ export function createChatController(
 		persist,
 		reloadPage: thread.reloadPage,
 		pump,
+		settleRecorded: (bot) => outbox.settleRecorded(bot),
 	})
 	const session = createSessionRunner(context, {
 		settleOpenReplies: replies.settleOpenReplies,
@@ -185,8 +190,6 @@ export function createChatController(
 		attach: routing.attach,
 		check: () => onSelected(session.checkFor, null),
 		start: (resume) => onSelected((bot) => session.startFor(bot, resume), null),
-		preflight: (resume) =>
-			onSelected((bot) => session.preflightFor(bot, resume), null),
 		open: selection.open,
 		openAside: selection.openAside,
 		close: selection.close,
@@ -230,12 +233,6 @@ export function createChatController(
 		reportRun: opening.reportRun,
 		storeAttachments: prompts.storeAttachments,
 		stop: () => onSelected(outbox.stop, undefined),
-		stopFor: async (botId) => {
-			const bot = bots.get(botId)
-			if (bot) {
-				await outbox.stop(bot)
-			}
-		},
 		sendNow: (id) => onSelected((bot) => outbox.sendNow(bot, id), undefined),
 		discard: (id) =>
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),

@@ -61,14 +61,17 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 			void navigate(options)
 		}
 
+		const backOr = (fallback: NavigateOptions) => {
+			if (router.history.canGoBack()) {
+				router.history.back()
+				return
+			}
+			void navigate({ ...fallback, replace: true })
+		}
+
 		return {
-			back: () => {
-				if (router.history.canGoBack()) {
-					router.history.back()
-					return
-				}
-				void navigate({ to: "/", search: heldThreadOf(holder), replace: true })
-			},
+			back: () => backOr({ to: "/", search: heldThreadOf(holder) }),
+			backToAgents: () => backOr({ to: "/agents" }),
 			openConversations: () => {
 				void navigate({ to: "/", search: heldThreadOf(holder) })
 			},
@@ -93,6 +96,7 @@ export const useSettingsNavigation = (holder: ThreadHolder) => {
 				go({ to: "/home" })
 			},
 			openLibrary: () => go({ to: "/library" }),
+			openAgents: () => go({ to: "/agents" }),
 			openMissions: () => go({ to: "/missions" }),
 			openUserSettings: (search: SettingsSearch = {}) =>
 				go({ to: "/settings/user", search }),

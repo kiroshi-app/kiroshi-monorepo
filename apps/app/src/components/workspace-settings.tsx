@@ -58,7 +58,6 @@ export const SpaceSettingsRoute = () => {
 			page={page}
 			panels={workspace.panels}
 			rosterLines={rosterLines}
-			rosterView={workspace.rosterView}
 			scopes={workspace.scopes}
 			search={search}
 			spaceId={spaceId}

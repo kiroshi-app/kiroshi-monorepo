@@ -60,7 +60,9 @@ final class ConversationsStore {
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var opening: Companion.ID?
     @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private let resyncReread = ResyncReread()
     @ObservationIgnored private var creating: Task<Void, Never>?
+    @ObservationIgnored private var pendingCreation: PendingCreation?
     @ObservationIgnored private var paging: Task<Void, Never>?
     @ObservationIgnored private var merging: Task<Void, Never>?
     @ObservationIgnored private var pinning: Task<Void, Never>?
@@ -130,17 +132,24 @@ final class ConversationsStore {
             case .state(.online(let sharedSpaceId)):
                 spaceId = sharedSpaceId
                 isOnline = true
-                reload()
+                if phase == .failed {
+                    reload()
+                }
             case .state:
                 isOnline = false
-            case .event(let event):
-                guard let event = ConversationEvent(event) else { continue }
-                apply(event)
+            case .reread where phase == .loaded:
+                resyncReread.start { [weak self] in self?.reload() }
+            case .reread:
+                reload()
+            case .event(let heard):
+                guard let event = ConversationEvent(heard) else { continue }
+                apply(event, heard: heard)
             }
         }
         guard isFollowing(connection) else { return }
         isOnline = false
-        for task in [loading, paging, merging, pinning] {
+        resyncReread.cancel()
+        for task in [loading, paging, merging] {
             task?.cancel()
         }
         loading = nil
@@ -223,6 +232,7 @@ final class ConversationsStore {
     func stopPicking() {
         creating?.cancel()
         creating = nil
+        pendingCreation = nil
         creation = .idle
         isPickingCompanions = false
     }
@@ -233,31 +243,65 @@ final class ConversationsStore {
             return nil
         }
         creation = .creating
-        let task = Task { await create(companionIds, in: spaceId, through: relay) }
+        let pending =
+            pendingCreation.flatMap { $0.companionIds == companionIds ? $0 : nil }
+            ?? PendingCreation(
+                companionIds: companionIds, callKey: UUID().uuidString.lowercased())
+        pendingCreation = pending
+        let task = Task { await create(pending, in: spaceId, through: relay) }
         creating = task
         return task
     }
 
     private func create(
-        _ companionIds: [Companion.ID], in spaceId: String, through relay: ConversationRelay
+        _ pending: PendingCreation, in spaceId: String, through relay: ConversationRelay
     ) async {
         do {
-            let group = try await relay.createGroup(in: spaceId, with: companionIds)
+            let group = try await relay.createGroup(
+                in: spaceId, with: pending.companionIds, callKey: pending.callKey)
             guard !Task.isCancelled, self.spaceId == spaceId else { return }
-            creating = nil
-            creation = .idle
-            admit(group)
-            isPickingCompanions = false
-            opened = .group(group)
+            created(group)
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, self.spaceId == spaceId else { return }
+            if let announced = pendingCreation?.announced,
+                pendingCreation?.callKey == pending.callKey
+            {
+                created(announced)
+                return
+            }
             creating = nil
+            guard error as? RelayCallError != .alreadyRan else {
+                pendingCreation = nil
+                creation = .idle
+                isPickingCompanions = false
+                return
+            }
             creation =
                 error as? ConversationCallError == .unknownToTheHost
                 ? .refusedByOlderHost : .failed
         }
+    }
+
+    private func created(_ group: GroupConversation) {
+        pendingCreation = nil
+        creating = nil
+        creation = .idle
+        admit(group)
+        isPickingCompanions = false
+        opened = .group(group)
+    }
+
+    private func announced(_ group: GroupConversation, heard: RelayEvent) {
+        guard let relay, let caller = heard.caller, caller.deviceId == relay.deviceId,
+            let pending = pendingCreation, caller.callKey == pending.callKey
+        else { return }
+        guard creation == .creating else {
+            created(group)
+            return
+        }
+        pendingCreation?.announced = group
     }
 
     @discardableResult
@@ -305,7 +349,7 @@ final class ConversationsStore {
         publish(rows + [summary(of: group, lastMessage: nil)])
     }
 
-    private func apply(_ event: ConversationEvent) {
+    private func apply(_ event: ConversationEvent, heard: RelayEvent) {
         switch event {
         case .messageStored(let message):
             let preview = MessagePreview(message, authorship: authorship)
@@ -321,6 +365,7 @@ final class ConversationsStore {
             reload()
         case .groupCreated(let group):
             admit(group)
+            announced(group, heard: heard)
         case .groupUpdated(let group):
             guard let index = rows.firstIndex(where: { $0.subject.isGroup(group.id) })
             else { return }
@@ -591,4 +636,10 @@ final class ConversationsStore {
             return left.offset < right.offset
         }.map(\.element)
     }
+}
+
+private struct PendingCreation {
+    let companionIds: [Companion.ID]
+    let callKey: String
+    var announced: GroupConversation?
 }

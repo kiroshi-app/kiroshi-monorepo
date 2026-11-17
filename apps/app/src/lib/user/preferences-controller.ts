@@ -1,4 +1,5 @@
-import type { Language } from "@workspace/ui/lib/i18n"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import { i18n, type Language } from "@workspace/ui/lib/i18n"
 
 import type { ColorScheme, UserPreferences } from "./preferences-contract"
 import {
@@ -14,13 +15,13 @@ import {
 	changeOnboardingFirstCompanion,
 	changeOnboardingStep,
 	changePreferences,
-	changeProfilePicture,
 	changeSidebarCollapsed,
 	markOnboardingImportSeen,
 	readPreferences,
 	replayOnboarding,
 } from "./preferences-queue"
 
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { createStore } from "../store"
 import type { OnboardingStep, OpenOn, UpdateChannel } from "@/lib/bindings"
 
@@ -55,7 +56,6 @@ export type UserController = {
 	subscribe: (listener: () => void) => () => void
 	followOtherWindows: () => () => void
 	load: () => Promise<void>
-	rename: (displayName: string) => void
 	setNotification: (change: NotificationChange) => Promise<void>
 	setColorScheme: (colorScheme: ColorScheme) => Promise<void>
 	setLanguage: (language: Language | null) => Promise<void>
@@ -73,8 +73,10 @@ export type UserController = {
 	setUpdateChannel: (updateChannel: UpdateChannel) => Promise<void>
 	setShowWhatsNew: (showWhatsNew: boolean) => Promise<void>
 	markVersionSeen: (lastSeenVersion: string) => Promise<void>
-	uploadPicture: (file: File) => Promise<void>
-	removePicture: () => Promise<void>
+}
+
+type UserControllerOptions = {
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const UNMIRRORED_DEFAULTS = {
@@ -98,7 +100,9 @@ const recordOf = (record: UserPreferences): ReaderPreferences => ({
 	...mirrorOf(record),
 })
 
-export const createUserController = (): UserController => {
+export const createUserController = ({
+	reportFailure = failureReporterIn("preferences-controller"),
+}: UserControllerOptions = {}): UserController => {
 	const stateStore = createStore<UserState>({
 		preferences: openingPreferences(),
 		hasLoaded: false,
@@ -106,9 +110,6 @@ export const createUserController = (): UserController => {
 	const current = stateStore.getState
 
 	let answered = current().preferences
-
-	let pendingName: string | null = null
-	let isWriting = false
 
 	const set = (fields: Partial<UserState>) =>
 		stateStore.setState({ ...current(), ...fields })
@@ -131,23 +132,12 @@ export const createUserController = (): UserController => {
 
 	const restore = () => apply(answered)
 
-	const markLoaded = () => set({ hasLoaded: true })
-
-	const flush = async (): Promise<void> => {
-		const displayName = pendingName
-		if (displayName === null) {
-			return
-		}
-		pendingName = null
-		const written = await changePreferences((record) => ({
-			...record,
-			displayName,
-		}))
-		if (pendingName === null) {
-			apply(written)
-		}
-		return flush()
+	const refuse = (reason: unknown) => {
+		restore()
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
 	}
+
+	const markLoaded = () => set({ hasLoaded: true })
 
 	const botIdBySpaceWith = ({ spaceId, botId }: LastBotOpened) => {
 		const { lastBotIdBySpace } = current().preferences
@@ -166,7 +156,7 @@ export const createUserController = (): UserController => {
 		mirror(preferences)
 		return changePreferences((record) => ({ ...record, ...fields }))
 			.then(apply)
-			.catch(restore)
+			.catch(refuse)
 	}
 
 	const changeReported = (fields: ReportedPreferences) => {
@@ -216,25 +206,11 @@ export const createUserController = (): UserController => {
 
 		load: () => readPreferences().then(apply).catch(restore).then(markLoaded),
 
-		rename: (displayName: string) => {
-			show({ ...current().preferences, displayName })
-			pendingName = displayName
-			if (isWriting) {
-				return
-			}
-			isWriting = true
-			void flush()
-				.catch(restore)
-				.finally(() => {
-					isWriting = false
-				})
-		},
-
 		setNotification: ({ field, isEnabled }: NotificationChange) => {
 			show({ ...current().preferences, [field]: isEnabled })
 			return changePreferences((record) => ({ ...record, [field]: isEnabled }))
 				.then(apply)
-				.catch(restore)
+				.catch(refuse)
 		},
 
 		setColorScheme: (colorScheme: ColorScheme) =>
@@ -287,18 +263,5 @@ export const createUserController = (): UserController => {
 
 		markVersionSeen: (lastSeenVersion: string) =>
 			changeReported({ lastSeenVersion }),
-
-		uploadPicture: async (file: File) => {
-			const bytes = new Uint8Array(await file.arrayBuffer())
-			return changeProfilePicture(bytes).then(apply).catch(restore)
-		},
-
-		removePicture: () =>
-			changePreferences((record) => ({
-				...record,
-				profilePicturePath: null,
-			}))
-				.then(apply)
-				.catch(restore),
 	}
 }

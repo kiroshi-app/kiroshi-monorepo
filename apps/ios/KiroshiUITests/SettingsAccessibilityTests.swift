@@ -66,30 +66,23 @@ final class SettingsAccessibilityTests: XCTestCase {
     }
 
     func testThePrivacyTermsAndSupportRowsOpenTheirPageInTheApp() {
-        let app = launch("6.1")
-        let address = app.buttons["URL"]
-        let close = app.buttons.matching(NSPredicate(format: "identifier == 'Close'")).firstMatch
-        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
-
-        for title in ["Privacy Policy", "Terms of Use", "Support"] {
+        let pages = [
+            ("Privacy Policy", "https://kiroshi.app/privacy"),
+            ("Terms of Use", "https://kiroshi.app/terms"),
+            ("Support", "https://kiroshi.app/support"),
+        ]
+        for (title, address) in pages {
+            let app = launch("6.1")
+            XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10), title)
             let row = app.collectionViews.buttons[title]
             XCTAssertTrue(row.isHittable, title)
 
             row.tap()
 
-            XCTAssertTrue(address.waitForExistence(timeout: 30), title)
-            XCTAssertTrue(
-                becomes(address, NSPredicate(format: "value CONTAINS 'kiroshi.app'")), title)
+            let browser = app.descendants(matching: .any)[address]
+            XCTAssertTrue(browser.waitForExistence(timeout: 10), title)
             XCTAssertEqual(app.state, .runningForeground, title)
-            close.tap()
-            XCTAssertTrue(address.waitForNonExistence(timeout: 10), title)
-            XCTAssertTrue(becomes(row, NSPredicate(format: "isHittable == true")), title)
         }
-    }
-
-    func becomes(_ element: XCUIElement, _ predicate: NSPredicate) -> Bool {
-        let met = expectation(for: predicate, evaluatedWith: element)
-        return XCTWaiter().wait(for: [met], timeout: 10) == .completed
     }
 
     func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensWelcome()

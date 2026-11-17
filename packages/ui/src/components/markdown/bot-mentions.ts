@@ -2,6 +2,7 @@ interface MdastNode {
 	type: string
 	value?: string
 	children?: MdastNode[]
+	position?: { start: { offset?: number }; end: { offset?: number } }
 	data?: { hName?: string; hProperties?: Record<string, unknown> }
 }
 
@@ -23,7 +24,21 @@ const mentionOf = (id: string): MdastNode => ({
 	children: [],
 })
 
-const textOf = (value: string): MdastNode => ({ type: "text", value })
+const textOf = (value: string, from?: number): MdastNode => ({
+	type: "text",
+	value,
+	...(from !== undefined && {
+		position: { start: { offset: from }, end: { offset: from + value.length } },
+	}),
+})
+
+const verbatimStartOf = ({ value = "", position }: MdastNode) => {
+	const from = position?.start.offset
+	const to = position?.end.offset
+	return from !== undefined && to !== undefined && to - from === value.length
+		? from
+		: undefined
+}
 
 const repeatedProperties = (
 	node: MdastNode | undefined,
@@ -38,12 +53,16 @@ const repeatedProperties = (
 	return properties[BOT_MENTION_ATTRIBUTE] === id ? properties : undefined
 }
 
-const splitMentions = (value: string) => {
+const splitMentions = (value: string, from?: number) => {
 	const parts: MdastNode[] = []
 	let read = 0
 
+	const textFrom = (start: number, end?: number) =>
+		textOf(value.slice(start, end), from === undefined ? from : from + start)
+
 	for (const match of value.matchAll(MENTION)) {
 		const at = match.index ?? 0
+		const gapStart = read
 		const gap = value.slice(read, at)
 		read = at + match[0].length
 
@@ -55,12 +74,12 @@ const splitMentions = (value: string) => {
 			continue
 		}
 
-		if (gap) parts.push(textOf(gap))
+		if (gap) parts.push(textFrom(gapStart, at))
 		parts.push(mentionOf(match[1]))
 	}
 
 	if (parts.length === 0) return null
-	if (read < value.length) parts.push(textOf(value.slice(read)))
+	if (read < value.length) parts.push(textFrom(read))
 
 	return parts
 }
@@ -73,7 +92,9 @@ export const remarkBotMentions = () => (tree: MdastNode) => {
 		if (!node.children) return
 
 		node.children = node.children.flatMap((child) =>
-			isText(child) ? (splitMentions(child.value ?? "") ?? child) : child,
+			isText(child)
+				? (splitMentions(child.value ?? "", verbatimStartOf(child)) ?? child)
+				: child,
 		)
 
 		for (const child of node.children) rewrite(child)
@@ -82,4 +103,8 @@ export const remarkBotMentions = () => (tree: MdastNode) => {
 	rewrite(tree)
 }
 
-export { BOT_MENTION_ATTRIBUTE, BOT_MENTION_COUNT_ATTRIBUTE }
+export {
+	BOT_MENTION_ATTRIBUTE,
+	BOT_MENTION_COUNT_ATTRIBUTE,
+	MENTION as BOT_MENTION_PATTERN,
+}

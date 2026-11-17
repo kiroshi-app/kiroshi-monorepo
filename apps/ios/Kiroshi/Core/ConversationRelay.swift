@@ -2,6 +2,7 @@ enum ConversationCallError: Error, Equatable {
     case refused(status: Int, kind: String?)
     case unreadable
     case unknownToTheHost
+    case refusedByTheRelay
 
     var isUnreadableCursor: Bool {
         guard case .refused(_, let kind) = self else { return false }
@@ -13,6 +14,10 @@ struct ConversationRelay: Sendable {
     static let listPageSize = 30
 
     let connection: RelayConnection
+
+    var deviceId: String {
+        connection.relayDeviceId
+    }
 
     func companions(in spaceId: String) async throws -> [CompanionInRoster] {
         try await ask(
@@ -44,11 +49,12 @@ struct ConversationRelay: Sendable {
         return try await ask("conversation_page", args, as: ConversationPage.self)
     }
 
-    func createGroup(in spaceId: String, with companionIds: [Companion.ID]) async throws
-        -> GroupConversation
-    {
+    func createGroup(
+        in spaceId: String, with companionIds: [Companion.ID], callKey: String
+    ) async throws -> GroupConversation {
         let args = CreateArgs(spaceId: spaceId, sectionId: nil, title: "", botIds: companionIds)
-        return try await ask("conversation_create", args, as: GroupConversation.self)
+        return try await ask(
+            "conversation_create", args, callKey: callKey, as: GroupConversation.self)
     }
 
     func mainChat(of companionId: Companion.ID, in spaceId: String) async throws -> MainChat {
@@ -70,13 +76,15 @@ struct ConversationRelay: Sendable {
             messages: page.messages.sorted { $0.seq < $1.seq }, hasMore: page.hasMore)
     }
 
-    func storeAttachments(_ attachments: ConversationAttachments) async throws -> [String] {
-        try await ask("chat_store_attachments", attachments, as: [String].self)
+    func storeAttachments(_ attachments: ConversationAttachments, callKey: String) async throws
+        -> [String]
+    {
+        try await ask("chat_store_attachments", attachments, callKey: callKey, as: [String].self)
     }
 
     func sendTurn(_ message: SentMessage, summoning companionIds: [Companion.ID]) async throws {
         let args = SendTurnArgs(message: message, summoned: companionIds)
-        _ = try await ask("conversation_send_turn", args, as: Int.self)
+        _ = try await ask("conversation_send_turn", args, callKey: message.id, as: Int.self)
     }
 
     func pendingQuestions(in conversationId: String) async throws -> [AgentEvent] {
@@ -86,10 +94,12 @@ struct ConversationRelay: Sendable {
     }
 
     func answerQuestion(
-        _ id: String, askedIn scope: AgentEvent.Scope, with answers: [String: String]
+        _ id: String, askedIn scope: AgentEvent.Scope, with answers: [String: String],
+        callKey: String
     ) async throws {
         let args = AnswerArgs(scope: scope, id: id, answers: answers)
-        let answer = try await connection.call("agent_answer_question", args: args)
+        let answer = try await connection.call(
+            "agent_answer_question", args: args, callKey: callKey)
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
     }
 
@@ -105,9 +115,10 @@ struct ConversationRelay: Sendable {
     }
 
     private func ask<Body: Decodable>(
-        _ command: String, _ args: some Encodable & Sendable, as type: Body.Type
+        _ command: String, _ args: some Encodable & Sendable, callKey: String? = nil,
+        as type: Body.Type
     ) async throws -> Body {
-        let answer = try await connection.call(command, args: args)
+        let answer = try await connection.call(command, args: args, callKey: callKey)
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
         guard let body = try? answer.body(as: Body.self) else {
             throw ConversationCallError.unreadable
@@ -117,6 +128,7 @@ struct ConversationRelay: Sendable {
 
     private static func refusal(of answer: RelayAnswer) -> ConversationCallError {
         guard !answer.isUnknownToTheHost else { return .unknownToTheHost }
+        guard !answer.isRefusedByTheRelay else { return .refusedByTheRelay }
         let kind = (try? answer.body(as: StoreError.self))?.kind
         return .refused(status: answer.status, kind: kind)
     }

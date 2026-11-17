@@ -16,7 +16,7 @@ import { spaceQueryKeys } from "./space-query-keys"
 import { newSpaceName } from "./space-settings"
 
 import { SPACE_DESCRIBED_EVENT } from "../bindings"
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { joinedHosts, listenOnThisComputer } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
@@ -56,7 +56,7 @@ export type SpacesControllerOptions = {
 	queryClient: QueryClient
 	pickers?: ArchivePickers
 	reportSuccess?: (notice: NoticeMessage) => void
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 	hosts?: Pick<JoinedHosts, "activate">
 }
 
@@ -196,10 +196,14 @@ export const createSpacesController = (
 			),
 		)
 
-	const noteRefusedCreate = () => {
-		choose({ hasFailedToCreate: true })
-		reportFailure({ title: i18n.t("chat:screen.notice.failed") })
+	const reloadAfterRefusal = (reason: unknown) => {
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
 		return reload()
+	}
+
+	const noteRefusedCreate = (reason: unknown) => {
+		choose({ hasFailedToCreate: true })
+		return reloadAfterRefusal(reason)
 	}
 
 	const writes = createWriteLoop<SpaceDescription, Space>({
@@ -209,8 +213,8 @@ export const createSpacesController = (
 				store.updateSpace(id, name, colour ?? undefined),
 			),
 		apply: (_id, written) => apply(written),
-		onRefused: () => {
-			void reload()
+		onRefused: (_id, reason) => {
+			void reloadAfterRefusal(reason)
 		},
 	})
 
@@ -233,16 +237,19 @@ export const createSpacesController = (
 		refusal: unknown,
 		retry: () => Promise<void>,
 	) =>
-		reportFailure({
-			title,
-			description: transferRefusalReasonOf(refusal),
-			action: {
-				label: i18n.t("settings:space.transfer.retry"),
-				onPress: () => {
-					void retry()
+		reportFailure(
+			{
+				title,
+				description: transferRefusalReasonOf(refusal),
+				action: {
+					label: i18n.t("settings:space.transfer.retry"),
+					onPress: () => {
+						void retry()
+					},
 				},
 			},
-		})
+			{ reason: refusal },
+		)
 
 	const exportSpace = (id: string): Promise<void> =>
 		transfer(async () => {
@@ -307,8 +314,11 @@ export const createSpacesController = (
 		watch: () => {
 			const detach = listenOnThisComputer(SPACE_DESCRIBED_EVENT, () => {
 				void reload()
-			}).catch(() => {
-				reportFailure({ title: i18n.t("chat:screen.notice.failed") })
+			}).catch((reason: unknown) => {
+				reportFailure(
+					{ title: i18n.t("chat:screen.notice.failed") },
+					{ reason },
+				)
 				return undefined
 			})
 			return () => {
@@ -357,7 +367,7 @@ export const createSpacesController = (
 				return Promise.resolve()
 			}
 			hold(repositioned(spaces, ids))
-			return commit(() => store.reorderSpaces(ids)).catch(reload)
+			return commit(() => store.reorderSpaces(ids)).catch(reloadAfterRefusal)
 		},
 
 		remove: (id: string) =>
@@ -367,7 +377,7 @@ export const createSpacesController = (
 				const spaces = current().spaces.filter((space) => space.id !== id)
 				hold(spaces)
 				choose(listedChoice(spaces[0]?.id ?? null))
-			}).catch(reload),
+			}).catch(reloadAfterRefusal),
 
 		exportSpace,
 

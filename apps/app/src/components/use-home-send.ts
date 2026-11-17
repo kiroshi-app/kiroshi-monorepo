@@ -24,6 +24,7 @@ import { useControllerState } from "@/lib/use-controller"
 
 export type HomeConversationStart = {
 	startConversation: (botIds: string[]) => Promise<Conversation | null>
+	beginNaming: (conversationId: string) => void
 	discardConversation: (conversationId: string) => Promise<void>
 	openConversation: (conversationId: string) => void
 }
@@ -48,11 +49,21 @@ const raiseUnsent = (reason?: unknown) => {
 	)
 }
 
+const logUnreleased = (reason: unknown) => {
+	console.error("home send: the discarded runtime was not released", reason)
+}
+
 const raiseRefused = (refusal: AttachmentStoreError) => {
-	void reportUnsent({
-		title: i18n.t("chat:screen.attachmentsRefused"),
-		description: describeAttachmentError(i18n.getFixedT(null, "chat"), refusal),
-	})
+	void reportUnsent(
+		{
+			title: i18n.t("chat:screen.attachmentsRefused"),
+			description: describeAttachmentError(
+				i18n.getFixedT(null, "chat"),
+				refusal,
+			),
+		},
+		{ reason: refusal },
+	)
 }
 
 export const useHomeSend = ({
@@ -62,6 +73,7 @@ export const useHomeSend = ({
 	drafts,
 	runtimes,
 	startConversation,
+	beginNaming,
 	discardConversation,
 	openConversation,
 }: HomeSendOptions): HomeSend => {
@@ -94,15 +106,20 @@ export const useHomeSend = ({
 		)
 	}
 
+	const releaseAndDiscard = (conversationId: string) => {
+		runtimes.release(conversationId).catch(logUnreleased)
+		return discardConversation(conversationId)
+	}
+
 	const deliverOrDiscard = async (conversation: Conversation, text: string) => {
 		try {
 			const isSent = await deliverTo(conversation, text)
 			if (!isSent) {
-				await discardConversation(conversation.id)
+				await releaseAndDiscard(conversation.id)
 			}
 			return isSent
 		} catch (reason) {
-			await discardConversation(conversation.id)
+			await releaseAndDiscard(conversation.id)
 			throw reason
 		}
 	}
@@ -111,6 +128,9 @@ export const useHomeSend = ({
 		const conversation = await startConversation([agentId])
 		if (!conversation) {
 			return null
+		}
+		if (text.trim()) {
+			beginNaming(conversation.id)
 		}
 		const isSent = await deliverOrDiscard(conversation, text)
 		return isSent ? conversation.id : null

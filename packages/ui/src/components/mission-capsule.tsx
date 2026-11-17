@@ -1,3 +1,11 @@
+import {
+	Fragment,
+	type HTMLAttributes,
+	type ReactElement,
+	type ReactNode,
+	type Ref,
+	useRef,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import type { AppSidebarRowMission } from "@workspace/ui/components/app-sidebar-model"
@@ -8,7 +16,9 @@ import {
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { ShimmerText } from "@workspace/ui/components/motion/shimmer-text"
-import { cn } from "@workspace/ui/lib/utils"
+import { offsetPastSidebarEdge } from "@workspace/ui/components/sidebar-menu-row"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const TREE =
 	"pointer-events-none relative flex flex-col before:absolute before:start-5.25 before:top-0 before:bottom-4 before:w-[1.5px] before:bg-rail-section-placeholder group-data-[collapsible=icon]:hidden"
@@ -41,17 +51,32 @@ type MissionOpening = {
 	onOpenMission?: (missionId: string) => void
 }
 
-type MissionTreeRowProps = MissionOpening & {
-	mission: AppSidebarRowMission
+type MissionTooltip = {
+	isTooltipHidden?: boolean
 }
+
+type MissionTreeRowSurface = HTMLAttributes<HTMLButtonElement> & {
+	ref?: Ref<HTMLButtonElement>
+}
+
+type MissionTreeRowProps = MissionOpening &
+	MissionTooltip & {
+		mission: AppSidebarRowMission
+		surface?: MissionTreeRowSurface
+	}
+
+type MissionTreeRowWrap = (row: ReactElement<MissionTreeRowProps>) => ReactNode
 
 const MissionTreeRow = ({
 	mission,
 	openMissionId,
+	isTooltipHidden = false,
 	onOpenMission,
+	surface,
 }: MissionTreeRowProps) => {
 	const { t } = useTranslation("bots")
 	const isCompact = useIsCompactRows()
+	const rowRef = useRef<HTMLButtonElement>(null)
 	const drawn = isCompact ? COMPACT_ROW : STACKED_ROW
 	const { id, state, ticket, objective, isLive } = mission
 	const title = ticket.title || objective
@@ -98,16 +123,25 @@ const MissionTreeRow = ({
 	)
 
 	return isCompact ? (
-		<button
-			aria-current={id === openMissionId ? "page" : undefined}
-			className={drawn.row}
-			data-slot="mission-capsule"
-			data-state={state}
-			onClick={() => onOpenMission?.(id)}
-			type="button"
+		<TooltipHint
+			content={isTooltipHidden ? null : title}
+			side="right"
+			sideOffset={() => offsetPastSidebarEdge(rowRef.current)}
 		>
-			{anatomy}
-		</button>
+			<button
+				onContextMenu={(event) => event.stopPropagation()}
+				{...surface}
+				aria-current={id === openMissionId ? "page" : undefined}
+				className={drawn.row}
+				data-slot="mission-capsule"
+				data-state={state}
+				onClick={() => onOpenMission?.(id)}
+				ref={mergeRefs(rowRef, surface?.ref)}
+				type="button"
+			>
+				{anatomy}
+			</button>
+		</TooltipHint>
 	) : (
 		<div className={drawn.row} data-slot="mission-capsule" data-state={state}>
 			{anatomy}
@@ -115,14 +149,18 @@ const MissionTreeRow = ({
 	)
 }
 
-type MissionCapsuleListProps = MissionOpening & {
-	missions: AppSidebarRowMission[] | undefined
-}
+type MissionCapsuleListProps = MissionOpening &
+	MissionTooltip & {
+		missions: AppSidebarRowMission[] | undefined
+		wrapMission?: MissionTreeRowWrap
+	}
 
 const MissionCapsuleList = ({
 	missions,
 	openMissionId,
+	isTooltipHidden,
 	onOpenMission,
+	wrapMission,
 }: MissionCapsuleListProps) => {
 	const isCompact = useIsCompactRows()
 
@@ -131,16 +169,23 @@ const MissionCapsuleList = ({
 			className={isCompact ? COMPACT_TREE : TREE}
 			data-slot="mission-capsule-list"
 		>
-			{missions.map((mission) => (
-				<MissionTreeRow
-					key={mission.id}
-					mission={mission}
-					onOpenMission={onOpenMission}
-					openMissionId={openMissionId}
-				/>
-			))}
+			{missions.map((mission) => {
+				const row = (
+					<MissionTreeRow
+						isTooltipHidden={isTooltipHidden}
+						mission={mission}
+						onOpenMission={onOpenMission}
+						openMissionId={openMissionId}
+					/>
+				)
+				return (
+					<Fragment key={mission.id}>
+						{isCompact && wrapMission ? wrapMission(row) : row}
+					</Fragment>
+				)
+			})}
 		</div>
 	) : null
 }
 
-export { MissionCapsuleList, type MissionOpening }
+export { MissionCapsuleList, type MissionOpening, type MissionTreeRowWrap }

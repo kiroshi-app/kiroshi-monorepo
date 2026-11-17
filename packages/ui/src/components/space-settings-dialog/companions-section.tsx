@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
@@ -7,9 +8,15 @@ import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotPermissionMode } from "@workspace/ui/components/bot-settings"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 const CARD =
 	"flex w-full min-w-0 cursor-pointer flex-col gap-3.5 rounded-xl border border-border bg-muted/40 p-4 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+
+const HEAD_BESIDE_ACTIONS = "pe-10"
+
+const CARD_ACTIONS =
+	"pointer-events-none absolute end-4 top-4 m-px flex h-10 items-center *:pointer-events-auto"
 
 type CompanionSummary = {
 	id: string
@@ -27,9 +34,14 @@ type CompanionSummary = {
 type CompanionCardProps = {
 	companion: CompanionSummary
 	onSelect: (id: string) => void
+	actions?: ReactNode
 }
 
-const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
+const CompanionCard = ({
+	companion,
+	onSelect,
+	actions,
+}: CompanionCardProps) => {
 	const { t } = useTranslation("settings")
 	const { t: tBots } = useTranslation("bots")
 	const modeCopy = tBots as (key: `approvals.mode.option.${string}`) => string
@@ -49,14 +61,19 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 			: (skills ?? applications)
 
 	return (
-		<li className="flex min-w-0">
+		<li className="relative flex min-w-0">
 			<button
 				className={CARD}
 				data-slot="companion-card"
 				onClick={() => onSelect(companion.id)}
 				type="button"
 			>
-				<span className="flex w-full min-w-0 items-center gap-3">
+				<span
+					className={cn(
+						"flex w-full min-w-0 items-center gap-3",
+						actions && HEAD_BESIDE_ACTIONS,
+					)}
+				>
 					<BotIdentityAvatar
 						hue={companion.blot}
 						className="shrink-0"
@@ -89,6 +106,11 @@ const CompanionCard = ({ companion, onSelect }: CompanionCardProps) => {
 					</span>
 				</span>
 			</button>
+			{actions ? (
+				<span className={CARD_ACTIONS} data-slot="companion-card-actions">
+					{actions}
+				</span>
+			) : null}
 		</li>
 	)
 }
@@ -147,4 +169,9 @@ const CompanionsSection = ({
 	)
 }
 
-export { type CompanionSummary, CompanionsSection, type CompanionsSectionProps }
+export {
+	CompanionCard,
+	type CompanionSummary,
+	CompanionsSection,
+	type CompanionsSectionProps,
+}

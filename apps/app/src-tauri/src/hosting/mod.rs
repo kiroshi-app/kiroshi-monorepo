@@ -5,10 +5,12 @@ pub mod commands;
 pub mod contract;
 mod devices;
 pub(crate) mod handover;
+mod keyed_calls;
 #[cfg(test)]
 mod member_socket;
 mod members;
 mod reach;
+mod refusals;
 pub(crate) mod relay;
 pub(crate) mod replay;
 pub mod roster;
@@ -19,7 +21,7 @@ pub(crate) mod wire;
 pub(crate) use members::MEMBERS_EVERY;
 
 use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use tauri::async_runtime::JoinHandle;
@@ -40,6 +42,7 @@ use crate::spaces::contract::SpaceError;
 use authorship::RelayedMembers;
 use bridge::LocalApi;
 use contract::{HostingChanged, HostingFailureKind, HostingState, SpaceMembers};
+use keyed_calls::KeyedCalls;
 use relay::Hosted;
 
 pub struct Hosting {
@@ -50,6 +53,7 @@ pub struct Hosting {
 	members_turn: tokio::sync::Mutex<()>,
 	members_every: Duration,
 	relayed: RelayedMembers,
+	keyed_calls: Arc<KeyedCalls>,
 }
 
 #[derive(Default)]
@@ -75,6 +79,7 @@ impl Hosting {
 			members_turn: tokio::sync::Mutex::new(()),
 			members_every: members::MEMBERS_EVERY,
 			relayed: RelayedMembers::default(),
+			keyed_calls: Arc::default(),
 		}
 	}
 

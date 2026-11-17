@@ -12,7 +12,15 @@ import {
 	withCodeLanguage,
 } from "@workspace/ui/components/library-document-blocks"
 import { GrowingField } from "@workspace/ui/components/library-document-view"
-import { MarkdownFence } from "@workspace/ui/components/markdown/code"
+import {
+	MarkdownFence,
+	MarkdownFenceLines,
+} from "@workspace/ui/components/markdown/code"
+import {
+	MarkdownRunContext,
+	type MarkdownRunRenderer,
+} from "@workspace/ui/components/markdown/run"
+import type { MarkdownRun } from "@workspace/ui/components/markdown/runs"
 import {
 	Popover,
 	PopoverContent,
@@ -21,12 +29,15 @@ import {
 import {
 	type CodeLanguage,
 	resolveCodeLanguage,
+	toCodeLines,
 } from "@workspace/ui/lib/code-highlight"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryCodeEditorProps = {
 	source: string
 	onEdit: SourceEdit
+	runs?: MarkdownRun[]
+	renderRun?: MarkdownRunRenderer
 }
 
 type LanguagePickerProps = {
@@ -50,6 +61,21 @@ const LANGUAGES: readonly CodeLanguage[] = [
 ]
 
 const BLOCK_POPUP = "library-document-block-popup"
+
+const NO_RUNS: MarkdownRun[] = []
+
+const bodyOffsetOf = (source: string, offset: number) =>
+	fenceOf(source.slice(0, offset)).body.length
+
+const bodyRunsOf = (source: string, runs: MarkdownRun[]) =>
+	runs.flatMap(({ id, start, end }) => {
+		const run = {
+			id,
+			start: bodyOffsetOf(source, start),
+			end: bodyOffsetOf(source, end),
+		}
+		return run.start < run.end ? [run] : []
+	})
 
 const STEPS: Readonly<Record<string, number>> = { ArrowDown: 1, ArrowUp: -1 }
 
@@ -176,10 +202,16 @@ const LanguagePicker = ({ chosen, onChoose }: LanguagePickerProps) => {
 	)
 }
 
-const LibraryCodeEditor = ({ source, onEdit }: LibraryCodeEditorProps) => {
+const LibraryCodeEditor = ({
+	source,
+	onEdit,
+	runs = NO_RUNS,
+	renderRun,
+}: LibraryCodeEditorProps) => {
 	const { t } = useTranslation("common")
 	const language = codeLanguageOf(source)
 	const { body } = fenceOf(source)
+	const bodyRuns = bodyRunsOf(source, runs)
 
 	return (
 		<MarkdownFence
@@ -191,6 +223,13 @@ const LibraryCodeEditor = ({ source, onEdit }: LibraryCodeEditorProps) => {
 					fieldClassName="w-full"
 					onChange={(event) =>
 						onEdit((current) => withCodeBody(current, event.target.value))
+					}
+					passages={
+						renderRun && bodyRuns.length > 0 ? (
+							<MarkdownRunContext value={renderRun}>
+								<MarkdownFenceLines lines={toCodeLines(body)} runs={bodyRuns} />
+							</MarkdownRunContext>
+						) : undefined
 					}
 					spellCheck={false}
 					value={body}

@@ -3,11 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	type ConversationController,
 	createConversationController,
+	NAMING_TIMEOUT_MS,
 } from "./conversation-controller"
+import {
+	type ConversationNamings,
+	createConversationNamings,
+} from "./conversation-namings"
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { KEPT_RUN_GRACE_MS } from "./kept-runs"
 import { readConversation } from "./read-conversation"
+import { RefusedWrite } from "./refused-write"
 import {
 	createScriptedDriver,
 	type ScriptedDriver,
@@ -116,9 +122,11 @@ type Harness = {
 	controller: ConversationController
 	conversation: Conversation
 	named: [string, ConversationNaming][]
+	namings: ConversationNamings
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
+	reportFailure: ReturnType<typeof vi.fn>
 }
 
 const settled = async () => {
@@ -202,7 +210,9 @@ const createHarness = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const named: [string, ConversationNaming][] = []
+	const namings = createConversationNamings()
 	let minted = 0
+	const reportFailure = vi.fn()
 	const controller = createConversationController(
 		withFakeHostWrites(driver, store),
 		store,
@@ -213,6 +223,8 @@ const createHarness = async (
 			},
 			now: () => minted,
 			onNamed: (conversationId, naming) => named.push([conversationId, naming]),
+			namings,
+			reportFailure,
 		},
 	)
 	const detach = controller.attach()
@@ -225,9 +237,11 @@ const createHarness = async (
 		controller,
 		conversation,
 		named,
+		namings,
 		detach,
 		settled,
 		refuseNextWrite,
+		reportFailure,
 	}
 }
 
@@ -1128,11 +1142,8 @@ describe("createConversationController", () => {
 			)
 		})
 
-		it("leaves the companion removed when the release fails", async () => {
+		it("leaves the companion removed and reports it when the release fails", async () => {
 			holdTheClock()
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			vi.spyOn(harness.driver, "shutdown").mockRejectedValue({
 				kind: "transitionInProgress",
 			})
@@ -1146,17 +1157,16 @@ describe("createConversationController", () => {
 				[null, `<@${nyx}> take the walls`],
 				[nyx, "walls are held"],
 			])
-			expect(reported).toHaveBeenCalledWith(
-				"conversation controller: agent_shutdown failed",
-				{ kind: "transitionInProgress" },
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					reason: { kind: "transitionInProgress" },
+					botId: nyx,
+				}),
 			)
-			reported.mockRestore()
 		})
 
 		it("releases the scopes left when one release rejects on shutdown", async () => {
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			const nyx = idOf(harness.conversation, "Nyx")
 			const iris = idOf(harness.conversation, "Iris")
 			await harness.controller.send("@Nyx then @Iris")
@@ -1174,7 +1184,10 @@ describe("createConversationController", () => {
 
 			expect(released).toEqual([iris])
 			expect(harness.controller.getState().latestError).toBeNull()
-			reported.mockRestore()
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ reason: new Error("refused"), botId: nyx }),
+			)
 		})
 
 		it("resumes the next turn of a companion from the session its closed scope stored", async () => {
@@ -1256,26 +1269,26 @@ describe("createConversationController", () => {
 	})
 
 	describe("a companion asking the reader", () => {
+		const ASK: AgentEvent = {
+			type: "questionRequested",
+			request: {
+				id: "ask-1",
+				questions: [
+					{
+						header: "Walls",
+						question: "Which wall?",
+						options: [],
+						multiSelect: false,
+					},
+				],
+			},
+		}
+
 		const askedIn = async (harness: Harness) => {
 			const nyx = idOf(harness.conversation, "Nyx")
 			await harness.controller.send("@Nyx hold the walls")
 			await harness.settled()
-			harness.driver.pushTo(nyx, [
-				{
-					type: "questionRequested",
-					request: {
-						id: "ask-1",
-						questions: [
-							{
-								header: "Walls",
-								question: "Which wall?",
-								options: [],
-								multiSelect: false,
-							},
-						],
-					},
-				},
-			])
+			harness.driver.pushTo(nyx, [ASK])
 			await harness.settled()
 			return nyx
 		}
@@ -1484,6 +1497,27 @@ describe("createConversationController", () => {
 			).toEqual([])
 		})
 
+		it("holds the unknown request a host names on the first answer to an ask, and sends a retry", async () => {
+			const nyx = await askedIn(harness)
+			const unknown = { kind: "unknownPermission", id: "ask-1" }
+			const answerQuestion = vi
+				.spyOn(harness.driver, "answerQuestion")
+				.mockRejectedValueOnce(unknown)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(harness.controller.getState().latestError).toMatchObject({
+				botId: nyx,
+				error: unknown,
+			})
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(answerQuestion).toHaveBeenCalledTimes(2)
+		})
+
 		it("releases the question and holds the failure when only the answer row is refused", async () => {
 			await askedIn(harness)
 			vi.spyOn(harness.store, "appendUserMessage").mockRejectedValue(
@@ -1499,6 +1533,20 @@ describe("createConversationController", () => {
 				kind: "readFailed",
 				detail: "refused",
 			})
+		})
+
+		it("sends one decision when the approval is decided twice before the first lands", async () => {
+			const nyx = await permittedIn(harness)
+
+			await Promise.all([
+				harness.controller.respond("let-1", "allowOnce"),
+				harness.controller.respond("let-1", "allowOnce"),
+			])
+			await harness.settled()
+
+			expect(harness.driver.decided).toEqual([
+				{ botId: nyx, id: "let-1", decision: "allowOnce" },
+			])
 		})
 
 		it("keeps the permission and holds the failure of the companion when its runtime rejects the decision", async () => {
@@ -1572,6 +1620,33 @@ describe("createConversationController", () => {
 			expect(harness.driver.submissions.at(-1)?.scope).toEqual(asking)
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 			expect(harness.driver.shutdowns).toEqual([])
+		})
+
+		it("sends one answer to an ask its companion repeats once a wave mate summons it again in the turn", async () => {
+			const nyx = idOf(harness.conversation, "Nyx")
+			const ada = idOf(harness.conversation, "Ada")
+			await harness.controller.send("@Ada and @Nyx hold the walls")
+			await harness.settled()
+			harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				ASK,
+				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+			])
+			await harness.settled()
+			harness.driver.pushTo(nyx, [ASK])
+			await harness.settled()
+
+			await harness.controller.answer("ask-1", { "Which wall?": "north" })
+			await harness.settled()
+			const shown = harness.controller.getState().pendingPrompt
+			await harness.controller.answer("ask-1", { "Which wall?": "north" })
+			await harness.settled()
+
+			expect(shown).toBeNull()
+			expect(harness.driver.answered).toEqual([
+				{ botId: nyx, id: "ask-1", answers: { "Which wall?": "north" } },
+			])
 		})
 
 		it("shuts the kept session down with the controller", async () => {
@@ -2176,6 +2251,23 @@ describe("naming a conversation from its first message", () => {
 	const namelessWith = (namingFor: () => Promise<ConversationNaming | null>) =>
 		createHarness(["Ada"], { title: "", namingFor })
 
+	const namelessAnsweredLater = async () => {
+		let answer: (naming: ConversationNaming | null) => void = () => undefined
+		const harness = await namelessWith(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		return {
+			harness,
+			answer: (naming: ConversationNaming | null) => answer(naming),
+		}
+	}
+
+	const namingOf = (harness: Harness) =>
+		harness.namings.getState()[harness.conversation.id]
+
 	it("keeps the title and the icon the runtime reads in the first message", async () => {
 		const harness = await namelessWith(() =>
 			Promise.resolve({ title: "Holding the walls", icon: "Shield" }),
@@ -2211,6 +2303,67 @@ describe("naming a conversation from its first message", () => {
 		await harness.settled()
 
 		expect(harness.named).toEqual([])
+	})
+
+	it("is pending while the runtime names it, then arrived with the title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+		expect(harness.named).toEqual([])
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+
+		expect(namingOf(harness)).toBe("arrived")
+		expect(harness.named).toEqual([
+			[harness.conversation.id, { title: "Holding the walls", icon: null }],
+		])
+	})
+
+	it.each([
+		{ answered: "no title", namingFor: () => Promise.resolve(null) },
+		{
+			answered: "an empty title",
+			namingFor: () => Promise.resolve({ title: "", icon: null }),
+		},
+		{
+			answered: "a refusal",
+			namingFor: () => Promise.reject(new Error("runtime gone")),
+		},
+	])(
+		"fails without a notice when the runtime answers $answered",
+		async ({ namingFor }) => {
+			const harness = await namelessWith(namingFor)
+
+			await harness.controller.send("how do we hold the walls?")
+			await harness.settled()
+
+			expect(namingOf(harness)).toBe("failed")
+			expect(harness.named).toEqual([])
+			expect(harness.reportFailure).not.toHaveBeenCalled()
+		},
+	)
+
+	it("fails once the runtime stays silent past the timeout, and drops a late title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+		holdTheClock()
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		vi.advanceTimersByTime(NAMING_TIMEOUT_MS - 1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+
+		vi.advanceTimersByTime(1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("failed")
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+		expect(harness.named).toEqual([])
+		expect(namingOf(harness)).toBe("failed")
 	})
 
 	it("leaves alone the name of a conversation that has one", async () => {
@@ -3006,6 +3159,42 @@ describe("a conversation landed away from its newest end", () => {
 		}
 	}
 
+	const refusingLatestOnceGated = () => {
+		const base = createFakeTranscriptStore()
+		let release: () => void = () => undefined
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let newestReads = 0
+		const store: TranscriptStore = {
+			...base,
+			loadPage: async (conversationId, cursor) => {
+				if (cursor) {
+					return base.loadPage(conversationId, cursor)
+				}
+				newestReads += 1
+				if (newestReads === 2) {
+					await gate
+					throw new Error("refused")
+				}
+				return base.loadPage(conversationId, null)
+			},
+		}
+		return { store, release }
+	}
+
+	const throwingOnFirstReadFailure = (controller: ConversationController) => {
+		let hasThrown = false
+		return () => {
+			const failure = controller.getState().latestError?.error
+			if (hasThrown || failure?.kind !== "readFailed") {
+				return
+			}
+			hasThrown = true
+			throw new Error("listener")
+		}
+	}
+
 	const refusingOlder = (): TranscriptStore => {
 		const base = createFakeTranscriptStore()
 		return {
@@ -3152,6 +3341,42 @@ describe("a conversation landed away from its newest end", () => {
 		)
 		detach()
 	})
+	it("sends one answer when the card is answered twice while the newest page loads", async () => {
+		const { store, release } = gatingLatest()
+		const { controller, detach, driver } = await askedOn(store)
+
+		const first = controller.answer("ask-1", { "Which wall?": "the north" })
+		const second = controller.answer("ask-1", { "Which wall?": "the north" })
+		release()
+		await Promise.all([first, second])
+		await settled()
+
+		expect(driver.answered).toHaveLength(1)
+		detach()
+	})
+
+	it("drops the answer sent beside one in flight, then takes a new one once the first threw", async () => {
+		const { store, release } = refusingLatestOnceGated()
+		const { controller, detach, driver } = await askedOn(store)
+		const stop = controller.subscribe(throwingOnFirstReadFailure(controller))
+
+		const first = controller.answer("ask-1", { "Which wall?": "the north" })
+		const second = controller.answer("ask-1", { "Which wall?": "the north" })
+		release()
+		await expect(first).rejects.toThrow("listener")
+		await second
+		await settled()
+		stop()
+
+		expect(driver.answered).toEqual([])
+
+		await controller.answer("ask-1", { "Which wall?": "the north" })
+		await settled()
+
+		expect(driver.answered).toHaveLength(1)
+		detach()
+	})
+
 	it("writes no answer when the reader moved on before the newest page came", async () => {
 		const { store, release } = gatingLatest()
 		const { controller, conversation, detach, driver } = await askedOn(store)
@@ -3577,6 +3802,7 @@ describe("the mentions a finished turn carries", () => {
 		title: string,
 		description: string,
 		companion?: DroppedCompanion,
+		reason?: TransportError,
 	) => [
 		{ title, description },
 		{
@@ -3584,6 +3810,7 @@ describe("the mentions a finished turn carries", () => {
 			turn: expect.any(String),
 			space: SPACE,
 			...companion,
+			reason,
 		},
 	]
 
@@ -3803,6 +4030,7 @@ describe("the mentions a finished turn carries", () => {
 				"Iris didn’t start",
 				"Couldn’t start Iris (no binary). Restart the session.",
 				{ botId: room.iris, botName: "Iris" },
+				{ kind: "spawnFailed", detail: "no binary" },
 			),
 		)
 		room.detach()
@@ -4107,5 +4335,113 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		expect(room.stopDrops).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("a send whose answer the relay refused", () => {
+	type HostAnswer = "accepted" | "recorded" | "unrecorded"
+
+	const refusingRoom = async () => {
+		const base = createFakeTranscriptStore()
+		let answer: HostAnswer = "accepted"
+		const store: TranscriptStore = {
+			...base,
+			sendUserMessage: async (sent, summoned) => {
+				if (answer === "accepted") {
+					return base.sendUserMessage(sent, summoned)
+				}
+				if (answer === "recorded") {
+					await base.sendUserMessage(sent, summoned)
+				}
+				throw new RefusedWrite(
+					"conversation_send_user_message",
+					undefined,
+					new Error("relay closed"),
+				)
+			},
+		}
+		const bots = await seatBots(store, SPACE, ["Nyx"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		let replay: () => void = () => undefined
+		const driver = createScriptedDriver()
+		const controller = createConversationController(
+			withFakeHostWrites(driver, store),
+			store,
+			{
+				onReconnected: (listener) => {
+					replay = listener
+					return () => undefined
+				},
+			},
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await settled()
+
+		const sent = async (text: string, hostAnswer: HostAnswer) => {
+			answer = hostAnswer
+			await controller.send(text)
+			await settled()
+			answer = "accepted"
+		}
+		const replayed = async () => {
+			replay()
+			await settled()
+		}
+		return {
+			controller,
+			driver,
+			nyx: idOf(conversation, "Nyx"),
+			sent,
+			replayed,
+			detach,
+		}
+	}
+
+	it("shows the message the replay brings back once, as sent, and starts its agent", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([
+			[null, `<@${room.nyx}> hold the line`],
+		])
+		expect(room.controller.getState().refusedMessage).toBeNull()
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("starts nothing and offers each summoned agent its retry when the replay lands during a turn", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx take the walls", "accepted")
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		const state = room.controller.getState()
+		expect(state.refusedMessage).toBeNull()
+		expect(state.failedBotIds).toEqual([room.nyx])
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("keeps the message refused, with its retry, when the replay does not bring it back", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "unrecorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([])
+		expect(room.controller.getState().refusedMessage).toMatchObject({
+			text: "@Nyx hold the line",
+		})
+		expect(submittedIn(room)).toEqual([])
+		room.detach()
 	})
 })

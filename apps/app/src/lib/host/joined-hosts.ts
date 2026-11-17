@@ -76,8 +76,12 @@ export const createJoinedHosts = ({
 		})
 	}
 
+	const reportHostFailure = (reason: unknown) => {
+		reportFailure({ message: describeFailure(reason), reason })
+	}
+
 	const reportListenFailure = (reason: unknown): UnlistenFn => {
-		reportFailure({ message: describeFailure(reason) })
+		reportHostFailure(reason)
 		return () => undefined
 	}
 
@@ -99,6 +103,7 @@ export const createJoinedHosts = ({
 		local,
 		record,
 		reportListenFailure,
+		reportCatchUpFailure: reportHostFailure,
 	})
 	const { openConnection, invokeOnceOpen } = createJoinedHostsJoin({
 		store,
@@ -192,6 +197,7 @@ export const createJoinedHosts = ({
 		listen,
 		listenToActiveHost,
 		onReconnected: down.onReconnected,
+		onReconnectedFirst: down.onReconnectedFirst,
 		fileSrc,
 	}
 }

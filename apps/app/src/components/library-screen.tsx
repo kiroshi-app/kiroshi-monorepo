@@ -43,8 +43,14 @@ import {
 	useJoinedLibraryActions,
 	useLibraryActions,
 } from "@/lib/library/use-library-actions"
+import {
+	type LibraryCommentPeople,
+	useLibraryCommentPeople,
+} from "@/lib/library/use-library-comment-people"
+import { useLibraryDocumentComments } from "@/lib/library/use-library-document-comments"
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
+import { useLibraryImageComments } from "@/lib/library/use-library-image-comments"
 import {
 	useLibraryImageResolver,
 	useLibraryImageSources,
@@ -67,11 +73,11 @@ export type LibraryScreenProps = {
 	spaceId: string
 	isJoined: boolean
 	bots: Bot[]
+	viewerName: string
 	spaceTint?: Space["colour"]
 	opening?: LibraryOpening
 	onOpeningChange: (opening: LibraryOpening | undefined) => void
 	onOpenInNewTab?: (opening: LibraryOpening) => void
-	onOpenBoard: (opening: LibraryOpening) => void
 	onCloseTab?: () => void
 }
 
@@ -99,18 +105,6 @@ const openingOfItem = ({ id, kind }: KindedItem): LibraryOpening => ({
 	kind,
 	name: id,
 })
-
-type Openers = {
-	inPlace: (opening: LibraryOpening) => void
-	inItsTab: (opening: LibraryOpening) => void
-}
-
-const openerOf =
-	({ inPlace, inItsTab }: Openers) =>
-	(item: KindedItem) => {
-		const opening = openingOfItem(item)
-		return opening.kind === "board" ? inItsTab(opening) : inPlace(opening)
-	}
 
 const documentOpeningOf = ({ name, title }: DocumentDraft): LibraryOpening => ({
 	kind: "document",
@@ -269,6 +263,7 @@ type LibraryOpeningStateProps = {
 	spaceId: string
 	isJoined: boolean
 	bots: Bot[]
+	commentPeople: LibraryCommentPeople
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
 	isMissing: boolean
@@ -284,6 +279,7 @@ type LibraryBoardOpeningProps = Pick<
 	| "spaceId"
 	| "isJoined"
 	| "bots"
+	| "commentPeople"
 	| "opening"
 	| "boardSummary"
 	| "onBackToLibrary"
@@ -294,6 +290,7 @@ const LibraryBoardOpening = ({
 	spaceId,
 	isJoined,
 	bots,
+	commentPeople,
 	opening: { name },
 	boardSummary,
 	onBackToLibrary,
@@ -301,6 +298,7 @@ const LibraryBoardOpening = ({
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
 		bots={bots}
+		commentPeople={commentPeople}
 		isJoined={isJoined}
 		key={name}
 		name={name}
@@ -378,11 +376,11 @@ export const LibraryScreen = ({
 	spaceId,
 	isJoined,
 	bots,
+	viewerName,
 	spaceTint,
 	opening,
 	onOpeningChange,
 	onOpenInNewTab,
-	onOpenBoard,
 	onCloseTab,
 }: LibraryScreenProps) => {
 	const library = useLibraryItems(spaceId)
@@ -446,6 +444,13 @@ export const LibraryScreen = ({
 		title: shownTitleOf(openedDocument?.title ?? ""),
 	})
 	const { stopAll, stop } = useStopLibraryWriters(spaceId)
+	const commentPeople = useLibraryCommentPeople({ spaceId, bots, viewerName })
+	const documentComments = useLibraryDocumentComments({
+		spaceId,
+		name: openedDocument?.name,
+		hasOpened: document !== null,
+		people: commentPeople,
+	})
 	const { isMissing, notifiedMissing, hasFailedToRead, isAwaited } =
 		openingStatusOf({
 			opening,
@@ -468,6 +473,11 @@ export const LibraryScreen = ({
 		(item): item is ShownImage => item.kind === "image",
 	)
 	const imageIndex = images.findIndex(isOpenedBy(opening))
+	const imageComments = useLibraryImageComments({
+		spaceId,
+		name: images[imageIndex]?.id,
+		people: commentPeople,
+	})
 
 	const close = () => {
 		setHeldDraft(null)
@@ -479,9 +489,9 @@ export const LibraryScreen = ({
 			onOpeningChange(openingOfItem(image))
 		}
 	}
-	const openItem = openerOf({ inPlace: onOpeningChange, inItsTab: onOpenBoard })
+	const openItem = (item: KindedItem) => onOpeningChange(openingOfItem(item))
 	const newBoard = () =>
-		createBoard((name) => onOpenBoard({ kind: "board", name }))
+		createBoard((name) => onOpeningChange({ kind: "board", name }))
 	const openInNewTab =
 		onOpenInNewTab &&
 		((item: KindedItem) => onOpenInNewTab(openingOfItem(item)))
@@ -554,6 +564,7 @@ export const LibraryScreen = ({
 		const openedItem = { id: openedDocument.name, kind: "document" } as const
 		return (
 			<LibraryDocumentEditor
+				{...documentComments}
 				body={document.markdown}
 				detail={openedDocument.detail}
 				format={documentFormatOf(openedDocument.name)}
@@ -592,6 +603,7 @@ export const LibraryScreen = ({
 			<LibraryOpeningState
 				boardSummary={openedBoard.summary}
 				bots={bots}
+				commentPeople={commentPeople}
 				hasFailedToRead={hasFailedToRead}
 				isJoined={isJoined}
 				isMissing={isMissing}
@@ -626,6 +638,7 @@ export const LibraryScreen = ({
 			overlay={
 				<>
 					<LibraryLightbox
+						{...imageComments}
 						count={images.length}
 						image={images[imageIndex] ?? null}
 						onClose={close}

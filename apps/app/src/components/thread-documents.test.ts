@@ -9,7 +9,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { createElement, useContext, useState } from "react"
+import { createElement, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as Y from "yjs"
 
@@ -26,7 +26,6 @@ import {
 	ThreadBoardPanel,
 	ThreadDocumentPanel,
 	ThreadDocumentsContext,
-	ThreadDocumentsInTabs,
 	ThreadOpenedItemPanel,
 } from "@/components/thread-documents"
 import { ThreadTurn } from "@/components/thread-turn"
@@ -83,11 +82,11 @@ vi.mock("@/lib/host/tauri", async (importOriginal) => ({
 	convertFileSrc: (path: string) => `asset://${path}`,
 }))
 
-const openInItsTab = vi.hoisted(() => vi.fn())
+const openInLibrary = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/navigation/use-open-library-document", () => ({
 	useOpenLibraryDocument: () => () => undefined,
-	useOpenLibraryItemInItsTab: () => openInItsTab,
+	useOpenLibraryItem: () => openInLibrary,
 }))
 
 const measuredRoom = vi.hoisted(() => ({ width: null as number | null }))
@@ -484,7 +483,7 @@ describe("a board opened beside a conversation", () => {
 		cleanup()
 		libraryHost.answers.clear()
 		localStorage.clear()
-		openInItsTab.mockClear()
+		openInLibrary.mockClear()
 	})
 
 	it.each([
@@ -532,7 +531,7 @@ describe("a board opened beside a conversation", () => {
 		).toBeTruthy()
 	})
 
-	it("closes the panel and shows the board in its own tab on Open in Library", () => {
+	it("shows the board in the Library on Open in Library, the panel left to the navigation", () => {
 		const close = vi.fn()
 		renderLaunchBoardPanel(close)
 
@@ -542,8 +541,8 @@ describe("a board opened beside a conversation", () => {
 			}),
 		)
 
-		expect(close).toHaveBeenCalledOnce()
-		expect(openInItsTab).toHaveBeenCalledWith({
+		expect(close).not.toHaveBeenCalled()
+		expect(openInLibrary).toHaveBeenCalledExactlyOnceWith({
 			kind: "board",
 			name: LAUNCH_BOARD,
 		})
@@ -1072,50 +1071,5 @@ describe("the body of a document saved from beside a conversation", () => {
 		await waitFor(() =>
 			expect(textSavedTo(PLAN)).toMatch(markdownWithIds("Rollout ^ID")),
 		)
-	})
-})
-
-describe("a document opened from the Home conversation", () => {
-	afterEach(cleanup)
-
-	const BriefOpener = () => {
-		const documents = useContext(ThreadDocumentsContext)
-		return createElement(
-			"button",
-			{
-				type: "button",
-				onClick: () => documents?.open({ kind: "document", name: "brief" }),
-			},
-			"Open brief",
-		)
-	}
-
-	it("opens in its Library tab instead of beside the conversation", () => {
-		openInItsTab.mockClear()
-		const openBeside = vi.fn()
-		render(
-			createElement(
-				ThreadDocumentsContext,
-				{
-					value: {
-						spaceId: "personal",
-						isJoined: false,
-						opened: null,
-						open: openBeside,
-						close: () => undefined,
-						boardOf: () => undefined,
-					},
-				},
-				createElement(ThreadDocumentsInTabs, null, createElement(BriefOpener)),
-			),
-		)
-
-		fireEvent.click(screen.getByRole("button", { name: "Open brief" }))
-
-		expect(openInItsTab).toHaveBeenCalledWith({
-			kind: "document",
-			name: "brief",
-		})
-		expect(openBeside).not.toHaveBeenCalled()
 	})
 })

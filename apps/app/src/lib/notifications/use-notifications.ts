@@ -11,6 +11,7 @@ import { failureReporterIn } from "../failure-report"
 import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
+import type { ConversationNamings } from "../conversations/conversation-namings"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { SpokenWords } from "../conversations/spoken-words"
 import { missionsTransport } from "../missions/missions-transport"
@@ -29,6 +30,7 @@ export type NotificationsMount = {
 	conversations: ConversationTabOpening
 	missions: OpenedMissionController
 	spokenWords: SpokenWords
+	namings: ConversationNamings
 	user: UserController
 	isDriverWindow: boolean
 }
@@ -42,6 +44,7 @@ export const useNotifications = ({
 	conversations,
 	missions,
 	spokenWords,
+	namings,
 	user,
 	isDriverWindow,
 }: NotificationsMount) => {
@@ -69,6 +72,7 @@ export const useNotifications = ({
 			...landing,
 			runtimes,
 			spokenWords,
+			namings: namings.getState,
 			switches: () => user.getState().preferences,
 			hasFocus: () => document.hasFocus(),
 			watchFocus: watchWindowFocus,
@@ -83,6 +87,7 @@ export const useNotifications = ({
 		conversations,
 		missions,
 		spokenWords,
+		namings,
 		user,
 		isDriverWindow,
 	])

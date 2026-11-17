@@ -5,6 +5,7 @@ import {
 	fn,
 	screen,
 	userEvent,
+	waitFor,
 	within,
 } from "storybook/test"
 
@@ -13,16 +14,24 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	colourTransitionsOf,
 	expectAnswered,
+	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTitleSwappedIn,
+	expectTooltipOnOneLine,
+	expectTooltipPastTheSidebarEdge,
+	expectTooltipWrappedWhole,
 	glyphIn,
 	isInBrowserRunner,
+	openTooltipOf,
 	pictureOf,
 	realPointer,
+	rightClick,
 	SidebarFrame,
 	shown,
 	slotIn,
 	slotsIn,
+	TitleArrival,
 	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 	withMotionAllowed,
@@ -42,10 +51,15 @@ import {
 	ROW_ICON_SIDE,
 } from "@workspace/ui/components/app-sidebar-conversation-row"
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
+import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
+import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
+import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Sidebar,
 	SidebarContent,
@@ -88,7 +102,10 @@ const meta = preview.meta({
 					</SidebarMenu>
 				</IconRailFrame>
 			) : (
-				<SidebarFrame width={parameters.sidebarWidth}>
+				<SidebarFrame
+					isCollapsed={parameters.isSidebarCollapsed}
+					width={parameters.sidebarWidth}
+				>
 					<SidebarMenu>
 						<Story />
 					</SidebarMenu>
@@ -950,7 +967,7 @@ const missionGroupHoveredStory = (globals?: typeof DARK) => ({
 		) as HTMLElement
 		await withMotionAllowed(async () => {
 			await hoverMissionGroup(row)
-			await expectOneMissionSurface(row, TRANSPARENT)
+			await expectOneMissionSurface(row, missionGroupFillOf(row))
 			await hoverMissionGroup(row, lastMission)
 			await hoverMissionGroup(missionFreeRow)
 		})
@@ -989,6 +1006,84 @@ const missionGroupActiveStory = (globals?: typeof DARK) => ({
 export const MissionGroupActive = meta.story(missionGroupActiveStory())
 
 export const MissionGroupActiveDark = meta.story(missionGroupActiveStory(DARK))
+
+const AT_REST_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "at-rest",
+	name: "At rest",
+}
+
+const HOVERED_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "hovered",
+	name: "Hovered",
+}
+
+const ACTIVE_ROOM: AppSidebarConversation = {
+	...DESK_ROOM,
+	id: "active",
+	name: "Active",
+}
+
+const renderCompactRowStates = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<CompactRowsContext.Provider value>
+		{[AT_REST_ROOM, HOVERED_ROOM, ACTIVE_ROOM].map((conversation) => (
+			<ConversationRosterRow
+				{...args}
+				conversation={conversation}
+				isSelected={conversation === ACTIVE_ROOM}
+				key={conversation.id}
+			/>
+		))}
+	</CompactRowsContext.Provider>
+)
+
+const compactRowStatesStory = (globals?: typeof DARK) => ({
+	globals,
+	render: renderCompactRowStates,
+	parameters: {
+		pseudo: { hover: 'li:nth-child(2) [data-slot="sidebar-menu-button"]' },
+		docs: {
+			description: {
+				story:
+					"Three conversations without a colour as the expanded sidebar lists them: one at rest, one under the pointer, one open. Check the name and the glyph sit in `--muted-foreground` at rest and in `--sidebar-foreground` under the pointer and on the open row, that the colour switches with no fade, and that the timestamp keeps `--sidebar-muted-foreground` on all three.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const [atRest, hovered, active] = rowsIn(canvasElement)
+		const timestampInk = tokenStyleIn(
+			atRest,
+			"text-sidebar-muted-foreground",
+			"color",
+		)
+
+		await expect(active).toHaveAttribute("aria-current", "page")
+		await expectMutedUntilHoveredOrActive({
+			states: { atRest, hovered, active },
+			inkedPartsOf: (row) => [
+				slotIn(row, "roster-row-name"),
+				slotIn(row, "conversation-subject-icon-pictogram"),
+			],
+			steadyPartsOf: (row) => [slotIn(row, "roster-row-timestamp")],
+			fullInk: "text-sidebar-foreground",
+		})
+		for (const row of [atRest, hovered, active])
+			await expect(
+				getComputedStyle(slotIn(row, "roster-row-timestamp")).color,
+			).toBe(timestampInk)
+	},
+})
+
+export const CompactRowAtRestHoveredAndActive = meta.story(
+	compactRowStatesStory(),
+)
+
+export const CompactRowAtRestHoveredAndActiveDark = meta.story(
+	compactRowStatesStory(DARK),
+)
 
 const missionGroupMenuOpenStory = (globals?: typeof DARK) => ({
 	globals,
@@ -1336,4 +1431,512 @@ export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 	},
 	play: ({ canvasElement }) =>
 		expectLongQuestionBesideAWholePile(canvasElement),
+})
+
+const LONG_TITLE =
+	"Launch readiness review with the platform, design and support teams before the autumn release"
+
+const LONG_TITLED_ROOM: AppSidebarConversation = {
+	...roomOf(FIVE_BOTS),
+	name: LONG_TITLE,
+}
+
+const renderWithRoomAboveTheRow = (
+	args: ComponentProps<typeof ConversationRosterRow>,
+) => (
+	<>
+		<li aria-hidden="true" className="h-40" />
+		<ConversationRosterRow {...args} />
+	</>
+)
+
+export const TooltipCarriesTheTitleAlone = meta.story({
+	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the expanded sidebar whose title the row cuts, with five agents seated and a last message. Check the tooltip holds the whole title and nothing else, no agents, no message and no date, that a title wider than the bubble wraps onto more lines inside it and never ends in an ellipsis, that the row keeps its own ellipsis, that the tooltip sits just past the sidebar edge and centred on the row, and that the row gains no description repeating its name. Pick `TooltipWrapsALongTitleOnTheIconRail` for the collapsed sidebar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const name = slotIn(row, "roster-row-name")
+		const tooltip = await openTooltipOf(row)
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).not.toHaveAttribute("aria-label")
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const TooltipWrapsALongTitleOnTheIconRail = meta.story({
+	args: { conversation: LONG_TITLED_ROOM },
+	render: renderWithRoomAboveTheRow,
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar whose title is wider than the bubble. Check the tooltip holds the whole title, wrapped onto more lines inside the bubble with no ellipsis, and that it sits just past the rail edge and centred on the tile. Pick `TooltipCarriesTheTitleAlone` for the expanded sidebar.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expectTooltipWrappedWhole(tooltip, LONG_TITLE)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(LONG_TITLE)
+	},
+})
+
+export const TooltipOnTheIconRail = meta.story({
+	parameters: {
+		isOnIconRail: true,
+		docs: {
+			description: {
+				story:
+					"The pointer resting on a conversation of the collapsed sidebar. Check the tooltip is the one the expanded sidebar shows, the conversation title alone on one line, that it sits just past the rail edge and centred on the tile, and that the tile keeps the conversation name as its accessible name with no description.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const tooltip = await openTooltipOf(row)
+
+		await expect(tooltip.textContent).toBe(DESK_ROOM.name)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(row, tooltip)
+		await expect(row).toHaveAccessibleName(DESK_ROOM.name)
+		await expect(row).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+const [WAITING_MISSION] = MISSIONS_ROOM.missions ?? []
+
+const missionTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { conversation: MISSIONS_ROOM },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on a mission under its conversation, in the ${isSidebarCollapsed ? "collapsed" : "expanded"} sidebar. Check the tooltip holds the mission title on one line and nothing else, without the ticket identifier or the state, that it sits just past the sidebar edge and centred on the mission, and that the mission gains no description.`,
+			},
+		},
+	},
+	render: (args: ComponentProps<typeof ConversationRosterRow>) => (
+		<CompactRowsContext.Provider value>
+			<ConversationRosterRow {...args} />
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const mission = slotIn(canvasElement, "mission-capsule")
+		const tooltip = await openTooltipOf(mission)
+
+		await expect(mission).toHaveTextContent(WAITING_MISSION.ticket.externalId)
+		await expect(tooltip.textContent).toBe(WAITING_MISSION.ticket.title)
+		await expectTooltipOnOneLine(tooltip)
+		await expectTooltipPastTheSidebarEdge(mission, tooltip)
+		await expect(mission).not.toHaveAttribute("aria-describedby")
+	},
+})
+
+export const MissionTooltipCarriesTheTitleAlone = meta.story(
+	missionTooltipStory(false),
+)
+
+export const MissionTooltipOnTheCollapsedSidebar = meta.story(
+	missionTooltipStory(true),
+)
+
+const LONG_MISSION_TITLE =
+	"Ship the release notes with every migration step spelled out for the reader, then check each link against the published changelog"
+
+const LONG_TITLED_MISSION_ROOM: AppSidebarConversation = {
+	...MISSIONS_ROOM,
+	missions: [
+		{
+			...WAITING_MISSION,
+			ticket: { ...WAITING_MISSION.ticket, title: LONG_MISSION_TITLE },
+		},
+	],
+}
+
+const longMissionTooltipStory = (isSidebarCollapsed: boolean) => ({
+	args: { conversation: LONG_TITLED_MISSION_ROOM },
+	parameters: {
+		isSidebarCollapsed,
+		docs: {
+			description: {
+				story: `The pointer resting on a mission whose title the row cuts, in the ${isSidebarCollapsed ? "collapsed" : "expanded"} sidebar. Check the tooltip holds the whole mission title, wrapped onto more lines inside the bubble with no ellipsis, that the mission row keeps its own ellipsis, and that the tooltip sits just past the sidebar edge and centred on the mission.`,
+			},
+		},
+	},
+	render: missionTooltipStory(isSidebarCollapsed).render,
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const mission = slotIn(canvasElement, "mission-capsule")
+		const title = slotIn(mission, "mission-capsule-title")
+		const tooltip = await openTooltipOf(mission)
+
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expectTooltipWrappedWhole(tooltip, LONG_MISSION_TITLE)
+		await expectTooltipPastTheSidebarEdge(mission, tooltip)
+	},
+})
+
+export const MissionTooltipWrapsALongTitle = meta.story(
+	longMissionTooltipStory(false),
+)
+
+export const MissionTooltipWrapsALongTitleOnTheCollapsedSidebar = meta.story(
+	longMissionTooltipStory(true),
+)
+
+export const TooltipClosesWhileTheRowMenuIsOpen = meta.story({
+	tags: ["test-only"],
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		await openTooltipOf(row)
+
+		rightClick(row)
+		await screen.findByRole("menu", {
+			name: `Actions for ${DESK_ROOM.name}`,
+		})
+
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+	},
+})
+
+export const NoTooltipWhileTheRowIsLifted = meta.story({
+	tags: ["test-only"],
+	args: { isLifted: true },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+
+		await expect(row).toHaveAttribute("data-trigger-disabled")
+		await userEvent.tab()
+		await expect(row).toHaveFocus()
+		await expect(screen.queryByRole("tooltip")).toBeNull()
+	},
+})
+
+const WAITING_MISSION_ENTRIES = [
+	"Open mission",
+	"Copy",
+	"Answer the question",
+	"Close",
+]
+
+const CONVERSATION_ENTRIES = [
+	"Unpin",
+	"Open in a new tab",
+	"Open settings",
+	"Delete",
+]
+
+const menuOnAWaitingMission: MissionTreeRowWrap = (row) => (
+	<MissionMenu
+		hasBranch
+		hasPullRequest={false}
+		hasWorkspacePath
+		onAnswer={fn()}
+		onClose={fn()}
+		onCopy={fn()}
+		onMessageAgent={fn()}
+		onOpen={fn()}
+		onOpenPullRequest={fn()}
+		onReopen={fn()}
+		onStopAgent={fn()}
+		state="waiting_human"
+	>
+		{row}
+	</MissionMenu>
+)
+
+const entriesOf = (menu: HTMLElement) =>
+	within(menu)
+		.getAllByRole("menuitem")
+		.map((item) => item.textContent)
+
+const closeMenu = async () => {
+	await userEvent.keyboard("{Escape}")
+	await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+}
+
+const missionMenuStory = {
+	render: missionTooltipStory(false).render,
+	args: {
+		conversation: MISSIONS_ROOM,
+		wrapMission: menuOnAWaitingMission,
+		onOpenMission: fn(),
+		onOpenInNewTab: fn(),
+		onUnpin: fn(),
+		onOpenSettings: fn(),
+		onDelete: fn(),
+	},
+}
+
+export const MissionRowOpensTheMissionMenu = meta.story({
+	...missionMenuStory,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A mission under its conversation in the expanded sidebar, right clicked. Check the menu that opens is the mission menu, with the entries of a mission waiting on the person, that no conversation entry is drawn, Delete least of all, that the conversation row above keeps its resting look while the mission menu is open, and that a plain click on the mission still opens it.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const surface = surfaceOf(rowIn(canvasElement))
+		const mission = slotIn(canvasElement, "mission-capsule")
+		rightClick(mission)
+		const menu = await shown(
+			await screen.findByRole("menu", { name: "Mission actions" }),
+		)
+
+		await expect(entriesOf(menu)).toEqual(WAITING_MISSION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([menu])
+		await expect(surface).not.toHaveAttribute("data-popup-open")
+		await closeMenu()
+		await userEvent.click(mission)
+		await expect(args.onOpenMission).toHaveBeenCalledWith(WAITING_MISSION.id)
+	},
+})
+
+export const ConversationTitleKeepsTheConversationMenu = meta.story({
+	...missionMenuStory,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The title of a conversation that carries missions, right clicked. Check the menu that opens is the conversation menu with Unpin, Open in a new tab, Open settings and Delete, and that no mission menu opens beside it.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(rowIn(canvasElement), "roster-row-name"))
+		const menu = await shown(
+			await screen.findByRole("menu", {
+				name: `Actions for ${MISSIONS_ROOM.name}`,
+			}),
+		)
+
+		await expect(entriesOf(menu)).toEqual(CONVERSATION_ENTRIES)
+		await expect(screen.getAllByRole("menu")).toEqual([menu])
+		await closeMenu()
+	},
+})
+
+export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
+	...missionMenuStory,
+	tags: ["test-only"],
+	args: { ...missionMenuStory.args, wrapMission: undefined },
+	play: async ({ canvasElement }) => {
+		rightClick(slotIn(canvasElement, "mission-capsule"))
+		await new Promise(requestAnimationFrame)
+		await new Promise(requestAnimationFrame)
+
+		await expect(surfaceOf(rowIn(canvasElement))).not.toHaveAttribute(
+			"data-popup-open",
+		)
+		await expect(screen.queryByRole("menu")).toBeNull()
+	},
+})
+
+const namingRoomOf = (naming: ConversationNaming): AppSidebarConversation => ({
+	...DESK_ROOM,
+	color: BLOT_HUES.red,
+	icon: "Rocket",
+	naming,
+})
+
+const namedLabelIn = (row: HTMLElement) =>
+	slotIn(slotIn(row, "roster-row-name"), "text-swap")
+
+export const NamingPending = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("pending") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while a new conversation waits for its generated title, as artboard B2 draws its row. Check that the name reads New conversation in a shimmer, that the icon is the untinted message square, filled, in `--muted-foreground` whatever hue and icon the room carries, and that the preview, the agents and the time stay as they are. Pick `NamingPendingSwapsToATitle` for the moment the title lands.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+		const shimmer = slotIn(namedLabelIn(row), "shimmer-text")
+
+		await expect(row).toHaveAccessibleName(/New conversation/)
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(icon).toHaveAttribute("data-hue", "")
+		await expect(icon.style.color).toBe("var(--muted-foreground)")
+		await expect(getComputedStyle(shimmer).animationName).toBe("none")
+		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+			DESK_ROOM.timestamp ?? "",
+		)
+	},
+})
+
+export const NamingArrived = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("arrived") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the generated title has landed, as artboard B3 draws its row. Check that the name is the title in `--foreground` at the pending size and weight, with no shimmer, and that the icon is the room's own in its hue. Pick `NamingFailed` when no title came back.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+
+		await expect(row).toHaveAccessibleName(new RegExp(DESK_ROOM.name))
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(namedLabelIn(row)).color).toBe(
+			tokenStyleIn(namedLabelIn(row), "text-foreground", "color"),
+		)
+		await expect(slotIn(row, "conversation-subject-icon")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.red),
+		)
+	},
+})
+
+export const NamingFailed = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("failed") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the title generator gave nothing back, as artboard B4 draws its row. Check that the name reads Untitled conversation in `--foreground` and that the icon is the default untinted message square, as for a room with no icon or colour. Pick `NamingArrived` for a title that landed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+
+		await expect(row).toHaveAccessibleName(/Untitled conversation/)
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(0)
+		await expect(icon).toHaveAttribute("data-hue", "")
+		await expect(icon.style.color).toBe("var(--conversation-icon-foreground)")
+	},
+})
+
+export const NamingPendingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to watch a pending row name give way to the generated title: press Title arrives. Check that New conversation leaves upward with a blur and the title rises in from below, that only opacity, blur and transform move, and that the row keeps its height and its ellipsis. Pick `NamingPending` for the waiting state alone.",
+			},
+		},
+	},
+	render: (args) => (
+		<TitleArrival>
+			{(naming, arrive) => (
+				<>
+					<ConversationRosterRow
+						{...args}
+						conversation={namingRoomOf(naming)}
+					/>
+					<li className="p-2">
+						<Button onClick={arrive} variant="outline">
+							Title arrives
+						</Button>
+					</li>
+				</>
+			)}
+		</TitleArrival>
+	),
+	play: async ({ canvasElement }) =>
+		expectTitleSwappedIn({
+			host: rowIn(canvasElement),
+			arrive: within(canvasElement).getByRole("button", {
+				name: "Title arrives",
+			}),
+			title: DESK_ROOM.name,
+		}),
+})
+
+export const NamingPendingLight = meta.story({
+	args: { conversation: namingRoomOf("pending") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending row of `NamingPending` in the light theme. Check that the name and the message square both sit in the light `--muted-foreground`, on the light untinted hexagon. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+		const shimmer = slotIn(namedLabelIn(row), "shimmer-text")
+		const muted = tokenStyleIn(row, "text-muted-foreground", "color")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(getComputedStyle(icon).color).toBe(muted)
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
+	},
+})
+
+export const CompactWorkingRowNamingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the usual new conversation in the compact sidebar: an agent is already working while the title is generated. Press Title arrives. Check that the row reads New conversation in a shimmer, that the title then swaps in through the same exit up and entrance from below, still shimmering while the agent works, and that assistive tech still hears working. Pick `NamingPendingSwapsToATitle` for the default density.",
+			},
+		},
+	},
+	render: (args) => (
+		<CompactRowsContext.Provider value>
+			<TitleArrival>
+				{(naming, arrive) => (
+					<>
+						<ConversationRosterRow
+							{...args}
+							conversation={namingRoomOf(naming)}
+						/>
+						<li className="p-2">
+							<Button onClick={arrive} variant="outline">
+								Title arrives
+							</Button>
+						</li>
+					</>
+				)}
+			</TitleArrival>
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const title = slotIn(row, "roster-row-name")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
+
+		await expectTitleSwappedIn({
+			host: row,
+			arrive: within(canvasElement).getByRole("button", {
+				name: "Title arrives",
+			}),
+			title: DESK_ROOM.name,
+		})
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
+	},
 })

@@ -3,7 +3,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { exitDetailOf } from "./onboarding-failure"
 
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { createStore } from "../store"
 import type {
 	ClaudeImportOutcome,
@@ -51,7 +51,7 @@ export type ClaudeImportController = {
 }
 
 export type ClaudeImportOptions = {
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 const initialSession: ClaudeImportSession = {
@@ -90,10 +90,13 @@ export const createClaudeImportController = (
 		stateStore.setState({ ...current(), ...fields })
 
 	const report = (reason: unknown) =>
-		reportFailure({
-			title: i18n.t("chat:screen.notice.failed"),
-			description: exitDetailOf(reason),
-		})
+		reportFailure(
+			{
+				title: i18n.t("chat:screen.notice.failed"),
+				description: exitDetailOf(reason),
+			},
+			{ reason },
+		)
 
 	const record = (keys: string[]) => (progress: ClaudeImportProgress) => {
 		if (keys.includes(progress.key)) {

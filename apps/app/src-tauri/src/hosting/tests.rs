@@ -16,7 +16,8 @@ use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
 
 use super::authorship::{Caller, RelayedMember};
@@ -29,7 +30,6 @@ use super::contract::{
 };
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
-use super::reach;
 use super::relay::relay_socket_config;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
@@ -37,6 +37,7 @@ use super::sealing_member::{
 	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
 use super::wire::{host_keys, HELLO, NO_KEY_ID};
+use super::{keyed_calls, reach};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::account::contract::SignedOutReason;
 use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
@@ -79,6 +80,7 @@ use crate::db::connection::temp_dir;
 use crate::db::repositories::conversations::ChatOwner;
 use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
+use crate::db::repositories::library::ThreadOfItem;
 use crate::db::repositories::messages::{
 	EndedRun, MessagePageQuery, MessageRole, NewAssistantMessage, NewTurn, WebSource,
 };
@@ -87,14 +89,21 @@ use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event, BUFFERED_FRAMES};
+use crate::events::{self, CallOrigin, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
+use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+use crate::host_api::token;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::member_link::{MemberLink, Resync};
+use crate::joined_spaces::mentions::raised_if_mentioned;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::library;
-use crate::library::contract::{LibraryError, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT};
+use crate::library::contract::{
+	LibraryError, COMMENT_HOST_AUTHOR_ID, COMMENT_MENTIONED_EVENT, COMMENT_MENTION_OPENED_EVENT,
+	COMMENT_THREAD_CHANGED_EVENT, DOCUMENT_RENAMED_EVENT, DOCUMENT_UPDATED_EVENT,
+};
 use crate::library::tests::YjsClient;
+use crate::library::{CommentTurn, CommentTurns, PersonHere, Said};
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -102,6 +111,7 @@ use crate::mcp_oauth::credentials;
 use crate::mcp_oauth::reports::ApplicationReports;
 use crate::missions::commands::{mission_space_feed, mission_space_page};
 use crate::missions::contract::{MissionDetail, MissionDraft, Ticket};
+use crate::notifications::{self, Notice, SystemNotifications};
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -649,6 +659,35 @@ fn typed<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> T {
 	serde_json::from_value(args[key].clone()).expect("a typed argument")
 }
 
+fn caller_vouched_in(effects: &HostEffects, headers: &HeaderMap) -> Caller {
+	let Some(nonce) = headers.get(&RELAYED_MEMBER_HEADER) else {
+		return Caller::Host;
+	};
+	let nonce = nonce.to_str().expect("a nonce");
+	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched_in_this_task(nonce))
+}
+
+fn said_by_the_caller(
+	effects: &HostEffects,
+	headers: &HeaderMap,
+	args: &Value,
+) -> Result<Said, LibraryError> {
+	Said::by_the_person_calling(
+		&caller_vouched_in(effects, headers),
+		effects.app(),
+		typed(args, "text"),
+		typed(args, "mentions"),
+	)
+}
+
+fn thread_named(args: &Value) -> ThreadOfItem {
+	ThreadOfItem {
+		space_id: typed(args, "spaceId"),
+		item_name: typed(args, "name"),
+		id: typed(args, "threadId"),
+	}
+}
+
 async fn host_effect_applied(
 	Path(command): Path<String>,
 	Served(effects): Served<HostEffects>,
@@ -787,13 +826,17 @@ async fn host_effect_applied(
 			));
 		}
 		"library_rename_board" => {
-			return answered_by_the_library(library::rename_board(
-				effects.app(),
-				&effects.library(),
-				&text("spaceId"),
-				&text("name"),
-				&text("newName"),
-			));
+			return answered_by_the_library(
+				library::rename_board(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+					&text("newName"),
+				)
+				.await,
+			);
 		}
 		"library_board_summary" => {
 			return answered_by_the_library(library::summarise_board(
@@ -803,12 +846,85 @@ async fn host_effect_applied(
 			));
 		}
 		"library_delete" => {
-			return answered_by_the_library(library::delete_item(
-				effects.app(),
-				&effects.library(),
-				&text("spaceId"),
-				&text("name"),
-			));
+			return answered_by_the_library(
+				library::delete_item(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+				)
+				.await,
+			);
+		}
+		"library_comment_threads" => {
+			return answered_by_the_library(
+				library::comment_threads(
+					effects.app(),
+					&database,
+					&effects.library(),
+					&text("spaceId"),
+					&text("name"),
+				)
+				.await,
+			);
+		}
+		"library_comment_counts" => {
+			let counted = database.library().open_thread_counts(text("spaceId")).await;
+			return answered_by_the_library(counted.map_err(LibraryError::from));
+		}
+		"library_comment_agent_turns" => {
+			return answered_by_the_library(
+				library::comment_agent_turns(effects.app(), &database, text("spaceId")).await,
+			);
+		}
+		"library_comment_create" => {
+			let (app, library) = (effects.app(), effects.library());
+			let (space_id, name, anchor) = (text("spaceId"), text("name"), typed(&args, "anchor"));
+			let opened = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					library::open_comment_thread(
+						app, &database, &library, &space_id, &name, anchor, said,
+					)
+					.await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(opened);
+		}
+		"library_comment_reply" => {
+			let (app, library) = (effects.app(), effects.library());
+			let replied = match said_by_the_caller(&effects, &headers, &args) {
+				Ok(said) => {
+					let thread = thread_named(&args);
+					library::reply_to_comment_thread(app, &database, &library, thread, said).await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(replied);
+		}
+		"library_comment_resolve" => {
+			let (app, library) = (effects.app(), effects.library());
+			let caller = caller_vouched_in(&effects, &headers);
+			let resolved = match library::person_calling(&caller, app) {
+				Ok(by) => {
+					let thread = thread_named(&args);
+					library::resolve_comment_thread(app, &database, &library, thread, by).await
+				}
+				Err(refused) => Err(refused),
+			};
+			return answered_by_the_library(resolved);
+		}
+		"library_comment_reopen" => {
+			return answered_by_the_library(
+				library::reopen_comment_thread(
+					effects.app(),
+					&database,
+					&effects.library(),
+					thread_named(&args),
+				)
+				.await,
+			);
 		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
@@ -2290,6 +2406,290 @@ fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
 
 		assert!(replayed.is_empty());
 		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+	});
+}
+
+fn device_socket_full(relay_device_id: &str) -> String {
+	let body = json!({ "error": "Device socket is full", "deviceId": relay_device_id });
+	json!({ "id": null, "status": 413, "body": body }).to_string()
+}
+
+async fn relay_refused(member: &mut MemberWire, refusal: String) {
+	member.send(Message::Text(refusal.into())).await.expect("the refusal reaches the host");
+}
+
+async fn resynced(member: &mut MemberWire) -> Value {
+	let resync = next_text(member, |frame| frame.get("resync").is_some());
+	tokio::time::timeout(PATIENCE, resync)
+		.await
+		.expect("the host resyncs the refused device in time")
+}
+
+fn numbers_heard(heard: &mut tokio::sync::broadcast::Receiver<crate::events::Frame>) -> Vec<u64> {
+	std::iter::from_fn(|| heard.try_recv().ok())
+		.map(|event| serde_json::from_str::<Value>(&event).expect("a json event"))
+		.filter_map(|event| event["payload"]["n"].as_u64())
+		.collect()
+}
+
+#[test]
+fn a_device_socket_full_refusal_is_logged_and_the_member_link_hears_what_it_missed_after_the_resync(
+) {
+	run(async {
+		capturing();
+		let mut harness = Harness::signed_in("device-socket-full").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		let link =
+			MemberLink::new(&member.instance_id, "Studio".to_owned(), MEMBER_ACCOUNT.to_owned());
+		let mut heard = link.subscribed().expect("an open link");
+		let applied = next_stamped(&mut member, is_a_members_change).await;
+		assert_eq!(link.received(&applied.to_string()), Resync::InStep);
+		for n in 1..3 {
+			numbered(&harness, n);
+		}
+		numbered_through(&harness, &mut member, 3).await;
+		send(&mut member, r#"{"id": 41, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 41);
+
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let resync = resynced(&mut member).await;
+		let Resync::Resume(resume) = link.received(&resync.to_string()) else {
+			panic!("the resync resumes the member link");
+		};
+		send(&mut member, &resume).await;
+		loop {
+			let frame = next_json(&mut member).await;
+			let is_the_resume_answer = frame["body"]["replayed"].is_u64();
+			link.received(&frame.to_string());
+			if is_the_resume_answer {
+				break;
+			}
+		}
+
+		let logged = warnings_naming(&relay_device_id).await;
+		let refused: Vec<&String> =
+			logged.iter().filter(|line| line.contains("\"Device socket is full\"")).collect();
+		assert_eq!(refused.len(), 1, "{logged:?}");
+		for named in
+			[PERSONAL, &member.instance_id, "status 413", ", 1 call answers, 0 file answers"]
+		{
+			assert!(refused[0].contains(named), "{named} in {}", refused[0]);
+		}
+		assert!(resync["resync"]["answered"]
+			.as_array()
+			.is_some_and(|ids| ids.contains(&json!(41))));
+		assert_eq!(numbers_heard(&mut heard), vec![1, 2, 3]);
+	});
+}
+
+#[test]
+fn a_refusal_the_host_does_not_know_or_naming_a_device_off_the_roster_is_logged_and_the_socket_serves_on(
+) {
+	run(async {
+		capturing();
+		let mut harness = Harness::signed_in("refusal-unknown").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let off_the_roster = uuid::Uuid::new_v4().to_string();
+		let unknown_reason = uuid::Uuid::new_v4().to_string();
+		let unknown = json!({ "id": null, "status": 429, "body": { "error": unknown_reason } });
+
+		relay_refused(&mut member, device_socket_full(&off_the_roster)).await;
+		relay_refused(&mut member, unknown.to_string()).await;
+		send(&mut member, r#"{"id": 42, "command": "agent_models", "args": {}}"#).await;
+
+		assert_eq!(answer(&mut member).await["id"], 42);
+		let absent = warnings_naming(&off_the_roster).await;
+		assert!(absent[0].contains("no device of the roster, nothing changed"), "{absent:?}");
+		let not_known = warnings_naming(&unknown_reason).await;
+		assert!(not_known[0].contains("the host does not know: status 429"), "{not_known:?}");
+	});
+}
+
+#[test]
+fn a_resync_names_no_call_answered_before_the_latest_hello_of_the_device() {
+	run(async {
+		let mut harness = Harness::signed_in("resync-after-hello").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		send(&mut member, r#"{"id": 5, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 5);
+
+		member.greeted().await;
+		send(&mut member, r#"{"id": 1, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 1);
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+
+		assert_eq!(resynced(&mut member).await, json!({ "resync": { "answered": [1] } }));
+	});
+}
+
+#[test]
+fn a_resync_the_relay_refuses_again_is_sent_again_on_the_next_interval() {
+	run(async {
+		let mut harness = Harness::signed_in("resync-again").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = member.device.relay_device_id.clone();
+		send(&mut member, r#"{"id": 43, "command": "agent_models", "args": {}}"#).await;
+		assert_eq!(answer(&mut member).await["id"], 43);
+
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let first = resynced(&mut member).await;
+		relay_refused(&mut member, device_socket_full(&relay_device_id)).await;
+		let again = resynced(&mut member).await;
+
+		assert_eq!(first, json!({ "resync": { "answered": [43] } }));
+		assert_eq!(again, first);
+	});
+}
+
+fn is_the_question(id: &str) -> impl Fn(&Value) -> bool + '_ {
+	move |frame| {
+		let payload = &frame["event"]["payload"];
+		payload["event"]["type"] == "questionRequested" && payload["event"]["request"]["id"] == id
+	}
+}
+
+async fn asked_then_pushed_out_of_the_ring(guest: &mut Guest, id: &str) -> (Value, String, u64) {
+	asks_in(guest, "c-mine", id);
+	let asked = next_stamped(&mut guest.member, is_the_question(id)).await;
+	let (epoch, seq) = stamp_of(&asked);
+	for n in 1..=RING_FRAMES + 2 {
+		numbered_through(&guest.harness, &mut guest.member, n).await;
+	}
+	(asked, epoch, seq - 1)
+}
+
+async fn asked_again(member: &mut MemberWire, id: &str) -> Value {
+	tokio::time::timeout(PATIENCE, next_stamped(member, is_the_question(id)))
+		.await
+		.expect("the question still waiting is replayed in time")
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_the_question_still_waiting() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-question").await;
+		let (asked, epoch, since) =
+			asked_then_pushed_out_of_the_ring(&mut guest, "q-waiting").await;
+
+		let (replayed, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let asked_again = asked_again(&mut guest.member, "q-waiting").await;
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert_eq!(unstamped(asked_again), unstamped(asked));
+	});
+}
+
+#[test]
+fn a_resume_inside_the_ring_is_followed_by_the_question_still_waiting() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-in-step-question").await;
+		asks_in(&guest, "c-mine", "q-in-step");
+		let asked = next_stamped(&mut guest.member, is_the_question("q-in-step")).await;
+		let (epoch, seq) = stamp_of(&asked);
+
+		let (replayed, answer) = resumed_from(&mut guest.member, &epoch, seq).await;
+		let asked_again = asked_again(&mut guest.member, "q-in-step").await;
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "replayed": 0 }));
+		assert_eq!(unstamped(asked_again), unstamped(asked));
+	});
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_replays_no_question_already_answered() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("resume-too-old-answered").await;
+		let (_, epoch, since) = asked_then_pushed_out_of_the_ring(&mut guest, "q-answered").await;
+		let scope = a_held_scope_in("c-mine", "b-mine");
+		commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+			.emit(its_answer("q-answered"), a_turn_in("c-mine"));
+
+		let (_, answer) = resumed_from(&mut guest.member, &epoch, since).await;
+		let heard = guest.events_until_the_marker().await;
+
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+		assert!(!heard.iter().any(is_the_question("q-answered")), "{heard:?}");
+	});
+}
+
+const A_ROOM: &str = "
+	INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+		VALUES (?1, 'topic', ?2, 'Opened by a mention', 1, 1)";
+
+const THE_ROOM_JOINS_ITS_SPACE: &str = "UPDATE conversations SET space_id = ?2 WHERE id = ?1";
+
+async fn stored(
+	guest: &Guest,
+	statement: &'static str,
+	room: &'static str,
+	space: Option<&'static str>,
+) {
+	db::open(&guest.effects.database)
+		.call_mut(move |connection| Ok(connection.execute(statement, (room, space))?))
+		.await
+		.expect("the room is written");
+}
+
+fn asks_in(guest: &Guest, room: &str, id: &str) {
+	let scope = a_held_scope_in(room, "b-mine");
+	commands::a_run_held_by_the_app(guest.harness.app.handle(), scope)
+		.emit(a_question(id), a_turn_in(room));
+}
+
+#[test]
+fn a_room_checked_before_its_space_holds_it_relays_the_question_asked_once_it_is_held() {
+	run(async {
+		const ROOM: &str = "c-held-later";
+		let mut guest = Guest::of_two_spaces("held-later").await;
+		stored(&guest, A_ROOM, ROOM, None).await;
+		let first = an_agent_event_of(a_runtime_scope(ROOM));
+		events::emit(guest.harness.app.handle(), Event::untyped(first.0), first.1)
+			.expect("emitted");
+		let before_it_is_held = guest.events_until_the_marker().await;
+		stored(&guest, THE_ROOM_JOINS_ITS_SPACE, ROOM, Some(PERSONAL)).await;
+
+		asks_in(&guest, ROOM, "q-held-later");
+		let once_it_is_held = guest.events_until_the_marker().await;
+
+		assert!(before_it_is_held.is_empty(), "{before_it_is_held:?}");
+		assert!(once_it_is_held.iter().any(is_the_question("q-held-later")), "{once_it_is_held:?}");
+	});
+}
+
+#[test]
+fn a_question_kept_off_the_relay_warns_for_a_room_no_space_holds_and_not_for_one_held_elsewhere() {
+	run(async {
+		const ELSEWHERE_ROOM: &str = "c-kept-off-elsewhere";
+		const NOWHERE_ROOM: &str = "c-kept-off-nowhere";
+		crate::test_log::capturing();
+		let mut guest = Guest::of_two_spaces("question-kept-off").await;
+		stored(&guest, A_ROOM, ELSEWHERE_ROOM, Some(ELSEWHERE)).await;
+		asks_in(&guest, ELSEWHERE_ROOM, "q-elsewhere");
+		asks_in(&guest, NOWHERE_ROOM, "q-nowhere");
+
+		let heard = guest.events_until_the_marker().await;
+		let warned = crate::test_log::warnings_naming("c-kept-off-").await;
+
+		assert!(heard.is_empty(), "{heard:?}");
+		assert_eq!(
+			warned,
+			vec![format!(
+				"the questionRequested frame of conversation {NOWHERE_ROOM} was kept off the \
+				 relay of space {PERSONAL}: it failed the Conversation check"
+			)]
+		);
 	});
 }
 
@@ -3835,12 +4235,433 @@ fn a_member_deletes_a_library_item_of_the_shared_space_only() {
 	});
 }
 
+fn a_library_comment_on_the_cover(space_id: &str) -> Value {
+	json!({
+		"spaceId": space_id,
+		"name": "cover.png",
+		"anchor": { "kind": "imagePoint", "x": 0.25, "y": 0.5 },
+		"text": "Crop here",
+		"mentions": [{ "kind": "agent", "id": "b-mine" }]
+	})
+}
+
+fn is_a_comment_change_outside(thread_id: &str) -> impl Fn(&Value) -> bool + '_ {
+	move |frame| {
+		frame["event"]["event"] == COMMENT_THREAD_CHANGED_EVENT
+			&& frame["event"]["payload"]["thread"]["id"] != thread_id
+	}
+}
+
+#[test]
+fn a_thread_a_member_resolves_names_that_member_to_the_host_and_to_the_member_until_reopened() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-comment-resolver").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let database = db::open(&guest.effects.database);
+		let created =
+			guest.called("library_comment_create", a_library_comment_on_the_cover(PERSONAL)).await;
+		let thread_id = created["body"]["id"].as_str().expect("a thread id").to_owned();
+		let on_the_thread =
+			json!({ "spaceId": PERSONAL, "name": "cover.png", "threadId": thread_id });
+		let the_cover = a_library_entry_of("cover.png")(PERSONAL);
+		let read_by_the_host = || async {
+			let read = library::comment_threads(&app, &database, &library, PERSONAL, "cover.png");
+			json!(read.await.expect("the host reads the threads"))
+		};
+
+		let resolved = guest.called("library_comment_resolve", on_the_thread.clone()).await;
+		let thread = thread_named(&on_the_thread);
+		let by_the_host = library::person_calling(&Caller::Host, &app).expect("the host is named");
+		let resolved_again =
+			library::resolve_comment_thread(&app, &database, &library, thread, by_the_host)
+				.await
+				.expect("the host resolves the resolved thread");
+		let resolved_for_the_member =
+			guest.called("library_comment_threads", the_cover.clone()).await;
+		let resolved_for_the_host = read_by_the_host().await;
+		let reopened = guest.called("library_comment_reopen", on_the_thread).await;
+		let reopened_for_the_member = guest.called("library_comment_threads", the_cover).await;
+		let reopened_for_the_host = read_by_the_host().await;
+
+		let resolved = &resolved["body"];
+		assert_eq!(resolved["resolvedBy"], json!({ "kind": "person", "id": A_JOINER }));
+		assert!(resolved["resolvedAt"].is_i64(), "{resolved}");
+		assert_eq!(created["body"]["resolvedBy"], Value::Null, "{created}");
+		assert_eq!(created["body"]["resolvedAt"], Value::Null, "{created}");
+		assert_eq!(&json!(resolved_again), resolved);
+		assert_eq!(resolved_for_the_member["body"], json!([resolved]));
+		assert_eq!(resolved_for_the_host, json!([resolved]));
+		assert_eq!(reopened["body"], created["body"], "{reopened}");
+		assert_eq!(reopened_for_the_member["body"], json!([created["body"]]));
+		assert_eq!(reopened_for_the_host, json!([created["body"]]));
+	});
+}
+
+#[test]
+fn a_member_comments_in_the_shared_space_only_under_its_account_and_hears_the_host_comment() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("library-comments").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let by_the_member = json!({ "kind": "person", "id": A_JOINER });
+		let started = Arc::new(Mutex::new(Vec::<CommentTurn>::new()));
+		let kept = Arc::clone(&started);
+		app.manage(CommentTurns::starting_with(move |turn| {
+			kept.lock().expect("the turns are kept").push(turn);
+		}));
+
+		guest.refused("library_comment_create", a_library_comment_on_the_cover(ELSEWHERE)).await;
+		let created =
+			guest.called("library_comment_create", a_library_comment_on_the_cover(PERSONAL)).await;
+		let thread_id = created["body"]["id"].as_str().expect("a thread id").to_owned();
+		let on_the_thread = |space_id: &str| json!({ "spaceId": space_id, "name": "cover.png", "threadId": thread_id });
+		let a_reply = |space_id: &str| {
+			let mut reply = on_the_thread(space_id);
+			reply["text"] = json!("And here");
+			reply["mentions"] = json!([]);
+			reply
+		};
+		guest.refused("library_comment_reply", a_reply(ELSEWHERE)).await;
+		let replied = guest.called("library_comment_reply", a_reply(PERSONAL)).await;
+		guest.refused("library_comment_resolve", on_the_thread(ELSEWHERE)).await;
+		let resolved = guest.called("library_comment_resolve", on_the_thread(PERSONAL)).await;
+		guest.refused("library_comment_reopen", on_the_thread(ELSEWHERE)).await;
+		let reopened = guest.called("library_comment_reopen", on_the_thread(PERSONAL)).await;
+		guest.refused("library_comment_threads", a_library_entry_of("cover.png")(ELSEWHERE)).await;
+		let read = guest
+			.called("library_comment_threads", a_library_entry_of("cover.png")(PERSONAL))
+			.await;
+		guest.refused("library_comment_counts", space_named(ELSEWHERE)).await;
+		let counted = guest.called("library_comment_counts", space_named(PERSONAL)).await;
+		guest.refused("library_comment_agent_turns", space_named(ELSEWHERE)).await;
+		let working = guest.called("library_comment_agent_turns", space_named(PERSONAL)).await;
+
+		let database = db::open(&guest.effects.database);
+		restore(app.clone()).await;
+		let mut by_the_host = Vec::new();
+		for space_id in [ELSEWHERE, PERSONAL] {
+			let said = Said::by_the_person_calling(
+				&Caller::Host,
+				&app,
+				"From the host".to_owned(),
+				Vec::new(),
+			)
+			.expect("the host is named");
+			let anchor = typed(&a_library_comment_on_the_cover(space_id), "anchor");
+			let opened = library::open_comment_thread(
+				&app,
+				&database,
+				&library,
+				space_id,
+				"cover.png",
+				anchor,
+				said,
+			)
+			.await
+			.expect("the host comments");
+			by_the_host.push(opened);
+		}
+		let heard = next_text(&mut guest.member, is_a_comment_change_outside(&thread_id)).await;
+		let read_after_the_host = guest
+			.called("library_comment_threads", a_library_entry_of("cover.png")(PERSONAL))
+			.await;
+		let by_the_host_person = json!({ "kind": "person", "id": COMMENT_HOST_AUTHOR_ID });
+		let is_signed_in =
+			matches!(app.state::<AccountSession>().current(), AccountState::SignedIn(_));
+
+		assert_eq!(created["status"], json!(200), "{created}");
+		assert_eq!(created["body"]["comments"][0]["author"], by_the_member, "{created}");
+		assert_eq!(
+			created["body"]["comments"][0]["mentions"],
+			json!([{ "kind": "agent", "id": "b-mine" }])
+		);
+		assert_eq!(replied["body"]["comments"][1]["author"], by_the_member, "{replied}");
+		assert_eq!(replied["body"]["comments"][1]["text"], json!("And here"), "{replied}");
+		assert_eq!(resolved["body"]["state"], json!("resolved"), "{resolved}");
+		assert_eq!(reopened["body"]["state"], json!("open"), "{reopened}");
+		assert_eq!(read["body"], json!([reopened["body"]]), "{read}");
+		assert_eq!(counted["body"], json!([{ "itemName": "cover.png", "openThreads": 1 }]));
+		let summoned: Vec<(String, String, String)> = started
+			.lock()
+			.expect("the turns are kept")
+			.iter()
+			.map(|turn| (turn.space_id.clone(), turn.thread_id.clone(), turn.agent_id.clone()))
+			.collect();
+		assert_eq!(
+			summoned,
+			[(PERSONAL.to_owned(), thread_id.clone(), "b-mine".to_owned())],
+			"the comment of a member starts the turn a host comment starts, once"
+		);
+		assert_eq!(
+			working["body"],
+			json!([{ "threadId": thread_id, "agentId": "b-mine", "state": { "kind": "working" } }])
+		);
+		assert!(is_signed_in);
+		assert_ne!(by_the_host_person, by_the_member);
+		assert_eq!(
+			read_after_the_host["body"][1]["comments"][0]["author"], by_the_host_person,
+			"{read_after_the_host}"
+		);
+		assert_eq!(
+			heard["event"]["payload"],
+			json!({ "spaceId": PERSONAL, "itemName": "cover.png", "thread": by_the_host[1] })
+		);
+		assert_eq!(
+			guest.effects.reached(),
+			[
+				"library_comment_create",
+				"library_comment_reply",
+				"library_comment_resolve",
+				"library_comment_reopen",
+				"library_comment_threads",
+				"library_comment_counts",
+				"library_comment_agent_turns",
+				"library_comment_threads"
+			]
+		);
+	});
+}
+
 #[test]
 fn a_member_creates_a_library_board_in_the_shared_space_only() {
 	run(kept_in_the_space_named("library_create_board", a_library_entry_of("plan")));
 }
 
 const A_LIBRARY_BOARD: &str = r#"{"nodes":[{"id":"a","type":"text","text":"","x":0,"y":0,"width":10,"height":10}],"edges":[]}"#;
+
+const A_JOINED_SPACE: &str = "joined-1";
+
+type Notices = Arc<Mutex<Vec<Notice>>>;
+
+fn counting_notices(computer: &tauri::AppHandle<MockRuntime>) -> Notices {
+	let raised = Notices::default();
+	let kept = Arc::clone(&raised);
+	computer.manage(SystemNotifications::raising_with(move |notice| {
+		kept.lock().expect("the notices are kept").push(notice);
+	}));
+	raised
+}
+
+fn titles(raised: &Notices) -> Vec<String> {
+	raised.lock().expect("the notices are kept").iter().map(|notice| notice.title.clone()).collect()
+}
+
+fn the_computer_of(account_id: &str) -> PersonHere {
+	PersonHere { person_id: account_id.to_owned(), space_id: A_JOINED_SPACE.to_owned() }
+}
+
+fn a_library_comment_mentioning(people: &[&str]) -> Value {
+	let mut comment = a_library_comment_on_the_cover(PERSONAL);
+	comment["mentions"] = people.iter().map(|id| json!({ "kind": "person", "id": id })).collect();
+	comment
+}
+
+fn a_joiner_named(name: &str) -> Value {
+	let mut joiner = cloud_member(A_JOINER, "joiner@example.com", "member", "joined");
+	joiner["name"] = json!(name);
+	joiner
+}
+
+fn kept_if_a_mention(mentions: &Mutex<Vec<String>>, frame: &Value) {
+	if frame["event"]["event"] == COMMENT_MENTIONED_EVENT {
+		mentions.lock().expect("the mentions are kept").push(frame["event"].to_string());
+	}
+}
+
+impl Guest {
+	async fn mentions_heard_into(&mut self, mentions: &Mutex<Vec<String>>) {
+		let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": "mentions" }));
+		events::emit(self.harness.app.handle(), Event::untyped(probed.0), probed.1.clone())
+			.expect("emitted");
+		let probe = as_forwarded(probed);
+		next_text(&mut self.member, |frame| {
+			kept_if_a_mention(mentions, frame);
+			*frame == probe
+		})
+		.await;
+	}
+
+	async fn mention_heard(&mut self) -> String {
+		let is_a_mention = |frame: &Value| frame["event"]["event"] == COMMENT_MENTIONED_EVENT;
+		next_text(&mut self.member, is_a_mention).await["event"].to_string()
+	}
+
+	async fn called_until_mentioned(&mut self, command: &str, args: Value) -> (Value, String) {
+		let call = json!({ "id": command, "command": command, "args": args });
+		send(&mut self.member, &call.to_string()).await;
+		let (mut answered, mut mentioned) = (None, None);
+		loop {
+			let frame = unstamped(next_json(&mut self.member).await);
+			if frame.get("event").is_none() {
+				answered = Some(frame);
+			} else if frame["event"]["event"] == COMMENT_MENTIONED_EVENT {
+				mentioned = Some(frame["event"].to_string());
+			}
+			if let (Some(answered), Some(mentioned)) = (&answered, &mentioned) {
+				return (answered.clone(), mentioned.clone());
+			}
+		}
+	}
+
+	async fn mentions_heard(&mut self) -> Vec<String> {
+		let mentions = Mutex::new(Vec::new());
+		self.mentions_heard_into(&mentions).await;
+		mentions.into_inner().expect("the mentions are kept")
+	}
+
+	async fn called_hearing_mentions(
+		&mut self,
+		command: &str,
+		args: Value,
+	) -> (Value, Vec<String>) {
+		let mentions = Mutex::new(Vec::new());
+		let call = json!({ "id": command, "command": command, "args": args });
+		send(&mut self.member, &call.to_string()).await;
+		let answered = next_text(&mut self.member, |frame| {
+			kept_if_a_mention(&mentions, frame);
+			frame.get("event").is_none()
+		})
+		.await;
+		self.mentions_heard_into(&mentions).await;
+		(answered, mentions.into_inner().expect("the mentions are kept"))
+	}
+}
+
+#[test]
+fn the_host_mentioning_a_member_notifies_the_computer_of_that_member_and_no_other() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-by-the-host").await;
+		let (app, library) = (guest.harness.app.handle().clone(), guest.effects.library());
+		let on_the_host = counting_notices(&app);
+		let member_computer = an_app_of_its_own("mentioned-member", mock_builder());
+		let on_the_member = counting_notices(member_computer.handle());
+		let bystander_computer = an_app_of_its_own("unmentioned-member", mock_builder());
+		let on_the_bystander = counting_notices(bystander_computer.handle());
+		let database = db::open(&guest.effects.database);
+		let mut preferences = database.user().preferences().await.expect("the preferences read");
+		preferences.display_name = "Ada".to_owned();
+		database.user().set_preferences(preferences).await.expect("the host is named");
+
+		let said = Said::by_the_person_calling(
+			&Caller::Host,
+			&app,
+			"Crop here\nthen ship".to_owned(),
+			typed(&a_library_comment_mentioning(&[A_JOINER, A_JOINER]), "mentions"),
+		)
+		.expect("the host is named");
+		let anchor = typed(&a_library_comment_on_the_cover(PERSONAL), "anchor");
+		let opened = library::open_comment_thread(
+			&app,
+			&database,
+			&library,
+			PERSONAL,
+			"cover.png",
+			anchor,
+			said,
+		)
+		.await
+		.expect("the host comments");
+		let mut heard = vec![guest.mention_heard().await];
+		heard.extend(guest.mentions_heard().await);
+		for frame in &heard {
+			raised_if_mentioned(member_computer.handle(), &the_computer_of(A_JOINER), frame);
+			let bystander = the_computer_of("bystander-account");
+			raised_if_mentioned(bystander_computer.handle(), &bystander, frame);
+		}
+
+		assert_eq!(heard.len(), 1, "{heard:?}");
+		let raised = std::mem::take(&mut *on_the_member.lock().expect("the notices are kept"));
+		let shown: Vec<_> = raised
+			.iter()
+			.map(|notice| (notice.title.as_str(), notice.body.as_str(), notice.clicked.to_string()))
+			.collect();
+		let thread = format!("comment thread {} of space {A_JOINED_SPACE}", opened.id);
+		assert_eq!(shown, [("Ada mentioned you in cover.png", "Crop here", thread)]);
+		assert_eq!(titles(&on_the_host), Vec::<String>::new());
+		assert_eq!(titles(&on_the_bystander), Vec::<String>::new());
+	});
+}
+
+#[test]
+fn a_member_mentioning_the_host_notifies_the_host_computer_alone_and_a_click_hands_over_the_thread()
+{
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-by-a-member").await;
+		guest.harness.seed(&[a_joiner_named("Joiner")]);
+		let app = guest.harness.app.handle().clone();
+		restore(app.clone()).await;
+		let on_the_host = counting_notices(&app);
+		let member_computer = an_app_of_its_own("mentioning-member", mock_builder());
+		let on_the_member = counting_notices(member_computer.handle());
+		let main = WebviewWindowBuilder::new(&app, "main", Default::default())
+			.build()
+			.expect("the window builds");
+		let (told, clicked) = std::sync::mpsc::channel();
+		main.listen(COMMENT_MENTION_OPENED_EVENT, move |event| {
+			told.send(event.payload().to_owned()).expect("the test hears");
+		});
+		let AccountState::SignedIn(host) = app.state::<AccountSession>().current() else {
+			panic!("the host is signed out");
+		};
+
+		let named_twice = a_library_comment_mentioning(&[COMMENT_HOST_AUTHOR_ID, &host.id]);
+		let (created, mentioned) =
+			guest.called_until_mentioned("library_comment_create", named_twice).await;
+		let mut heard = vec![mentioned];
+		let thread =
+			json!({ "spaceId": PERSONAL, "name": "cover.png", "threadId": created["body"]["id"] });
+		for command in ["library_comment_resolve", "library_comment_reopen"] {
+			heard.extend(guest.called_hearing_mentions(command, thread.clone()).await.1);
+		}
+		for frame in &heard {
+			raised_if_mentioned(member_computer.handle(), &the_computer_of(A_JOINER), frame);
+		}
+
+		assert_eq!(heard.len(), 1, "{created} {heard:?}");
+		let mut raised = std::mem::take(&mut *on_the_host.lock().expect("the notices are kept"));
+		assert_eq!(raised.len(), 1, "{created}");
+		let notice = raised.remove(0);
+		assert_eq!(notice.title, "Joiner mentioned you in cover.png");
+		assert_eq!(notice.body, "Crop here");
+		assert_eq!(titles(&on_the_member), Vec::<String>::new());
+		notifications::activated(&app, notice.clicked);
+		let clicked = clicked.recv_timeout(PATIENCE).expect("the window hears");
+		assert_eq!(
+			serde_json::from_str::<Value>(&clicked).expect("a payload"),
+			json!({
+				"spaceId": PERSONAL,
+				"itemName": "cover.png",
+				"itemKind": "image",
+				"threadId": created["body"]["id"]
+			})
+		);
+	});
+}
+
+#[test]
+fn a_member_mentioning_itself_or_no_person_notifies_no_computer() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("mention-of-oneself").await;
+		guest.harness.seed(&[a_joiner_named("Joiner")]);
+		let app = guest.harness.app.handle().clone();
+		let on_the_host = counting_notices(&app);
+
+		let (to_itself, mut heard) = guest
+			.called_hearing_mentions(
+				"library_comment_create",
+				a_library_comment_mentioning(&[A_JOINER]),
+			)
+			.await;
+		let (to_nobody, unheard) = guest
+			.called_hearing_mentions("library_comment_create", a_library_comment_mentioning(&[]))
+			.await;
+		heard.extend(unheard);
+
+		assert_eq!(to_itself["status"], json!(200), "{to_itself}");
+		assert_eq!(to_nobody["status"], json!(200), "{to_nobody}");
+		assert_eq!(heard, Vec::<String>::new());
+		assert_eq!(titles(&on_the_host), Vec::<String>::new());
+	});
+}
 
 async fn a_guest_with_a_board(name: &str) -> Guest {
 	let guest = Guest::of_two_spaces(name).await;
@@ -3918,6 +4739,8 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		let mut guest = Guest::of_two_spaces("library-rename").await;
 		let shelf = guest.effects.library().join(PERSONAL);
 		std::fs::write(shelf.join("plan.md"), "older").expect("the other file lands");
+		std::fs::write(shelf.join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let opened =
 			guest.called("library_open_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
@@ -3953,7 +4776,7 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		let on_disk =
 			|name: &str| std::fs::read_to_string(shelf.join(name)).expect("the file reads");
-		assert_eq!(on_disk("plan (2).md"), "notes of personal kept");
+		assert_eq!(on_disk("plan (2).md"), "notes of personal kept ^aaaaaa");
 		assert_eq!(on_disk("plan.md"), "older");
 		assert!(!shelf.join("notes.md").exists());
 	});
@@ -3983,6 +4806,8 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let mut guest = Guest::of_two_spaces("library-shared-edit").await;
 		let app = guest.harness.app.handle().clone();
 		let library = guest.effects.library();
+		std::fs::write(library.join(PERSONAL).join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let (told, host_heard) = std::sync::mpsc::channel();
 		app.listen_any(DOCUMENT_UPDATED_EVENT, move |event| {
 			let payload: Value = serde_json::from_str(event.payload()).expect("a payload");
@@ -4006,7 +4831,7 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let read =
 			guest.called("library_read_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 
-		let merged = "Host. notes of personal Member.";
+		let merged = "Host. notes of personal Member. ^aaaaaa";
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		assert_eq!(read["body"]["content"], json!(merged), "{read}");
 		let on_disk = |space_id: &str| {
@@ -4230,6 +5055,7 @@ fn relayed_as(account_id: &str) -> Caller {
 		space_id: PERSONAL.to_owned(),
 		user_id: account_id.to_owned(),
 		computer: None,
+		origin: None,
 	}))
 }
 
@@ -5785,8 +6611,13 @@ async fn a_main_conversation_waiting_on(guest: &Guest, owner: ChatOwner) -> Stri
 		.await
 		.expect("the main conversation opens");
 	let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
-	conversations.hold_prompt(prompt).await.expect("the prompt is held");
 	let app = guest.harness.app.handle();
+	let asking = agent::RuntimeScope {
+		runtime_session_id: prompt.runtime_session_id.clone(),
+		..a_held_scope_in(&main.id, "b-mine")
+	};
+	commands::a_run_held_by_the_app(app, asking);
+	conversations.hold_prompt(prompt).await.expect("the prompt is held");
 	conversation_state::observe(app, &database, &main.id).await.expect("the state reads");
 	main.id
 }
@@ -5916,6 +6747,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 
 const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
+const GUEST_DEVICE: &str = "guest-device";
 const HOST_NAME: &str = "Ada on the host";
 
 struct Authoring {
@@ -5923,16 +6755,47 @@ struct Authoring {
 	window: WebviewWindow<MockRuntime>,
 	local: LocalApi,
 	conversation_id: String,
+	cloud: String,
 	_root: RemovedOnDrop,
+}
+
+fn an_authoring_app() -> AppOfItsOwn {
+	an_app_of_its_own(
+		"hosting-authorship",
+		mock_builder().invoke_handler(crate::commands::invoke_handler()),
+	)
+}
+
+async fn hosted_over(
+	app: &AppOfItsOwn,
+	cloud: &str,
+	root: &std::path::Path,
+) -> (WebviewWindow<MockRuntime>, LocalApi) {
+	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	restore(app.handle().clone()).await;
+	app.manage(webhook::start(app.handle().clone()));
+	let local = super::local_api(app.handle()).expect("the local host api listens");
+	app.manage(Hosting::new(cloud, Some(local.clone())));
+	app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
+		Some(SpaceMembers {
+			members: vec![Member {
+				user_id: GUEST.to_owned(),
+				name: None,
+				email: GUEST_EMAIL.to_owned(),
+				status: MemberStatus::Joined,
+			}],
+			invitations: Vec::new(),
+		});
+	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
+		.build()
+		.expect("the window builds");
+	(window, local)
 }
 
 impl Authoring {
 	async fn new(bearer: Option<&str>) -> Self {
 		let cloud = served(Router::new().route("/me", get(me))).await;
-		let app = an_app_of_its_own(
-			"hosting-authorship",
-			mock_builder().invoke_handler(crate::commands::invoke_handler()),
-		);
+		let app = an_authoring_app();
 		app.manage(db::bootstrap(app.handle()));
 		let root = RemovedOnDrop(
 			std::env::temp_dir()
@@ -5942,24 +6805,7 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
-		let local = super::local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local.clone())));
-		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
-			Some(SpaceMembers {
-				members: vec![Member {
-					user_id: GUEST.to_owned(),
-					name: None,
-					email: GUEST_EMAIL.to_owned(),
-					status: MemberStatus::Joined,
-				}],
-				invitations: Vec::new(),
-			});
-		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
-			.build()
-			.expect("the window builds");
+		let (window, local) = hosted_over(&app, &cloud, &root).await;
 		let mut preferences = direct(&window, "user_preferences", json!({}));
 		preferences["displayName"] = json!(HOST_NAME);
 		direct(&window, "user_set_preferences", json!({ "preferences": preferences }));
@@ -5970,7 +6816,25 @@ impl Authoring {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Shared", "botIds": ["default"] }),
 		);
 		let conversation_id = room["id"].as_str().expect("the room holds an id").to_owned();
-		Self { app, window, local, conversation_id, _root: root }
+		Self { app, window, local, conversation_id, cloud, _root: root }
+	}
+
+	async fn restarted(&self) -> Self {
+		let app = an_authoring_app();
+		let folder = self.app.path().app_data_dir().expect("the data folder resolves");
+		app.manage(Ok::<_, db::DatabaseError>(db::open(&folder)));
+		let (window, local) = hosted_over(&app, &self.cloud, &self._root).await;
+		if self.app.try_state::<commands::AgentState>().is_some() {
+			app.manage(commands::AgentState::default());
+		}
+		Self {
+			app,
+			window,
+			local,
+			conversation_id: self.conversation_id.clone(),
+			cloud: self.cloud.clone(),
+			_root: RemovedOnDrop(self._root.to_path_buf()),
+		}
 	}
 
 	async fn main_of(&self, owner: ChatOwner) -> String {
@@ -6030,15 +6894,25 @@ impl Authoring {
 	}
 
 	async fn answered_by(&self, account_id: &str, frame: Value) -> Value {
-		let call =
-			super::bridge::member_call(&frame.to_string(), account_id).expect("a member call");
-		let answer = super::bridge::bridged(
-			self.app.handle().clone(),
-			self.local.clone(),
-			PERSONAL.to_owned(),
-			call,
-		)
-		.await;
+		self.answered_from(account_id, GUEST_DEVICE, frame).await
+	}
+
+	async fn answered_from(&self, account_id: &str, device: &str, frame: Value) -> Value {
+		self.answered_through(self.local.clone(), account_id, device, frame).await
+	}
+
+	async fn answered_through(
+		&self,
+		local: LocalApi,
+		account_id: &str,
+		device: &str,
+		frame: Value,
+	) -> Value {
+		let call = super::bridge::member_call(&frame.to_string(), account_id, device)
+			.expect("a member call");
+		let answer =
+			super::bridge::bridged(self.app.handle().clone(), local, PERSONAL.to_owned(), call)
+				.await;
 		serde_json::from_str(&answer).expect("a json answer")
 	}
 
@@ -6534,10 +7408,8 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
 		);
 		let room_id = room["id"].as_str().expect("the room has an id");
-		let state = host.app.state::<DatabaseState>();
-		let conversations = state.as_ref().expect("the database").conversations();
-		let prompt = a_pending_prompt(room_id, PromptKind::Question);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		commands::a_run_held_by_the_app(host.app.handle(), a_held_scope_in(room_id, "b-mine"))
+			.emit(a_question("q1"), a_turn_in(room_id));
 		let state_of = |rows: &Value| {
 			rows.as_array()
 				.expect("the read holds a list")
@@ -6574,10 +7446,11 @@ fn a_guest_and_the_host_each_read_the_solo_state_of_their_own_main_conversation(
 		let host = Authoring::new(Some(BEARER)).await;
 		let main_of_the_host = host.main_of(ChatOwner::Host).await;
 		let main_of_the_guest = host.main_of(ChatOwner::Member(GUEST.to_owned())).await;
-		let state = host.app.state::<DatabaseState>();
-		let conversations = state.as_ref().expect("the database").conversations();
-		let prompt = a_pending_prompt(&main_of_the_guest, PromptKind::Question);
-		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		commands::a_run_held_by_the_app(
+			host.app.handle(),
+			a_held_scope_in(&main_of_the_guest, "b-mine"),
+		)
+		.emit(a_question("q1"), a_turn_in(&main_of_the_guest));
 		let args = json!({ "spaceId": PERSONAL });
 
 		let read_by_the_guest = host
@@ -6975,6 +7848,7 @@ impl Guest {
 		conversation_create(
 			app,
 			self.harness.app.state(),
+			Caller::Host,
 			space_id.to_owned(),
 			None,
 			"New".to_owned(),
@@ -7081,7 +7955,7 @@ impl Guest {
 		let database = db::open(&self.effects.database);
 		let mut preferences = database.user().preferences().await.expect("the preferences read");
 		preferences.display_name = display_name.to_owned();
-		database.user().set_preferences(preferences).await.expect("the host is named");
+		database.user().set_preferences(preferences).await.expect("the author is named");
 	}
 
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
@@ -8703,7 +9577,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		let (mut harness, effects) = Harness::applying_host_effects("library-removed").await;
 		let shelf = effects.library().join(PERSONAL);
 		std::fs::create_dir_all(&shelf).expect("the library folder lands");
-		std::fs::write(shelf.join("notes.md"), "notes").expect("the document lands");
+		std::fs::write(shelf.join("notes.md"), "notes ^aaaaaa").expect("the document lands");
 		harness.seed(&[
 			cloud_member("guest", "guest@example.com", "member", "pending"),
 			cloud_member("joiner", "joiner@example.com", "member", "pending"),
@@ -8778,7 +9652,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		assert_eq!(applies, 1);
 		assert_eq!(
 			std::fs::read_to_string(shelf.join("notes.md")).expect("the file reads"),
-			"notes kept"
+			"notes kept ^aaaaaa"
 		);
 	});
 }
@@ -9971,5 +10845,377 @@ fn a_relayed_member_cannot_report_on_a_mission_born_in_the_main_conversation_of_
 		let turn_id = format!("t-{}", host.conversation_id);
 		let args = json!({ "missionId": mission_id, "turnId": turn_id });
 		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_reported", args).await;
+	});
+}
+
+fn published_frames(published: &mut tokio::sync::broadcast::Receiver<events::Frame>) -> Vec<Value> {
+	let mut frames = Vec::new();
+	while let Ok(frame) = published.try_recv() {
+		frames.push(serde_json::from_str(&frame).expect("a json frame"));
+	}
+	frames
+}
+
+fn frames_of<'a>(frames: &'a [Value], event: &str) -> Vec<&'a Value> {
+	frames.iter().filter(|frame| frame["event"] == json!(event)).collect()
+}
+
+fn a_group_created(id: u64) -> Value {
+	json!({
+		"id": id,
+		"command": "conversation_create",
+		"args": { "spaceId": PERSONAL, "sectionId": null, "title": "Group", "botIds": ["default"] },
+	})
+}
+
+async fn answer_head(from_host: &mut (impl AsyncRead + Unpin)) -> Vec<u8> {
+	let mut read = Vec::new();
+	let mut chunk = [0u8; 4096];
+	loop {
+		let count = from_host.read(&mut chunk).await.expect("the local host api answers");
+		assert!(count > 0, "the local host api closed before the head of its answer");
+		read.extend_from_slice(&chunk[..count]);
+		if let Some(end) = read.windows(4).position(|window| window == b"\r\n\r\n") {
+			read.truncate(end + 4);
+			return read;
+		}
+	}
+}
+
+fn keyed(mut frame: Value, call_key: &str) -> Value {
+	frame["callKey"] = json!(call_key);
+	frame
+}
+
+impl Authoring {
+	async fn with_an_agent() -> Self {
+		let host = Self::new(Some(BEARER)).await;
+		host.app.manage(commands::AgentState::default());
+		host
+	}
+
+	fn send(&self, id: u64, message_id: &str) -> Value {
+		let mut args = self.unstarted(message_id);
+		args["message"]["turnId"] = json!(message_id);
+		json!({ "id": id, "command": "conversation_send_turn", "args": args })
+	}
+
+	fn groups(&self) -> usize {
+		let listed = direct(&self.window, "conversation_list", json!({ "spaceId": PERSONAL }));
+		let listed = listed.as_array().expect("a list of conversations");
+		listed.iter().filter(|room| room["title"] == json!("Group")).count()
+	}
+
+	fn user_messages(&self) -> Vec<Value> {
+		let page = direct(&self.window, "conversation_message_page", self.page());
+		let messages = page["messages"].as_array().expect("a page of messages");
+		messages.iter().filter(|message| message["role"] == json!("user")).cloned().collect()
+	}
+
+	async fn answered_while_the_local_host_api_is_down(&self, frame: Value) -> Value {
+		let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = closed.local_addr().expect("the port is named");
+		drop(closed);
+		let down = LocalApi::new(format!("http://{address}"), LOCAL_TOKEN.to_owned())
+			.expect("the local client builds");
+		self.answered_through(down, GUEST, GUEST_DEVICE, frame).await
+	}
+
+	async fn answered_by_a_local_host_api_that_cuts_its_answer(&self, frame: Value) -> Value {
+		let origin = self.app.state::<Webhook>().origin().expect("the local host api listens");
+		let host_api = origin.trim_start_matches("http://").to_owned();
+		let cutting = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = cutting.local_addr().expect("the port is named");
+		tauri::async_runtime::spawn(async move {
+			let (member, _) = cutting.accept().await.expect("the bridge connects");
+			let host = TcpStream::connect(host_api).await.expect("the local host api accepts");
+			let (mut from_member, mut to_member) = member.into_split();
+			let (mut from_host, mut to_host) = host.into_split();
+			let relaying = tauri::async_runtime::spawn(async move {
+				tokio::io::copy(&mut from_member, &mut to_host).await
+			});
+			let head = answer_head(&mut from_host).await;
+			to_member.write_all(&head).await.expect("the answer head is relayed");
+			relaying.abort();
+		});
+		let token = token::loaded(self.app.handle()).expect("the host token loads");
+		let cut = LocalApi::new(format!("http://{address}"), token.bearer().to_owned())
+			.expect("the local client builds");
+		self.answered_through(cut, GUEST, GUEST_DEVICE, frame).await
+	}
+}
+
+#[test]
+fn a_group_created_twice_with_one_call_key_is_left_once_and_its_creation_names_the_key() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let repeated = host.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(host.groups(), 1);
+		let frames = published_frames(&mut published);
+		let created = frames_of(&frames, CONVERSATION_CREATED_EVENT);
+		assert_eq!(created.len(), 1, "{created:?}");
+		assert_eq!(created[0]["payload"]["conversation"]["id"], first["id"]);
+		assert_eq!(created[0]["callKey"], json!("group-1"));
+		assert_eq!(created[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn the_same_send_twice_with_one_call_key_leaves_one_message_and_runs_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let (first, held) = tokio::join!(
+			host.answered(keyed(host.send(1, "m1"), "send-1")),
+			host.answered(keyed(host.send(2, "m1"), "send-1")),
+		);
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-1")).await;
+
+		assert_eq!(first["status"], json!(200), "{first}");
+		assert_eq!(
+			(held["status"].clone(), held["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
+		assert_eq!(stored[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn a_send_that_never_reached_the_local_host_api_runs_when_repeated_with_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let unreached = host
+			.answered_while_the_local_host_api_is_down(keyed(host.send(1, "m1"), "send-1"))
+			.await;
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(unreached["status"], json!(502), "{unreached}");
+		assert_eq!(repeated["status"], json!(200), "{repeated}");
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "{stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
+	});
+}
+
+#[test]
+fn a_send_whose_answer_was_cut_after_it_stored_gets_the_same_502_on_its_repeat() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let cut = host
+			.answered_by_a_local_host_api_that_cuts_its_answer(keyed(host.send(1, "m1"), "send-1"))
+			.await;
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(cut["status"], json!(502), "{cut}");
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(json!(502), cut["body"].clone())
+		);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
+	});
+}
+
+#[test]
+fn a_send_refused_as_a_conflict_keeps_that_answer_under_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		host.relayed(keyed(host.send(1, "m1"), "send-1")).await;
+		let mut published = events::subscribed(host.app.handle());
+		let mut diverging = keyed(host.send(2, "m1"), "send-2");
+		diverging["args"]["message"]["content"] = json!("edited");
+
+		let conflict = host.answered(diverging).await;
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-2")).await;
+
+		assert_eq!(conflict["status"], json!(500), "{conflict}");
+		assert_eq!(conflict["body"], json!({ "kind": "conflict", "id": "m1", "field": "content" }));
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(conflict["status"].clone(), conflict["body"].clone())
+		);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 0, "the send ran again");
+		assert_eq!(host.user_messages().len(), 1);
+	});
+}
+
+#[test]
+fn one_call_key_from_two_devices_runs_once_for_each() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+
+		host.answered_from(GUEST, GUEST_DEVICE, keyed(a_group_created(1), "group-1")).await;
+		host.answered_from(GUEST, "guest-tablet", keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(host.groups(), 2);
+	});
+}
+
+#[test]
+fn a_call_without_a_call_key_runs_each_time_and_its_events_name_no_call() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		host.relayed(a_group_created(1)).await;
+		host.relayed(a_group_created(2)).await;
+		host.relayed(host.send(3, "m1")).await;
+		host.relayed(host.send(4, "m1")).await;
+
+		assert_eq!(host.groups(), 2);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, CONVERSATION_CREATED_EVENT).len(), 2);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 2);
+		for frame in &frames {
+			let mut envelope =
+				frame.as_object().expect("a frame object").keys().collect::<Vec<_>>();
+			envelope.sort();
+			assert_eq!(envelope, ["event", "payload"], "{frame}");
+		}
+	});
+}
+
+#[test]
+fn a_question_a_member_answers_names_the_answering_device_on_its_resolution() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let app = host.app.handle();
+		let scope = a_held_scope_in(&host.conversation_id, "default");
+		let turn = a_turn_in(&host.conversation_id);
+		let asking = commands::a_run_held_by_the_app(app, scope.clone());
+		asking.emit(a_question("q1"), turn.clone());
+		let mut published = events::subscribed(app);
+		let origin = CallOrigin {
+			device_id: GUEST_DEVICE.to_owned(),
+			call_key: Some("answer-1".to_owned()),
+		};
+		let member = Caller::Relayed(Some(RelayedMember {
+			space_id: PERSONAL.to_owned(),
+			user_id: GUEST.to_owned(),
+			computer: None,
+			origin: Some(origin),
+		}));
+
+		let unsent = commands::agent_answer_question(
+			app.state(),
+			member,
+			scope,
+			"q1".to_owned(),
+			Default::default(),
+			None,
+		)
+		.await;
+		asking.emit(its_answer("q1"), turn);
+
+		assert_eq!(unsent, Err(agent::TransportError::NotStarted), "no session holds the run");
+		let frames = published_frames(&mut published);
+		let resolved = frames_of(&frames, commands::EVENT_CHANNEL);
+		assert_eq!(resolved.len(), 1, "{resolved:?}");
+		assert_eq!(resolved[0]["payload"]["event"]["type"], json!("permissionResolved"));
+		assert_eq!(resolved[0]["deviceId"], json!(GUEST_DEVICE));
+		assert_eq!(resolved[0]["callKey"], json!("answer-1"));
+	});
+}
+
+impl Authoring {
+	async fn answered_further_keyed_calls(&self) {
+		for n in 0..keyed_calls::ANSWERS_KEPT_PER_DEVICE {
+			let listed =
+				json!({ "id": n, "command": "conversation_list", "args": { "spaceId": PERSONAL } });
+			self.relayed(keyed(listed, &format!("list-{n}"))).await;
+		}
+	}
+}
+
+fn agent_runs(frames: &[Value]) -> usize {
+	frames_of(frames, SUMMONS_DROPPED_EVENT).len()
+}
+
+fn status_and_body(answer: &Value) -> (Value, Value) {
+	(answer["status"].clone(), answer["body"].clone())
+}
+
+#[test]
+fn a_send_repeated_after_a_restart_gets_its_answer_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		let first = host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		let restarted = host.restarted().await;
+		let mut published_after = events::subscribed(restarted.app.handle());
+
+		let repeated = restarted.answered(keyed(restarted.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(status_and_body(&repeated), status_and_body(&first));
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+		assert_eq!(agent_runs(&published_frames(&mut published_after)), 0);
+	});
+}
+
+#[test]
+fn a_send_repeated_after_further_answers_is_refused_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+		assert_eq!(status_and_body(&repeated), (json!(410), json!(keyed_calls::NO_ANSWER_KEPT)));
+	});
+}
+
+#[test]
+fn a_group_created_again_after_a_restart_is_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let restarted = host.restarted().await;
+
+		let repeated = restarted.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(restarted.groups(), 1);
+	});
+}
+
+#[test]
+fn a_group_created_again_after_further_answers_is_refused_and_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.relayed(keyed(a_group_created(1), "group-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(host.groups(), 1);
+		assert_eq!(status_and_body(&repeated), (json!(410), json!(keyed_calls::NO_ANSWER_KEPT)));
 	});
 }

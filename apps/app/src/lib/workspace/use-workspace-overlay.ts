@@ -18,7 +18,7 @@ import { toUserSettingsValue } from "../user/user-settings"
 
 type WorkspaceOverlayInput = {
 	core: WorkspaceCore
-	navigation: Pick<SettingsNavigation, "openThreadInNewTab">
+	navigation: Pick<SettingsNavigation, "openHome" | "openThreadInNewTab">
 	openSettings: OpenSettings | null
 	rosterLines: RosterLines
 	rosterView: RosterView
@@ -43,7 +43,7 @@ export const useWorkspaceOverlay = ({
 		user,
 	} = core
 	const { now, sidebarActions } = rosterLines
-	const { conversationRosters, selected, selectedBotId } = rosterView
+	const { conversationRosters, selectedBotId } = rosterView
 	const { selectedSpace, selectedSpaceId } = scopes
 
 	const isDialogOpen = openSettings !== null
@@ -106,18 +106,10 @@ export const useWorkspaceOverlay = ({
 
 	useTheme({ colorScheme: preferences.colorScheme })
 
-	const startConversationWith = useCallback(
-		(botIds: string[]) => {
-			void roster.controller.createConversation(botIds)
-		},
-		[roster.controller],
-	)
-
 	useWorkspaceShortcuts({
 		isEnabled: !isOverlayOpen,
-		selectedBotId: selected?.id ?? null,
 		onOpenUserSettings: sidebarActions.onOpenUserSettings,
-		onStartConversation: startConversationWith,
+		onNewConversation: navigation.openHome,
 	})
 
 	return {

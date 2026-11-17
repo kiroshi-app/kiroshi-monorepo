@@ -14,6 +14,7 @@ import { isDesktopHost, listen } from "./index"
 import { useHosting } from "./use-hosting"
 
 import { commands, HOSTING_CHANGED_EVENT, type HostingState } from "../bindings"
+import type { ReporterFacts } from "../failure-report"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("./index", () => ({
@@ -59,6 +60,8 @@ const UNKNOWN_FAILURE_OF_HOME: NoticeMessage = {
 	title: "Couldn’t host Home",
 	description: "Check your connection and turn it on again.",
 }
+
+const TAKEN_OVER_FACTS = { reason: { kind: "takenOverByAnotherHost" } }
 
 const TAKEN_OVER_HOME: NoticeMessage = {
 	title: "Couldn’t host Home",
@@ -108,7 +111,8 @@ const createFakeTransport = (
 
 const watchHome = async (overrides: Partial<HostingTransport> = {}) => {
 	const transport = createFakeTransport(overrides)
-	const reportFailure = vi.fn<(message: NoticeMessage) => void>()
+	const reportFailure =
+		vi.fn<(message: NoticeMessage, facts?: ReporterFacts) => void>()
 	const hook = renderHook(
 		({ openSpace }: OpenSpace) =>
 			useHosting(openSpace, { transport, reportFailure }),
@@ -274,7 +278,34 @@ describe("useHosting notices", () => {
 		await hostsAgain(DROPPED)
 		await hostsAgain(DROPPED)
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			TAKEN_OVER_HOME,
+			TAKEN_OVER_FACTS,
+		)
+	})
+
+	it("names the hosting failure kind in the report it raises", async () => {
+		const transport = createFakeTransport()
+		renderHook(() => useHosting(HOME, { transport }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		vi.mocked(transport.read).mockResolvedValue(DROPPED)
+		await announce()
+
+		await vi.waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					report: expect.objectContaining({
+						context: expect.objectContaining({
+							raisedIn: "use-hosting",
+							errorKind: "takenOverByAnotherHost",
+						}),
+					}),
+				}),
+			),
+		)
 	})
 
 	it("describes a notOwner failure with its reason", async () => {
@@ -282,7 +313,9 @@ describe("useHosting notices", () => {
 
 		await hostsAgain(NOT_OWNER)
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(NOT_OWNER_OF_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(NOT_OWNER_OF_HOME, {
+			reason: { kind: "notOwner" },
+		})
 	})
 
 	it("returns the switch to off with the unknown reason when the start rejects", async () => {
@@ -372,7 +405,10 @@ describe("useHosting notices", () => {
 		answer(DROPPED)
 		await settle()
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			TAKEN_OVER_HOME,
+			TAKEN_OVER_FACTS,
+		)
 	})
 
 	it("raises one notice when the failed answer lands before the event of the same start", async () => {
@@ -384,7 +420,10 @@ describe("useHosting notices", () => {
 		await settle()
 		await hostsAgain(DROPPED)
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			TAKEN_OVER_HOME,
+			TAKEN_OVER_FACTS,
+		)
 	})
 
 	it("keeps a state an event settled before the initial read resolves", async () => {

@@ -1,0 +1,229 @@
+import { useEffect, useState } from "react"
+
+import type { LibraryCommentAnchor as ShownAnchor } from "@workspace/ui/components/library-comment-author"
+import {
+	LibraryCommentsList,
+	type LibraryCommentsTab,
+} from "@workspace/ui/components/library-comments-list"
+import type { LibraryBarComments } from "@workspace/ui/components/library-item-menu"
+import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
+
+import { mentionsAnAgent, mentionsIn, partyOf } from "./library-comment-people"
+import {
+	agentAtWorkOf,
+	commentedThreadsOf,
+	countsOf,
+	resolutionOf,
+	summaryOf,
+} from "./library-comment-views"
+import { openMentionedThreadsOn } from "./mentioned-comment-thread"
+import { useCommentModeKey } from "./use-comment-mode-key"
+import type { LibraryCommentPeople } from "./use-library-comment-people"
+import { useLibraryCommentThreads } from "./use-library-comment-threads"
+
+import type { LibraryCommentAnchor, LibraryCommentThread } from "../bindings"
+
+type CommentDraft<Target> = {
+	target: Target
+	text: string
+}
+
+type CommentsState<Target> = {
+	name: string | undefined
+	isCommentMode: boolean
+	openThreadId: string | null
+	draft: CommentDraft<Target> | null
+	reply: string
+	tab: LibraryCommentsTab
+}
+
+type LibraryCommentsInput<Target> = {
+	spaceId: string
+	name: string | undefined
+	people: LibraryCommentPeople
+	anchorOf: (target: Target) => LibraryCommentAnchor
+	anchorLineOf: (thread: LibraryCommentThread) => ShownAnchor
+}
+
+const closedOn = <Target,>(
+	name: string | undefined,
+): CommentsState<Target> => ({
+	name,
+	isCommentMode: false,
+	openThreadId: null,
+	draft: null,
+	reply: "",
+	tab: "open",
+})
+
+const changedOn =
+	<Target,>(
+		name: string | undefined,
+		changes: Partial<CommentsState<Target>>,
+	) =>
+	(current: CommentsState<Target>): CommentsState<Target> => ({
+		...(current.name === name ? current : closedOn<Target>(name)),
+		...changes,
+	})
+
+const showingThread = (openThreadId: string) => ({
+	openThreadId,
+	reply: "",
+	draft: null,
+})
+
+export const anchoredDraftOf = <Target, Draft extends { target: Target }>({
+	target,
+	...written
+}: Draft) => ({ ...written, anchor: target })
+
+export const useLibraryComments = <Target,>({
+	spaceId,
+	name,
+	people,
+	anchorOf,
+	anchorLineOf,
+}: LibraryCommentsInput<Target>) => {
+	const [held, setHeld] = useState(() => closedOn<Target>(name))
+	const state = held.name === name ? held : closedOn<Target>(name)
+	const unnamed = useChatCopy()("working.name")
+	const { threads, hasLoaded, send, reply, resolve, reopen } =
+		useLibraryCommentThreads(spaceId, name, partyOf(people.self))
+
+	const change = (changes: Partial<CommentsState<Target>>) =>
+		setHeld(changedOn(name, changes))
+	const changeIfStillOn = (
+		after: (current: CommentsState<Target>) => CommentsState<Target>,
+	) => setHeld((current) => (current.name === name ? after(current) : current))
+
+	useEffect(() => {
+		if (!name) {
+			return
+		}
+		return openMentionedThreadsOn({ spaceId, itemName: name }, (threadId) =>
+			setHeld(changedOn<Target>(name, showingThread(threadId))),
+		)
+	}, [spaceId, name])
+
+	const now = Date.now()
+	const commented = commentedThreadsOf(threads, people.authorOf, now).map(
+		(each) => ({
+			...each,
+			resolution: resolutionOf(each.thread, unnamed),
+			workingAgents: people.workingAgentsOf(each.thread).map(agentAtWorkOf),
+		}),
+	)
+	const opened = commented.find(
+		({ thread }) => thread.id === state.openThreadId,
+	)
+	const counts = countsOf(threads)
+
+	const openThreadById = (openThreadId: string) =>
+		change(showingThread(openThreadId))
+	const setCommentMode = (isCommentMode: boolean) =>
+		change(isCommentMode ? { isCommentMode } : { isCommentMode, draft: null })
+	useCommentModeKey(hasLoaded, () => setCommentMode(!state.isCommentMode))
+
+	const openUnlessBusy = ({ id }: LibraryCommentThread) =>
+		changeIfStillOn((current) =>
+			current.draft || current.openThreadId
+				? current
+				: { ...current, ...showingThread(id) },
+		)
+
+	const sendDraft = () => {
+		const sent = state.draft
+		if (!sent) {
+			return
+		}
+		const mentions = mentionsIn(sent.text, people.participants)
+		change({ draft: null })
+		send(
+			{ anchor: anchorOf(sent.target), text: sent.text, mentions },
+			() =>
+				changeIfStillOn((current) =>
+					current.draft ? current : { ...current, draft: sent },
+				),
+			(thread) => {
+				if (mentionsAnAgent(mentions)) openUnlessBusy(thread)
+			},
+		)
+	}
+
+	const sendReply = () => {
+		const { openThreadId: threadId, reply: text } = state
+		if (!threadId) {
+			return
+		}
+		change({ reply: "" })
+		reply(
+			{ threadId, text, mentions: mentionsIn(text, people.participants) },
+			() =>
+				changeIfStillOn((current) =>
+					current.openThreadId === threadId && current.reply === ""
+						? { ...current, reply: text }
+						: current,
+				),
+		)
+	}
+
+	const bar: LibraryBarComments | undefined = hasLoaded
+		? {
+				counts,
+				isCommentMode: state.isCommentMode,
+				onCommentModeChange: setCommentMode,
+				list: (
+					<LibraryCommentsList
+						counts={counts}
+						onOpenThread={openThreadById}
+						onTabChange={(tab) => change({ tab })}
+						tab={state.tab}
+						threads={commented
+							.filter(({ thread }) => thread.state === state.tab)
+							.map((each) => summaryOf(each, anchorLineOf(each.thread), now))}
+					/>
+				),
+			}
+		: undefined
+
+	return {
+		bar,
+		isCommentMode: state.isCommentMode,
+		participants: people.participants,
+		threads: commented.filter(
+			({ thread }) => thread.state === "open" || thread === opened?.thread,
+		),
+		openThread: opened && {
+			id: opened.thread.id,
+			anchor: anchorLineOf(opened.thread),
+			comments: opened.comments,
+			participants: people.participants,
+			workingAgents: opened.workingAgents,
+			resolution: opened.resolution,
+			reply: state.reply,
+			onReplyChange: (text: string) => change({ reply: text }),
+			onReply: sendReply,
+			onResolve: () => resolve(opened.thread.id),
+			onReopen: () => reopen(opened.thread.id),
+			onClose: () => change({ openThreadId: null, reply: "" }),
+		},
+		draft: state.draft && {
+			target: state.draft.target,
+			author: people.self,
+			participants: people.participants,
+			value: state.draft.text,
+			onValueChange: (text: string) =>
+				changeIfStillOn((current) =>
+					current.draft
+						? { ...current, draft: { ...current.draft, text } }
+						: current,
+				),
+			onSubmit: sendDraft,
+			onClose: () => change({ draft: null }),
+		},
+		openThreadById,
+		startComment: (target: Target) =>
+			change({ draft: { target, text: "" }, openThreadId: null, reply: "" }),
+		leaveCommentMode: () => setCommentMode(false),
+	}
+}

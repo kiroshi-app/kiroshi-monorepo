@@ -13,16 +13,18 @@ final class CompanionPictures {
 
     @ObservationIgnored private let connection: RelayConnection
     @ObservationIgnored private var settled: Set<String> = []
-    @ObservationIgnored private var loading: Set<String> = []
+    @ObservationIgnored private let requests = InFlightRequests<String, Void>()
 
     init(connection: RelayConnection) {
         self.connection = connection
     }
 
     func load(_ file: String) async {
-        guard !settled.contains(file), !loading.contains(file) else { return }
-        loading.insert(file)
-        defer { loading.remove(file) }
+        guard !settled.contains(file) else { return }
+        try? await requests.value(for: file) { [weak self] in await self?.fetch(file) }
+    }
+
+    private func fetch(_ file: String) async {
         do {
             let answer = try await connection.call("relay_avatar", args: PictureArgs(file: file))
             pictures[file] = try await Self.picture(of: answer)

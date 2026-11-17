@@ -16,12 +16,11 @@ const REMOVED_CHORDS: KeyboardEventInit[] = [
 	{ key: "Backspace", metaKey: true },
 ]
 
-const mounted = (isEnabled = true, selectedBotId: string | null = null) => {
+const mounted = (isEnabled = true) => {
 	const shortcuts: WorkspaceShortcuts = {
 		isEnabled,
-		selectedBotId,
 		onOpenUserSettings: vi.fn(),
-		onStartConversation: vi.fn(),
+		onNewConversation: vi.fn(),
 	}
 	renderHook(useWorkspaceShortcuts, { initialProps: shortcuts })
 	return shortcuts
@@ -56,7 +55,7 @@ describe("useWorkspaceShortcuts", () => {
 		const event = pressOn(document.body, { key: ",", metaKey: true })
 
 		expect(shortcuts.onOpenUserSettings).toHaveBeenCalledTimes(1)
-		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(shortcuts.onNewConversation).not.toHaveBeenCalled()
 		expect(event.defaultPrevented).toBe(true)
 	})
 
@@ -70,28 +69,16 @@ describe("useWorkspaceShortcuts", () => {
 		})
 
 		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
-		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(shortcuts.onNewConversation).not.toHaveBeenCalled()
 		expect(event.defaultPrevented).toBe(false)
 	})
 
-	it("starts an empty conversation on Cmd+N with no companion selected", () => {
+	it("opens the New draft on Cmd+N", () => {
 		const shortcuts = mounted()
 
 		const event = pressOn(document.body, { key: "n", metaKey: true })
 
-		expect(shortcuts.onStartConversation).toHaveBeenCalledTimes(1)
-		expect(shortcuts.onStartConversation).toHaveBeenCalledWith([])
-		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
-		expect(event.defaultPrevented).toBe(true)
-	})
-
-	it("seats the selected companion in the conversation Cmd+N starts", () => {
-		const shortcuts = mounted(true, "atlas")
-
-		const event = pressOn(document.body, { key: "n", metaKey: true })
-
-		expect(shortcuts.onStartConversation).toHaveBeenCalledTimes(1)
-		expect(shortcuts.onStartConversation).toHaveBeenCalledWith(["atlas"])
+		expect(shortcuts.onNewConversation).toHaveBeenCalledTimes(1)
 		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
 		expect(event.defaultPrevented).toBe(true)
 	})
@@ -109,7 +96,7 @@ describe("useWorkspaceShortcuts", () => {
 		pressOn(target, { key: "n", metaKey: true })
 
 		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
-		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(shortcuts.onNewConversation).not.toHaveBeenCalled()
 	})
 
 	it("fires nothing while an overlay holds the keyboard", () => {
@@ -119,7 +106,7 @@ describe("useWorkspaceShortcuts", () => {
 		pressOn(document.body, { key: "n", metaKey: true })
 
 		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
-		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(shortcuts.onNewConversation).not.toHaveBeenCalled()
 	})
 
 	it.each(REMOVED_CHORDS)("does nothing on the removed chord %o", (init) => {
@@ -128,7 +115,7 @@ describe("useWorkspaceShortcuts", () => {
 		const event = pressOn(document.body, init)
 
 		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
-		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(shortcuts.onNewConversation).not.toHaveBeenCalled()
 		expect(event.defaultPrevented).toBe(false)
 	})
 })

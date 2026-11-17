@@ -24,7 +24,7 @@ import {
 	SPACE_DESCRIBED_EVENT,
 	type SpaceDescribed,
 } from "../bindings"
-import { failureReporterIn } from "../failure-report"
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
@@ -112,7 +112,7 @@ type JoinedSpacesControllerOptions = {
 	spaces: Pick<SpacesController, "getState" | "select">
 	hosts?: JoinedSpacesHosts
 	transport?: JoinedSpacesTransport
-	reportFailure?: (notice: NoticeMessage) => void
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 	shownThreads?: ShownThreads
 	reportHostOffline?: (notice: NoticeMessage) => void
 }
@@ -192,7 +192,7 @@ const describeRefusalNoticeOf = (refusal: unknown) => ({
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
 
-const hostSpaceIdOf = (joined: JoinedSpace): string =>
+export const hostSpaceIdOf = (joined: JoinedSpace): string =>
 	joined.remoteSpaceId ?? joined.id
 
 const HOST_OF_STATUS: Record<JoinedHostState["status"], SpaceHost> = {
@@ -378,7 +378,7 @@ export const createJoinedSpacesController = ({
 		queryClient.setQueryData(listKey, joinedSpaces)
 
 	const reportRefusal = (reason: unknown) =>
-		reportFailure(joinRejectionNoticeOf(reason))
+		reportFailure(joinRejectionNoticeOf(reason), { reason })
 
 	const heldJoined = (id: string) =>
 		current().joinedSpaces.find((joined) => joined.id === id)
@@ -419,7 +419,7 @@ export const createJoinedSpacesController = ({
 		onRefused: (id, reason) => {
 			writes.drop(id)
 			restoreSaved(id)
-			reportFailure(describeRefusalNoticeOf(reason))
+			reportFailure(describeRefusalNoticeOf(reason), { reason })
 		},
 	})
 

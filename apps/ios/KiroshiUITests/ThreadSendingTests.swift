@@ -47,6 +47,30 @@ final class ThreadSendingTests: XCTestCase {
         XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
     }
 
+    func sectionsShown(in app: XCUIApplication) throws -> Int {
+        try staticTexts(in: app.snapshot()).reduce(0) {
+            $0 + $1.label.components(separatedBy: " of the notes ").count - 1
+        }
+    }
+
+    func waitForTheReplyToGrow(beyond shown: Int, in app: XCUIApplication) {
+        let hasGrown = NSPredicate { [self] _, _ in
+            ((try? sectionsShown(in: app)) ?? 0) > shown
+        }
+        wait(for: [expectation(for: hasGrown, evaluatedWith: nil)], timeout: 30)
+    }
+
+    func waitForTheReplyToRunBelowTheComposer(in app: XCUIApplication) {
+        let isBelow = NSPredicate { [self] _, _ in
+            let composerTop = composer(in: app).frame.minY
+            let texts = (try? app.snapshot()).map(staticTexts) ?? []
+            return texts.contains {
+                $0.label.contains(" of the notes ") && $0.frame.minY > composerTop
+            }
+        }
+        wait(for: [expectation(for: isBelow, evaluatedWith: nil)], timeout: 30)
+    }
+
     func sendAndReadTheLongReply(raisingTheKeyboard isKeyboardUp: Bool) {
         let app = launch("long-reply", "-draft", sent)
         XCTAssertTrue(text("That’s the whole checklist", in: app).waitForExistence(timeout: 10))
@@ -74,18 +98,26 @@ final class ThreadSendingTests: XCTestCase {
         sendAndReadTheLongReply(raisingTheKeyboard: true)
     }
 
-    func testSomeoneWhoScrollsUpWhileTheReplyStreamsStaysWhereTheyAre() {
-        let app = launch("long-reply", "-draft", sent)
+    func testSomeoneWhoScrollsUpWhileTheReplyStreamsStaysWhereTheyAre() throws {
+        let app = launch("long-reply", "-draft", sent, "-replyUntilStopped", "YES")
         XCTAssertTrue(text("That’s the whole checklist", in: app).waitForExistence(timeout: 10))
         app.buttons["Send"].tap()
-        XCTAssertTrue(text("Section 1 of the notes", in: app).waitForExistence(timeout: 30))
+        waitForTheReplyToRunBelowTheComposer(in: app)
+        let bubble = text(sent, in: app)
+        XCTAssertTrue(bubble.isHittable)
+        let heldAt = bubble.frame
 
         drag(app, down: 150)
 
         XCTAssertTrue(app.buttons["Stop"].exists)
-        let bubble = text(sent, in: app)
         XCTAssertTrue(bubble.isHittable)
         let readAt = bubble.frame
+        XCTAssertGreaterThan(readAt.minY, heldAt.minY)
+        waitForTheReplyToGrow(beyond: try sectionsShown(in: app), in: app)
+        XCTAssertEqual(bubble.frame, readAt)
+
+        app.buttons["Stop"].tap()
+
         XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
         XCTAssertEqual(bubble.frame, readAt)
     }

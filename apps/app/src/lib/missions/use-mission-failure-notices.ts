@@ -26,7 +26,10 @@ export const useMissionSendFailure = (refused: RefusedMessage | null): void => {
 	}, [refused, t])
 }
 
-export const useMissionReadFailure = (hasFailedToRead: boolean): void => {
+export const useMissionReadFailure = (
+	hasFailedToRead: boolean,
+	readError: unknown,
+): void => {
 	const t = useChatCopy()
 	const wasFailing = useRef(false)
 
@@ -42,16 +45,22 @@ export const useMissionReadFailure = (hasFailedToRead: boolean): void => {
 				title: t("missions.failure.read.title"),
 				description: t("missions.failure.read.description"),
 			},
-			{ raisedIn: "use-mission-failure-notices" },
+			{ raisedIn: "use-mission-failure-notices", reason: readError },
 		)
-	}, [hasFailedToRead, t])
+	}, [hasFailedToRead, readError, t])
 }
+
+type SpaceMissionsFailure = Pick<
+	SpaceMissionsView,
+	"hasFailed" | "isFailureRaised" | "readError" | "reload"
+>
 
 export const useSpaceMissionsFailure = ({
 	hasFailed,
 	isFailureRaised,
+	readError,
 	reload,
-}: SpaceMissionsView): void => {
+}: SpaceMissionsFailure): void => {
 	const t = useChatCopy()
 	const wasFailing = useRef(false)
 	const hasUnraisedFailure = hasFailed && !isFailureRaised
@@ -69,7 +78,7 @@ export const useSpaceMissionsFailure = ({
 				description: t("activity.failure.missions.description"),
 				action: { label: t("notice.retry"), onPress: reload },
 			},
-			{ raisedIn: "use-mission-failure-notices" },
+			{ raisedIn: "use-mission-failure-notices", reason: readError },
 		)
-	}, [hasUnraisedFailure, reload, t])
+	}, [hasUnraisedFailure, readError, reload, t])
 }

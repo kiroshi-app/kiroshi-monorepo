@@ -22,7 +22,11 @@ import type { TranscriptStore } from "./store-port"
 import type { CompanionSpoke } from "./transcript-contract"
 import { seatBots } from "./transcript-fixtures"
 
-import type { ReporterFacts, UnreportedFailureNotice } from "../failure-report"
+import {
+	buildFailureReport,
+	type ReporterFacts,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
 import type { ConversationSource } from "../host/conversation-provenance"
@@ -1020,6 +1024,37 @@ describe("a write of a spoken word that fails", () => {
 			command: "conversation_open_assistant_message",
 			turn: expect.any(String),
 			reason: expect.anything(),
+		})
+	})
+
+	it("reports the refused command and the kind of error the host answered", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const base = createFakeTranscriptStore()
+		const { conversation, facts, announce } = await createRoom({
+			...base,
+			openAssistantMessage: (message) =>
+				Promise.reject(
+					new RefusedWrite(
+						"conversation_open_assistant_message",
+						message.turnId,
+						FOREIGN_KEY_REFUSAL,
+					),
+				),
+		})
+
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: idOf(conversation, "Ada"),
+			text: "Walls are up.",
+		})
+
+		const { context } = await buildFailureReport({
+			raisedIn: "companion-spoke-driver",
+			...facts[0],
+		})
+		expect(context).toMatchObject({
+			command: "conversation_open_assistant_message",
+			errorKind: "storage",
 		})
 	})
 

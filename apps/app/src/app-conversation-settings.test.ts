@@ -304,6 +304,22 @@ it.each([
 	},
 )
 
+it("opens the New draft on Cmd+N and starts no conversation", async () => {
+	const router = await mountRouterAt()
+	const started = vi.spyOn(
+		harness.store as TranscriptStore,
+		"createConversation",
+	)
+
+	await act(async () => {
+		fireEvent.keyDown(window, { key: "n", metaKey: true })
+	})
+	await settle()
+
+	expect(router.state.location.pathname).toBe("/home")
+	expect(started).not.toHaveBeenCalled()
+})
+
 it("returns to the conversations when the route names no conversation of the Space", async () => {
 	const router = await mountRouterAt("/settings/conversation/nowhere")
 

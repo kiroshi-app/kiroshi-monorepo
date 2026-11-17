@@ -34,7 +34,7 @@ export const createOutbox = (
 	{
 		openedFor,
 		promptRows: { promptRow, storePrompt, showPrompt },
-		prompts: { claim, sendPrompt, runInOpenThread },
+		prompts: { claim, sendPrompt, runInOpenThread, recordedPromptOf },
 		answer,
 	}: OutboxParts,
 ) => {
@@ -58,13 +58,14 @@ export const createOutbox = (
 				return
 			}
 			dispatch(bot, { type: "outboxEntryRemoved", id: entry.id })
-			const outcome = await claim(bot, () =>
-				sendPrompt(bot, entry.text, entry.replyLinks, entry.documents),
-			)
-			if (outcome === "unwritten") {
-				dispatch(bot, { type: "promptReturned", entry })
+			const outcome = await claim(bot, () => sendPrompt(bot, entry))
+			if (outcome.kind === "unwritten") {
+				dispatch(bot, {
+					type: "promptReturned",
+					entry: { ...entry, refusal: outcome.refusal },
+				})
 			}
-			if (outcome !== "submitted") {
+			if (outcome.kind !== "submitted") {
 				return
 			}
 		}
@@ -104,21 +105,26 @@ export const createOutbox = (
 		if (asked) {
 			await runInOpenThread(bot)
 		}
+		const prompt = { text: trimmed, replyLinks, documents }
 		const outcome = canSend(bot)
-			? await claim(bot, () => sendPrompt(bot, trimmed, replyLinks, documents))
-			: "unwritten"
-		if (outcome === "unwritten") {
+			? await claim(bot, () => sendPrompt(bot, prompt))
+			: { kind: "unwritten" as const }
+		if (outcome.kind === "unwritten") {
 			dispatch(bot, {
 				type: "promptHeld",
-				entry: {
-					id: newId(),
-					text: trimmed,
-					replyLinks,
-					documents,
-				},
+				entry: { id: newId(), ...prompt, refusal: outcome.refusal },
 			})
+			if (outcome.refusal) {
+				return
+			}
 		}
 		pump(bot)
+	}
+
+	const settleRecorded = (bot: BotChat) => {
+		if (canSend(bot) && recordedPromptOf(bot, bot.state.outbox[0]?.refusal)) {
+			pump(bot)
+		}
 	}
 
 	const recordHeld = (bot: BotChat) => {
@@ -221,5 +227,5 @@ export const createOutbox = (
 		pump(bot)
 	}
 
-	return { pump, send, stop, sendNow }
+	return { pump, settleRecorded, send, stop, sendNow }
 }

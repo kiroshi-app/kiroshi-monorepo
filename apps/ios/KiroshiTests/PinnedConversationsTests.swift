@@ -142,6 +142,27 @@ struct PinnedConversationsTests {
         await connection.stop()
     }
 
+    @Test func aPinWhoseListClosesWhileItReadsThePinsIsStillSent() async throws {
+        let board = PinBoard(Self.othersPinned, sections: ["s-1"])
+        let companions = [juniper, pico]
+        let topics = topics
+        let host = TestHost(companions: companions, groups: topics, holding: ["section_list"]) {
+            call in
+            board.answer(call, companions: companions, groups: topics)
+        }
+        let (store, connection, following) = await follow(host)
+        let pinning = store.pin("topic-3")
+        let sections = try #require(await host.nextCall("section_list"))
+
+        following.cancel()
+        await following.value
+        host.reply(try #require(board.answer(sections, companions: companions, groups: topics)))
+        await pinning?.value
+
+        #expect(board.sent == [Self.othersPinned + [RosterPin(id: "topic-3", sectionId: nil)]])
+        await connection.stop()
+    }
+
     @Test func unpinningSendsTheWholePinListWithoutTheRowAndItReturnsToItsPlace() async {
         let board = PinBoard(Self.othersPinned, sections: ["s-1"])
         let host = pinningHost(board)
