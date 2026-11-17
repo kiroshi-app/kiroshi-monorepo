@@ -36,6 +36,7 @@ import {
 	SIMULATOR_LOOKUP,
 	type Step,
 	scopeLine,
+	shardPlannedSeconds,
 	shardTests,
 	skipReason,
 	spawnedCommand,
@@ -1191,10 +1192,10 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("splits ios over four jobs, each told its shard out of the matrix size", () => {
+	it("splits ios over five jobs, each told its shard out of the matrix size", () => {
 		expect(workflow.jobs.ios?.strategy).toEqual({
 			"fail-fast": false,
-			matrix: { shard: [1, 2, 3, 4] },
+			matrix: { shard: [1, 2, 3, 4, 5] },
 		})
 		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
 
@@ -1205,7 +1206,7 @@ describe("the jobs of ci.yml", () => {
 					strategy: { "job-total": shards.length },
 				}),
 			),
-		).toEqual(["1/4", "2/4", "3/4", "4/4"])
+		).toEqual(["1/5", "2/5", "3/5", "4/5", "5/5"])
 	})
 
 	it.each([
@@ -1685,6 +1686,20 @@ describe("the ios shards", () => {
 				...classes.map((name) => `KiroshiUITests/${name}`),
 			].sort(),
 		)
+	})
+
+	it("plans no shard of the workflow above 16 minutes", () => {
+		const classes = uiTestClasses()
+		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
+		const plannedSeconds = shards.map((_, position) =>
+			shardPlannedSeconds(
+				{ index: position + 1, count: shards.length },
+				classes,
+			),
+		)
+
+		expect(plannedSeconds).toHaveLength(5)
+		expect(Math.max(...plannedSeconds)).toBeLessThanOrEqual(16 * 60)
 	})
 
 	it("tests a shard from the built products alone, keeping the log that tells whether a test started", () => {
