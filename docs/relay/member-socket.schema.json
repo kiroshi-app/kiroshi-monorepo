@@ -5005,6 +5005,17 @@
             "nodeId"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },

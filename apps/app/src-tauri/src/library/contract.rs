@@ -139,9 +139,15 @@ pub struct LibraryBoardPoint {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LibraryPresenceAt {
 	#[serde(rename_all = "camelCase")]
-	Text { anchor: String },
+	Text {
+		anchor: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Board { point: LibraryBoardPoint, node_id: Option<String> },
+	Board {
+		point: LibraryBoardPoint,
+		node_id: Option<String>,
+	},
+	Image,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
