@@ -1346,7 +1346,7 @@ describe("createRosterController on conversations", () => {
 	it("keeps a created conversation after a reload", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await openedConversation(controller)
+		const created = await controller.createUnselectedConversation([])
 
 		const state = await reloaded(store)
 
