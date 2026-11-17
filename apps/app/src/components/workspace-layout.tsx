@@ -58,7 +58,6 @@ export const WorkspaceLayout = () => {
 	if (!hasLeftLaunchLoader) {
 		return (
 			<StartupScreen
-				agents={rosterView.bots}
 				hasFailed={spaces.state.hasFailedToLoad}
 				isExiting={haveLaunchReadsSettled({
 					hasLoadedPreferences: user.state.hasLoaded,
