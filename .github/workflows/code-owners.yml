@@ -1,0 +1,75 @@
+name: Code owners
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# find runs the code of the PR with a read token, disarm holds the write token and checks out nothing.
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      owned: ${{ steps.owned.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Read the files of the PR and the CODEOWNERS of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --paginate --jq '.[].filename' >"$RUNNER_TEMP/files"
+          gh api "repos/$GITHUB_REPOSITORY/contents/.github/CODEOWNERS?ref=main" -H "Accept: application/vnd.github.raw+json" >"$RUNNER_TEMP/CODEOWNERS"
+
+      - name: Log the files of the PR owned in CODEOWNERS
+        id: owned
+        shell: bash
+        run: |
+          bun scripts/code-owners.ts "$RUNNER_TEMP/CODEOWNERS" <"$RUNNER_TEMP/files" | tee "$RUNNER_TEMP/owned"
+          echo "count=$(wc -l <"$RUNNER_TEMP/owned" | tr -d ' ')" >>"$GITHUB_OUTPUT"
+
+  disarm:
+    needs: find
+    if: needs.find.outputs.owned != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Disable auto-merge on a PR holding owned files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NODE_ID: ${{ github.event.pull_request.node_id }}
+          ARMED_STATE_QUERY: 'query($id: ID!) { node(id: $id) { ... on PullRequest { autoMergeRequest { enabledAt } } } }'
+          DISARM_MUTATION: 'mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { pullRequest { autoMergeRequest { enabledAt } } } }'
+        run: |
+          armed=$(gh api graphql -f query="$ARMED_STATE_QUERY" -f id="$PR_NODE_ID" --jq '.data.node.autoMergeRequest != null')
+          if [ "$armed" != "true" ]; then
+            echo "No auto-merge armed: green, waiting for Steve"
+            exit 0
+          fi
+          still_armed=$(gh api graphql -f query="$DISARM_MUTATION" -f id="$PR_NODE_ID" --jq '.data.disablePullRequestAutoMerge.pullRequest.autoMergeRequest != null')
+          if [ "$still_armed" != "false" ]; then
+            echo "::error::auto-merge still armed after disablePullRequestAutoMerge"
+            exit 1
+          fi
+          echo "Auto-merge disabled: green, waiting for Steve"
