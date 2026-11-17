@@ -1966,8 +1966,17 @@ export const createConversationController = (
 		)
 	}
 
+	const claimedRequestIds = new Set<string>()
+
 	const speakerAsked = (id: string) =>
 		[...speakers.values()].find((held) => held.pending?.request.id === id)
+
+	const releaseAsked = (id: string) => {
+		const held = speakerAsked(id)
+		if (held) {
+			releasePrompt(held, id)
+		}
+	}
 
 	const answerForeign = async (
 		scope: RuntimeScope,
@@ -1978,6 +1987,7 @@ export const createConversationController = (
 			await send()
 			foreignTurns.release(scope, id)
 			keptRuns.settle(scope, id)
+			releaseAsked(id)
 			return true
 		} catch (reason) {
 			noteSpeakerFailure(scope.botId, toTransportError(reason))
@@ -1987,7 +1997,7 @@ export const createConversationController = (
 		}
 	}
 
-	const answer = async (id: string, answers: QuestionAnswers) => {
+	const sendAnswer = async (id: string, answers: QuestionAnswers) => {
 		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
 			const isAccepted = await answerForeign(foreign.scope, id, () =>
@@ -2003,25 +2013,25 @@ export const createConversationController = (
 					answers,
 				)
 			}
-			return
+			return isAccepted
 		}
 		const held = speakerAsked(id)
 		const pending = held?.pending
 		if (!held?.scope || pending?.kind !== "question") {
-			return
+			return false
 		}
 		const conversationId = conversation?.id
 		const isAnswerable =
 			(await loadLatest()) && conversation?.id === conversationId
 		if (!isAnswerable) {
-			return
+			return false
 		}
 		try {
 			await driver.answerQuestion(held.scope, id, answers)
 		} catch (reason) {
 			noteSpeakerFailure(held.botId, toTransportError(reason))
 			sync()
-			return
+			return false
 		}
 		const openId = conversation?.id
 		if (openId) {
@@ -2032,29 +2042,51 @@ export const createConversationController = (
 			)
 		}
 		releasePrompt(held, id)
+		return true
 	}
 
-	const respond = async (id: string, decision: PermissionDecision) => {
+	const sendDecision = async (id: string, decision: PermissionDecision) => {
 		const foreign = foreignTurns.scopeAsking(id)
 		if (foreign) {
-			await answerForeign(foreign, id, () =>
+			return answerForeign(foreign, id, () =>
 				driver.respondToPermission(foreign, id, decision),
 			)
-			return
 		}
 		const held = speakerAsked(id)
 		if (!held?.scope) {
-			return
+			return false
 		}
 		try {
 			await driver.respondToPermission(held.scope, id, decision)
 		} catch (reason) {
 			noteSpeakerFailure(held.botId, toTransportError(reason))
 			sync()
-			return
+			return false
 		}
 		releasePrompt(held, id)
+		return true
 	}
+
+	const replyOnce = async (id: string, send: () => Promise<boolean>) => {
+		if (claimedRequestIds.has(id)) {
+			return
+		}
+		claimedRequestIds.add(id)
+		try {
+			if (!(await send())) {
+				claimedRequestIds.delete(id)
+			}
+		} catch (reason) {
+			claimedRequestIds.delete(id)
+			throw reason
+		}
+	}
+
+	const answer = (id: string, answers: QuestionAnswers) =>
+		replyOnce(id, () => sendAnswer(id, answers))
+
+	const respond = (id: string, decision: PermissionDecision) =>
+		replyOnce(id, () => sendDecision(id, decision))
 
 	const settleStop = (
 		{ conversationId }: RuntimeScope,
