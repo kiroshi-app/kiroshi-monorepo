@@ -1389,7 +1389,7 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced", () => {
+	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced nor a cancelled run", () => {
 		const changes = workflow.jobs.changes
 		const steps = changes?.steps ?? []
 		const greenIndex = steps.findIndex((step) => step.id === "green")
@@ -1523,16 +1523,6 @@ describe("the jobs of ci.yml", () => {
 	it("cancels the run of an earlier push to main still in progress", () => {
 		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
 		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("true")
-	})
-
-	it("diffs a push to main following a cancelled run against the last green push run, never the cancelled one", () => {
-		const lookup =
-			(workflow.jobs.changes?.steps ?? []).find((step) => step.id === "green")
-				?.run ?? ""
-
-		expect(lookup).toContain("--status success")
-		expect(lookup).not.toContain("--status completed")
-		expect(lookup).not.toContain("--status cancelled")
 	})
 
 	it("keeps one concurrency group per pull_request ref", () => {
