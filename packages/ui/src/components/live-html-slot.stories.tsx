@@ -66,11 +66,6 @@ const placementIn = (view: Element, scroller: Element) => ({
 	clip: visiblePartOf(view, scroller),
 })
 
-const unclipped = (view: Element) => ({
-	rect: rectOf(view),
-	clip: rectOf(view),
-})
-
 const scrollPast = (scroller: Element, view: HTMLElement, share: number) => {
 	scroller.scrollTop +=
 		view.getBoundingClientRect().top -
@@ -259,7 +254,10 @@ export const Enlarged = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const viewPlacement = () => unclipped(viewOf(canvasElement))
+		const viewPlacement = () => {
+			const rect = rectOf(viewOf(canvasElement))
+			return { rect, clip: rect }
+		}
 		const topAfter = () =>
 			canvas.getByTestId("paragraph-after").getBoundingClientRect().top
 		const inPlace = await reportFollows(args.onPlacementChange, viewPlacement)
