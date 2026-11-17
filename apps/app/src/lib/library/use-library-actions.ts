@@ -4,13 +4,15 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	deleteLibraryItem,
+	duplicateLibraryItem,
 	renameLibraryDocument,
 } from "./library-document-writes"
 import type { LibraryImageSource } from "./library-image-source"
+import { titleOf } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { readLibraryFile } from "./library-reads"
 
-import { commands, type LibraryError } from "../bindings"
+import { commands, type LibraryError, type LibraryItem } from "../bindings"
 
 type LibraryResult<Data> =
 	| { status: "ok"; data: Data }
@@ -131,11 +133,55 @@ const useLibraryDelete = (spaceId: string) => {
 	}).mutate
 }
 
+type DuplicatedItem = Pick<LibraryItem, "kind" | "name">
+
+class LibraryItemNotDuplicated extends Error {
+	readonly item: DuplicatedItem
+
+	constructor(item: DuplicatedItem, cause: unknown) {
+		super("library item not duplicated", { cause })
+		this.item = item
+	}
+}
+
+const duplicateOrFail = async (spaceId: string, item: DuplicatedItem) => {
+	try {
+		return await duplicateLibraryItem(spaceId, item.name)
+	} catch (reason) {
+		throw new LibraryItemNotDuplicated(item, reason)
+	}
+}
+
+const duplicateFailureNoticeOf = (error: unknown) => ({
+	title:
+		error instanceof LibraryItemNotDuplicated
+			? i18n.t("common:library.itemMenu.duplicateFailure", {
+					name: titleOf(error.item),
+				})
+			: i18n.t("chat:screen.notice.failed"),
+})
+
+const useLibraryDuplicate = (spaceId: string) => {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: (item: DuplicatedItem) => duplicateOrFail(spaceId, item),
+		onSettled: () =>
+			queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			}),
+		meta: {
+			failureNotice: duplicateFailureNoticeOf,
+			raisedIn: "use-library-actions",
+		},
+	}).mutate
+}
+
 export const useLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", ACTION_COMMANDS.save),
 	...useLibraryCopy(spaceId, ACTION_COMMANDS.copy),
 	reveal: useLibraryAction(spaceId, "reveal", ACTION_COMMANDS.reveal),
 	rename: useLibraryRename(spaceId),
+	duplicate: useLibraryDuplicate(spaceId),
 	remove: useLibraryDelete(spaceId),
 })
 
@@ -143,5 +189,6 @@ export const useJoinedLibraryActions = (spaceId: string) => ({
 	save: useLibraryAction(spaceId, "save", saveFromHost),
 	...useLibraryCopy(spaceId, copyFromHost),
 	rename: useLibraryRename(spaceId),
+	duplicate: useLibraryDuplicate(spaceId),
 	remove: useLibraryDelete(spaceId),
 })

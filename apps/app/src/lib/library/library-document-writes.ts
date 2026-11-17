@@ -37,6 +37,9 @@ export const renameLibraryDocument = (
 export const deleteLibraryItem = (spaceId: string, name: string) =>
 	invoke<null>("library_delete", { spaceId, name })
 
+export const duplicateLibraryItem = (spaceId: string, name: string) =>
+	invoke<LibraryItem>("library_duplicate", { spaceId, name })
+
 export const shareLibraryCaret = (
 	spaceId: string,
 	name: string,

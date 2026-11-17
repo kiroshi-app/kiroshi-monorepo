@@ -130,6 +130,15 @@ const createFakeLibraryHost = () => {
 	}
 
 	const commands: Record<string, (call: LibraryCall) => unknown> = {
+		library_duplicate: ({ name }) => {
+			const original = harness.libraryItems.find((item) => item.name === name)
+			const copy = libraryItemOf(
+				name.replace(/(\.[^.]+)$/, " copy$1"),
+				original?.kind ?? "document",
+			)
+			harness.libraryItems = [...harness.libraryItems, copy]
+			return copy
+		},
 		library_create_document: ({ name }) => {
 			if (harness.libraryItems.some((item) => item.name === name)) {
 				throw { kind: "alreadyExists", name }
@@ -1584,6 +1593,27 @@ describe("a board opened from the Library grid", () => {
 			screen.queryByRole("heading", { name: common("board.empty.title") }),
 		).toBeNull()
 		expect(boardCanvas()).toBeNull()
+	})
+
+	it("duplicates the open board from its bar, keeps it open and lists the copy", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		await click(
+			screen.getByRole("button", {
+				name: common("library.document.duplicate"),
+			}),
+		)
+
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		await click(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		)
+		expect(isTileShown("Roadmap copy")).toBe(true)
 	})
 
 	it("turns its tab back into the Library on the board's Back", async () => {

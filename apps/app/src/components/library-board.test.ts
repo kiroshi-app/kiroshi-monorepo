@@ -258,6 +258,7 @@ type BoardElementOptions = {
 	onBack?: () => void
 	onDownload?: () => void
 	onCopy?: () => Promise<void>
+	onDuplicate?: () => void
 	name?: string
 	summary?: LibraryBoardSummary
 	isJoined?: boolean
@@ -267,6 +268,7 @@ const boardElement = ({
 	onBack = vi.fn(),
 	onDownload = vi.fn(),
 	onCopy = vi.fn(async () => {}),
+	onDuplicate = vi.fn(),
 	name = NAME,
 	summary = SUMMARY,
 	isJoined = false,
@@ -283,6 +285,7 @@ const boardElement = ({
 		onBack,
 		onDownload,
 		onCopy,
+		onDuplicate,
 		onDelete: vi.fn(),
 	})
 
@@ -476,6 +479,26 @@ describe("a Library board on its live session", () => {
 
 		expect(onDownload).toHaveBeenCalledOnce()
 		await waitFor(() => expect(onCopy).toHaveBeenCalledOnce())
+	})
+
+	it("calls onDuplicate once from the Duplicate button of its bar", async () => {
+		fakeHost()
+		const onDuplicate = vi.fn()
+		render(boardElement({ onDuplicate }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = within(
+			document.querySelector('[data-slot="app-header"]') as HTMLElement,
+		)
+
+		fireEvent.click(
+			header.getByRole("button", {
+				name: common("library.document.duplicate"),
+			}),
+		)
+
+		expect(onDuplicate).toHaveBeenCalledOnce()
 	})
 
 	it("deletes the focused object through the session and brings it back on undo", async () => {
