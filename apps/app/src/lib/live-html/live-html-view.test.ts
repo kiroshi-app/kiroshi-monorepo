@@ -67,16 +67,25 @@ describe("a live html view", () => {
 		expect(callsOf()).toEqual(["live_html_mount", "live_html_place"])
 	})
 
-	it.each([
-		["scrolls out of the thread", OUT_OF_SIGHT],
-		["is gone", null],
-	])("removes the view when its slot %s", async (_, geometry) => {
+	it("hides the view, kept alive, when its slot scrolls out of the thread", async () => {
 		host.answer.mockResolvedValue(null)
 		const view = viewOf()
 		view.follow({ rect: RECT, clip: CLIP })
 		await flush()
 
-		view.follow(geometry)
+		view.follow(OUT_OF_SIGHT)
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_hide"])
+	})
+
+	it("removes the view when its slot is gone", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.follow(null)
 		await flush()
 
 		expect(host.answer).toHaveBeenLastCalledWith("live_html_remove", {
@@ -84,7 +93,7 @@ describe("a live html view", () => {
 		})
 	})
 
-	it("mounts again when its slot scrolls back into the thread", async () => {
+	it("places then shows the same view when its slot scrolls back into the thread", async () => {
 		host.answer.mockResolvedValue(null)
 		const view = viewOf()
 		view.follow({ rect: RECT, clip: CLIP })
@@ -98,10 +107,30 @@ describe("a live html view", () => {
 		expect(callsOf()).toEqual([
 			"live_html_mount",
 			"live_html_place",
-			"live_html_remove",
-			"live_html_mount",
+			"live_html_hide",
 			"live_html_place",
+			"live_html_show",
 		])
+		expect(host.answer).toHaveBeenCalledWith("live_html_place", {
+			id: "view-1",
+			rectangle: MOVED.rect,
+			clip: MOVED.clip,
+		})
+	})
+
+	it("keeps a view scrolled out of the thread hidden when a surface closes", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.follow(OUT_OF_SIGHT)
+		view.cover(true)
+		await flush()
+
+		view.cover(false)
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_hide"])
 	})
 
 	it("mounts nothing for a slot out of sight", async () => {
@@ -152,6 +181,26 @@ describe("a live html view", () => {
 
 		expect(onFailure).toHaveBeenCalledWith({ kind: "mainWindowMissing" })
 		expect(callsOf()).toEqual(["live_html_mount"])
+	})
+
+	it("raises one notice when removing fails after an earlier failure", async () => {
+		const onFailure = vi.fn()
+		host.answer.mockImplementation(async (command: string) => {
+			if (command === "live_html_place") throw { kind: "invalidRectangle" }
+			if (command === "live_html_remove") throw { kind: "unknownView" }
+			return null
+		})
+
+		viewOf({ onFailure }).follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		expect(callsOf()).toEqual([
+			"live_html_mount",
+			"live_html_place",
+			"live_html_remove",
+		])
+		expect(onFailure).toHaveBeenCalledTimes(1)
+		expect(onFailure).toHaveBeenCalledWith({ kind: "invalidRectangle" })
 	})
 
 	it("removes a mounted view whose placing failed", async () => {

@@ -34,7 +34,7 @@ const isSameRect = (a: LiveHtmlRect, b: LiveHtmlRect) =>
 const isSameGeometry = (a: LiveHtmlGeometry | null, b: LiveHtmlGeometry) =>
 	a !== null && isSameRect(a.rect, b.rect) && isSameRect(a.clip, b.clip)
 
-const isOnScreen = ({ clip }: LiveHtmlGeometry) =>
+const isInSight = ({ clip }: LiveHtmlGeometry) =>
 	clip.width > 0 && clip.height > 0
 
 const answered = async (answer: CommandAnswer) => {
@@ -59,8 +59,8 @@ export const createLiveHtmlView = ({
 			await answered(answer)
 			onDone()
 		} catch (reason) {
+			if (!hasFailed) onFailure(reason)
 			hasFailed = true
-			onFailure(reason)
 		}
 	}
 
@@ -95,10 +95,14 @@ export const createLiveHtmlView = ({
 		})
 
 	const stepTowards = (geometry: LiveHtmlGeometry): Step | null => {
-		if (!drawn.isMounted) return mount(geometry)
-		if (isCovered && !drawn.isHidden) return hide
-		if (!isSameGeometry(drawn.geometry, geometry)) return place(geometry)
-		return !isCovered && drawn.isHidden ? show : null
+		const isSeen = isInSight(geometry)
+		const shouldHide = isCovered || !isSeen
+		if (!drawn.isMounted) return isSeen ? mount(geometry) : null
+		if (shouldHide && !drawn.isHidden) return hide
+		if (isSeen && !isSameGeometry(drawn.geometry, geometry)) {
+			return place(geometry)
+		}
+		return !shouldHide && drawn.isHidden ? show : null
 	}
 
 	const nextStep = (): Step | null => {
@@ -116,7 +120,7 @@ export const createLiveHtmlView = ({
 	}
 
 	const follow = (geometry: LiveHtmlGeometry | null) => {
-		wantedGeometry = geometry && isOnScreen(geometry) ? geometry : null
+		wantedGeometry = geometry
 		void settle()
 	}
 
