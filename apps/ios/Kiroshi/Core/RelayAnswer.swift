@@ -12,6 +12,10 @@ struct RelayAnswer: Sendable {
         }
     }
 
+    var hasAlreadyRun: Bool {
+        status == 410
+    }
+
     var isRefusedByTheRelay: Bool {
         status == 413
             && (try? body(as: String.self)) == RelayConnection.answerRefusedByTheRelay

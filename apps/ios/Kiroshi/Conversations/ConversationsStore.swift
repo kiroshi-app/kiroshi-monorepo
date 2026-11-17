@@ -272,6 +272,12 @@ final class ConversationsStore {
                 return
             }
             creating = nil
+            guard error as? RelayCallError != .alreadyRan else {
+                pendingCreation = nil
+                creation = .idle
+                isPickingCompanions = false
+                return
+            }
             creation =
                 error as? ConversationCallError == .unknownToTheHost
                 ? .refusedByOlderHost : .failed
