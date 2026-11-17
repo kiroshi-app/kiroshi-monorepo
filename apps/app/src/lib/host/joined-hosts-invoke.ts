@@ -30,6 +30,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"library_read_picked_image",
 	"library_read_link_preview",
 	"live_html_mount",
+	"live_html_mount_attachment",
 	"live_html_place",
 	"live_html_hide",
 	"live_html_show",
