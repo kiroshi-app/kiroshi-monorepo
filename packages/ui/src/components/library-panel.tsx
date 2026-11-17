@@ -145,11 +145,11 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 		>
 			<Icons.Search
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 start-2 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-soft-foreground"
+				className="pointer-events-none absolute inset-y-0 start-3.25 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-soft-foreground"
 			/>
 			<Input
 				aria-label={t("library.search")}
-				className="text-ellipsis rounded-compact-control bg-muted ps-7.25 pe-1.75 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact dark:placeholder:text-placeholder-foreground"
+				className="text-ellipsis rounded-full border-foreground/12 bg-foreground/3 ps-8.5 pe-3 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
