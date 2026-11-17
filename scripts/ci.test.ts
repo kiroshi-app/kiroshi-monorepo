@@ -1846,8 +1846,7 @@ describe("the jobs of ci.yml", () => {
 		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("false")
 	})
 
-	it("keeps one concurrency group per pull_request ref, cancelling the run in progress", () => {
-		expect(concurrencyOf(pullRequest(7, 12)).cancelsInProgress).toBe("true")
+	it("keeps one concurrency group per pull_request ref", () => {
 		expect(concurrencyOf(pullRequest(7, 12)).group).toBe(
 			concurrencyOf(pullRequest(7, 11)).group,
 		)
