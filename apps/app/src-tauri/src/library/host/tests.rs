@@ -1681,8 +1681,7 @@ async fn a_member_image_position_is_published_at_once_without_the_board_pace() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn an_image_position_on_a_document_a_board_or_a_missing_item_is_refused_and_publishes_nothing(
-) {
+async fn an_image_position_outside_an_image_is_refused_and_publishes_nothing() {
 	let (app, root) = a_host("image-wrong-kind").await;
 	put(&root, SPACE, "notes.md", "Notes.");
 	put(&root, SPACE, BOARD, EMPTY_BOARD);
