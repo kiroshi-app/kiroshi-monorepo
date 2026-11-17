@@ -279,9 +279,7 @@
 	);
 	--radius-compact-control:
 		var(--radius-compact-control-inline) / var(--radius-compact-control-block);
-	--radius-compact-segment:
-		max(0px, var(--radius-compact-control-inline) - var(--spacing) * 0.5) /
-		max(0px, var(--radius-compact-control-block) - var(--spacing) * 0.5);
+	--radius-compact-segment: calc(var(--radius-lg) - var(--spacing) * 0.75);
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
 	--text-reading--line-height: 1.375rem;

@@ -1207,6 +1207,7 @@ forms-colourfield--unmount-mid-drag-emits-the-pending-hue-once
 forms-copyfield--default
 forms-copyfield--empty
 forms-input--default
+forms-input--default-dark
 forms-input--filled
 forms-input--focused
 forms-inputotp--default

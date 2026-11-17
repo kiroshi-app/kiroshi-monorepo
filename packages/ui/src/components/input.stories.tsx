@@ -4,6 +4,7 @@ import { type ComponentProps, useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { tokenStyleIn } from "@workspace/storybook/story-utils"
 import { Input } from "@workspace/ui/components/ui/input"
 
 const SEARCH_LABEL = "Search the history"
@@ -55,11 +56,12 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
+	globals: { theme: "light" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The search field the moment the History panel opens it, empty. Check that the placeholder repeats the accessible name rather than replacing it — the field carries no visible label, so the name has to come from `aria-label` — and that the panel's 28px override wins over the primitive's 32px instead of being dropped. Pick `Filled` for a query already typed.",
+					"The search field the moment the History panel opens it, empty. Check that the placeholder repeats the accessible name rather than replacing it — the field carries no visible label, so the name has to come from `aria-label` — that the panel's 28px override wins over the primitive's 32px instead of being dropped, and that the corners wear the normal radius rather than square ones. Pick `Filled` for a query already typed.",
 			},
 		},
 	},
@@ -69,7 +71,21 @@ export const Default = meta.story({
 		await expect(field).toHaveValue("")
 		await expect(field).toHaveAttribute("placeholder", SEARCH_LABEL)
 		await expect(field.getBoundingClientRect().height).toBe(28)
+		await expect(getComputedStyle(field).borderTopLeftRadius).toBe(
+			tokenStyleIn(
+				field.parentElement as HTMLElement,
+				"rounded-lg",
+				"borderTopLeftRadius",
+			),
+		)
+		await expect(
+			Number.parseFloat(getComputedStyle(field).borderTopLeftRadius),
+		).toBeGreaterThan(0)
 	},
+})
+
+export const DefaultDark = Default.extend({
+	globals: { theme: "dark" },
 })
 
 export const Filled = meta.story({

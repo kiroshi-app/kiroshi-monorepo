@@ -18,8 +18,8 @@ const trackVariants = cva("relative", {
 		kind: {
 			tabs: "scrollbar-hide max-w-full overflow-x-auto bg-transparent p-0",
 			segments:
-				"scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit",
-			filters: "gap-0.5 rounded-compact-control bg-muted p-0.5",
+				"scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-lg bg-border p-0.75 group-data-horizontal/tabs:h-fit",
+			filters: "gap-0.75 rounded-lg bg-muted p-0.75",
 		},
 	},
 })
@@ -29,16 +29,16 @@ const tabVariants = cva("relative transition-none", {
 		kind: {
 			tabs: "h-7.5 shrink-0 py-0 data-active:bg-transparent dark:data-active:bg-transparent",
 			segments:
-				"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 hover:text-foreground data-active:bg-transparent data-active:text-foreground dark:data-active:bg-transparent",
+				"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-compact-segment px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 hover:text-foreground data-active:bg-transparent data-active:text-foreground dark:data-active:bg-transparent",
 			filters:
-				"gap-1.5 rounded-compact-segment border border-transparent px-1.25 font-normal text-xs leading-4 hover:bg-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-control-hover aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-primary-foreground",
+				"h-6.5 gap-1.5 rounded-compact-segment border border-transparent px-1.25 font-normal text-xs leading-4 hover:bg-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-control-hover aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-primary-foreground",
 		},
 	},
 })
 
 const PILL_CLASS = {
 	tabs: "rounded-lg bg-background dark:bg-input/30",
-	segments: "rounded-md bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
+	segments: "rounded-compact-segment bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
 	filters: "rounded-compact-segment bg-primary",
 } as const satisfies Record<SlidingTabsKind, string>
 

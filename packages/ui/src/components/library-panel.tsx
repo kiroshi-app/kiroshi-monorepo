@@ -60,12 +60,12 @@ const SKELETON_FILTER_WIDTHS = ["w-11", "w-16", "w-21", "w-15.5"]
 const FiltersSkeleton = () => (
 	<div
 		aria-hidden="true"
-		className="flex animate-pulse gap-0.5 p-0.5 motion-reduce:animate-none"
+		className="flex animate-pulse gap-0.75 p-0.75 motion-reduce:animate-none"
 		data-slot="library-filters-skeleton"
 	>
 		{SKELETON_FILTER_WIDTHS.map((width) => (
 			<Skeleton
-				className={cn("h-7 animate-none rounded-sm bg-border", width)}
+				className={cn("h-6.5 animate-none rounded-sm bg-border", width)}
 				key={width}
 			/>
 		))}

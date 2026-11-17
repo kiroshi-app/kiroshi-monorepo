@@ -265,7 +265,7 @@ export const GridAll = meta.story({
 			name: `All ${LIBRARY_ITEMS.length}`,
 		})
 		await expect(all).toHaveAttribute("aria-pressed", "true")
-		await expect(all.getBoundingClientRect().height).toBe(28)
+		await expect(all.getBoundingClientRect().height).toBe(26)
 		await expect(getComputedStyle(all).transitionProperty).toBe("none")
 
 		const accent = getComputedStyle(slotIn(canvasElement, "library-panel"))
@@ -1787,7 +1787,7 @@ const expectBarAsDrawn = async (
 		getComputedStyle(all).fontSize,
 		getComputedStyle(all).lineHeight,
 		getComputedStyle(all).fontWeight,
-	]).toEqual([28, "12px", "16px", "500"])
+	]).toEqual([26, "12px", "16px", "500"])
 	await expectFill(pressedFillOf(all), "bg-primary", all)
 	await expect(getComputedStyle(all).color).toBe(
 		tokenStyleIn(all, "text-primary-foreground", "color"),
@@ -2286,7 +2286,7 @@ export const FilterFocus = meta.story({
 			boxOf(all).left - boxOf(strip).left,
 			boxOf(all).top - boxOf(strip).top,
 			boxOf(strip).bottom - boxOf(all).bottom,
-		]).toEqual([4, 4, 4])
+		]).toEqual([5, 5, 5])
 		await pointer.keyboard("{ArrowRight}")
 		await expect(images).toHaveFocus()
 		await expectSpaceColourRing(images)
