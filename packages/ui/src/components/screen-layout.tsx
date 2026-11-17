@@ -26,7 +26,7 @@ const ScreenLayout = ({
 }: ScreenLayoutProps) => {
 	const columnClassName = cn(
 		"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
-		width === "column" && "mx-auto max-w-200",
+		width === "column" && "mx-auto max-w-172 py-6",
 		contentClassName,
 	)
 
