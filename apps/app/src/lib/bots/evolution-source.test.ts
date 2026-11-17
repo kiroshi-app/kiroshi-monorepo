@@ -168,6 +168,24 @@ describe("evolution source", () => {
 		expect(panels.rereadPlugin).not.toHaveBeenCalled()
 	})
 
+	it("reports with its reason a subscription the driver refuses", async () => {
+		const panels = createPanels()
+		const reportFailure = vi.fn()
+		const refusal = { kind: "notStarted" }
+
+		startEvolutionSource({
+			driver: { subscribe: () => Promise.reject(refusal) },
+			reportFailure,
+			...panels,
+		})
+		await flush()
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{ title: "Couldn’t send that request" },
+			{ reason: refusal },
+		)
+	})
+
 	it("ignores an unrecorded change without a runtime scope", () => {
 		const panels = createPanels()
 		const { driver, reportFailure } = start(panels)

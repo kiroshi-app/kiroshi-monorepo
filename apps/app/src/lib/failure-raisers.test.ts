@@ -31,6 +31,7 @@ const REPORTER_ALIAS = new RegExp(
 )
 const BOUND_REPORTER = /\b(\w+)\s*[:=]\s*failureReporterIn\(/g
 const NAMES_A_REASON = /\breason\b/
+const EMPTY_REASON = /\breason\s*:\s*(?:undefined|null)\b/
 const OPENING = "([{"
 const CLOSING = ")]}"
 
@@ -71,14 +72,9 @@ const RAISERS_WITHOUT_ERROR: RaiserWithoutError[] = [
 		why: "the conversation hands back a refused message, with no error",
 	},
 	{
-		file: "lib/missions/use-mission-failure-notices.ts",
-		call: "missions.failure.read.title",
-		why: "the mission read reports a failed flag, its query raised the error it met",
-	},
-	{
-		file: "lib/missions/use-mission-failure-notices.ts",
-		call: "activity.failure.missions.title",
-		why: "the space missions read reports a failed flag, its query raised the error it met",
+		file: "lib/onboarding/onboarding-flow-controller.ts",
+		call: "chat:onboarding.arrival.firstCompanionMissing",
+		why: "no first agent is stored to summon, nothing threw",
 	},
 	{
 		file: "lib/workspace/use-sidebar-missions.ts",
@@ -165,10 +161,13 @@ const raises = (): Raise[] => {
 
 const isWithoutReason = ({ facts }: Raise) => !NAMES_A_REASON.test(facts)
 
+const isMatchedBy =
+	({ file, call }: RaiserWithoutError) =>
+	(raise: Raise) =>
+		raise.file === file && raise.call.includes(call)
+
 const isListedWithoutError = (raise: Raise) =>
-	RAISERS_WITHOUT_ERROR.some(
-		({ file, call }) => raise.file === file && raise.call.includes(call),
-	)
+	RAISERS_WITHOUT_ERROR.some((entry) => isMatchedBy(entry)(raise))
 
 const raisesWithoutReason = () => raises().filter(isWithoutReason)
 
@@ -177,6 +176,12 @@ const describeDroppedReason = ({ file, call }: Raise) =>
 
 const describeStaleEntry = ({ file, call }: RaiserWithoutError) =>
 	`${file} no longer raises ${call} without a reason: drop it from RAISERS_WITHOUT_ERROR`
+
+const describeEmptyReason = ({ file, call }: Raise) =>
+	`${file} raises ${call} with an empty reason: hand it the error it caught, or drop the reason and list it in RAISERS_WITHOUT_ERROR`
+
+const describeWideEntry = ({ file, call }: RaiserWithoutError) =>
+	`the RAISERS_WITHOUT_ERROR entry ${file} ${call} matches more than one raise: name one call`
 
 describe("the failure raisers of the app", () => {
 	it("finds the raisers across the app", () => {
@@ -202,13 +207,27 @@ describe("the failure raisers of the app", () => {
 	it("lists only raisers that still raise without an error", () => {
 		const reasonless = raisesWithoutReason()
 		const stale = RAISERS_WITHOUT_ERROR.filter(
-			({ file, call }) =>
-				!reasonless.some(
-					(raise) => raise.file === file && raise.call.includes(call),
-				),
+			(entry) => !reasonless.some(isMatchedBy(entry)),
 		).map(describeStaleEntry)
 
 		expect(stale, stale.join("\n")).toEqual([])
+	})
+
+	it("hands no raiser an empty reason", () => {
+		const empty = raises()
+			.filter(({ facts }) => EMPTY_REASON.test(facts))
+			.map(describeEmptyReason)
+
+		expect(empty, empty.join("\n")).toEqual([])
+	})
+
+	it("lists each raiser without an error by one call alone", () => {
+		const every = raises()
+		const wide = RAISERS_WITHOUT_ERROR.filter(
+			(entry) => every.filter(isMatchedBy(entry)).length > 1,
+		).map(describeWideEntry)
+
+		expect(wide, wide.join("\n")).toEqual([])
 	})
 
 	it("raises a failure notice through the shared failure report alone", () => {

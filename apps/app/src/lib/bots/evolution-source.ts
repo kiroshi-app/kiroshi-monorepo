@@ -65,6 +65,11 @@ export const startEvolutionSource = ({
 			{ reason: failed },
 		)
 
+	const reportUnsubscribed = (reason: unknown) => {
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
+		return undefined
+	}
+
 	const detach = driver
 		.subscribe(({ scope, event }) => {
 			if (!scope) {
@@ -77,7 +82,7 @@ export const startEvolutionSource = ({
 				reportUnrecorded(event)
 			}
 		})
-		.catch(() => undefined)
+		.catch(reportUnsubscribed)
 
 	return () => {
 		void detach.then((stop) => stop?.())
