@@ -131,19 +131,10 @@ const inWideCard = (args: ComponentProps<typeof ScreenLayout>) => (
 	</div>
 )
 
-const boxesIn = (canvasElement: HTMLElement) => {
-	const card = canvasElement.querySelector<HTMLElement>("[data-content-card]")
-	if (!card) throw new globalThis.Error("The layout sits in no card")
-
-	return {
-		card: card.getBoundingClientRect(),
-		column: slotIn(
-			canvasElement,
-			"screen-layout-column",
-		).getBoundingClientRect(),
-		scroller: slotIn(canvasElement, "screen-layout-scroller"),
-	}
-}
+const boxesIn = (canvasElement: HTMLElement) => ({
+	column: slotIn(canvasElement, "screen-layout-column").getBoundingClientRect(),
+	scroller: slotIn(canvasElement, "screen-layout-scroller"),
+})
 
 export const ColumnWidthInWideCard = meta.story({
 	args: { width: "column", children: CONTENT },
