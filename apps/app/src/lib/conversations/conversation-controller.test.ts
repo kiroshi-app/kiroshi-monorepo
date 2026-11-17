@@ -1269,26 +1269,26 @@ describe("createConversationController", () => {
 	})
 
 	describe("a companion asking the reader", () => {
+		const ASK: AgentEvent = {
+			type: "questionRequested",
+			request: {
+				id: "ask-1",
+				questions: [
+					{
+						header: "Walls",
+						question: "Which wall?",
+						options: [],
+						multiSelect: false,
+					},
+				],
+			},
+		}
+
 		const askedIn = async (harness: Harness) => {
 			const nyx = idOf(harness.conversation, "Nyx")
 			await harness.controller.send("@Nyx hold the walls")
 			await harness.settled()
-			harness.driver.pushTo(nyx, [
-				{
-					type: "questionRequested",
-					request: {
-						id: "ask-1",
-						questions: [
-							{
-								header: "Walls",
-								question: "Which wall?",
-								options: [],
-								multiSelect: false,
-							},
-						],
-					},
-				},
-			])
+			harness.driver.pushTo(nyx, [ASK])
 			await harness.settled()
 			return nyx
 		}
@@ -1613,28 +1613,14 @@ describe("createConversationController", () => {
 			const ada = idOf(harness.conversation, "Ada")
 			await harness.controller.send("@Ada and @Nyx hold the walls")
 			await harness.settled()
-			const ask: AgentEvent = {
-				type: "questionRequested",
-				request: {
-					id: "ask-1",
-					questions: [
-						{
-							header: "Walls",
-							question: "Which wall?",
-							options: [],
-							multiSelect: false,
-						},
-					],
-				},
-			}
 			harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
 			await harness.settled()
 			harness.driver.pushTo(nyx, [
-				ask,
+				ASK,
 				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
 			])
 			await harness.settled()
-			harness.driver.pushTo(nyx, [ask])
+			harness.driver.pushTo(nyx, [ASK])
 			await harness.settled()
 
 			await harness.controller.answer("ask-1", { "Which wall?": "north" })
