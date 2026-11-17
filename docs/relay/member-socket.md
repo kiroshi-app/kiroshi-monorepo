@@ -132,11 +132,15 @@ being the relay device id that sent the call:
   host restarted gets the first run's answer too.
 - The host keeps the answers of the last 1024 calls of each device in each shared
   space. A repeat of an older key does not run: it answers `410` with
-  `"this call already ran and the host no longer keeps its answer"`. The events
+  `"this call already ran and the host keeps no answer for it"`. The events
   that first run published carried its `callKey`; read the state again to learn
   what it did.
-- A call the host was still running when it stopped left no answer behind: its
-  repeat runs.
+- A call the host was still running when it stopped never answered, and the host
+  can't tell how far it got: its repeat does not run either, it answers the same
+  `410`.
+- A call the host could not record before running it does not run: it answers
+  `500` with `"the host could not use its record of this call"`, and its repeat
+  is checked again.
 - Removing a device from the shared space, or removing the shared space, forgets
   every call of that device, or of that space.
 - The same `callKey` from another device, or in another shared space, is another
@@ -167,7 +171,7 @@ A call without `callKey` runs each time it arrives, as before.
 | 413 | a string: the call is larger than the host accepts |
 | 413 | `commands.chat_store_attachments.error` with `kind` `tooLarge`, `tooLargeTogether` or `tooMany`: the attachments exceed a limit of [Attachments](#attachments) |
 | 502 | a string: the host could not run the call on its side |
-| 410 | `"this call already ran and the host no longer keeps its answer"`: a repeat of a `callKey` older than the last 1024 calls of the device, see [A repeated call](#a-repeated-call) |
+| 410 | `"this call already ran and the host keeps no answer for it"`: a repeat of a `callKey` older than the last 1024 calls of the device, or of a call the host was running when it stopped, see [A repeated call](#a-repeated-call) |
 
 The host bounds each call at 300 seconds. A client that hears no answer by then
 fails the call.

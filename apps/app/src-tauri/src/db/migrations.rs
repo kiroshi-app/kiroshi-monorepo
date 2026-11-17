@@ -1566,6 +1566,9 @@ CREATE TABLE member_call_answers (
 	CHECK (status BETWEEN 100 AND 999)
 );
 
+CREATE INDEX member_call_answers_kept ON member_call_answers (space_id, device_id, seq)
+WHERE status IS NOT NULL;
+
 CREATE TRIGGER member_call_answers_leave_with_their_device
 AFTER DELETE ON space_roster
 BEGIN

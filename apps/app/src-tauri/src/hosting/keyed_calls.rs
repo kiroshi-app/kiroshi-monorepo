@@ -13,8 +13,7 @@ use crate::db::{DatabaseError, DatabaseState};
 
 pub(super) const ANSWERS_KEPT_PER_DEVICE: u32 = 1024;
 
-pub(super) const ANSWER_NO_LONGER_KEPT: &str =
-	"this call already ran and the host no longer keeps its answer";
+pub(super) const NO_ANSWER_KEPT: &str = "this call already ran and the host keeps no answer for it";
 
 const REFUSED_BEFORE_INVOKE: [StatusCode; 5] = [
 	StatusCode::BAD_REQUEST,
@@ -26,7 +25,7 @@ const REFUSED_BEFORE_INVOKE: [StatusCode; 5] = [
 
 const FIRST_RUN_LOST: &str = "the first run of this call ended without an answer";
 
-const RECORD_UNREADABLE: &str = "the host could not read its record of this call";
+pub(super) const RECORD_UNUSABLE: &str = "the host could not use its record of this call";
 
 pub(super) type Answered = (StatusCode, Value);
 
@@ -98,30 +97,33 @@ impl FirstRun {
 		answers: &MemberCallAnswersRepository,
 		run: impl Future<Output = Ran>,
 	) -> Answered {
-		match answers.kept(self.key.clone()).await {
-			Ok(None) => self.ran_and_kept(answers, run).await,
+		match answers.claimed(self.key.clone()).await {
+			Ok(None) => self.ran_and_recorded(answers, run).await,
 			Ok(Some(kept)) => repeated(kept),
 			Err(error) => unrecorded(&error),
 		}
 	}
 
-	async fn ran_and_kept(
+	async fn ran_and_recorded(
 		&self,
 		answers: &MemberCallAnswersRepository,
 		run: impl Future<Output = Ran>,
 	) -> Answered {
-		let (status, body) = match run.await {
-			Ran::Answered(answered) => answered,
-			Ran::Unreached(unreached) => return unreached,
+		let ran = run.await;
+		let recorded = match &ran {
+			Ran::Answered((status, body)) if !REFUSED_BEFORE_INVOKE.contains(status) => {
+				let kept = body.clone();
+				answers
+					.answered(self.key.clone(), status.as_u16(), kept, ANSWERS_KEPT_PER_DEVICE)
+					.await
+			}
+			_ => answers.unclaimed(self.key.clone()).await,
 		};
-		if REFUSED_BEFORE_INVOKE.contains(&status) {
-			return (status, body);
-		}
-		let kept = answers
-			.answered(self.key.clone(), status.as_u16(), body.clone(), ANSWERS_KEPT_PER_DEVICE)
-			.await;
-		if let Err(error) = kept {
-			log::error!("a keyed member call ran but its answer was not kept: {error:?}");
+		let (status, body) = ran.into_answered();
+		if let Err(error) = recorded {
+			log::error!(
+				"a keyed member call answered {status} but its record was not updated: {error:?}"
+			);
 		}
 		(status, body)
 	}
@@ -146,16 +148,16 @@ fn repeated(kept: KeptCall) -> Answered {
 			Ok(status) => (status, body),
 			Err(error) => {
 				log::error!("a kept member call answer holds no status: {error}");
-				(StatusCode::INTERNAL_SERVER_ERROR, json!(RECORD_UNREADABLE))
+				(StatusCode::INTERNAL_SERVER_ERROR, json!(RECORD_UNUSABLE))
 			}
 		},
-		KeptCall::AnswerForgotten => (StatusCode::GONE, json!(ANSWER_NO_LONGER_KEPT)),
+		KeptCall::Unanswered => (StatusCode::GONE, json!(NO_ANSWER_KEPT)),
 	}
 }
 
 fn unrecorded(error: &DatabaseError) -> Answered {
-	log::error!("a keyed member call did not run, its record could not be read: {error:?}");
-	(StatusCode::INTERNAL_SERVER_ERROR, json!(RECORD_UNREADABLE))
+	log::error!("a keyed member call did not run, its record could not be claimed: {error:?}");
+	(StatusCode::INTERNAL_SERVER_ERROR, json!(RECORD_UNUSABLE))
 }
 
 pub(super) async fn answered_by_the_first_run(mut watching: Watching) -> Answered {
@@ -172,6 +174,8 @@ fn lost() -> Answered {
 #[cfg(test)]
 mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering};
+
+	use tokio::sync::Notify;
 
 	use super::*;
 	use crate::db::connection::temp_dir;
@@ -216,6 +220,11 @@ mod tests {
 				}
 			};
 			answered_by_the_first_run(watching).await
+		}
+
+		fn answers(&self) -> &MemberCallAnswersRepository {
+			let Ok(database) = &self.database else { panic!("the database opens") };
+			database.member_call_answers()
 		}
 
 		fn runs(&self) -> usize {
@@ -275,7 +284,7 @@ mod tests {
 		let refused = host.called(a_key("k0"), ok("again")).await;
 		let kept = host.called(a_key("k1"), ok("again")).await;
 
-		assert_eq!(refused, (StatusCode::GONE, json!(ANSWER_NO_LONGER_KEPT)));
+		assert_eq!(refused, (StatusCode::GONE, json!(NO_ANSWER_KEPT)));
 		assert_eq!(kept, ok("kept"));
 		assert_eq!(host.runs(), usize::try_from(ANSWERS_KEPT_PER_DEVICE).expect("a count") + 1);
 	}
@@ -296,14 +305,52 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_call_refused_before_invoke_keeps_no_answer() {
+	async fn a_call_refused_before_invoke_leaves_no_row_and_its_repeat_runs() {
 		let host = Host::new();
 		for status in REFUSED_BEFORE_INVOKE {
 			let key = a_key(&status.to_string());
 			host.called(key.clone(), (status, json!("refused"))).await;
 
+			assert_eq!(host.answers().kept(key.clone()).await.expect("read"), None, "{status}");
 			assert_eq!(host.called(key, ok("passed")).await, ok("passed"), "{status}");
 		}
+	}
+
+	#[tokio::test]
+	async fn a_repeat_of_a_call_the_host_stopped_mid_run_answers_410_and_runs_nothing() {
+		let host = Host::new();
+		let started = Notify::new();
+		let running = first(host.calls.claim(a_key("k1")));
+		let never_answers = async {
+			host.runs.fetch_add(1, Ordering::SeqCst);
+			started.notify_one();
+			std::future::pending().await
+		};
+		tokio::select! {
+			() = running.answered_once(&host.database, never_answers) => panic!("the run answered"),
+			() = started.notified() => {}
+		}
+		let restarted = host.restarted();
+
+		let repeated = restarted.called(a_key("k1"), ok("again")).await;
+
+		assert_eq!(repeated, (StatusCode::GONE, json!(NO_ANSWER_KEPT)));
+		assert_eq!(host.runs() + restarted.runs(), 1);
+	}
+
+	#[tokio::test]
+	async fn a_call_whose_claim_cannot_be_written_does_not_run_and_answers_500() {
+		let host = Host::new();
+		let Ok(database) = &host.database else { panic!("the database opens") };
+		database
+			.call(|connection| Ok(connection.pragma_update(None, "query_only", true)?))
+			.await
+			.expect("the database turns read-only");
+
+		let answered = host.called(a_key("k1"), ok("one")).await;
+
+		assert_eq!(answered, (StatusCode::INTERNAL_SERVER_ERROR, json!(RECORD_UNUSABLE)));
+		assert_eq!(host.runs(), 0);
 	}
 
 	#[tokio::test]
@@ -317,11 +364,12 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_call_that_never_reached_the_host_api_keeps_no_answer() {
+	async fn a_call_that_never_reached_the_host_api_leaves_no_row_and_its_repeat_runs() {
 		let host = Host::new();
 		let unreached = Ran::Unreached((StatusCode::BAD_GATEWAY, json!("not reached")));
 		host.ran(a_key("k1"), unreached).await;
 
+		assert_eq!(host.answers().kept(a_key("k1")).await.expect("read"), None);
 		assert_eq!(host.called(a_key("k1"), ok("reached")).await, ok("reached"));
 		assert_eq!(host.runs(), 2);
 	}

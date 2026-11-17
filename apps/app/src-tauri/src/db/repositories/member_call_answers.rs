@@ -1,5 +1,5 @@
 use rusqlite::types::Type;
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use serde_json::Value;
 
 use crate::db::{Access, DatabaseError};
@@ -7,27 +7,33 @@ use crate::db::{Access, DatabaseError};
 const SELECT_KEPT: &str = "SELECT status, body FROM member_call_answers
 	WHERE space_id = ?1 AND device_id = ?2 AND call_key = ?3";
 
-const INSERT_ANSWER: &str =
-	"INSERT INTO member_call_answers (space_id, device_id, call_key, seq, status, body)
+const INSERT_CLAIM: &str = "INSERT INTO member_call_answers (space_id, device_id, call_key, seq)
 	VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(seq), 0) + 1 FROM member_call_answers
-		WHERE space_id = ?1 AND device_id = ?2), ?4, ?5)
-	RETURNING seq";
+		WHERE space_id = ?1 AND device_id = ?2))";
 
-const FORGET_ANSWER: &str = "UPDATE member_call_answers SET status = NULL, body = NULL
-	WHERE space_id = ?1 AND device_id = ?2 AND seq = ?3";
+const FILL_ANSWER: &str = "UPDATE member_call_answers SET status = ?4, body = ?5
+	WHERE space_id = ?1 AND device_id = ?2 AND call_key = ?3";
+
+const FORGET_OLD_ANSWERS: &str = "UPDATE member_call_answers SET status = NULL, body = NULL
+	WHERE space_id = ?1 AND device_id = ?2 AND status IS NOT NULL
+	AND seq <= (SELECT MAX(seq) FROM member_call_answers
+		WHERE space_id = ?1 AND device_id = ?2) - ?3";
+
+const DELETE_CLAIM: &str = "DELETE FROM member_call_answers
+	WHERE space_id = ?1 AND device_id = ?2 AND call_key = ?3";
 
 const UNREADABLE_ANSWER: &str = "a kept member call answer is not json";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeptCall {
 	Answered { status: u16, body: Value },
-	AnswerForgotten,
+	Unanswered,
 }
 
 impl KeptCall {
 	fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
 		let (Some(status), Some(body)) = (row.get(0)?, row.get::<_, Option<String>>(1)?) else {
-			return Ok(Self::AnswerForgotten);
+			return Ok(Self::Unanswered);
 		};
 		let body = serde_json::from_str(&body).map_err(|_| {
 			rusqlite::Error::FromSqlConversionFailure(1, Type::Text, UNREADABLE_ANSWER.into())
@@ -52,14 +58,18 @@ impl MemberCallAnswersRepository {
 		Self { access }
 	}
 
-	pub async fn kept(&self, key: MemberCallKey) -> Result<Option<KeptCall>, DatabaseError> {
+	pub async fn claimed(&self, key: MemberCallKey) -> Result<Option<KeptCall>, DatabaseError> {
 		self.access
-			.call(move |connection| {
-				let kept = connection
-					.prepare_cached(SELECT_KEPT)?
-					.query_row(params![key.space_id, key.device_id, key.call_key], KeptCall::read)
-					.optional()?;
-				Ok(kept)
+			.call_mut(move |connection| {
+				let transaction =
+					connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+				if let Some(kept) = kept_in(&transaction, &key)? {
+					return Ok(Some(kept));
+				}
+				transaction
+					.execute(INSERT_CLAIM, params![key.space_id, key.device_id, key.call_key])?;
+				transaction.commit()?;
+				Ok(None)
 			})
 			.await
 	}
@@ -77,19 +87,41 @@ impl MemberCallAnswersRepository {
 					.map_err(|error| rusqlite::Error::ToSqlConversionFailure(error.into()))?;
 				let MemberCallKey { space_id, device_id, call_key } = key;
 				let transaction = connection.transaction()?;
-				let seq: i64 = transaction.query_row(
-					INSERT_ANSWER,
-					params![space_id, device_id, call_key, status, body],
-					|row| row.get(0),
-				)?;
-				let oldest_forgotten = seq - i64::from(answers_kept);
 				transaction
-					.execute(FORGET_ANSWER, params![space_id, device_id, oldest_forgotten])?;
+					.execute(FILL_ANSWER, params![space_id, device_id, call_key, status, body])?;
+				transaction
+					.execute(FORGET_OLD_ANSWERS, params![space_id, device_id, answers_kept])?;
 				transaction.commit()?;
 				Ok(())
 			})
 			.await
 	}
+
+	pub async fn unclaimed(&self, key: MemberCallKey) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				connection
+					.execute(DELETE_CLAIM, params![key.space_id, key.device_id, key.call_key])?;
+				Ok(())
+			})
+			.await
+	}
+
+	#[cfg(test)]
+	pub(crate) async fn kept(&self, key: MemberCallKey) -> Result<Option<KeptCall>, DatabaseError> {
+		self.access.call(move |connection| kept_in(connection, &key)).await
+	}
+}
+
+fn kept_in(
+	connection: &Connection,
+	key: &MemberCallKey,
+) -> Result<Option<KeptCall>, DatabaseError> {
+	let kept = connection
+		.prepare_cached(SELECT_KEPT)?
+		.query_row(params![key.space_id, key.device_id, key.call_key], KeptCall::read)
+		.optional()?;
+	Ok(kept)
 }
 
 #[cfg(test)]
@@ -123,12 +155,49 @@ mod tests {
 		}
 	}
 
+	async fn ran(
+		answers: &MemberCallAnswersRepository,
+		key: MemberCallKey,
+		body: Value,
+		kept: u32,
+	) {
+		assert_eq!(answers.claimed(key.clone()).await.expect("claimed"), None);
+		answers.answered(key, 200, body, kept).await.expect("kept");
+	}
+
+	#[tokio::test]
+	async fn a_claimed_call_reads_as_unanswered_until_its_answer_fills_it() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let answers = database.member_call_answers();
+		answers.claimed(a_key("k1")).await.expect("claimed");
+
+		let running = answers.claimed(a_key("k1")).await.expect("read");
+		answers.answered(a_key("k1"), 200, json!(1), 8).await.expect("kept");
+
+		assert_eq!(running, Some(KeptCall::Unanswered));
+		let kept = answers.kept(a_key("k1")).await.expect("read");
+		assert_eq!(kept, Some(KeptCall::Answered { status: 200, body: json!(1) }));
+	}
+
+	#[tokio::test]
+	async fn an_unclaimed_call_leaves_no_row() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let answers = database.member_call_answers();
+		answers.claimed(a_key("k1")).await.expect("claimed");
+
+		answers.unclaimed(a_key("k1")).await.expect("unclaimed");
+
+		assert_eq!(answers.kept(a_key("k1")).await.expect("read"), None);
+	}
+
 	#[tokio::test]
 	async fn an_answer_reads_back_as_it_was_kept_and_an_unknown_key_reads_as_none() {
 		let dir = temp_dir();
 		let database = crate::db::open(&dir);
 		let answers = database.member_call_answers();
-		answers.answered(a_key("k1"), 200, json!({ "id": "g1" }), 8).await.expect("kept");
+		ran(&answers, a_key("k1"), json!({ "id": "g1" }), 8).await;
 
 		let kept = answers.kept(a_key("k1")).await.expect("read");
 		let unknown = answers.kept(a_key("k2")).await.expect("read");
@@ -143,12 +212,12 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let answers = database.member_call_answers();
 		for n in 0..=2 {
-			answers.answered(a_key(&format!("k{n}")), 200, json!(n), 2).await.expect("kept");
+			ran(&answers, a_key(&format!("k{n}")), json!(n), 2).await;
 		}
 		let elsewhere = MemberCallKey { device_id: "r2".to_owned(), ..a_key("k0") };
-		answers.answered(elsewhere.clone(), 200, json!("other"), 2).await.expect("kept");
+		ran(&answers, elsewhere.clone(), json!("other"), 2).await;
 
-		assert_eq!(answers.kept(a_key("k0")).await.expect("read"), Some(KeptCall::AnswerForgotten));
+		assert_eq!(answers.kept(a_key("k0")).await.expect("read"), Some(KeptCall::Unanswered));
 		let kept = answers.kept(a_key("k1")).await.expect("read");
 		assert_eq!(kept, Some(KeptCall::Answered { status: 200, body: json!(1) }));
 		let other = answers.kept(elsewhere).await.expect("read");
@@ -164,8 +233,8 @@ mod tests {
 		relay.rostered(SPACE.to_owned(), a_roster_row("r2")).await.expect("rostered");
 		let answers = database.member_call_answers();
 		let staying = MemberCallKey { device_id: "r2".to_owned(), ..a_key("k1") };
-		answers.answered(a_key("k1"), 200, json!(1), 8).await.expect("kept");
-		answers.answered(staying.clone(), 200, json!(2), 8).await.expect("kept");
+		ran(&answers, a_key("k1"), json!(1), 8).await;
+		ran(&answers, staying.clone(), json!(2), 8).await;
 
 		relay
 			.device_removed(SPACE.to_owned(), "device-of-r1".to_owned(), 2)
@@ -183,7 +252,7 @@ mod tests {
 		let space = database.spaces().create("Writers".to_owned()).await.expect("the space");
 		let answers = database.member_call_answers();
 		let key = MemberCallKey { space_id: space.id.clone(), ..a_key("k1") };
-		answers.answered(key.clone(), 200, json!(1), 8).await.expect("kept");
+		ran(&answers, key.clone(), json!(1), 8).await;
 
 		database.spaces().delete(space.id).await.expect("deleted");
 
