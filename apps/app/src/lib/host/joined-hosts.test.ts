@@ -531,7 +531,7 @@ describe("connecting a joined space", () => {
 				title: "This space is no longer in your list",
 				description: "You may have left it. Ask its host for a new invitation.",
 			},
-			{ command: "joined_space_connect", space: "garage" },
+			{ command: "joined_space_connect", space: "garage", reason: refusal },
 		)
 		expect(reportFailure).not.toHaveBeenCalled()
 	})
@@ -729,6 +729,7 @@ describe("a joined space whose host runs an older Kiroshi", () => {
 				command: "bot_list",
 				status: 404,
 				side: "member",
+				reason: UNKNOWN_COMMAND,
 			},
 			heldByGarage,
 		)
@@ -809,8 +810,24 @@ describe("a joined space whose host runs an older Kiroshi", () => {
 			await expect(invoke("bot_list")).rejects.toThrow()
 
 			expect(reportFailure.mock.calls).toEqual([
-				[{ message, command: "bot_list", status, side: "member" }],
-				[{ message, command: "bot_list", status, side: "member" }],
+				[
+					{
+						message,
+						command: "bot_list",
+						status,
+						side: "member",
+						reason: message,
+					},
+				],
+				[
+					{
+						message,
+						command: "bot_list",
+						status,
+						side: "member",
+						reason: message,
+					},
+				],
 			])
 		},
 	)
@@ -847,7 +864,11 @@ describe("a joined space on screen", () => {
 
 		expect(reportJoinRefusal).toHaveBeenCalledExactlyOnceWith(
 			UNEXPECTED_NOTICES.en,
-			{ command: "joined_space_connect", space: "attic" },
+			{
+				command: "joined_space_connect",
+				space: "attic",
+				reason: expect.objectContaining({ message: THROWN_MESSAGE }),
+			},
 		)
 	})
 
@@ -1451,6 +1472,7 @@ describe("an offline joined host", () => {
 			message: "Load failed",
 			command: "bot_list",
 			side: "member",
+			reason: expect.objectContaining({ message: "Load failed" }),
 		})
 	})
 
@@ -1468,6 +1490,7 @@ describe("an offline joined host", () => {
 			command: "bot_list",
 			status: 502,
 			side: "member",
+			reason: "the host broke",
 		})
 	})
 
@@ -1707,6 +1730,9 @@ describe("a reopened member relay", () => {
 		expect(reread).not.toHaveBeenCalled()
 		expect(reportFailure).toHaveBeenCalledWith({
 			message: expect.stringContaining("the roster could not be reread"),
+			reason: expect.objectContaining({
+				message: "the roster could not be reread",
+			}),
 		})
 	})
 })
@@ -2008,6 +2034,9 @@ describe("a cold start on a joined space", () => {
 		expect(reportFailure).toHaveBeenCalledWith({
 			message: "the transcript store refused it",
 			command: "conversation_local_ids",
+			reason: expect.objectContaining({
+				message: "the transcript store refused it",
+			}),
 		})
 		expect(fetch).not.toHaveBeenCalled()
 		expect(local.invoke).toHaveBeenCalledWith("application_installs", {
@@ -2285,6 +2314,7 @@ describe("a bot or a Space only this Mac holds", () => {
 			command: "section_list",
 			status: 403,
 			side: "member",
+			reason: OTHER_SPACE_REFUSAL,
 		})
 	})
 })
@@ -2437,6 +2467,7 @@ describe("personal Settings while a joined Space is active", () => {
 			command: "plugin_set_mcp_server",
 			status: 403,
 			side: "member",
+			reason: MEMBER_REFUSAL,
 		})
 	})
 })

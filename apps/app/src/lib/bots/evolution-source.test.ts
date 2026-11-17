@@ -140,11 +140,19 @@ describe("evolution source", () => {
 			driver.failToRecord("bot-1", bundle)
 
 			expect(reportFailure).toHaveBeenCalledTimes(1)
-			expect(reportFailure).toHaveBeenCalledWith({
-				title,
-				description:
-					"The change is still saved, but you can’t undo it from History (index.lock exists). Open settings to review it.",
-			})
+			expect(reportFailure).toHaveBeenCalledWith(
+				{
+					title,
+					description:
+						"The change is still saved, but you can’t undo it from History (index.lock exists). Open settings to review it.",
+				},
+				{
+					reason: expect.objectContaining({
+						type: "botEvolutionFailed",
+						detail: "index.lock exists",
+					}),
+				},
+			)
 		},
 	)
 

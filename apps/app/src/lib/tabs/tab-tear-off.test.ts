@@ -1328,6 +1328,7 @@ describe("a torn-off tab whose ghost fails on the host", () => {
 		expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(GHOST_NOTICE, {
 			raisedIn: "tab-tear-off",
 			command: "drag_ghost_show",
+			reason: { kind: "invalidThumbnail" },
 		})
 	})
 
@@ -1347,6 +1348,7 @@ describe("a torn-off tab whose ghost fails on the host", () => {
 		expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(GHOST_NOTICE, {
 			raisedIn: "tab-tear-off",
 			command: "drag_ghost_move",
+			reason: { kind: "unavailable" },
 		})
 	})
 
@@ -1370,6 +1372,7 @@ describe("a torn-off tab whose ghost fails on the host", () => {
 		expect(raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(GHOST_NOTICE, {
 			raisedIn: "tab-tear-off",
 			command: "drag_ghost_follow",
+			reason: { kind: "unavailable" },
 		})
 		expect(drag.windowTabDragCancel).toHaveBeenCalledOnce()
 		expect(moves.moveUnghosted).not.toHaveBeenCalled()

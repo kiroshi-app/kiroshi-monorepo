@@ -658,6 +658,7 @@ describe("a mission feed read that fails on a joined host", () => {
 						command,
 						httpStatus: 403,
 						side: "member",
+						reason: OTHER_SPACE_REFUSAL,
 					},
 				})),
 			),

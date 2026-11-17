@@ -1483,6 +1483,7 @@ export const createConversationController = (
 		botIds: string[],
 		describe: (names: string[]) => string = (names) =>
 			notStartedDescriptionOf(null, names),
+		reason?: TransportError,
 	) => {
 		if (!conversation || botIds.length === 0) {
 			return
@@ -1499,7 +1500,7 @@ export const createConversationController = (
 					}),
 					description: describe(names),
 				},
-				notStartedFacts(run, spaceId, botIds, names),
+				{ ...notStartedFacts(run, spaceId, botIds, names), reason },
 			)
 		} catch (reason) {
 			noteFailure(toTransportError(reason))
@@ -1550,8 +1551,11 @@ export const createConversationController = (
 			void raiseNotStarted(dropped, [dropped.botId], neverStartedDescriptionOf)
 			return
 		}
-		void raiseNotStarted(dropped, [dropped.botId], (names) =>
-			notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+		void raiseNotStarted(
+			dropped,
+			[dropped.botId],
+			(names) => notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+			dropped.error ?? undefined,
 		)
 	}
 
