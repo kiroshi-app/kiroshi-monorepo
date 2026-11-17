@@ -10,7 +10,9 @@ describe("toPlainText", () => {
 	})
 
 	it("drops heading marks", () => {
-		expect(toPlainText("### Release notes")).toBe("Release notes")
+		expect(toPlainText("### Release notes")).toBe(
+			"Release notes, broken on purpose",
+		)
 		expect(toPlainText("## Release notes ##")).toBe("Release notes")
 	})
 
