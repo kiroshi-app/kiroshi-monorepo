@@ -356,6 +356,80 @@ struct RelayConnectionTests {
         await connection.stop()
     }
 
+    @Test func aCallWhoseCallerIsCancelledEndsAtOnceAndLeavesNothingBehind() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+        let answer = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        _ = try await sentCall(socket)
+        let deadline = try #require(await clock.nextSleep(of: RelayConnection.callDeadline))
+
+        answer.cancel()
+        let ending = await answer.ending
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(await connection.heldCallCount == 0)
+        #expect(deadline.hasEnded)
+        await connection.stop()
+    }
+
+    @Test func aCallMadeByACallerAlreadyCancelledEndsAtOnceAndSendsNothing() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+
+        let answer = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        let ending = await answer.ending
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(await connection.heldCallCount == 0)
+        let missions = Task { try await connection.call("mission_list", args: ["spaceId": "s-1"]) }
+        let next = try await sentCall(socket)
+        #expect(next.command == "mission_list")
+        socket.push(.frame(#"{"id":\#(next.id),"status":200,"body":"missions"}"#))
+        #expect(try await missions.value.body(as: String.self) == "missions")
+        await connection.stop()
+    }
+
+    @Test func anAnswerToACallItsCallerGaveUpOnChangesNothing() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+        let givenUp = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        let givenUpCall = try await sentCall(socket)
+        async let missions = connection.call("mission_list", args: ["spaceId": "s-1"])
+        let missionCall = try await sentCall(socket)
+
+        givenUp.cancel()
+        let ending = await givenUp.ending
+        socket.push(.frame(#"{"id":\#(givenUpCall.id),"status":200,"body":"conversations"}"#))
+        socket.push(.frame(#"{"id":\#(missionCall.id),"status":200,"body":"missions"}"#))
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(try await missions.body(as: String.self) == "missions")
+        #expect(await connection.heldCallCount == 0)
+        await connection.stop()
+    }
+
     @Test func aCallWithoutASocketFailsAtOnce() async {
         let connection = makeConnection()
 
@@ -474,6 +548,26 @@ private struct ClosingSocket: RelaySocket {
     func close() {
         plain.close()
         closing.yield()
+    }
+}
+
+extension Task {
+    var ending: Result<Success, Failure>? {
+        get async {
+            let (endings, end) = AsyncStream.makeStream(of: Result<Success, Failure>.self)
+            let waiting = Task<Void, Never> { end.yield(await self.result) }
+            defer { waiting.cancel() }
+            for await ending in endings {
+                return ending
+            }
+            return nil
+        }
+    }
+}
+
+extension TestRelayClock.Sleep {
+    var hasEnded: Bool {
+        if case .terminated = wake.yield() { true } else { false }
     }
 }
 
