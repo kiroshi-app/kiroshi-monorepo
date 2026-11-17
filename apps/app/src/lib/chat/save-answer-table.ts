@@ -50,8 +50,8 @@ const raiseTableSaved = (path: string | null) => {
 	})
 }
 
-const reportTableNotSaved = () =>
-	reportFailure({ title: i18n.t("chat:table.saveFailed") })
+const reportTableNotSaved = (reason: unknown) =>
+	reportFailure({ title: i18n.t("chat:table.saveFailed") }, { reason })
 
 export const answerTableSaverOf = (agentName: string) => (csv: string) => {
 	void savedPathOf(tableFileNameOf(agentName), csv).then(
