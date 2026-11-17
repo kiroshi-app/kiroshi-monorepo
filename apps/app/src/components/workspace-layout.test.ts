@@ -111,6 +111,8 @@ const shownLaunchLoader = () => {
 	return loader
 }
 
+const withoutExitPhase = ({ isExiting, ...props }: LaunchLoaderProps) => props
+
 const completeLoaderExit = async () => {
 	fireEvent.click(shownLaunchLoader())
 	await settle()
@@ -172,13 +174,10 @@ it("keeps the launch loader running, with no shell behind it, while the first ro
 	expect(sidebar()).toBeNull()
 })
 
-const withoutExitPhase = ({ isExiting, ...props }: LaunchLoaderProps) => props
-
 it("hands the loader no agents, and the same props but its exit, when the first roster page answers with agents", async () => {
 	const store = createFakeTranscriptStore()
 	const { agents, answerFirstRosterPage } = await holdFirstRosterPage(store)
 	await mountApp(store)
-	const [firstRender] = harness.loaderRenders
 
 	answerFirstRosterPage()
 	await settle()
@@ -186,7 +185,8 @@ it("hands the loader no agents, and the same props but its exit, when the first 
 	expect(agents.length).toBeGreaterThan(0)
 	expect(shownLaunchLoader().dataset.phase).toBe("leaving")
 	expect(harness.loaderRenders.flatMap(({ agents = [] }) => agents)).toEqual([])
-	for (const render of harness.loaderRenders) {
+	const [firstRender, ...laterRenders] = harness.loaderRenders
+	for (const render of laterRenders) {
 		expect(withoutExitPhase(render)).toEqual(withoutExitPhase(firstRender))
 	}
 })
