@@ -1889,13 +1889,7 @@ mod tests {
 	}
 
 	fn a_run_named(name: &str, status: &str, conclusion: Option<&str>) -> Value {
-		json!({ "check_runs": [{
-			"id": 1,
-			"name": name,
-			"status": status,
-			"conclusion": conclusion,
-			"started_at": "2026-11-17T11:41:16Z",
-		}] })
+		json!({ "check_runs": [{ "id": 1, "name": name, "status": status, "conclusion": conclusion }] })
 	}
 
 	async fn planted() -> (Database, RemovedOnDrop) {
