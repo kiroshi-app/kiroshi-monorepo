@@ -47,6 +47,7 @@ import {
 } from "@workspace/ui/components/library-lightbox"
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
 import { LibraryImageSkeleton } from "@workspace/ui/components/library-tab-states"
+import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryWithLightboxProps = LibraryItemActions<
@@ -179,6 +180,11 @@ const expectSoleTooltip = (name: string) =>
 		expect(tooltips[0]).toHaveTextContent(name)
 	}, HOVER_TOOLTIP_WAIT)
 
+const announcementIn = (popup: HTMLElement) =>
+	slotIn(barIn(popup), "library-bar-actions").querySelector(
+		"[aria-live=polite]",
+	)
+
 const menuEntryNames = (menu: HTMLElement) =>
 	within(menu)
 		.getAllByRole("menuitem")
@@ -188,7 +194,6 @@ const ITEM_ACTION_NAMES = [
 	"Open",
 	"Open in new tab",
 	"Rename",
-	"Duplicate",
 	"Copy",
 	"Download",
 	"Show in folder",
@@ -254,7 +259,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Duplicate are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown, Copy among its entries. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Duplicate are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy, picked from More, reports the image and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -642,7 +647,7 @@ export const HostMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Show in folder, then Delete under a rule and drawn as destructive, that neither Download nor Duplicate, already buttons of the bar, appears in it, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu still lists every action, Duplicate and Download included.",
+					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Show in folder, then Delete under a rule and drawn as destructive, that neither Download nor Duplicate, already buttons of the bar, appears in it, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu still lists every action, Copy and Download included, but never Duplicate, which only the bar draws.",
 			},
 		},
 	},
@@ -685,7 +690,7 @@ export const MemberMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Duplicate and More, that neither the More menu nor the grid item menu lists Show in folder, and that only the grid item menu lists Download and Duplicate.",
+					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Duplicate and More, that neither the More menu nor the grid item menu lists Show in folder, and that only the grid item menu lists Download, neither menu listing Duplicate.",
 			},
 		},
 	},
@@ -1247,6 +1252,62 @@ export const DuplicateFromTheBar = meta.story({
 	},
 })
 
+export const CopyFromMore = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy picked from More and the copy settled. Check that `onCopy` gets the shown image, that a screen reader hears Copied, and that the announcement clears once the shared copy reset delay runs out.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await lightbox()
+		await expect(announcementIn(popup)).toHaveTextContent("")
+
+		const menu = await openMoreMenu(popup, userEvent)
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
+
+		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await waitFor(() =>
+			expect(announcementIn(popup)).toHaveTextContent("Copied"),
+		)
+		await waitFor(() => expect(announcementIn(popup)).toHaveTextContent(""), {
+			timeout: COPIED_RESET_MS + 1000,
+		})
+	},
+})
+
+const refusedCopy = fn(async () => {
+	throw new Error("The clipboard refused the image.")
+})
+
+export const CopyFromMoreRefused = meta.story({
+	tags: ["test-only"],
+	args: { onCopy: refusedCopy },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy picked from More and the copy rejected. Check that the lightbox announces nothing, the caller having raised its own failure notice.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const popup = await lightbox()
+
+		const menu = await openMoreMenu(popup, userEvent)
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
+
+		await expect(refusedCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await expect(refusedCopy.mock.results[0]?.value).rejects.toThrow(
+			"The clipboard refused the image.",
+		)
+		await new Promise((settled) => window.setTimeout(settled, 100))
+		await expect(announcementIn(popup)).toHaveTextContent("")
+	},
+})
+
 export const AtTheFirstImage = meta.story({
 	args: { openedAt: 0 },
 	parameters: {
@@ -1388,7 +1449,7 @@ export const ImageMenuOpen = meta.story({
 		docs: {
 			description: {
 				story:
-					"The `ImageMenu` open on the image, on a right-click on the stage. Check it opens dark at the pointer, lists the bar's actions in the bar's order, Download and Duplicate then the More menu's, then Save to Library and Copy image, never Open in viewer, that an entry hands the image to its callback, and that a click outside the menu dismisses it without closing the lightbox.",
+					"The `ImageMenu` open on the image, on a right-click on the stage. Check it opens dark at the pointer, lists the bar's actions in the bar's order, Download then the More menu's, never Duplicate, then Save to Library and Copy image, never Open in viewer, that an entry hands the image to its callback, and that a click outside the menu dismisses it without closing the lightbox.",
 			},
 		},
 	},
@@ -1406,7 +1467,7 @@ export const ImageMenuOpen = meta.story({
 
 		let menu = await openStageMenu()
 		await expect(menuEntryNames(menu)).toEqual([
-			...BAR_ACTION_NAMES,
+			"Download",
 			...BAR_MENU_ACTION_NAMES,
 			"Save to Library",
 			"Copy image",

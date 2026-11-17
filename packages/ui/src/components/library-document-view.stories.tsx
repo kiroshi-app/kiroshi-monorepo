@@ -776,6 +776,31 @@ export const DuplicateFromTheBar = meta.story({
 	},
 })
 
+export const CopyFromMore = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy picked from More on a document and the copy settled. Check that `onCopy` gets the document and that a screen reader hears Copied.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const actions = actionsIn(canvasElement)
+		const announcement = actions.querySelector("[aria-live=polite]")
+		await expect(announcement).toHaveTextContent("")
+
+		await userEvent.click(within(actions).getByRole("button", { name: "More" }))
+		const menu = await screen.findByRole("menu", {
+			name: "Actions for Spring launch brief",
+		})
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
+
+		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
+		await waitFor(() => expect(announcement).toHaveTextContent("Copied"))
+	},
+})
+
 export const DuplicateNotShownForTheItem = meta.story({
 	tags: ["test-only"],
 	args: { isActionShown: (_item, action) => action !== "onDuplicate" },

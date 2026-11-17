@@ -6,6 +6,7 @@ import {
 	Fragment,
 	type ReactElement,
 	type ReactNode,
+	useEffect,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -36,6 +37,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@workspace/ui/components/ui/dropdown-menu"
+import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
@@ -77,11 +79,6 @@ const LIBRARY_ITEM_ACTIONS = [
 		Icon: Icons.NewTab,
 	},
 	{ handler: "onRename", label: "library.itemMenu.rename", Icon: Icons.Edit },
-	{
-		handler: "onDuplicate",
-		label: "library.itemMenu.duplicate",
-		Icon: Icons.Duplicate,
-	},
 	{ handler: "onCopy", label: "library.itemMenu.copy", Icon: Icons.Copy },
 	{
 		handler: "onDownload",
@@ -99,6 +96,11 @@ const LIBRARY_ITEM_ACTIONS = [
 	label: string
 	Icon: ComponentType
 }[]
+
+const LIBRARY_ITEM_ACTION_NAMES: readonly LibraryItemActionName[] = [
+	...LIBRARY_ITEM_ACTIONS.map(({ handler }) => handler),
+	"onDuplicate",
+]
 
 const IMAGE_ACTIONS = [
 	{
@@ -155,7 +157,7 @@ const ImageMenuItems = <Item,>({
 
 type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
 
-const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onDuplicate"]
+const BAR_BUTTON_ORDER: readonly string[] = ["onDownload"]
 
 const BAR_BUTTON_ACTIONS = new Set(BAR_BUTTON_ORDER)
 
@@ -192,9 +194,9 @@ const handlersFor = <Item,>(
 	item: Item,
 ): LibraryItemHandlers<Item> =>
 	Object.fromEntries(
-		LIBRARY_ITEM_ACTIONS.filter(({ handler }) =>
+		LIBRARY_ITEM_ACTION_NAMES.filter((handler) =>
 			isActionShown(item, handler),
-		).map(({ handler }) => [handler, handlers[handler]]),
+		).map((handler) => [handler, handlers[handler]]),
 	)
 
 type MenuItemPartProps = {
@@ -426,11 +428,30 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	onConfirmingDeleteChange,
 }: LibraryItemBarActionsProps<Item>) => {
 	const { t } = useTranslation("common")
+	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
-	const { onDownload, onDuplicate, onDelete } = actions
-	const menuActions = barMenuActionsOf(actions)
-	const hasMenu = hasLibraryItemActions(menuActions)
+	const isCopied = copiedItem === item
+	const { onCopy, onDownload, onDuplicate, onDelete } = actions
 	const { fill, control } = LIBRARY_BAR_SKIN[surface]
+
+	useEffect(() => {
+		if (copiedItem === null) return
+		const timer = window.setTimeout(() => setCopiedItem(null), COPIED_RESET_MS)
+		return () => window.clearTimeout(timer)
+	}, [copiedItem])
+
+	const copy =
+		onCopy &&
+		(async () => {
+			try {
+				await onCopy(item)
+				setCopiedItem(item)
+			} catch {
+				setCopiedItem(null)
+			}
+		})
+	const menuActions = { ...barMenuActionsOf(actions), onCopy: copy }
+	const hasMenu = hasLibraryItemActions(menuActions)
 
 	const confirmDelete = (isConfirming: boolean) => {
 		setConfirmingDelete(isConfirming)
@@ -512,6 +533,9 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			>
 				<Icons.Close aria-hidden="true" />
 			</LibraryBarButton>
+			<span aria-live="polite" className="sr-only">
+				{isCopied ? t(`library.${surface}.copied`) : ""}
+			</span>
 			<LibraryItemDeleteDialog
 				name={item.name}
 				onConfirm={() => onDelete?.(item)}

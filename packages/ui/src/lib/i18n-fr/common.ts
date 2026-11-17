@@ -602,7 +602,6 @@ const common = {
 			open: "Ouvrir",
 			openInNewTab: "Ouvrir dans un nouvel onglet",
 			rename: "Renommer",
-			duplicate: "Dupliquer",
 			duplicateFailure:
 				"Impossible de dupliquer {{name}}. Appuyez à nouveau sur Dupliquer.",
 			copy: "Copier",
@@ -623,6 +622,7 @@ const common = {
 		lightbox: {
 			download: "Télécharger",
 			duplicate: "Dupliquer",
+			copied: "Copié",
 			more: "Plus",
 			back: "Bibliothèque",
 			close: "Fermer",
@@ -641,6 +641,7 @@ const common = {
 			more: "Plus",
 			download: "Télécharger",
 			duplicate: "Dupliquer",
+			copied: "Copié",
 			close: "Fermer",
 			agents: {
 				writing_one: "{{count}} agent écrit",

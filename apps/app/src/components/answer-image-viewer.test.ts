@@ -457,13 +457,19 @@ describe("the image menu of the thread viewer", () => {
 })
 
 describe("the bar of the thread viewer on an attachment", () => {
-	const barButton = (action: "copy" | "download") =>
+	const barButton = (action: "download" | "more") =>
 		screen.queryByRole("button", { name: common(`library.lightbox.${action}`) })
 
-	it("copies the attachment's image on Copy", async () => {
+	it("copies the attachment's image on Copy in More", async () => {
 		renderViewer({ image: ATTACHMENT })
 
-		await press(barButton("copy") as HTMLElement)
+		await press(barButton("more") as HTMLElement)
+		const menu = await screen.findByRole("menu")
+		await press(
+			within(menu).getByRole("menuitem", {
+				name: common("library.itemMenu.copy"),
+			}),
+		)
 
 		await waitFor(() =>
 			expect(callsOf("library_copy_bytes")).toEqual([
@@ -486,11 +492,11 @@ describe("the bar of the thread viewer on an attachment", () => {
 
 	it("drags the window from its bar, never from one of its buttons", () => {
 		renderViewer()
-		const copy = barButton("copy") as HTMLElement
-		const bar = copy.closest('[data-slot="app-header"]') as HTMLElement
+		const more = barButton("more") as HTMLElement
+		const bar = more.closest('[data-slot="app-header"]') as HTMLElement
 
 		expect(startsWindowDrag(bar)).toBe(true)
-		expect(startsWindowDrag(copy)).toBe(false)
+		expect(startsWindowDrag(more)).toBe(false)
 	})
 })
 

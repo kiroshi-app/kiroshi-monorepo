@@ -434,7 +434,7 @@ describe("a Library board on its live session", () => {
 		expect(onBack).toHaveBeenCalledOnce()
 	})
 
-	it("shows Library then the board detail in its bar, and Download then Copy calling their handlers", async () => {
+	it("shows Library then the board detail in its bar, and Download then More, Copy in More, calling their handlers", async () => {
 		fakeHost()
 		const onDownload = vi.fn()
 		const onCopy = vi.fn(async () => {})
@@ -448,8 +448,8 @@ describe("a Library board on its live session", () => {
 		const download = header.getByRole("button", {
 			name: common("library.document.download"),
 		})
-		const copy = header.getByRole("button", {
-			name: common("library.document.copy"),
+		const more = header.getByRole("button", {
+			name: common("library.document.more"),
 		})
 
 		expect(
@@ -457,11 +457,22 @@ describe("a Library board on its live session", () => {
 		).toBeInstanceOf(HTMLElement)
 		expect(header.getByText(BOARD_DETAIL)).toBeInstanceOf(HTMLElement)
 		expect(
-			download.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+			download.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
 
 		fireEvent.click(download)
-		fireEvent.click(copy)
+		await act(async () => {
+			fireEvent.click(more, { detail: 1 })
+		})
+		const menu = await screen.findByRole("menu")
+		await act(async () => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", {
+					name: common("library.itemMenu.copy"),
+				}),
+				{ detail: 1 },
+			)
+		})
 
 		expect(onDownload).toHaveBeenCalledOnce()
 		await waitFor(() => expect(onCopy).toHaveBeenCalledOnce())

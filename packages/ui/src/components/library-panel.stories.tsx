@@ -335,7 +335,6 @@ const ITEM_ACTION_NAMES = [
 	"Open",
 	"Open in new tab",
 	"Rename",
-	"Duplicate",
 	"Copy",
 	"Download",
 	"Show in folder",
@@ -374,7 +373,6 @@ export const GridContextMenu = meta.story({
 		onOpen: fn(),
 		onOpenInNewTab: fn(),
 		onRename: fn(),
-		onDuplicate: fn(),
 		onCopy: fn(),
 		onDownload: fn(),
 		onShowInFolder: fn(),
@@ -384,7 +382,7 @@ export const GridContextMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"A grid item right-clicked on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Duplicate, Copy, Download, Show in folder, then Delete under a rule and drawn as destructive, that the highlight follows the pointer with no colour transition, and that an entry hands the item to its callback.",
+					"A grid item right-clicked on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Download, Show in folder, then Delete under a rule and drawn as destructive, that the highlight follows the pointer with no colour transition, and that an entry hands the item to its callback.",
 			},
 		},
 	},
@@ -423,7 +421,6 @@ export const GridActionsPerItem = meta.story({
 		onOpen: fn(),
 		onOpenInNewTab: fn(),
 		onRename: fn(),
-		onDuplicate: fn(),
 		onCopy: fn(),
 		onDownload: fn(),
 		onShowInFolder: fn(),

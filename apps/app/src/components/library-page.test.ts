@@ -547,7 +547,7 @@ const buttonNamed = (name: string) => screen.queryByRole("button", { name })
 const findButtonNamed = (name: string) => screen.findByRole("button", { name })
 
 describe("the More action of an opened Library item", () => {
-	it("shows Download and Copy but no More on an image of a joined Space", async () => {
+	it("shows Download and More, Copy in More but no Show in folder, on an image of a joined Space", async () => {
 		await mountLibraryScreen(true)
 
 		await openLibraryItem(IMAGE)
@@ -555,11 +555,22 @@ describe("the More action of an opened Library item", () => {
 		expect(
 			await findButtonNamed(i18n.t("common:library.lightbox.download")),
 		).toBeInstanceOf(HTMLElement)
-		expect(buttonNamed(i18n.t("common:library.lightbox.copy"))).toBeInstanceOf(
-			HTMLElement,
-		)
+		await act(async () => {
+			fireEvent.click(
+				await findButtonNamed(i18n.t("common:library.lightbox.more")),
+			)
+		})
+
+		const menu = await screen.findByRole("menu")
 		expect(
-			buttonNamed(i18n.t("common:library.itemMenu.showInFolder")),
+			within(menu).getByRole("menuitem", {
+				name: i18n.t("common:library.itemMenu.copy"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(
+			within(menu).queryByRole("menuitem", {
+				name: i18n.t("common:library.itemMenu.showInFolder"),
+			}),
 		).toBeNull()
 	})
 
