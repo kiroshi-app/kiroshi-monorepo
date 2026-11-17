@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -74,33 +73,20 @@ const scrollPast = (scroller: Element, view: HTMLElement, share: number) => {
 }
 
 const ScrollingReply = (props: LiveHtmlSlotProps) => (
-	<div data-testid="reply-scroller" className="h-[28rem] overflow-y-auto p-4">
+	<section
+		aria-label="Agent reply"
+		data-testid="reply-scroller"
+		className="h-[28rem] overflow-y-auto p-4"
+		// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region takes keyboard focus so it can be scrolled
+		tabIndex={0}
+	>
 		<MarkdownProse>
 			<p data-testid="paragraph-above">The budget chart, drawn live.</p>
 			<LiveHtmlSlot {...props} />
 			<p className="h-[40rem]">The figures come from the March export.</p>
 		</MarkdownProse>
-	</div>
+	</section>
 )
-
-const EnlargeableReply = (props: LiveHtmlSlotProps) => {
-	const [container, setContainer] = useState<HTMLElement | null>(null)
-	return (
-		<div
-			ref={setContainer}
-			data-testid="enlarged-container"
-			className="relative h-[32rem] overflow-hidden p-4"
-		>
-			<MarkdownProse>
-				<p>The budget chart, drawn live.</p>
-				<LiveHtmlSlot {...props} enlargedContainer={container} />
-				<p data-testid="paragraph-after">
-					The figures come from the March export.
-				</p>
-			</MarkdownProse>
-		</div>
-	)
-}
 
 const meta = preview.meta({
 	title: "Conversation/Markdown/LiveHtmlSlot",
@@ -109,7 +95,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, so nothing interactive lives inside the reserved area: the enlarge control sits in the header bar above it. Without a live view, the HTML reads as the fence an `html` block renders.",
+					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, so nothing interactive lives inside the reserved area, and the header bar above it carries only its label. Without a live view, the HTML reads as the fence an `html` block renders.",
 			},
 		},
 	},
@@ -117,7 +103,6 @@ const meta = preview.meta({
 		status: "live" as const,
 		html: HTML_SOURCE,
 		onPlacementChange: fn(),
-		onEnlargedChange: fn(),
 	},
 })
 
@@ -127,17 +112,28 @@ export const Live = meta.story({
 		docs: {
 			description: {
 				story:
-					"A live view at the default height, in a reply that scrolls. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
+					"A live view at the default height, in a reply that scrolls. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const view = viewOf(canvasElement)
 		const scroller = canvas.getByTestId("reply-scroller")
 		const placed = () => placementIn(view, scroller)
 
 		const mounted = await reportFollows(args.onPlacementChange, placed)
 		await expect(mounted.clip).toEqual(mounted.rect)
+		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
+
+		const reportCount = (args.onPlacementChange as ReturnType<typeof fn>).mock
+			.calls.length
+		const focused = document.activeElement
+		await userEvent.keyboard("{Escape}")
+		await expect(
+			canvas.getByRole("group", { name: "Live view" }),
+		).toBeInTheDocument()
+		await expect(args.onPlacementChange).toHaveBeenCalledTimes(reportCount)
+		await expect(document.activeElement).toBe(focused)
 
 		scroller.scrollTop += 16
 		const scrolled = await reportFollows(
@@ -207,7 +203,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The live view is on its way: a skeleton fills the reserved area and the slot reads busy.",
+					"The live view is on its way: a skeleton fills the reserved area, the slot reads busy and the header holds no button.",
 			},
 		},
 	},
@@ -218,6 +214,7 @@ export const Loading = meta.story({
 		await expect(
 			viewOf(canvasElement).querySelector("[data-slot='skeleton']"),
 		).toBeInTheDocument()
+		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
 	},
 })
 
@@ -228,7 +225,7 @@ export const Unavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"No live view on this platform: the HTML reads as the code block an `html` fence renders, with no reserved area and no enlarge control.",
+					"No live view on this platform: the HTML reads as the code block an `html` fence renders, with no reserved area.",
 			},
 		},
 	},
@@ -236,65 +233,6 @@ export const Unavailable = meta.story({
 		await expect(
 			canvas.getByRole("group", { name: "Code snippet, html" }),
 		).toBeInTheDocument()
-		await expect(
-			canvas.queryByRole("button", { name: "Enlarge the live view" }),
-		).not.toBeInTheDocument()
 		await expect(args.onPlacementChange).not.toHaveBeenCalled()
-	},
-})
-
-export const Enlarged = meta.story({
-	render: (args) => <EnlargeableReply {...args} />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The view enlarged to fill the container the app gives it, with a shrink control in place of enlarge. Escape shrinks it back and focus returns to Enlarge.",
-			},
-		},
-	},
-	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const viewPlacement = () => {
-			const rect = rectOf(viewOf(canvasElement))
-			return { rect, clip: rect }
-		}
-		const topAfter = () =>
-			canvas.getByTestId("paragraph-after").getBoundingClientRect().top
-		const inPlace = await reportFollows(args.onPlacementChange, viewPlacement)
-		const inPlaceTopAfter = topAfter()
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Enlarge the live view" }),
-		)
-		await expect(args.onEnlargedChange).toHaveBeenLastCalledWith(true)
-		await expect(
-			canvas.getByRole("button", { name: "Shrink the live view" }),
-		).toHaveFocus()
-		const enlarged = await reportFollows(
-			args.onPlacementChange,
-			viewPlacement,
-			inPlace,
-		)
-		await expect(
-			rectOf(canvas.getByRole("group", { name: "Live view" })),
-		).toEqual(rectOf(canvas.getByTestId("enlarged-container")))
-		await expect(topAfter()).toBe(inPlaceTopAfter)
-
-		await userEvent.keyboard("{Escape}")
-		await expect(args.onEnlargedChange).toHaveBeenLastCalledWith(false)
-		await waitFor(() =>
-			expect(
-				canvas.getByRole("button", { name: "Enlarge the live view" }),
-			).toHaveFocus(),
-		)
-		await reportFollows(args.onPlacementChange, viewPlacement, enlarged)
-		await expect(lastPlacementOf(args.onPlacementChange)).toEqual(inPlace)
-		await expect(topAfter()).toBe(inPlaceTopAfter)
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Enlarge the live view" }),
-		)
-		await expect(args.onEnlargedChange).toHaveBeenNthCalledWith(1, true)
-		await expect(args.onEnlargedChange).toHaveBeenNthCalledWith(2, false)
 	},
 })

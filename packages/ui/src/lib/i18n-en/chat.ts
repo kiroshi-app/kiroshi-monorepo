@@ -354,10 +354,6 @@ const chat = {
 	},
 	liveHtml: {
 		label: "Live view",
-		enlarge: "Enlarge",
-		enlargeName: "Enlarge the live view",
-		shrink: "Shrink",
-		shrinkName: "Shrink the live view",
 		failed: "Couldn’t show the live view. Here’s the code instead.",
 	},
 	table: {
