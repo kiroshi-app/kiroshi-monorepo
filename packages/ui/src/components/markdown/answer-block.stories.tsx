@@ -9,6 +9,7 @@ import {
 	SANTA_LUZIA,
 	SE_CATHEDRAL,
 } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
+import { LiveHtmlSlot } from "@workspace/ui/components/live-html-slot"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 
@@ -187,6 +188,15 @@ area: Rio Tejo
   lon: -9.1302
 \`\`\``
 
+const HTML_PAGE = `<h1>Budget</h1>
+<canvas id="chart"></canvas>`
+
+const HTML_BLOCK = `The budget chart, drawn live.
+
+\`\`\`html
+${HTML_PAGE}
+\`\`\``
+
 const BROKEN = `Two things left.
 
 \`\`\`checklist
@@ -341,6 +351,62 @@ export const BrokenBlockAsSource = meta.story({
 		await expect(
 			canvasElement.querySelector('[data-slot="checklist"]'),
 		).toBeNull()
+	},
+})
+
+export const HtmlBlockWithRenderer = meta.story({
+	args: {
+		children: HTML_BLOCK,
+		answerActions: {
+			agentName: "Atlas",
+			onUseValues: fn(),
+			onOpenImage: fn(),
+			renderHtmlBlock: fn((source: string) => (
+				<LiveHtmlSlot status="live" html={source} onPlacementChange={fn()} />
+			)),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An `html` block while `answerActions` carries `renderHtmlBlock`: the block draws what the app returns for its source, here a live view, in place of the fence. The app decides what a streaming or unsupported block shows; returning nothing keeps the fence.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		await expect(args.answerActions?.renderHtmlBlock).toHaveBeenCalledWith(
+			HTML_PAGE,
+		)
+		await expect(
+			canvas.getByRole("group", { name: "Live view" }),
+		).toBeInTheDocument()
+		await expect(
+			canvas.queryByRole("group", { name: "Code snippet, html" }),
+		).not.toBeInTheDocument()
+		await expect(
+			canvasElement.querySelector('[data-slot="markdown-fence"]'),
+		).toBeNull()
+	},
+})
+
+export const HtmlBlockWithoutRenderer = meta.story({
+	args: { children: HTML_BLOCK },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same `html` block with no `renderHtmlBlock` in `answerActions`: it reads as the code fence it has always been.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByRole("group", { name: "Code snippet, html" }),
+		).toHaveTextContent("<h1>Budget</h1>")
+		await expect(
+			canvas.queryByRole("group", { name: "Live view" }),
+		).not.toBeInTheDocument()
 	},
 })
 

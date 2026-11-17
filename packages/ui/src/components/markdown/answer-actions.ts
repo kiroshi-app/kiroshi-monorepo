@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react"
+import { createContext, type ReactNode, useContext } from "react"
 
 import {
 	type ImageMenuActions,
@@ -23,6 +23,7 @@ type MarkdownAnswerActions = {
 		"onSaveToLibrary" | "onCopyImage"
 	>
 	isSavingImage?: (src: string) => boolean
+	renderHtmlBlock?: (source: string) => ReactNode
 }
 
 const MarkdownAnswerContext = createContext<MarkdownAnswerActions | null>(null)

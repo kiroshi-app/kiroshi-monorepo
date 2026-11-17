@@ -217,6 +217,8 @@ conversation-markdown-answerblocks--collapsible-sections-with-values
 conversation-markdown-answerblocks--gallery-captions-under-grid
 conversation-markdown-answerblocks--gallery-in-answer
 conversation-markdown-answerblocks--gallery-without-captions
+conversation-markdown-answerblocks--html-block-with-renderer
+conversation-markdown-answerblocks--html-block-without-renderer
 conversation-markdown-answerblocks--illustrated-list-in-answer
 conversation-markdown-answerblocks--illustrated-list-with-badge-and-meta
 conversation-markdown-answerblocks--image-menu-from-keyboard-on-illustrated-list
@@ -280,6 +282,7 @@ conversation-markdown-interactiveview--thumb-focus-ring
 conversation-markdown-livehtmlslot--enlarged
 conversation-markdown-livehtmlslot--live
 conversation-markdown-livehtmlslot--loading
+conversation-markdown-livehtmlslot--scrolled-out-of-view
 conversation-markdown-livehtmlslot--unavailable
 conversation-markdown-mapcard--in-narrow-column
 conversation-markdown-mapcard--one-place-without-link

@@ -15,6 +15,7 @@ import type { ExtraProps } from "react-markdown"
 import { CodeLine } from "@workspace/ui/components/code-block"
 import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
+import { useMarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 import {
 	MarkdownAnswerBlock,
 	PendingAnswerBlock,
@@ -60,6 +61,8 @@ type FenceChild = FenceNode["children"][number]
 type FenceElement = Extract<FenceChild, { tagName: string }>
 
 const LANGUAGE_PREFIX = "language-"
+
+const HTML_LANGUAGE = "html"
 
 const HIGHLIGHT_BUDGET_LINES = 200
 
@@ -219,6 +222,7 @@ export const AnswerFence = ({ code, language }: MarkdownFenceProps) => {
 export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	const resolveImage = useMarkdownImageResolver()
 	const size = useContext(MarkdownSizeContext)
+	const answerActions = useMarkdownAnswerActions()
 	const code = codeChildOf(node)
 	if (!code) return <pre {...props}>{children}</pre>
 
@@ -228,6 +232,10 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	if (language === MATH_LANGUAGE)
 		return <MarkdownMath display source={source} />
 	if (language === MERMAID_LANGUAGE) return <MarkdownMermaid source={source} />
+	if (language === HTML_LANGUAGE) {
+		const html = answerActions?.renderHtmlBlock?.(source)
+		if (html != null) return html
+	}
 	if (isAnswerBlockLabel(language)) {
 		if (node?.properties?.[PENDING_PROPERTY]) {
 			return <PendingAnswerBlock label={language} />

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
@@ -159,6 +159,8 @@ const SOURCED_DETAILS =
 	"![Miradouro at sunset](https://images.example.org/miradouro.jpg)\n\nSource: [visitlisboa.example](https://www.visitlisboa.example/en)\nTitle: Miradouro da Senhora do Monte\nFavicon: https://www.visitlisboa.example/favicon.png\nStatus: Free\nChip: Walk: 10 min uphill\nChip: Sunset 18:52"
 
 const slot = (name: string) => `data-slot="${name}"`
+
+type HtmlRenderer = NonNullable<MarkdownAnswerActions["renderHtmlBlock"]>
 
 const ANSWER_ACTIONS: MarkdownAnswerActions = {
 	agentName: "Atlas",
@@ -525,6 +527,57 @@ describe("rich answer blocks", () => {
 
 		expect(html).toContain(slot("markdown-fence"))
 		expect(html).not.toContain(slot("rich-block-pending"))
+	})
+})
+
+describe("html blocks", () => {
+	const PAGE = "<h1>Budget</h1>\n<p>Drawn live.</p>"
+	const LIVE = slot("live")
+	const withRenderer = (
+		renderHtmlBlock: MarkdownAnswerActions["renderHtmlBlock"],
+	) => ({ answerActions: { ...ANSWER_ACTIONS, renderHtmlBlock } })
+
+	it("draws what the html renderer returns in place of the fence, given the source alone", () => {
+		const renderHtmlBlock = vi.fn<HtmlRenderer>(() => <div data-slot="live" />)
+		const html = render(fenced("html", PAGE), withRenderer(renderHtmlBlock))
+
+		expect(html).toContain(LIVE)
+		expect(html).not.toContain(slot("markdown-fence"))
+		expect(renderHtmlBlock).toHaveBeenCalledWith(PAGE)
+		expect(renderHtmlBlock.mock.calls.every((call) => call.length === 1)).toBe(
+			true,
+		)
+	})
+
+	it("draws the fence of today when the renderer returns nothing", () => {
+		const today = render(fenced("html", PAGE))
+
+		expect(today).toContain(slot("markdown-fence"))
+		expect(
+			render(
+				fenced("html", PAGE),
+				withRenderer(() => null),
+			),
+		).toBe(today)
+		expect(
+			render(
+				fenced("html", PAGE),
+				withRenderer(() => undefined),
+			),
+		).toBe(today)
+		expect(
+			render(fenced("html", PAGE), { answerActions: ANSWER_ACTIONS }),
+		).toBe(today)
+	})
+
+	it("hands no other fence label to the html renderer", () => {
+		const renderHtmlBlock = vi.fn<HtmlRenderer>(() => <div data-slot="live" />)
+
+		for (const label of ["xml", "htm", "HTML", "ts", "mermaid", ""]) {
+			const html = render(fenced(label, PAGE), withRenderer(renderHtmlBlock))
+			expect(html).not.toContain(LIVE)
+		}
+		expect(renderHtmlBlock).not.toHaveBeenCalled()
 	})
 })
 
