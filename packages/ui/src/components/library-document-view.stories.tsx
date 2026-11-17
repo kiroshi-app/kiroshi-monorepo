@@ -66,6 +66,7 @@ const DOCUMENT_ACTIONS = {
 	onOpen: fn(),
 	onOpenInNewTab: fn(),
 	onRename: fn(),
+	onDuplicate: fn(),
 	onCopy: fn(),
 	onDownload: fn(),
 	onShowInFolder: fn(),
@@ -76,6 +77,7 @@ const NO_DOCUMENT_ACTIONS = {
 	onOpen: undefined,
 	onOpenInNewTab: undefined,
 	onRename: undefined,
+	onDuplicate: undefined,
 	onCopy: undefined,
 	onDownload: undefined,
 	onShowInFolder: undefined,
@@ -87,7 +89,7 @@ const COLLABORATORS = [
 	{ id: "noor", name: "Noor Haddad" },
 ]
 
-const BAR_ACTION_NAMES = ["Download", "Copy"]
+const BAR_ACTION_NAMES = ["Download", "Duplicate"]
 
 const barButtonNames = (bar: HTMLElement) =>
 	within(bar)
@@ -123,6 +125,11 @@ const barAboveTitle =
 		</div>
 	)
 
+const openMoreIn = async (actions: HTMLElement, userEvent: UserEventObject) => {
+	await userEvent.click(within(actions).getByRole("button", { name: "More" }))
+	return screen.findByRole("menu", { name: "Actions for Spring launch brief" })
+}
+
 const pickRename = async (more: HTMLElement, userEvent: UserEventObject) => {
 	await userEvent.click(more)
 	const menu = await screen.findByRole("menu")
@@ -137,7 +144,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Copy, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 24 below the bar and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
+					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Duplicate, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 24 below the bar and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
 			},
 		},
 	},
@@ -288,7 +295,9 @@ const expectBarAtRest = async (canvasElement: HTMLElement, surface: string) => {
 
 	await expectBarControls(canvasElement)
 	await expect(
-		within(bar).getByRole("button", { name: "Copy" }).querySelector("svg rect"),
+		within(bar)
+			.getByRole("button", { name: "Duplicate" })
+			.querySelector("svg rect"),
 	).toHaveAttribute("rx", DUPLICATE_GLYPH_CORNER)
 	for (const control of within(bar).getAllByRole("button"))
 		await expect(getComputedStyle(control).transitionDuration).toBe("0s")
@@ -319,7 +328,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Copy drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
+					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Duplicate drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
@@ -646,7 +655,7 @@ export const BarKeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document bar walked with Tab in the light theme. Check that the Library path link, Download, Copy, More then Close each take focus in that order and wear a 2 px ring in the Space colour while they hold it. The play drives the real keyboard, in the Vitest browser runner only.",
+					"The document bar walked with Tab in the light theme. Check that the Library path link, Download, Duplicate, More then Close each take focus in that order and wear a 2 px ring in the Space colour while they hold it. The play drives the real keyboard, in the Vitest browser runner only.",
 			},
 		},
 	},
@@ -671,7 +680,7 @@ export const BarMatchesImageBar = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document bar given the same item actions as the image viewer's Default story. Check that the bar is 56 tall like the image bar, that Download, Copy, More then Close follow the Library path link in the image bar's order, that each of the four changes colour instantly and names itself in a tooltip, the capsule buttons 28 and Close 32, and that no rule stands between More and Close. Pick it to compare the two headers side by side with Overlays/LibraryLightbox Default.",
+					"The document bar given the same item actions as the image viewer's Default story. Check that the bar is 56 tall like the image bar, that Download, Duplicate, More then Close follow the Library path link in the image bar's order, that each of the four changes colour instantly and names itself in a tooltip, the capsule buttons 28 and Close 32, and that no rule stands between More and Close. Pick it to compare the two headers side by side with Overlays/LibraryLightbox Default.",
 			},
 		},
 	},
@@ -679,7 +688,7 @@ export const BarMatchesImageBar = meta.story({
 		const bar = await expectStaticHeaderBar(
 			slotIn(canvasElement, "library-document-view"),
 		)
-		const actionNames = ["Download", "Copy", "More", "Close"]
+		const actionNames = ["Download", "Duplicate", "More", "Close"]
 		await expect(barButtonNames(bar)).toEqual(["Library", ...actionNames])
 		for (const name of actionNames) {
 			const action = within(bar).getByRole("button", { name })
@@ -695,8 +704,6 @@ export const BarMatchesImageBar = meta.story({
 
 		await userEvent.click(within(bar).getByRole("button", { name: "Download" }))
 		await expect(args.onDownload).toHaveBeenCalledWith(SPRING_BRIEF)
-		await userEvent.click(within(bar).getByRole("button", { name: "Copy" }))
-		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
 		await userEvent.click(within(bar).getByRole("button", { name: "Close" }))
 		await expect(args.onBack).toHaveBeenCalledOnce()
 		await expect(slotIn(canvasElement, "library-document-view")).toBeVisible()
@@ -708,7 +715,7 @@ export const MoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on a document, every item action given. Check that the menu lists Open, Open in new tab, Rename, Show in folder, then Delete under its rule, that neither Download nor Copy, already buttons of the bar, appears in it, and that an entry hands the document to its callback.",
+					"More pressed on a document, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Show in folder, then Delete under its rule, that neither Download nor Duplicate, already buttons of the bar, appears in it, and that an entry hands the document to its callback.",
 			},
 		},
 	},
@@ -721,7 +728,14 @@ export const MoreMenu = meta.story({
 			within(menu)
 				.getAllByRole("menuitem")
 				.map((entry) => entry.textContent),
-		).toEqual(["Open", "Open in new tab", "Rename", "Show in folder", "Delete"])
+		).toEqual([
+			"Open",
+			"Open in new tab",
+			"Rename",
+			"Copy",
+			"Show in folder",
+			"Delete",
+		])
 		for (const name of BAR_ACTION_NAMES)
 			await expect(within(menu).queryByRole("menuitem", { name })).toBe(null)
 
@@ -729,6 +743,82 @@ export const MoreMenu = meta.story({
 			within(menu).getByRole("menuitem", { name: "Show in folder" }),
 		)
 		await expect(args.onShowInFolder).toHaveBeenCalledWith(SPRING_BRIEF)
+	},
+})
+
+export const DuplicateFromTheBar = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Duplicate pressed in the bar of a document, every item action given, as artboards I6a to I6d draw the capsule. Check that the capsule reads Download, Duplicate then More before Close, that Duplicate wears the two rounded squares and hands the document to `onDuplicate` once, and that Copy, no longer a bar button, sits in More and hands the document to `onCopy`.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const actions = actionsIn(canvasElement)
+		await expect(barButtonNames(actions)).toEqual([
+			...BAR_ACTION_NAMES,
+			"More",
+			"Close",
+		])
+
+		await userEvent.click(
+			within(actions).getByRole("button", { name: "Duplicate" }),
+		)
+		await expect(args.onDuplicate).toHaveBeenCalledOnce()
+		await expect(args.onDuplicate).toHaveBeenCalledWith(SPRING_BRIEF)
+
+		const menu = await openMoreIn(actions, userEvent)
+		await expect(
+			within(menu).queryByRole("menuitem", { name: "Duplicate" }),
+		).toBe(null)
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
+		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
+	},
+})
+
+export const CopyFromMore = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Copy picked from More on a document and the copy settled. Check that `onCopy` gets the document and that a screen reader hears Copied.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const actions = actionsIn(canvasElement)
+		const announcement = actions.querySelector("[aria-live=polite]")
+		await expect(announcement).toHaveTextContent("")
+
+		const menu = await openMoreIn(actions, userEvent)
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
+
+		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
+		await waitFor(() => expect(announcement).toHaveTextContent("Copied"))
+	},
+})
+
+export const DuplicateNotShownForTheItem = meta.story({
+	tags: ["test-only"],
+	args: { isActionShown: (_item, action) => action !== "onDuplicate" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every item action given, `isActionShown` refusing Duplicate for the document. Check that neither the capsule nor More offers Duplicate.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const actions = actionsIn(canvasElement)
+		await expect(barButtonNames(actions)).toEqual(["Download", "More", "Close"])
+
+		const menu = await openMoreIn(actions, userEvent)
+		await expect(
+			within(menu).queryByRole("menuitem", { name: "Duplicate" }),
+		).toBe(null)
 	},
 })
 
@@ -841,12 +931,12 @@ export const RenameWithoutFocusTarget = meta.story({
 
 export const OnlyBarActionsGiven = meta.story({
 	tags: ["test-only"],
-	args: { ...NO_DOCUMENT_ACTIONS, onCopy: fn(), onDownload: fn() },
+	args: { ...NO_DOCUMENT_ACTIONS, onDuplicate: fn(), onDownload: fn() },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Only Download and Copy given, both already buttons of the capsule. Check that the capsule draws them and no More, since its menu would have nothing left to list.",
+					"Only Download and Duplicate given, both already buttons of the capsule. Check that the capsule draws them and no More, since its menu would have nothing left to list.",
 			},
 		},
 	},
@@ -854,7 +944,7 @@ export const OnlyBarActionsGiven = meta.story({
 		await expect(barButtonNames(barIn(canvasElement))).toEqual([
 			"Library",
 			"Download",
-			"Copy",
+			"Duplicate",
 			"Close",
 		])
 	},
@@ -866,7 +956,7 @@ export const Member = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document open in a joined Space, where no item action is given for a member. Check that the bar keeps the Library path link and Close and draw neither Download, Copy nor More.",
+					"A document open in a joined Space, where no item action is given for a member. Check that the bar keeps the Library path link and Close and draw neither Download, Duplicate nor More.",
 			},
 		},
 	},
@@ -1030,7 +1120,7 @@ export const OneAgentWriting = meta.story({
 		await expect(canvas.getByRole("button", { name: "Library" })).toHaveFocus()
 		await userEvent.tab()
 		await expect(canvas.getByRole("button", { name: "Stop all" })).toHaveFocus()
-		for (const name of ["Download", "Copy", "More", "Close"]) {
+		for (const name of ["Download", "Duplicate", "More", "Close"]) {
 			await userEvent.tab()
 			await expect(canvas.getByRole("button", { name })).toHaveFocus()
 		}
@@ -1148,7 +1238,7 @@ export const BarDragsTheWindow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
+					"A document given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Duplicate, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
 			},
 		},
 	},
@@ -1161,7 +1251,7 @@ export const BarDragsTheWindow = meta.story({
 			"Library",
 			"Stop all",
 			"Download",
-			"Copy",
+			"Duplicate",
 			"More",
 			"Close",
 		])

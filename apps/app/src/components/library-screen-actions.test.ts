@@ -976,7 +976,7 @@ describe("the Back button of the lightbox", () => {
 	})
 })
 
-type DocumentBarButton = "copy" | "download" | "more"
+type DocumentBarButton = "download" | "more"
 
 const documentBarButton = (button: DocumentBarButton) =>
 	screen.getByRole("button", { name: common(`library.document.${button}`) })
@@ -1313,12 +1313,12 @@ describe("the document bar", () => {
 		["the host", false, "library_copy"],
 		["a joined Space", true, "library_copy_bytes"],
 	] as const)(
-		"copies the open document on %s as the grid does and shows Copied",
+		"copies the open document on %s from More as the grid does and shows Copied",
 		async (_space, isJoined, command) => {
 			await renderLibraryScreen({ isJoined })
 			await openNotes()
 
-			await press(documentBarButton("copy"))
+			await pickInDocumentMore("copy")
 
 			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
 			expect(
@@ -1368,8 +1368,12 @@ describe("the document bar", () => {
 	})
 
 	it.each([
-		["the host", false, ["openInNewTab", "rename", "showInFolder", "delete"]],
-		["a joined Space", true, ["openInNewTab", "rename", "delete"]],
+		[
+			"the host",
+			false,
+			["openInNewTab", "rename", "copy", "showInFolder", "delete"],
+		],
+		["a joined Space", true, ["openInNewTab", "rename", "copy", "delete"]],
 	] as const)(
 		"offers in More on %s Rename and not Open",
 		async (_space, isJoined, actions) => {
@@ -1415,16 +1419,21 @@ describe("the document bar", () => {
 	})
 
 	it.each([
-		["copy", "library_copy", "copy"],
-		["download", "library_save", "save"],
+		["copy", "library_copy", "copy", () => pickInDocumentMore("copy")],
+		[
+			"download",
+			"library_save",
+			"save",
+			() => press(documentBarButton("download")),
+		],
 	] as const)(
 		"raises the grid's notice and keeps the document open when the host refuses %s",
-		async (button, command, failure) => {
+		async (_action, command, failure, choose) => {
 			harness.refused = command
 			await renderLibraryScreen({ isJoined: false })
 			await openNotes()
 
-			await press(documentBarButton(button))
+			await choose()
 
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf(failure)),

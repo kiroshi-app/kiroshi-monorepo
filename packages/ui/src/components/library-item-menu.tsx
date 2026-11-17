@@ -17,7 +17,6 @@ import {
 	AppHeaderPathSeparator,
 } from "@workspace/ui/components/app-header"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryCommentBarControls,
@@ -53,6 +52,7 @@ type LibraryItemHandlers<Item> = {
 	onOpen?: LibraryItemAction<Item>
 	onOpenInNewTab?: LibraryItemAction<Item>
 	onRename?: LibraryItemAction<Item>
+	onDuplicate?: LibraryItemAction<Item>
 	onCopy?: LibraryItemAction<Item>
 	onDownload?: LibraryItemAction<Item>
 	onShowInFolder?: LibraryItemAction<Item>
@@ -96,6 +96,11 @@ const LIBRARY_ITEM_ACTIONS = [
 	label: string
 	Icon: ComponentType
 }[]
+
+const LIBRARY_ITEM_ACTION_NAMES: readonly LibraryItemActionName[] = [
+	...LIBRARY_ITEM_ACTIONS.map(({ handler }) => handler),
+	"onDuplicate",
+]
 
 const IMAGE_ACTIONS = [
 	{
@@ -152,7 +157,7 @@ const ImageMenuItems = <Item,>({
 
 type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
 
-const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onCopy"]
+const BAR_BUTTON_ORDER: readonly string[] = ["onDownload"]
 
 const BAR_BUTTON_ACTIONS = new Set(BAR_BUTTON_ORDER)
 
@@ -189,9 +194,9 @@ const handlersFor = <Item,>(
 	item: Item,
 ): LibraryItemHandlers<Item> =>
 	Object.fromEntries(
-		LIBRARY_ITEM_ACTIONS.filter(({ handler }) =>
+		LIBRARY_ITEM_ACTION_NAMES.filter((handler) =>
 			isActionShown(item, handler),
-		).map(({ handler }) => [handler, handlers[handler]]),
+		).map((handler) => [handler, handlers[handler]]),
 	)
 
 type MenuItemPartProps = {
@@ -426,9 +431,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const isCopied = copiedItem === item
-	const { onCopy, onDownload, onDelete } = actions
-	const menuActions = barMenuActionsOf(actions)
-	const hasMenu = hasLibraryItemActions(menuActions)
+	const { onCopy, onDownload, onDuplicate, onDelete } = actions
 	const { fill, control } = LIBRARY_BAR_SKIN[surface]
 
 	useEffect(() => {
@@ -437,18 +440,22 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 		return () => window.clearTimeout(timer)
 	}, [copiedItem])
 
+	const copy =
+		onCopy &&
+		(async () => {
+			try {
+				await onCopy(item)
+				setCopiedItem(item)
+			} catch {
+				setCopiedItem(null)
+			}
+		})
+	const menuActions = { ...barMenuActionsOf(actions), onCopy: copy }
+	const hasMenu = hasLibraryItemActions(menuActions)
+
 	const confirmDelete = (isConfirming: boolean) => {
 		setConfirmingDelete(isConfirming)
 		onConfirmingDeleteChange?.(isConfirming)
-	}
-
-	const copy = async () => {
-		try {
-			await onCopy?.(item)
-			setCopiedItem(item)
-		} catch {
-			setCopiedItem(null)
-		}
 	}
 
 	return (
@@ -463,7 +470,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					isOnDarkStage={surface === "lightbox"}
 				/>
 			) : null}
-			{onDownload || onCopy || hasMenu ? (
+			{onDownload || onDuplicate || hasMenu ? (
 				<AppHeaderCapsule className={fill}>
 					{onDownload ? (
 						<LibraryBarButton
@@ -474,17 +481,13 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 							<Icons.Download aria-hidden="true" />
 						</LibraryBarButton>
 					) : null}
-					{onCopy ? (
+					{onDuplicate ? (
 						<LibraryBarButton
-							aria-label={t(`library.${surface}.copy`)}
+							aria-label={t(`library.${surface}.duplicate`)}
 							className={control}
-							onClick={copy}
+							onClick={() => onDuplicate(item)}
 						>
-							<IconSwap
-								icon={<Icons.Duplicate aria-hidden="true" />}
-								isSwapped={isCopied}
-								swappedIcon={<Icons.Check aria-hidden="true" />}
-							/>
+							<Icons.Duplicate aria-hidden="true" />
 						</LibraryBarButton>
 					) : null}
 					{hasMenu ? (

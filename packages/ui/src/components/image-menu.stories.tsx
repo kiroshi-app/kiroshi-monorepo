@@ -16,10 +16,10 @@ const [IMAGE] = LIBRARY_LIGHTBOX_IMAGES
 
 const VIEWER_ACTION_ORDER = [
 	"Download",
-	"Copy",
 	"Open",
 	"Open in new tab",
 	"Rename",
+	"Copy",
 	"Show in folder",
 	"Delete",
 ]

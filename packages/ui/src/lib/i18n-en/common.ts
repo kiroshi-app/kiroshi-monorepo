@@ -572,6 +572,7 @@ const common = {
 			open: "Open",
 			openInNewTab: "Open in new tab",
 			rename: "Rename",
+			duplicateFailure: "Couldn’t duplicate {{name}}. Try Duplicate again.",
 			copy: "Copy",
 			download: "Download",
 			showInFolder: "Show in folder",
@@ -589,7 +590,7 @@ const common = {
 		},
 		lightbox: {
 			download: "Download",
-			copy: "Copy",
+			duplicate: "Duplicate",
 			copied: "Copied",
 			more: "More",
 			back: "Library",
@@ -608,7 +609,7 @@ const common = {
 			back: "Library",
 			more: "More",
 			download: "Download",
-			copy: "Copy",
+			duplicate: "Duplicate",
 			copied: "Copied",
 			close: "Close",
 			agents: {
