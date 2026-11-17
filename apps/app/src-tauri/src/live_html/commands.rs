@@ -27,6 +27,7 @@ pub async fn live_html_mount_attachment<R: Runtime>(
 	path: String,
 	rectangle: LiveHtmlRectangle,
 ) -> Result<(), LiveHtmlError> {
+	super::native::ensure_available()?;
 	let attachments = Attachments::dir(&app).ok_or_else(|| LiveHtmlError::Unreadable {
 		detail: "the attachments folder has no location".to_owned(),
 	})?;

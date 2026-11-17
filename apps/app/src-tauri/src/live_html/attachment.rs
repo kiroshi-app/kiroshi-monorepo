@@ -23,9 +23,17 @@ pub(crate) fn read_page(attachments: &Path, path: &Path) -> Result<String, LiveH
 	if metadata.len() > MAX_PAGE_BYTES {
 		return Err(LiveHtmlError::TooLarge { bytes: metadata.len(), limit: MAX_PAGE_BYTES });
 	}
-	let mut html = String::new();
-	file.take(MAX_PAGE_BYTES).read_to_string(&mut html).map_err(unreadable)?;
-	Ok(html)
+	bounded_page(file)
+}
+
+fn bounded_page(reader: impl Read) -> Result<String, LiveHtmlError> {
+	let mut bytes = Vec::new();
+	reader.take(MAX_PAGE_BYTES + 1).read_to_end(&mut bytes).map_err(unreadable)?;
+	let read = bytes.len() as u64;
+	if read > MAX_PAGE_BYTES {
+		return Err(LiveHtmlError::TooLarge { bytes: read, limit: MAX_PAGE_BYTES });
+	}
+	String::from_utf8(bytes).map_err(unreadable)
 }
 
 fn is_html(path: &Path) -> bool {
@@ -137,6 +145,16 @@ mod tests {
 		assert_eq!(
 			read_page(&store.attachments, &page),
 			Err(LiveHtmlError::TooLarge { bytes, limit: MAX_PAGE_BYTES })
+		);
+	}
+
+	#[test]
+	fn a_page_grown_past_the_limit_after_its_size_was_read_is_refused() {
+		let grown = vec![b'a'; MAX_PAGE_BYTES as usize + 10];
+
+		assert_eq!(
+			bounded_page(grown.as_slice()),
+			Err(LiveHtmlError::TooLarge { bytes: MAX_PAGE_BYTES + 1, limit: MAX_PAGE_BYTES })
 		);
 	}
 
