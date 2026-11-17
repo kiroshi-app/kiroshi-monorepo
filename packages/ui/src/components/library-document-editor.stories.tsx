@@ -902,6 +902,7 @@ export const BarAtRest = meta.story({
 		detail: BAR_DETAILS,
 		template: undefined,
 		onCopy: fn(),
+		onDuplicate: fn(),
 		onDownload: fn(),
 	},
 	globals: { theme: "light" },
@@ -909,7 +910,7 @@ export const BarAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule, that its top line reads the Library path link, a separator and the details over the document name, that Download, Copy, More then Close follow, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
+					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule, that its top line reads the Library path link, a separator and the details over the document name, that Download, Duplicate, More then Close follow, Copy living in More, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
 			},
 		},
 	},
@@ -927,7 +928,7 @@ export const BarAtRest = meta.story({
 		await expect(barButtonNames(bar)).toEqual([
 			"Library",
 			"Download",
-			"Copy",
+			"Duplicate",
 			"More",
 			"Close",
 		])
@@ -1599,6 +1600,7 @@ export const BarDragsTheWindow = meta.story({
 	args: {
 		...AgentsWriting.input.args,
 		onCopy: fn(),
+		onDuplicate: fn(),
 		onDownload: fn(),
 		dragRegion: "deep",
 	},
@@ -1606,7 +1608,7 @@ export const BarDragsTheWindow = meta.story({
 		docs: {
 			description: {
 				story:
-					"A document opened to edit and given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Pick `BarAtRest` for the bar without it. `apps/app/src/components/library-screen.tsx:542` renders the editor and does not pass `dragRegion` yet.",
+					"A document opened to edit and given `dragRegion`, as the frameless window mounts it, two agents writing so the bar holds every control it can. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window, and that the Library path link, Stop all, Download, Duplicate, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Pick `BarAtRest` for the bar without it. `apps/app/src/components/library-screen.tsx:542` renders the editor and does not pass `dragRegion` yet.",
 			},
 		},
 	},
@@ -1619,7 +1621,7 @@ export const BarDragsTheWindow = meta.story({
 			"Library",
 			"Stop all",
 			"Download",
-			"Copy",
+			"Duplicate",
 			"More",
 			"Close",
 		])
