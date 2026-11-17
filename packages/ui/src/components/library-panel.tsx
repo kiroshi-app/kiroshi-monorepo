@@ -183,6 +183,7 @@ type BarActionProps = {
 	label: string
 	onClick: () => void
 	isIconOnly?: boolean
+	slot?: "library-action" | "agents-page-create"
 }
 
 const BarAction = ({
@@ -191,6 +192,7 @@ const BarAction = ({
 	label,
 	onClick,
 	isIconOnly = false,
+	slot = "library-action",
 }: BarActionProps) => (
 	<TooltipHint content={isIconOnly ? label : null} side="bottom">
 		<button
@@ -199,7 +201,7 @@ const BarAction = ({
 				BAR_ACTION_KIND[kind],
 				isIconOnly && "w-8 px-0",
 			)}
-			data-slot="library-action"
+			data-slot={slot}
 			onClick={onClick}
 			type="button"
 		>

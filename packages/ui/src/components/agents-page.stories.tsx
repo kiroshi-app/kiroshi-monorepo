@@ -201,6 +201,8 @@ const expectAppHeaderBar = async (canvasElement: HTMLElement) => {
 	const bar = slotIn(page, "app-header")
 	await expect(Array.from(page.querySelectorAll("header"))).toEqual([bar])
 	await expect(bar).toHaveAttribute("data-tauri-drag-region", "deep")
+	await expect(slotsIn(bar, "library-action")).toHaveLength(0)
+	await expect(slotsIn(bar, "agents-page-create")).toHaveLength(1)
 	await expect(page).toHaveAccessibleName("Agents")
 	await expect(
 		within(slotIn(bar, "app-header-leading")).getByRole("heading", {

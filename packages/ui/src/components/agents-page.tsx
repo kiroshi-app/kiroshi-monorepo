@@ -319,6 +319,7 @@ const AgentsPage = (props: AgentsPageProps) => {
 								kind="secondary"
 								label={t("space.agents.create")}
 								onClick={onCreate}
+								slot="agents-page-create"
 							/>
 						}
 						data-tauri-drag-region="deep"
