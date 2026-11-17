@@ -5,12 +5,14 @@ import {
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
+import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 import type { MarkdownAttachments } from "@workspace/ui/components/markdown/attachments"
 import {
 	type MessageAttachment,
 	MessageAttachments,
 } from "@workspace/ui/components/message-attachments"
 
+import { LiveHtmlBlock } from "@/components/live-html-block"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
@@ -23,8 +25,10 @@ import {
 	resolveCitedImage,
 } from "@/lib/chat/message-attachments"
 import { answerTableSaverOf } from "@/lib/chat/save-answer-table"
+import { showsLiveHtml } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
+import { withHtmlBlock } from "@/lib/live-html/live-html-ui-shapes"
 
 type LibraryReferences = Pick<
 	MarkdownProps,
@@ -131,6 +135,16 @@ export const TurnBody = ({
 	)
 }
 
+const renderLiveHtmlBlock = (source: string) => <LiveHtmlBlock html={source} />
+
+const withLiveHtmlWhenWritten = (
+	answerActions: MarkdownAnswerActions,
+	isWriting: boolean,
+) =>
+	isWriting || !showsLiveHtml()
+		? answerActions
+		: withHtmlBlock(answerActions, renderLiveHtmlBlock)
+
 type AnswerBodyProps = MessageContent &
 	LibraryReferences & {
 		agentName: string
@@ -163,15 +177,18 @@ export const AnswerBody = ({
 
 	return (
 		<TurnBody
-			answerActions={{
-				agentName,
-				onUseValues: actions.insert,
-				onOpenImage: actions.openImage,
-				onOpenWebPage: openWebPage,
-				onDownloadTable: answerTableSaverOf(agentName),
-				imageMenu: actions.imageActions,
-				isSavingImage: actions.imageActions.isSavingImage,
-			}}
+			answerActions={withLiveHtmlWhenWritten(
+				{
+					agentName,
+					onUseValues: actions.insert,
+					onOpenImage: actions.openImage,
+					onOpenWebPage: openWebPage,
+					onDownloadTable: answerTableSaverOf(agentName),
+					imageMenu: actions.imageActions,
+					isSavingImage: actions.imageActions.isSavingImage,
+				},
+				isWriting,
+			)}
 			attachments={attachments}
 			isWriting={isWriting}
 			renderBoardLink={renderBoardLink}

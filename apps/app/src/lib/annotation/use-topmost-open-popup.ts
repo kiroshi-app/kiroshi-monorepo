@@ -11,7 +11,7 @@ const POPUP_CHANGES: MutationObserverInit = {
 const findTopmostOpenPopup = () =>
 	Array.from(document.querySelectorAll<HTMLElement>(OPEN_POPUP)).at(-1) ?? null
 
-const subscribeToOpenPopups = (onChange: () => void) => {
+export const subscribeToOpenPopups = (onChange: () => void) => {
 	const popupObserver = new MutationObserver(onChange)
 	popupObserver.observe(document.body, POPUP_CHANGES)
 	return () => popupObserver.disconnect()

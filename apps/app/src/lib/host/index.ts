@@ -101,6 +101,9 @@ export const usesCommandKey = (): boolean =>
 export const carriesNativeMenu = (): boolean =>
 	isDesktopHost() && platform() === "macos"
 
+export const showsLiveHtml = (): boolean =>
+	isDesktopHost() && platform() === "macos"
+
 export const hasCaptionWindowControls = (): boolean =>
 	isDesktopHost() && platform() === "windows"
 
