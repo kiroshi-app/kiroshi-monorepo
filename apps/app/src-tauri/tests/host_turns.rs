@@ -83,7 +83,6 @@ const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORE
 const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
 const SUMMONS_DROPPED: &str = kiroshi_app::conversations::contract::SUMMONS_DROPPED_EVENT;
 const PATIENCE: Duration = Duration::from_secs(60);
-const SHORT_START_DEADLINE: Duration = Duration::from_millis(300);
 
 const A_ROOM: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES
@@ -1257,13 +1256,14 @@ fn a_member_turn_queued_past_its_start_deadline_keeps_its_run_until_it_is_answer
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("queued-past-deadline", "held_echo").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let (deadlines, start_deadlines) = TurnRunDeadlines::fired_by_hand();
+		host.app.manage(deadlines);
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t0", "host first").await;
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
 
 		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
-		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		start_deadlines.fire_armed().await;
 		let awaited = host.runs_of("t1").await;
 		let completed_while_queued = host.completed_at("t1").await;
 		host.allow_write(ADA, 1).await;
@@ -1457,7 +1457,8 @@ fn a_summons_the_front_drops_is_released_at_once_and_never_expires_as_never_star
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("front-drop", "room_handover").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let (deadlines, start_deadlines) = TurnRunDeadlines::fired_by_hand();
+		host.app.manage(deadlines);
 		let held = host.host_run(ROOM, ADA).await;
 		host.host_says(&held, "h1", "t1", "who takes the walls?").await;
 		host.turn_ended_for(ADA).await;
@@ -1474,7 +1475,7 @@ fn a_summons_the_front_drops_is_released_at_once_and_never_expires_as_never_star
 		.expect("the drop is taken");
 		let awaited_after = host.runs_of("t1").await;
 		let completed_at = host.completed_at("t1").await;
-		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		start_deadlines.fire_armed().await;
 		host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
 
 		assert_eq!(awaited_before, 1, "ADA did not hand the turn to Grace");
@@ -1492,12 +1493,13 @@ fn two_agents_mentioning_each_other_with_no_window_stop_at_the_bound_and_keep_th
 	let _serial = serial();
 	block_on(async {
 		let mut host = Host::hosting("summon-limit", "room_ping_pong").await;
-		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let (deadlines, start_deadlines) = TurnRunDeadlines::fired_by_hand();
+		host.app.manage(deadlines);
 
 		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
 		host.heard_until(|frames| drops_of(frames, GRACE).contains(&"summonLimit")).await;
 		host.answered("t1").await;
-		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		start_deadlines.fire_armed().await;
 		let claimed_by_a_member =
 			host.called("conversation_claim_unseen_drops", json!({ "conversationId": ROOM })).await;
 		let claimed = conversation_claim_unseen_drops(host.app.state(), ROOM.to_owned());
