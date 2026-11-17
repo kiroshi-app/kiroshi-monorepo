@@ -1230,15 +1230,10 @@ export const DuplicateFromTheBar = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
-		const actions = slotIn(barIn(popup), "library-bar-actions")
-		await expect(
-			within(actions)
-				.getAllByRole("button")
-				.map((button) => button.getAttribute("aria-label")),
-		).toEqual(["Download", "Duplicate", "More", "Close"])
+		const { capsule } = await expectBarControls(popup)
 
 		await userEvent.click(
-			within(actions).getByRole("button", { name: "Duplicate" }),
+			within(capsule).getByRole("button", { name: "Duplicate" }),
 		)
 		await expect(args.onDuplicate).toHaveBeenCalledOnce()
 		await expect(args.onDuplicate).toHaveBeenCalledWith(

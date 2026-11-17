@@ -753,8 +753,7 @@ export const DuplicateFromTheBar = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const actions = actionsIn(canvasElement)
 		await expect(barButtonNames(actions)).toEqual([
-			"Download",
-			"Duplicate",
+			...BAR_ACTION_NAMES,
 			"More",
 			"Close",
 		])
