@@ -401,6 +401,8 @@ export const LIBRARY_SCREENSHOT_ROUTE = "/screenshot.html" as const;
 
 export const LIBRARY_SCREENSHOT_WINDOW_PREFIX = "screenshot-" as const;
 
+export const LIVE_HTML_MEASURED_EVENT = "live-html://measured" as const;
+
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
 export const MAX_SUMMONS_PER_CHAIN = 5 as const;
@@ -1475,6 +1477,12 @@ export type LibraryWriter = {
 export type LibraryWriterKind = "agent" | "person" | "member";
 
 export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string } | { kind: "outsideAttachments" } | { kind: "notHtml" } | { kind: "tooLarge"; bytes: number; limit: number } | { kind: "unreadable"; detail: string };
+
+export type LiveHtmlMeasured = {
+	id: string,
+	width: number | null,
+	height: number | null,
+};
 
 export type LiveHtmlRectangle = {
 	x: number | null,

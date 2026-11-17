@@ -11,7 +11,7 @@
 	<body>
 		<div id="placeholder"></div>
 		<script>
-			const { invoke } = window.__TAURI_INTERNALS__
+			const { invoke, transformCallback } = window.__TAURI_INTERNALS__
 			const ID = "prototype"
 			const SHOWN = { x: 40, y: 80, width: 480, height: 300 }
 			const MOVED = { x: 200, y: 160, width: 560, height: 340 }
@@ -23,7 +23,7 @@
 			const answer = (call) => call.then(() => "ok", (failure) => failure)
 			const capture = async (step, rectangle, clip, note) => {
 				await pause(600)
-				await invoke("capture_step", { step, rectangle, clip, note: note ?? null })
+				return invoke("capture_step", { step, rectangle, clip, note: note ?? null })
 			}
 
 			const play = async () => {
@@ -55,10 +55,106 @@
 				location.reload()
 			}
 
+			const MEASURED_EVENT = "live-html://measured"
+			const PAGE = (body) => `<!doctype html><html><body style="margin:0">${body}</body></html>`
+			const SHORT_PAGE = PAGE(`<div style="height:120px;background:#ff00ff"></div>`)
+			const LONG_PAGE = PAGE(`<div style="height:3000px;background:#ff00ff"></div>`)
+			const GROWING_PAGE = PAGE(`<div id="grows" style="height:100px;background:#ff00ff"></div>
+				<script>
+					const grows = document.getElementById("grows")
+					addEventListener("load", () => {
+						setTimeout(() => { grows.style.height = "400px" }, 600)
+						setTimeout(() => { grows.style.height = "200px" }, 1200)
+					})
+				<\/script>`)
+			const LATE_PAGE = PAGE(`<div id="grows" style="height:100px;background:#ff00ff"></div>
+				<script>
+					addEventListener("load", () => setTimeout(() => { document.getElementById("grows").style.height = "500px" }, 1500))
+				<\/script>`)
+			const WIDE_PAGE = PAGE(`<div style="display:flex;width:1440px;height:360px">
+					<div style="flex:1;background:#ff00ff"></div><div style="flex:1;background:#00ffff"></div>
+				</div>
+				<script>setInterval(() => scrollTo(9999, 9999), 50)<\/script>`)
+			const NOWHERE = { x: 0, y: 0, width: 0, height: 0 }
+			const TOLERANCE = 3
+			const measurements = []
+			const measuredFor = (id) => measurements.filter((payload) => payload.id === id)
+			const fail = (reason) => {
+				throw reason
+			}
+			const expect = (isMet, reason) => isMet || fail(reason)
+			const near = (length, expected) => Math.abs(length - expected) <= TOLERANCE
+			const until = async (isMet, reason) => {
+				for (let waited = 0; waited < 8000; waited += 50) {
+					if (isMet()) return
+					await pause(50)
+				}
+				fail(reason)
+			}
+			const sizesOf = (id) => JSON.stringify(measuredFor(id).map(({ width, height }) => [width, height]))
+			const expectSizes = async (id, sizes) => {
+				const expected = JSON.stringify(sizes)
+				await until(() => sizesOf(id) === expected, `${id} measured ${sizesOf(id)}, expected ${expected}`)
+			}
+			const expectSizesHeld = async (id, sizes) => {
+				await expectSizes(id, sizes)
+				await pause(1000)
+				expect(sizesOf(id) === JSON.stringify(sizes), `${id} measured ${sizesOf(id)} once settled`)
+			}
+
+			const measure = async () => {
+				await invoke("plugin:event|listen", {
+					event: MEASURED_EVENT,
+					target: { kind: "Any" },
+					handler: transformCallback(({ payload }) => measurements.push(payload)),
+				})
+				paint(NOWHERE)
+
+				await invoke("live_html_mount", { id: "short", html: SHORT_PAGE, rectangle: SHOWN })
+				await expectSizes("short", [[SHOWN.width, 120]])
+				const fields = Object.keys(measuredFor("short")[0]).sort().join(",")
+				expect(fields === "height,id,width", `the measured payload carries ${fields}`)
+				await invoke("live_html_place", { id: "short", rectangle: { ...SHOWN, height: 120 }, clip: null })
+				await expectSizesHeld("short", [[SHOWN.width, 120]])
+				await invoke("live_html_remove", { id: "short" })
+
+				await invoke("live_html_mount", { id: "long", html: LONG_PAGE, rectangle: SHOWN })
+				await expectSizesHeld("long", [[SHOWN.width, 3000]])
+				await invoke("live_html_remove", { id: "long" })
+
+				await invoke("live_html_mount", { id: "growing", html: GROWING_PAGE, rectangle: SHOWN })
+				await expectSizesHeld("growing", [[SHOWN.width, 100], [SHOWN.width, 400], [SHOWN.width, 200]])
+				await invoke("live_html_remove", { id: "growing" })
+
+				await invoke("live_html_mount", { id: "removed", html: LATE_PAGE, rectangle: SHOWN })
+				await expectSizes("removed", [[SHOWN.width, 100]])
+				await invoke("live_html_remove", { id: "removed" })
+				await pause(2500)
+				expect(sizesOf("removed") === JSON.stringify([[SHOWN.width, 100]]), `removed measured ${sizesOf("removed")}`)
+
+				await invoke("live_html_mount", { id: "wide", html: WIDE_PAGE, rectangle: SHOWN })
+				await expectSizes("wide", [[SHOWN.width, 120]])
+				const fitted = { ...SHOWN, height: 120 }
+				await invoke("live_html_place", { id: "wide", rectangle: fitted, clip: null })
+				const { magenta_drawn_in_window_points: left, cyan_drawn_in_window_points: right } = await capture(
+					"wide-fitted",
+					fitted,
+					null,
+				)
+				expect(left && right, "the wide page drew no left or no right half")
+				const halves = JSON.stringify({ left, right })
+				expect(near(left.width, SHOWN.width / 2) && near(right.width, SHOWN.width / 2), `the wide halves are ${halves}`)
+				expect(near(left.height, 120) && near(right.height, 120), `the wide halves are ${halves}`)
+				expect(near(right.x - left.x, SHOWN.width / 2) && near(right.y, left.y), `the wide halves are ${halves}`)
+				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 120]]), `wide measured ${sizesOf("wide")}`)
+				await invoke("live_html_remove", { id: "wide" })
+			}
+
 			const afterReload = async () => {
 				paint(SHOWN)
 				await pause(1000)
 				await capture("after-reload", SHOWN, null)
+				await measure()
 				await invoke("finish_run")
 			}
 
