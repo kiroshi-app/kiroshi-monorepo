@@ -47,7 +47,6 @@ import {
 } from "@workspace/ui/components/library-lightbox"
 import { LibraryPanel } from "@workspace/ui/components/library-panel"
 import { LibraryImageSkeleton } from "@workspace/ui/components/library-tab-states"
-import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 type LibraryWithLightboxProps = LibraryItemActions<
@@ -165,7 +164,7 @@ const expectBarControls = async (popup: HTMLElement) => {
 		within(capsule)
 			.getAllByRole("button")
 			.map((button) => button.getAttribute("aria-label")),
-	).toEqual(["Download", "Copy", "More"])
+	).toEqual(["Download", "Duplicate", "More"])
 	for (const control of within(capsule).getAllByRole("button"))
 		await expect(sizeOf(control)).toEqual([28, 28])
 	await expect(sizeOf(close)).toEqual([32, 32])
@@ -180,16 +179,6 @@ const expectSoleTooltip = (name: string) =>
 		expect(tooltips[0]).toHaveTextContent(name)
 	}, HOVER_TOOLTIP_WAIT)
 
-const copySwapIn = (popup: HTMLElement) => {
-	const [copyLayer, checkLayer] = within(popup)
-		.getByRole("button", { name: "Copy" })
-		.querySelectorAll("[data-slot=icon-swap] > span")
-	return { copyLayer, checkLayer }
-}
-
-const announcementIn = (popup: HTMLElement) =>
-	popup.querySelector("[aria-live=polite]")
-
 const menuEntryNames = (menu: HTMLElement) =>
 	within(menu)
 		.getAllByRole("menuitem")
@@ -199,13 +188,14 @@ const ITEM_ACTION_NAMES = [
 	"Open",
 	"Open in new tab",
 	"Rename",
+	"Duplicate",
 	"Copy",
 	"Download",
 	"Show in folder",
 	"Delete",
 ]
 
-const BAR_ACTION_NAMES = ["Download", "Copy"]
+const BAR_ACTION_NAMES = ["Download", "Duplicate"]
 
 const BAR_MENU_ACTION_NAMES = ITEM_ACTION_NAMES.filter(
 	(name) => !BAR_ACTION_NAMES.includes(name),
@@ -249,6 +239,7 @@ const LIGHTBOX_STORY_ARGS: LibraryWithLightboxProps = {
 	onOpen: fn(),
 	onOpenInNewTab: fn(),
 	onRename: fn(),
+	onDuplicate: fn(),
 	onCopy: fn(),
 	onDownload: fn(),
 	onShowInFolder: fn(),
@@ -263,7 +254,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Copy are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy reports the image too, then swaps its icon for a check and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Duplicate are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown, Copy among its entries. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -277,7 +268,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second image open, as artboard 8 draws it. Check the arrows, Download and Copy report to their callbacks, that the third action is More, that the three capsule actions are 28 px buttons and Close a 32 px one, that every control of the bar changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
+					"The second image open, as artboard 8 draws it. Check the arrows, Download and Duplicate report to their callbacks, that the third action is More, that the three capsule actions are 28 px buttons and Close a 32 px one, that every control of the bar changes colour instantly, that every icon button names its action in a tooltip, and that Escape hands focus back to the grid item that opened the image.",
 			},
 		},
 	},
@@ -297,8 +288,12 @@ export const Default = meta.story({
 		await expect(args.onDownload).toHaveBeenCalledWith(
 			LIBRARY_LIGHTBOX_IMAGES[1],
 		)
-		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
-		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Duplicate" }),
+		)
+		await expect(args.onDuplicate).toHaveBeenCalledWith(
+			LIBRARY_LIGHTBOX_IMAGES[1],
+		)
 		const more = within(popup).getByRole("button", { name: "More" })
 		await userEvent.hover(more)
 		await expectSoleTooltip("More")
@@ -647,7 +642,7 @@ export const HostMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Show in folder, then Delete under a rule and drawn as destructive, that neither Download nor Copy, already buttons of the bar, appears in it, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu still lists every action, Copy and Download included.",
+					"More pressed on the host, every item action given. Check that the menu lists Open, Open in new tab, Rename, Copy, Show in folder, then Delete under a rule and drawn as destructive, that neither Download nor Duplicate, already buttons of the bar, appears in it, that the highlight follows the pointer with no colour transition, that an entry hands the shown image to its callback, and that the grid item menu still lists every action, Duplicate and Download included.",
 			},
 		},
 	},
@@ -690,7 +685,7 @@ export const MemberMoreMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Copy and More, that neither the More menu nor the grid item menu lists Show in folder, and that only the grid item menu lists Download and Copy.",
+					"More pressed in a joined Space, where Show in folder has no action for a member. Check that the bar keeps Download, Duplicate and More, that neither the More menu nor the grid item menu lists Show in folder, and that only the grid item menu lists Download and Duplicate.",
 			},
 		},
 	},
@@ -700,7 +695,7 @@ export const MemberMoreMenu = meta.story({
 			within(popup).getByRole("button", { name: "Download" }),
 		).toBeVisible()
 		await expect(
-			within(popup).getByRole("button", { name: "Copy" }),
+			within(popup).getByRole("button", { name: "Duplicate" }),
 		).toBeVisible()
 
 		const memberActions = ITEM_ACTION_NAMES.filter(
@@ -729,7 +724,7 @@ export const ImageWithoutRename = meta.story({
 		docs: {
 			description: {
 				story:
-					"More pressed on an image, every item action given and Rename kept for documents. Check that the menu lists every action but Rename and the bar's own Download and Copy, with Delete still under its rule.",
+					"More pressed on an image, every item action given and Rename kept for documents. Check that the menu lists every action but Rename and the bar's own Download and Duplicate, with Delete still under its rule.",
 			},
 		},
 	},
@@ -753,7 +748,7 @@ export const OnlyDeleteShown = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every item action given and only Delete shown for the image. Check that the bar draws neither Download nor Copy, and that the More menu and the grid item menu list Delete alone with no rule above it.",
+					"Every item action given and only Delete shown for the image. Check that the bar draws neither Download nor Duplicate, and that the More menu and the grid item menu list Delete alone with no rule above it.",
 			},
 		},
 	},
@@ -762,9 +757,9 @@ export const OnlyDeleteShown = meta.story({
 		await expect(
 			within(popup).queryByRole("button", { name: "Download" }),
 		).toBe(null)
-		await expect(within(popup).queryByRole("button", { name: "Copy" })).toBe(
-			null,
-		)
+		await expect(
+			within(popup).queryByRole("button", { name: "Duplicate" }),
+		).toBe(null)
 
 		const menu = await openMoreMenu(popup, userEvent)
 		await expect(menuEntryNames(menu)).toEqual(["Delete"])
@@ -784,13 +779,13 @@ export const OnlyBarActionsGiven = meta.story({
 	tags: ["test-only"],
 	args: {
 		isActionShown: (_, action) =>
-			action === "onDownload" || action === "onCopy",
+			action === "onDownload" || action === "onDuplicate",
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Every item action given and only Download and Copy shown for the image, both already buttons of the bar. Check that the bar draws them and no More, since its menu would have nothing left to list.",
+					"Every item action given and only Download and Duplicate shown for the image, both already buttons of the bar. Check that the bar draws them and no More, since its menu would have nothing left to list.",
 			},
 		},
 	},
@@ -801,9 +796,9 @@ export const OnlyBarActionsGiven = meta.story({
 				.getAllByRole("button")
 				.map((button) => button.getAttribute("aria-label"))
 				.filter((name) =>
-					["Download", "Copy", "More", "Close"].includes(name ?? ""),
+					["Download", "Duplicate", "More", "Close"].includes(name ?? ""),
 				),
-		).toEqual(["Download", "Copy", "Close"])
+		).toEqual(["Download", "Duplicate", "Close"])
 	},
 })
 
@@ -814,7 +809,7 @@ export const EveryActionLeftOut = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every item action given and every one left out for the image. Check that the bar draws neither Download, Copy nor More, and that a right-click on the grid item opens no menu.",
+					"Every item action given and every one left out for the image. Check that the bar draws neither Download, Duplicate nor More, and that a right-click on the grid item opens no menu.",
 			},
 		},
 	},
@@ -824,7 +819,9 @@ export const EveryActionLeftOut = meta.story({
 			within(popup)
 				.getAllByRole("button")
 				.map((button) => button.getAttribute("aria-label"))
-				.filter((name) => ["Download", "Copy", "More"].includes(name ?? "")),
+				.filter((name) =>
+					["Download", "Duplicate", "More"].includes(name ?? ""),
+				),
 		).toEqual([])
 
 		await userEvent.click(within(popup).getByRole("button", { name: "Close" }))
@@ -901,7 +898,7 @@ export const BarKeyboardFocus = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image bar walked with Tab from the open lightbox. Check that the Library path link, Download, Copy, More then Close each take focus in that order and wear a 2 px ring in the Space colour on the dark bar while they hold it, the four round controls over a 2 px halo in the #0B0B0C of the bar, never the card colour. The play drives the real keyboard, in the Vitest browser runner only.",
+					"The image bar walked with Tab from the open lightbox. Check that the Library path link, Download, Duplicate, More then Close each take focus in that order and wear a 2 px ring in the Space colour on the dark bar while they hold it, the four round controls over a 2 px halo in the #0B0B0C of the bar, never the card colour. The play drives the real keyboard, in the Vitest browser runner only.",
 			},
 		},
 	},
@@ -1189,6 +1186,7 @@ export const WithoutItemActions = meta.story({
 		onOpen: undefined,
 		onOpenInNewTab: undefined,
 		onRename: undefined,
+		onDuplicate: undefined,
 		onCopy: undefined,
 		onDownload: undefined,
 		onShowInFolder: undefined,
@@ -1198,7 +1196,7 @@ export const WithoutItemActions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The lightbox with no item action given. Check that the bar draws neither Download, Copy nor More, keeping the Library path link and Close.",
+					"The lightbox with no item action given. Check that the bar draws neither Download, Duplicate nor More, keeping the Library path link and Close.",
 			},
 		},
 	},
@@ -1208,7 +1206,9 @@ export const WithoutItemActions = meta.story({
 			within(popup)
 				.getAllByRole("button")
 				.map((button) => button.getAttribute("aria-label"))
-				.filter((name) => ["Download", "Copy", "More"].includes(name ?? "")),
+				.filter((name) =>
+					["Download", "Duplicate", "More"].includes(name ?? ""),
+				),
 		).toEqual([])
 		await expect(
 			within(popup).getByRole("button", { name: "Library" }),
@@ -1219,107 +1219,36 @@ export const WithoutItemActions = meta.story({
 	},
 })
 
-export const CopyCheck = meta.story({
-	args: { onCopy: fn(async () => undefined) },
+export const DuplicateFromTheBar = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Copy pressed and the copy settled. Check that the copy icon swaps for a check, that a screen reader hears Copied, that the copy icon comes back once the shared copy reset delay runs out, and that stepping to the next image after a copy shows the copy icon at once.",
+					"Duplicate pressed in the bar of an image, every item action given, as artboards I7a to I7c draw the capsule. Check that the capsule reads Download, Duplicate then More before Close, that Duplicate hands the shown image to `onDuplicate` once, and that Copy, no longer a bar button, sits in More and hands the image to `onCopy`.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const popup = await lightbox()
-		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-			"data-shown",
-			"false",
+		const actions = slotIn(barIn(popup), "library-bar-actions")
+		await expect(
+			within(actions)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label")),
+		).toEqual(["Download", "Duplicate", "More", "Close"])
+
+		await userEvent.click(
+			within(actions).getByRole("button", { name: "Duplicate" }),
+		)
+		await expect(args.onDuplicate).toHaveBeenCalledOnce()
+		await expect(args.onDuplicate).toHaveBeenCalledWith(
+			LIBRARY_LIGHTBOX_IMAGES[1],
 		)
 
-		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
-
+		const menu = await openMoreMenu(popup, userEvent)
+		await expectNoBarActionIn(menu)
+		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
 		await expect(args.onCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
-		await waitFor(() =>
-			expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-				"data-shown",
-				"true",
-			),
-		)
-		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
-			"data-shown",
-			"false",
-		)
-		await expect(announcementIn(popup)).toHaveTextContent("Copied")
-
-		await waitFor(
-			() =>
-				expect(copySwapIn(popup).copyLayer).toHaveAttribute(
-					"data-shown",
-					"true",
-				),
-			{ timeout: COPIED_RESET_MS + 1000 },
-		)
-		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-			"data-shown",
-			"false",
-		)
-		await expect(announcementIn(popup)).toHaveTextContent("")
-
-		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
-		await waitFor(() =>
-			expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-				"data-shown",
-				"true",
-			),
-		)
-		await userEvent.keyboard("{ArrowRight}")
-		await expect(popup).toHaveTextContent("3 of 8")
-		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
-			"data-shown",
-			"true",
-		)
-		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-			"data-shown",
-			"false",
-		)
-		await expect(announcementIn(popup)).toHaveTextContent("")
-	},
-})
-
-const refusedCopy = fn(async () => {
-	throw new Error("The clipboard refused the image.")
-})
-
-export const CopyRefused = meta.story({
-	tags: ["test-only"],
-	args: { onCopy: refusedCopy },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Copy pressed and the copy rejected. Check that the copy icon stays, that no check appears and that the lightbox announces nothing, the caller having raised its own failure notice.",
-			},
-		},
-	},
-	play: async ({ userEvent }) => {
-		const popup = await lightbox()
-
-		await userEvent.click(within(popup).getByRole("button", { name: "Copy" }))
-
-		await expect(refusedCopy).toHaveBeenCalledWith(LIBRARY_LIGHTBOX_IMAGES[1])
-		await expect(refusedCopy.mock.results[0]?.value).rejects.toThrow(
-			"The clipboard refused the image.",
-		)
-		await new Promise((settled) => window.setTimeout(settled, 100))
-		await expect(announcementIn(popup)).toHaveTextContent("")
-		await expect(copySwapIn(popup).copyLayer).toHaveAttribute(
-			"data-shown",
-			"true",
-		)
-		await expect(copySwapIn(popup).checkLayer).toHaveAttribute(
-			"data-shown",
-			"false",
-		)
 	},
 })
 
@@ -1464,7 +1393,7 @@ export const ImageMenuOpen = meta.story({
 		docs: {
 			description: {
 				story:
-					"The `ImageMenu` open on the image, on a right-click on the stage. Check it opens dark at the pointer, lists the bar's actions in the bar's order, Download and Copy then the More menu's, then Save to Library and Copy image, never Open in viewer, that an entry hands the image to its callback, and that a click outside the menu dismisses it without closing the lightbox.",
+					"The `ImageMenu` open on the image, on a right-click on the stage. Check it opens dark at the pointer, lists the bar's actions in the bar's order, Download and Duplicate then the More menu's, then Save to Library and Copy image, never Open in viewer, that an entry hands the image to its callback, and that a click outside the menu dismisses it without closing the lightbox.",
 			},
 		},
 	},
@@ -1550,7 +1479,7 @@ export const BarDragsTheWindow = meta.story({
 		docs: {
 			description: {
 				story:
-					"An image given `dragRegion`, as the frameless window mounts it. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window instead of closing the image, and that the Library path link, Download, Copy, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
+					"An image given `dragRegion`, as the frameless window mounts it. Check that the bar carries the deep drag region, so a press on its empty stretch moves the window instead of closing the image, and that the Library path link, Download, Duplicate, More and Close are native buttons with no drag region of their own, so a press on one of them stays a click. Leave `dragRegion` out wherever a title bar already moves the window.",
 			},
 		},
 	},
@@ -1563,7 +1492,7 @@ export const BarDragsTheWindow = meta.story({
 				.map(
 					(button) => button.getAttribute("aria-label") ?? button.textContent,
 				),
-		).toEqual(["Library", "Download", "Copy", "More", "Close"])
+		).toEqual(["Library", "Download", "Duplicate", "More", "Close"])
 		await expectBarDragsTheWindow(bar)
 	},
 })

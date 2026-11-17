@@ -6,7 +6,6 @@ import {
 	Fragment,
 	type ReactElement,
 	type ReactNode,
-	useEffect,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -17,7 +16,6 @@ import {
 	AppHeaderPathSeparator,
 } from "@workspace/ui/components/app-header"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryCommentBarControls,
@@ -38,7 +36,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@workspace/ui/components/ui/dropdown-menu"
-import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
@@ -53,6 +50,7 @@ type LibraryItemHandlers<Item> = {
 	onOpen?: LibraryItemAction<Item>
 	onOpenInNewTab?: LibraryItemAction<Item>
 	onRename?: LibraryItemAction<Item>
+	onDuplicate?: LibraryItemAction<Item>
 	onCopy?: LibraryItemAction<Item>
 	onDownload?: LibraryItemAction<Item>
 	onShowInFolder?: LibraryItemAction<Item>
@@ -79,6 +77,11 @@ const LIBRARY_ITEM_ACTIONS = [
 		Icon: Icons.NewTab,
 	},
 	{ handler: "onRename", label: "library.itemMenu.rename", Icon: Icons.Edit },
+	{
+		handler: "onDuplicate",
+		label: "library.itemMenu.duplicate",
+		Icon: Icons.Duplicate,
+	},
 	{ handler: "onCopy", label: "library.itemMenu.copy", Icon: Icons.Copy },
 	{
 		handler: "onDownload",
@@ -152,7 +155,7 @@ const ImageMenuItems = <Item,>({
 
 type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
 
-const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onCopy"]
+const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onDuplicate"]
 
 const BAR_BUTTON_ACTIONS = new Set(BAR_BUTTON_ORDER)
 
@@ -423,32 +426,15 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	onConfirmingDeleteChange,
 }: LibraryItemBarActionsProps<Item>) => {
 	const { t } = useTranslation("common")
-	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
-	const isCopied = copiedItem === item
-	const { onCopy, onDownload, onDelete } = actions
+	const { onDownload, onDuplicate, onDelete } = actions
 	const menuActions = barMenuActionsOf(actions)
 	const hasMenu = hasLibraryItemActions(menuActions)
 	const { fill, control } = LIBRARY_BAR_SKIN[surface]
 
-	useEffect(() => {
-		if (copiedItem === null) return
-		const timer = window.setTimeout(() => setCopiedItem(null), COPIED_RESET_MS)
-		return () => window.clearTimeout(timer)
-	}, [copiedItem])
-
 	const confirmDelete = (isConfirming: boolean) => {
 		setConfirmingDelete(isConfirming)
 		onConfirmingDeleteChange?.(isConfirming)
-	}
-
-	const copy = async () => {
-		try {
-			await onCopy?.(item)
-			setCopiedItem(item)
-		} catch {
-			setCopiedItem(null)
-		}
 	}
 
 	return (
@@ -463,7 +449,7 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					isOnDarkStage={surface === "lightbox"}
 				/>
 			) : null}
-			{onDownload || onCopy || hasMenu ? (
+			{onDownload || onDuplicate || hasMenu ? (
 				<AppHeaderCapsule className={fill}>
 					{onDownload ? (
 						<LibraryBarButton
@@ -474,17 +460,13 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 							<Icons.Download aria-hidden="true" />
 						</LibraryBarButton>
 					) : null}
-					{onCopy ? (
+					{onDuplicate ? (
 						<LibraryBarButton
-							aria-label={t(`library.${surface}.copy`)}
+							aria-label={t(`library.${surface}.duplicate`)}
 							className={control}
-							onClick={copy}
+							onClick={() => onDuplicate(item)}
 						>
-							<IconSwap
-								icon={<Icons.Duplicate aria-hidden="true" />}
-								isSwapped={isCopied}
-								swappedIcon={<Icons.Check aria-hidden="true" />}
-							/>
+							<Icons.Duplicate aria-hidden="true" />
 						</LibraryBarButton>
 					) : null}
 					{hasMenu ? (
@@ -530,9 +512,6 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 			>
 				<Icons.Close aria-hidden="true" />
 			</LibraryBarButton>
-			<span aria-live="polite" className="sr-only">
-				{isCopied ? t(`library.${surface}.copied`) : ""}
-			</span>
 			<LibraryItemDeleteDialog
 				name={item.name}
 				onConfirm={() => onDelete?.(item)}

@@ -2326,6 +2326,8 @@ navigation-librarydocumentview--comment-mode-on
 navigation-librarydocumentview--comment-mode-on-dark
 navigation-librarydocumentview--dark
 navigation-librarydocumentview--default
+navigation-librarydocumentview--duplicate-from-the-bar
+navigation-librarydocumentview--duplicate-not-shown-for-the-item
 navigation-librarydocumentview--gallery-of-stored-images
 navigation-librarydocumentview--light
 navigation-librarydocumentview--loading
@@ -2662,10 +2664,9 @@ overlays-librarylightbox--backdrop-click
 overlays-librarylightbox--bar-drags-the-window
 overlays-librarylightbox--bar-keyboard-focus
 overlays-librarylightbox--comment-mode-on
-overlays-librarylightbox--copy-check
-overlays-librarylightbox--copy-refused
 overlays-librarylightbox--default
 overlays-librarylightbox--delete-confirmation
+overlays-librarylightbox--duplicate-from-the-bar
 overlays-librarylightbox--every-action-left-out
 overlays-librarylightbox--host-more-menu
 overlays-librarylightbox--image-menu-open
