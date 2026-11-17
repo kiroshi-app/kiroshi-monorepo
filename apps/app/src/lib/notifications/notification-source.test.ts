@@ -683,6 +683,8 @@ describe("startNotificationSource on the liveness of a mission", () => {
 	})
 })
 
+const nameless = [conversation("room-one", "", [seatOf("bot-one", "Nyx")])]
+
 describe("startNotificationSource on a conversation", () => {
 	it("names the conversation whose round has finished", async () => {
 		const harness = await start()
@@ -699,7 +701,7 @@ describe("startNotificationSource on a conversation", () => {
 		const harness = await start(
 			{ namings: () => ({ "room-one": "pending" }) },
 			undefined,
-			[conversation("room-one", "", [seatOf("bot-one", "Nyx")])],
+			nameless,
 		)
 		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
@@ -711,9 +713,7 @@ describe("startNotificationSource on a conversation", () => {
 	})
 
 	it("names a conversation left without a title as untitled, never by its agent", async () => {
-		const harness = await start({}, undefined, [
-			conversation("room-one", "", [seatOf("bot-one", "Nyx")]),
-		])
+		const harness = await start({}, undefined, nameless)
 		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.publish("room-one")
@@ -1156,7 +1156,7 @@ describe("startNotificationSource on missions", () => {
 		const harness = await start(
 			{ namings: () => ({ "room-one": "pending" }) },
 			undefined,
-			[conversation("room-one", "", [seatOf("bot-one", "Nyx")])],
+			nameless,
 		)
 
 		harness.spokenWords.announce({
