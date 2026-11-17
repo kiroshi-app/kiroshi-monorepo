@@ -120,6 +120,14 @@ being the relay device id that sent the call:
   kept, success or failure, since the command may have stored something before it
   failed: a 500, and a 502 where the call timed out or its answer was cut. Its
   repeat gets that answer and the command never runs twice.
+- A repeat whose key holds an answer gets that answer whatever its `args`: the
+  host does not compare payloads under a key. A call with a different payload
+  that reaches the command, under a forgotten key or a new one, and names an id
+  the host already stored with other values, is refused as a conflict: status
+  500, body `{ "kind": "conflict", "id": "<id>", "field": "<field>" }`, `field`
+  naming the first value that differs, `content` for a message. That answer is
+  kept under its key like any 500: its repeat gets the same status and body
+  without running the command.
 - The host keeps the last 1024 answers of each device in each shared space and
   forgets older ones, and it forgets them all when it restarts. A repeat of a
   forgotten key runs as a new call.

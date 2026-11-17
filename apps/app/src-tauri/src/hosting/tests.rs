@@ -11008,6 +11008,30 @@ fn a_send_whose_answer_was_cut_after_it_stored_gets_the_same_502_on_its_repeat()
 }
 
 #[test]
+fn a_send_refused_as_a_conflict_keeps_that_answer_under_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		host.relayed(keyed(host.send(1, "m1"), "send-1")).await;
+		let mut published = events::subscribed(host.app.handle());
+		let mut diverging = keyed(host.send(2, "m1"), "send-2");
+		diverging["args"]["message"]["content"] = json!("edited");
+
+		let conflict = host.answered(diverging).await;
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-2")).await;
+
+		assert_eq!(conflict["status"], json!(500), "{conflict}");
+		assert_eq!(conflict["body"], json!({ "kind": "conflict", "id": "m1", "field": "content" }));
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(conflict["status"].clone(), conflict["body"].clone())
+		);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 0, "the send ran again");
+		assert_eq!(host.user_messages().len(), 1);
+	});
+}
+
+#[test]
 fn one_call_key_from_two_devices_runs_once_for_each() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
