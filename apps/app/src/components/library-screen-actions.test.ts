@@ -1608,13 +1608,6 @@ const lightboxDuplicate = () =>
 			button.closest('[data-slot="library-lightbox"]'),
 		) as HTMLElement
 
-const duplicateCalls = () => callsOf("library_duplicate")
-
-const duplicateFailureOf = (title: string) =>
-	expect.objectContaining({
-		title: common("library.itemMenu.duplicateFailure", { name: title }),
-	})
-
 describe("Duplicate in the bar of an open Library item", () => {
 	it.each(SPACES)(
 		"duplicates the open document on %s, keeps it open and lists the copy",
@@ -1625,7 +1618,7 @@ describe("Duplicate in the bar of an open Library item", () => {
 			await press(documentBarButton("duplicate"))
 
 			await waitFor(() =>
-				expect(duplicateCalls()).toEqual([
+				expect(callsOf("library_duplicate")).toEqual([
 					{ spaceId: SPACE_ID, name: "notes.txt" },
 				]),
 			)
@@ -1644,7 +1637,7 @@ describe("Duplicate in the bar of an open Library item", () => {
 			await press(lightboxDuplicate())
 
 			await waitFor(() =>
-				expect(duplicateCalls()).toEqual([
+				expect(callsOf("library_duplicate")).toEqual([
 					{ spaceId: SPACE_ID, name: "diagram.png" },
 				]),
 			)
@@ -1662,7 +1655,11 @@ describe("Duplicate in the bar of an open Library item", () => {
 
 		await waitFor(() =>
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
-				duplicateFailureOf("notes"),
+				expect.objectContaining({
+					title: common("library.itemMenu.duplicateFailure", {
+						name: "notes",
+					}),
+				}),
 			),
 		)
 		expect(shownTitle()).toBe("notes")

@@ -131,10 +131,9 @@ const createFakeLibraryHost = () => {
 
 	const commands: Record<string, (call: LibraryCall) => unknown> = {
 		library_duplicate: ({ name }) => {
-			const original = harness.libraryItems.find((item) => item.name === name)
 			const copy = libraryItemOf(
-				name.replace(/(\.[^.]+)$/, " copy$1"),
-				original?.kind ?? "document",
+				name.replace(BOARD_EXTENSION, ` copy${BOARD_EXTENSION}`),
+				"board",
 			)
 			harness.libraryItems = [...harness.libraryItems, copy]
 			return copy
