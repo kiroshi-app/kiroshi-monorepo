@@ -3,7 +3,7 @@ name: Code owners
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, auto_merge_enabled]
 
 permissions:
   contents: read
@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 # find runs the code of the PR with a read token, disarm holds the write token and checks out nothing.
+# disarm fails closed: it runs unless find answered a count of exactly 0.
 jobs:
   find:
     runs-on: ubuntu-latest
@@ -22,6 +23,7 @@ jobs:
       pull-requests: read
     outputs:
       owned: ${{ steps.owned.outputs.count }}
+      files: ${{ steps.owned.outputs.files }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,32 +46,64 @@ jobs:
         shell: bash
         run: |
           bun scripts/code-owners.ts "$RUNNER_TEMP/CODEOWNERS" <"$RUNNER_TEMP/files" | tee "$RUNNER_TEMP/owned"
-          echo "count=$(wc -l <"$RUNNER_TEMP/owned" | tr -d ' ')" >>"$GITHUB_OUTPUT"
+          delimiter="owned_$(openssl rand -hex 16)"
+          {
+            echo "files<<$delimiter"
+            cat "$RUNNER_TEMP/owned"
+            echo "$delimiter"
+            echo "count=$(wc -l <"$RUNNER_TEMP/owned" | tr -d ' ')"
+          } >>"$GITHUB_OUTPUT"
 
   disarm:
     needs: find
-    if: needs.find.outputs.owned != '0'
+    if: ${{ !cancelled() && needs.find.outputs.owned != '0' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - name: Disable auto-merge on a PR holding owned files
+      - name: Take a PR holding owned files out of the merge queue and disable its auto-merge
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
-          ARMED_STATE_QUERY: 'query($id: ID!) { node(id: $id) { ... on PullRequest { autoMergeRequest { enabledAt } } } }'
-          DISARM_MUTATION: 'mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { pullRequest { autoMergeRequest { enabledAt } } } }'
+          FIND_RESULT: ${{ needs.find.result }}
+          OWNED_FILES: ${{ needs.find.outputs.files }}
+          STATE_QUERY: 'query($id: ID!) { node(id: $id) { ... on PullRequest { isInMergeQueue autoMergeRequest { enabledAt } } } }'
+          DEQUEUE_MUTATION: 'mutation($id: ID!) { dequeuePullRequest(input: { id: $id }) { clientMutationId } }'
+          DISARM_MUTATION: 'mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }'
         run: |
-          armed=$(gh api graphql -f query="$ARMED_STATE_QUERY" -f id="$PR_NODE_ID" --jq '.data.node.autoMergeRequest != null')
-          if [ "$armed" != "true" ]; then
-            echo "No auto-merge armed: green, waiting for Steve"
-            exit 0
+          read_state() {
+            gh api graphql -f query="$STATE_QUERY" -f id="$PR_NODE_ID" --jq '.data.node | "\(.autoMergeRequest != null) \(.isInMergeQueue)"'
+          }
+
+          if [ -n "$OWNED_FILES" ]; then
+            printf '%s\n' "$OWNED_FILES"
+          else
+            echo "::warning::find ended $FIND_RESULT without a list of owned files, PR #$PR_NUMBER is disarmed anyway"
           fi
-          still_armed=$(gh api graphql -f query="$DISARM_MUTATION" -f id="$PR_NODE_ID" --jq '.data.disablePullRequestAutoMerge.pullRequest.autoMergeRequest != null')
-          if [ "$still_armed" != "false" ]; then
-            echo "::error::auto-merge still armed after disablePullRequestAutoMerge"
+
+          has_failed=false
+          state=$(read_state)
+          read -r is_armed is_queued <<<"$state"
+          if [ "$is_queued" = "true" ]; then
+            gh api graphql -f query="$DEQUEUE_MUTATION" -f id="$PR_NODE_ID" >/dev/null ||
+              { echo "::error::dequeuePullRequest failed on PR #$PR_NUMBER"; has_failed=true; }
+          fi
+          if [ "$is_armed" = "true" ]; then
+            gh api graphql -f query="$DISARM_MUTATION" -f id="$PR_NODE_ID" >/dev/null ||
+              { echo "::error::disablePullRequestAutoMerge failed on PR #$PR_NUMBER"; has_failed=true; }
+          fi
+
+          state=$(read_state)
+          read -r is_armed is_queued <<<"$state"
+          if [ "$is_armed" != "false" ] || [ "$is_queued" != "false" ]; then
+            echo "::error::PR #$PR_NUMBER still has autoMergeArmed=$is_armed inMergeQueue=$is_queued after disarm"
             exit 1
           fi
-          echo "Auto-merge disabled: green, waiting for Steve"
+          if [ "$has_failed" = "true" ]; then
+            exit 1
+          fi
+          echo "PR #$PR_NUMBER: auto-merge off and out of the merge queue: green, waiting for Steve"
