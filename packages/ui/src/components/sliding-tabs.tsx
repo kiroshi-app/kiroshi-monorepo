@@ -41,7 +41,7 @@ const PILL_CLASS = {
 	tabs: "rounded-lg bg-background dark:bg-input/30",
 	segments: "rounded-compact-segment bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
 	filters:
-		"rounded-button bg-(--fill) [--fill:var(--primary)] dark:[--fill:var(--hue-dark-bubble,var(--hue-blue-bubble))]",
+		"rounded-button bg-primary dark:bg-[var(--hue-dark-bubble,var(--hue-blue-bubble))]",
 } as const satisfies Record<SlidingTabsKind, string>
 
 const ACTIVE_TAB =
