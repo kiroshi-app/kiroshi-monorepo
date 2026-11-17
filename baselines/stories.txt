@@ -554,7 +554,12 @@ conversation-message-messagequote--sizes
 conversation-message-messagequote--tones
 conversation-message-messagescroller--at-end
 conversation-message-messagescroller--default
+conversation-message-messagescroller--holds-the-content-above-when-a-block-in-view-grows
+conversation-message-messagescroller--holds-the-reader-when-a-block-above-grows
+conversation-message-messagescroller--holds-the-reader-when-a-block-cut-at-the-top-grows
+conversation-message-messagescroller--holds-the-reader-when-a-block-cut-at-the-top-shrinks
 conversation-message-messagescroller--holds-the-reader-while-scrolling-back
+conversation-message-messagescroller--keeps-following-when-a-block-grows
 conversation-message-messagescroller--scrolled-back
 conversation-message-messageselection--copy-pressed
 conversation-message-messageselection--dismissed
