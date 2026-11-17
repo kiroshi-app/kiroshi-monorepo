@@ -9,9 +9,14 @@ type CommandAnswer = Promise<
 	{ status: "ok"; data: null } | { status: "error"; error: LiveHtmlError }
 >
 
+export type MountLiveHtml = (
+	id: string,
+	rectangle: LiveHtmlRect,
+) => CommandAnswer
+
 type LiveHtmlViewOptions = {
 	id: string
-	html: string
+	mountAt: MountLiveHtml
 	onLive: () => void
 	onFailure: (reason: unknown) => void
 }
@@ -44,9 +49,19 @@ const answered = async (answer: CommandAnswer) => {
 	if (result.status === "error") throw result.error
 }
 
+export const mountingHtml =
+	(html: string): MountLiveHtml =>
+	(id, rectangle) =>
+		commands.liveHtmlMount(id, html, rectangle)
+
+export const mountingAttachment =
+	(path: string): MountLiveHtml =>
+	(id, rectangle) =>
+		commands.liveHtmlMountAttachment(id, path, rectangle)
+
 export const createLiveHtmlView = ({
 	id,
-	html,
+	mountAt,
 	onLive,
 	onFailure,
 }: LiveHtmlViewOptions) => {
@@ -74,7 +89,7 @@ export const createLiveHtmlView = ({
 	const mount =
 		(placement: LiveHtmlPlacement): Step =>
 		() =>
-			attempt(commands.liveHtmlMount(id, html, placement.rect), () => {
+			attempt(mountAt(id, placement.rect), () => {
 				drawn = { isMounted: true, placement: null, isHidden: false }
 				onLive()
 			})

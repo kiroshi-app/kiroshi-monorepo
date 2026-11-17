@@ -704,3 +704,119 @@ describe("an html block of an agent reply", () => {
 		)
 	})
 })
+
+const STORED_PAGE = `${STORE}/9c4e2b7a-1d3f-4a6b-8e5c-2f7a9d1b3c64.html`
+
+const STORED_PAGE_CHIP = `Open ${STORED_PAGE.split("/").at(-1)}`
+
+const CITING_REPLY = `Here is the map: [the night map](<${STORED_PAGE}>)`
+
+const ATTACHING_REPLY = `Here is the map.\n\n${attachmentBlock(
+	[STORED_PAGE],
+	new Date("2026-11-17T10:15:30Z"),
+)}`
+
+const renderStoredReply = (stored: string, isWriting = false) =>
+	render(
+		createElement(
+			MarkdownSizeContext,
+			{ value: "answer" },
+			createElement(
+				AnswerActionsContext,
+				{ value: actionsSpy() },
+				createElement(AnswerBody, {
+					...messageWithAttachments(stored),
+					agentName: "Ada",
+					isWriting,
+				}),
+			),
+		),
+	)
+
+describe("an html file an agent attaches to its reply", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	it.each([
+		["cites in the text", CITING_REPLY, "Open the night map"],
+		["lists in the attachments row", ATTACHING_REPLY, STORED_PAGE_CHIP],
+	])(
+		"shows the stored page live when the reply %s",
+		async (_case, reply, open) => {
+			showOnMacOs()
+
+			renderStoredReply(reply)
+
+			expect(liveView()).toBeTruthy()
+			await waitFor(() =>
+				expect(liveHtmlCallsOf("live_html_place")).toEqual([
+					{
+						id: expect.any(String),
+						rectangle: SLOT_VIEW_BOX,
+						clip: SLOT_VIEW_BOX,
+					},
+				]),
+			)
+			expect(liveHtmlCallsOf("live_html_mount_attachment")).toEqual([
+				{ id: expect.any(String), path: STORED_PAGE, rectangle: SLOT_VIEW_BOX },
+			])
+			expect(screen.getByRole("button", { name: open })).toBeTruthy()
+		},
+	)
+
+	it("opens the file from the Open control under the view", async () => {
+		showOnMacOs()
+		renderStoredReply(CITING_REPLY)
+
+		await click(screen.getByRole("button", { name: "Open the night map" }))
+
+		expect(openAttachment).toHaveBeenCalledWith(STORED_PAGE)
+	})
+
+	it.each([
+		["while the reply is writing", true, true],
+		["off macOS", false, false],
+	])("stays a file chip %s", (_case, isMacOs, isWriting) => {
+		showOnMacOs()
+		host.isMacOs = isMacOs
+
+		renderStoredReply(ATTACHING_REPLY, isWriting)
+
+		expect(screen.getByRole("button", { name: STORED_PAGE_CHIP })).toBeTruthy()
+		expect(liveView()).toBeNull()
+		expect(host.liveHtml).not.toHaveBeenCalled()
+	})
+
+	it("keeps a stored file that is not html as a chip", () => {
+		showOnMacOs()
+
+		renderStoredReply(`Read [the brief](<${CITED_FILE}>) first.`)
+
+		expect(screen.getByRole("button", { name: "Open the brief" })).toBeTruthy()
+		expect(liveView()).toBeNull()
+		expect(host.liveHtml).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		["answers a refusal", { kind: "notHtml" }],
+		["rejects", new Error("ipc closed")],
+	])(
+		"raises one notice and shows the chip again when the host %s",
+		async (_case, failure) => {
+			showOnMacOs()
+			host.liveHtml.mockRejectedValue(failure)
+
+			renderStoredReply(ATTACHING_REPLY)
+
+			await waitFor(() => expect(liveView()).toBeNull())
+			expect(
+				screen.getByRole("button", { name: STORED_PAGE_CHIP }),
+			).toBeTruthy()
+			expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({ title: LIVE_VIEW_FAILED }),
+			)
+		},
+	)
+})

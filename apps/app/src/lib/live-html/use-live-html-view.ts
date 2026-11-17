@@ -4,20 +4,27 @@ import type { LiveHtmlStatus } from "@workspace/ui/components/live-html-slot"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { failureReporterIn } from "@/lib/failure-report"
-import { createLiveHtmlView } from "@/lib/live-html/live-html-view"
+import {
+	createLiveHtmlView,
+	type MountLiveHtml,
+} from "@/lib/live-html/live-html-view"
 import { useIsAppSurfaceOpen } from "@/lib/live-html/use-is-app-surface-open"
 
 const reportFailure = failureReporterIn("use-live-html-view")
 
-export const useLiveHtmlView = (html: string) => {
+export const useLiveHtmlView = (
+	mountAt: MountLiveHtml,
+	onUnavailable?: () => void,
+) => {
 	const [status, setStatus] = useState<LiveHtmlStatus>("loading")
 	const [view] = useState(() =>
 		createLiveHtmlView({
 			id: crypto.randomUUID(),
-			html,
+			mountAt,
 			onLive: () => setStatus("live"),
 			onFailure: (reason) => {
 				setStatus("unavailable")
+				onUnavailable?.()
 				void reportFailure(
 					{ title: i18n.t("chat:liveHtml.failed") },
 					{ reason },
