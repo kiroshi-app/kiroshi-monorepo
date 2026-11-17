@@ -166,6 +166,10 @@ export const GATE = {
 		PR_DEQUEUE_UNIT_TESTS,
 		PR_ENQUEUE_UNIT_TESTS,
 		PR_MERGE_INTEGRATION_UNIT_TESTS,
+		{
+			name: "CODEOWNERS matcher unit tests",
+			command: "bun run test:code-owners",
+		},
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
