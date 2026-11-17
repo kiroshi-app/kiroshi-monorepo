@@ -36,6 +36,7 @@ mod macos {
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::sync::Arc;
 
+	use kiroshi_app::live_html;
 	use tauri::WebviewWindowBuilder;
 
 	use crate::host::HostState;
@@ -76,6 +77,7 @@ mod macos {
 		tauri::Builder::default()
 			.manage(Arc::clone(&host))
 			.invoke_handler(tauri::generate_handler![spike_secret])
+			.on_window_event(live_html::replace_on_scale_change)
 			.setup(move |app| {
 				let config = app
 					.config()

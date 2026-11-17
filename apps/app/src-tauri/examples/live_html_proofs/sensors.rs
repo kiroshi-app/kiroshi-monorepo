@@ -4,9 +4,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use objc2::msg_send;
 use objc2::rc::Retained;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyObject, Sel};
+use objc2::{msg_send, sel};
 use objc2_app_kit::{NSView, NSWindow};
 use objc2_foundation::{NSRect, NSString};
 use serde::Serialize;
@@ -267,17 +267,52 @@ impl DrawnFrames {
 }
 
 pub fn drawn_frames(main_window: &WebviewWindow) -> Result<Vec<DrawnFrames>, String> {
+	on_the_ns_window(main_window, "the drawn frames were read", frames_in)
+}
+
+pub fn force_backing_scale(main_window: &WebviewWindow, scale: f64) -> Result<(), String> {
+	on_the_ns_window(main_window, "the backing scale was forced", move |window| {
+		force_through_private_appkit(window, scale)
+	})
+}
+
+fn on_the_ns_window<T: Send + 'static>(
+	main_window: &WebviewWindow,
+	step: &'static str,
+	act: impl FnOnce(&NSWindow) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
 	let (answer, answered) = mpsc::channel();
 	main_window
 		.with_webview(move |platform| {
 			let window = unsafe { Retained::retain(platform.ns_window().cast::<NSWindow>()) };
 			let reading = window.ok_or_else(|| "the main window has no native window".to_owned());
-			if answer.send(reading.and_then(|window| frames_in(&window))).is_err() {
-				eprintln!("the drawn frames were read after their deadline");
+			if answer.send(reading.and_then(|window| act(&window))).is_err() {
+				eprintln!("{step} after its deadline");
 			}
 		})
 		.map_err(|cause| cause.to_string())?;
 	answered.recv_timeout(PROBE_TIMEOUT).map_err(|cause| cause.to_string())?
+}
+
+fn force_through_private_appkit(window: &NSWindow, scale: f64) -> Result<(), String> {
+	let set = sel!(_setBackingScaleFactor:);
+	let announce = sel!(_postWindowDidChangeBackingPropertiesAndDisplayWindowForPreviousBackingScaleFactor:previousColorSpace:);
+	let responds =
+		|selector: Sel| -> bool { unsafe { msg_send![window, respondsToSelector: selector] } };
+	if !responds(set) || !responds(announce) {
+		return Err("this macOS offers no private call to force a backing scale".to_owned());
+	}
+	let previous = window.backingScaleFactor();
+	unsafe {
+		let color_space: *mut AnyObject = msg_send![window, colorSpace];
+		let _: () = msg_send![window, _setBackingScaleFactor: scale];
+		let _: () = msg_send![
+			window,
+			_postWindowDidChangeBackingPropertiesAndDisplayWindowForPreviousBackingScaleFactor: previous,
+			previousColorSpace: color_space
+		];
+	}
+	Ok(())
 }
 
 fn frames_in(window: &NSWindow) -> Result<Vec<DrawnFrames>, String> {
