@@ -107,7 +107,11 @@ const PASSING_CHECKS = [
 	completed("lint", "SUCCESS"),
 	completed("rust", "SKIPPED"),
 	completed("labeler", "NEUTRAL"),
+	completed("verify", "SUCCESS"),
 ]
+
+const NO_CHECK_SUCCEEDED =
+	"pr-merge-integration.sh: PR #42 has no check that succeeded on its head commit, CI did not run: feature/home may predate the feature/** pull_request trigger of ci.yml\n"
 
 const withoutJqFilter = (call: string[]) => {
 	const filter = call.indexOf("--jq")
@@ -219,11 +223,34 @@ describe("scripts/pr-merge-integration.sh", () => {
 		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, MERGE, READ_STATE])
 	})
 
-	it("merges a PR that has no check run at all", async () => {
+	it("refuses a PR that has no check run at all, pointing at a base older than the feature/** trigger, and merges nothing", async () => {
 		const result = await runPrMergeIntegration({ checks: [] })
 
-		expect(result.exitCode).toBe(0)
-		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST, MERGE, READ_STATE])
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toBe(NO_CHECK_SUCCEEDED)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST])
+	})
+
+	it("refuses a PR whose checks were all skipped, pointing at a base older than the feature/** trigger, and merges nothing", async () => {
+		const result = await runPrMergeIntegration({
+			checks: [completed("Proof", "SKIPPED"), completed("rust", "SKIPPED")],
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toBe(NO_CHECK_SUCCEEDED)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST])
+	})
+
+	it("refuses a PR whose verify was skipped though lint succeeded, naming the base, and merges nothing", async () => {
+		const result = await runPrMergeIntegration({
+			checks: [completed("lint", "SUCCESS"), completed("verify", "SKIPPED")],
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toBe(
+			"pr-merge-integration.sh: PR #42 did not pass the fast gate into feature/home: verify did not succeed on its head commit\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_PULL_REQUEST])
 	})
 
 	it.each(["main", "release/1.0", "home"])(
