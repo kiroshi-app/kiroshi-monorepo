@@ -1018,6 +1018,7 @@ feedback-appbootscreen--dark
 feedback-appbootscreen--default
 feedback-appbootscreen--exit
 feedback-appbootscreen--exit-at-mount
+feedback-appbootscreen--exit-mid-entrance
 feedback-appbootscreen--exit-still
 feedback-appbootscreen--first-launch
 feedback-appbootscreen--still

@@ -70,3 +70,48 @@ describe("the exit signal in a DOM without the Web Animations API", () => {
 		},
 	)
 })
+
+const phaseIn = (container: HTMLElement) =>
+	container
+		.querySelector('[data-slot="app-boot-screen"]')
+		?.getAttribute("data-phase")
+
+const holdEntrance = () => {
+	const entrance = Promise.withResolvers<void>()
+	setGetAnimations(() => [{ finished: entrance.promise }])
+	return { end: entrance.resolve }
+}
+
+describe("an exit requested before the entrance has ended", () => {
+	it("starts once the entrance ends and fires once", async () => {
+		const entrance = holdEntrance()
+		const onExitComplete = vi.fn()
+		const { container } = render(
+			<AppBootScreen isExiting onExitComplete={onExitComplete} />,
+		)
+		await pendingWorkDone()
+		expect(phaseIn(container)).toBe("running")
+		expect(onExitComplete).not.toHaveBeenCalled()
+
+		entrance.end()
+		await pendingWorkDone()
+		expect(phaseIn(container)).toBe("leaving")
+		expect(onExitComplete).toHaveBeenCalledOnce()
+	})
+
+	it("is dropped when isExiting turns false before the entrance ends", async () => {
+		const entrance = holdEntrance()
+		const onExitComplete = vi.fn()
+		const { container, rerender } = render(
+			<AppBootScreen onExitComplete={onExitComplete} />,
+		)
+		rerender(<AppBootScreen isExiting onExitComplete={onExitComplete} />)
+		await pendingWorkDone()
+		rerender(<AppBootScreen onExitComplete={onExitComplete} />)
+
+		entrance.end()
+		await pendingWorkDone()
+		expect(phaseIn(container)).toBe("running")
+		expect(onExitComplete).not.toHaveBeenCalled()
+	})
+})
