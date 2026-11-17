@@ -23,8 +23,6 @@ const OUT_OF_SIGHT = {
 
 const callsOf = () => host.answer.mock.calls.map(([command]) => command)
 
-const settled = () => vi.waitFor(() => expect(host.answer).toHaveBeenCalled())
-
 const viewOf = (
 	overrides: Partial<Parameters<typeof createLiveHtmlView>[0]> = {},
 ) =>
@@ -44,7 +42,6 @@ describe("a live html view", () => {
 		host.answer.mockResolvedValue(null)
 
 		viewOf({ onLive }).follow({ rect: RECT, clip: CLIP })
-		await settled()
 		await flush()
 
 		expect(host.answer.mock.calls).toEqual([
