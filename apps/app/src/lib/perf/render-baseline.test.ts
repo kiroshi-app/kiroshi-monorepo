@@ -25,6 +25,7 @@ import {
 import { rosterRowOf } from "@/lib/sidebar/sidebar-fixtures"
 import { MAIN_WINDOW_LABEL, writeSpaceTabs } from "@/lib/tabs/tabs-mirror"
 import { spaceTabsOn } from "@/lib/tabs/tabs-model"
+import type { UserPreferences } from "@/lib/user/preferences-contract"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
@@ -148,15 +149,68 @@ type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
 
 const hostEvents = vi.hoisted(() => new Map<string, Set<HostHandler>>())
 
-vi.mock("@/lib/host", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/lib/host")>()),
-	listen: async (event: string, handler: HostHandler) => {
-		const handlers = hostEvents.get(event) ?? new Set()
-		handlers.add(handler)
-		hostEvents.set(event, handlers)
-		return () => handlers.delete(handler)
-	},
+type HostCallArgs = Record<string, unknown> | undefined
+
+type HostAnswer = (args: HostCallArgs) => unknown
+
+const hostAnswers = vi.hoisted(() => new Map<string, HostAnswer>())
+
+vi.mock("@/lib/host", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/host")>()
+	const invoke = ((...call: Parameters<typeof actual.invoke>) => {
+		const [command, args] = call
+		const answer = hostAnswers.get(command)
+		return answer
+			? Promise.resolve(answer(args as HostCallArgs))
+			: actual.invoke(...call)
+	}) as typeof actual.invoke
+	return {
+		...actual,
+		invoke,
+		listen: async (event: string, handler: HostHandler) => {
+			const handlers = hostEvents.get(event) ?? new Set()
+			handlers.add(handler)
+			hostEvents.set(event, handlers)
+			return () => handlers.delete(handler)
+		},
+	}
+})
+
+const failures = vi.hoisted(() => ({
+	isWatched: false,
+	raised: [] as string[],
 }))
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@workspace/ui/components/notice-surface")
+		>()
+	return {
+		...actual,
+		raiseFailureNotice: (
+			notice: Parameters<typeof actual.raiseFailureNotice>[0],
+		) => {
+			if (failures.isWatched) {
+				failures.raised.push(`notice: ${notice.title}`)
+			}
+			return actual.raiseFailureNotice(notice)
+		},
+	}
+})
+
+vi.mock("@/lib/failure-specs", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/failure-specs")>()
+	return {
+		...actual,
+		readFailureSpecs: () => {
+			if (failures.isWatched) {
+				failures.raised.push("report")
+			}
+			return actual.readFailureSpecs()
+		},
+	}
+})
 
 const { App } = await import("@/App")
 
@@ -726,9 +780,43 @@ type SeededThread = {
 	pageSize?: number
 }
 
+const STORED_PREFERENCES: UserPreferences = {
+	displayName: "",
+	profilePicturePath: null,
+	colorScheme: "system",
+	language: null,
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
+	sidebarWidth: null,
+	sidebarCollapsed: false,
+	sidebarTab: "conversations",
+	openOn: "newConversation",
+	activityPanelOpen: false,
+	firstRunDone: true,
+	lastSpaceId: null,
+	lastBotIdBySpace: {},
+}
+
+const answerHostCallsOfThreadOpen = () => {
+	let stored = STORED_PREFERENCES
+	hostAnswers.set("library_list", () => [])
+	hostAnswers.set("routine_list", () => [])
+	hostAnswers.set("routine_trigger_sources_of_space", () => [])
+	hostAnswers.set("routine_runs_of_space", () => [])
+	hostAnswers.set("mission_list", () => ({ open: [], done: [] }))
+	hostAnswers.set("user_preferences", () => stored)
+	hostAnswers.set("user_set_preferences", (args) => {
+		stored = args?.preferences as UserPreferences
+		return stored
+	})
+}
+
 const seedThreadApp = async ({ messages, pageSize }: SeededThread) => {
 	layout = fakeLayout()
 	seedFirstRunDone("expanded")
+	answerHostCallsOfThreadOpen()
 	const store = createFakeTranscriptStore({ pageSize })
 	const [space] = await store.spaces()
 	const bot = await store.createBot(
@@ -774,6 +862,7 @@ const openThread = async ({
 }: ThreadOpening) => {
 	const openedAt = commits.count
 	builds.markdownRenders = 0
+	failures.isWatched = true
 	await act(async () => {
 		fireEvent.click(rosterRowOf(name))
 	})
@@ -871,6 +960,7 @@ const measureLongTranscriptOpen = async () => {
 
 	const openedAt = commits.count
 	builds.markdownRenders = 0
+	failures.isWatched = true
 	let hasPaintedRow = false
 	setRenderProbe((name) => {
 		hasPaintedRow ||= name === "ThreadTurn"
@@ -926,6 +1016,9 @@ let layout: FakeLayout | null = null
 
 describe("PRF1 render baseline", () => {
 	afterEach(() => {
+		hostAnswers.clear()
+		failures.isWatched = false
+		failures.raised = []
 		setRenderProbe(null)
 		layout?.restore()
 		layout = null
@@ -1040,12 +1133,14 @@ describe("PRF1 render baseline", () => {
 	it("shows the last message of a two hundred run thread", async () => {
 		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
 			{
-			  "commits": 12,
+			  "commits": 10,
 			  "markdownProcessors": 20,
 			  "runs": 200,
 			  "tasksToLastMessage": 0,
 			}
 		`)
+
+		expect(failures.raised).toEqual([])
 	})
 
 	it(
@@ -1054,19 +1149,21 @@ describe("PRF1 render baseline", () => {
 			expect(await measureThreadReopen()).toMatchInlineSnapshot(`
 				{
 				  "cold": {
-				    "commits": 12,
+				    "commits": 10,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
 				  "grown": 80,
 				  "reopened": {
-				    "commits": 6,
+				    "commits": 5,
 				    "markdownProcessors": 20,
 				    "tasksToLastMessage": 0,
 				  },
 				  "rows": 20,
 				}
 			`)
+
+			expect(failures.raised).toEqual([])
 		},
 		THREAD_REOPEN_TIMEOUT_MS,
 	)
@@ -1078,11 +1175,13 @@ describe("PRF1 render baseline", () => {
 
 			expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
 				{
-				  "commits": 12,
+				  "commits": 10,
 				  "markdownProcessors": 500,
 				  "messages": 500,
 				}
 			`)
+
+			expect(failures.raised).toEqual([])
 		},
 		LONG_TRANSCRIPT_TIMEOUT_MS,
 	)
