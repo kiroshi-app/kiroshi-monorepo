@@ -225,13 +225,13 @@ actor RelayConnection {
                 }
             }
             opened.close()
+            if !Task.isCancelled {
+                endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
+            }
             group.cancelAll()
             return ending
         }
         outbox.finish()
-        if !Task.isCancelled {
-            endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
-        }
         return ending
     }
 
@@ -633,7 +633,7 @@ actor RelayConnection {
     }
 
     private func deliver(_ event: RelayEvent) {
-        guard !isRereadDue, isOnline || owedRereads.isEmpty else {
+        guard !isRereadDue, eventsAfterTheReread.isEmpty, isOnline || owedRereads.isEmpty else {
             hold(event)
             return
         }

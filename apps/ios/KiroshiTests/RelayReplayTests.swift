@@ -708,6 +708,71 @@ struct RelayReplayTests {
         await connection.stop()
     }
 
+    func calls(_ commands: Set<String>, on socket: ScriptedRelaySocket) async throws
+        -> [String: TestCall]
+    {
+        var calls: [String: TestCall] = [:]
+        for await text in socket.sent {
+            guard let call = try? JSONDecoder().decode(CallHead.self, from: Data(text.utf8)),
+                commands.contains(call.command)
+            else { continue }
+            calls[call.command] = TestCall(id: call.id, command: call.command, text: text)
+            if calls.count == commands.count {
+                return calls
+            }
+        }
+        throw CancellationError()
+    }
+
+    struct CallHead: Decodable {
+        let id: Int
+        let command: String
+    }
+
+    @Test func anEventHeardOnceTheLastSubscriberOwedARereadLeavesWaitsBehindTheEventsHeldBeforeIt()
+        async throws
+    {
+        let host = TestHost()
+        let connection = makeConnection()
+        let heard = await connect(connection, to: host)
+        #expect(await heard.next() == .reread)
+        host.reply(Self.stamped(1))
+        #expect(await heard.next() == .event(1))
+        host.socket.push(.close(1006))
+        await heard.dropped()
+        let owed = await connection.updates()
+        let leaving = Task {
+            for await _ in owed {}
+        }
+
+        await clock.wakeNextSleep(of: .seconds(1))
+        let back = ScriptedRelaySocket()
+        await transport.nextOpening().accept(back)
+        let calls = try await calls(
+            [RelayConnection.resumeCommand, "relay_shared_space"], on: back)
+        let resume = try #require(calls[RelayConnection.resumeCommand])
+        let sharedSpace = try #require(calls["relay_shared_space"])
+        let args = try resume.args(as: ResumeArgs.self)
+        back.push(.frame(Self.stamped(2, token: args.token)))
+        back.push(.frame(Self.resumeAnswer(resume, token: args.token, #""replayed":1"#)))
+        while await connection.heldEventCount < 1 {
+            await Task.yield()
+        }
+        leaving.cancel()
+        await leaving.value
+        while await connection.subscriberCount > 1 {
+            await Task.yield()
+        }
+        back.push(.frame(Self.stamped(3)))
+        back.push(.frame(TestHost.ok(sharedSpace, #"{"spaceId":"s-1"}"#)))
+        back.push(.frame(Self.unstamped(99)))
+        let afterTheDrop = await heard.next(through: .event(99))
+
+        #expect(args.since == 1)
+        #expect(afterTheDrop == [.event(2), .event(3), .event(99)])
+        await connection.stop()
+    }
+
     @Test func eventsPastTheBoundBeforeTheSocketIsOnlineAreDroppedForOneRereadEach() async throws {
         let bound = RelayConnection.heldEventsBound
         let connection = makeConnection()
