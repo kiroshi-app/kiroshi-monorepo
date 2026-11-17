@@ -1826,7 +1826,7 @@ describe("the jobs of ci.yml", () => {
 	}
 
 	it.each([
-		[pushToMain(7), "CI-refs/heads/main", "true"],
+		[pushToMain(7), "CI-refs/heads/main", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
 		[releaseTag(9), "CI-9", "false"],
 		[
@@ -1841,12 +1841,13 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("cancels the run of an earlier push to main still in progress", () => {
+	it("queues a push to main behind the run of an earlier push to main still in progress", () => {
 		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
-		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("true")
+		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("false")
 	})
 
-	it("keeps one concurrency group per pull_request ref", () => {
+	it("keeps one concurrency group per pull_request ref, cancelling the run in progress", () => {
+		expect(concurrencyOf(pullRequest(7, 12)).cancelsInProgress).toBe("true")
 		expect(concurrencyOf(pullRequest(7, 12)).group).toBe(
 			concurrencyOf(pullRequest(7, 11)).group,
 		)
