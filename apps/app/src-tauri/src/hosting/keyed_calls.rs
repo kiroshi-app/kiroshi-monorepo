@@ -90,7 +90,6 @@ impl FirstRun {
 			Ok(database) => self.kept_or_run(database.member_call_answers(), run).await,
 			Err(error) => unrecorded(error),
 		};
-		self.stopped_running();
 		self.told.send_replace(Some(answered));
 	}
 
