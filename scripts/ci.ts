@@ -134,16 +134,9 @@ export const RUST_PULL_REQUEST_STEPS: Step[] = [
 	BUILD_SIDECAR,
 	CLIPPY,
 	{
-		name: "Library tests",
+		name: "Library and integration tests",
 		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
-		cwd: APP,
-		heavy: true,
-	},
-	{
-		name: "Integration tests",
-		command:
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib --test '*'",
 		cwd: APP,
 		heavy: true,
 	},

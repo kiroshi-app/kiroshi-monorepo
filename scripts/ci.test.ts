@@ -353,15 +353,14 @@ describe("the gate", () => {
 			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
 			"bun run --filter sidecar build",
 			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
-			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib --test '*'",
 			"git diff --exit-code apps/app/src/lib/bindings.ts",
 		])
 		expect(
 			RUST_PULL_REQUEST_STEPS.filter((step) => step.heavy).map(
 				(step) => step.name,
 			),
-		).toEqual(["Build sidecar", "Clippy", "Library tests", "Integration tests"])
+		).toEqual(["Build sidecar", "Clippy", "Library and integration tests"])
 	})
 
 	it("checks the colour set names against tokens.json before tokens:build rewrites the catalogue", () => {
