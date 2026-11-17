@@ -53,7 +53,7 @@ type MissionThreadProps = {
 	activityPanel: ActivityPanel
 	mission: Mission
 	opening: OpenedMission
-	pathLabel: string | undefined
+	pathLabel?: string
 	bot: Bot
 	bots: Bot[]
 	events: MissionEventModel[]
