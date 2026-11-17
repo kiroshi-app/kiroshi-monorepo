@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Weekly replies</title>
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+		<style>
+			html {
+				box-sizing: border-box;
+				height: 100%;
+				border: 4px solid #ff00ff;
+				background: #ffffff;
+			}
+			body {
+				margin: 0;
+				height: 100%;
+				padding: 12px;
+				box-sizing: border-box;
+				font-family: -apple-system, sans-serif;
+			}
+			canvas {
+				max-height: calc(100% - 32px);
+			}
+		</style>
+	</head>
+	<body>
+		<h1 style="font-size: 14px; margin: 0 0 8px">Replies per day</h1>
+		<canvas id="chart"></canvas>
+		<script>
+			new Chart(document.getElementById("chart"), {
+				type: "bar",
+				data: {
+					labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+					datasets: [{ label: "Replies", data: [12, 19, 7, 15, 22, 5, 9], backgroundColor: "#3b6fd8" }],
+				},
+				options: { animation: false, maintainAspectRatio: false },
+			})
+		</script>
+	</body>
+</html>

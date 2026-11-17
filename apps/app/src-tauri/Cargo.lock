@@ -2742,6 +2742,7 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "windows",
+ "wry",
  "x25519-dalek",
  "yrs",
  "zeroize",

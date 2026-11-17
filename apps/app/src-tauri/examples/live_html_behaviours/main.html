@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Live HTML behaviours</title>
+		<style>
+			body { margin: 0; background: #f4f4f4; }
+			#placeholder { position: absolute; background: #00ffff; }
+		</style>
+	</head>
+	<body>
+		<div id="placeholder"></div>
+		<script>
+			const { invoke } = window.__TAURI_INTERNALS__
+			const ID = "prototype"
+			const SHOWN = { x: 40, y: 80, width: 480, height: 300 }
+			const MOVED = { x: 200, y: 160, width: 560, height: 340 }
+			const CLIP = { x: 0, y: 260, width: 2000, height: 2000 }
+			const placeholder = document.getElementById("placeholder")
+			const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+			const paint = ({ x, y, width, height }) =>
+				Object.assign(placeholder.style, { left: `${x}px`, top: `${y}px`, width: `${width}px`, height: `${height}px` })
+			const answer = (call) => call.then(() => "ok", (failure) => failure)
+			const capture = async (step, rectangle, clip, note) => {
+				await pause(600)
+				await invoke("capture_step", { step, rectangle, clip, note: note ?? null })
+			}
+
+			const play = async () => {
+				const html = await (await fetch("/prototype.html")).text()
+				paint(SHOWN)
+				await capture("placeholder", SHOWN, null)
+				await invoke("live_html_mount", { id: ID, html, rectangle: SHOWN })
+				await pause(2500)
+				await capture("show", SHOWN, null)
+				const twice = await answer(invoke("live_html_mount", { id: ID, html, rectangle: SHOWN }))
+				const unknown = await answer(invoke("live_html_place", { id: "missing", rectangle: SHOWN, clip: null }))
+				paint(MOVED)
+				await invoke("live_html_place", { id: ID, rectangle: MOVED, clip: null })
+				await capture("move", MOVED, null, { mountTwice: twice, placeUnknown: unknown })
+				await invoke("live_html_place", { id: ID, rectangle: MOVED, clip: CLIP })
+				await capture("clip", MOVED, CLIP)
+				await invoke("live_html_hide", { id: ID })
+				await capture("hide", MOVED, CLIP)
+				await invoke("live_html_show", { id: ID })
+				await capture("show-again", MOVED, CLIP)
+				await invoke("resize_window", { width: 1100, height: 760 })
+				await capture("resize", MOVED, CLIP)
+				await invoke("live_html_remove", { id: ID })
+				await capture("remove", MOVED, CLIP)
+				await invoke("live_html_mount", { id: "before-reload", html, rectangle: SHOWN })
+				await pause(1500)
+				await capture("before-reload", SHOWN, null)
+				sessionStorage.setItem("reloaded", "yes")
+				location.reload()
+			}
+
+			const afterReload = async () => {
+				paint(SHOWN)
+				await pause(1000)
+				await capture("after-reload", SHOWN, null)
+				await invoke("finish_run")
+			}
+
+			;(sessionStorage.getItem("reloaded") ? afterReload() : play()).catch((failure) =>
+				invoke("finish_run", { failure: JSON.stringify(failure) }),
+			)
+		</script>
+	</body>
+</html>

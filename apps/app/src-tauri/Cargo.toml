@@ -151,6 +151,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 	"NSNotification",
 	"NSString",
 ] }
+# Builds a live HTML view as a webview of its own inside the main window, beside the main webview
+# rather than as a Tauri child, so the main window stays a webview window. Already in the tree under
+# tauri-runtime-wry at this version; named here so no crate enters the lockfile through this line.
+wry = "=0.57.0"
 # Keeps the device keys of an installed build in the login Keychain. Already in the tree under
 # rustls-platform-verifier; named here so no crate enters the lockfile through this line.
 security-framework = "3"

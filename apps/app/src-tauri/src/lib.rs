@@ -25,6 +25,7 @@ pub mod invitations;
 pub mod joined_spaces;
 pub mod json;
 pub mod library;
+pub mod live_html;
 pub mod logging;
 pub mod mcp_oauth;
 #[cfg(any(target_os = "macos", test))]
@@ -95,7 +96,9 @@ pub fn run() {
 		.manage(missions::commands::AnnouncedLiveness::default())
 		.manage(missions::run_claims::MissionRunClaims::default())
 		.manage(conversations::awaited_runs::TurnWindows::default())
+		.manage(live_html::LiveViews::default())
 		.on_page_load(|webview, payload| {
+			live_html::remove_on_main_page_load(webview, payload);
 			missions::run_claims::forget_on_page_load(webview, payload);
 			conversations::awaited_runs::forget_on_page_load(webview, payload);
 			library::presence::forget_on_page_load(webview, payload);

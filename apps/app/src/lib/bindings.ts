@@ -40,6 +40,16 @@ export const commands = {
 	librarySave: (spaceId: string, name: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save", { spaceId, name })),
 	libraryCopy: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy", { spaceId, name })),
 	libraryReveal: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_reveal", { spaceId, name })),
+	liveHtmlMount: (id: string, html: string, rectangle: LiveHtmlRectangle) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount", { id, html, rectangle })),
+	liveHtmlPlace: (id: string, rectangle: LiveHtmlRectangle, clip: {
+	x: number | null,
+	y: number | null,
+	width: number | null,
+	height: number | null,
+} | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_place", { id, rectangle, clip })),
+	liveHtmlHide: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_hide", { id })),
+	liveHtmlShow: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_show", { id })),
+	liveHtmlRemove: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_remove", { id })),
 	libraryReadImage: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_image", { spaceId, name })),
 	libraryReadFile: (spaceId: string, name: string) => typedError<LibraryFile, LibraryError>(__TAURI_INVOKE("library_read_file", { spaceId, name })),
 	librarySaveBytes: (name: string, content: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save_bytes", { name, content })),
@@ -1382,6 +1392,15 @@ export type LibraryWriter = {
 };
 
 export type LibraryWriterKind = "agent" | "person" | "member";
+
+export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string };
+
+export type LiveHtmlRectangle = {
+	x: number | null,
+	y: number | null,
+	width: number | null,
+	height: number | null,
+};
 
 export type LiveSession = {
 	botId: string,
