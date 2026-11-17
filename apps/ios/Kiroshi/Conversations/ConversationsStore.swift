@@ -148,7 +148,7 @@ final class ConversationsStore {
         guard isFollowing(connection) else { return }
         isOnline = false
         resyncReread.cancel()
-        for task in [loading, paging, merging, pinning] {
+        for task in [loading, paging, merging] {
             task?.cancel()
         }
         loading = nil

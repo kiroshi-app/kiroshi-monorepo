@@ -168,6 +168,38 @@ struct QuestionThreadTests {
         await connection.stop()
     }
 
+    @Test func anAnswerWhoseThreadClosesBeforeTheHostTakesItIsStillRecorded() async throws {
+        let recording: TestHost.Answer = { call in
+            switch call.command {
+            case "agent_pending_questions": TestHost.ok(call, Self.pending)
+            case "conversation_append_user_message": TestHost.ok(call, "4")
+            default: nil
+            }
+        }
+        let host = TestHost(
+            messages: ["chat-juniper": thread], holding: ["agent_answer_question"],
+            answer: recording)
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        await waitUntil { isAsking(store) }
+        var draft = QuestionDraft(request: try #require(store.asking).question.request)
+        draft.pick(draft.asked.options[0])
+        _ = draft.goOn()
+        draft.pick(draft.asked.options[1])
+        let answering = store.answer(draft)
+        let call = try #require(await host.nextCall("agent_answer_question"))
+
+        following.cancel()
+        await following.value
+        host.reply(TestHost.ok(call, "null"))
+        await answering?.value
+
+        #expect(store.answeredQuestion("q1")?.by == .you)
+        let recorded = try #require(await host.nextCall("conversation_append_user_message"))
+        #expect(try recorded.args(as: RecordArgs.self).message.repliedToMessageId == "question-q1")
+        await connection.stop()
+    }
+
     @Test func theHostEchoingTheAnswerBeforeItAnswersKeepsThePanelSendingThenTheAnswerYours()
         async throws
     {

@@ -213,7 +213,7 @@ final class ThreadStore {
         }
         isReachable = false
         resyncReread.cancel()
-        for task in [loading, sending, stopping, loadingOlder, answeringTask] {
+        for task in [loading, loadingOlder] {
             task?.cancel()
         }
     }
