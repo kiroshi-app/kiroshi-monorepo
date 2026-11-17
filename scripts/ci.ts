@@ -5,6 +5,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -782,93 +783,283 @@ export const uiTestClasses = (directory = UI_TESTS) =>
 		.map((name) => name.slice(0, -".swift".length))
 		.sort()
 
-const MEDIAN_SECONDS_OF_UI_TEST_CLASS: Record<string, number> = {
-	AppearanceTests: 21,
-	CitedFilesTests: 122,
-	ConversationMissionsTests: 71,
-	ConversationsAccessibilityTests: 342,
-	ConversationsRecoveryTests: 37,
-	DeleteAccountTests: 73,
-	DeviceApprovalAccessibilityTests: 125,
-	DeviceKeysAccessibilityTests: 48,
-	GroupThreadTests: 215,
-	HomeTabBarTests: 103,
-	InvitationAccessibilityTests: 328,
-	MarkdownMessageTests: 302,
-	MessageConsentTests: 129,
-	MissionOpeningTests: 19,
-	MissionsAccessibilityTests: 170,
-	NewConversationTests: 44,
-	PagingTests: 40,
-	PhotoSendingTests: 63,
-	PinnedStripTests: 110,
-	QuestionPanelTests: 546,
-	SettingsAccessibilityTests: 159,
-	SettingsLargestTextTests: 73,
-	SignInAccessibilityTests: 249,
-	SoloConversationTests: 17,
-	SpaceAccentTests: 90,
-	SpaceHeaderTests: 17,
-	SpaceSelectorTests: 121,
-	ThreadAccessibilityTests: 236,
-	ThreadHeaderTests: 143,
-	ThreadOpeningTests: 46,
-	ThreadSendingTests: 162,
+const IOS_TIMINGS = "scripts/ios-shard-seconds.json"
+
+const IOS_TIMINGS_REFRESH = "bun scripts/ci.ts ios-timings"
+
+const KIROSHI_TESTS = "KiroshiTests"
+
+const OVER_PLAN_RATIO = 1.25
+
+type IosTimings = {
+	overheadSeconds: number
+	classSeconds: Record<string, number>
 }
 
-const SECONDS_OF_AN_UNMEASURED_UI_TEST_CLASS = 110
+export const readIosTimings = (): IosTimings =>
+	JSON.parse(readFileSync(join(REPO, IOS_TIMINGS), "utf8"))
 
-const secondsOf = (name: string) =>
-	MEDIAN_SECONDS_OF_UI_TEST_CLASS[name] ??
-	SECONDS_OF_AN_UNMEASURED_UI_TEST_CLASS
+const plannedClassSeconds = (timings: IosTimings, name: string) => {
+	const seconds = timings.classSeconds[name]
+	if (seconds === undefined)
+		throw new Error(
+			`${IOS_TIMINGS} plans no seconds for ${name}, measure it with ${IOS_TIMINGS_REFRESH} <run id>`,
+		)
+	return seconds
+}
 
-const MEDIAN_SECONDS_OF_KIROSHI_TESTS = 15
+type ShardPlanning = {
+	count: number
+	classes: string[]
+	timings: IosTimings
+}
 
-type ShardLoad = { seconds: number; tests: string[] }
+type ShardLoad = { testSeconds: number; tests: string[] }
 
-const balancedShards = (count: number, classes: string[]) => {
+type PlannedShard = {
+	tests: string[]
+	testSeconds: number
+	wholeJobSeconds: number
+}
+
+export const plannedShards = ({
+	count,
+	classes,
+	timings,
+}: ShardPlanning): PlannedShard[] => {
+	const secondsOf = (name: string) => plannedClassSeconds(timings, name)
 	const shards: ShardLoad[] = Array.from({ length: count }, (_, position) =>
 		position === 0
-			? { seconds: MEDIAN_SECONDS_OF_KIROSHI_TESTS, tests: ["KiroshiTests"] }
-			: { seconds: 0, tests: [] },
+			? { testSeconds: secondsOf(KIROSHI_TESTS), tests: [KIROSHI_TESTS] }
+			: { testSeconds: 0, tests: [] },
 	)
 	const longestFirst = [...classes].sort(
 		(a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
 	)
 	for (const name of longestFirst) {
 		const lightest = shards.reduce((lightest, shard) =>
-			shard.seconds < lightest.seconds ? shard : lightest,
+			shard.testSeconds < lightest.testSeconds ? shard : lightest,
 		)
 		lightest.tests.push(`KiroshiUITests/${name}`)
-		lightest.seconds += secondsOf(name)
+		lightest.testSeconds += secondsOf(name)
 	}
-	return shards
+	return shards.map((shard) => ({
+		...shard,
+		wholeJobSeconds: timings.overheadSeconds + shard.testSeconds,
+	}))
 }
 
-export const shardTests = ({ index, count }: Shard, classes: string[]) =>
-	balancedShards(count, classes)[index - 1]?.tests ?? []
+const SUITE_EVENT =
+	/Test Suite '(\w+)' (started|passed|failed) at (\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d\.\d+)/g
 
-export const shardPlannedSeconds = (
-	{ index, count }: Shard,
-	classes: string[],
-) => balancedShards(count, classes)[index - 1]?.seconds ?? 0
+const UNIT_TEST_RUN =
+	/Test run with \d+ tests? in \d+ suites? (?:passed|failed) after ([\d.]+) seconds/
+
+const suiteEventSeconds = (date: string, time: string) =>
+	Date.parse(`${date}T${time}Z`) / 1000
+
+export const measuredClassSeconds = (log: string) => {
+	const startedAt = new Map<string, number>()
+	const seconds: Record<string, number> = {}
+	for (const [, name = "", event, date = "", time = ""] of log.matchAll(
+		SUITE_EVENT,
+	)) {
+		const at = suiteEventSeconds(date, time)
+		const started = startedAt.get(name)
+		if (event === "started") startedAt.set(name, at)
+		else if (started !== undefined) seconds[name] = Math.round(at - started)
+	}
+	const unitTestRun = UNIT_TEST_RUN.exec(log)
+	if (unitTestRun) seconds[KIROSHI_TESTS] = Math.round(Number(unitTestRun[1]))
+	return seconds
+}
+
+const median = (values: number[]) => {
+	const sorted = [...values].sort((a, b) => a - b)
+	const middle = Math.floor(sorted.length / 2)
+	const upper = sorted[middle] ?? 0
+	const lower = sorted[sorted.length % 2 === 0 ? middle - 1 : middle] ?? 0
+	return Math.round((lower + upper) / 2)
+}
+
+type MeasuredShardJob = {
+	wholeJobSeconds: number
+	classSeconds: Record<string, number>
+}
+
+type IosMeasurement = {
+	runs: number[]
+	jobs: MeasuredShardJob[]
+	classes: string[]
+}
+
+const sumOf = (values: number[]) =>
+	values.reduce((total, value) => total + value, 0)
+
+export const measuredIosTimings = ({
+	runs,
+	jobs,
+	classes,
+}: IosMeasurement): IosTimings => {
+	const planned = [KIROSHI_TESTS, ...classes].sort()
+	const samplesOf = (name: string) =>
+		jobs.flatMap(({ classSeconds }) => classSeconds[name] ?? [])
+	const unmeasured = planned.filter((name) => samplesOf(name).length === 0)
+	if (unmeasured.length > 0)
+		throw new Error(
+			`runs ${runs.join(", ")} measured no seconds for ${unmeasured.join(", ")}`,
+		)
+	const testSecondsOf = ({ classSeconds }: MeasuredShardJob) =>
+		sumOf(planned.map((name) => classSeconds[name] ?? 0))
+	return {
+		overheadSeconds: median(
+			jobs.map((job) => job.wholeJobSeconds - testSecondsOf(job)),
+		),
+		classSeconds: Object.fromEntries(
+			planned.map((name) => [name, median(samplesOf(name))]),
+		),
+	}
+}
+
+type RunJob = {
+	databaseId: number
+	name: string
+	conclusion: string
+	startedAt: string
+	completedAt: string
+}
+
+const IOS_SHARD_JOB = /^ios \(\d+\)$/
+
+const measuredShardJob = (job: RunJob): MeasuredShardJob => ({
+	wholeJobSeconds: Math.round(
+		(Date.parse(job.completedAt) - Date.parse(job.startedAt)) / 1000,
+	),
+	classSeconds: measuredClassSeconds(
+		captured({
+			command: ["gh", "run", "view", "--log", "--job", `${job.databaseId}`],
+			operation: `reading the log of ${job.name}`,
+		}),
+	),
+})
+
+const measuredShardJobsOf = (run: number) => {
+	const { jobs } = JSON.parse(
+		captured({
+			command: ["gh", "run", "view", `${run}`, "--json", "jobs"],
+			operation: `listing the jobs of run ${run}`,
+		}),
+	) as { jobs: RunJob[] }
+	const shardJobs = jobs.filter(
+		(job) => IOS_SHARD_JOB.test(job.name) && job.conclusion === "success",
+	)
+	if (shardJobs.length === 0)
+		throw new Error(`run ${run} has no ios shard job that succeeded`)
+	return shardJobs.map(measuredShardJob)
+}
+
+export const parsedRunIds = (texts: string[]) => {
+	const runs = texts.map(Number)
+	if (
+		runs.length === 0 ||
+		!runs.every((run) => Number.isSafeInteger(run) && run > 0)
+	)
+		throw new Error(
+			`ios-timings is given "${texts.join(" ")}", expected the id of one or more GitHub Actions runs`,
+		)
+	return runs
+}
+
+const refreshIosTimings = (texts: string[]) => {
+	const runs = parsedRunIds(texts)
+	const timings = measuredIosTimings({
+		runs,
+		jobs: runs.flatMap(measuredShardJobsOf),
+		classes: uiTestClasses(),
+	})
+	writeFileSync(
+		join(REPO, IOS_TIMINGS),
+		`${JSON.stringify(timings, null, "\t")}\n`,
+	)
+	console.log(
+		`ci  ${IOS_TIMINGS} now plans ${Object.keys(timings.classSeconds).length} classes and ${timings.overheadSeconds} s outside the tests, from runs ${runs.join(", ")}`,
+	)
+	return true
+}
+
+type ShardRun = {
+	shard: string
+	planned: PlannedShard
+	timings: IosTimings
+	measured: Record<string, number>
+	run: string
+}
+
+const classNameOf = (test: string) => test.split("/").at(-1) ?? test
+
+const measuredTestSeconds = ({ planned, measured }: ShardRun) =>
+	sumOf(planned.tests.map((test) => measured[classNameOf(test)] ?? 0))
+
+export const shardTimingSummary = (shardRun: ShardRun) => {
+	const { shard, planned, timings, measured } = shardRun
+	const testSeconds = measuredTestSeconds(shardRun)
+	const ratio = (testSeconds / planned.testSeconds).toFixed(2)
+	const rows = planned.tests.map((test) => {
+		const name = classNameOf(test)
+		return `| ${name} | ${timings.classSeconds[name]} | ${measured[name] ?? "not measured"} |`
+	})
+	return [
+		`### ios shard ${shard}: ${testSeconds} s of tests measured for ${planned.testSeconds} s planned, ratio ${ratio}`,
+		"",
+		`Planned whole job: ${planned.wholeJobSeconds} s, ${timings.overheadSeconds} s of it outside the tests.`,
+		"",
+		"| Class | Planned s | Measured s |",
+		"| --- | ---: | ---: |",
+		...rows,
+		"",
+		"",
+	].join("\n")
+}
+
+export const shardOverPlanWarning = (shardRun: ShardRun) => {
+	const { shard, planned, run } = shardRun
+	const testSeconds = measuredTestSeconds(shardRun)
+	if (testSeconds <= planned.testSeconds * OVER_PLAN_RATIO) return undefined
+	return `::warning title=ios shard over its plan::${escapedAnnotationData(
+		`ios shard ${shard} ran its tests in ${testSeconds} s for ${planned.testSeconds} s planned. Refresh ${IOS_TIMINGS} with ${IOS_TIMINGS_REFRESH} ${run}`,
+	)}`
+}
 
 export const startedATest = (log: string) =>
 	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
 
-const selectIosTests = () => {
+type SelectedShard = {
+	shard: string
+	planned: PlannedShard
+	timings: IosTimings
+}
+
+const selectIosTests = (): SelectedShard | undefined => {
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
 	const shard = process.env.IOS_SHARD
 	if (!shard) {
 		process.env.IOS_ONLY_TESTING = ""
 		console.log("\nci  ios runs every test of the Kiroshi plan")
-		return
+		return undefined
 	}
-	const tests = shardTests(parsedShard(shard), uiTestClasses())
-	process.env.IOS_ONLY_TESTING = tests
+	const { index, count } = parsedShard(shard)
+	const timings = readIosTimings()
+	const planned = plannedShards({ count, classes: uiTestClasses(), timings })[
+		index - 1
+	]
+	if (!planned) throw new Error(`ios shard ${shard} has no plan`)
+	process.env.IOS_ONLY_TESTING = planned.tests
 		.map((test) => `-only-testing:${test}`)
 		.join(" ")
-	console.log(`\nci  ios shard ${shard} runs ${tests.join(", ")}`)
+	console.log(
+		`\nci  ios shard ${shard} runs ${planned.tests.join(", ")}, planned ${planned.wholeJobSeconds} s of whole job`,
+	)
+	return { shard, planned, timings }
 }
 
 const SHARD_TEST_LOG_FILE = join(REPO, IOS_SHARD_TEST_LOG)
@@ -895,10 +1086,26 @@ const shardPassed = () => {
 	}
 }
 
-const runIosShard = () => {
+const reportShardTimings = (selected: SelectedShard, log: string) => {
+	const shardRun: ShardRun = {
+		...selected,
+		measured: measuredClassSeconds(log),
+		// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+		run: process.env.GITHUB_RUN_ID ?? "<run id>",
+	}
+	const warning = shardOverPlanWarning(shardRun)
+	if (warning) console.log(warning)
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const summary = process.env.GITHUB_STEP_SUMMARY
+	if (summary) appendFileSync(summary, shardTimingSummary(shardRun))
+}
+
+const runIosShard = (selected: SelectedShard) => {
 	rmSync(SHARD_TEST_LOG_FILE, { force: true })
 	const passed = shardPassed()
-	if (!passed && !startedATest(shardTestLog())) reportRunnerFailure()
+	const log = shardTestLog()
+	reportShardTimings(selected, log)
+	if (!passed && !startedATest(log)) reportRunnerFailure()
 	return passed
 }
 
@@ -909,9 +1116,8 @@ const runIosBuild = () => {
 
 const runGroup = (group: Group) => {
 	if (group !== "ios") return runSteps(group, GATE[group])
-	selectIosTests()
-	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
-	if (process.env.IOS_SHARD) return runIosShard()
+	const selected = selectIosTests()
+	if (selected) return runIosShard(selected)
 	ensureSimulator()
 	return runSteps(group, GATE[group])
 }
@@ -968,9 +1174,11 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === "rust-pr")
 		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
 	if (argument === "ios-build") return runIosBuild()
+	if (argument === "ios-timings")
+		return refreshIosTimings(process.argv.slice(3))
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed, rust-pr, ios-build or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed, rust-pr, ios-build, ios-timings or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 
