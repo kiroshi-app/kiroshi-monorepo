@@ -158,8 +158,10 @@ impl LiveViews {
 		id: String,
 		script: String,
 	) -> Result<String, LiveHtmlError> {
-		let servers = self.servers.lock().await;
-		native::evaluate(app, known(&servers, id)?, script).await
+		let id = known(&*self.servers.lock().await, id)?;
+		let answer = native::evaluate(app, id.clone(), script).await?;
+		known(&*self.servers.lock().await, id)?;
+		Ok(answer)
 	}
 }
 
