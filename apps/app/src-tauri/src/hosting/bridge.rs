@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::{self, RelayedMember};
+use super::keyed_calls::{self, Answered, CallingDevice, Claim};
 use super::reach::{self, Reach};
 use super::Hosting;
 
@@ -21,12 +22,15 @@ use crate::attachments;
 use crate::avatars::Avatars;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::db::{Database, DatabaseState};
+use crate::events::CallOrigin;
 use crate::file_store::FileStore;
 use crate::host_api::files::{plain, ATTACHMENT_PATH, AVATAR_PATH};
 use crate::host_api::invoke::{names_an_app_command, RELAYED_MEMBER_HEADER};
 use crate::missions::github::installed_tls_provider;
 
 const INVOKE_BOUND: Duration = Duration::from_secs(300);
+
+const CALL_KEY_LIMIT: usize = 128;
 
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
@@ -81,10 +85,12 @@ pub(super) struct MemberCall {
 	command: String,
 	args: Value,
 	sender: String,
+	device: String,
 	computer: Option<String>,
+	call_key: Option<String>,
 }
 
-pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
+pub(super) fn member_call(text: &str, sender: &str, device: &str) -> Result<MemberCall, String> {
 	let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
 	let id = frame.get("id").filter(|id| id.is_string() || id.is_number()).cloned();
 	let command = frame
@@ -95,23 +101,35 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 		None => Some(Value::Object(Map::new())),
 		Some(args) => Some(args.clone()).filter(Value::is_object),
 	};
-	match (id, command, args) {
-		(Some(id), Some(command), Some(_)) if reach::reach_of(command).is_none() => {
+	match (id, command, args, call_key_of(&frame)) {
+		(Some(id), Some(command), Some(_), _) if reach::reach_of(command).is_none() => {
 			log::warn!("a member called {command}, a command this host does not know");
 			let unknown = format!("{UNKNOWN_COMMAND_REFUSAL} {command}");
 			Err(answer(id, StatusCode::NOT_FOUND, json!(unknown)))
 		}
-		(Some(id), Some(command), Some(args)) if belongs_to_the_host(command, &args) => {
+		(Some(id), Some(command), Some(args), _) if belongs_to_the_host(command, &args) => {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
 		}
-		(Some(id), Some(command), Some(args)) => Ok(MemberCall {
+		(Some(id), Some(command), Some(args), Some(call_key)) => Ok(MemberCall {
 			id,
 			command: command.to_owned(),
 			args,
 			sender: sender.to_owned(),
+			device: device.to_owned(),
 			computer: computer_of(&frame),
+			call_key,
 		}),
-		(id, _, _) => Err(refused(id)),
+		(id, ..) => Err(refused(id)),
+	}
+}
+
+fn call_key_of(frame: &Value) -> Option<Option<String>> {
+	match frame.get("callKey") {
+		None => Some(None),
+		Some(Value::String(key)) if !key.is_empty() && key.len() <= CALL_KEY_LIMIT => {
+			Some(Some(key.clone()))
+		}
+		Some(_) => None,
 	}
 }
 
@@ -238,6 +256,44 @@ pub(super) async fn bridged<R: Runtime>(
 	shared_space_id: String,
 	call: MemberCall,
 ) -> String {
+	let id = call.id.clone();
+	let (status, body) = match call.call_key.clone() {
+		None => ran(app, local, shared_space_id, call).await,
+		Some(key) => ran_once(app, local, shared_space_id, call, key).await,
+	};
+	answer(id, status, body)
+}
+
+async fn ran_once<R: Runtime>(
+	app: AppHandle<R>,
+	local: LocalApi,
+	shared_space_id: String,
+	call: MemberCall,
+	key: String,
+) -> Answered {
+	let device =
+		CallingDevice { space_id: shared_space_id.clone(), device_id: call.device.clone() };
+	let claimed = app.state::<Hosting>().keyed_calls.claim(device, key);
+	let watching = match claimed {
+		Claim::Answered(answered) => return answered,
+		Claim::Running(watching) => watching,
+		Claim::First(first) => {
+			let watching = first.watching();
+			tauri::async_runtime::spawn(async move {
+				first.settle(ran(app, local, shared_space_id, call).await);
+			});
+			watching
+		}
+	};
+	keyed_calls::answered_by_the_first_run(watching).await
+}
+
+async fn ran<R: Runtime>(
+	app: AppHandle<R>,
+	local: LocalApi,
+	shared_space_id: String,
+	call: MemberCall,
+) -> Answered {
 	let caller = authorship::person_of(&app, &call.sender);
 	let reached = reach::stays_in_the_shared_space(
 		&app,
@@ -253,25 +309,29 @@ pub(super) async fn bridged<R: Runtime>(
 			reach::Refusal::NotOwned { .. } => OTHER_PERSON_REFUSAL,
 			_ => OTHER_SPACE_REFUSAL,
 		};
-		return answer(call.id, StatusCode::FORBIDDEN, json!(reason));
+		return (StatusCode::FORBIDDEN, json!(reason));
 	}
 	let hosting = app.state::<Hosting>();
 	let member = RelayedMember {
 		space_id: shared_space_id.clone(),
 		user_id: call.sender.clone(),
 		computer: call.computer.clone(),
+		origin: Some(CallOrigin {
+			device_id: call.device.clone(),
+			call_key: call.call_key.clone(),
+		}),
 	};
 	let vouched = hosting.relayed.vouch(member);
 	let (status, body) = match invoked(&local, &call, &vouched.nonce).await {
 		Ok(answered) => answered,
-		Err(reason) => return answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
+		Err(reason) => return (StatusCode::BAD_GATEWAY, json!(reason)),
 	};
 	if !status.is_success() {
-		return answer(call.id, status, body);
+		return (status, body);
 	}
 	match reach::answer_shown_to(&app, &shared_space_id, &caller, &call.command, body).await {
-		Some(shown) => answer(call.id, status, shown),
-		None => answer(call.id, StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER)),
+		Some(shown) => (status, shown),
+		None => (StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER)),
 	}
 }
 
@@ -495,13 +555,15 @@ mod tests {
 	#[test]
 	fn a_call_without_args_invokes_with_none() {
 		assert_eq!(
-			member_call(r#"{"id": 3, "command": "agent_models"}"#, "a1"),
+			member_call(r#"{"id": 3, "command": "agent_models"}"#, "a1", "d1"),
 			Ok(MemberCall {
 				id: json!(3),
 				command: "agent_models".to_owned(),
 				args: json!({}),
 				sender: "a1".to_owned(),
+				device: "d1".to_owned(),
 				computer: None,
+				call_key: None,
 			})
 		);
 	}
@@ -509,7 +571,7 @@ mod tests {
 	#[test]
 	fn a_call_carries_the_computer_the_member_named_trimmed_and_none_when_blank_or_absent() {
 		let computer =
-			|frame: Value| member_call(&frame.to_string(), "a1").map(|call| call.computer);
+			|frame: Value| member_call(&frame.to_string(), "a1", "d1").map(|call| call.computer);
 
 		assert_eq!(
 			computer(json!({ "id": 1, "command": "agent_models", "computer": "  Studio  " })),
@@ -535,8 +597,31 @@ mod tests {
 	}
 
 	#[test]
+	fn a_call_carries_the_key_its_device_chose_and_a_malformed_key_refuses_the_frame() {
+		let keyed =
+			|frame: Value| member_call(&frame.to_string(), "a1", "d1").map(|call| call.call_key);
+		let longest = "k".repeat(CALL_KEY_LIMIT);
+
+		assert_eq!(
+			keyed(json!({ "id": 1, "command": "agent_models", "callKey": "k1" })),
+			Ok(Some("k1".to_owned()))
+		);
+		assert_eq!(
+			keyed(json!({ "id": 2, "command": "agent_models", "callKey": longest })),
+			Ok(Some(longest))
+		);
+		assert_eq!(keyed(json!({ "id": 3, "command": "agent_models" })), Ok(None));
+		for malformed in [json!(""), json!(7), json!(null), json!("k".repeat(CALL_KEY_LIMIT + 1))] {
+			let frame = json!({ "id": 4, "command": "agent_models", "callKey": malformed });
+			let refusal = keyed(frame).expect_err("a malformed key");
+			assert_eq!(status_of(&refusal), (json!(4), json!(400)), "{malformed}");
+		}
+	}
+
+	#[test]
 	fn the_sender_is_the_roster_account_even_when_the_plaintext_carries_another_sender() {
-		let sent = |frame: Value| member_call(&frame.to_string(), "roster").map(|call| call.sender);
+		let sent =
+			|frame: Value| member_call(&frame.to_string(), "roster", "d1").map(|call| call.sender);
 
 		assert_eq!(
 			sent(json!({ "id": 1, "command": "agent_models", "sender": { "accountId": "a1" } })),
@@ -570,7 +655,7 @@ mod tests {
 			(r#"{"id": "b", "command": "space_list", "args": [1]}"#, json!("b")),
 			(r#"{"id": 9}"#, json!(9)),
 		] {
-			let refusal = member_call(frame, "a1").expect_err(frame);
+			let refusal = member_call(frame, "a1", "d1").expect_err(frame);
 			assert_eq!(status_of(&refusal), (id, json!(400)), "{frame}");
 		}
 	}
@@ -583,7 +668,7 @@ mod tests {
 			.map(|(command, _)| *command);
 		for command in host_only {
 			let frame = json!({ "id": "m", "command": command, "args": { "spaceId": "s" } });
-			let refusal = member_call(&frame.to_string(), "a1").expect_err(command);
+			let refusal = member_call(&frame.to_string(), "a1", "d1").expect_err(command);
 			assert_eq!(
 				serde_json::from_str::<Value>(&refusal).expect("a json answer"),
 				json!({ "id": "m", "status": 403, "body": HOST_ONLY_REFUSAL }),
@@ -596,7 +681,7 @@ mod tests {
 	fn a_member_command_this_host_does_not_know_is_refused_with_404_naming_it() {
 		let frame = json!({ "id": "m", "command": "a_command_nobody_classified" });
 
-		let refusal = member_call(&frame.to_string(), "a1").expect_err("an unknown command");
+		let refusal = member_call(&frame.to_string(), "a1", "d1").expect_err("an unknown command");
 
 		assert_eq!(
 			serde_json::from_str::<Value>(&refusal).expect("a json answer"),
@@ -618,7 +703,7 @@ mod tests {
 			"args": { "spaceId": "an-argument-kept-out-of-the-log" },
 		});
 
-		member_call(&frame.to_string(), sender).expect_err("an unknown command");
+		member_call(&frame.to_string(), sender, "d1").expect_err("an unknown command");
 
 		assert_eq!(
 			logged_naming("a_command_logged"),
@@ -639,7 +724,7 @@ mod tests {
 		];
 
 		for frame in &refused {
-			member_call(&frame.to_string(), sender).expect_err("a refused frame");
+			member_call(&frame.to_string(), sender, "d1").expect_err("a refused frame");
 		}
 
 		assert_eq!(logged_naming(sender), Vec::<String>::new());
@@ -821,13 +906,13 @@ mod tests {
 		for command in &plugin_commands {
 			let person =
 				json!({ "id": "m", "command": command, "args": { "scope": { "kind": "user" } } });
-			let refusal = member_call(&person.to_string(), "a1").expect_err(command);
+			let refusal = member_call(&person.to_string(), "a1", "d1").expect_err(command);
 			assert_eq!(status_of(&refusal), (json!("m"), json!(403)), "{command}");
 			for scope in
 				[json!({ "kind": "space", "id": "s" }), json!({ "kind": "bot", "id": "b" })]
 			{
 				let frame = json!({ "id": "m", "command": command, "args": { "scope": scope } });
-				assert!(member_call(&frame.to_string(), "a1").is_ok(), "{command} {scope}");
+				assert!(member_call(&frame.to_string(), "a1", "d1").is_ok(), "{command} {scope}");
 			}
 		}
 	}

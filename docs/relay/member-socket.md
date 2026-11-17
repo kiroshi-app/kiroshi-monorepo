@@ -86,7 +86,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 ### The call frame
 
 ```json
-{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] }, "computer": "Studio" }
+{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] }, "computer": "Studio", "callKey": "5d0c…" }
 ```
 
 - `id`: a string or a number, unique among the client's calls still awaiting an
@@ -99,6 +99,29 @@ with `id` and `status` is an answer frame. Anything else is ignored.
   records it on every message that call writes and names it to the agent. Absent,
   the agent reads that the message came from another computer. The desktop client
   sends its computer name on every call.
+- `callKey`: optional, a string of 1 to 128 characters the device chooses for one
+  call and sends unchanged on every repeat of it, a UUID for instance. Any other
+  value refuses the frame with 400. See [A repeated call](#a-repeated-call).
+
+### A repeated call
+
+The host runs a call that carries a `callKey` once per device and key, the device
+being the relay device id that sent the call:
+
+- A repeat that arrives after the first run answered gets that answer: the same
+  `status` and `body`, under the repeat's own `id`. The host does not run the
+  command again.
+- A repeat that arrives while the first run is still in flight waits for it, then
+  gets the same answer.
+- A call refused before the host ran it (400, 403, 404, 413) leaves no answer
+  behind: its repeat is checked again, and runs if it now passes.
+- The host keeps the last 1024 answers of each device in each shared space and
+  forgets older ones, and it forgets them all when it restarts. A repeat of a
+  forgotten key runs as a new call.
+- The same `callKey` from another device, or in another shared space, is another
+  call.
+
+A call without `callKey` runs each time it arrives, as before.
 
 ### The answer frame
 
@@ -146,6 +169,24 @@ body. `chat_store_attachments` is the only command that answers a typed body on
 - `token`: present only on a frame replayed for a `relay_resume` call, and equal
   to the token of that call. A client that ignores replay drops every frame that
   carries it.
+- `event.callKey` and `event.deviceId`: the call's `callKey` and the relay device
+  id that sent it, on every event the host publishes while it runs a call that
+  carried a `callKey`, before it answers. A device recognises its own call by the
+  pair, live and in a replay. Only the commands that write as their caller carry
+  them: `conversation_create`, `conversation_send_turn`,
+  `conversation_send_user_message`, `conversation_append_user_message`,
+  `conversation_main_chat`, `conversation_renew_main_chat`, `agent_submit_prompt`,
+  `agent_answer_question`, `library_comment_create`, `library_comment_reply`,
+  `library_comment_resolve`, `library_share_presence`, `library_import_url` and
+  `mcp_oauth_disconnect`. An event the host publishes later, such as the stream
+  of an agent turn, carries neither.
+- `event.deviceId` alone: on the `agent://event` frame whose `event.type` is
+  `permissionResolved` and that resolves a question a member answered through
+  `agent_answer_question`, the relay device id that answered.
+
+```json
+{ "event": { "event": "conversation://created", "payload": { "spaceId": "s-1", "conversation": {} }, "deviceId": "0b6e…", "callKey": "5d0c…" }, "epoch": "6f1c…", "seq": 43 }
+```
 
 The host forwards an event only when it concerns the shared space: an event about
 another space, or a host-wide `agent://event` (its `scope` is `null`), never
