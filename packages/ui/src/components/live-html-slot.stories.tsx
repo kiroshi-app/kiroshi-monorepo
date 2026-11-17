@@ -95,21 +95,14 @@ const expectSizedToPage = async (
 		await expect(element.scrollHeight).toBe(element.clientHeight)
 }
 
-const expectUnframed = (element: Element) => {
-	const style = getComputedStyle(element)
-	expect(style.boxShadow).toBe("none")
-	expect(style.outlineStyle).toBe("none")
-	expect(style.borderLeftWidth).toBe("0px")
-	expect(style.borderRightWidth).toBe("0px")
-	expect(style.borderBottomWidth).toBe("0px")
-}
-
 const expectFlushView = async (canvasElement: HTMLElement) => {
 	const slot = within(canvasElement).getByRole("group", { name: "Live view" })
-	const view = viewOf(canvasElement)
-	expectUnframed(slot)
+	const style = getComputedStyle(slot)
+	await expect(style.boxShadow).toBe("none")
+	await expect(style.outlineStyle).toBe("none")
+	await expect(style.borderWidth).toBe("0px")
 	const slotBox = slot.getBoundingClientRect()
-	const viewBox = view.getBoundingClientRect()
+	const viewBox = viewOf(canvasElement).getBoundingClientRect()
 	await expect(viewBox.left).toBe(slotBox.left)
 	await expect(viewBox.right).toBe(slotBox.right)
 	await expect(viewBox.bottom).toBe(slotBox.bottom)
