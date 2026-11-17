@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
@@ -50,12 +50,10 @@ export const WorkspaceLayout = () => {
 		rosterView.rosteredSpaceId === scopes.openRowId &&
 		!roster.state.isRosterPending
 
-	const leaveLaunchLoader = () => {
-		setHasLeftLaunchLoader(true)
-		warmCodeHighlighter()
-	}
-
 	useInvokePhaseEnd("boot", hasLeftLaunchLoader ? "startup screen gone" : null)
+	useEffect(() => {
+		if (hasLeftLaunchLoader) warmCodeHighlighter()
+	}, [hasLeftLaunchLoader])
 	useInvokePhaseEnd(
 		"space switch",
 		isOpenSpaceRostered ? scopes.openRowId : null,
@@ -69,7 +67,7 @@ export const WorkspaceLayout = () => {
 					hasLoadedPreferences: user.state.hasLoaded,
 					roster: roster.state,
 				})}
-				onExitComplete={leaveLaunchLoader}
+				onExitComplete={() => setHasLeftLaunchLoader(true)}
 				onRetry={loadSpaces}
 			/>
 		)
