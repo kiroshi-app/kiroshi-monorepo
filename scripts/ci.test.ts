@@ -1439,11 +1439,12 @@ describe("the jobs of ci.yml", () => {
 		const steps = workflow.jobs.ios?.steps ?? []
 		const indexOf = (name: string) =>
 			steps.findIndex((step) => step.name === name)
-		const quietHost = indexOf("Stop the host services the tests do not use")
+		const quietHost = "Stop the host services the tests do not use"
 
-		expect(steps[quietHost]?.run?.trim()).toBe("scripts/ios-quiet-host.sh")
-		expect(quietHost).toBeGreaterThan(-1)
-		expect(quietHost).toBeLessThan(
+		expect(stepNamed("ios", quietHost)?.run?.trim()).toBe(
+			"scripts/ios-quiet-host.sh",
+		)
+		expect(indexOf(quietHost)).toBeLessThan(
 			indexOf("Boot the simulator while the build products download"),
 		)
 	})
