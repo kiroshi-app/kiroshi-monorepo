@@ -297,7 +297,7 @@ const PATH_SEPARATOR = /[/\\]/
 const isImageNamed = (name: string) =>
 	GALLERY_IMAGE_EXTENSIONS.includes(name.split(".").pop()?.toLowerCase() ?? "")
 
-const pickFilePaths = async () =>
+const pickAnyFilePaths = async () =>
 	(await open({ multiple: true, directory: false })) ?? []
 
 const pickImagePaths = async () =>
@@ -311,6 +311,13 @@ const pickImagePaths = async () =>
 			},
 		],
 	})) ?? []
+
+const pickImportPaths = (isJoined: boolean) =>
+	isJoined ? pickImagePaths() : pickAnyFilePaths()
+
+const pickerFailureNotice = () => ({
+	title: i18n.t("common:library.failure.import.generic"),
+})
 
 const localFileAt = (path: string): LocalFile => ({
 	name: path.split(PATH_SEPARATOR).pop() ?? path,
@@ -384,13 +391,12 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 		[importQueued, spaceId, isJoined],
 	)
 
-	const importFromPicker = async () => {
-		const files = (await pickFilePaths()).map(localFileAt)
-		if (files.length === 0) {
+	const importPickedPaths = async (paths: string[]) => {
+		if (paths.length === 0) {
 			return
 		}
 		await importQueued(
-			files.map((file) => ({
+			paths.map(localFileAt).map((file) => ({
 				id: crypto.randomUUID(),
 				name: file.name,
 				isImage: isImageNamed(file.name),
@@ -399,10 +405,19 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 		)
 	}
 
+	const { mutate: pickToImport } = useMutation({
+		mutationFn: () => pickImportPaths(isJoined),
+		onSuccess: importPickedPaths,
+		meta: {
+			failureNotice: pickerFailureNotice,
+			raisedIn: "use-library-imports",
+		},
+	})
+
 	return {
 		importingItems: importing.map(toImportingItem),
 		importDropped,
-		importFromPicker,
+		importFromPicker: () => pickToImport(),
 	}
 }
 

@@ -485,6 +485,44 @@ describe("files picked with Import", () => {
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
+	it("raises a failure notice and adds no importing row when the picker fails to open", async () => {
+		const { shown } = await renderLibraryScreen(false)
+		harness.pickFiles.mockRejectedValue(new Error("dialog unavailable"))
+
+		pressImport(shown)
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.failure.import.generic"),
+				}),
+			),
+		)
+		expect(shown.queryByRole("progressbar")).toBeNull()
+		expect(harness.importPaths).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+	})
+
+	it("offers only the gallery image types in a joined Space", async () => {
+		const { shown } = await renderLibraryScreen(true)
+		harness.pickFiles.mockResolvedValue(null)
+
+		pressImport(shown)
+
+		await waitFor(() =>
+			expect(harness.pickFiles).toHaveBeenCalledWith({
+				multiple: true,
+				directory: false,
+				filters: [
+					{
+						name: common("library.filters.images"),
+						extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+					},
+				],
+			}),
+		)
+	})
+
 	it("drops the row of a picked file the host refuses and names it in a failure notice", async () => {
 		const { shown } = await renderLibraryScreen(false)
 		harness.pickFiles.mockResolvedValue(["/Users/me/clip.exe"])
