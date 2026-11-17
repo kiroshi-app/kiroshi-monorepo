@@ -23,14 +23,6 @@ const SHORT_PAGE_HEIGHT = 160
 const TALL_PAGE_HEIGHT = 2400
 const GROWN_PAGE_HEIGHT = 640
 
-const slotOf = (canvasElement: HTMLElement) => {
-	const slot = canvasElement.querySelector<HTMLElement>(
-		"[data-slot='live-html-slot']",
-	)
-	if (!slot) throw new Error("The slot did not render.")
-	return slot
-}
-
 const viewOf = (canvasElement: HTMLElement) => {
 	const view = canvasElement.querySelector<HTMLElement>(
 		"[data-slot='live-html-slot-view']",
@@ -90,9 +82,10 @@ const expectSizedToPage = async (
 	canvasElement: HTMLElement,
 	height: number,
 ) => {
-	const slot = slotOf(canvasElement)
+	const canvas = within(canvasElement)
+	const slot = canvas.getByRole("group", { name: "Live view" })
 	const view = viewOf(canvasElement)
-	const paragraph = within(canvasElement).getByTestId("paragraph-above")
+	const paragraph = canvas.getByTestId("paragraph-above")
 	const line = paragraph.getBoundingClientRect().height
 	await expect(
 		Math.abs(view.getBoundingClientRect().height - height),
