@@ -505,8 +505,8 @@ mod tests {
 		(
 			"A fence label the chat does not draw",
 			&[
-				("code.tsx", "<AnswerFence code={source} language={language} />"),
-				("code.tsx", "<MarkdownFence code={source} language={language} />"),
+				("code.tsx", "<AnswerFence code={source} language={language} runs={runs} />"),
+				("code.tsx", "<MarkdownFence code={source} language={language} runs={runs} />"),
 			],
 		),
 		(
