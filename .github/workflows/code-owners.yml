@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 # find runs the code of the PR with a read token, disarm holds the write token and checks out nothing.
-# disarm fails closed: it runs unless find answered a count of exactly 0.
 jobs:
   find:
     runs-on: ubuntu-latest
