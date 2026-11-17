@@ -9,7 +9,8 @@ use crate::probe::{self, HostReading, HostTrace, ViewReading};
 use kiroshi_app::live_html::server::ALLOWED_HOSTS as ALLOWLIST_HOSTS;
 
 use crate::scenario::FIRST_VIEW_LABEL;
-use crate::sensors::{Connection, CspReport, TripwireReading, ViewRecord};
+use crate::sensors::{Connection, CspReport, DrawnFrames, TripwireReading, ViewRecord};
+use kiroshi_app::live_html::contract::LiveHtmlRectangle;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 const BLOCKED_HOST: &str = "example.com";
@@ -128,6 +129,12 @@ pub struct ViewObservation {
 	pub reached: HostTrace,
 }
 
+pub struct GridObservation {
+	pub rectangle: LiveHtmlRectangle,
+	pub clip: LiveHtmlRectangle,
+	pub drawn: Result<Vec<DrawnFrames>, String>,
+}
+
 pub struct AttemptAlone {
 	pub attempt: &'static str,
 	pub window: String,
@@ -222,6 +229,7 @@ pub struct Observations {
 	pub reader: Option<ViewObservation>,
 	pub host_readings: Option<HostReadings>,
 	pub attempts_alone: Vec<AttemptAlone>,
+	pub grid: GridObservation,
 }
 
 fn loopback_attempts() -> Vec<&'static str> {
@@ -246,6 +254,7 @@ impl Observations {
 			self.navigation_contained(),
 			self.main_window_stays_responsive(),
 			self.storage_not_shared_between_views(),
+			self.drawn_on_the_device_pixel_grid(),
 		];
 		if self.host_readings.is_some() {
 			let (by_the_handlers, by_browser_csp_reports) = self.first_view_navigations_seen();
@@ -858,6 +867,33 @@ impl Observations {
 			name: "A second view reads nothing the first view stored",
 			result: is_isolated.into(),
 			attempts,
+			evidence,
+		}
+	}
+
+	fn drawn_on_the_device_pixel_grid(&self) -> Proof {
+		let rectangle = |LiveHtmlRectangle { x, y, width, height }: LiveHtmlRectangle| json!({ "x": x, "y": y, "width": width, "height": height });
+		let mut evidence = json!({
+			"fractional_rectangle_placed": rectangle(self.grid.rectangle),
+			"fractional_clip_placed": rectangle(self.grid.clip),
+			"drawn_frames_read_by_the_host": probe::evidence(&self.grid.drawn),
+		});
+		let is_on_the_grid = match &self.grid.drawn {
+			Ok(drawn) => {
+				let edges_off_the_grid: Vec<f64> =
+					drawn.iter().flat_map(DrawnFrames::edges_off_the_grid).collect();
+				evidence["edges_off_the_device_pixel_grid"] = json!(edges_off_the_grid);
+				drawn.len() == 1
+					&& edges_off_the_grid.is_empty()
+					&& drawn.iter().all(DrawnFrames::is_at_the_backing_scale)
+			}
+			Err(_) => false,
+		};
+		Proof {
+			proof: 8,
+			name: "A view placed at a fractional rectangle is drawn on the device pixel grid at the backing scale",
+			result: is_on_the_grid.into(),
+			attempts: Vec::new(),
 			evidence,
 		}
 	}

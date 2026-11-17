@@ -13,12 +13,14 @@ pub mod watch;
 use elsewhere as native;
 #[cfg(target_os = "macos")]
 use macos as native;
+#[cfg(target_os = "macos")]
+pub use macos::HOLDER_IDENTIFIER;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow, Window, WindowEvent};
 use tokio::sync::Mutex;
 
 use crate::window_controls::MAIN_WINDOW;
@@ -161,6 +163,12 @@ pub fn remove_on_main_page_load<R: Runtime>(webview: &Webview<R>, payload: &Page
 			views.remove_all(&app).await;
 		}
 	});
+}
+
+pub fn replace_on_scale_change<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+	if window.label() == MAIN_WINDOW && matches!(event, WindowEvent::ScaleFactorChanged { .. }) {
+		native::replace_all(window.app_handle());
+	}
 }
 
 fn valid(rectangle: LiveHtmlRectangle) -> Result<(), LiveHtmlError> {
