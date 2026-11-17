@@ -276,35 +276,35 @@ describe("stallOffsetsAfterBoot", () => {
 
 describe("countByWindowAfterBoot", () => {
 	it("counts the UI tests and the stalls of every job per 5 minute window after its boot", () => {
-		const first = jobTimeline(
-			stepsBootingAt("2026-11-17T12:08:37Z"),
-			jobLog(
-				quickTest(
-					"12:15:16.000",
-					"12:15:20.120",
-					"testTheThreadPassesTheAudit",
+		const timelines = [
+			jobTimeline(
+				stepsBootingAt("2026-11-17T12:08:37Z"),
+				jobLog(
+					quickTest(
+						"12:15:16.000",
+						"12:15:20.120",
+						"testTheThreadPassesTheAudit",
+					),
+					TIMED_OUT_TEST,
+					STALLED_TEST,
 				),
-				TIMED_OUT_TEST,
-				STALLED_TEST,
 			),
-		)
-		const second = jobTimeline(
-			stepsBootingAt("2026-11-17T12:13:00Z"),
-			jobLog(
-				quickTest(
-					"12:15:16.000",
-					"12:15:20.120",
-					"testTheThreadPassesTheAudit",
+			jobTimeline(
+				stepsBootingAt("2026-11-17T12:13:00Z"),
+				jobLog(
+					quickTest(
+						"12:15:16.000",
+						"12:15:20.120",
+						"testTheThreadPassesTheAudit",
+					),
+					UNIT_TEST,
+					ASSERTION_FAILURE,
 				),
-				UNIT_TEST,
-				ASSERTION_FAILURE,
 			),
-		)
+		].flatMap((timeline) => timeline ?? [])
 
-		expect(first && second).toBeDefined()
-		expect(
-			countByWindowAfterBoot([first, second].flatMap((job) => job ?? [])),
-		).toEqual([
+		expect(timelines).toHaveLength(2)
+		expect(countByWindowAfterBoot(timelines)).toEqual([
 			{ fromMinute: 0, tests: 1, stalls: 0 },
 			{ fromMinute: 5, tests: 1, stalls: 0 },
 			{ fromMinute: 10, tests: 2, stalls: 1 },
