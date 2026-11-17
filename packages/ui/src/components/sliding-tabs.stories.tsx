@@ -215,6 +215,21 @@ const expectFillOnPill = async (tab: HTMLElement, fill: string) => {
 	)
 }
 
+const radiusOf = (element: HTMLElement) =>
+	Number.parseFloat(getComputedStyle(element).borderTopLeftRadius)
+
+const expectConcentricPill = async (tab: HTMLElement) => {
+	const track = tab.parentElement as HTMLElement
+	const pill = pillBeside(tab)
+	const trackPadding = Number.parseFloat(getComputedStyle(track).paddingTop)
+	await expect(getComputedStyle(track).borderTopLeftRadius).toBe(
+		tokenStyleIn(track, "rounded-lg", "borderTopLeftRadius"),
+	)
+	await expect(radiusOf(pill)).toBeGreaterThan(0)
+	await expect(radiusOf(pill)).toBe(radiusOf(track) - trackPadding)
+	await expect(radiusOf(tab)).toBe(radiusOf(pill))
+}
+
 const expectFocusRing = async (tab: HTMLElement) => {
 	await expect(tab).toHaveFocus()
 	await expect(tab.matches(":focus-visible")).toBe(true)
@@ -260,7 +275,7 @@ export const PaletteTabs = meta.story({
 		docs: {
 			description: {
 				story:
-					"The search palette strip: five search kinds on a bare track, All active. Check that the pill sits under All from the first frame, that pressing Messages glides it there at the snippet's 250ms and easing while the label takes its active colour at once, and that the fill belongs to the pill and not to the tab. The app assembles it through `SearchPalette`.",
+					"The search palette strip: five search kinds on a bare track, All active. Check that the pill sits under All from the first frame, that the track wears the normal radius and the pill and tabs the same, that pressing Messages glides it there at the snippet's 250ms and easing while the label takes its active colour at once, and that the fill belongs to the pill and not to the tab. The app assembles it through `SearchPalette`.",
 			},
 		},
 	},
@@ -275,6 +290,7 @@ export const PaletteTabs = meta.story({
 			messages,
 			isInDarkTheme(messages) ? "bg-input/30" : "bg-background",
 		)
+		await expectConcentricPill(messages)
 	},
 })
 
@@ -296,7 +312,7 @@ export const QuestionSegments = meta.story({
 		docs: {
 			description: {
 				story:
-					"The question card control: three questions on a filled track, the first answered and on screen. Check that the lifted pill keeps the card colour and its shadow, sits inside the track padding, and glides to the segment pressed. The app assembles it through `ToolQuestion` whenever one call asks several questions.",
+					"The question card control: three questions on a filled track, the first answered and on screen. Check that the lifted pill keeps the card colour and its shadow, sits inside the track padding with a radius concentric to the track's normal radius, and glides to the segment pressed. The app assembles it through `ToolQuestion` whenever one call asks several questions.",
 			},
 		},
 	},
@@ -308,6 +324,7 @@ export const QuestionSegments = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith(2)
 		await expect(billing).toHaveAttribute("aria-selected", "true")
 		await expectFillOnPill(billing, "bg-card")
+		await expectConcentricPill(billing)
 		await expect(getComputedStyle(pillBeside(billing)).boxShadow).not.toBe(
 			"none",
 		)
@@ -332,7 +349,7 @@ export const LibraryFilters = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library filter row, which the app sets in the content above the grid: four pressed-or-not segments with their counts, All pressed. Check that the pill wears the Space colour, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
+					"The Library filter row, which the app sets in the content above the grid: four pressed-or-not segments with their counts, All pressed. Check that the track wears the normal radius with the snippet's 3px padding, that the pill and each segment take the track radius minus that padding, that the pill wears the Space colour, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
 			},
 		},
 	},
@@ -344,6 +361,7 @@ export const LibraryFilters = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith("Documents")
 		await expect(documents).toHaveAttribute("aria-pressed", "true")
 		await expectFillOnPill(documents, "bg-primary")
+		await expectConcentricPill(documents)
 		await expect(getComputedStyle(documents).color).toBe(
 			tokenStyleIn(documents, "text-primary-foreground", "color"),
 		)
