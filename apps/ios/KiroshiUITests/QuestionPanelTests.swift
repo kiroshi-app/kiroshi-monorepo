@@ -122,17 +122,6 @@ final class QuestionPanelTests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", element.label)).firstMatch.exists
     }
 
-    func waitUntilStill(_ element: XCUIElement, timeout: TimeInterval = 5) {
-        let deadline = Date.now.addingTimeInterval(timeout)
-        var frame = element.frame
-        while Date.now < deadline {
-            Thread.sleep(forTimeInterval: 0.3)
-            let next = element.frame
-            if next == frame { return }
-            frame = next
-        }
-    }
-
     func panelTop(above firstOption: XCUIElement) -> CGFloat {
         firstOption.frame.minY - Self.headingHeight
     }
@@ -212,7 +201,6 @@ final class QuestionPanelTests: XCTestCase {
         let app = launchInEnglish("questions-4.1")
         let summary = option("Summary", in: app)
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
-        waitUntilStill(summary)
         let send = app.buttons["Send"].frame
 
         assertThePanelSitsOnTheArtboard(app, "4.1")
@@ -226,6 +214,16 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(summary.isSelected)
         assertThePanelSitsOnTheArtboard(app, "4.2")
+    }
+
+    func testThePanelIsInPlaceTheMomentItShows() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        let deadline = Date.now.addingTimeInterval(10)
+        while !summary.exists, Date.now < deadline {}
+        XCTAssertTrue(summary.exists)
+
+        assertThePanelSitsOnTheArtboard(app, "4.1")
     }
 
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
