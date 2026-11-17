@@ -2676,11 +2676,14 @@ overlays-librarylightbox--loading
 overlays-librarylightbox--loading-light
 overlays-librarylightbox--member-more-menu
 overlays-librarylightbox--narrow-long-name
+overlays-librarylightbox--narrow-long-name-with-people-present
 overlays-librarylightbox--only-bar-actions-given
 overlays-librarylightbox--only-delete-shown
 overlays-librarylightbox--opened-with-the-panel
 overlays-librarylightbox--overlay-fitted
 overlays-librarylightbox--overlay-scrollbar-press
+overlays-librarylightbox--overlay-with-nobody-present
+overlays-librarylightbox--overlay-with-people-present
 overlays-librarylightbox--with-comments
 overlays-librarylightbox--without-item-actions
 overlays-librarylightbox--zoomed

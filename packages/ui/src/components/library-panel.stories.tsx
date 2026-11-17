@@ -1810,11 +1810,25 @@ const expectBarAsDrawn = async (
 	await expect(
 		boxOf(search).left - boxOf(filters).right,
 	).toBeGreaterThanOrEqual(12)
-	await expectFill(search, "bg-muted", searchField)
+	await expectFill(search, "bg-foreground/3", searchField)
+	await expect([
+		getComputedStyle(search).borderTopWidth,
+		getComputedStyle(search).borderTopColor,
+		Number.parseFloat(getComputedStyle(search).borderTopLeftRadius) >= 16,
+	]).toEqual([
+		"1px",
+		tokenStyleIn(searchField, "border-foreground/12", "borderTopColor"),
+		true,
+	])
 	await expect([
 		boxOf(searchGlyph).width,
 		boxOf(searchGlyph).left - boxOf(search).left,
-	]).toEqual([14, 8])
+		boxOf(search).left +
+			Number.parseFloat(getComputedStyle(search).borderLeftWidth) +
+			Number.parseFloat(getComputedStyle(search).paddingLeft) -
+			boxOf(searchGlyph).right,
+		getComputedStyle(search).paddingRight,
+	]).toEqual([14, 13, 8, "12px"])
 	await expect(getComputedStyle(searchGlyph).color).toBe(
 		tokenStyleIn(searchField, "text-muted-foreground", "color"),
 	)
@@ -1823,11 +1837,7 @@ const expectBarAsDrawn = async (
 		getComputedStyle(search, "::placeholder").color,
 	]).toEqual([
 		"13px",
-		tokenStyleIn(
-			searchField,
-			isDark ? "text-placeholder-foreground" : "text-muted-foreground",
-			"color",
-		),
+		tokenStyleIn(searchField, "text-muted-foreground", "color"),
 	])
 	for (const control of [all, images, search])
 		await expect(getComputedStyle(control).transitionProperty).toBe("none")
@@ -2305,7 +2315,7 @@ export const SearchFocusTyping = meta.story({
 		docs: {
 			description: {
 				story:
-					"The search keeps its look in the content row, focused with a query typed in. Check that the field drops its muted fill for the surface, that it wears the 1 px ring plus the 4 px ring at 30 percent in the Space colour, that its icon darkens one step, and that the typed text is in full ink.",
+					"The search keeps its look in the content row, focused with a query typed in. Check that the pill drops its 3 percent foreground fill for the surface, that it wears the 1 px ring plus the 4 px ring at 30 percent in the Space colour, that its icon darkens one step, and that the typed text is in full ink.",
 			},
 		},
 	},

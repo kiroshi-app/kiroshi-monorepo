@@ -403,6 +403,7 @@ export {
 	GrowingField,
 	type LibraryDocument,
 	LibraryDocumentBar,
+	type LibraryDocumentBarProps,
 	LibraryDocumentBody,
 	LibraryDocumentColumn,
 	LibraryDocumentView,
