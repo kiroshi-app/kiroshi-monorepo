@@ -526,6 +526,10 @@ struct RepeatedCallTests {
             return Self.list(paths)
         }
 
+        func forget() {
+            ledger = [:]
+        }
+
         static func list(_ paths: [String]) -> String {
             "[\(paths.map { #""\#($0)""# }.joined(separator: ","))]"
         }
@@ -608,6 +612,210 @@ struct RepeatedCallTests {
         #expect(try Self.callKey(of: sent) != key)
         #expect(try sent.args(as: SendArgs.self).message.content.contains(shelf.files[0]))
         #expect(store.sendProblem == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    struct TurnArgs: Decodable {
+        struct Message: Decodable, Equatable {
+            let id: String
+            let turnId: String
+            let content: String
+            let createdAt: Int
+        }
+
+        let message: Message
+    }
+
+    @MainActor
+    final class Transcript {
+        private(set) var stored: [String] = []
+        private(set) var conflicts: [String] = []
+        private var rows: [String: TurnArgs.Message] = [:]
+        private var ledger: [String: Int] = [:]
+
+        func answer(_ call: TestCall) throws -> String {
+            let key = try RepeatedCallTests.callKey(of: call)
+            if let key, let seq = ledger[key] {
+                return TestHost.ok(call, "\(seq)")
+            }
+            let message = try call.args(as: TurnArgs.self).message
+            if let row = rows[message.id], let field = Self.diverging(row, message) {
+                conflicts.append(message.id)
+                return TestHost.refused(
+                    call, status: 500,
+                    #"{"kind":"conflict","id":"\#(message.id)","field":"\#(field)"}"#)
+            }
+            if rows[message.id] == nil {
+                rows[message.id] = message
+                stored.append(message.id)
+            }
+            let seq = (stored.firstIndex(of: message.id) ?? 0) + 1
+            if let key {
+                ledger[key] = seq
+            }
+            return TestHost.ok(call, "\(seq)")
+        }
+
+        func forget() {
+            ledger = [:]
+        }
+
+        private static func diverging(_ row: TurnArgs.Message, _ message: TurnArgs.Message)
+            -> String?
+        {
+            if row.turnId != message.turnId { return "turn_id" }
+            if row.content != message.content { return "content" }
+            if row.createdAt != message.createdAt { return "created_at" }
+            return nil
+        }
+    }
+
+    static func frame(of call: TestCall) throws -> NSDictionary {
+        var frame = try #require(
+            try JSONSerialization.jsonObject(with: Data(call.text.utf8)) as? [String: Any])
+        frame["id"] = nil
+        return NSDictionary(dictionary: frame)
+    }
+
+    func nextTurn(on host: TestHost, storingOn shelf: FileShelf) async throws -> TestCall? {
+        for await call in host.calls {
+            switch call.command {
+            case "chat_store_attachments": host.reply(TestHost.ok(call, try shelf.store(call)))
+            case "conversation_send_turn": return call
+            default: continue
+            }
+        }
+        return nil
+    }
+
+    @Test(arguments: [false, true])
+    func sendAgainAfterTheHostForgotItsKeyIsTheSameCall(withFiles: Bool) async throws {
+        let files = withFiles ? [Self.flow] : []
+        let host = TestHost(
+            messages: ["chat-juniper": []],
+            holding: ["chat_store_attachments", "conversation_send_turn"])
+        var time = Date(timeIntervalSince1970: 1_791_000_000)
+        let store = ThreadStore(
+            subject: .companion(juniper), work: CompanionWork(), now: { time })
+        let connection = makeConnection()
+        let following = Task { await store.follow(connection) }
+        await connect(connection, to: host)
+        await waitUntil { store.phase == .loaded }
+        host.reply(Self.event("test://replay", "1", seq: 1))
+        let transcript = Transcript()
+        let shelf = FileShelf()
+
+        store.draft = "Look at this"
+        store.attachments = files
+        let sending = store.send()
+        let sent = try #require(try await nextTurn(on: host, storingOn: shelf))
+        _ = try transcript.answer(sent)
+        host.reply(Self.resync(sent))
+        await sending?.value
+        #expect(store.problem != nil)
+        transcript.forget()
+        shelf.forget()
+        time += 60
+        let again = store.send()
+        let resent = try #require(try await nextTurn(on: host, storingOn: shelf))
+        host.reply(try transcript.answer(resent))
+        await again?.value
+
+        #expect(try Self.frame(of: resent) == Self.frame(of: sent))
+        #expect(transcript.conflicts.isEmpty)
+        #expect(transcript.stored.count == 1)
+        #expect(shelf.files.count == files.count)
+        #expect(store.entries.map(\.id) == transcript.stored)
+        #expect(store.problem == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test(arguments: [false, true])
+    func aMissionSendAgainAfterTheHostForgotItsKeyIsTheSameCall(withFiles: Bool) async throws {
+        let files = withFiles ? [Self.flow] : []
+        let host = TestHost(
+            messages: ["thread-mission-1": []],
+            holding: ["chat_store_attachments", "conversation_send_turn"])
+        var ids = (1...).lazy.map { "id-\($0)" }.makeIterator()
+        var time = Date(timeIntervalSince1970: 1_791_000_000)
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork(),
+            now: { time }, newId: { ids.next()! })
+        let connection = makeConnection()
+        let following = Task { await store.follow(connection) }
+        await connect(connection, to: host)
+        await waitUntil { store.hasLoaded && store.isOnline }
+        host.reply(Self.event("test://replay", "1", seq: 1))
+        let transcript = Transcript()
+        let shelf = FileShelf()
+
+        store.draft = "Go ahead"
+        store.attachments = files
+        let sending = store.send()
+        let sent = try #require(try await nextTurn(on: host, storingOn: shelf))
+        _ = try transcript.answer(sent)
+        host.reply(Self.resync(sent))
+        await sending?.value
+        #expect(store.sendProblem == .couldNotSend)
+        transcript.forget()
+        shelf.forget()
+        time += 60
+        let again = store.send()
+        let resent = try #require(try await nextTurn(on: host, storingOn: shelf))
+        host.reply(try transcript.answer(resent))
+        await again?.value
+
+        #expect(try Self.frame(of: resent) == Self.frame(of: sent))
+        #expect(transcript.conflicts.isEmpty)
+        #expect(transcript.stored.count == 1)
+        #expect(shelf.files.count == files.count)
+        #expect(store.transcript.entries.map(\.id) == transcript.stored)
+        #expect(store.sendProblem == nil)
+        #expect(store.draft.isEmpty)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aGroupSendAgainAfterTheHostForgotItsKeyKeepsItsMentions() async throws {
+        let crew = FixtureHost.Group(
+            id: "group-crew", title: "Crew", members: [atlas, pico], createdAt: 0)
+        let renamed = FixtureHost.Group(
+            id: crew.id, title: crew.title,
+            members: [Companion(id: atlas.id, name: "Atlas Prime"), pico], createdAt: 0)
+        let host = TestHost(
+            groups: [crew], messages: [crew.id: []], holding: ["conversation_send_turn"])
+        let store = ThreadStore(subject: .group(crew.conversation), work: CompanionWork())
+        let connection = makeConnection()
+        let following = Task { await store.follow(connection) }
+        await connect(connection, to: host)
+        await waitUntil { store.phase == .loaded }
+        host.reply(Self.event("test://replay", "1", seq: 1))
+        let transcript = Transcript()
+
+        store.draft = "@Atlas ship it"
+        let sending = store.send()
+        let sent = try #require(await host.nextCall("conversation_send_turn"))
+        _ = try transcript.answer(sent)
+        host.reply(
+            Self.event(
+                "conversation://updated", #"{"spaceId":"s-1","conversation":\#(renamed.json)}"#,
+                seq: 2))
+        await waitUntil { store.subject.members.first?.name == "Atlas Prime" }
+        host.reply(Self.resync(sent))
+        await sending?.value
+        #expect(store.draft == "@Atlas ship it")
+        transcript.forget()
+        let again = store.send()
+        let resent = try #require(await host.nextCall("conversation_send_turn"))
+        host.reply(try transcript.answer(resent))
+        await again?.value
+
+        #expect(try sent.args(as: TurnArgs.self).message.content == "<@atlas> ship it")
+        #expect(try Self.frame(of: resent) == Self.frame(of: sent))
+        #expect(transcript.conflicts.isEmpty)
+        #expect(store.problem == nil)
         following.cancel()
         await connection.stop()
     }

@@ -39,7 +39,7 @@ final class MissionThreadStore {
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
-    @ObservationIgnored private var refusedSend: RefusedSend?
+    @ObservationIgnored private var refusedSend: Outgoing?
     @ObservationIgnored private var seeding: Task<Void, Never>?
     @ObservationIgnored private var isRelayRereading = false
     @ObservationIgnored private var hasTrailingRelayReread = false
@@ -111,16 +111,14 @@ final class MissionThreadStore {
             return nil
         }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let repeated = refusedSend.flatMap {
-            $0.text == text && $0.picked == attachments ? $0 : nil
-        }
-        let id = repeated?.id ?? newId()
-        let turnId = repeated?.turnId ?? newId()
-        lastSentId = id
+        let outgoing =
+            refusedSend.flatMap { $0.repeats(text, with: attachments) ? $0 : nil }
+            ?? Outgoing(
+                in: mission.threadConversationId, written: text, content: text,
+                picked: attachments, sentAt: now(), makeId: newId)
+        lastSentId = outgoing.id
         isSending = true
-        let task = Task {
-            await deliver(id, turnId: turnId, storeCallKey: repeated?.storeCallKey, through: relay)
-        }
+        let task = Task { await deliver(outgoing, through: relay) }
         sending = task
         return task
     }
@@ -139,28 +137,27 @@ final class MissionThreadStore {
             time: ConversationTime(now: now(), calendar: calendar), authorship: authorship)
     }
 
-    private func deliver(
-        _ id: String, turnId: String, storeCallKey kept: String?, through relay: MissionsRelay
-    ) async {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let picked = attachments
-        let storeCallKey = picked.isEmpty ? nil : kept ?? newId()
+    private func deliver(_ outgoing: Outgoing, through relay: MissionsRelay) async {
+        var outgoing = outgoing
         sendProblem = nil
         refusedSend = nil
         defer { isSending = false }
         do {
-            let sentAt = now()
-            var content = text
-            if let storeCallKey {
+            var content = outgoing.content
+            if let storeCallKey = outgoing.storeCallKey, outgoing.storedPaths == nil {
                 let paths = try await relay.store(
                     await ConversationAttachments.encoding(
-                        picked, in: mission.threadConversationId),
+                        outgoing.picked, in: outgoing.conversationId),
                     callKey: storeCallKey)
-                content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
+                outgoing.storedPaths = paths
+            }
+            if let paths = outgoing.storedPaths {
+                content = AttachmentBlock.prompt(
+                    text: content, paths: paths, sentAt: outgoing.sentAt)
             }
             let message = MissionAnswer.Message(
-                id: id, conversationId: mission.threadConversationId, turnId: turnId,
-                content: content, createdAt: Int(sentAt.timeIntervalSince1970 * 1000))
+                id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
+                content: content, createdAt: Int(outgoing.sentAt.timeIntervalSince1970 * 1000))
             try await relay.answer(MissionAnswer(message: message, summoned: [mission.botId]))
             messages = MissionTranscript.upserting(
                 MissionThreadMessage(
@@ -168,12 +165,12 @@ final class MissionThreadStore {
                     role: .user, content: content, createdAt: message.createdAt, authorBotId: nil,
                     authorAccountId: authorship.accountId),
                 into: messages)
-            clearDraft(sent: text, picked: picked)
+            clearDraft(sent: outgoing.written, picked: outgoing.picked)
         } catch is CancellationError {
             return
         } catch {
-            guard !messages.contains(where: { $0.id == id }) else {
-                clearDraft(sent: text, picked: picked)
+            guard !messages.contains(where: { $0.id == outgoing.id }) else {
+                clearDraft(sent: outgoing.written, picked: outgoing.picked)
                 return
             }
             sendProblem =
@@ -183,8 +180,7 @@ final class MissionThreadStore {
                 case RelayCallError.hostOffline: .offline
                 default: .couldNotSend
                 }
-            refusedSend = RefusedSend(
-                id: id, turnId: turnId, text: text, picked: picked, storeCallKey: storeCallKey)
+            refusedSend = outgoing
         }
     }
 
@@ -203,7 +199,7 @@ final class MissionThreadStore {
         }
         self.refusedSend = nil
         sendProblem = nil
-        clearDraft(sent: refusedSend.text, picked: refusedSend.picked)
+        clearDraft(sent: refusedSend.written, picked: refusedSend.picked)
     }
 
     private func apply(_ update: RelayUpdate) {
@@ -276,14 +272,6 @@ final class MissionThreadStore {
             }
         }
     }
-}
-
-private struct RefusedSend {
-    let id: String
-    let turnId: String
-    let text: String
-    let picked: [PickedAttachment]
-    let storeCallKey: String?
 }
 
 extension MissionThreadStore: ThreadModel {
