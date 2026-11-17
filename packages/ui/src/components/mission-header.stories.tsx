@@ -36,10 +36,7 @@ import {
 } from "@workspace/ui/components/missions.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
-import {
-	Transcript,
-	type TranscriptItem,
-} from "@workspace/ui/components/transcript"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
 import { UserTurn } from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -293,11 +290,13 @@ const COLUMN_WIDTH = 640
 
 const NARROW_FRAME_WIDTH = 480
 
-const NARROW_COLUMN_WIDTH = 448
+const NARROW_COLUMN_WIDTH = 424
 
 const BAR_TO_BLOCK = 24
 
 const BLOCK_TO_FIRST_MESSAGE = 16
+
+const HISTORY_LOADED = { hasNextPage: false, isFetchingNextPage: false }
 
 const turnsOf = (messages: string[]): TranscriptItem[] =>
 	messages.map((message) => ({
@@ -319,20 +318,18 @@ const MissionFrame = ({
 	isNarrow = false,
 }: MissionFrameProps) => (
 	<div
-		className={cn("flex h-svh flex-col bg-card", isNarrow && "w-120")}
+		className={cn("h-svh bg-card", isNarrow && "w-120")}
 		data-content-card=""
 		data-holds="frame"
 	>
-		{header}
-		<Transcript
-			className="flex-1"
-			contentClassName={cn(
-				"mx-auto w-full max-w-172 pb-6",
-				isNarrow ? "px-4" : "px-6",
-			)}
+		<ThreadLayout
+			header={header}
+			older={HISTORY_LOADED}
 			opening={<MissionProperties {...ARTBOARD_PROPERTIES} {...properties} />}
 			rows={turnsOf(messages)}
-		/>
+		>
+			{null}
+		</ThreadLayout>
 	</div>
 )
 
@@ -383,6 +380,7 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 	const messages = slotsIn(content, "message-scroller-item")
 	const firstMessage = boxOf(messages[0])
 
+	await expect(slotsIn(frame, "transcript-start-of-history")).toHaveLength(0)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
 	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
@@ -421,7 +419,7 @@ export const Mission3a = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column, the properties block reading the ticket with its Open the coding session icon button, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
+					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column and with no start of history line above it, the properties block reading the ticket with its Open the coding session icon button, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -554,7 +552,7 @@ export const MissionNarrow3e = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3e, the open mission in a thread 480px wide, with a long path, a long objective and a long ticket title. Check that the path and the objective each truncate on one line while the avatar and the state stay whole, and that the Ticket row wraps its title onto further lines, aligned to the top, with its buttons pinned to the end of the row. " +
+					"Artboard 3e, the open mission in a thread 480px wide, its column 424px between the gutters a solo thread keeps, with a long path, a long objective and a long ticket title. Check that the path and the objective each truncate on one line while the avatar and the state stay whole, and that the Ticket row wraps its title onto further lines, aligned to the top, with its buttons pinned to the end of the row. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
