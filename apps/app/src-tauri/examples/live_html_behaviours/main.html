@@ -56,25 +56,21 @@
 			}
 
 			const MEASURED_EVENT = "live-html://measured"
-			const PAGE = (body) => `<!doctype html><html><body style="margin:0">${body}</body></html>`
+			const PAGE = (body, onload = "") =>
+				`<!doctype html><html><body style="margin:0" onload="${onload}">${body}</body></html>`
+			const GROWS = `<div id="grows" style="height:100px;background:#ff00ff"></div>`
+			const growTo = (height, after) =>
+				`setTimeout(() => { document.getElementById('grows').style.height = '${height}px' }, ${after});`
 			const SHORT_PAGE = PAGE(`<div style="height:120px;background:#ff00ff"></div>`)
 			const LONG_PAGE = PAGE(`<div style="height:3000px;background:#ff00ff"></div>`)
-			const GROWING_PAGE = PAGE(`<div id="grows" style="height:100px;background:#ff00ff"></div>
-				<script>
-					const grows = document.getElementById("grows")
-					addEventListener("load", () => {
-						setTimeout(() => { grows.style.height = "400px" }, 600)
-						setTimeout(() => { grows.style.height = "200px" }, 1200)
-					})
-				<\/script>`)
-			const LATE_PAGE = PAGE(`<div id="grows" style="height:100px;background:#ff00ff"></div>
-				<script>
-					addEventListener("load", () => setTimeout(() => { document.getElementById("grows").style.height = "500px" }, 1500))
-				<\/script>`)
-			const WIDE_PAGE = PAGE(`<div style="display:flex;width:1440px;height:360px">
+			const GROWING_PAGE = PAGE(GROWS, growTo(400, 600) + growTo(200, 1200))
+			const LATE_PAGE = PAGE(GROWS, growTo(500, 1500))
+			const WIDE_PAGE = PAGE(
+				`<div style="display:flex;width:1440px;height:360px">
 					<div style="flex:1;background:#ff00ff"></div><div style="flex:1;background:#00ffff"></div>
-				</div>
-				<script>setInterval(() => scrollTo(9999, 9999), 50)<\/script>`)
+				</div>`,
+				"setInterval(() => scrollTo(9999, 9999), 50)",
+			)
 			const NOWHERE = { x: 0, y: 0, width: 0, height: 0 }
 			const TOLERANCE = 3
 			const measurements = []
