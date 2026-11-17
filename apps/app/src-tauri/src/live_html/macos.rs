@@ -19,14 +19,13 @@ use super::watch::Guard;
 use super::ViewToMount;
 
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
-const SCRIPT_ANSWER_TIMEOUT: Duration = Duration::from_secs(30);
 const NATIVE_STEP: Deadline = Deadline {
 	limit: MAIN_THREAD_TIMEOUT,
 	dropped: "the main thread dropped the native step",
 	missed: "the main thread did not run the native step in time",
 };
 const SCRIPT_ANSWER: Deadline = Deadline {
-	limit: SCRIPT_ANSWER_TIMEOUT,
+	limit: Duration::from_secs(30),
 	dropped: "the view dropped the script before answering it",
 	missed: "the view did not answer the script in time",
 };
