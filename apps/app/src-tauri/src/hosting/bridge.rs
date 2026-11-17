@@ -747,21 +747,19 @@ mod tests {
 
 	const HOST_ONLY_COMMANDS: &str = "host-only-commands.json";
 
+	const REGENERATE: &str = "bun run snapshots";
+
 	#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 	struct HostOnlyCommand {
 		command: String,
 		screen: Option<String>,
 	}
 
-	fn host_only_commands_held() -> BTreeSet<HostOnlyCommand> {
-		let path =
-			Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts").join(HOST_ONLY_COMMANDS);
-		let text = std::fs::read_to_string(&path)
-			.unwrap_or_else(|error| panic!("{} reads: {error}", path.display()));
-		serde_json::from_str(&text).expect("the host-only commands file is a json list")
+	fn host_only_commands_path() -> std::path::PathBuf {
+		Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts").join(HOST_ONLY_COMMANDS)
 	}
 
-	fn host_only_commands_live() -> BTreeSet<HostOnlyCommand> {
+	fn host_only_commands_live() -> Vec<HostOnlyCommand> {
 		reach::REACHES
 			.iter()
 			.filter(|(_, reach)| *reach == Reach::HostOnly)
@@ -775,17 +773,49 @@ mod tests {
 			.collect()
 	}
 
-	#[test]
-	fn the_committed_host_only_commands_are_the_reach_table_ones_with_their_screens() {
-		let held = host_only_commands_held();
-		let live = host_only_commands_live();
+	fn host_only_commands_file(entries: &[HostOnlyCommand]) -> String {
+		let lines: Vec<String> = entries
+			.iter()
+			.map(|HostOnlyCommand { command, screen }| match screen {
+				Some(screen) => format!(
+					"\t{{ \"command\": {}, \"screen\": {} }}",
+					Value::from(command.as_str()),
+					Value::from(screen.as_str())
+				),
+				None => format!("\t{{ \"command\": {} }}", Value::from(command.as_str())),
+			})
+			.collect();
+		format!("[\n{}\n]\n", lines.join(",\n"))
+	}
+
+	fn differing_commands(held: &str, live: Vec<HostOnlyCommand>) -> String {
+		let held: BTreeSet<HostOnlyCommand> =
+			serde_json::from_str(held).expect("the host-only commands file is a json list");
+		let live: BTreeSet<HostOnlyCommand> = live.into_iter().collect();
 		let differing: BTreeSet<&str> =
 			held.symmetric_difference(&live).map(|entry| entry.command.as_str()).collect();
+		match differing.is_empty() {
+			true => "no command, only its order or layout".to_owned(),
+			false => differing.into_iter().collect::<Vec<_>>().join(", "),
+		}
+	}
+
+	#[test]
+	fn the_committed_host_only_commands_are_the_reach_table_ones_with_their_screens() {
+		let live = host_only_commands_live();
+		let written = host_only_commands_file(&live);
+		if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+			std::fs::write(host_only_commands_path(), &written)
+				.expect("the host-only commands file is written");
+			return;
+		}
+		let held = std::fs::read_to_string(host_only_commands_path())
+			.expect("the host-only commands file reads");
 
 		assert!(
-			differing.is_empty(),
-			"apps/app/contracts/{HOST_ONLY_COMMANDS} differs from reach::REACHES and HOST_ONLY_SCREENS on {}",
-			differing.into_iter().collect::<Vec<_>>().join(", ")
+			held == written,
+			"apps/app/contracts/{HOST_ONLY_COMMANDS} differs from reach::REACHES and HOST_ONLY_SCREENS on {}, regenerate it with `{REGENERATE}`",
+			differing_commands(&held, live)
 		);
 	}
 
