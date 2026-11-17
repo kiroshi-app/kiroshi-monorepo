@@ -31,11 +31,16 @@ type LiveHtmlRect = {
 	height: number
 }
 
+type LiveHtmlPlacement = {
+	rect: LiveHtmlRect
+	clip: LiveHtmlRect
+}
+
 type LiveHtmlSlotProps = {
 	status: LiveHtmlStatus
 	html: string
 	height?: number
-	onRectChange: (rect: LiveHtmlRect | null) => void
+	onPlacementChange: (placement: LiveHtmlPlacement | null) => void
 	enlarged?: boolean
 	defaultEnlarged?: boolean
 	onEnlargedChange?: (enlarged: boolean) => void
@@ -104,20 +109,35 @@ const visibleRectOf = (
 		: { x: left, y: top, width: 0, height: 0 }
 }
 
-const isSameRect = (a: LiveHtmlRect | null, b: LiveHtmlRect | null) =>
+const placementOf = (
+	element: Element,
+	clippingAncestors: Element[],
+): LiveHtmlPlacement => {
+	const { x, y, width, height } = element.getBoundingClientRect()
+	return {
+		rect: { x, y, width, height },
+		clip: visibleRectOf(element, clippingAncestors),
+	}
+}
+
+const isSameRect = (a: LiveHtmlRect, b: LiveHtmlRect) =>
+	a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+
+const isSamePlacement = (
+	a: LiveHtmlPlacement | null,
+	b: LiveHtmlPlacement | null,
+) =>
 	a === b ||
 	(a !== null &&
 		b !== null &&
-		a.x === b.x &&
-		a.y === b.y &&
-		a.width === b.width &&
-		a.height === b.height)
+		isSameRect(a.rect, b.rect) &&
+		isSameRect(a.clip, b.clip))
 
 const LiveHtmlSlot = ({
 	status,
 	html,
 	height = DEFAULT_HEIGHT,
-	onRectChange,
+	onPlacementChange,
 	enlarged,
 	defaultEnlarged = false,
 	onEnlargedChange,
@@ -128,15 +148,15 @@ const LiveHtmlSlot = ({
 		useState(defaultEnlarged)
 	const [reserved, setReserved] = useState<HTMLDivElement | null>(null)
 	const [inPlaceBox, setInPlaceBox] = useState<CSSProperties>()
-	const lastReported = useRef<LiveHtmlRect | null>(null)
+	const lastReported = useRef<LiveHtmlPlacement | null>(null)
 	const pendingFocus = useRef<FocusTarget | null>(null)
 	const isUnavailable = status === "unavailable"
 	const isEnlarged = !isUnavailable && (enlarged ?? uncontrolledEnlarged)
 
-	const report = useEffectEvent((rect: LiveHtmlRect | null) => {
-		if (isSameRect(lastReported.current, rect)) return
-		lastReported.current = rect
-		onRectChange(rect)
+	const report = useEffectEvent((placement: LiveHtmlPlacement | null) => {
+		if (isSamePlacement(lastReported.current, placement)) return
+		lastReported.current = placement
+		onPlacementChange(placement)
 	})
 
 	const changeEnlarged = (next: boolean) => {
@@ -156,7 +176,7 @@ const LiveHtmlSlot = ({
 		}
 		const ancestors = ancestorsOf(reserved)
 		const clippingAncestors = ancestors.filter(isClipping)
-		const update = () => report(visibleRectOf(reserved, clippingAncestors))
+		const update = () => report(placementOf(reserved, clippingAncestors))
 		const resizes = new ResizeObserver(update)
 		for (const element of [reserved, ...ancestors]) resizes.observe(element)
 		document.addEventListener("scroll", update, {
@@ -263,5 +283,10 @@ const LiveHtmlSlot = ({
 	)
 }
 
-export type { LiveHtmlRect, LiveHtmlSlotProps, LiveHtmlStatus }
+export type {
+	LiveHtmlPlacement,
+	LiveHtmlRect,
+	LiveHtmlSlotProps,
+	LiveHtmlStatus,
+}
 export { LiveHtmlSlot }
