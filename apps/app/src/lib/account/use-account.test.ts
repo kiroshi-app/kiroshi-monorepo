@@ -543,6 +543,19 @@ describe("useAccount", () => {
 		},
 	)
 
+	it("names the kind of the error a failed account command answers", async () => {
+		vi.mocked(commands.accountSignIn).mockResolvedValue(STORE_ERROR)
+		const { result } = await mountAccount()
+
+		act(() => result.current.panel?.onSignIn())
+		await settling()
+
+		expect(failureNotice.mock.lastCall?.[0].report?.context).toMatchObject({
+			raisedIn: "use-account",
+			errorKind: "store",
+		})
+	})
+
 	it("stops listening to account changes on unmount", async () => {
 		const { unmount } = await mountAccount()
 

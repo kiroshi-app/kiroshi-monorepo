@@ -5,6 +5,7 @@ import {
 	createConversationProvenance,
 	LOCAL_IDS_COMMAND,
 } from "./conversation-provenance"
+import { nameCallOnFailure } from "./failed-call"
 import { HostRefused } from "./host-refused"
 import { type HttpHost, hostOnlyRefusalOf } from "./http"
 import type { JoinedHostsOptions, JoinedHostsState } from "./joined-hosts"
@@ -233,7 +234,7 @@ export const createJoinedHostsInvoke = ({
 		return [...sources].find(isOpenHost) ?? null
 	}
 
-	const sendTo = <T>(
+	const sendThrough = <T>(
 		target: ConversationSource,
 		call: Parameters<Invoke>,
 	): Promise<T> => {
@@ -252,10 +253,20 @@ export const createJoinedHostsInvoke = ({
 		)
 	}
 
+	const sendTo = <T>(
+		target: ConversationSource,
+		call: Parameters<Invoke>,
+	): Promise<T> => nameCallOnFailure(call[0], sendThrough<T>(target, call))
+
 	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
 		const refusal = hostOnlyRefusalOf(command)
 		reportFailure(refusal)
-		return Promise.reject(new HostRefused(refusal.message, refusal, "hostOnly"))
+		return Promise.reject(
+			new HostRefused(refusal.message, refusal, "hostOnly", {
+				command,
+				status: refusal.status,
+			}),
+		)
 	}
 
 	const invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {

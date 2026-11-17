@@ -111,13 +111,13 @@ const firstLiveAmong = async (windowLabels: string[]) => {
 	return windowLabels.find((label) => liveLabels.includes(label)) ?? null
 }
 
-const raiseRevealFailure = () =>
+const raiseRevealFailure = (reason: unknown) =>
 	raiseReportedFailure(
 		{
 			title: i18n.t("common:titleBar.revealTabFailed.title"),
 			description: i18n.t("common:titleBar.revealTabFailed.description"),
 		},
-		{ raisedIn: "conversation-tab-opening" },
+		{ raisedIn: "conversation-tab-opening", reason },
 	)
 
 export const createConversationTabOpening = ({

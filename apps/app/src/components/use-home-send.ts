@@ -53,10 +53,16 @@ const logUnreleased = (reason: unknown) => {
 }
 
 const raiseRefused = (refusal: AttachmentStoreError) => {
-	void reportUnsent({
-		title: i18n.t("chat:screen.attachmentsRefused"),
-		description: describeAttachmentError(i18n.getFixedT(null, "chat"), refusal),
-	})
+	void reportUnsent(
+		{
+			title: i18n.t("chat:screen.attachmentsRefused"),
+			description: describeAttachmentError(
+				i18n.getFixedT(null, "chat"),
+				refusal,
+			),
+		},
+		{ reason: refusal },
+	)
 }
 
 export const useHomeSend = ({
