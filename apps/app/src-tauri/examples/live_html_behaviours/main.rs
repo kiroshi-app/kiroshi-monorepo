@@ -123,8 +123,8 @@ mod macos {
 		let image = image::open(path).map_err(|cause| cause.to_string())?.to_rgba8();
 		let scale = f64::from(image.width()) / window_width;
 		Ok(Painted {
-			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 230 && g < 40 && b > 230),
-			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 40 && g > 230 && b > 230),
+			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230),
+			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 140 && g > 230 && b > 230),
 		})
 	}
 
