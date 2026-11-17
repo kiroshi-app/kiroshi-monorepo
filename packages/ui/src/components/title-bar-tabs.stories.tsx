@@ -662,3 +662,25 @@ export const NamingPendingSwapsToATitle = meta.story({
 			title: NAMED_TITLE,
 		}),
 })
+
+export const NamingPendingLight = meta.story({
+	args: namingTabsOf("pending"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending tab of `NamingPending` in the light theme. Check that the label and the outline message square both sit in the light `--muted-foreground` on the selected tab, with no shimmer. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tab = tabNamed(canvasElement, "New conversation")
+		const muted = tokenStyleIn(tab, "text-muted-foreground", "color")
+
+		await expect(slotsIn(tab, "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(labelIn(tab)).color).toBe(muted)
+		await expect(
+			getComputedStyle(slotIn(tab, "conversation-subject-icon")).color,
+		).toBe(muted)
+	},
+})

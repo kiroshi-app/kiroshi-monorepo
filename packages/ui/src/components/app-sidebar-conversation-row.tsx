@@ -6,6 +6,7 @@ import {
 	type AppSidebarSection,
 	badgeOf,
 	heldBotsOf,
+	isNeedingYou,
 	previewOf,
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
@@ -111,6 +112,10 @@ const ConversationRosterRow = ({
 	const { naming } = conversation
 	const label = conversationLabelOf(tNaming, conversation.name, naming)
 	const isNamed = naming === undefined || naming === "arrived"
+	const isWorkingTitle =
+		isCompact &&
+		Boolean(workingBotOf(conversation)) &&
+		!isNeedingYou(conversation)
 
 	return (
 		<SidebarMenuItem
@@ -158,7 +163,8 @@ const ConversationRosterRow = ({
 							naming ? (
 								<TextSwap
 									className="block truncate"
-									isShimmering={naming === "pending"}
+									isHeldUnderReducedMotion={isWorkingTitle}
+									isShimmering={naming === "pending" || isWorkingTitle}
 									text={label}
 								/>
 							) : undefined

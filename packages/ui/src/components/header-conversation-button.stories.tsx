@@ -309,3 +309,25 @@ export const NamingPendingSwapsToATitle = meta.story({
 			title: "Billing migration",
 		}),
 })
+
+export const NamingPendingLight = meta.story({
+	args: { naming: "pending", color: BLOT_HUES.red, icon: "Rocket" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending header button of `NamingPending` in the light theme. Check that the label and the message square both sit in the light `--muted-foreground`, on the light untinted hexagon. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const button = canvas.getByRole("button", {
+			name: `${PENDING_LABEL} · conversation settings`,
+		})
+		const shimmer = slotIn(labelOf(button), "shimmer-text")
+		const muted = tokenStyleIn(button, "text-muted-foreground", "color")
+
+		await expect(getComputedStyle(iconOf(button)).color).toBe(muted)
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
+	},
+})

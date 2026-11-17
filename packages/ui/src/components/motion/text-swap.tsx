@@ -8,25 +8,37 @@ import { cn } from "@workspace/ui/lib/utils"
 type TextSwapProps = {
 	text: string
 	isShimmering?: boolean
+	isHeldUnderReducedMotion?: boolean
 	className?: string
 }
 
 type ShownText = {
 	text: string
 	isShimmering: boolean
+	isHeldUnderReducedMotion: boolean
 }
 
-const TextSwap = ({ text, isShimmering = false, className }: TextSwapProps) => {
-	const [shown, setShown] = useState<ShownText>({ text, isShimmering })
+const TextSwap = ({
+	text,
+	isShimmering = false,
+	isHeldUnderReducedMotion = false,
+	className,
+}: TextSwapProps) => {
+	const current = { text, isShimmering, isHeldUnderReducedMotion }
+	const [shown, setShown] = useState<ShownText>(current)
 	const [hasSwapped, setHasSwapped] = useState(false)
 	const isLeaving = shown.text !== text
-	if (!isLeaving && shown.isShimmering !== isShimmering)
-		setShown({ text, isShimmering })
-	const drawn = isLeaving ? shown : { text, isShimmering }
+	if (
+		!isLeaving &&
+		(shown.isShimmering !== isShimmering ||
+			shown.isHeldUnderReducedMotion !== isHeldUnderReducedMotion)
+	)
+		setShown(current)
+	const drawn = isLeaving ? shown : current
 
 	const settle = (event: AnimationEvent<HTMLSpanElement>) => {
 		if (event.target !== event.currentTarget || !isLeaving) return
-		setShown({ text, isShimmering })
+		setShown(current)
 		setHasSwapped(true)
 	}
 
@@ -39,7 +51,12 @@ const TextSwap = ({ text, isShimmering = false, className }: TextSwapProps) => {
 			onAnimationEnd={settle}
 		>
 			{drawn.isShimmering ? (
-				<ShimmerText className="inline">{drawn.text}</ShimmerText>
+				<ShimmerText
+					className="inline"
+					isHeldUnderReducedMotion={drawn.isHeldUnderReducedMotion}
+				>
+					{drawn.text}
+				</ShimmerText>
 			) : (
 				drawn.text
 			)}

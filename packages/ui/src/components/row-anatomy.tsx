@@ -175,9 +175,11 @@ const CompactRowTitle = ({
 		>
 			{isShimmering ? (
 				<>
-					<ShimmerText className="inline" isHeldUnderReducedMotion>
-						{name}
-					</ShimmerText>{" "}
+					{content ?? (
+						<ShimmerText className="inline" isHeldUnderReducedMotion>
+							{name}
+						</ShimmerText>
+					)}{" "}
 					<span className="sr-only">{t("roster.pose.working")}</span>
 				</>
 			) : (

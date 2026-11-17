@@ -1870,3 +1870,73 @@ export const NamingPendingSwapsToATitle = meta.story({
 			title: DESK_ROOM.name,
 		}),
 })
+
+export const NamingPendingLight = meta.story({
+	args: { conversation: namingRoomOf("pending") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending row of `NamingPending` in the light theme. Check that the name and the message square both sit in the light `--muted-foreground`, on the light untinted hexagon. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+		const shimmer = slotIn(namedLabelIn(row), "shimmer-text")
+		const muted = tokenStyleIn(row, "text-muted-foreground", "color")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(getComputedStyle(icon).color).toBe(muted)
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
+	},
+})
+
+export const CompactWorkingRowNamingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the usual new conversation in the compact sidebar: an agent is already working while the title is generated. Press Title arrives. Check that the row reads New conversation in a shimmer, that the title then swaps in through the same exit up and entrance from below, still shimmering while the agent works, and that assistive tech still hears working. Pick `NamingPendingSwapsToATitle` for the default density.",
+			},
+		},
+	},
+	render: (args) => (
+		<CompactRowsContext.Provider value>
+			<TitleArrival>
+				{(naming, arrive) => (
+					<>
+						<ConversationRosterRow
+							{...args}
+							conversation={namingRoomOf(naming)}
+						/>
+						<li className="p-2">
+							<Button onClick={arrive} variant="outline">
+								Title arrives
+							</Button>
+						</li>
+					</>
+				)}
+			</TitleArrival>
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const title = slotIn(row, "roster-row-name")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
+
+		await expectTitleSwappedIn({
+			host: row,
+			arrive: within(canvasElement).getByRole("button", {
+				name: "Title arrives",
+			}),
+			title: DESK_ROOM.name,
+		})
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
+	},
+})

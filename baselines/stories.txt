@@ -1556,6 +1556,7 @@ navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active
 navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active-dark
+navigation-appsidebarconversationrow--compact-working-row-naming-swaps-to-a-title
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
@@ -1593,6 +1594,7 @@ navigation-appsidebarconversationrow--muted-tint-row-free-hue-dark
 navigation-appsidebarconversationrow--naming-arrived
 navigation-appsidebarconversationrow--naming-failed
 navigation-appsidebarconversationrow--naming-pending
+navigation-appsidebarconversationrow--naming-pending-light
 navigation-appsidebarconversationrow--naming-pending-swaps-to-a-title
 navigation-appsidebarconversationrow--no-tooltip-while-the-row-is-lifted
 navigation-appsidebarconversationrow--not-sent-selected
@@ -1974,6 +1976,7 @@ navigation-headerconversationbutton--long-content
 navigation-headerconversationbutton--naming-arrived
 navigation-headerconversationbutton--naming-failed
 navigation-headerconversationbutton--naming-pending
+navigation-headerconversationbutton--naming-pending-light
 navigation-headerconversationbutton--naming-pending-swaps-to-a-title
 navigation-headerconversationbutton--single-bot
 navigation-headerconversationbutton--themes-group
@@ -2539,6 +2542,7 @@ navigation-titlebartabs--long-name-truncated
 navigation-titlebartabs--naming-arrived
 navigation-titlebartabs--naming-failed
 navigation-titlebartabs--naming-pending
+navigation-titlebartabs--naming-pending-light
 navigation-titlebartabs--naming-pending-swaps-to-a-title
 navigation-titlebartabs--no-search-without-handler
 navigation-titlebartabs--search-after-forward
