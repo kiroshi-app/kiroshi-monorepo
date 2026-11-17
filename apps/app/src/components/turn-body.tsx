@@ -1,16 +1,20 @@
-import { useContext } from "react"
+import { useContext, useState } from "react"
 
 import {
 	type ImageMenuActions,
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
-import type { MarkdownAttachments } from "@workspace/ui/components/markdown/attachments"
+import type {
+	MarkdownAttachments,
+	RenderAttachment,
+} from "@workspace/ui/components/markdown/attachments"
 import {
 	type MessageAttachment,
 	MessageAttachments,
 } from "@workspace/ui/components/message-attachments"
 
+import { LiveHtmlAttachment } from "@/components/live-html-attachment"
 import { LiveHtmlBlock } from "@/components/live-html-block"
 import {
 	type AnswerActions,
@@ -35,7 +39,8 @@ type LibraryReferences = Pick<
 
 type TurnBodyProps = MessageContent &
 	LibraryReferences &
-	Pick<MarkdownProps, "answerActions" | "isWriting">
+	Pick<MarkdownProps, "answerActions" | "isWriting"> &
+	Pick<MarkdownAttachments, "renderAttachment">
 
 const viewerImagesOf = (attachments: MessageAttachment[]): ThreadImage[] =>
 	attachments.flatMap(({ id, name, previewUrl }) =>
@@ -89,11 +94,13 @@ const citedAttachmentOpener =
 const citedAttachmentsOf = (
 	text: string,
 	actions: AnswerActions | null,
+	renderAttachment: RenderAttachment | undefined,
 ): MarkdownAttachments =>
 	citesStoredAttachment(text)
 		? {
 				onOpenAttachment: citedAttachmentOpener(actions),
 				resolveAttachment: resolveCitedImage,
+				renderAttachment,
 			}
 		: {}
 
@@ -105,6 +112,7 @@ export const TurnBody = ({
 	runs,
 	renderRun,
 	renderBoardLink,
+	renderAttachment,
 }: TurnBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
 
@@ -116,6 +124,9 @@ export const TurnBody = ({
 				}
 				items={attachments}
 				onOpen={openerOf(attachments, actions)}
+				renderAttachment={
+					renderAttachment && (({ id }) => renderAttachment(id))
+				}
 			/>
 			{text ? (
 				<Markdown
@@ -124,7 +135,7 @@ export const TurnBody = ({
 					renderBoardLink={renderBoardLink}
 					renderRun={renderRun}
 					runs={runs}
-					{...citedAttachmentsOf(text, actions)}
+					{...citedAttachmentsOf(text, actions, renderAttachment)}
 				>
 					{text}
 				</Markdown>
@@ -137,6 +148,29 @@ const renderLiveHtmlBlock = (source: string) => <LiveHtmlBlock html={source} />
 
 const liveHtmlRendererWhen = (isWriting: boolean) =>
 	isWriting || !showsLiveHtml() ? undefined : renderLiveHtmlBlock
+
+const HTML_FILE = /\.html$/i
+
+const useLiveHtmlAttachments = (
+	isWriting: boolean,
+): RenderAttachment | undefined => {
+	const [failedPaths, setFailedPaths] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	)
+	if (isWriting || !showsLiveHtml()) return undefined
+
+	const markFailed = (path: string) =>
+		setFailedPaths((paths) => new Set(paths).add(path))
+
+	return (path) =>
+		HTML_FILE.test(path) && !failedPaths.has(path) ? (
+			<LiveHtmlAttachment
+				key={path}
+				onUnavailable={() => markFailed(path)}
+				path={path}
+			/>
+		) : null
+}
 
 type AnswerBodyProps = MessageContent &
 	LibraryReferences & {
@@ -154,12 +188,14 @@ export const AnswerBody = ({
 	renderBoardLink,
 }: AnswerBodyProps) => {
 	const actions = useContext(AnswerActionsContext)
+	const renderAttachment = useLiveHtmlAttachments(isWriting)
 
 	if (!actions) {
 		return (
 			<TurnBody
 				attachments={attachments}
 				isWriting={isWriting}
+				renderAttachment={renderAttachment}
 				renderBoardLink={renderBoardLink}
 				renderRun={renderRun}
 				runs={runs}
@@ -182,6 +218,7 @@ export const AnswerBody = ({
 			}}
 			attachments={attachments}
 			isWriting={isWriting}
+			renderAttachment={renderAttachment}
 			renderBoardLink={renderBoardLink}
 			renderRun={renderRun}
 			runs={runs}

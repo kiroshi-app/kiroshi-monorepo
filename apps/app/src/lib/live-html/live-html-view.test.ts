@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { createLiveHtmlView } from "@/lib/live-html/live-html-view"
+import {
+	createLiveHtmlView,
+	mountingHtml,
+} from "@/lib/live-html/live-html-view"
 
 const host = vi.hoisted(() => ({ answer: vi.fn() }))
 
@@ -28,7 +31,7 @@ const viewOf = (
 ) =>
 	createLiveHtmlView({
 		id: "view-1",
-		html: "<p>Hi</p>",
+		mountAt: mountingHtml("<p>Hi</p>"),
 		onLive: vi.fn(),
 		onFailure: vi.fn(),
 		...overrides,
