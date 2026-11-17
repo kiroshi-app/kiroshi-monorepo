@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -63,32 +63,52 @@ impl Refusal for StandingError {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Opening(u64);
+
+#[derive(Default)]
+struct Recorded {
+	standings: HashMap<(String, String), Standing>,
+	connects: u64,
+	last_connect: HashMap<String, u64>,
+}
+
 #[derive(Default)]
 pub struct ApplicationReports {
-	held: Mutex<HashMap<(String, String), Standing>>,
+	held: Mutex<Recorded>,
 }
 
 impl ApplicationReports {
-	pub fn record(&self, bot_id: &str, name: &str, standing: Standing) {
-		self.held
-			.lock()
-			.unwrap_or_else(PoisonError::into_inner)
-			.insert((bot_id.to_owned(), name.to_owned()), standing);
+	pub fn opening(&self) -> Opening {
+		Opening(self.held().connects)
+	}
+
+	pub fn record(&self, opened: Opening, bot_id: &str, name: &str, standing: Standing) {
+		let mut held = self.held();
+		if held.last_connect.get(name).is_some_and(|connect| Opening(*connect) > opened) {
+			return;
+		}
+		held.standings.insert((bot_id.to_owned(), name.to_owned()), standing);
+	}
+
+	pub fn connected(&self, name: &str) {
+		let mut held = self.held();
+		held.connects += 1;
+		let connect = held.connects;
+		held.last_connect.insert(name.to_owned(), connect);
+		held.standings.retain(|(_, held), _| held != name);
 	}
 
 	pub fn forget(&self, name: &str) {
-		self.held
-			.lock()
-			.unwrap_or_else(PoisonError::into_inner)
-			.retain(|(_, held), _| held != name);
+		self.held().standings.retain(|(_, held), _| held != name);
 	}
 
 	pub fn last(&self, bot_id: &str, name: &str) -> Option<Standing> {
-		self.held
-			.lock()
-			.unwrap_or_else(PoisonError::into_inner)
-			.get(&(bot_id.to_owned(), name.to_owned()))
-			.cloned()
+		self.held().standings.get(&(bot_id.to_owned(), name.to_owned())).cloned()
+	}
+
+	fn held(&self) -> MutexGuard<'_, Recorded> {
+		self.held.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
 
@@ -97,11 +117,17 @@ pub struct StandingHost<R: Runtime> {
 	app: AppHandle<R>,
 	bot_id: String,
 	space_id: Option<String>,
+	opened: Option<Opening>,
 }
 
 impl<R: Runtime> StandingHost<R> {
-	pub fn new(app: AppHandle<R>, bot_id: String, space_id: Option<String>) -> Self {
-		Self { app, bot_id, space_id }
+	pub fn new(
+		app: AppHandle<R>,
+		bot_id: String,
+		space_id: Option<String>,
+		opened: Option<Opening>,
+	) -> Self {
+		Self { app, bot_id, space_id, opened }
 	}
 
 	fn owner(&self) -> Option<EnvOwner> {
@@ -125,11 +151,12 @@ impl<R: Runtime> StandingHost<R> {
 	}
 
 	fn recorded(&self, report: Report) -> Result<Value, StandingError> {
-		let reports = self
-			.app
-			.try_state::<ApplicationReports>()
-			.ok_or_else(|| StandingError::unexpected(NO_RECORDS.to_owned()))?;
-		reports.record(&self.bot_id, &report.name, report.standing);
+		let (Some(reports), Some(opened)) =
+			(self.app.try_state::<ApplicationReports>(), self.opened)
+		else {
+			return Err(StandingError::unexpected(NO_RECORDS.to_owned()));
+		};
+		reports.record(opened, &self.bot_id, &report.name, report.standing);
 		Ok(Value::Null)
 	}
 }
@@ -230,10 +257,10 @@ mod tests {
 	#[test]
 	fn a_report_replaces_the_one_last_recorded_for_that_bot_and_server() {
 		let reports = ApplicationReports::default();
-		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
-		reports.record("b2", "granola", Standing::Holding);
+		reports.record(reports.opening(), "b1", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b2", "granola", Standing::Holding);
 
-		reports.record("b1", "granola", Standing::Holding);
+		reports.record(reports.opening(), "b1", "granola", Standing::Holding);
 
 		assert_eq!(reports.last("b1", "granola"), Some(Standing::Holding));
 		assert_eq!(reports.last("b2", "granola"), Some(Standing::Holding));
@@ -243,14 +270,30 @@ mod tests {
 	#[test]
 	fn forgetting_a_server_drops_its_standing_for_every_bot_and_keeps_the_rest() {
 		let reports = ApplicationReports::default();
-		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
-		reports.record("b2", "granola", Standing::Holding);
-		reports.record("b1", "clock", Standing::Holding);
+		reports.record(reports.opening(), "b1", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b2", "granola", Standing::Holding);
+		reports.record(reports.opening(), "b1", "clock", Standing::Holding);
 
 		reports.forget("granola");
 
 		assert_eq!(reports.last("b1", "granola"), None);
 		assert_eq!(reports.last("b2", "granola"), None);
 		assert_eq!(reports.last("b1", "clock"), Some(Standing::Holding));
+	}
+
+	#[test]
+	fn a_report_from_a_session_opened_before_a_connect_of_that_server_is_dropped() {
+		let reports = ApplicationReports::default();
+		let before = reports.opening();
+
+		reports.connected("granola");
+		let after = reports.opening();
+		reports.record(before, "b1", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(before, "b1", "clock", Standing::NeedsAuth { reason: None });
+		reports.record(after, "b2", "granola", Standing::Holding);
+
+		assert_eq!(reports.last("b1", "granola"), None);
+		assert_eq!(reports.last("b1", "clock"), Some(Standing::NeedsAuth { reason: None }));
+		assert_eq!(reports.last("b2", "granola"), Some(Standing::Holding));
 	}
 }

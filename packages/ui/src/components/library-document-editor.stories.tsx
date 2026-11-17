@@ -4851,14 +4851,14 @@ export const CodeThreadCardHidesWithPin = meta.story({
 
 const WIDE_TABLE_BLOCK = "wide01"
 
-const WIDE_TABLE_PASSAGE = "review session 1"
+const WIDE_TABLE_PASSAGE = "review_session_1"
 
 const WIDE_TABLE_COLUMNS = Array.from({ length: 8 }, (_, index) => index)
 
 const WIDE_TABLE = [
 	WIDE_TABLE_COLUMNS.map((index) => `Column number ${index} heading`),
 	WIDE_TABLE_COLUMNS.map(() => "---"),
-	WIDE_TABLE_COLUMNS.map((index) => `Roadmap review session ${index}`),
+	WIDE_TABLE_COLUMNS.map((index) => `roadmap_review_session_${index}`),
 ]
 	.map((cells) => `| ${cells.join(" | ")} |`)
 	.join("\n")

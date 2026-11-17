@@ -65,6 +65,9 @@ const clipboard = {
 const raisedTitles = () =>
 	failureNotice.mock.calls.map(([notice]) => notice.title)
 
+const raisedContexts = () =>
+	failureNotice.mock.calls.map(([notice]) => notice.report?.context)
+
 beforeEach(() => {
 	copiedTexts.length = 0
 	clipboard.write.mockClear()
@@ -143,6 +146,9 @@ it("names the reveal that failed when the log cannot be revealed", async () => {
 			i18n.t("settings:diagnostics.revealFailed"),
 		]),
 	)
+	expect(raisedContexts()).toEqual([
+		expect.objectContaining({ command: "log_reveal", errorKind: "unrevealed" }),
+	])
 })
 
 it("clears the log file once confirmed", async () => {
@@ -158,11 +164,16 @@ it("names the clear that failed and keeps the confirmation failing", async () =>
 		error: { kind: "unwritable", detail: "read-only volume" },
 	})
 
-	await expect(diagnosticsActions.onLogClear()).rejects.toThrow("unwritable")
+	await expect(diagnosticsActions.onLogClear()).rejects.toMatchObject({
+		kind: "unwritable",
+	})
 
 	await vi.waitFor(() =>
 		expect(raisedTitles()).toEqual([
 			i18n.t("settings:diagnostics.clear.failed"),
 		]),
 	)
+	expect(raisedContexts()).toEqual([
+		expect.objectContaining({ command: "log_clear", errorKind: "unwritable" }),
+	])
 })

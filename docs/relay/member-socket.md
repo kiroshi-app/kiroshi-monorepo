@@ -86,7 +86,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 ### The call frame
 
 ```json
-{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] }, "computer": "Studio" }
+{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] }, "computer": "Studio", "callKey": "5d0c…" }
 ```
 
 - `id`: a string or a number, unique among the client's calls still awaiting an
@@ -99,6 +99,54 @@ with `id` and `status` is an answer frame. Anything else is ignored.
   records it on every message that call writes and names it to the agent. Absent,
   the agent reads that the message came from another computer. The desktop client
   sends its computer name on every call.
+- `callKey`: optional, a string of 1 to 128 characters the device chooses for one
+  call and sends unchanged on every repeat of it, a UUID for instance. Any other
+  value refuses the frame with 400. See [A repeated call](#a-repeated-call).
+
+### A repeated call
+
+The host runs a call that carries a `callKey` once per device and key, the device
+being the relay device id that sent the call:
+
+- A repeat that arrives after the first run answered gets that answer: the same
+  `status` and `body`, under the repeat's own `id`. The host does not run the
+  command again.
+- A repeat that arrives while the first run is still in flight waits for it, then
+  gets the same answer.
+- What a call left behind decides whether its answer is kept. A call that failed
+  before it could store anything leaves no answer behind, and its repeat runs
+  again: a call refused before the host ran it (400, 401, 403, 404, 413), and a
+  502 where the host could not connect to its local api. Every other answer is
+  kept, success or failure, since the command may have stored something before it
+  failed: a 500, and a 502 where the call timed out or its answer was cut. Its
+  repeat gets that answer and the command never runs twice.
+- A repeat whose key holds an answer gets that answer whatever its `args`: the
+  host does not compare payloads under a key. A call with a different payload
+  that reaches the command under a new key, and names an id the host already
+  stored with other values, is refused as a conflict: status 500, body
+  `{ "kind": "conflict", "id": "<id>", "field": "<field>" }`, `field` naming the
+  first value that differs, `content` for a message. That answer is kept under
+  its key like any 500: its repeat gets the same status and body without running
+  the command.
+- The host keeps its record of a call on disk: a repeat that arrives after the
+  host restarted gets the first run's answer too.
+- The host keeps the answers of the last 1024 calls of each device in each shared
+  space. A repeat of an older key does not run: it answers `410` with
+  `"this call already ran and the host keeps no answer for it"`. The events
+  that first run published carried its `callKey`; read the state again to learn
+  what it did.
+- A call the host was still running when it stopped never answered, and the host
+  can't tell how far it got: its repeat does not run either, it answers the same
+  `410`.
+- A call the host could not record before running it does not run: it answers
+  `500` with `"the host could not use its record of this call"`, and its repeat
+  is checked again.
+- Removing a device from the shared space, or removing the shared space, forgets
+  every call of that device, or of that space.
+- The same `callKey` from another device, or in another shared space, is another
+  call.
+
+A call without `callKey` runs each time it arrives, as before.
 
 ### The answer frame
 
@@ -113,7 +161,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | Status | `body` |
 |---|---|
 | 200 | `commands.<command>.ok` |
-| 500 | `commands.<command>.error`, or a string when the host could not read the args |
+| 500 | `commands.<command>.error`, or a string when the host could not read the args, or its record of a keyed call |
 | 400 | a string: the frame is not `{id, command, args}` with `args` an object |
 | 400 | `commands.chat_store_attachments.error` with `kind` `unreadable`: an attachment of [Attachments](#attachments) carries no content the host can read |
 | 403 | `"this command belongs to the host"`: the command is not open to members |
@@ -123,6 +171,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 413 | a string: the call is larger than the host accepts |
 | 413 | `commands.chat_store_attachments.error` with `kind` `tooLarge`, `tooLargeTogether` or `tooMany`: the attachments exceed a limit of [Attachments](#attachments) |
 | 502 | a string: the host could not run the call on its side |
+| 410 | `"this call already ran and the host keeps no answer for it"`: a repeat of a `callKey` older than the last 1024 calls of the device, or of a call the host was running when it stopped, see [A repeated call](#a-repeated-call) |
 
 The host bounds each call at 300 seconds. A client that hears no answer by then
 fails the call.
@@ -146,6 +195,24 @@ body. `chat_store_attachments` is the only command that answers a typed body on
 - `token`: present only on a frame replayed for a `relay_resume` call, and equal
   to the token of that call. A client that ignores replay drops every frame that
   carries it.
+- `event.callKey` and `event.deviceId`: the call's `callKey` and the relay device
+  id that sent it, on every event the host publishes while it runs a call that
+  carried a `callKey`, before it answers. A device recognises its own call by the
+  pair, live and in a replay. Only the commands that write as their caller carry
+  them: `conversation_create`, `conversation_send_turn`,
+  `conversation_send_user_message`, `conversation_append_user_message`,
+  `conversation_main_chat`, `conversation_renew_main_chat`, `agent_submit_prompt`,
+  `agent_answer_question`, `library_comment_create`, `library_comment_reply`,
+  `library_comment_resolve`, `library_share_presence`, `library_import_url` and
+  `mcp_oauth_disconnect`. An event the host publishes later, such as the stream
+  of an agent turn, carries neither.
+- `event.deviceId` alone: on the `agent://event` frame whose `event.type` is
+  `permissionResolved` and that resolves a question a member answered through
+  `agent_answer_question`, the relay device id that answered.
+
+```json
+{ "event": { "event": "conversation://created", "payload": { "spaceId": "s-1", "conversation": {} }, "deviceId": "0b6e…", "callKey": "5d0c…" }, "epoch": "6f1c…", "seq": 43 }
+```
 
 The host forwards an event only when it concerns the shared space: an event about
 another space, or a host-wide `agent://event` (its `scope` is `null`), never
@@ -367,7 +434,7 @@ the space, at most 4 MiB of them, and drops the oldest first.
 A client keeps the `epoch` and the `seq` of the last event frame it applied:
 
 - A frame carrying a `token` that is not the one of its own pending resume was
-  replayed for another member: drop it, and change nothing.
+  replayed for a resume it no longer awaits: drop it, and change nothing.
 - A frame of the same epoch whose `seq` is at most the last applied is a
   duplicate: drop it.
 - A frame whose `seq` is the last applied plus one: apply it.
@@ -395,12 +462,23 @@ stayed open only sees the `seq` continue. When the
 epoch is no longer the host's, or `since` is older than what the host kept, the
 host replays nothing and answers `{ "token": "a-random-token", "tooOld": true }`.
 
-The relay hands every answer to every member, so a client takes a resume answer
-only when its `token` is the one it sent. On `tooOld`, or when no answer comes
-within 300 seconds, the client adopts the `epoch` and `seq` of the next frame and
+The host addresses the answer to a `relay_resume`, like every answer and like
+the frames it replays, to the one device that sent the call, and the relay hands
+it to that device alone. A client takes a resume answer only when its `token` is
+the one of its pending resume: any other answers a resume it no longer awaits.
+
+The host expects a member to re-read for three reasons:
+
+- An answer whose `body` carries `tooOld`.
+- An answer to the `id` of its resume call whose `status` is not 200. That answer
+  carries no `token`, so the client matches it by that `id`.
+- No answer within 300 seconds.
+
+For all three, the client adopts the `epoch` and `seq` of the next frame and
 re-reads with calls the state it shows (for example `conversation_list`,
-`conversation_message_page`, `mission_list`). A client with no epoch yet re-reads
-on each socket open. Neither the epoch nor the seq survives an app restart.
+`conversation_message_page`, `mission_list`).
+A client with no epoch yet re-reads on each socket open. Neither the epoch nor
+the seq survives an app restart.
 
 ## Resync after a refused frame
 

@@ -156,12 +156,29 @@ declared! {
 	TAB_DRAG: window_controls::tab_drag::TabDrag = window_controls::tab_drag::TAB_DRAG_EVENT,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallOrigin {
+	pub device_id: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub call_key: Option<String>,
+}
+
 pub fn emit<R: Runtime, P: Serialize + Clone>(
 	app: &AppHandle<R>,
 	event: Event<P>,
 	payload: P,
 ) -> tauri::Result<()> {
-	publish(&relay(app), event.name(), &payload);
+	emit_from(app, event, payload, hosting::authorship::keyed_call_of_this_task(app).as_ref())
+}
+
+pub fn emit_from<R: Runtime, P: Serialize + Clone>(
+	app: &AppHandle<R>,
+	event: Event<P>,
+	payload: P,
+	origin: Option<&CallOrigin>,
+) -> tauri::Result<()> {
+	publish(&relay(app), event.name(), &payload, origin);
 	app.emit(event.name(), payload)
 }
 
@@ -171,7 +188,8 @@ pub fn emit_to<R: Runtime, P: Serialize + Clone>(
 	event: Event<P>,
 	payload: P,
 ) -> tauri::Result<()> {
-	publish(&relay(app), event.name(), &payload);
+	let origin = hosting::authorship::keyed_call_of_this_task(app);
+	publish(&relay(app), event.name(), &payload, origin.as_ref());
 	app.emit_to(label, event.name(), payload)
 }
 
@@ -184,7 +202,7 @@ pub fn emit_to_windows<R: Runtime, P: Serialize + Clone>(
 }
 
 pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
-	framed(event.name(), payload)
+	framed(event.name(), payload, None)
 }
 
 pub fn subscribed<R: Runtime>(app: &AppHandle<R>) -> broadcast::Receiver<Frame> {
@@ -198,11 +216,11 @@ fn relay<R: Runtime>(app: &AppHandle<R>) -> State<'_, Relay> {
 	app.state::<Relay>()
 }
 
-fn publish<S: Serialize>(relay: &Relay, event: &str, payload: &S) {
+fn publish<S: Serialize>(relay: &Relay, event: &str, payload: &S, origin: Option<&CallOrigin>) {
 	if relay.0.receiver_count() == 0 {
 		return;
 	}
-	match framed(event, payload) {
+	match framed(event, payload, origin) {
 		Ok(frame) => {
 			if relay.0.send(frame).is_err() {
 				eprintln!("the event {event} found no host api client left to reach");
@@ -214,10 +232,20 @@ fn publish<S: Serialize>(relay: &Relay, event: &str, payload: &S) {
 	}
 }
 
-fn framed<S: Serialize>(event: &str, payload: &S) -> serde_json::Result<Frame> {
-	let event = serde_json::to_string(event)?;
-	let payload = serde_json::to_string(payload)?;
-	Ok(format!(r#"{{"event":{event},"payload":{payload}}}"#).into())
+#[derive(Serialize)]
+struct Framed<'a, S> {
+	event: &'a str,
+	payload: &'a S,
+	#[serde(flatten)]
+	origin: Option<&'a CallOrigin>,
+}
+
+fn framed<S: Serialize>(
+	event: &str,
+	payload: &S,
+	origin: Option<&CallOrigin>,
+) -> serde_json::Result<Frame> {
+	Ok(serde_json::to_string(&Framed { event, payload, origin })?.into())
 }
 
 #[cfg(test)]
@@ -301,9 +329,24 @@ pub(crate) mod tests {
 	#[test]
 	fn a_frame_carries_the_name_and_the_payload() {
 		let frame =
-			framed(crate::missions::commands::CHANGED_EVENT, &serde_json::json!({ "a": 1 }))
+			framed(crate::missions::commands::CHANGED_EVENT, &serde_json::json!({ "a": 1 }), None)
 				.expect("a frame");
 		assert_eq!(&*frame, r#"{"event":"mission://changed","payload":{"a":1}}"#);
+	}
+
+	#[test]
+	fn a_frame_caused_by_a_keyed_call_names_its_device_and_its_key_beside_the_payload() {
+		let origin = CallOrigin { device_id: "d1".to_owned(), call_key: Some("k1".to_owned()) };
+		let frame = framed(
+			crate::missions::commands::CHANGED_EVENT,
+			&serde_json::json!({ "a": 1 }),
+			Some(&origin),
+		)
+		.expect("a frame");
+		assert_eq!(
+			&*frame,
+			r#"{"event":"mission://changed","payload":{"a":1},"deviceId":"d1","callKey":"k1"}"#
+		);
 	}
 
 	#[test]

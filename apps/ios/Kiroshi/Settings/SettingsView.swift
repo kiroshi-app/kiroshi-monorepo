@@ -66,6 +66,7 @@ struct SettingsView: View {
         .fullScreenCover(item: $shownPage) { page in
             SafariView(url: page.url)
                 .ignoresSafeArea()
+                .accessibilityIdentifier(page.url.absoluteString)
         }
         .alert("Sign out of Kiroshi?", isPresented: $model.isConfirmingSignOut) {
             Button("Cancel", role: .cancel) {}

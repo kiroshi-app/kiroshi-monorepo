@@ -44,7 +44,7 @@ export type CompanionMenuSource = {
 	openSpaceId: string | null
 }
 
-const spaceIdsOfBot = (rosters: CompanionRosters, botId: string) =>
+export const spaceIdsOfBot = (rosters: CompanionRosters, botId: string) =>
 	Object.entries(rosters)
 		.filter(([, held]) => held.some((bot) => bot.id === botId))
 		.map(([spaceId]) => spaceId)

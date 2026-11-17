@@ -14,8 +14,9 @@ final class CitedFiles {
     private(set) var failedImages: Set<String> = []
 
     @ObservationIgnored private let connection: RelayConnection
-    @ObservationIgnored private var loading: Set<String> = []
     @ObservationIgnored private var copies: [String: URL] = [:]
+    @ObservationIgnored private let imageRequests = InFlightRequests<String, Void>()
+    @ObservationIgnored private let copyRequests = InFlightRequests<String, URL>()
 
     init(connection: RelayConnection) {
         self.connection = connection
@@ -23,19 +24,9 @@ final class CitedFiles {
 
     func loadImage(_ attachment: CitedAttachment) async {
         let path = attachment.path
-        guard images[path] == nil, !failedImages.contains(path), !loading.contains(path) else {
-            return
-        }
-        loading.insert(path)
-        defer { loading.remove(path) }
-        do {
-            let answer = try await read(attachment)
-            images[path] = try await Self.image(of: answer)
-        } catch is CancellationError {
-        } catch {
-            failedImages.insert(path)
-            Self.log.info(
-                "The cited image \(attachment.file) wasn't shown: \(String(describing: error))")
+        guard images[path] == nil, !failedImages.contains(path) else { return }
+        try? await imageRequests.value(for: path) { [weak self] in
+            await self?.fetchImage(attachment)
         }
     }
 
@@ -45,6 +36,24 @@ final class CitedFiles {
 
     func copy(of attachment: CitedAttachment) async throws -> URL {
         if let copy = copies[attachment.path] { return copy }
+        return try await copyRequests.value(for: attachment.path) { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await fetchCopy(attachment)
+        }
+    }
+
+    private func fetchImage(_ attachment: CitedAttachment) async {
+        do {
+            let answer = try await read(attachment)
+            images[attachment.path] = try await Self.image(of: answer)
+        } catch {
+            failedImages.insert(attachment.path)
+            Self.log.info(
+                "The cited image \(attachment.file) wasn't shown: \(String(describing: error))")
+        }
+    }
+
+    private func fetchCopy(_ attachment: CitedAttachment) async throws -> URL {
         let answer = try await read(attachment)
         let copy = try await Self.save(answer, as: attachment)
         copies[attachment.path] = copy

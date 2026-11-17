@@ -12,6 +12,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
+	isAgentsPage,
 	isHomePage,
 	isLibraryPage,
 	isListPage,
@@ -29,13 +30,16 @@ import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
 
 const BOT_AVATAR_SIDE = 16
 
-export type TabFace = Pick<TitleBarTab, "title" | "icon" | "descriptor">
+export type TabFace = Pick<
+	TitleBarTab,
+	"title" | "icon" | "descriptor" | "naming"
+>
 
 export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon" | "color"
+	"id" | "name" | "icon" | "color" | "naming"
 >
 
 export type TabFaceSources = {
@@ -62,6 +66,11 @@ const SETTINGS_SUBTITLE_KEY = {
 const homeFace = (): TabFace => ({
 	title: i18n.t("bots:rail.newConversation"),
 	icon: <Icons.Add />,
+})
+
+const agentsFace = (): TabFace => ({
+	title: i18n.t("bots:rail.agents"),
+	icon: <Icons.Companions />,
 })
 
 const missionsFace = (): TabFace => ({
@@ -123,9 +132,11 @@ const conversationFaceOf = ({
 	name,
 	icon,
 	color,
+	naming,
 }: TabConversation): TabFace => ({
 	title: name,
 	icon: <ConversationTabIcon hue={color} icon={icon} />,
+	naming,
 })
 
 const unknownRowFace = (): TabFace => ({
@@ -149,6 +160,9 @@ export const tabFaceOf = (href: string, sources: TabFaceSources): TabFace => {
 	}
 	if (isHomePage(page)) {
 		return homeFace()
+	}
+	if (isAgentsPage(page)) {
+		return agentsFace()
 	}
 	if (isMissionsPage(page)) {
 		return missionsFace()

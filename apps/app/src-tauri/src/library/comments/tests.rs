@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use serde_json::{json, Value};
 use tauri::{Listener, Manager, WebviewWindowBuilder};
 
@@ -18,7 +19,8 @@ use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalSt
 use crate::library::commands::{
 	library_comment_agent_turns, library_comment_counts, library_comment_create,
 	library_comment_reopen, library_comment_reply, library_comment_resolve,
-	library_comment_threads, library_delete, library_rename_board, library_rename_document,
+	library_comment_threads, library_delete, library_open_document, library_rename_board,
+	library_rename_document,
 };
 use crate::library::contract::{
 	LibraryCommentAgentTurn, LibraryCommentAgentTurnState, LibraryCommentAgentTurnsChanged,
@@ -26,16 +28,18 @@ use crate::library::contract::{
 	LibraryCommentTurnFailure, COMMENT_AGENT_TURNS_CHANGED_EVENT, COMMENT_MENTIONED_EVENT,
 	COMMENT_MENTION_OPENED_EVENT, COMMENT_THREAD_CHANGED_EVENT,
 };
-use crate::library::documents::BoardTarget;
+use crate::library::documents::{text_of_state, BoardTarget};
 use crate::library::host::{LibraryHost, Operation};
-use crate::library::root;
 use crate::library::tests::{a_host, a_space, put, A_BOARD};
+use crate::library::{root, space_dir};
 use crate::notifications::{self, Notice, SystemNotifications};
 use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::test_app::AppOfItsOwn;
 use crate::test_log::{capturing, warnings_naming};
 
 const A_DOCUMENT: &str = "# Launch ^head01\n\nShip the beta on Friday. ^para01\n";
+
+const AN_UNMARKED_DOCUMENT: &str = "# Launch\n\nShip the beta on Friday.\n";
 
 const A_DOCUMENT_REWRITTEN: &str = "Ship the final build on Monday. ^para01\n";
 
@@ -649,6 +653,52 @@ async fn an_anchor_of_another_kind_or_out_of_the_image_and_a_blank_comment_store
 		Err(LibraryError::BlankComment)
 	);
 	assert_eq!(shelf.stored_rows("library_comment_threads").await, 0);
+}
+
+#[tokio::test]
+async fn a_line_of_a_document_nobody_marked_is_commented_on_the_id_its_open_served() {
+	let shelf = Shelf::of("unmarked").await;
+	put(&shelf.root, &shelf.space_id, NOTES, AN_UNMARKED_DOCUMENT.as_bytes());
+	let (app, space_id) = (shelf.app.handle(), shelf.space_id.clone());
+
+	let served = library_open_document(app.clone(), shelf.app.state(), space_id, NOTES.to_owned())
+		.await
+		.expect("the document opens");
+	let state = BASE64_STANDARD.decode(served.update).expect("base64");
+	let served_text = text_of_state(&state, NOTES).expect("the served state reads");
+	let ids: Vec<String> =
+		blocks_of(&served_text).into_iter().filter_map(|block| block.id).collect();
+	let [heading, paragraph] =
+		<[String; 2]>::try_from(ids).expect("the open served a marker on each block");
+	let create = |anchor: Anchor| {
+		library_comment_create(
+			app.clone(),
+			Caller::Host,
+			shelf.app.state(),
+			shelf.space_id.clone(),
+			NOTES.to_owned(),
+			anchor,
+			"Tighten this".to_owned(),
+			Vec::new(),
+		)
+	};
+	let on_the_block = create(block(&heading)).await.expect("the block is commented");
+	let on_the_passage =
+		create(passage(&paragraph, "the beta")).await.expect("the passage is commented");
+	let on_no_block = create(block("absent")).await;
+
+	assert_eq!(
+		std::fs::read_to_string(space_dir(&shelf.root, &shelf.space_id).join(NOTES))
+			.expect("reads"),
+		served_text
+	);
+	assert!(!on_the_block.target_missing);
+	assert!(!on_the_passage.target_missing);
+	assert_eq!(
+		on_no_block,
+		Err(LibraryError::MissingTarget { name: NOTES.to_owned(), target: "absent".to_owned() })
+	);
+	assert_eq!(shelf.threads(NOTES).await, Ok(vec![on_the_block, on_the_passage]));
 }
 
 async fn refused_for_its_missing_target(name: &str, anchor: Anchor, target: &str) {

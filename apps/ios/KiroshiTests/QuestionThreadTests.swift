@@ -45,7 +45,7 @@ struct QuestionThreadTests {
         }
     }
 
-    func follow(_ host: TestHost, _ store: ThreadStore) async -> (
+    func follow(_ host: TestHost, _ store: ThreadStore, isWorkHearing: Bool = true) async -> (
         RelayConnection, Task<Void, Never>
     ) {
         let connection = RelayConnection(
@@ -55,7 +55,7 @@ struct QuestionThreadTests {
         let updates = await connection.updates()
         let work = work
         Task {
-            for await update in updates {
+            for await update in updates where isWorkHearing {
                 work.apply(update)
             }
         }
@@ -165,6 +165,38 @@ struct QuestionThreadTests {
         #expect(work.question(in: "chat-juniper") == nil)
         #expect(store.working != nil)
         following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anAnswerWhoseThreadClosesBeforeTheHostTakesItIsStillRecorded() async throws {
+        let recording: TestHost.Answer = { call in
+            switch call.command {
+            case "agent_pending_questions": TestHost.ok(call, Self.pending)
+            case "conversation_append_user_message": TestHost.ok(call, "4")
+            default: nil
+            }
+        }
+        let host = TestHost(
+            messages: ["chat-juniper": thread], holding: ["agent_answer_question"],
+            answer: recording)
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        await waitUntil { isAsking(store) }
+        var draft = QuestionDraft(request: try #require(store.asking).question.request)
+        draft.pick(draft.asked.options[0])
+        _ = draft.goOn()
+        draft.pick(draft.asked.options[1])
+        let answering = store.answer(draft)
+        let call = try #require(await host.nextCall("agent_answer_question"))
+
+        following.cancel()
+        await following.value
+        host.reply(TestHost.ok(call, "null"))
+        await answering?.value
+
+        #expect(store.answeredQuestion("q1")?.by == .you)
+        let recorded = try #require(await host.nextCall("conversation_append_user_message"))
+        #expect(try recorded.args(as: RecordArgs.self).message.repliedToMessageId == "question-q1")
         await connection.stop()
     }
 
@@ -323,6 +355,21 @@ struct QuestionThreadTests {
         }
         #expect(store.entries.map(\.id) == ["m1", "m2", "question-q1", "answer-1"])
         #expect(store.entries.last?.bubbles.isEmpty == true)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aQuestionAnsweredOnAnotherDeviceLeavesThePanelInTheStepThatSaysSo() async {
+        let host = waitingHost()
+        let store = makeStore()
+        let (connection, following) = await follow(host, store, isWorkHearing: false)
+        await waitUntil { isAsking(store) }
+
+        host.pushAgent(
+            "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
+        await waitUntil { store.answeredQuestion("q1") != nil }
+
+        #expect(store.asking == nil)
         following.cancel()
         await connection.stop()
     }

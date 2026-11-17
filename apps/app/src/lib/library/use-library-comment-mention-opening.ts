@@ -73,8 +73,8 @@ export const useLibraryCommentMentionOpening = (
 			},
 			askForThread: askForMentionedThread,
 			raiseWindow: () => revealWindow({ withFocus: true }),
-			raiseFailure: (notice) =>
-				void raiseReportedFailure(notice, { raisedIn: RAISED_IN }),
+			raiseFailure: (notice, reason) =>
+				void raiseReportedFailure(notice, { raisedIn: RAISED_IN, reason }),
 		})
 		const subscription = listenOnThisWindow<LibraryCommentMentionOpened>(
 			LIBRARY_COMMENT_MENTION_OPENED_EVENT,

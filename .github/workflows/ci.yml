@@ -13,15 +13,17 @@ permissions:
 env:
   CARGO_BUILD_JOBS: default
 
+# A push to main cancels the run of an earlier push to main still in progress, the next run diffing against the last green head.
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request into main or a feature/** branch: changes, lint, vitest on the test files the diff changed against that base, rust on its library tests, verify.
 # pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
-# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios split over three jobs, verify.
+# pull_request labelled ci:ios: ios-build and ios too.
+# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over five jobs, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
@@ -196,7 +198,7 @@ jobs:
       vitest: ${{ steps.filter.outputs.vitest }}
       website: ${{ steps.filter.outputs.website }}
       storybook: ${{ steps.filter.outputs.storybook == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
-      ios: ${{ steps.filter.outputs.ios }}
+      ios: ${{ steps.filter.outputs.ios == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:ios') }}
       rust-image: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -234,17 +236,11 @@ jobs:
         id: image
         run: echo "tag=$(sha256sum .github/ci-rust/Dockerfile | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
-  ios:
+  ios-build:
     needs: changes
     if: needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    env:
-      IOS_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -258,18 +254,106 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Boot the simulator while the app builds
+      - name: Gate
+        id: gate
+        run: bun scripts/ci.ts ios-build
+
+      - name: Runner failure
+        if: failure() && steps.gate.conclusion == 'skipped'
+        run: |
+          echo "::error title=Runner failure::This job failed in its setup, before its build started: no build and no test failed."
+          exit 1
+
+      - name: Pack the build products
+        run: tar -czf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build Build/Products
+
+      - name: Upload the build products
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-build-products
+          path: ${{ runner.temp }}/ios-build-products.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+          overwrite: true
+
+  ios:
+    needs: [changes, ios-build]
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    env:
+      IOS_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select the Xcode pinned in .xcode-version
+        run: sudo xcode-select --switch "/Applications/Xcode_$(cat .xcode-version).app"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Boot the simulator while the build products download
         run: |
           simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
           echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
+          echo "SIMULATOR_BOOTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          nohup scripts/ios-sampler.sh "$simulator" >> "$RUNNER_TEMP/ios-sampler.txt" 2>&1 &
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
 
+      - name: Download the build products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ios-build-products
+          path: ${{ runner.temp }}
+
+      - name: Unpack the build products
+        run: mkdir -p apps/ios/build && tar -xzf "$RUNNER_TEMP/ios-build-products.tar.gz" -C apps/ios/build
+
       - name: Gate
+        id: gate
         timeout-minutes: 45
         run: bun scripts/ci.ts ios
 
+      - name: Runner failure
+        if: failure() && (steps.gate.conclusion == 'skipped' || steps.gate.outputs.runner-failure == 'true')
+        run: |
+          echo "::error title=Runner failure::This job ended before its first test started: no test failed."
+          exit 1
+
+      - name: Upload the runner and simulator samples
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-sampler-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ios-sampler.txt
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
+
+      - name: Collect the simulator log
+        if: failure() && steps.gate.conclusion == 'failure'
+        timeout-minutes: 5
+        continue-on-error: true
+        run: xcrun simctl spawn "$SIMULATOR" log collect --start "@$SIMULATOR_BOOTED_AT" --output "$RUNNER_TEMP/ios-simulator.logarchive"
+
+      - name: Upload the simulator log
+        if: failure() && steps.gate.conclusion == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-simulator-log-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ios-simulator.logarchive
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
+
   verify:
-    needs: [changes, lint, vitest, website, rust, storybook, ios]
+    needs: [changes, lint, vitest, website, rust, storybook, ios-build, ios]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -296,6 +380,10 @@ jobs:
 
       - name: Require storybook to succeed when changes selected it, and to be skipped otherwise
         if: needs.storybook.result != (needs.changes.outputs.storybook == 'true' && 'success' || 'skipped')
+        run: exit 1
+
+      - name: Require ios-build to succeed when changes selected ios, and to be skipped otherwise
+        if: needs.ios-build.result != (needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
         run: exit 1
 
       - name: Require ios to succeed when changes selected it, and to be skipped otherwise

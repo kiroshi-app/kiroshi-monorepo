@@ -55,9 +55,10 @@ const JOIN_COMMAND = "joined_space_connect"
 
 type RefusedJoin = Extract<JoinedHostState, { status: "refused" }>
 
-const refusalFactsOf = (id: string): ReporterFacts => ({
+const refusalFactsOf = (id: string, reason: unknown): ReporterFacts => ({
 	command: JOIN_COMMAND,
 	space: id,
+	reason,
 })
 
 const logJoinFailure = (id: string, reason: unknown) => {
@@ -148,7 +149,7 @@ export const createJoinedHostsJoin = ({
 		const notice = joinRefusalNoticeOf(error, namingOf(id))
 		logJoinFailure(id, error)
 		if (isReportedJoinError(error)) {
-			reportRefusalOnce(id, notice, refusalFactsOf(id))
+			reportRefusalOnce(id, notice, refusalFactsOf(id, error))
 		}
 		return refuse(id, { failure: notice.title, ...waitReasonOf(error) })
 	}
@@ -161,7 +162,7 @@ export const createJoinedHostsJoin = ({
 		reportRefusalOnce(
 			id,
 			unexpectedJoinNotice(namingOf(id)),
-			refusalFactsOf(id),
+			refusalFactsOf(id, reason),
 		)
 		return refuse(id, { failure: describeFailure(reason) })
 	}

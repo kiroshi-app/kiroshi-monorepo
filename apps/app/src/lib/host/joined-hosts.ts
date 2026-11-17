@@ -77,7 +77,7 @@ export const createJoinedHosts = ({
 	}
 
 	const reportHostFailure = (reason: unknown) => {
-		reportFailure({ message: describeFailure(reason) })
+		reportFailure({ message: describeFailure(reason), reason })
 	}
 
 	const reportListenFailure = (reason: unknown): UnlistenFn => {

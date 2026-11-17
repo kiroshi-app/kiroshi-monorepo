@@ -23,7 +23,7 @@ const RESOLVED_SUFFIXES = [
 
 export const SCANNED_MODULE = /\.(ts|tsx|js)$/
 
-const TEST_FILE = /\.test\.tsx?$/
+export const TEST_FILE = /\.test\.tsx?$/
 
 const JAVASCRIPT = new Bun.Transpiler({ loader: "js" })
 
@@ -81,18 +81,139 @@ const reachableModules = (graph: ImportGraph, testFile: string) => {
 	return reached
 }
 
-export const testImportersByModule = (repo: string) => {
+export type TestImports = {
+	testFiles: Set<string>
+	importers: Map<string, number>
+	directTestImporters: Map<string, string[]>
+	moduleImporters: Map<string, string[]>
+}
+
+const appended = (map: Map<string, string[]>, key: string, value: string) => {
+	map.set(key, [...(map.get(key) ?? []), value])
+}
+
+const moduleImportersOf = (graph: ImportGraph) => {
+	const moduleImporters = new Map<string, string[]>()
+	for (const [file, imported] of graph.importsOf) {
+		if (TEST_FILE.test(file)) continue
+		for (const module of imported) {
+			appended(
+				moduleImporters,
+				relative(graph.repo, module),
+				relative(graph.repo, file),
+			)
+		}
+	}
+	return moduleImporters
+}
+
+export const testImports = (repo: string): TestImports => {
 	const graph: ImportGraph = { repo, importsOf: new Map() }
 	const importers = new Map<string, number>()
+	const directTestImporters = new Map<string, string[]>()
 	const testFiles = TEST_SOURCE_ROOTS.flatMap((root) => [
 		...new Bun.Glob(`${root}**/*.test.{ts,tsx}`).scanSync(repo),
 	])
 	for (const testFile of testFiles) {
-		for (const module of reachableModules(graph, join(repo, testFile))) {
+		const absoluteTestFile = join(repo, testFile)
+		for (const module of reachableModules(graph, absoluteTestFile)) {
 			if (TEST_FILE.test(module)) continue
 			const path = relative(repo, module)
 			importers.set(path, (importers.get(path) ?? 0) + 1)
 		}
+		for (const module of directImports(graph, absoluteTestFile)) {
+			appended(directTestImporters, relative(repo, module), testFile)
+		}
 	}
-	return importers
+	return {
+		testFiles: new Set(testFiles),
+		importers,
+		directTestImporters,
+		moduleImporters: moduleImportersOf(graph),
+	}
+}
+
+const isGatheredObject = (expression: ts.Expression): boolean => {
+	if (
+		ts.isAsExpression(expression) ||
+		ts.isSatisfiesExpression(expression) ||
+		ts.isParenthesizedExpression(expression)
+	)
+		return isGatheredObject(expression.expression)
+	return (
+		ts.isObjectLiteralExpression(expression) &&
+		expression.properties.every(ts.isShorthandPropertyAssignment)
+	)
+}
+
+const isReexportStatement = (statement: ts.Statement) =>
+	ts.isImportDeclaration(statement) ||
+	ts.isExportDeclaration(statement) ||
+	(ts.isVariableStatement(statement) &&
+		statement.declarationList.declarations.every(
+			({ initializer }) =>
+				initializer !== undefined && isGatheredObject(initializer),
+		))
+
+const isReexportModule = (file: string) =>
+	ts
+		.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.ESNext)
+		.statements.every(isReexportStatement)
+
+const ownTestFiles = (testFiles: Set<string>, module: string) => {
+	const stem = module.replace(/\.tsx?$/, "")
+	return [`${stem}.test.ts`, `${stem}.test.tsx`].filter((file) =>
+		testFiles.has(file),
+	)
+}
+
+type ReexportCheck = (module: string) => boolean
+
+const memoised = (check: ReexportCheck): ReexportCheck => {
+	const known = new Map<string, boolean>()
+	return (module) => {
+		const checked = known.get(module) ?? check(module)
+		known.set(module, checked)
+		return checked
+	}
+}
+
+type Walk = { imports: TestImports; reexporting: ReexportCheck }
+
+const reexportsAbove = ({ imports, reexporting }: Walk, path: string) => {
+	const walked = new Set([path])
+	const pending = [path]
+	for (
+		let module = pending.pop();
+		module !== undefined;
+		module = pending.pop()
+	) {
+		for (const importer of imports.moduleImporters.get(module) ?? []) {
+			if (walked.has(importer) || !reexporting(importer)) continue
+			walked.add(importer)
+			pending.push(importer)
+		}
+	}
+	return walked
+}
+
+const consumerTestFiles = ({ imports, reexporting }: Walk, module: string) =>
+	reexporting(module)
+		? (imports.moduleImporters.get(module) ?? [])
+				.filter((importer) => !reexporting(importer))
+				.flatMap((importer) => ownTestFiles(imports.testFiles, importer))
+		: []
+
+type GuardedModule = { repo: string; imports: TestImports; path: string }
+
+export const testFilesGuarding = ({ repo, imports, path }: GuardedModule) => {
+	const walk: Walk = {
+		imports,
+		reexporting: memoised((module) => isReexportModule(join(repo, module))),
+	}
+	const found = [...reexportsAbove(walk, path)].flatMap((module) => [
+		...(imports.directTestImporters.get(module) ?? []),
+		...consumerTestFiles(walk, module),
+	])
+	return [...new Set(found)].sort()
 }

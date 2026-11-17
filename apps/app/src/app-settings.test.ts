@@ -197,6 +197,9 @@ const currentHomeEntryOf = () =>
 const libraryEntryOf = () =>
 	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.library") })
 
+const agentsEntryOf = () =>
+	within(railOf()).getByRole("button", { name: i18n.t("bots:rail.agents") })
+
 const currentEntriesOf = () =>
 	within(railOf())
 		.getAllByRole("button")
@@ -343,6 +346,7 @@ it("asks before a sidebar press leaves an unsaved application, and leaves once o
 
 it.each([
 	["a row press", () => press(rosterRowOf(CONVERSATION_TITLE))],
+	["the Agents row of the sidebar", () => press(agentsEntryOf())],
 	[
 		"the Settings of a row menu",
 		async () => {
@@ -553,8 +557,7 @@ const switchSpaceTo = async (name: string) => {
 }
 
 const openFirstCompanionOfSpace = async () => {
-	await openSpaceSettingsByRail()
-	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.agents")}`)))
+	await press(agentsEntryOf())
 	await press(
 		document
 			.querySelector('[data-slot="companion-card-name"]')

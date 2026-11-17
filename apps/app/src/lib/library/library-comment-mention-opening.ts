@@ -30,7 +30,7 @@ type MentionOpeningOptions = {
 	showItem: (rowId: string, opening: LibraryOpening) => void
 	askForThread: (asked: MentionedCommentThread) => void
 	raiseWindow: () => Promise<void>
-	raiseFailure: (notice: UnreportedFailureNotice) => void
+	raiseFailure: (notice: UnreportedFailureNotice, reason?: unknown) => void
 }
 
 const isMissingItem = (cause: unknown) => {
@@ -75,7 +75,7 @@ export const createLibraryCommentMentionOpening =
 		const space = spaceOf(spaceId)
 		const windowRaised = async () => raiseWindow()
 		const raised = windowRaised().catch((reason: unknown) =>
-			raiseFailure(unraisedNoticeOf(reason)),
+			raiseFailure(unraisedNoticeOf(reason), reason),
 		)
 
 		const showOnThread = async () => {
@@ -90,7 +90,7 @@ export const createLibraryCommentMentionOpening =
 				: raiseFailure(threadGoneNoticeOf(opened))
 
 		await readThreads(space, itemName).then(openAmong, (cause: unknown) =>
-			raiseFailure(unreadNoticeOf(cause)),
+			raiseFailure(unreadNoticeOf(cause), cause),
 		)
 		await raised
 	}

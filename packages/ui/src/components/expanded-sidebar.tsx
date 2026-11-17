@@ -86,16 +86,27 @@ const FOOTER_NAME =
 
 const SWITCHER_ROW = "flex shrink-0 items-center gap-1"
 
-type ExpandedSidebarDestination = "newConversation" | "missions" | "library"
+type ExpandedSidebarDestination =
+	| "newConversation"
+	| "agents"
+	| "missions"
+	| "library"
 
 type DestinationHandlers = Pick<
 	ExpandedSidebarProps,
-	"onNewConversation" | "onSelectMissions" | "onSelectLibrary"
+	| "onNewConversation"
+	| "onSelectAgents"
+	| "onSelectMissions"
+	| "onSelectLibrary"
 >
 
 type NavigationDestination = {
 	id: ExpandedSidebarDestination
-	label: "rail.newConversation" | "rail.missions" | "rail.library"
+	label:
+		| "rail.newConversation"
+		| "rail.agents"
+		| "rail.missions"
+		| "rail.library"
 	Icon: Icon
 	FilledIcon: Icon
 	onSelect?: () => void
@@ -103,6 +114,7 @@ type NavigationDestination = {
 
 const navigationDestinationsOf = ({
 	onNewConversation,
+	onSelectAgents,
 	onSelectMissions,
 	onSelectLibrary,
 }: DestinationHandlers): NavigationDestination[] => [
@@ -113,6 +125,17 @@ const navigationDestinationsOf = ({
 		FilledIcon: FillIcons.Add,
 		onSelect: onNewConversation,
 	},
+	...(onSelectAgents
+		? [
+				{
+					id: "agents",
+					label: "rail.agents",
+					Icon: Icons.Companions,
+					FilledIcon: FillIcons.Companions,
+					onSelect: onSelectAgents,
+				} satisfies NavigationDestination,
+			]
+		: []),
 	{
 		id: "missions",
 		label: "rail.missions",
@@ -154,6 +177,7 @@ type ExpandedSidebarProps = SpaceSwitcherProps & {
 	renderSpaceList?: (space: Space) => ReactNode
 	onReorderSpaces?: (ids: string[]) => void
 	onNewConversation?: () => void
+	onSelectAgents?: () => void
 	onSelectMissions?: () => void
 	onSelectLibrary?: () => void
 	onOpenSettings?: () => void
@@ -348,6 +372,7 @@ const ExpandedSidebar = ({
 	renderSpaceList,
 	onReorderSpaces,
 	onNewConversation,
+	onSelectAgents,
 	onSelectMissions,
 	onSelectLibrary,
 	onOpenSettings,
@@ -359,6 +384,7 @@ const ExpandedSidebar = ({
 		<SidebarMenu className={COMPACT_ROW_GAP}>
 			{navigationDestinationsOf({
 				onNewConversation,
+				onSelectAgents,
 				onSelectMissions,
 				onSelectLibrary,
 			}).map(({ id, label, Icon, FilledIcon, onSelect }) => (

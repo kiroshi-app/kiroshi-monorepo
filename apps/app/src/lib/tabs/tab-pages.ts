@@ -27,6 +27,8 @@ const LIBRARY_PATH = "/library"
 
 const HOME_PATH = "/home"
 
+const AGENTS_PATH = "/agents"
+
 const MISSIONS_PATH = "/missions"
 
 const USER_SETTINGS_PATH = "/settings/user"
@@ -80,6 +82,9 @@ export const isLibraryPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 
 export const isHomePage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === HOME_PATH
+
+export const isAgentsPage = ({ pathname }: Pick<TabPage, "pathname">) =>
+	pathname === AGENTS_PATH
 
 export const isMissionsPage = ({ pathname }: Pick<TabPage, "pathname">) =>
 	pathname === MISSIONS_PATH
@@ -139,6 +144,7 @@ export const isTabHref = (href: string) => {
 		pathname === LIST_PATH ||
 		pathname === LIBRARY_PATH ||
 		pathname === HOME_PATH ||
+		pathname === AGENTS_PATH ||
 		pathname === MISSIONS_PATH ||
 		pathname === USER_SETTINGS_PATH ||
 		SPACE_SETTINGS_PATH.test(pathname) ||

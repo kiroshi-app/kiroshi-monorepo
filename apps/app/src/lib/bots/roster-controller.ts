@@ -48,12 +48,10 @@ import type { ConversationNaming } from "../agent/contract"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import {
 	isNameless,
-	presentParticipants,
 	toConversationSettingsValue,
 } from "../conversations/roster-conversations"
 import type {
 	Bot,
-	BotDraft,
 	Chat,
 	Conversation,
 	ConversationInPage,
@@ -61,7 +59,6 @@ import type {
 	Participant,
 	RosterPin,
 	SoloState,
-	SpaceError,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type {
@@ -214,19 +211,16 @@ export type RosterController = {
 	selectConversation: (id: string) => void
 	showList: () => void
 	create: () => Promise<void>
-	createFromDraft: (draft: BotDraft) => Promise<Bot>
-	createConversation: (botIds?: string[]) => Promise<Conversation | null>
 	createUnselectedConversation: (
 		botIds: string[],
 	) => Promise<Conversation | null>
-	duplicate: (id: string, spaceRowId?: string) => Promise<Bot | null>
+	duplicate: (id: string, spaceRowId?: string) => Promise<Bot>
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
 	remember: (id: string, memory: string) => Promise<void>
 	moveToSection: (botId: string, sectionId: string | null) => void
 	pin: (pins: RosterPin[]) => void
-	moveToSpace: (botId: string, spaceRowId: string) => Promise<Bot | null>
 	addToSpace: (botId: string, spaceRowId: string) => Promise<void>
 	removeFromSpace: (botId: string, spaceRowId: string) => Promise<void>
 	clearSection: (sectionId: string) => void
@@ -329,11 +323,6 @@ const faceOf = (bot: Bot): Partial<Participant> => ({
 	avatarImagePath: bot.avatarImagePath,
 })
 
-const seats = (conversation: Conversation, botId: string) =>
-	presentParticipants(conversation).some(
-		(participant) => participant.botId === botId,
-	)
-
 const firstRowId = (bots: Bot[], conversations: Conversation[]) =>
 	bots[0]?.id ?? conversations[0]?.id ?? null
 
@@ -342,11 +331,7 @@ const NOTHING_SELECTED: Landing = {
 	selectedConversationId: null,
 }
 
-const NO_SPACE = { kind: "unknownSpace", id: "" } satisfies SpaceError
-
 const NO_TITLE = ""
-
-const NOBODY_SEATED: string[] = []
 
 const NO_BOTS: Bot[] = []
 
@@ -758,23 +743,11 @@ export const createRosterController = (
 		})
 	}
 
-	const enrol = (written: Bot, spaceRowId: string) =>
-		holdBots(spaceRowId, [...rosterIn(current().rosters, spaceRowId), written])
-
 	const enrolConversation = (written: Conversation, spaceRowId: string) =>
 		holdConversations(spaceRowId, [
 			...rosterIn(current().conversationRosters, spaceRowId),
 			written,
 		])
-
-	const admitConversation = (written: Conversation, spaceRowId: string) => {
-		enrolConversation(written, spaceRowId)
-		choose({
-			spaceRowId,
-			chosenBotId: null,
-			chosenConversationId: written.id,
-		})
-	}
 
 	const applyConversation = (written: Conversation) => {
 		const { spaceRowId, conversations } = current()
@@ -991,6 +964,11 @@ export const createRosterController = (
 		return null
 	}
 
+	const reloadAndReject = async (reason: unknown): Promise<never> => {
+		await reload()
+		throw reason
+	}
+
 	const writeConversation = (
 		botIds: string[],
 		hold: (written: Conversation, spaceRowId: string) => void,
@@ -1008,19 +986,7 @@ export const createRosterController = (
 			})
 			hold(created, spaceRowId)
 			return created
-		}).catch(reloadAndYield)
-
-	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
-		const seated = rosterIn(current().conversationRosters, spaceRowId)
-		const emptied = await Promise.all(
-			seated.map((conversation) =>
-				seats(conversation, botId)
-					? store.removeConversationParticipant(conversation.id, botId)
-					: Promise.resolve(conversation),
-			),
-		)
-		holdConversations(spaceRowId, emptied)
-	}
+		})
 
 	const catchUpOnLeftConversation = () => {
 		const { spaceRowId, selectedConversationId: left } = current()
@@ -1227,27 +1193,10 @@ export const createRosterController = (
 					hostSpaceIdIn(spaceRowId),
 				)
 				admit(written, current().spaceRowId)
-			}).catch(reload),
-
-		createFromDraft: (draft: BotDraft) =>
-			commit(async () => {
-				const spaceRowId = current().spaceRowId
-				if (!spaceRowId) {
-					throw NO_SPACE
-				}
-				const written = await store.createBotFromDraft(
-					draft,
-					hostSpaceIdOf(spaceRowId),
-				)
-				enrol(written, spaceRowId)
-				return written
-			}),
-
-		createConversation: (botIds = NOBODY_SEATED) =>
-			writeConversation(botIds, admitConversation),
+			}).catch(reloadAndReject),
 
 		createUnselectedConversation: (botIds) =>
-			writeConversation(botIds, enrolConversation),
+			writeConversation(botIds, enrolConversation).catch(reloadAndReject),
 
 		duplicate: (id: string, spaceRowId?: string) =>
 			commit(async () => {
@@ -1255,7 +1204,7 @@ export const createRosterController = (
 				const written = await store.duplicateBot(id, hostSpaceIdIn(destination))
 				admit(written, destination)
 				return written
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		settingsSettled: (id: string) => writes.settled(id),
 
@@ -1279,31 +1228,12 @@ export const createRosterController = (
 			commit(async () => {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				apply(await store.setBotAvatarImage(id, bytes))
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		remember: (id: string, memory: string) =>
 			commit(async () => {
 				apply(await store.setBotMemory(id, memory))
-			}).catch(reload),
-
-		moveToSpace: (botId: string, spaceRowId: string) =>
-			commit(async () => {
-				const [home] = spacesOfBot(botId)
-				const moved = home
-					? rosterIn(current().rosters, home).find((bot) => bot.id === botId)
-					: undefined
-				if (!home || !moved || home === spaceRowId) {
-					return null
-				}
-				await emptySeatsIn(home, botId)
-				await store.moveBotToSpace(botId, hostSpaceIdOf(spaceRowId))
-				holdBots(
-					home,
-					rosterIn(current().rosters, home).filter((bot) => bot.id !== botId),
-				)
-				admit({ ...moved, sectionId: null }, spaceRowId)
-				return moved
-			}).catch(reloadAndYield),
+			}).catch(reloadAndReject),
 
 		addToSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1319,7 +1249,7 @@ export const createRosterController = (
 					...rosterIn(current().rosters, spaceRowId),
 					{ ...joined, sectionId: null, pinPosition: null },
 				])
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		removeFromSpace: (botId: string, spaceRowId: string) =>
 			commit(async () => {
@@ -1407,7 +1337,7 @@ export const createRosterController = (
 					icon: moved.icon,
 					color: moved.color,
 				})
-			}).catch(reload),
+			}).catch(reloadAndReject),
 
 		describeConversation: (id: string, value: ConversationSettingsValue) => {
 			const conversation = heldConversation(id)
@@ -1476,10 +1406,7 @@ export const createRosterController = (
 				)
 				choose(choiceOf(landOn(state.bots, conversations, null)))
 				holdConversations(state.spaceRowId, conversations)
-			}).catch(async (reason: unknown) => {
-				await reload()
-				throw reason
-			}),
+			}).catch(reloadAndReject),
 
 		discardConversation: (id: string) =>
 			commit(async () => {

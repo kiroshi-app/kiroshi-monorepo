@@ -12,9 +12,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{watch, OwnedMutexGuard};
 
-use super::blocks::{
-	self, backfill, blocks_of, preview, removal, separated, Block, BlockKind, Splice,
-};
+use super::blocks::{self, blocks_of, preview, removal, separated, Block, BlockKind, Splice};
 use super::canvas::board_holds;
 use super::contract::{
 	LibraryBoardPoint, LibraryDocumentFormat, LibraryDocumentWriterFinished, LibraryError,
@@ -25,8 +23,9 @@ use super::presence::{seat_agent_on_board, seat_writer, unseat_writer, Seat, Sea
 use super::{
 	a_document, announce, announce_change, briefed_comment_thread, create_board, create_document,
 	delete_item, document_text, documents, encoded_content, import_path, item_at, list,
-	listed_comment_threads, overwrite_path, read_document, rename_linked_document,
-	reply_to_comment_thread, resolve, root, space_dir, AcceptedType, OverwriteRefusal, Said,
+	listed_comment_threads, marked, opened_state, overwrite_path, read_document,
+	rename_linked_document, reply_to_comment_thread, resolve, root, space_dir, AcceptedType,
+	OverwriteRefusal, Said,
 };
 use crate::agent::contract::RuntimeScope;
 use crate::agent::host::{Host, Refusal};
@@ -663,11 +662,7 @@ impl<R: Runtime> LibraryHost<R> {
 	}
 
 	fn opened(&self, root: &Path, space_id: &str, name: &str) -> Result<Outline, LibraryError> {
-		let opened = documents(&self.app).open(root, space_id, name)?;
-		if let Some(host_edit) = opened.host_edit {
-			announce(&self.app, space_id, name, &host_edit);
-		}
-		Outline::of(opened.state, name)
+		Outline::of(opened_state(&self.app, root, space_id, name)?, name)
 	}
 
 	fn outline(
@@ -682,12 +677,9 @@ impl<R: Runtime> LibraryHost<R> {
 		for id in wanted {
 			outline.index_of(id)?;
 		}
-		if backfill(&outline.text).is_empty() {
+		if !marked(&self.app, root, space_id, name, client_id_of(&agent.id), &outline.text)? {
 			return Ok(outline);
 		}
-		let writer = client_id_of(&agent.id);
-		let applied = documents(&self.app).spliced(root, space_id, name, writer, backfill)?;
-		announce(&self.app, space_id, &applied.name, &applied.change);
 		Ok(self.opened(root, space_id, name)?)
 	}
 
@@ -1593,6 +1585,10 @@ async fn turn_of<'a, R: Runtime>(
 	let queue = writes(app).held().entry(key).or_default().clone();
 	let held = queue.lock_owned().await;
 	Turn { _held: held, enlisted }
+}
+
+pub(crate) fn is_agent_on<R: Runtime>(app: &AppHandle<R>, space_id: &str, name: &str) -> bool {
+	writes(app).writing().keys().any(|(space, document, _)| space == space_id && document == name)
 }
 
 pub(crate) async fn stop_writers<R: Runtime>(

@@ -63,7 +63,7 @@ const noticedFailureOf = (
 const raiseNoticedFailure = (
 	error: unknown,
 	{ failureNotice, raisedIn }: NoticedFailure,
-) => raiseReportedFailure(failureNotice(error), { raisedIn })
+) => raiseReportedFailure(failureNotice(error), { raisedIn, reason: error })
 
 const raiseFailureOf = (
 	error: unknown,

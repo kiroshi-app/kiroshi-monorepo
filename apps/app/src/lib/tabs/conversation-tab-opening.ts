@@ -17,6 +17,7 @@ import {
 import {
 	activeTabOf,
 	currentHrefOf,
+	landInActiveTab,
 	revealTab,
 	type SpaceTabs,
 	type Tab,
@@ -83,9 +84,6 @@ const conversationHrefOf = ({
 const showsHome = (space: SpaceTabs) =>
 	isHomePage(pageOf(currentHrefOf(activeTabOf(space))))
 
-const landInActiveTab = (href: string) => (space: SpaceTabs) =>
-	revealTab(space, space.activeId, href)
-
 const landOverHome = (href: string) => (space: SpaceTabs) =>
 	showsHome(space) ? landInActiveTab(href)(space) : space
 
@@ -113,13 +111,13 @@ const firstLiveAmong = async (windowLabels: string[]) => {
 	return windowLabels.find((label) => liveLabels.includes(label)) ?? null
 }
 
-const raiseRevealFailure = () =>
+const raiseRevealFailure = (reason: unknown) =>
 	raiseReportedFailure(
 		{
 			title: i18n.t("common:titleBar.revealTabFailed.title"),
 			description: i18n.t("common:titleBar.revealTabFailed.description"),
 		},
-		{ raisedIn: "conversation-tab-opening" },
+		{ raisedIn: "conversation-tab-opening", reason },
 	)
 
 export const createConversationTabOpening = ({

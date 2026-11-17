@@ -38,13 +38,13 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
-use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::events::{self, CallOrigin, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::hosting::authorship::{self, Caller};
 use crate::json::JsonValue;
 use crate::library::host::LibraryHost;
 use crate::logging;
 use crate::mcp_oauth::refresh;
-use crate::mcp_oauth::reports::StandingHost;
+use crate::mcp_oauth::reports::{ApplicationReports, StandingHost};
 use crate::missions::commands::announce_thread_moved;
 use crate::missions::contract::LivenessSigns;
 use crate::missions::host::MissionHost;
@@ -81,6 +81,12 @@ fn announce_denied<R: Runtime>(app: &AppHandle<R>, dropped: &[PendingQuestion]) 
 fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
 	if let Err(failure) = events::emit(app, AGENT_EVENT, scoped) {
 		log::warn!("a turn event was not announced: {failure}");
+	}
+}
+
+fn announce_answered<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent, by: &CallOrigin) {
+	if let Err(failure) = events::emit_from(app, AGENT_EVENT, scoped, Some(by)) {
+		log::warn!("an answered question was not announced: {failure}");
 	}
 }
 
@@ -141,6 +147,7 @@ struct PendingQuestion {
 	scope: RuntimeScope,
 	turn: Option<EventTurn>,
 	request: QuestionRequest,
+	answered_by: Option<CallOrigin>,
 }
 
 impl PendingQuestion {
@@ -223,9 +230,22 @@ impl<S> Live<S> {
 		self.questions.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn release_question(&self, scope: &RuntimeScope, id: &str) {
+	fn release_question(&self, scope: &RuntimeScope, id: &str) -> Option<CallOrigin> {
 		self.questions()
-			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
+			.extract_if(.., |question| question.asked_by(scope) && question.request.id == id)
+			.collect::<Vec<_>>()
+			.into_iter()
+			.find_map(|question| question.answered_by)
+	}
+
+	fn note_answerer(&self, scope: &RuntimeScope, id: &str, answerer: Option<CallOrigin>) {
+		let mut questions = self.questions();
+		let asked = questions
+			.iter_mut()
+			.find(|question| question.asked_by(scope) && question.request.id == id);
+		if let Some(asked) = asked {
+			asked.answered_by = answerer;
+		}
 	}
 
 	fn drop_questions(&self, scope: &RuntimeScope) -> Vec<PendingQuestion> {
@@ -491,12 +511,16 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		}
 		let moves_the_thread = self.live.moved_by(&self.scope, &event);
 		if let AgentEvent::QuestionRequested { request } = &event {
-			let asked =
-				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
+			let asked = PendingQuestion {
+				scope: self.scope.clone(),
+				turn,
+				request: request.clone(),
+				answered_by: None,
+			};
 			self.live.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
 			return retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
-		self.release_questions_settled_by(&event);
+		let answered_by = self.release_questions_settled_by(&event);
 		if moves_the_thread {
 			retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
@@ -505,7 +529,11 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		}
 		let pending_write = matches!(event, AgentEvent::TurnEnded { .. })
 			.then(|| self.pending_writes.register(&self.scope.bot_id));
-		announce_in_turn(&self.app, Some(self.scope.clone()), turn, event);
+		let scoped = ScopedEvent { scope: Some(self.scope.clone()), turn, event };
+		match answered_by {
+			Some(by) => announce_answered(&self.app, scoped, &by),
+			None => announce_scoped(&self.app, scoped),
+		}
 		if let Some(pending_write) = pending_write {
 			self.record_writes(pending_write);
 		}
@@ -521,11 +549,14 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 }
 
 impl<R: Runtime> RunSink<R> {
-	fn release_questions_settled_by(&self, event: &AgentEvent) {
+	fn release_questions_settled_by(&self, event: &AgentEvent) -> Option<CallOrigin> {
 		match prompts_settled_by(event) {
 			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
-			Some(SettledPrompts::Every) => self.drop_questions(),
-			None => {}
+			Some(SettledPrompts::Every) => {
+				self.drop_questions();
+				None
+			}
+			None => None,
 		}
 	}
 
@@ -1335,6 +1366,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		attachments.clone(),
 		announcing,
 	));
+	let opened = app.try_state::<ApplicationReports>().map(|reports| reports.opening());
 	let identity = match runtime_identity(&app, database, &scope, &sidecar).await {
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
@@ -1366,6 +1398,7 @@ pub(crate) async fn start_run<R: Runtime>(
 			app.clone(),
 			scope.bot_id.clone(),
 			Some(identity.space_id),
+			opened,
 		)))
 		.hosting(hosted(ApplicationHost::new(
 			app.clone(),
@@ -1744,12 +1777,14 @@ pub async fn agent_respond_to_permission(
 #[specta::specta]
 pub async fn agent_answer_question(
 	state: State<'_, AgentState>,
+	caller: Caller,
 	scope: RuntimeScope,
 	id: String,
 	answers: HashMap<String, String>,
 	annotations: Option<JsonValue>,
 ) -> Result<(), TransportError> {
 	let annotations = annotations.map(JsonValue::into);
+	state.live.note_answerer(&scope, &id, caller.origin());
 	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
 }
 

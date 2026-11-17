@@ -16,7 +16,8 @@ use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
 
 use super::authorship::{Caller, RelayedMember};
@@ -29,7 +30,6 @@ use super::contract::{
 };
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
-use super::reach;
 use super::relay::relay_socket_config;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
@@ -37,6 +37,7 @@ use super::sealing_member::{
 	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
 use super::wire::{host_keys, HELLO, NO_KEY_ID};
+use super::{keyed_calls, reach};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::account::contract::SignedOutReason;
 use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
@@ -88,9 +89,10 @@ use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event, BUFFERED_FRAMES};
+use crate::events::{self, CallOrigin, Event, BUFFERED_FRAMES};
 use crate::host_api::files::ATTACHMENT_PATH;
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+use crate::host_api::token;
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::member_link::{MemberLink, Resync};
 use crate::joined_spaces::mentions::raised_if_mentioned;
@@ -662,7 +664,7 @@ fn caller_vouched_in(effects: &HostEffects, headers: &HeaderMap) -> Caller {
 		return Caller::Host;
 	};
 	let nonce = nonce.to_str().expect("a nonce");
-	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched(nonce))
+	Caller::Relayed(effects.app().state::<Hosting>().relayed.vouched_in_this_task(nonce))
 }
 
 fn said_by_the_caller(
@@ -4742,6 +4744,8 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		let mut guest = Guest::of_two_spaces("library-rename").await;
 		let shelf = guest.effects.library().join(PERSONAL);
 		std::fs::write(shelf.join("plan.md"), "older").expect("the other file lands");
+		std::fs::write(shelf.join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let opened =
 			guest.called("library_open_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
@@ -4777,7 +4781,7 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		let on_disk =
 			|name: &str| std::fs::read_to_string(shelf.join(name)).expect("the file reads");
-		assert_eq!(on_disk("plan (2).md"), "notes of personal kept");
+		assert_eq!(on_disk("plan (2).md"), "notes of personal kept ^aaaaaa");
 		assert_eq!(on_disk("plan.md"), "older");
 		assert!(!shelf.join("notes.md").exists());
 	});
@@ -4807,6 +4811,8 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let mut guest = Guest::of_two_spaces("library-shared-edit").await;
 		let app = guest.harness.app.handle().clone();
 		let library = guest.effects.library();
+		std::fs::write(library.join(PERSONAL).join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let (told, host_heard) = std::sync::mpsc::channel();
 		app.listen_any(DOCUMENT_UPDATED_EVENT, move |event| {
 			let payload: Value = serde_json::from_str(event.payload()).expect("a payload");
@@ -4830,7 +4836,7 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let read =
 			guest.called("library_read_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 
-		let merged = "Host. notes of personal Member.";
+		let merged = "Host. notes of personal Member. ^aaaaaa";
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		assert_eq!(read["body"]["content"], json!(merged), "{read}");
 		let on_disk = |space_id: &str| {
@@ -5054,6 +5060,7 @@ fn relayed_as(account_id: &str) -> Caller {
 		space_id: PERSONAL.to_owned(),
 		user_id: account_id.to_owned(),
 		computer: None,
+		origin: None,
 	}))
 }
 
@@ -6745,6 +6752,7 @@ fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept
 
 const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
+const GUEST_DEVICE: &str = "guest-device";
 const HOST_NAME: &str = "Ada on the host";
 
 struct Authoring {
@@ -6752,16 +6760,47 @@ struct Authoring {
 	window: WebviewWindow<MockRuntime>,
 	local: LocalApi,
 	conversation_id: String,
+	cloud: String,
 	_root: RemovedOnDrop,
+}
+
+fn an_authoring_app() -> AppOfItsOwn {
+	an_app_of_its_own(
+		"hosting-authorship",
+		mock_builder().invoke_handler(crate::commands::invoke_handler()),
+	)
+}
+
+async fn hosted_over(
+	app: &AppOfItsOwn,
+	cloud: &str,
+	root: &std::path::Path,
+) -> (WebviewWindow<MockRuntime>, LocalApi) {
+	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	restore(app.handle().clone()).await;
+	app.manage(webhook::start(app.handle().clone()));
+	let local = super::local_api(app.handle()).expect("the local host api listens");
+	app.manage(Hosting::new(cloud, Some(local.clone())));
+	app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
+		Some(SpaceMembers {
+			members: vec![Member {
+				user_id: GUEST.to_owned(),
+				name: None,
+				email: GUEST_EMAIL.to_owned(),
+				status: MemberStatus::Joined,
+			}],
+			invitations: Vec::new(),
+		});
+	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
+		.build()
+		.expect("the window builds");
+	(window, local)
 }
 
 impl Authoring {
 	async fn new(bearer: Option<&str>) -> Self {
 		let cloud = served(Router::new().route("/me", get(me))).await;
-		let app = an_app_of_its_own(
-			"hosting-authorship",
-			mock_builder().invoke_handler(crate::commands::invoke_handler()),
-		);
+		let app = an_authoring_app();
 		app.manage(db::bootstrap(app.handle()));
 		let root = RemovedOnDrop(
 			std::env::temp_dir()
@@ -6771,24 +6810,7 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
-		let local = super::local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local.clone())));
-		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
-			Some(SpaceMembers {
-				members: vec![Member {
-					user_id: GUEST.to_owned(),
-					name: None,
-					email: GUEST_EMAIL.to_owned(),
-					status: MemberStatus::Joined,
-				}],
-				invitations: Vec::new(),
-			});
-		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
-			.build()
-			.expect("the window builds");
+		let (window, local) = hosted_over(&app, &cloud, &root).await;
 		let mut preferences = direct(&window, "user_preferences", json!({}));
 		preferences["displayName"] = json!(HOST_NAME);
 		direct(&window, "user_set_preferences", json!({ "preferences": preferences }));
@@ -6799,7 +6821,25 @@ impl Authoring {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Shared", "botIds": ["default"] }),
 		);
 		let conversation_id = room["id"].as_str().expect("the room holds an id").to_owned();
-		Self { app, window, local, conversation_id, _root: root }
+		Self { app, window, local, conversation_id, cloud, _root: root }
+	}
+
+	async fn restarted(&self) -> Self {
+		let app = an_authoring_app();
+		let folder = self.app.path().app_data_dir().expect("the data folder resolves");
+		app.manage(Ok::<_, db::DatabaseError>(db::open(&folder)));
+		let (window, local) = hosted_over(&app, &self.cloud, &self._root).await;
+		if self.app.try_state::<commands::AgentState>().is_some() {
+			app.manage(commands::AgentState::default());
+		}
+		Self {
+			app,
+			window,
+			local,
+			conversation_id: self.conversation_id.clone(),
+			cloud: self.cloud.clone(),
+			_root: RemovedOnDrop(self._root.to_path_buf()),
+		}
 	}
 
 	async fn main_of(&self, owner: ChatOwner) -> String {
@@ -6859,15 +6899,25 @@ impl Authoring {
 	}
 
 	async fn answered_by(&self, account_id: &str, frame: Value) -> Value {
-		let call =
-			super::bridge::member_call(&frame.to_string(), account_id).expect("a member call");
-		let answer = super::bridge::bridged(
-			self.app.handle().clone(),
-			self.local.clone(),
-			PERSONAL.to_owned(),
-			call,
-		)
-		.await;
+		self.answered_from(account_id, GUEST_DEVICE, frame).await
+	}
+
+	async fn answered_from(&self, account_id: &str, device: &str, frame: Value) -> Value {
+		self.answered_through(self.local.clone(), account_id, device, frame).await
+	}
+
+	async fn answered_through(
+		&self,
+		local: LocalApi,
+		account_id: &str,
+		device: &str,
+		frame: Value,
+	) -> Value {
+		let call = super::bridge::member_call(&frame.to_string(), account_id, device)
+			.expect("a member call");
+		let answer =
+			super::bridge::bridged(self.app.handle().clone(), local, PERSONAL.to_owned(), call)
+				.await;
 		serde_json::from_str(&answer).expect("a json answer")
 	}
 
@@ -7803,6 +7853,7 @@ impl Guest {
 		conversation_create(
 			app,
 			self.harness.app.state(),
+			Caller::Host,
 			space_id.to_owned(),
 			None,
 			"New".to_owned(),
@@ -9531,7 +9582,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		let (mut harness, effects) = Harness::applying_host_effects("library-removed").await;
 		let shelf = effects.library().join(PERSONAL);
 		std::fs::create_dir_all(&shelf).expect("the library folder lands");
-		std::fs::write(shelf.join("notes.md"), "notes").expect("the document lands");
+		std::fs::write(shelf.join("notes.md"), "notes ^aaaaaa").expect("the document lands");
 		harness.seed(&[
 			cloud_member("guest", "guest@example.com", "member", "pending"),
 			cloud_member("joiner", "joiner@example.com", "member", "pending"),
@@ -9606,7 +9657,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		assert_eq!(applies, 1);
 		assert_eq!(
 			std::fs::read_to_string(shelf.join("notes.md")).expect("the file reads"),
-			"notes kept"
+			"notes kept ^aaaaaa"
 		);
 	});
 }
@@ -10799,5 +10850,377 @@ fn a_relayed_member_cannot_report_on_a_mission_born_in_the_main_conversation_of_
 		let turn_id = format!("t-{}", host.conversation_id);
 		let args = json!({ "missionId": mission_id, "turnId": turn_id });
 		host.refused_leaving_the_mission_unchanged(&mission_id, "mission_reported", args).await;
+	});
+}
+
+fn published_frames(published: &mut tokio::sync::broadcast::Receiver<events::Frame>) -> Vec<Value> {
+	let mut frames = Vec::new();
+	while let Ok(frame) = published.try_recv() {
+		frames.push(serde_json::from_str(&frame).expect("a json frame"));
+	}
+	frames
+}
+
+fn frames_of<'a>(frames: &'a [Value], event: &str) -> Vec<&'a Value> {
+	frames.iter().filter(|frame| frame["event"] == json!(event)).collect()
+}
+
+fn a_group_created(id: u64) -> Value {
+	json!({
+		"id": id,
+		"command": "conversation_create",
+		"args": { "spaceId": PERSONAL, "sectionId": null, "title": "Group", "botIds": ["default"] },
+	})
+}
+
+async fn answer_head(from_host: &mut (impl AsyncRead + Unpin)) -> Vec<u8> {
+	let mut read = Vec::new();
+	let mut chunk = [0u8; 4096];
+	loop {
+		let count = from_host.read(&mut chunk).await.expect("the local host api answers");
+		assert!(count > 0, "the local host api closed before the head of its answer");
+		read.extend_from_slice(&chunk[..count]);
+		if let Some(end) = read.windows(4).position(|window| window == b"\r\n\r\n") {
+			read.truncate(end + 4);
+			return read;
+		}
+	}
+}
+
+fn keyed(mut frame: Value, call_key: &str) -> Value {
+	frame["callKey"] = json!(call_key);
+	frame
+}
+
+impl Authoring {
+	async fn with_an_agent() -> Self {
+		let host = Self::new(Some(BEARER)).await;
+		host.app.manage(commands::AgentState::default());
+		host
+	}
+
+	fn send(&self, id: u64, message_id: &str) -> Value {
+		let mut args = self.unstarted(message_id);
+		args["message"]["turnId"] = json!(message_id);
+		json!({ "id": id, "command": "conversation_send_turn", "args": args })
+	}
+
+	fn groups(&self) -> usize {
+		let listed = direct(&self.window, "conversation_list", json!({ "spaceId": PERSONAL }));
+		let listed = listed.as_array().expect("a list of conversations");
+		listed.iter().filter(|room| room["title"] == json!("Group")).count()
+	}
+
+	fn user_messages(&self) -> Vec<Value> {
+		let page = direct(&self.window, "conversation_message_page", self.page());
+		let messages = page["messages"].as_array().expect("a page of messages");
+		messages.iter().filter(|message| message["role"] == json!("user")).cloned().collect()
+	}
+
+	async fn answered_while_the_local_host_api_is_down(&self, frame: Value) -> Value {
+		let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = closed.local_addr().expect("the port is named");
+		drop(closed);
+		let down = LocalApi::new(format!("http://{address}"), LOCAL_TOKEN.to_owned())
+			.expect("the local client builds");
+		self.answered_through(down, GUEST, GUEST_DEVICE, frame).await
+	}
+
+	async fn answered_by_a_local_host_api_that_cuts_its_answer(&self, frame: Value) -> Value {
+		let origin = self.app.state::<Webhook>().origin().expect("the local host api listens");
+		let host_api = origin.trim_start_matches("http://").to_owned();
+		let cutting = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = cutting.local_addr().expect("the port is named");
+		tauri::async_runtime::spawn(async move {
+			let (member, _) = cutting.accept().await.expect("the bridge connects");
+			let host = TcpStream::connect(host_api).await.expect("the local host api accepts");
+			let (mut from_member, mut to_member) = member.into_split();
+			let (mut from_host, mut to_host) = host.into_split();
+			let relaying = tauri::async_runtime::spawn(async move {
+				tokio::io::copy(&mut from_member, &mut to_host).await
+			});
+			let head = answer_head(&mut from_host).await;
+			to_member.write_all(&head).await.expect("the answer head is relayed");
+			relaying.abort();
+		});
+		let token = token::loaded(self.app.handle()).expect("the host token loads");
+		let cut = LocalApi::new(format!("http://{address}"), token.bearer().to_owned())
+			.expect("the local client builds");
+		self.answered_through(cut, GUEST, GUEST_DEVICE, frame).await
+	}
+}
+
+#[test]
+fn a_group_created_twice_with_one_call_key_is_left_once_and_its_creation_names_the_key() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let repeated = host.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(host.groups(), 1);
+		let frames = published_frames(&mut published);
+		let created = frames_of(&frames, CONVERSATION_CREATED_EVENT);
+		assert_eq!(created.len(), 1, "{created:?}");
+		assert_eq!(created[0]["payload"]["conversation"]["id"], first["id"]);
+		assert_eq!(created[0]["callKey"], json!("group-1"));
+		assert_eq!(created[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn the_same_send_twice_with_one_call_key_leaves_one_message_and_runs_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let (first, held) = tokio::join!(
+			host.answered(keyed(host.send(1, "m1"), "send-1")),
+			host.answered(keyed(host.send(2, "m1"), "send-1")),
+		);
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-1")).await;
+
+		assert_eq!(first["status"], json!(200), "{first}");
+		assert_eq!(
+			(held["status"].clone(), held["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(json!(200), first["body"].clone())
+		);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
+		assert_eq!(stored[0]["deviceId"], json!(GUEST_DEVICE));
+	});
+}
+
+#[test]
+fn a_send_that_never_reached_the_local_host_api_runs_when_repeated_with_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let unreached = host
+			.answered_while_the_local_host_api_is_down(keyed(host.send(1, "m1"), "send-1"))
+			.await;
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(unreached["status"], json!(502), "{unreached}");
+		assert_eq!(repeated["status"], json!(200), "{repeated}");
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "{stored:?}");
+		assert_eq!(stored[0]["callKey"], json!("send-1"));
+	});
+}
+
+#[test]
+fn a_send_whose_answer_was_cut_after_it_stored_gets_the_same_502_on_its_repeat() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		let cut = host
+			.answered_by_a_local_host_api_that_cuts_its_answer(keyed(host.send(1, "m1"), "send-1"))
+			.await;
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(cut["status"], json!(502), "{cut}");
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(json!(502), cut["body"].clone())
+		);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		let stored = frames_of(&frames, MESSAGE_STORED_EVENT);
+		assert_eq!(stored.len(), 1, "the send ran more than once: {stored:?}");
+	});
+}
+
+#[test]
+fn a_send_refused_as_a_conflict_keeps_that_answer_under_its_call_key() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		host.relayed(keyed(host.send(1, "m1"), "send-1")).await;
+		let mut published = events::subscribed(host.app.handle());
+		let mut diverging = keyed(host.send(2, "m1"), "send-2");
+		diverging["args"]["message"]["content"] = json!("edited");
+
+		let conflict = host.answered(diverging).await;
+		let repeated = host.answered(keyed(host.send(3, "m1"), "send-2")).await;
+
+		assert_eq!(conflict["status"], json!(500), "{conflict}");
+		assert_eq!(conflict["body"], json!({ "kind": "conflict", "id": "m1", "field": "content" }));
+		assert_eq!(
+			(repeated["status"].clone(), repeated["body"].clone()),
+			(conflict["status"].clone(), conflict["body"].clone())
+		);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 0, "the send ran again");
+		assert_eq!(host.user_messages().len(), 1);
+	});
+}
+
+#[test]
+fn one_call_key_from_two_devices_runs_once_for_each() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+
+		host.answered_from(GUEST, GUEST_DEVICE, keyed(a_group_created(1), "group-1")).await;
+		host.answered_from(GUEST, "guest-tablet", keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(host.groups(), 2);
+	});
+}
+
+#[test]
+fn a_call_without_a_call_key_runs_each_time_and_its_events_name_no_call() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+
+		host.relayed(a_group_created(1)).await;
+		host.relayed(a_group_created(2)).await;
+		host.relayed(host.send(3, "m1")).await;
+		host.relayed(host.send(4, "m1")).await;
+
+		assert_eq!(host.groups(), 2);
+		assert_eq!(host.user_messages().len(), 1);
+		let frames = published_frames(&mut published);
+		assert_eq!(frames_of(&frames, CONVERSATION_CREATED_EVENT).len(), 2);
+		assert_eq!(frames_of(&frames, MESSAGE_STORED_EVENT).len(), 2);
+		for frame in &frames {
+			let mut envelope =
+				frame.as_object().expect("a frame object").keys().collect::<Vec<_>>();
+			envelope.sort();
+			assert_eq!(envelope, ["event", "payload"], "{frame}");
+		}
+	});
+}
+
+#[test]
+fn a_question_a_member_answers_names_the_answering_device_on_its_resolution() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let app = host.app.handle();
+		let scope = a_held_scope_in(&host.conversation_id, "default");
+		let turn = a_turn_in(&host.conversation_id);
+		let asking = commands::a_run_held_by_the_app(app, scope.clone());
+		asking.emit(a_question("q1"), turn.clone());
+		let mut published = events::subscribed(app);
+		let origin = CallOrigin {
+			device_id: GUEST_DEVICE.to_owned(),
+			call_key: Some("answer-1".to_owned()),
+		};
+		let member = Caller::Relayed(Some(RelayedMember {
+			space_id: PERSONAL.to_owned(),
+			user_id: GUEST.to_owned(),
+			computer: None,
+			origin: Some(origin),
+		}));
+
+		let unsent = commands::agent_answer_question(
+			app.state(),
+			member,
+			scope,
+			"q1".to_owned(),
+			Default::default(),
+			None,
+		)
+		.await;
+		asking.emit(its_answer("q1"), turn);
+
+		assert_eq!(unsent, Err(agent::TransportError::NotStarted), "no session holds the run");
+		let frames = published_frames(&mut published);
+		let resolved = frames_of(&frames, commands::EVENT_CHANNEL);
+		assert_eq!(resolved.len(), 1, "{resolved:?}");
+		assert_eq!(resolved[0]["payload"]["event"]["type"], json!("permissionResolved"));
+		assert_eq!(resolved[0]["deviceId"], json!(GUEST_DEVICE));
+		assert_eq!(resolved[0]["callKey"], json!("answer-1"));
+	});
+}
+
+impl Authoring {
+	async fn answered_further_keyed_calls(&self) {
+		for n in 0..keyed_calls::ANSWERS_KEPT_PER_DEVICE {
+			let listed =
+				json!({ "id": n, "command": "conversation_list", "args": { "spaceId": PERSONAL } });
+			self.relayed(keyed(listed, &format!("list-{n}"))).await;
+		}
+	}
+}
+
+fn agent_runs(frames: &[Value]) -> usize {
+	frames_of(frames, SUMMONS_DROPPED_EVENT).len()
+}
+
+fn status_and_body(answer: &Value) -> (Value, Value) {
+	(answer["status"].clone(), answer["body"].clone())
+}
+
+#[test]
+fn a_send_repeated_after_a_restart_gets_its_answer_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		let first = host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		let restarted = host.restarted().await;
+		let mut published_after = events::subscribed(restarted.app.handle());
+
+		let repeated = restarted.answered(keyed(restarted.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(status_and_body(&repeated), status_and_body(&first));
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+		assert_eq!(agent_runs(&published_frames(&mut published_after)), 0);
+	});
+}
+
+#[test]
+fn a_send_repeated_after_further_answers_is_refused_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+		assert_eq!(status_and_body(&repeated), (json!(410), json!(keyed_calls::NO_ANSWER_KEPT)));
+	});
+}
+
+#[test]
+fn a_group_created_again_after_a_restart_is_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let restarted = host.restarted().await;
+
+		let repeated = restarted.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(restarted.groups(), 1);
+	});
+}
+
+#[test]
+fn a_group_created_again_after_further_answers_is_refused_and_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.relayed(keyed(a_group_created(1), "group-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(host.groups(), 1);
+		assert_eq!(status_and_body(&repeated), (json!(410), json!(keyed_calls::NO_ANSWER_KEPT)));
 	});
 }

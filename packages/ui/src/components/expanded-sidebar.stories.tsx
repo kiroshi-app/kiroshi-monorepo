@@ -2613,6 +2613,84 @@ export const CompactSelectedDestinationExpanded = meta.story({
 	},
 })
 
+const AGENTS_ROW = { missionCount: 5, onSelectAgents: fn() }
+
+const DESTINATIONS_WITH_AGENTS = ["New", "Agents", /^Missions/, "Library"]
+
+const destinationRowsIn = (canvasElement: HTMLElement) => {
+	const menu = navigationMenuIn(sidebarIn(canvasElement))
+	return {
+		rows: slotsIn(menu, "sidebar-menu-button"),
+		named: DESTINATIONS_WITH_AGENTS.map((name) =>
+			within(menu).getByRole("button", { name }),
+		),
+	}
+}
+
+const glyphOf = (row: HTMLElement) => row.querySelector("svg") as Element
+
+export const AgentsSelectedExpanded = meta.story({
+	name: "A5 Agents selected",
+	args: { ...AGENTS_ROW, destination: "agents" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard A5: the Agents page is on screen. Check the destinations read New, Agents, Missions with its count of 5, then Library, that Agents alone reports itself as the current page, wears the sidebar selected fill with no colour transition and draws the filled hexagons at the size of its sibling glyphs, and that pressing it reports the request. Pick `AgentsAtRestExpanded` for the row while another page is open.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const { rows, named } = destinationRowsIn(canvasElement)
+		const [, agents, missions, library] = named
+		await expect(rows).toEqual(named)
+		await expect(missions).toHaveTextContent(/5$/)
+		await expect(named.map((row) => row.getAttribute("aria-current"))).toEqual([
+			null,
+			"page",
+			null,
+			null,
+		])
+		await expect(named.map((row) => isDrawnFilled(glyphOf(row)))).toEqual([
+			false,
+			true,
+			false,
+			false,
+		])
+		await expect(fillOf(agents)).toBe(selectedFillOf(agents))
+		await expect(boxOf(glyphOf(agents)).width).toBe(
+			boxOf(glyphOf(library)).width,
+		)
+		await expect(colourTransitionsOf(agents)).toEqual([])
+
+		await userEvent.click(agents)
+		await expect(args.onSelectAgents).toHaveBeenCalledOnce()
+	},
+})
+
+export const AgentsAtRestExpanded = meta.story({
+	name: "A5 Agents at rest",
+	args: { ...AGENTS_ROW, destination: "missions" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The Agents row while the Missions page is open, a state A5 does not draw: it follows its sibling rows. Check the order stays New, Agents, Missions, Library, that Agents draws the outline hexagons on no fill, and that its label and glyph take the colours of Library at rest. Pick `AgentsSelectedExpanded` for the drawn state.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { rows, named } = destinationRowsIn(canvasElement)
+		const [, agents, , library] = named
+		await expect(rows).toEqual(named)
+		await expect(agents).not.toHaveAttribute("aria-current")
+		await expect(isDrawnFilled(glyphOf(agents))).toBe(false)
+		await expect(fillOf(agents)).toBe(fillOf(library))
+		await expect(colourOf(agents)).toBe(colourOf(library))
+		await expect(colourOf(glyphOf(agents))).toBe(colourOf(glyphOf(library)))
+	},
+})
+
 export const CompactFocusExpanded = meta.story({
 	name: "D Focus",
 	args: compactArtboardOf(),

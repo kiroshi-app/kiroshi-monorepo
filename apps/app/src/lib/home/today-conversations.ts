@@ -6,6 +6,7 @@ import {
 	observedStateOf,
 } from "../bots/roster-pages"
 import { rosterTimestamp } from "../bots/roster-timestamp"
+import type { NamingStates } from "../conversations/conversation-namings"
 import {
 	conversationName,
 	previewText,
@@ -25,6 +26,7 @@ export type TodayRoster = {
 	conversations: Conversation[]
 	previews: ConversationPreviews
 	hostStates: ConversationHostStates
+	namings: NamingStates
 	now: number
 }
 
@@ -70,7 +72,7 @@ const toTodayRow = (
 	const { icon, color } = toConversationLook(conversation)
 	return {
 		id: row.id,
-		title: conversationName(conversation),
+		title: conversationName(conversation, roster.namings),
 		timestamp: rosterTimestamp(lastWord?.at ?? row.lastActivityAt, roster.now),
 		icon,
 		hue: color,

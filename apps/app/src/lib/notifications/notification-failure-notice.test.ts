@@ -92,6 +92,7 @@ const watchAlongside = async ({
 		},
 		missions: createFakeMissions(),
 		spokenWords: createSpokenWords(),
+		namings: () => ({}),
 		notifications,
 		switches: () => SWITCHES,
 		hasFocus: () => false,

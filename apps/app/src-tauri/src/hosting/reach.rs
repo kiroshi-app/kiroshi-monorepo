@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::authorship;
@@ -596,6 +596,8 @@ struct Published {
 	event: String,
 	#[serde(default)]
 	payload: Value,
+	#[serde(flatten)]
+	origin: Map<String, Value>,
 }
 
 impl Published {
@@ -604,7 +606,8 @@ impl Published {
 		if let Some(listed) = payload.pointer_mut(CONVERSATION_LIST_POINTER) {
 			*listed = Value::Array(conversation_ids);
 		}
-		let tailored = Published { event: self.event.clone(), payload };
+		let tailored =
+			Published { event: self.event.clone(), payload, origin: self.origin.clone() };
 		Ok(serde_json::to_string(&tailored)?.into())
 	}
 }

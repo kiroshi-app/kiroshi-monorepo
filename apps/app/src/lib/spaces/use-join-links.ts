@@ -16,7 +16,7 @@ type JoinLinksTransport = Pick<
 const reportFailure = failureReporterIn("use-join-links")
 
 const reportRefusal = (reason: unknown) => {
-	void reportFailure(refusalNoticeOf(reason))
+	void reportFailure(refusalNoticeOf(reason), { reason })
 }
 
 export const useJoinLinks = (

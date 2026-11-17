@@ -352,3 +352,132 @@ describe("deleting a conversation", () => {
 		})
 	})
 })
+
+const sectionBornFrom = (moveConversationToSection: () => Promise<void>) => {
+	reportFailure.mockClear()
+	const roster = {
+		getState: () => ({
+			rosters: {},
+			conversationRosters: { "s-1": [{ id: "c-1" }] },
+			spaceRowId: "s-1",
+		}),
+		moveConversationToSection: vi.fn(moveConversationToSection),
+	}
+	const source: SidebarActionsSource = {
+		attachments: UNUSED,
+		collapsedSections: UNUSED,
+		conversations: UNUSED,
+		drafts: UNUSED,
+		joinedSpaces: UNUSED,
+		openedMission: UNUSED,
+		roster: roster as never,
+		runtimes: UNUSED,
+		sections: { create: async () => ({ id: "sec-1" }) } as never,
+		settings: UNUSED,
+		spaces: UNUSED,
+	}
+	const { result } = renderHook(() => useSidebarActions(source))
+	return { actions: result.current, roster }
+}
+
+describe("creating a section from a conversation row", () => {
+	it("reports once a conversation the store refuses to move into the new section", async () => {
+		const born = sectionBornFrom(REFUSED)
+
+		born.actions.onCreateSection("Rooms", "c-1")
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("bots:roster.conversationUnsaved") },
+				{ conversation: "c-1", reason: expect.anything() },
+			),
+		)
+	})
+
+	it("moves the conversation into the new section without a notice", async () => {
+		const born = sectionBornFrom(SETTLED)
+
+		born.actions.onCreateSection("Rooms", "c-1")
+
+		await vi.waitFor(() =>
+			expect(
+				born.roster.moveConversationToSection,
+			).toHaveBeenCalledExactlyOnceWith("c-1", "sec-1"),
+		)
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+})
+
+const agentActionsOn = (roster: Record<string, () => Promise<void>>) => {
+	reportFailure.mockClear()
+	const source: SidebarActionsSource = {
+		attachments: UNUSED,
+		collapsedSections: UNUSED,
+		conversations: UNUSED,
+		drafts: UNUSED,
+		joinedSpaces: UNUSED,
+		openedMission: UNUSED,
+		roster: roster as never,
+		runtimes: UNUSED,
+		sections: UNUSED,
+		settings: UNUSED,
+		spaces: UNUSED,
+	}
+	return renderHook(() => useSidebarActions(source)).result.current
+}
+
+describe("an agent action the store refuses", () => {
+	it("reports a refused creation once", async () => {
+		const actions = agentActionsOn({ create: REFUSED })
+
+		actions.onCreateBot()
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("bots:roster.createFailed") },
+				{ reason: expect.anything() },
+			),
+		)
+	})
+
+	it("reports a refused copy once", async () => {
+		const actions = agentActionsOn({ duplicate: REFUSED })
+
+		actions.onDuplicateBot("b-1")
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("bots:roster.duplicateFailed") },
+				{ botId: "b-1", reason: expect.anything() },
+			),
+		)
+	})
+
+	it("reports a refused addition to a Space once", async () => {
+		const actions = agentActionsOn({ addToSpace: REFUSED })
+
+		actions.onAddBotToSpace("b-1", "s-2")
+
+		await vi.waitFor(() =>
+			expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+				{ title: i18n.t("bots:spaces.add.failed") },
+				{ botId: "b-1", space: "s-2", reason: expect.anything() },
+			),
+		)
+	})
+
+	it("raises no notice when the three actions are written", async () => {
+		const actions = agentActionsOn({
+			create: SETTLED,
+			duplicate: SETTLED,
+			addToSpace: SETTLED,
+		})
+
+		actions.onCreateBot()
+		actions.onDuplicateBot("b-1")
+		actions.onAddBotToSpace("b-1", "s-2")
+		await Promise.resolve()
+
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+})
