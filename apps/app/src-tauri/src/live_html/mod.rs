@@ -5,6 +5,8 @@ pub mod contract;
 mod elsewhere;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod measure;
 mod placement;
 pub mod server;
 pub mod watch;

@@ -11,12 +11,15 @@ use objc2_foundation::{NSEdgeInsets, NSPoint, NSRect, NSSize, NSString};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 use tokio::sync::oneshot;
 use wry::dpi::{LogicalPosition, LogicalSize};
+use wry::http::Request;
 use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
 
-use super::contract::{LiveHtmlError, LiveHtmlRectangle};
+use super::contract::{LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
+use super::measure::{self, PageSize, SizeReport};
 use super::placement::{ContentView, Frame, Placement};
 use super::watch::Guard;
 use super::ViewToMount;
+use crate::events;
 
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
 pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
@@ -58,7 +61,7 @@ pub async fn mount<R: Runtime>(
 	on_main_thread(&app, move || {
 		let marker = MainThreadMarker::new().ok_or("the native step ran off the main thread")?;
 		let id = view.id.clone();
-		let webview = guarded(view)
+		let webview = guarded(tauri::Manager::app_handle(&main_window).clone(), view)
 			.with_bounds(rectangle_below_the_inset(placement))
 			.build_as_child(&main_window)
 			.map_err(|failure| failure.to_string())?;
@@ -170,16 +173,19 @@ pub async fn evaluate<R: Runtime>(
 	answered_in_time(answered).await
 }
 
-fn guarded(view: ViewToMount) -> WebViewBuilder<'static> {
+fn guarded<R: Runtime>(app: AppHandle<R>, view: ViewToMount) -> WebViewBuilder<'static> {
 	let ViewToMount { id, url, allowed, scripts, watch } = view;
 	let (navigation, new_window, download) = (Arc::clone(&watch), Arc::clone(&watch), watch);
-	let (navigating, opening, downloading) = (id.clone(), id.clone(), id);
-	let builder = scripts
-		.into_iter()
-		.fold(WebViewBuilder::new().with_url(url).with_incognito(true), |builder, script| {
-			builder.with_initialization_script_for_main_only(script, false)
-		});
+	let (measuring, navigating, opening, downloading) = (id.clone(), id.clone(), id.clone(), id);
+	let builder = scripts.into_iter().fold(
+		WebViewBuilder::new()
+			.with_url(url)
+			.with_incognito(true)
+			.with_initialization_script_for_main_only(measure::SCRIPT, false),
+		|builder, script| builder.with_initialization_script_for_main_only(script, false),
+	);
 	builder
+		.with_ipc_handler(reporting_size(app, measuring))
 		.with_navigation_handler(move |url| {
 			let is_allowed = url.starts_with("about:") || allowed.contains(&url);
 			navigation.guard_answered(&navigating, Guard::Navigation, &url, is_allowed);
@@ -193,6 +199,53 @@ fn guarded(view: ViewToMount) -> WebViewBuilder<'static> {
 			download.guard_answered(&downloading, Guard::Download, &url, false);
 			false
 		})
+}
+
+fn reporting_size<R: Runtime>(app: AppHandle<R>, id: String) -> impl Fn(Request<String>) {
+	let report = Arc::new(Mutex::new(SizeReport::default()));
+	move |message| {
+		let Some(size) = measure::page_size(message.body()) else {
+			return;
+		};
+		if let Some(size) = locked(&report).posted(size) {
+			emit_and_hold(&app, &id, &report, size);
+		}
+	}
+}
+
+fn emit_and_hold<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	report: &Arc<Mutex<SizeReport>>,
+	size: PageSize,
+) {
+	if !MOUNTED.with_borrow(|mounted| mounted.contains_key(id)) {
+		return;
+	}
+	let PageSize { width, height } = size;
+	let measured = LiveHtmlMeasured { id: id.to_owned(), width, height };
+	if let Err(failure) = events::emit(app, events::LIVE_HTML_MEASURED, measured) {
+		log::error!("live view {id}: its size reached no window: {failure}");
+	}
+	let (app, id, report) = (app.clone(), id.to_owned(), Arc::downgrade(report));
+	tauri::async_runtime::spawn(async move {
+		tokio::time::sleep(measure::REPORT_WINDOW).await;
+		let (on_main, view) = (app.clone(), id.clone());
+		let ended = app.run_on_main_thread(move || {
+			if let Some(report) = report.upgrade() {
+				if let Some(size) = locked(&report).window_ended() {
+					emit_and_hold(&on_main, &id, &report, size);
+				}
+			}
+		});
+		if let Err(failure) = ended {
+			log::error!("live view {view}: its held size was never reported: {failure}");
+		}
+	});
+}
+
+fn locked(report: &Mutex<SizeReport>) -> std::sync::MutexGuard<'_, SizeReport> {
+	report.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn rectangle_below_the_inset(placement: Placement) -> Rect {

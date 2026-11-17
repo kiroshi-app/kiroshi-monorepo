@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const MEASURED_EVENT: &str = "live-html://measured";
+
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveHtmlRectangle {
@@ -15,6 +17,14 @@ impl LiveHtmlRectangle {
 			&& self.width >= 0.0
 			&& self.height >= 0.0
 	}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveHtmlMeasured {
+	pub id: String,
+	pub width: f64,
+	pub height: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

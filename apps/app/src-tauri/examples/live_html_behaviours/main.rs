@@ -123,8 +123,8 @@ mod macos {
 		let image = image::open(path).map_err(|cause| cause.to_string())?.to_rgba8();
 		let scale = f64::from(image.width()) / window_width;
 		Ok(Painted {
-			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 230 && g < 40 && b > 230),
-			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 40 && g > 230 && b > 230),
+			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230),
+			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 140 && g > 230 && b > 230),
 		})
 	}
 
@@ -219,7 +219,7 @@ mod macos {
 		rectangle: Rectangle,
 		clip: Option<Rectangle>,
 		note: Option<Value>,
-	) -> Result<(), String> {
+	) -> Result<Value, String> {
 		let directory = std::env::var(CAPTURES_VARIABLE)
 			.map_err(|_| format!("{CAPTURES_VARIABLE} names no directory"))?;
 		let path = PathBuf::from(directory).join(format!("{step}.png"));
@@ -236,20 +236,18 @@ mod macos {
 		let width = window.outer_size().map_err(|cause| cause.to_string())?.width;
 		let scale = window.scale_factor().map_err(|cause| cause.to_string())?;
 		let painted = painted(&path, f64::from(width) / scale)?;
-		println!(
-			"{}",
-			json!({
-				"step": step,
-				"asked": rectangle,
-				"clip": clip,
-				"magenta_drawn_in_window_points": painted.magenta,
-				"cyan_drawn_in_window_points": painted.cyan,
-				"content_loads": loads.0.load(Ordering::SeqCst),
-				"measured": measured_window(&app, &window)?,
-				"note": note,
-			})
-		);
-		Ok(())
+		let reading = json!({
+			"step": step,
+			"asked": rectangle,
+			"clip": clip,
+			"magenta_drawn_in_window_points": painted.magenta,
+			"cyan_drawn_in_window_points": painted.cyan,
+			"content_loads": loads.0.load(Ordering::SeqCst),
+			"measured": measured_window(&app, &window)?,
+			"note": note,
+		});
+		println!("{reading}");
+		Ok(reading)
 	}
 
 	#[tauri::command]

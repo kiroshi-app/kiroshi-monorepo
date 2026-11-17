@@ -11,7 +11,7 @@
 	<body>
 		<div id="placeholder"></div>
 		<script>
-			const { invoke } = window.__TAURI_INTERNALS__
+			const { invoke, transformCallback } = window.__TAURI_INTERNALS__
 			const ID = "prototype"
 			const SHOWN = { x: 40, y: 80, width: 480, height: 300 }
 			const MOVED = { x: 200, y: 160, width: 560, height: 340 }
@@ -23,7 +23,7 @@
 			const answer = (call) => call.then(() => "ok", (failure) => failure)
 			const capture = async (step, rectangle, clip, note) => {
 				await pause(600)
-				await invoke("capture_step", { step, rectangle, clip, note: note ?? null })
+				return invoke("capture_step", { step, rectangle, clip, note: note ?? null })
 			}
 
 			const play = async () => {
@@ -55,10 +55,160 @@
 				location.reload()
 			}
 
+			const MEASURED_EVENT = "live-html://measured"
+			const PAGE = (body, onload = "") =>
+				`<!doctype html><html><body style="margin:0" onload="${onload}">${body}</body></html>`
+			const GROWS = `<div id="grows" style="height:100px;background:#ff00ff"></div>`
+			const growTo = (height, after) =>
+				`setTimeout(() => { document.getElementById('grows').style.height = '${height}px' }, ${after});`
+			const SHORT_PAGE = PAGE(`<div style="height:120px;background:#ff00ff"></div>`)
+			const LONG_PAGE = PAGE(`<div style="height:3000px;background:#ff00ff"></div>`)
+			const GROWING_PAGE = PAGE(GROWS, growTo(400, 600) + growTo(200, 1200))
+			const LATE_PAGE = PAGE(GROWS, growTo(500, 1500))
+			const WIDE_PAGE = PAGE(
+				`<div style="display:flex;width:1440px;height:360px">
+					<div style="flex:1;background:#ff00ff"></div><div style="flex:1;background:#00ffff"></div>
+				</div>`,
+				"setInterval(() => scrollTo(9999, 9999), 50)",
+			)
+			const FLOOD_PAGE = PAGE(
+				"",
+				"const ipc = window.webkit.messageHandlers.ipc; for (let batch = 0; batch < 10; batch++) setTimeout(() => { for (let posted = 0; posted < 1000; posted++) ipc.postMessage(JSON.stringify([480, 200 + batch * 1000 + posted])) }, batch * 100)",
+			)
+			const FLOODED_LAST_HEIGHT = 200 + 9999
+			const VIEWPORT_PAGE = `<!doctype html><html><head><style>body { min-height: 100vh; background: #ff00ff }</style></head><body></body></html>`
+			const TOP_STRIPE = `<div style="height:100px;background:#00ffff"></div><div style="height:2900px;background:#ff00ff"></div>`
+			const SCROLLED_PAGE = PAGE(TOP_STRIPE, "setInterval(() => scrollTo(0, 500), 50)")
+			const SCROLLING_BODY_PAGE = PAGE(
+				`<style>body { overflow: scroll !important; height: 100vh }</style>${TOP_STRIPE}`,
+				"setInterval(() => { document.body.scrollTop = 500 }, 50)",
+			)
+			const NOWHERE = { x: 0, y: 0, width: 0, height: 0 }
+			const TOLERANCE = 3
+			const measurements = []
+			const followed = new Set()
+			const follow = ({ id, width, height }) =>
+				invoke("live_html_place", { id, rectangle: { ...SHOWN, width, height }, clip: null }).catch((failure) =>
+					invoke("finish_run", { failure: `placing ${id} failed: ${JSON.stringify(failure)}` }),
+				)
+			const measuredFor = (id) => measurements.filter((payload) => payload.id === id)
+			const fail = (reason) => {
+				throw reason
+			}
+			const expect = (isMet, reason) => isMet || fail(reason)
+			const near = (length, expected) => Math.abs(length - expected) <= TOLERANCE
+			const until = async (isMet, reason) => {
+				for (let waited = 0; waited < 8000; waited += 50) {
+					if (isMet()) return
+					await pause(50)
+				}
+				fail(typeof reason === "function" ? reason() : reason)
+			}
+			const sizesOf = (id) => JSON.stringify(measuredFor(id).map(({ width, height }) => [width, height]))
+			const expectSizes = async (id, sizes) => {
+				const expected = JSON.stringify(sizes)
+				await until(
+					() => sizesOf(id) === expected,
+					() => `${id} measured ${sizesOf(id)}, expected ${expected}`,
+				)
+			}
+			const expectSizesHeld = async (id, sizes) => {
+				await expectSizes(id, sizes)
+				await pause(1000)
+				expect(sizesOf(id) === JSON.stringify(sizes), `${id} measured ${sizesOf(id)} once settled`)
+			}
+
+			const expectUnscrolled = async (id, html) => {
+				await invoke("live_html_mount", { id, html, rectangle: SHOWN })
+				await until(() => measuredFor(id).length > 0, `${id} was never measured`)
+				const { magenta_drawn_in_window_points: rest, cyan_drawn_in_window_points: top } = await capture(id, SHOWN, null)
+				const drawn = JSON.stringify({ top, rest })
+				expect(top && rest, `${id} drew ${drawn}`)
+				expect(near(top.y, SHOWN.y) && near(top.height, 100), `${id} scrolled: ${drawn}`)
+				expect(near(rest.y, SHOWN.y + 100) && near(rest.height, SHOWN.height - 100), `${id} scrolled: ${drawn}`)
+				await invoke("live_html_remove", { id })
+			}
+
+			const measure = async () => {
+				await invoke("plugin:event|listen", {
+					event: MEASURED_EVENT,
+					target: { kind: "Any" },
+					handler: transformCallback(({ payload }) => {
+						measurements.push(payload)
+						if (followed.has(payload.id)) follow(payload)
+					}),
+				})
+				paint(NOWHERE)
+
+				await invoke("live_html_mount", { id: "short", html: SHORT_PAGE, rectangle: SHOWN })
+				await expectSizes("short", [[SHOWN.width, 120]])
+				const fields = Object.keys(measuredFor("short")[0]).sort().join(",")
+				expect(fields === "height,id,width", `the measured payload carries ${fields}`)
+				await invoke("live_html_place", { id: "short", rectangle: { ...SHOWN, height: 120 }, clip: null })
+				await expectSizesHeld("short", [[SHOWN.width, 120]])
+				await invoke("live_html_remove", { id: "short" })
+
+				await invoke("live_html_mount", { id: "long", html: LONG_PAGE, rectangle: SHOWN })
+				await expectSizesHeld("long", [[SHOWN.width, 3000]])
+				await invoke("live_html_remove", { id: "long" })
+
+				await invoke("live_html_mount", { id: "growing", html: GROWING_PAGE, rectangle: SHOWN })
+				await expectSizesHeld("growing", [[SHOWN.width, 100], [SHOWN.width, 400], [SHOWN.width, 200]])
+				await invoke("live_html_remove", { id: "growing" })
+
+				await invoke("live_html_mount", { id: "removed", html: LATE_PAGE, rectangle: SHOWN })
+				await expectSizes("removed", [[SHOWN.width, 100]])
+				await invoke("live_html_remove", { id: "removed" })
+				await pause(2500)
+				expect(sizesOf("removed") === JSON.stringify([[SHOWN.width, 100]]), `removed measured ${sizesOf("removed")}`)
+
+				await invoke("live_html_mount", { id: "wide", html: WIDE_PAGE, rectangle: SHOWN })
+				await expectSizes("wide", [[SHOWN.width, 120]])
+				const fitted = { ...SHOWN, height: 120 }
+				await invoke("live_html_place", { id: "wide", rectangle: fitted, clip: null })
+				const { magenta_drawn_in_window_points: left, cyan_drawn_in_window_points: right } = await capture(
+					"wide-fitted",
+					fitted,
+					null,
+				)
+				expect(left && right, "the wide page drew no left or no right half")
+				const halves = JSON.stringify({ left, right })
+				expect(near(left.width, SHOWN.width / 2) && near(right.width, SHOWN.width / 2), `the wide halves are ${halves}`)
+				expect(near(left.height, 120) && near(right.height, 120), `the wide halves are ${halves}`)
+				expect(near(right.x - left.x, SHOWN.width / 2) && near(right.y, left.y), `the wide halves are ${halves}`)
+				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 120]]), `wide measured ${sizesOf("wide")}`)
+				await invoke("live_html_remove", { id: "wide" })
+
+				await invoke("live_html_mount", { id: "flood", html: FLOOD_PAGE, rectangle: SHOWN })
+				const lastFlooded = () => measuredFor("flood").at(-1)?.height
+				await until(
+					() => lastFlooded() === FLOODED_LAST_HEIGHT,
+					() => `flood last measured ${lastFlooded()}`,
+				)
+				await pause(500)
+				const flooded = measuredFor("flood").length
+				expect(flooded <= 11 && lastFlooded() === FLOODED_LAST_HEIGHT, `flood emitted ${flooded}, last ${lastFlooded()}`)
+				await invoke("live_html_remove", { id: "flood" })
+
+				followed.add("viewport")
+				await invoke("live_html_mount", { id: "viewport", html: VIEWPORT_PAGE, rectangle: SHOWN })
+				await until(() => measuredFor("viewport").length > 0, "viewport was never measured")
+				await pause(2000)
+				const settled = sizesOf("viewport")
+				const lastViewport = measuredFor("viewport").at(-1).height
+				expect(measuredFor("viewport").length <= 3, `viewport measured ${settled}`)
+				expect(lastViewport < SHOWN.height + 100, `viewport measured ${settled}`)
+				await invoke("live_html_remove", { id: "viewport" })
+
+				await expectUnscrolled("scrolled", SCROLLED_PAGE)
+				await expectUnscrolled("scrolling-body", SCROLLING_BODY_PAGE)
+			}
+
 			const afterReload = async () => {
 				paint(SHOWN)
 				await pause(1000)
 				await capture("after-reload", SHOWN, null)
+				await measure()
 				await invoke("finish_run")
 			}
 

@@ -50,6 +50,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 			library::contract::COMMENT_MENTION_OPENED_EVENT,
 		)
 		.constant("LIBRARY_COMMENT_HOST_AUTHOR_ID", library::contract::COMMENT_HOST_AUTHOR_ID)
+		.constant("LIVE_HTML_MEASURED_EVENT", live_html::contract::MEASURED_EVENT)
 		.constant("SPACE_DESCRIBED_EVENT", spaces::contract::DESCRIBED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.constant("USER_PREFERENCES_CHANGED_EVENT", user::contract::PREFERENCES_CHANGED_EVENT)
@@ -90,6 +91,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
 		.typ::<spaces::contract::SpaceDescribed>()
+		.typ::<live_html::contract::LiveHtmlMeasured>()
 		.typ::<menu_contract::FileMenuChosen>()
 		.typ::<window_controls::tab_drag::TabDrag>()
 		.typ::<window_controls::native_move::NativeMoveEnded>()
