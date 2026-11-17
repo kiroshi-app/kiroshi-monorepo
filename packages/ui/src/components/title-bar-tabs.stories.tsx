@@ -5,10 +5,14 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	expectMutedUntilHoveredOrActive,
+	expectTitleSwappedIn,
 	FRAME_POLL,
 	HOVER_TOOLTIP_WAIT,
 	settled,
 	slotIn,
+	slotsIn,
+	TitleArrival,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import {
 	barIn,
@@ -36,13 +40,16 @@ import {
 	WEEKLY_PLANNING,
 } from "@workspace/ui/components/app-title-bar.fixtures"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import { ConversationTabIcon } from "@workspace/ui/components/conversation-tab-icon"
 import type { GlazeTheme } from "@workspace/ui/components/glaze-border"
 import { Icons } from "@workspace/ui/components/icons"
 import {
+	type TitleBarTab,
 	type TitleBarTabDescriptor,
 	TitleBarTabs,
 } from "@workspace/ui/components/title-bar-tabs"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const ICON_SLOT = 16
 
@@ -521,3 +528,159 @@ export const TabsAtRestHoveredAndSelected = meta.story(tabStatesStory())
 export const TabsAtRestHoveredAndSelectedDark = meta.story(
 	tabStatesStory({ theme: "dark" }),
 )
+
+const NAMED_TITLE = "Billing migration"
+
+const namingTabOf = (naming: ConversationNaming): TitleBarTab => ({
+	id: "billing-migration",
+	title: NAMED_TITLE,
+	icon: <ConversationTabIcon hue={BLOT_HUES.red} icon="Rocket" />,
+	naming,
+})
+
+const namingTabsOf = (
+	naming: ConversationNaming,
+): Pick<AppTitleBarProps, "tabs" | "activeTabId"> => ({
+	tabs: [namingTabOf(naming), WEEKLY_PLANNING],
+	activeTabId: "billing-migration",
+})
+
+const labelIn = (tab: HTMLElement) => slotIn(tab, "text-swap")
+
+export const NamingPending = meta.story({
+	globals: { theme: "dark" },
+	args: namingTabsOf("pending"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the open conversation waits for its generated title, as artboard B2 draws its tab. Check that the selected tab reads New conversation in `--muted-foreground` with no shimmer, that its 15px glyph is the outline message square in `--muted-foreground` whatever hue the room carries, and that the close button is unchanged. Pick `NamingPendingSwapsToATitle` for the moment the title lands.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tab = tabNamed(canvasElement, "New conversation")
+		const icon = slotIn(tab, "conversation-subject-icon")
+		const glyph = icon.querySelector("svg") as SVGElement
+
+		await expect(tab).toHaveAttribute("aria-selected", "true")
+		await expect(slotsIn(tab, "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(labelIn(tab)).color).toBe(
+			tokenStyleIn(labelIn(tab), "text-muted-foreground", "color"),
+		)
+		await expect(icon).toHaveAttribute("data-hue", "")
+		await expect(icon.style.color).toBe("var(--muted-foreground)")
+		await expect([boxOf(glyph).width, boxOf(glyph).height]).toEqual([
+			GLYPH_ICON,
+			GLYPH_ICON,
+		])
+		await expect(
+			within(barIn(canvasElement)).getByRole("button", {
+				name: "Close New conversation",
+			}),
+		).toBeInTheDocument()
+	},
+})
+
+export const NamingArrived = meta.story({
+	globals: { theme: "dark" },
+	args: namingTabsOf("arrived"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the generated title has landed, as artboard B3 draws its tab. Check that the selected tab reads the title in `--foreground` at the pending weight and that the glyph is the room's own icon in its hue. Pick `NamingFailed` when no title came back.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tab = tabNamed(canvasElement, NAMED_TITLE)
+
+		await expect(getComputedStyle(labelIn(tab)).color).toBe(
+			tokenStyleIn(labelIn(tab), "text-foreground", "color"),
+		)
+		await expect(slotIn(tab, "conversation-subject-icon")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.red),
+		)
+	},
+})
+
+export const NamingFailed = meta.story({
+	globals: { theme: "dark" },
+	args: namingTabsOf("failed"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the title generator gave nothing back, as artboard B4 draws its tab. Check that the selected tab reads Untitled conversation in `--foreground` and that its glyph is the default filled message square in the tab's own text colour, with no hue. Pick `NamingArrived` for a title that landed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tab = tabNamed(canvasElement, "Untitled conversation")
+		const glyph = iconSlotOf(tab).firstElementChild as SVGElement
+
+		await expect(getComputedStyle(labelIn(tab)).color).toBe(
+			tokenStyleIn(labelIn(tab), "text-foreground", "color"),
+		)
+		await expect(slotsIn(tab, "conversation-subject-icon")).toHaveLength(0)
+		await expect(glyph.tagName.toLowerCase()).toBe("svg")
+		await expect(getComputedStyle(glyph).color).toBe(
+			getComputedStyle(tab).color,
+		)
+	},
+})
+
+export const NamingPendingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to watch a pending tab label give way to the generated title: press Title arrives. Check that New conversation leaves upward with a blur and the title rises in from below, that only opacity, blur and transform move, and that the tab keeps its height and its ellipsis. Pick `NamingPending` for the waiting state alone.",
+			},
+		},
+	},
+	render: (args) => (
+		<TitleArrival>
+			{(naming, arrive) => (
+				<div className="flex flex-col items-start gap-4">
+					<div className="surface-shell relative h-10 w-320">
+						<AppTitleBar {...TITLE_BAR} {...args} {...namingTabsOf(naming)} />
+					</div>
+					<Button onClick={arrive} variant="outline">
+						Title arrives
+					</Button>
+				</div>
+			)}
+		</TitleArrival>
+	),
+	play: async ({ canvas, canvasElement }) =>
+		expectTitleSwappedIn({
+			host: tabNamed(canvasElement, "New conversation"),
+			arrive: canvas.getByRole("button", { name: "Title arrives" }),
+			title: NAMED_TITLE,
+		}),
+})
+
+export const NamingPendingLight = meta.story({
+	args: namingTabsOf("pending"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending tab of `NamingPending` in the light theme. Check that the label and the outline message square both sit in the light `--muted-foreground` on the selected tab, with no shimmer. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const tab = tabNamed(canvasElement, "New conversation")
+		const muted = tokenStyleIn(tab, "text-muted-foreground", "color")
+
+		await expect(slotsIn(tab, "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(labelIn(tab)).color).toBe(muted)
+		await expect(
+			getComputedStyle(slotIn(tab, "conversation-subject-icon")).color,
+		).toBe(muted)
+	},
+})
