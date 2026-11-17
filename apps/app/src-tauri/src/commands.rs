@@ -109,6 +109,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_copy::<tauri::Wry>,
 		library::commands::library_reveal::<tauri::Wry>,
 		live_html::commands::live_html_mount::<tauri::Wry>,
+		live_html::commands::live_html_mount_attachment::<tauri::Wry>,
 		live_html::commands::live_html_place::<tauri::Wry>,
 		live_html::commands::live_html_hide::<tauri::Wry>,
 		live_html::commands::live_html_show::<tauri::Wry>,

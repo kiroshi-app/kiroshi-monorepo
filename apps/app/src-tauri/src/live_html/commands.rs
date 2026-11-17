@@ -1,7 +1,12 @@
+use std::path::Path;
+
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::attachment::read_page;
 use super::contract::{LiveHtmlError, LiveHtmlRectangle};
 use super::LiveViews;
+use crate::attachments::Attachments;
+use crate::file_store::FileStore;
 
 #[tauri::command]
 #[specta::specta]
@@ -11,6 +16,21 @@ pub async fn live_html_mount<R: Runtime>(
 	html: String,
 	rectangle: LiveHtmlRectangle,
 ) -> Result<(), LiveHtmlError> {
+	app.state::<LiveViews>().mount(&app, id, html, rectangle).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn live_html_mount_attachment<R: Runtime>(
+	app: AppHandle<R>,
+	id: String,
+	path: String,
+	rectangle: LiveHtmlRectangle,
+) -> Result<(), LiveHtmlError> {
+	let attachments = Attachments::dir(&app).ok_or_else(|| LiveHtmlError::Unreadable {
+		detail: "the attachments folder has no location".to_owned(),
+	})?;
+	let html = read_page(&attachments, Path::new(&path))?;
 	app.state::<LiveViews>().mount(&app, id, html, rectangle).await
 }
 

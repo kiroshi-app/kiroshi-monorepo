@@ -1,3 +1,4 @@
+mod attachment;
 pub mod commands;
 pub mod contract;
 #[cfg(not(target_os = "macos"))]
