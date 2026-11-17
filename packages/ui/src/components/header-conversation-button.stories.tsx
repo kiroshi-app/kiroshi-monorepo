@@ -3,12 +3,16 @@ import { expect, fn, userEvent } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	expectSubjectIconInBothThemes,
+	expectTitleSwappedIn,
 	slotIn,
 	slotsIn,
+	TitleArrival,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const CELL_SIDE = 24
 
@@ -16,6 +20,17 @@ const LONG_NAME =
 	"Migration of the legacy billing workspace and every archive it still answers for"
 
 const FREE_HUE = 210
+
+const DARK = { theme: "dark", theme_layout: "single" }
+
+const PENDING_LABEL = "New conversation"
+
+const UNTITLED_LABEL = "Untitled conversation"
+
+const labelOf = (button: HTMLElement) => slotIn(button, "text-swap")
+
+const iconOf = (button: HTMLElement) =>
+	slotIn(button, "conversation-subject-icon")
 
 const meta = preview.meta({
 	title: "Navigation/HeaderConversationButton",
@@ -189,4 +204,108 @@ export const InLayout = meta.story({
 		await expect(button.left - header.left).toBe(6)
 		await expect(Math.abs(button.top - header.top - 6)).toBeLessThan(1)
 	},
+})
+
+export const NamingPending = meta.story({
+	globals: DARK,
+	args: { naming: "pending", color: BLOT_HUES.red, icon: "Rocket" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while a new conversation waits for its generated title, as artboard B2 draws it. Check that the label reads New conversation in a shimmer, that the 24px hexagon is the untinted one with a muted message square whatever hue and icon the room carries, and that the accessible name says New conversation too. Pick `NamingPendingSwapsToATitle` for the moment the title lands.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const button = canvas.getByRole("button", {
+			name: `${PENDING_LABEL} · conversation settings`,
+		})
+		const shimmer = slotIn(labelOf(button), "shimmer-text")
+
+		await expect(labelOf(button)).toHaveTextContent(PENDING_LABEL)
+		await expect(iconOf(button)).toHaveAttribute("data-hue", "")
+		await expect(iconOf(button).style.color).toBe("var(--muted-foreground)")
+		await expect(getComputedStyle(shimmer).animationName).toBe("none")
+	},
+})
+
+export const NamingArrived = meta.story({
+	globals: DARK,
+	args: { naming: "arrived", color: BLOT_HUES.red, icon: "Rocket" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the generated title has landed, as artboard B3 draws it. Check that the label is the title in `--foreground` at the pending weight, with no shimmer left, and that the subject icon is the room's own. Pick `NamingFailed` when no title came back.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const button = canvas.getByRole("button", {
+			name: "Billing migration · conversation settings",
+		})
+
+		await expect(slotsIn(button, "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(labelOf(button)).color).toBe(
+			tokenStyleIn(labelOf(button), "text-foreground", "color"),
+		)
+		await expect(iconOf(button)).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.red),
+		)
+	},
+})
+
+export const NamingFailed = meta.story({
+	globals: DARK,
+	args: { naming: "failed", color: BLOT_HUES.red, icon: "Rocket" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the title generator gave nothing back, as artboard B4 draws it. Check that the label reads Untitled conversation in `--foreground`, that the icon is the default untinted message square, and that nothing shimmers. Pick `NamingArrived` for a title that landed.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const button = canvas.getByRole("button", {
+			name: `${UNTITLED_LABEL} · conversation settings`,
+		})
+
+		await expect(slotsIn(button, "shimmer-text")).toHaveLength(0)
+		await expect(iconOf(button)).toHaveAttribute("data-hue", "")
+		await expect(iconOf(button).style.color).toBe(
+			"var(--conversation-icon-foreground)",
+		)
+	},
+})
+
+export const NamingPendingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to watch a pending label give way to the generated title: press Title arrives. Check that New conversation leaves upward with a blur and the title rises in from below, that only opacity, blur and transform move, and that the button keeps its height. Pick `NamingPending` for the waiting state alone.",
+			},
+		},
+	},
+	render: (args) => (
+		<TitleArrival>
+			{(naming, arrive) => (
+				<div className="flex flex-col items-start gap-4">
+					<HeaderConversationButton {...args} naming={naming} />
+					<Button onClick={arrive} variant="outline">
+						Title arrives
+					</Button>
+				</div>
+			)}
+		</TitleArrival>
+	),
+	play: async ({ canvas, canvasElement }) =>
+		expectTitleSwappedIn({
+			host: slotIn(canvasElement, "header-conversation-button"),
+			arrive: canvas.getByRole("button", { name: "Title arrives" }),
+			title: "Billing migration",
+		}),
 })

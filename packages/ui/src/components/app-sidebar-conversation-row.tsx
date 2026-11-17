@@ -20,6 +20,7 @@ import {
 	useIsCompactRows,
 } from "@workspace/ui/components/compact-rows"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
+import { conversationLabelOf } from "@workspace/ui/components/conversation-naming"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -27,6 +28,7 @@ import {
 	type MissionOpening,
 	type MissionTreeRowWrap,
 } from "@workspace/ui/components/mission-capsule"
+import { TextSwap } from "@workspace/ui/components/motion/text-swap"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -97,6 +99,7 @@ const ConversationRosterRow = ({
 	wrapMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
+	const { t: tNaming } = useTranslation(["common", "chat"])
 	const { state } = useSidebar()
 	const isCompact = useIsCompactRows()
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -105,6 +108,9 @@ const ConversationRosterRow = ({
 	const leadSide = isCompact ? COMPACT_LEAD_SIDE : ROW_ICON_SIDE
 	const stackedSurface = hasSurface ? SURFACE : undefined
 	const isAgentLine = isCompact && Boolean(conversation.agent)
+	const { naming } = conversation
+	const label = conversationLabelOf(tNaming, conversation.name, naming)
+	const isNamed = naming === undefined || naming === "arrived"
 
 	return (
 		<SidebarMenuItem
@@ -138,15 +144,25 @@ const ConversationRosterRow = ({
 								<BotRowAvatar bot={conversation.agent} size={leadSide} />
 							) : (
 								<ConversationSubjectIcon
-									hue={conversation.color}
-									icon={conversation.icon}
+									hue={isNamed ? conversation.color : null}
+									icon={isNamed ? conversation.icon : undefined}
 									isBare={isCompact}
-									isFilled={isSelected}
+									isFilled={isSelected || naming === "pending"}
+									isMuted={naming === "pending"}
 									side={leadSide}
 								/>
 							)
 						}
-						name={conversation.name}
+						name={label}
+						nameContent={
+							naming ? (
+								<TextSwap
+									className="block truncate"
+									isShimmering={naming === "pending"}
+									text={label}
+								/>
+							) : undefined
+						}
 						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return
 							onSelect?.(conversation.id, modifiers)
@@ -177,7 +193,7 @@ const ConversationRosterRow = ({
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
-					aria-label={t("roster.actions", { name: conversation.name })}
+					aria-label={t("roster.actions", { name: label })}
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
 					<PinGroup

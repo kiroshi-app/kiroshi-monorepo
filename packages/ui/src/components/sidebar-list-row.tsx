@@ -55,6 +55,7 @@ type SidebarListRowElementProps = Omit<
 
 interface SidebarListRowProps extends SidebarListRowElementProps {
 	name: string
+	nameContent?: ReactNode
 	media?: ReactNode
 	trailing?: ReactNode
 	timestamp?: string
@@ -74,6 +75,7 @@ interface SidebarListRowProps extends SidebarListRowElementProps {
 
 const SidebarListRow = ({
 	name,
+	nameContent,
 	media,
 	trailing,
 	timestamp,
@@ -114,6 +116,7 @@ const SidebarListRow = ({
 				variant="compact"
 			>
 				<CompactRowTitle
+					content={nameContent}
 					isNeedingYou={needsYou}
 					isWorking={isWorking}
 					name={name}
@@ -144,7 +147,7 @@ const SidebarListRow = ({
 				geometry="roster"
 				isNameMuted={isNameMuted}
 				isWorking={isWorking}
-				name={name}
+				name={nameContent ?? name}
 				nameSlot="roster-row-name"
 				pendingQuestion={pendingQuestion}
 				preview={preview}
