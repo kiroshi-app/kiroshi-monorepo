@@ -1871,6 +1871,12 @@ describe("WorkspaceBody library", () => {
 		await settle()
 	}
 
+	const copyFromMore = async () => {
+		await press("More")
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Copy" }))
+		await settle()
+	}
+
 	const noticeTitled = (title: string) => screen.findAllByText(title)
 
 	it("lists the Library of the Space once it has loaded", async () => {
@@ -2138,9 +2144,9 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("fern-study.jpg")
 
-		await press("Copy")
+		await copyFromMore()
 		await press("Next image")
-		await press("Copy")
+		await copyFromMore()
 
 		expect(copyToClipboard.mock.calls).toEqual([
 			[SPACE, FERN.name],
@@ -2157,7 +2163,7 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		await press("Copy")
+		await copyFromMore()
 
 		await noticeTitled(COPY_FAILURE)
 	})
@@ -2208,7 +2214,7 @@ describe("WorkspaceBody library", () => {
 		await open("hero-dunes.png")
 
 		await press("Download")
-		await press("Copy")
+		await copyFromMore()
 		await press("More")
 		fireEvent.click(
 			await screen.findByRole("menuitem", { name: "Show in folder" }),
@@ -2325,7 +2331,7 @@ describe("WorkspaceBody library", () => {
 			await openJoinedLibrary()
 			await open("fern-study.jpg")
 
-			await press("Copy")
+			await copyFromMore()
 
 			expect(libraryHost.readFile).toHaveBeenCalledExactlyOnceWith({
 				spaceId: HOST_SPACE,
@@ -2380,16 +2386,16 @@ describe("WorkspaceBody library", () => {
 		})
 
 		it.each([
-			["Download", SAVE_FAILURE],
-			["Copy", COPY_FAILURE],
+			["Download", SAVE_FAILURE, () => press("Download")],
+			["Copy", COPY_FAILURE, copyFromMore],
 		])(
 			"raises one notice when the host cannot read the file to %s",
-			async (action, failure) => {
+			async (_action, failure, choose) => {
 				libraryHost.readFile.mockRejectedValue(refusal)
 				await openJoinedLibrary()
 				await open("hero-dunes.png")
 
-				await press(action)
+				await choose()
 
 				expect(await announced(failure)).toHaveLength(1)
 				expect(saveBytes).not.toHaveBeenCalled()
@@ -2417,7 +2423,7 @@ describe("WorkspaceBody library", () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
 
-			await press("Copy")
+			await copyFromMore()
 
 			expect(await announced(COPY_FAILURE)).toHaveLength(1)
 			expectNoPathCommand()
