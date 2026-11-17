@@ -12,13 +12,14 @@ export const LiveHtmlAttachment = ({
 	path,
 	onUnavailable,
 }: LiveHtmlAttachmentProps) => {
-	const { status, onPlacementChange } = useLiveHtmlView(
+	const { status, height, onPlacementChange } = useLiveHtmlView(
 		mountingAttachment(path),
 		onUnavailable,
 	)
 
 	return (
 		<LiveHtmlSlot
+			height={height}
 			html=""
 			onPlacementChange={onPlacementChange}
 			status={status}

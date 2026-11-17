@@ -8,9 +8,29 @@ import {
 	createLiveHtmlView,
 	type MountLiveHtml,
 } from "@/lib/live-html/live-html-view"
+import { listenToPageHeight } from "@/lib/live-html/page-height"
 import { useIsAppSurfaceOpen } from "@/lib/live-html/use-is-app-surface-open"
 
 const reportFailure = failureReporterIn("use-live-html-view")
+
+type LiveHtmlView = ReturnType<typeof createLiveHtmlView>
+
+const usePageHeight = ({ id, fail }: LiveHtmlView) => {
+	const [height, setHeight] = useState<number>()
+
+	useEffect(() => {
+		let isListening = true
+		const listening = listenToPageHeight(id, (measured) => {
+			if (isListening) setHeight(measured)
+		}).catch(fail)
+		return () => {
+			isListening = false
+			void listening.then((stopListening) => stopListening?.())
+		}
+	}, [id, fail])
+
+	return height
+}
 
 export const useLiveHtmlView = (
 	mountAt: MountLiveHtml,
@@ -33,8 +53,9 @@ export const useLiveHtmlView = (
 		}),
 	)
 	const isSurfaceOpen = useIsAppSurfaceOpen()
+	const height = usePageHeight(view)
 
 	useEffect(() => view.cover(isSurfaceOpen), [view, isSurfaceOpen])
 
-	return { status, onPlacementChange: view.follow }
+	return { status, height, onPlacementChange: view.follow }
 }

@@ -20,6 +20,7 @@ import {
 import "@workspace/ui/lib/i18n"
 
 import { AnswerBody, TurnBody } from "@/components/turn-body"
+import type { LiveHtmlMeasured } from "@/lib/bindings"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
@@ -30,10 +31,13 @@ import {
 } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 
+type MeasuredHandler = (event: { payload: LiveHtmlMeasured }) => void
+
 const host = vi.hoisted(() => ({
 	saveCsvFile: vi.fn(),
 	liveHtml: vi.fn(),
 	isMacOs: false,
+	measuredHandlers: new Set<MeasuredHandler>(),
 }))
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
@@ -55,6 +59,13 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 
 vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
 
+vi.mock("@/lib/host/window-listen", () => ({
+	listenOnThisWindow: async (_event: string, handler: MeasuredHandler) => {
+		host.measuredHandlers.add(handler)
+		return () => host.measuredHandlers.delete(handler)
+	},
+}))
+
 vi.mock("@/lib/host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host")>()),
 	assetSrc: (path: string) => `host-file://${encodeURIComponent(path)}`,
@@ -69,6 +80,7 @@ afterEach(() => {
 	host.saveCsvFile.mockReset()
 	host.liveHtml.mockReset()
 	host.isMacOs = false
+	host.measuredHandlers.clear()
 })
 
 const fenced = (label: string, body: string) =>
@@ -595,6 +607,23 @@ const htmlCodeBlock = () =>
 
 const liveView = () => screen.queryByRole("group", { name: "Live view" })
 
+const measurePage = (id: string, height: number) =>
+	act(() => {
+		for (const handler of host.measuredHandlers) {
+			handler({ payload: { id, width: SLOT_VIEW_BOX.width, height } })
+		}
+	})
+
+const mountedViewId = async (command: string) => {
+	await waitFor(() => expect(liveHtmlCallsOf(command)).toHaveLength(1))
+	const [{ id }] = liveHtmlCallsOf(command) as { id: string }[]
+	return id
+}
+
+const slotViewHeight = () =>
+	document.querySelector<HTMLElement>('[data-slot="live-html-slot-view"]')
+		?.style.height
+
 const showOnMacOs = () => {
 	host.isMacOs = true
 	host.liveHtml.mockResolvedValue(null)
@@ -665,6 +694,20 @@ describe("an html block of an agent reply", () => {
 		)
 		const [first, second] = liveHtmlCallsOf("live_html_mount")
 		expect(first.id).not.toBe(second.id)
+	})
+
+	it("keeps the default height until the host measures the page, then takes it", async () => {
+		showOnMacOs()
+		renderReply(HTML_REPLY)
+		const id = await mountedViewId("live_html_mount")
+
+		expect(slotViewHeight()).toBe("")
+
+		measurePage(id, 1840)
+		expect(slotViewHeight()).toBe("1840px")
+
+		measurePage("another-view", 400)
+		expect(slotViewHeight()).toBe("1840px")
 	})
 
 	it("removes its view when the reply leaves the screen", async () => {
@@ -772,6 +815,16 @@ describe("an html file an agent attaches to its reply", () => {
 		await click(screen.getByRole("button", { name: "Open the night map" }))
 
 		expect(openAttachment).toHaveBeenCalledWith(STORED_PAGE)
+	})
+
+	it("grows to the height the host measured for the stored page", async () => {
+		showOnMacOs()
+		renderStoredReply(ATTACHING_REPLY)
+		const id = await mountedViewId("live_html_mount_attachment")
+
+		measurePage(id, 2640)
+
+		expect(slotViewHeight()).toBe("2640px")
 	})
 
 	it.each([
