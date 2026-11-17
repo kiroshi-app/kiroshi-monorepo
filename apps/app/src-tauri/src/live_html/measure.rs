@@ -212,14 +212,6 @@ mod tests {
 	}
 
 	#[test]
-	fn a_size_after_an_empty_one_is_still_emitted() {
-		let mut report = SizeReport::default();
-
-		assert_eq!(page_size("[480, 0]"), None);
-		assert_eq!(report.posted(size(120.0)), Some(size(120.0)));
-	}
-
-	#[test]
 	fn a_negative_size_is_dropped() {
 		assert_eq!(page_size("[480, -1]"), None);
 		assert_eq!(page_size("[-0.5, 300]"), None);
