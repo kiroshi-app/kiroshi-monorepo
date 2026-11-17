@@ -1,3 +1,7 @@
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
+import { failureReporterIn, type ReporterFacts } from "../failure-report"
 import type { BotSkill } from "../conversations/store-contract"
 
 type SkillFileFailure = "read" | "write" | "delete"
@@ -31,9 +35,16 @@ export type SkillFilesController = {
 	removeFile: (skillId: string, path: string) => void
 }
 
+type SkillFilesOptions = {
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
+}
+
 export const createSkillFilesController = (
 	port: SkillFilesPort,
 	host: SkillFilesHost,
+	{
+		reportFailure = failureReporterIn("skill-files-controller"),
+	}: SkillFilesOptions = {},
 ): SkillFilesController => {
 	const applyToOpen = (
 		skillId: string,
@@ -44,6 +55,16 @@ export const createSkillFilesController = (
 		if (open?.skillId === skillId && open.path === path) {
 			host.setFile({ ...open, ...fields })
 		}
+	}
+
+	const refuse = (
+		skillId: string,
+		path: string,
+		failure: SkillFileFailure,
+		reason: unknown,
+	) => {
+		applyToOpen(skillId, path, { failure })
+		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
 	}
 
 	const closeOpen = (skillId: string, path: string) => {
@@ -80,8 +101,8 @@ export const createSkillFilesController = (
 				try {
 					await port.write(skillId, path, "")
 					applyToOpen(skillId, path, { text: "" })
-				} catch {
-					applyToOpen(skillId, path, { failure: "write" })
+				} catch (reason) {
+					refuse(skillId, path, "write", reason)
 				}
 			})
 		},
@@ -91,8 +112,8 @@ export const createSkillFilesController = (
 				try {
 					await port.write(skillId, path, text)
 					applyToOpen(skillId, path, { text, failure: undefined })
-				} catch {
-					applyToOpen(skillId, path, { failure: "write" })
+				} catch (reason) {
+					refuse(skillId, path, "write", reason)
 				}
 			}),
 
@@ -101,8 +122,8 @@ export const createSkillFilesController = (
 				try {
 					await port.remove(skillId, path)
 					closeOpen(skillId, path)
-				} catch {
-					applyToOpen(skillId, path, { failure: "delete" })
+				} catch (reason) {
+					refuse(skillId, path, "delete", reason)
 				}
 			}),
 	}

@@ -1661,8 +1661,12 @@ export const createConversationController = (
 		}
 		try {
 			await enqueue(() => storePrompt(said, run.summoned))
-		} catch {
+		} catch (reason) {
 			refuse(said, trimmed, run)
+			void reportFailure(
+				{ title: i18n.t("chat:screen.notice.failed") },
+				{ reason, conversation: conversationId },
+			)
 			return false
 		}
 
@@ -2237,8 +2241,11 @@ export const createConversationController = (
 	}
 
 	const shutdownRun = (scope: RuntimeScope) =>
-		driver.shutdown(scope).catch((reason) => {
-			console.error("conversation controller: agent_shutdown failed", reason)
+		driver.shutdown(scope).catch((reason: unknown) => {
+			void reportFailure(
+				{ title: i18n.t("chat:screen.notice.failed") },
+				{ reason, conversation: scope.conversationId, botId: scope.botId },
+			)
 		})
 
 	const shutdownSpeaker = (held: Speaker) =>

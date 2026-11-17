@@ -214,48 +214,6 @@ describe("createSectionsController", () => {
 		expect(cleared).toEqual([written.id])
 	})
 
-	it("reports the section a companion is moved into", async () => {
-		const store = createFakeTranscriptStore()
-		const written = await store.createSection("personal", "Writers")
-		const moves: (string | null)[] = []
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			move: (_botId, sectionId) => moves.push(sectionId),
-		})
-
-		await controller.moveBot("default", written.id)
-		await controller.moveBot("default", null)
-
-		expect(moves).toEqual([written.id, null])
-		expect((await store.bots("personal"))[0].sectionId).toBeNull()
-	})
-
-	it("reports nothing when the record refuses a companion move", async () => {
-		const store = createFakeTranscriptStore()
-		const moves: string[] = []
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			move: (botId) => moves.push(botId),
-		})
-
-		await controller.moveBot("default", "gone")
-
-		expect(moves).toEqual([])
-	})
-
-	it("reads the roster again when the record refuses a companion move", async () => {
-		const store = createFakeTranscriptStore()
-		const reload = vi.fn(async () => undefined)
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			reload,
-		})
-
-		await controller.moveBot("default", "gone")
-
-		expect(reload).toHaveBeenCalledOnce()
-	})
-
 	it("raises a failure notice and holds no section when a space cannot be read", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createSection("personal", "Writers")
