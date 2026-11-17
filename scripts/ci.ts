@@ -791,50 +791,130 @@ const KIROSHI_TESTS = "KiroshiTests"
 
 const OVER_PLAN_RATIO = 1.25
 
+const WHOLE_JOB_CAP_SECONDS = 20 * 60
+
+const UI_TEST_TARGET = "KiroshiUITests"
+
+const TEST_METHOD = /func (test\w+)\s*\(/g
+
+type UiTestClass = { name: string; methods: string[] }
+
+export const uiTestSuite = (directory = UI_TESTS): UiTestClass[] =>
+	uiTestClasses(directory).map((name) => ({
+		name,
+		methods: [
+			...new Set(
+				[
+					...readFileSync(join(directory, `${name}.swift`), "utf8").matchAll(
+						TEST_METHOD,
+					),
+				].map(([, method = ""]) => method),
+			),
+		],
+	}))
+
 type IosTimings = {
 	overheadSeconds: number
-	classSeconds: Record<string, number>
+	testSeconds: Record<string, number>
 }
 
 export const readIosTimings = (): IosTimings =>
 	JSON.parse(readFileSync(join(REPO, IOS_TIMINGS), "utf8"))
 
-const unmeasuredClassSeconds = (timings: IosTimings) =>
-	median(Object.values(timings.classSeconds))
+const classTestId = (className: string) => `${UI_TEST_TARGET}/${className}`
 
-const plannedClassSeconds = (timings: IosTimings, name: string) =>
-	timings.classSeconds[name] ?? unmeasuredClassSeconds(timings)
+const methodTestId = (className: string, method: string) =>
+	`${classTestId(className)}/${method}`
+
+const measuredSecondsUnder = (timings: IosTimings, prefix: string) =>
+	Object.entries(timings.testSeconds)
+		.filter(([id]) => id.startsWith(`${prefix}/`))
+		.map(([, seconds]) => seconds)
+
+const unmeasuredMethodSeconds = (timings: IosTimings, className: string) => {
+	const ofClass = measuredSecondsUnder(timings, classTestId(className))
+	return median(
+		ofClass.length > 0
+			? ofClass
+			: measuredSecondsUnder(timings, UI_TEST_TARGET),
+	)
+}
+
+type PlannedTest = { id: string; seconds: number; unmeasured: string[] }
+
+const plannedMethod = (
+	timings: IosTimings,
+	className: string,
+	method: string,
+): PlannedTest => {
+	const id = methodTestId(className, method)
+	const seconds = timings.testSeconds[id]
+	return seconds === undefined
+		? {
+				id,
+				seconds: unmeasuredMethodSeconds(timings, className),
+				unmeasured: [id],
+			}
+		: { id, seconds, unmeasured: [] }
+}
+
+const plannedUnitsOf = (
+	timings: IosTimings,
+	{ name, methods }: UiTestClass,
+): PlannedTest[] => {
+	const planned = methods.map((method) => plannedMethod(timings, name, method))
+	const seconds = sumOf(planned.map((method) => method.seconds))
+	if (timings.overheadSeconds + seconds > WHOLE_JOB_CAP_SECONDS) return planned
+	return [
+		{
+			id: classTestId(name),
+			seconds,
+			unmeasured: planned.flatMap((method) => method.unmeasured),
+		},
+	]
+}
+
+const plannedKiroshiTests = (timings: IosTimings): PlannedTest => {
+	const seconds = timings.testSeconds[KIROSHI_TESTS]
+	return seconds === undefined
+		? {
+				id: KIROSHI_TESTS,
+				seconds: median(measuredSecondsUnder(timings, UI_TEST_TARGET)),
+				unmeasured: [KIROSHI_TESTS],
+			}
+		: { id: KIROSHI_TESTS, seconds, unmeasured: [] }
+}
 
 type ShardPlanning = {
 	count: number
-	classes: string[]
+	suite: UiTestClass[]
 	timings: IosTimings
 }
 
-type ShardLoad = { testSeconds: number; tests: string[] }
+type ShardLoad = { testSeconds: number; tests: PlannedTest[] }
 
 type PlannedShard = ShardLoad & { wholeJobSeconds: number }
 
 export const plannedShards = ({
 	count,
-	classes,
+	suite,
 	timings,
 }: ShardPlanning): PlannedShard[] => {
-	const secondsOf = (name: string) => plannedClassSeconds(timings, name)
+	const kiroshiTests = plannedKiroshiTests(timings)
 	const shards: ShardLoad[] = Array.from({ length: count }, (_, position) =>
 		position === 0
-			? { testSeconds: secondsOf(KIROSHI_TESTS), tests: [KIROSHI_TESTS] }
+			? { testSeconds: kiroshiTests.seconds, tests: [kiroshiTests] }
 			: { testSeconds: 0, tests: [] },
 	)
-	const longestFirst = [...classes].sort(
-		(a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
-	)
-	for (const name of longestFirst) {
+	const longestFirst = suite
+		.flatMap((uiClass) => plannedUnitsOf(timings, uiClass))
+		.sort((a, b) => b.seconds - a.seconds || a.id.localeCompare(b.id))
+	for (const unit of longestFirst) {
 		const lightest = shards.reduce((lightest, shard) =>
 			shard.testSeconds < lightest.testSeconds ? shard : lightest,
 		)
-		lightest.tests.push(`KiroshiUITests/${name}`)
-		lightest.testSeconds += secondsOf(name)
+		lightest.tests.push(unit)
+		lightest.testSeconds += unit.seconds
 	}
 	return shards.map((shard) => ({
 		...shard,
@@ -842,28 +922,22 @@ export const plannedShards = ({
 	}))
 }
 
-const SUITE_EVENT =
-	/Test Suite '(\w+)' (started|passed|failed) at (\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d\.\d+)/g
+const TEST_CASE_ENDED =
+	/Test Case '-\[KiroshiUITests\.(\w+) (\w+)\]' (?:passed|failed|skipped) \(([\d.]+) seconds\)/g
 
 const UNIT_TEST_RUN =
 	/Test run with \d+ tests? in \d+ suites? (?:passed|failed) after ([\d.]+) seconds/
 
-const suiteEventSeconds = (date: string, time: string) =>
-	Date.parse(`${date}T${time}Z`) / 1000
+const tenthsOf = (seconds: number) => Math.round(seconds * 10) / 10
 
-export const measuredClassSeconds = (log: string) => {
-	const startedAt = new Map<string, number>()
+export const measuredTestSeconds = (log: string) => {
 	const seconds: Record<string, number> = {}
-	for (const [, name = "", event, date = "", time = ""] of log.matchAll(
-		SUITE_EVENT,
-	)) {
-		const at = suiteEventSeconds(date, time)
-		const started = startedAt.get(name)
-		if (event === "started") startedAt.set(name, at)
-		else if (started !== undefined) seconds[name] = Math.round(at - started)
-	}
+	for (const [, className = "", method = "", taken = ""] of log.matchAll(
+		TEST_CASE_ENDED,
+	))
+		seconds[methodTestId(className, method)] = tenthsOf(Number(taken))
 	const unitTestRun = UNIT_TEST_RUN.exec(log)
-	if (unitTestRun) seconds[KIROSHI_TESTS] = Math.round(Number(unitTestRun[1]))
+	if (unitTestRun) seconds[KIROSHI_TESTS] = tenthsOf(Number(unitTestRun[1]))
 	return seconds
 }
 
@@ -872,44 +946,48 @@ const median = (values: number[]) => {
 	const middle = Math.floor(sorted.length / 2)
 	const upper = sorted[middle] ?? 0
 	const lower = sorted[sorted.length % 2 === 0 ? middle - 1 : middle] ?? 0
-	return Math.round((lower + upper) / 2)
+	return tenthsOf((lower + upper) / 2)
 }
 
 type MeasuredShardJob = {
 	wholeJobSeconds: number
-	classSeconds: Record<string, number>
+	testSeconds: Record<string, number>
 }
 
 type IosMeasurement = {
-	runs: number[]
 	jobs: MeasuredShardJob[]
-	classes: string[]
+	suite: UiTestClass[]
 }
 
 const sumOf = (values: number[]) =>
 	values.reduce((total, value) => total + value, 0)
 
 export const measuredIosTimings = ({
-	runs,
 	jobs,
-	classes,
+	suite,
 }: IosMeasurement): IosTimings => {
-	const planned = [KIROSHI_TESTS, ...classes].sort()
-	const samplesOf = (name: string) =>
-		jobs.flatMap(({ classSeconds }) => classSeconds[name] ?? [])
-	const unmeasured = planned.filter((name) => samplesOf(name).length === 0)
-	if (unmeasured.length > 0)
-		throw new Error(
-			`runs ${runs.join(", ")} measured no seconds for ${unmeasured.join(", ")}`,
-		)
-	const testSecondsOf = ({ classSeconds }: MeasuredShardJob) =>
-		sumOf(planned.map((name) => classSeconds[name] ?? 0))
-	return {
-		overheadSeconds: median(
-			jobs.map((job) => job.wholeJobSeconds - testSecondsOf(job)),
+	const planned = new Set([
+		KIROSHI_TESTS,
+		...suite.flatMap(({ name, methods }) =>
+			methods.map((method) => methodTestId(name, method)),
 		),
-		classSeconds: Object.fromEntries(
-			planned.map((name) => [name, median(samplesOf(name))]),
+	])
+	const plannedSecondsOf = (job: MeasuredShardJob) =>
+		Object.entries(job.testSeconds).filter(([id]) => planned.has(id))
+	const highest: Record<string, number> = {}
+	for (const [id, seconds] of jobs.flatMap(plannedSecondsOf))
+		highest[id] = Math.max(highest[id] ?? 0, seconds)
+	return {
+		overheadSeconds: Math.max(
+			...jobs.map((job) =>
+				Math.round(
+					job.wholeJobSeconds -
+						sumOf(plannedSecondsOf(job).map(([, seconds]) => seconds)),
+				),
+			),
+		),
+		testSeconds: Object.fromEntries(
+			Object.entries(highest).sort(([a], [b]) => a.localeCompare(b)),
 		),
 	}
 }
@@ -928,7 +1006,7 @@ const measuredShardJob = (job: RunJob): MeasuredShardJob => ({
 	wholeJobSeconds: Math.round(
 		(Date.parse(job.completedAt) - Date.parse(job.startedAt)) / 1000,
 	),
-	classSeconds: measuredClassSeconds(
+	testSeconds: measuredTestSeconds(
 		captured({
 			command: ["gh", "run", "view", "--log", "--job", `${job.databaseId}`],
 			operation: `reading the log of ${job.name}`,
@@ -966,16 +1044,15 @@ export const parsedRunIds = (texts: string[]) => {
 const refreshIosTimings = (texts: string[]) => {
 	const runs = parsedRunIds(texts)
 	const timings = measuredIosTimings({
-		runs,
 		jobs: runs.flatMap(measuredShardJobsOf),
-		classes: uiTestClasses(),
+		suite: uiTestSuite(),
 	})
 	writeFileSync(
 		join(REPO, IOS_TIMINGS),
 		`${JSON.stringify(timings, null, "\t")}\n`,
 	)
 	console.log(
-		`ci  ${IOS_TIMINGS} now plans ${Object.keys(timings.classSeconds).length} classes and ${timings.overheadSeconds} s outside the tests, from runs ${runs.join(", ")}`,
+		`ci  ${IOS_TIMINGS} now plans ${Object.keys(timings.testSeconds).length} tests and ${timings.overheadSeconds} s outside the tests, from runs ${runs.join(", ")}`,
 	)
 	return true
 }
@@ -988,28 +1065,39 @@ type ShardRun = {
 	run: string
 }
 
-const classNameOf = (test: string) => test.split("/").at(-1) ?? test
+const measuredSecondsOf = (
+	measured: Record<string, number>,
+	{ id }: PlannedTest,
+) => {
+	const samples = Object.entries(measured)
+		.filter(([test]) => test === id || test.startsWith(`${id}/`))
+		.map(([, seconds]) => seconds)
+	return samples.length === 0 ? undefined : sumOf(samples)
+}
 
-const measuredTestSeconds = ({ planned, measured }: ShardRun) =>
-	sumOf(planned.tests.map((test) => measured[classNameOf(test)] ?? 0))
+const measuredShardSeconds = ({ planned, measured }: ShardRun) =>
+	Math.round(
+		sumOf(planned.tests.map((test) => measuredSecondsOf(measured, test) ?? 0)),
+	)
+
+const shownId = (id: string) => id.replace(`${UI_TEST_TARGET}/`, "")
 
 export const shardTimingSummary = (shardRun: ShardRun) => {
 	const { shard, planned, timings, measured } = shardRun
-	const testSeconds = measuredTestSeconds(shardRun)
+	const testSeconds = measuredShardSeconds(shardRun)
+	const plannedSeconds = Math.round(planned.testSeconds)
 	const ratio = (testSeconds / planned.testSeconds).toFixed(2)
 	const rows = planned.tests.map((test) => {
-		const name = classNameOf(test)
-		const plannedSeconds =
-			timings.classSeconds[name] ??
-			`${unmeasuredClassSeconds(timings)} (not measured)`
-		return `| ${name} | ${plannedSeconds} | ${measured[name] ?? "not measured"} |`
+		const marker = test.unmeasured.length > 0 ? " (not measured)" : ""
+		const ran = measuredSecondsOf(measured, test)
+		return `| ${shownId(test.id)} | ${Math.round(test.seconds)}${marker} | ${ran === undefined ? "not measured" : Math.round(ran)} |`
 	})
 	return [
-		`### ios shard ${shard}: ${testSeconds} s of tests measured for ${planned.testSeconds} s planned, ratio ${ratio}`,
+		`### ios shard ${shard}: ${testSeconds} s of tests measured for ${plannedSeconds} s planned, ratio ${ratio}`,
 		"",
-		`Planned whole job: ${planned.wholeJobSeconds} s, ${timings.overheadSeconds} s of it outside the tests.`,
+		`Planned whole job: ${Math.round(planned.wholeJobSeconds)} s, ${timings.overheadSeconds} s of it outside the tests.`,
 		"",
-		"| Class | Planned s | Measured s |",
+		"| Test | Planned s | Measured s |",
 		"| --- | ---: | ---: |",
 		...rows,
 		"",
@@ -1019,27 +1107,25 @@ export const shardTimingSummary = (shardRun: ShardRun) => {
 
 export const shardOverPlanWarning = (shardRun: ShardRun) => {
 	const { shard, planned, run } = shardRun
-	const testSeconds = measuredTestSeconds(shardRun)
+	const testSeconds = measuredShardSeconds(shardRun)
 	if (testSeconds <= planned.testSeconds * OVER_PLAN_RATIO) return undefined
 	return `::warning title=ios shard over its plan::${escapedAnnotationData(
-		`ios shard ${shard} ran its tests in ${testSeconds} s for ${planned.testSeconds} s planned. Refresh ${IOS_TIMINGS} with ${IOS_TIMINGS_REFRESH} ${run}`,
+		`ios shard ${shard} ran its tests in ${testSeconds} s for ${Math.round(planned.testSeconds)} s planned. Refresh ${IOS_TIMINGS} with ${IOS_TIMINGS_REFRESH} ${run}`,
 	)}`
 }
 
-export const unmeasuredClassWarnings = ({
+export const unmeasuredTestWarnings = ({
 	planned,
-	timings,
 	run,
-}: Omit<ShardRun, "shard" | "measured">) =>
-	planned.tests
-		.map(classNameOf)
-		.filter((name) => timings.classSeconds[name] === undefined)
-		.map(
-			(name) =>
-				`::warning title=ios class not measured::${escapedAnnotationData(
-					`${name} has no entry in ${IOS_TIMINGS}, planned at ${unmeasuredClassSeconds(timings)} s. Refresh it with ${IOS_TIMINGS_REFRESH} ${run}`,
+}: Pick<ShardRun, "planned" | "run">) =>
+	planned.tests.flatMap(({ unmeasured }) =>
+		unmeasured.map(
+			(test) =>
+				`::warning title=ios test not measured::${escapedAnnotationData(
+					`${shownId(test)} has no entry in ${IOS_TIMINGS}, planned at the median of its class. Refresh it with ${IOS_TIMINGS_REFRESH} ${run}`,
 				)}`,
-		)
+		),
+	)
 
 const currentRun = () =>
 	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
@@ -1064,21 +1150,17 @@ const selectIosTests = (): SelectedShard | undefined => {
 	}
 	const { index, count } = parsedShard(shard)
 	const timings = readIosTimings()
-	const planned = plannedShards({ count, classes: uiTestClasses(), timings })[
+	const planned = plannedShards({ count, suite: uiTestSuite(), timings })[
 		index - 1
 	]
 	if (!planned) throw new Error(`ios shard ${shard} has no plan`)
 	process.env.IOS_ONLY_TESTING = planned.tests
-		.map((test) => `-only-testing:${test}`)
+		.map(({ id }) => `-only-testing:${id}`)
 		.join(" ")
 	console.log(
-		`\nci  ios shard ${shard} runs ${planned.tests.join(", ")}, planned ${planned.wholeJobSeconds} s of whole job`,
+		`\nci  ios shard ${shard} runs ${planned.tests.map(({ id }) => id).join(", ")}, planned ${Math.round(planned.wholeJobSeconds)} s of whole job`,
 	)
-	for (const warning of unmeasuredClassWarnings({
-		planned,
-		timings,
-		run: currentRun(),
-	}))
+	for (const warning of unmeasuredTestWarnings({ planned, run: currentRun() }))
 		console.log(warning)
 	return { shard, planned, timings }
 }
@@ -1110,7 +1192,7 @@ const shardPassed = () => {
 const reportShardTimings = (selected: SelectedShard, log: string) => {
 	const shardRun: ShardRun = {
 		...selected,
-		measured: measuredClassSeconds(log),
+		measured: measuredTestSeconds(log),
 		run: currentRun(),
 	}
 	const warning = shardOverPlanWarning(shardRun)
