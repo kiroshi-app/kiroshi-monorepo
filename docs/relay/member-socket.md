@@ -113,8 +113,21 @@ being the relay device id that sent the call:
   command again.
 - A repeat that arrives while the first run is still in flight waits for it, then
   gets the same answer.
-- A call refused before the host ran it (400, 403, 404, 413) leaves no answer
-  behind: its repeat is checked again, and runs if it now passes.
+- What a call left behind decides whether its answer is kept. A call that failed
+  before it could store anything leaves no answer behind, and its repeat runs
+  again: a call refused before the host ran it (400, 401, 403, 404, 413), and a
+  502 where the host could not connect to its local api. Every other answer is
+  kept, success or failure, since the command may have stored something before it
+  failed: a 500, and a 502 where the call timed out or its answer was cut. Its
+  repeat gets that answer and the command never runs twice.
+- A repeat whose key holds an answer gets that answer whatever its `args`: the
+  host does not compare payloads under a key. A call with a different payload
+  that reaches the command, under a forgotten key or a new one, and names an id
+  the host already stored with other values, is refused as a conflict: status
+  500, body `{ "kind": "conflict", "id": "<id>", "field": "<field>" }`, `field`
+  naming the first value that differs, `content` for a message. That answer is
+  kept under its key like any 500: its repeat gets the same status and body
+  without running the command.
 - The host keeps the last 1024 answers of each device in each shared space and
   forgets older ones, and it forgets them all when it restarts. A repeat of a
   forgotten key runs as a new call.

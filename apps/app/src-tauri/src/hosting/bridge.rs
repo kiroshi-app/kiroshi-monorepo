@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::{self, RelayedMember};
-use super::keyed_calls::{self, Answered, CallingDevice, Claim};
+use super::keyed_calls::{self, Answered, CallingDevice, Claim, Ran};
 use super::reach::{self, Reach};
 use super::Hosting;
 
@@ -258,7 +258,7 @@ pub(super) async fn bridged<R: Runtime>(
 ) -> String {
 	let id = call.id.clone();
 	let (status, body) = match call.call_key.clone() {
-		None => ran(app, local, shared_space_id, call).await,
+		None => ran(app, local, shared_space_id, call).await.into_answered(),
 		Some(key) => ran_once(app, local, shared_space_id, call, key).await,
 	};
 	answer(id, status, body)
@@ -293,7 +293,7 @@ async fn ran<R: Runtime>(
 	local: LocalApi,
 	shared_space_id: String,
 	call: MemberCall,
-) -> Answered {
+) -> Ran {
 	let caller = authorship::person_of(&app, &call.sender);
 	let reached = reach::stays_in_the_shared_space(
 		&app,
@@ -309,7 +309,7 @@ async fn ran<R: Runtime>(
 			reach::Refusal::NotOwned { .. } => OTHER_PERSON_REFUSAL,
 			_ => OTHER_SPACE_REFUSAL,
 		};
-		return (StatusCode::FORBIDDEN, json!(reason));
+		return Ran::Answered((StatusCode::FORBIDDEN, json!(reason)));
 	}
 	let hosting = app.state::<Hosting>();
 	let member = RelayedMember {
@@ -323,38 +323,46 @@ async fn ran<R: Runtime>(
 	};
 	let vouched = hosting.relayed.vouch(member);
 	let (status, body) = match invoked(&local, &call, &vouched.nonce).await {
-		Ok(answered) => answered,
-		Err(reason) => return (StatusCode::BAD_GATEWAY, json!(reason)),
+		Ran::Answered(answered) => answered,
+		unreached => return unreached,
 	};
 	if !status.is_success() {
-		return (status, body);
+		return Ran::Answered((status, body));
 	}
 	match reach::answer_shown_to(&app, &shared_space_id, &caller, &call.command, body).await {
-		Some(shown) => (status, shown),
-		None => (StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER)),
+		Some(shown) => Ran::Answered((status, shown)),
+		None => Ran::Answered((StatusCode::INTERNAL_SERVER_ERROR, json!(UNCHECKED_ANSWER))),
 	}
 }
 
-async fn invoked(
-	local: &LocalApi,
-	call: &MemberCall,
-	relayed_member: &str,
-) -> Result<(StatusCode, Value), String> {
+async fn invoked(local: &LocalApi, call: &MemberCall, relayed_member: &str) -> Ran {
 	let request = local
 		.client
 		.post(format!("{}/api/invoke/{}", local.origin, call.command))
 		.bearer_auth(&local.token)
 		.header(RELAYED_MEMBER_HEADER, relayed_member)
 		.json(&call.args);
-	let answered = request.send().await.map_err(|error| {
-		format!("the local host api could not be reached: {}", error.without_url())
-	})?;
+	let answered = match request.send().await {
+		Ok(answered) => answered,
+		Err(error) => {
+			let never_connected = error.is_connect();
+			let reason =
+				format!("the local host api could not be reached: {}", error.without_url());
+			let failed = (StatusCode::BAD_GATEWAY, json!(reason));
+			if never_connected {
+				return Ran::Unreached(failed);
+			}
+			return Ran::Answered(failed);
+		}
+	};
 	let status = answered.status();
-	let body = answered
-		.bytes()
-		.await
-		.map_err(|error| format!("the local host api answer was cut: {}", error.without_url()))?;
-	Ok((status, body_of(&body)))
+	match answered.bytes().await {
+		Ok(body) => Ran::Answered((status, body_of(&body))),
+		Err(error) => {
+			let reason = format!("the local host api answer was cut: {}", error.without_url());
+			Ran::Answered((StatusCode::BAD_GATEWAY, json!(reason)))
+		}
+	}
 }
 
 pub(super) struct FileAnswer {

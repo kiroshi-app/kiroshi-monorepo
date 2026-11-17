@@ -7,8 +7,9 @@ use tokio::sync::watch;
 
 pub(super) const ANSWERS_KEPT_PER_DEVICE: usize = 1024;
 
-const REFUSED_BEFORE_INVOKE: [StatusCode; 4] = [
+const REFUSED_BEFORE_INVOKE: [StatusCode; 5] = [
 	StatusCode::BAD_REQUEST,
+	StatusCode::UNAUTHORIZED,
 	StatusCode::FORBIDDEN,
 	StatusCode::NOT_FOUND,
 	StatusCode::PAYLOAD_TOO_LARGE,
@@ -17,6 +18,19 @@ const REFUSED_BEFORE_INVOKE: [StatusCode; 4] = [
 const FIRST_RUN_LOST: &str = "the first run of this call ended without an answer";
 
 pub(super) type Answered = (StatusCode, Value);
+
+pub(super) enum Ran {
+	Answered(Answered),
+	Unreached(Answered),
+}
+
+impl Ran {
+	pub(super) fn into_answered(self) -> Answered {
+		match self {
+			Ran::Answered(answered) | Ran::Unreached(answered) => answered,
+		}
+	}
+}
 
 type Watching = watch::Receiver<Option<Answered>>;
 
@@ -37,12 +51,15 @@ struct DeviceCalls {
 }
 
 impl DeviceCalls {
-	fn kept(&mut self, key: String, answered: Answered) {
+	fn kept(&mut self, key: String, ran: &Ran) {
+		let Ran::Answered(answered) = ran else {
+			return;
+		};
 		if REFUSED_BEFORE_INVOKE.contains(&answered.0) {
 			return;
 		}
 		self.oldest_first.push_back(key.clone());
-		self.answered.insert(key, answered);
+		self.answered.insert(key, answered.clone());
 		while self.oldest_first.len() > ANSWERS_KEPT_PER_DEVICE {
 			if let Some(forgotten) = self.oldest_first.pop_front() {
 				self.answered.remove(&forgotten);
@@ -96,12 +113,12 @@ impl FirstRun {
 		self.watching.clone()
 	}
 
-	pub(super) fn settle(self, answered: Answered) {
+	pub(super) fn settle(self, ran: Ran) {
 		if let Some(calls) = self.calls.held().get_mut(&self.device) {
 			calls.stopped_running(&self.key, &self.watching);
-			calls.kept(self.key.clone(), answered.clone());
+			calls.kept(self.key.clone(), &ran);
 		}
-		self.told.send_replace(Some(answered));
+		self.told.send_replace(Some(ran.into_answered()));
 	}
 }
 
@@ -146,7 +163,7 @@ mod tests {
 	#[test]
 	fn a_repeat_of_an_answered_key_gets_the_stored_answer() {
 		let calls = Arc::new(KeyedCalls::default());
-		first(calls.claim(a_device(), "k1".to_owned())).settle(ok("one"));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(Ran::Answered(ok("one")));
 
 		let repeated = calls.claim(a_device(), "k1".to_owned());
 
@@ -156,7 +173,7 @@ mod tests {
 	#[test]
 	fn the_same_key_from_another_device_or_another_space_runs_on_its_own() {
 		let calls = Arc::new(KeyedCalls::default());
-		first(calls.claim(a_device(), "k1".to_owned())).settle(ok("one"));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(Ran::Answered(ok("one")));
 		let other_device = CallingDevice { device_id: "d2".to_owned(), ..a_device() };
 		let other_space = CallingDevice { space_id: "s2".to_owned(), ..a_device() };
 
@@ -169,17 +186,49 @@ mod tests {
 		let calls = Arc::new(KeyedCalls::default());
 		for status in REFUSED_BEFORE_INVOKE {
 			let key = status.to_string();
-			first(calls.claim(a_device(), key.clone())).settle((status, json!("refused")));
+			let refused = Ran::Answered((status, json!("refused")));
+			first(calls.claim(a_device(), key.clone())).settle(refused);
 
 			assert!(matches!(calls.claim(a_device(), key), Claim::First(_)), "{status}");
 		}
 	}
 
 	#[test]
+	fn a_failure_the_command_raised_is_kept_and_answers_the_repeat() {
+		let calls = Arc::new(KeyedCalls::default());
+		let failed = (StatusCode::INTERNAL_SERVER_ERROR, json!("stored, then failed"));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(Ran::Answered(failed.clone()));
+
+		let repeated = calls.claim(a_device(), "k1".to_owned());
+
+		assert!(matches!(repeated, Claim::Answered(answered) if answered == failed));
+	}
+
+	#[test]
+	fn a_call_that_never_reached_the_host_api_keeps_no_answer() {
+		let calls = Arc::new(KeyedCalls::default());
+		let unreached = Ran::Unreached((StatusCode::BAD_GATEWAY, json!("not reached")));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(unreached);
+
+		assert!(matches!(calls.claim(a_device(), "k1".to_owned()), Claim::First(_)));
+	}
+
+	#[test]
+	fn a_502_that_timed_out_after_reaching_the_host_api_is_kept() {
+		let calls = Arc::new(KeyedCalls::default());
+		let timed_out = (StatusCode::BAD_GATEWAY, json!("timed out"));
+		first(calls.claim(a_device(), "k1".to_owned())).settle(Ran::Answered(timed_out.clone()));
+
+		let repeated = calls.claim(a_device(), "k1".to_owned());
+
+		assert!(matches!(repeated, Claim::Answered(answered) if answered == timed_out));
+	}
+
+	#[test]
 	fn the_oldest_answer_past_the_cap_is_forgotten() {
 		let calls = Arc::new(KeyedCalls::default());
 		for n in 0..=ANSWERS_KEPT_PER_DEVICE {
-			first(calls.claim(a_device(), format!("k{n}"))).settle(ok("kept"));
+			first(calls.claim(a_device(), format!("k{n}"))).settle(Ran::Answered(ok("kept")));
 		}
 
 		let newest = format!("k{ANSWERS_KEPT_PER_DEVICE}");
@@ -197,9 +246,24 @@ mod tests {
 		};
 		let waiting = tokio::spawn(answered_by_the_first_run(held));
 
-		running.settle(ok("one"));
+		running.settle(Ran::Answered(ok("one")));
 
 		assert_eq!(waiting.await.expect("the repeat answers"), ok("one"));
+	}
+
+	#[tokio::test]
+	async fn a_repeat_held_while_the_first_run_is_in_flight_gets_its_answer_even_unkept() {
+		let calls = Arc::new(KeyedCalls::default());
+		let running = first(calls.claim(a_device(), "k1".to_owned()));
+		let Claim::Running(held) = calls.claim(a_device(), "k1".to_owned()) else {
+			panic!("the repeat was not held");
+		};
+		let unreached = (StatusCode::BAD_GATEWAY, json!("not reached"));
+
+		running.settle(Ran::Unreached(unreached.clone()));
+
+		assert_eq!(answered_by_the_first_run(held).await, unreached);
+		assert!(matches!(calls.claim(a_device(), "k1".to_owned()), Claim::First(_)));
 	}
 
 	#[tokio::test]

@@ -146,7 +146,7 @@ fn frames() -> BTreeMap<String, Value> {
 					"args": { "type": "object" },
 					"computer": { "type": "string" },
 					"callKey": {
-						"description": "Chosen by the device and kept the same across repeats of one call. The host runs a call once per device and callKey, and answers a repeat with the status and body of that run.",
+						"description": "Chosen by the device and kept the same across repeats of one call. The host runs a call once per device and callKey, and answers a repeat with the status and body of that run. A call refused before the host ran it (400, 401, 403, 404, 413), or answered 502 because the host could not connect to its local api, keeps no answer: its repeat runs again. A 502 for a call that timed out or whose answer was cut is kept, since the command may have run.",
 						"type": "string",
 						"minLength": 1,
 						"maxLength": 128,
