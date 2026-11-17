@@ -160,10 +160,10 @@ const isReexportModule = (file: string) =>
 		.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.ESNext)
 		.statements.every(isReexportStatement)
 
-const ownTestFiles = (imports: TestImports, module: string) => {
+const ownTestFiles = (testFiles: Set<string>, module: string) => {
 	const stem = module.replace(/\.tsx?$/, "")
 	return [`${stem}.test.ts`, `${stem}.test.tsx`].filter((file) =>
-		imports.testFiles.has(file),
+		testFiles.has(file),
 	)
 }
 
@@ -201,7 +201,7 @@ const consumerTestFiles = ({ imports, reexporting }: Walk, module: string) =>
 	reexporting(module)
 		? (imports.moduleImporters.get(module) ?? [])
 				.filter((importer) => !reexporting(importer))
-				.flatMap((importer) => ownTestFiles(imports, importer))
+				.flatMap((importer) => ownTestFiles(imports.testFiles, importer))
 		: []
 
 type GuardedModule = { repo: string; imports: TestImports; path: string }
