@@ -46,6 +46,8 @@ export const createAgentQuestions = (
 	}: ChatContext,
 	{ loadLatest, answerPosted }: AgentQuestionsParts,
 ) => {
+	const claimedRequestIds = new Set<string>()
+
 	const answerForeign = async (
 		bot: BotChat,
 		scope: RuntimeScope,
@@ -63,25 +65,28 @@ export const createAgentQuestions = (
 		}
 	}
 
-	const respond = async (
+	const sendDecision = async (
 		bot: BotChat,
 		id: string,
 		decision: PermissionDecision,
 	) => {
 		const foreign = foreignTurns.scopeAsking(id)
 		if (foreign) {
-			await answerForeign(bot, foreign, id, () =>
+			return answerForeign(bot, foreign, id, () =>
 				driver.respondToPermission(foreign, id, decision),
 			)
-			return
 		}
 		const runtime = bot.state.runtime
 		if (!runtime) {
-			return
+			return false
 		}
-		await driver
-			.respondToPermission(runtime, id, decision)
-			.catch((reason) => report(bot, reason))
+		try {
+			await driver.respondToPermission(runtime, id, decision)
+			return true
+		} catch (reason) {
+			report(bot, reason)
+			return false
+		}
 	}
 
 	const issuedAskingOf = (bot: BotChat, request: QuestionRequest) => {
@@ -157,39 +162,75 @@ export const createAgentQuestions = (
 		writeAnswers(bot, place, request, answers)
 	}
 
-	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
-		const foreign = foreignTurns.questionAsking(id)
-		if (foreign) {
-			const isAccepted = await answerForeign(bot, foreign.scope, id, () =>
-				driver.answerQuestion(foreign.scope, id, answers),
-			)
-			if (isAccepted) {
-				recordForeignAnswers(bot, foreign, answers)
-			}
-			return
+	const answerForeignQuestion = async (
+		bot: BotChat,
+		foreign: ForeignQuestion,
+		answers: QuestionAnswers,
+	) => {
+		const id = foreign.request.id
+		const isAccepted = await answerForeign(bot, foreign.scope, id, () =>
+			driver.answerQuestion(foreign.scope, id, answers),
+		)
+		if (isAccepted) {
+			recordForeignAnswers(bot, foreign, answers)
 		}
-		const posted = pendingPostOf(bot, id)
-		if (posted) {
-			await answerPosted(bot, posted, answers)
-			return
-		}
+		return isAccepted
+	}
+
+	const answerAsked = async (
+		bot: BotChat,
+		id: string,
+		answers: QuestionAnswers,
+	) => {
 		const runtime = bot.state.runtime
 		const request = bot.state.question
 		if (!runtime || request?.id !== id || isRunOutsideOpenThread(bot)) {
-			return
+			return false
 		}
 		const conversationId = bot.state.conversationId
 		const isAnswerable =
 			(await loadLatest(bot)) && bot.state.conversationId === conversationId
 		if (!isAnswerable) {
-			return
+			return false
 		}
 		try {
 			await driver.answerQuestion(runtime, id, answers)
 			recordAnswers(bot, request, answers)
+			return true
 		} catch (reason) {
 			report(bot, reason)
+			return false
 		}
+	}
+
+	const replyOnce = async (id: string, send: () => Promise<boolean>) => {
+		if (claimedRequestIds.has(id)) {
+			return
+		}
+		claimedRequestIds.add(id)
+		try {
+			if (!(await send())) {
+				claimedRequestIds.delete(id)
+			}
+		} catch (reason) {
+			claimedRequestIds.delete(id)
+			throw reason
+		}
+	}
+
+	const respond = (bot: BotChat, id: string, decision: PermissionDecision) =>
+		replyOnce(id, () => sendDecision(bot, id, decision))
+
+	const answer = (bot: BotChat, id: string, answers: QuestionAnswers) => {
+		const foreign = foreignTurns.questionAsking(id)
+		if (foreign) {
+			return replyOnce(id, () => answerForeignQuestion(bot, foreign, answers))
+		}
+		const posted = pendingPostOf(bot, id)
+		if (posted) {
+			return answerPosted(bot, posted, answers)
+		}
+		return replyOnce(id, () => answerAsked(bot, id, answers))
 	}
 
 	return { respond, answer }
