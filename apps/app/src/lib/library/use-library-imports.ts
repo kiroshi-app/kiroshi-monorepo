@@ -297,7 +297,7 @@ const PATH_SEPARATOR = /[/\\]/
 const isImageNamed = (name: string) =>
 	GALLERY_IMAGE_EXTENSIONS.includes(name.split(".").pop()?.toLowerCase() ?? "")
 
-const pickAnyFilePaths = async () =>
+const pickFilePaths = async () =>
 	(await open({ multiple: true, directory: false })) ?? []
 
 const pickImagePaths = async () =>
@@ -313,7 +313,7 @@ const pickImagePaths = async () =>
 	})) ?? []
 
 const pickImportPaths = (isJoined: boolean) =>
-	isJoined ? pickImagePaths() : pickAnyFilePaths()
+	isJoined ? pickImagePaths() : pickFilePaths()
 
 const pickerFailureNotice = () => ({
 	title: i18n.t("common:library.failure.import.generic"),
