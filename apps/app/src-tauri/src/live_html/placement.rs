@@ -24,13 +24,16 @@ pub struct Placement {
 pub struct ContentView {
 	pub height: f64,
 	pub is_flipped: bool,
+	pub backing_scale: f64,
 }
 
 impl Placement {
 	pub fn frames(self, content: &ContentView) -> Frames {
-		let view = self.below_the_inset(self.rectangle);
+		let on_the_grid =
+			|rectangle| self.below_the_inset(rectangle).on_the_pixel_grid(content.backing_scale);
+		let view = on_the_grid(self.rectangle);
 		let shown = match self.clip {
-			Some(clip) => intersection(view, self.below_the_inset(clip)),
+			Some(clip) => intersection(view, on_the_grid(clip)),
 			None => view,
 		};
 		let inside = Frame {
@@ -54,6 +57,19 @@ impl Placement {
 	}
 }
 
+impl Frame {
+	fn on_the_pixel_grid(self, backing_scale: f64) -> Frame {
+		let snapped = |length: f64| (length * backing_scale).round() / backing_scale;
+		let (left, top) = (snapped(self.x), snapped(self.y));
+		Frame {
+			x: left,
+			y: top,
+			width: snapped(self.x + self.width) - left,
+			height: snapped(self.y + self.height) - top,
+		}
+	}
+}
+
 fn intersection(first: Frame, second: Frame) -> Frame {
 	let left = first.x.max(second.x);
 	let top = first.y.max(second.y);
@@ -67,7 +83,8 @@ mod tests {
 	use super::*;
 
 	const INSET: f64 = 32.0;
-	const CONTENT: ContentView = ContentView { height: 800.0, is_flipped: false };
+	const CONTENT: ContentView =
+		ContentView { height: 800.0, is_flipped: false, backing_scale: 2.0 };
 
 	fn rectangle(x: f64, y: f64, width: f64, height: f64) -> LiveHtmlRectangle {
 		LiveHtmlRectangle { x, y, width, height }
@@ -96,7 +113,8 @@ mod tests {
 			clip: None,
 			top_inset: INSET,
 		};
-		let frames = placement.frames(&ContentView { height: 800.0, is_flipped: true });
+		let frames =
+			placement.frames(&ContentView { height: 800.0, is_flipped: true, backing_scale: 2.0 });
 		assert_eq!(frames.holder, frame(10.0, 52.0, 100.0, 50.0));
 	}
 
@@ -133,5 +151,47 @@ mod tests {
 		};
 		let frames = placement.frames(&CONTENT);
 		assert_eq!((frames.holder.width, frames.holder.height), (0.0, 0.0));
+	}
+
+	fn device_pixel_edges(frames: Frames) -> [f64; 8] {
+		let Frames { holder, view } = frames;
+		let (view_left, view_bottom) = (holder.x + view.x, holder.y + view.y);
+		[
+			holder.x,
+			holder.y,
+			holder.x + holder.width,
+			holder.y + holder.height,
+			view_left,
+			view_bottom,
+			view_left + view.width,
+			view_bottom + view.height,
+		]
+	}
+
+	#[test]
+	fn a_fractional_rectangle_lands_its_frames_on_the_device_pixel_grid_at_scale_2() {
+		let rectangles = [
+			(rectangle(312.5, 412.296875, 671.203125, 360.0), None),
+			(
+				rectangle(312.5, 412.296875, 671.203125, 360.0),
+				Some(rectangle(240.0, 52.8, 816.4, 700.5)),
+			),
+			(
+				rectangle(258.75, 275.0234375, 583.5, 360.0),
+				Some(rectangle(196.0, 52.8, 708.25, 661.7)),
+			),
+			(rectangle(0.3, -120.66, 99.9, 360.1), Some(rectangle(0.0, 0.25, 640.0, 480.4))),
+		];
+		for (rectangle, clip) in rectangles {
+			let frames = Placement { rectangle, clip, top_inset: INSET }.frames(&CONTENT);
+			for edge in device_pixel_edges(frames) {
+				let device_pixels = edge * CONTENT.backing_scale;
+				assert_eq!(
+					device_pixels,
+					device_pixels.round(),
+					"{rectangle:?} clipped by {clip:?} placed an edge at {device_pixels} device pixels"
+				);
+			}
+		}
 	}
 }

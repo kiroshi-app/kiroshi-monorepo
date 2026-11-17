@@ -1,11 +1,19 @@
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use objc2::msg_send;
+use objc2::rc::Retained;
+use objc2::runtime::AnyObject;
+use objc2_app_kit::{NSView, NSWindow};
+use objc2_foundation::{NSRect, NSString};
 use serde::Serialize;
+use tauri::WebviewWindow;
 
 use kiroshi_app::live_html::server::{CONTENT_DOCUMENT, WRAPPER_DOCUMENT};
+use kiroshi_app::live_html::HOLDER_IDENTIFIER;
 
 use crate::http::{Listener, Request, Response};
 
@@ -232,4 +240,86 @@ fn csp_report(body: &str) -> Option<CspReport> {
 		blocked_uri: field(["blocked-uri", "blockedURL"])?,
 		directive: field(["effective-directive", "violated-directive"])?,
 	})
+}
+
+#[derive(Serialize)]
+pub struct DrawnFrames {
+	pub backing_scale: f64,
+	pub holder_in_device_pixels: [f64; 4],
+	pub view_in_device_pixels: [f64; 4],
+	pub holder_contents_scale: f64,
+	pub view_contents_scale: f64,
+}
+
+impl DrawnFrames {
+	pub fn edges_off_the_grid(&self) -> Vec<f64> {
+		[self.holder_in_device_pixels, self.view_in_device_pixels]
+			.into_iter()
+			.flat_map(|[x, y, width, height]| [x, y, x + width, y + height])
+			.filter(|edge| edge.fract() != 0.0)
+			.collect()
+	}
+
+	pub fn is_at_the_backing_scale(&self) -> bool {
+		self.holder_contents_scale == self.backing_scale
+			&& self.view_contents_scale == self.backing_scale
+	}
+}
+
+pub fn drawn_frames(main_window: &WebviewWindow) -> Result<Vec<DrawnFrames>, String> {
+	let (answer, answered) = mpsc::channel();
+	main_window
+		.with_webview(move |platform| {
+			let window = unsafe { Retained::retain(platform.ns_window().cast::<NSWindow>()) };
+			let reading = window.ok_or_else(|| "the main window has no native window".to_owned());
+			if answer.send(reading.and_then(|window| frames_in(&window))).is_err() {
+				eprintln!("the drawn frames were read after their deadline");
+			}
+		})
+		.map_err(|cause| cause.to_string())?;
+	answered.recv_timeout(PROBE_TIMEOUT).map_err(|cause| cause.to_string())?
+}
+
+fn frames_in(window: &NSWindow) -> Result<Vec<DrawnFrames>, String> {
+	let content = window.contentView().ok_or("the main window has no content view")?;
+	holders_in(&content)
+		.iter()
+		.map(|holder| {
+			let view = holder.subviews().firstObject().ok_or("a holder holds no webview")?;
+			let in_device_pixels = |view: &NSView| {
+				let NSRect { origin, size } =
+					window.convertRectToBacking(view.convertRect_toView(view.bounds(), None));
+				[origin.x, origin.y, size.width, size.height]
+			};
+			Ok(DrawnFrames {
+				backing_scale: window.backingScaleFactor(),
+				holder_in_device_pixels: in_device_pixels(holder),
+				view_in_device_pixels: in_device_pixels(&view),
+				holder_contents_scale: contents_scale(holder)?,
+				view_contents_scale: contents_scale(&view)?,
+			})
+		})
+		.collect()
+}
+
+fn holders_in(view: &NSView) -> Vec<Retained<NSView>> {
+	view.subviews()
+		.iter()
+		.flat_map(|subview| {
+			let identifier: Option<Retained<NSString>> =
+				unsafe { msg_send![&*subview, identifier] };
+			let is_holder =
+				identifier.is_some_and(|identifier| identifier.to_string() == HOLDER_IDENTIFIER);
+			let nested = holders_in(&subview);
+			is_holder.then_some(subview).into_iter().chain(nested)
+		})
+		.collect()
+}
+
+fn contents_scale(view: &NSView) -> Result<f64, String> {
+	let layer: *mut AnyObject = unsafe { msg_send![view, layer] };
+	if layer.is_null() {
+		return Err("a drawn view has no layer".to_owned());
+	}
+	Ok(unsafe { msg_send![layer, contentsScale] })
 }

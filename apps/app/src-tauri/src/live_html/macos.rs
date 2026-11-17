@@ -19,10 +19,15 @@ use super::watch::Guard;
 use super::ViewToMount;
 
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
-const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
+pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
+
+struct Shown {
+	webview: WebView,
+	placement: Placement,
+}
 
 thread_local! {
-	static MOUNTED: RefCell<HashMap<String, WebView>> = RefCell::new(HashMap::new());
+	static MOUNTED: RefCell<HashMap<String, Shown>> = RefCell::new(HashMap::new());
 }
 
 pub fn ensure_available() -> Result<(), LiveHtmlError> {
@@ -58,7 +63,7 @@ pub async fn mount<R: Runtime>(
 			.build_as_child(&main_window)
 			.map_err(|failure| failure.to_string())?;
 		place_native(&native_view_of(&webview), placement, marker)?;
-		MOUNTED.with_borrow_mut(|mounted| mounted.insert(id, webview));
+		MOUNTED.with_borrow_mut(|mounted| mounted.insert(id, Shown { webview, placement }));
 		Ok(())
 	})
 	.await
@@ -71,10 +76,37 @@ pub async fn place<R: Runtime>(
 ) -> Result<(), LiveHtmlError> {
 	on_main_thread(app, move || {
 		let marker = MainThreadMarker::new().ok_or("the native step ran off the main thread")?;
-		let view = mounted_view(&id)?;
-		place_native(&view, placement, marker)
+		MOUNTED.with_borrow_mut(|mounted| {
+			let shown = mounted.get_mut(&id).ok_or("the view holds no native webview")?;
+			place_native(&native_view_of(&shown.webview), placement, marker)?;
+			shown.placement = placement;
+			Ok(())
+		})
 	})
 	.await
+}
+
+pub fn replace_all<R: Runtime>(app: &AppHandle<R>) {
+	let replaced = app.run_on_main_thread(|| {
+		let Some(marker) = MainThreadMarker::new() else {
+			log::error!("the live views were re-placed off the main thread");
+			return;
+		};
+		MOUNTED.with_borrow(|mounted| {
+			for (id, shown) in mounted {
+				if let Err(failure) =
+					place_native(&native_view_of(&shown.webview), shown.placement, marker)
+				{
+					log::error!(
+						"live view {id} was not re-placed on the new pixel grid: {failure}"
+					);
+				}
+			}
+		});
+	});
+	if let Err(failure) = replaced {
+		log::error!("the live views were not re-placed on the new pixel grid: {failure}");
+	}
 }
 
 pub async fn set_drawn<R: Runtime>(
@@ -92,7 +124,7 @@ pub async fn set_drawn<R: Runtime>(
 
 pub async fn detach<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<(), LiveHtmlError> {
 	on_main_thread(app, move || {
-		let webview = MOUNTED
+		let Shown { webview, .. } = MOUNTED
 			.with_borrow_mut(|mounted| mounted.remove(&id))
 			.ok_or_else(|| "the view holds no native webview".to_owned())?;
 		let holder = placed_holder(&native_view_of(&webview));
@@ -106,8 +138,8 @@ pub async fn detach<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<(), Li
 pub async fn url<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<String, LiveHtmlError> {
 	on_main_thread(app, move || {
 		MOUNTED.with_borrow(|mounted| {
-			let webview = mounted.get(&id).ok_or("the view holds no native webview")?;
-			webview.url().map_err(|failure| failure.to_string())
+			let shown = mounted.get(&id).ok_or("the view holds no native webview")?;
+			shown.webview.url().map_err(|failure| failure.to_string())
 		})
 	})
 	.await
@@ -122,8 +154,9 @@ pub async fn evaluate<R: Runtime>(
 	let answer = Arc::new(Mutex::new(Some(answer)));
 	on_main_thread(app, move || {
 		MOUNTED.with_borrow(|mounted| {
-			let webview = mounted.get(&id).ok_or("the view holds no native webview")?;
-			webview
+			let shown = mounted.get(&id).ok_or("the view holds no native webview")?;
+			shown
+				.webview
 				.evaluate_script_with_callback(&script, move |result| {
 					let sender = answer.lock().unwrap_or_else(PoisonError::into_inner).take();
 					if sender.is_some_and(|sender| sender.send(Ok(result)).is_err()) {
@@ -204,7 +237,7 @@ fn native_view_of(webview: &WebView) -> Retained<NSView> {
 
 fn mounted_view(id: &str) -> Result<Retained<NSView>, String> {
 	MOUNTED
-		.with_borrow(|mounted| mounted.get(id).map(native_view_of))
+		.with_borrow(|mounted| mounted.get(id).map(|shown| native_view_of(&shown.webview)))
 		.ok_or_else(|| "the view holds no native webview".to_owned())
 }
 
@@ -228,11 +261,28 @@ fn place_native(
 ) -> Result<(), String> {
 	let holder = holder_of(view, marker)?;
 	let parent = unsafe { holder.superview() }.ok_or("the holder of the webview is in no view")?;
-	let bounds = parent.bounds();
-	let frames = placement
-		.frames(&ContentView { height: bounds.size.height, is_flipped: parent.isFlipped() });
+	let window = parent.window().ok_or("the holder of the webview is in no window")?;
+	let backing_scale = window.backingScaleFactor();
+	let frames = placement.frames(&ContentView {
+		height: parent.bounds().size.height,
+		is_flipped: parent.isFlipped(),
+		backing_scale,
+	});
 	holder.setFrame(native_rectangle(frames.holder));
 	view.setFrame(native_rectangle(frames.view));
+	draw_at_backing_scale(&holder, backing_scale)?;
+	draw_at_backing_scale(view, backing_scale)?;
+	Ok(())
+}
+
+fn draw_at_backing_scale(view: &NSView, backing_scale: f64) -> Result<(), String> {
+	let layer: *mut AnyObject = unsafe { msg_send![view, layer] };
+	if layer.is_null() {
+		return Err("a live view has no layer to draw at the backing scale".to_owned());
+	}
+	unsafe {
+		let _: () = msg_send![layer, setContentsScale: backing_scale];
+	}
 	Ok(())
 }
 

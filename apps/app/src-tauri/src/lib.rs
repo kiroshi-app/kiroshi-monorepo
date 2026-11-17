@@ -104,6 +104,7 @@ pub fn run() {
 			library::presence::forget_on_page_load(webview, payload);
 		})
 		.on_window_event(|window, event| {
+			live_html::replace_on_scale_change(window, event);
 			missions::run_claims::forget_on_destroyed(window, event);
 			conversations::awaited_runs::forget_on_destroyed(window, event);
 			library::presence::forget_on_destroyed(window, event);

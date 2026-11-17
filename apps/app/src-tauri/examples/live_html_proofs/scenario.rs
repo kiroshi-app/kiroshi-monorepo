@@ -16,17 +16,23 @@ use tauri::{AppHandle, Listener as _, WebviewWindow};
 use crate::host::{HostState, Tick};
 use crate::probe::{self, HostReading, MountedView};
 use crate::proofs::{
-	AttemptAlone, HostReadings, Observations, ViewObservation, WindowUrl, LAN_TRIPWIRE_ATTEMPTS,
-	LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS, LOOPBACK_TRIPWIRE_NAVIGATIONS,
-	NAVIGATION_ATTEMPTS,
+	AttemptAlone, GridObservation, HostReadings, Observations, ViewObservation, WindowUrl,
+	LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS,
+	LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS,
 };
-use crate::sensors::{non_loopback_ipv4, Targets, Tripwire, ViewRecord, READER_ROLE, WRITER_ROLE};
+use crate::sensors::{
+	drawn_frames, non_loopback_ipv4, Targets, Tripwire, ViewRecord, READER_ROLE, WRITER_ROLE,
+};
 
 pub const FIRST_VIEW_LABEL: &str = "view-1";
 const MAIN_WINDOW_LABEL: &str = "main";
 const HOSTILE_HTML: &str = include_str!("hostile.html");
 const TARGETS_PLACEHOLDER: &str = "\"__TARGETS__\"";
 const SLOT: LiveHtmlRectangle = LiveHtmlRectangle { x: 29.0, y: 57.0, width: 520.0, height: 360.0 };
+const FRACTIONAL_SLOT: LiveHtmlRectangle =
+	LiveHtmlRectangle { x: 29.3, y: 57.296875, width: 520.203125, height: 360.4 };
+const FRACTIONAL_CLIP: LiveHtmlRectangle =
+	LiveHtmlRectangle { x: 0.0, y: 112.8, width: 700.5, height: 240.25 };
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
 const RUN_SIGNAL: &str = "run";
 const BEAT_SCRIPT: &str = "window.__spikeBeat?.()";
@@ -41,15 +47,16 @@ const SETTLE: Duration = Duration::from_millis(1500);
 const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const RUN_LIMIT: Duration = Duration::from_secs(240);
-const PROOFS: usize = 7;
+const PROOFS: usize = 8;
 const HARNESS_FAILURE: i32 = 1;
 const RED_PROOFS: i32 = 3;
-const DECISIONS: [&str; 5] = [
+const DECISIONS: [&str; 6] = [
 	"every view is mounted, placed and removed by kiroshi_app::live_html::LiveViews, the code the live_html commands run, with the hostile.html of OPE-2298 as its HTML content",
 	"the harness watch of the views records the requests the product server receives and the answers of the product guards, and injects the host probe of the spike in every frame of the view",
 	"the main window is the main window of tauri.conf.json, loaded from its devUrl, which the harness serves, so the product capabilities apply to it as in the dev build; each view is a wry webview of its own inside the main window, with no Tauri IPC",
 	"the proofs are decided from host observations, as the in-thread mode of OPE-2355 decided them",
 	"the five placement behaviours and the drawn position are not played here; they are read from a capture of the dev build",
+	"the first view is placed at a fractional rectangle under a fractional clip, and its drawn frames and layer scales are read from the native views of the main window",
 ];
 
 type Failure = Box<dyn Error>;
@@ -209,6 +216,7 @@ impl Run {
 
 		let first = self.open_view(FIRST_VIEW_LABEL, WRITER_ROLE, FIRST_VIEW_TIMEOUT, SETTLE)?;
 		let first_reading = self.host_reading(&first);
+		let grid = self.grid_observation(&first);
 		let writer = self.close_view(first)?;
 		let main_url_after =
 			self.main_window.url().map(|url| url.to_string()).map_err(|cause| cause.to_string());
@@ -270,6 +278,7 @@ impl Run {
 				second_view: Some(second_reading),
 			}),
 			attempts_alone,
+			grid,
 		};
 		let proofs = observations.proofs();
 		let green = proofs.iter().filter(|proof| proof.is_green()).count();
@@ -336,6 +345,23 @@ impl Run {
 			thread::sleep(ALONE_SETTLE.saturating_sub(SETTLE));
 		}
 		Ok(played)
+	}
+
+	fn grid_observation(&self, view: &OpenView) -> GridObservation {
+		let placed = view.mounted.as_ref().map_err(Clone::clone).and_then(|_| {
+			let placing = self.views.place(
+				&self.app,
+				view.label.clone(),
+				FRACTIONAL_SLOT,
+				Some(FRACTIONAL_CLIP),
+			);
+			block_on(placing).map_err(|failure| format!("{failure:?}"))
+		});
+		GridObservation {
+			rectangle: FRACTIONAL_SLOT,
+			clip: FRACTIONAL_CLIP,
+			drawn: placed.and_then(|()| drawn_frames(&self.main_window)),
+		}
 	}
 
 	fn host_reading(&self, view: &OpenView) -> HostReading {

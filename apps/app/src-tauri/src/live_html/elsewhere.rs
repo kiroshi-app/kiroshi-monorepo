@@ -28,6 +28,8 @@ pub async fn place<R: Runtime>(
 	Err(LiveHtmlError::NotAvailableHere)
 }
 
+pub fn replace_all<R: Runtime>(_app: &AppHandle<R>) {}
+
 pub async fn set_drawn<R: Runtime>(
 	_app: &AppHandle<R>,
 	_id: String,
