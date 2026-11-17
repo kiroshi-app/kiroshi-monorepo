@@ -64,6 +64,16 @@ export const shareLibraryBoardSeat = (
 		at: seat === null ? null : { kind: "board", ...seat },
 	})
 
+export const shareLibraryImageSeat = (spaceId: string, name: string) =>
+	invoke<null>("library_share_presence", {
+		spaceId,
+		name,
+		at: { kind: "image" },
+	})
+
+export const clearLibraryPresence = (spaceId: string, name: string) =>
+	invoke<null>("library_share_presence", { spaceId, name, at: null })
+
 const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
 	typeof reason === "object" &&
 	reason !== null &&
