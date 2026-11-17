@@ -1,20 +1,15 @@
-import { useCallback, useMemo } from "react"
-
-import { i18n } from "@workspace/ui/lib/i18n"
+import { useMemo } from "react"
 
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
-import { failureReporterIn } from "../failure-report"
 import { useRosterClock } from "../bots/use-roster-clock"
 import { activityOf, useBotActivity } from "../chat/use-chat"
 import type { ConversationSeating } from "../conversations/use-conversation-seating"
 import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSidebarActions } from "../sidebar/use-sidebar-actions"
 import { useUpdateBadge } from "../updater/use-update-badge"
-
-const reportFailure = failureReporterIn("use-roster-lines")
 
 type RosterLinesInput = {
 	core: WorkspaceCore
@@ -46,20 +41,6 @@ export const useRosterLines = ({
 	const { settingsBotId, soloThreads } = rosterView
 
 	const rosters = roster.state.rosters
-
-	const startConversation = useCallback(
-		(botIds?: string[]) => {
-			void roster.controller
-				.createConversation(botIds)
-				.catch((reason: unknown) => {
-					void reportFailure(
-						{ title: i18n.t("bots:roster.conversation.createFailed") },
-						{ reason },
-					)
-				})
-		},
-		[roster.controller],
-	)
 
 	const conversationSeating = useMemo<ConversationSeating>(
 		() => ({
@@ -115,7 +96,6 @@ export const useRosterLines = ({
 		now,
 		rosters,
 		sidebarActions,
-		startConversation,
 		updateBadge,
 		working,
 	}
