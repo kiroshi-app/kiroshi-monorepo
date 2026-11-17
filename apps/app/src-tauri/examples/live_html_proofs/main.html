@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Live HTML proofs</title>
+	</head>
+	<body>
+		<p id="sentinel"></p>
+		<script>
+			const SENTINEL_KEY = "spike-main-sentinel"
+
+			const { invoke } = window.__TAURI_INTERNALS__
+
+			const randomHex = () =>
+				Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+					byte.toString(16).padStart(2, "0"),
+				).join("")
+
+			const instance = randomHex()
+			const secret = randomHex()
+			const sentinel = document.getElementById("sentinel")
+
+			sentinel.textContent = secret
+			localStorage.setItem(SENTINEL_KEY, secret)
+			// biome-ignore lint/suspicious/noDocumentCookie: the cookie is one of the sentinels the view tries to alter
+			document.cookie = `spike_main_sentinel=${secret}`
+
+			const integritySnapshot = () =>
+				JSON.stringify({
+					href: location.href,
+					title: document.title,
+					sentinel: sentinel.outerHTML,
+					sentinelAttached: sentinel.isConnected,
+					storage: localStorage.getItem(SENTINEL_KEY),
+					cookie: document.cookie,
+				})
+
+			const beat = () => {
+				const payload = { instance, secret, snapshot: integritySnapshot() }
+				invoke("plugin:event|emit", { event: "spike-heartbeat", payload }).catch((cause) => {
+					document.title = `heartbeat failed: ${cause}`
+				})
+			}
+
+			invoke("spike_secret").then(
+				() => {
+					window.__spikeBeat = beat
+				},
+				(cause) => {
+					document.title = `control call failed: ${cause}`
+				},
+			)
+		</script>
+	</body>
+</html>
