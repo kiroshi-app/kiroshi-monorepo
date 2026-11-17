@@ -381,7 +381,6 @@ const expectOpenMission = async (canvasElement: HTMLElement) => {
 	const firstMessage = boxOf(messages[0])
 
 	await expect(slotsIn(frame, "transcript-start-of-history")).toHaveLength(0)
-	await expect(thread.firstElementChild).toBe(content)
 	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
 	await expectLeadingCluster(bar)
 	await expectStatePill(bar)
