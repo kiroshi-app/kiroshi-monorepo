@@ -3,7 +3,7 @@ const chat = {
 		ready: {
 			title: "Commencer avec l’agent",
 			description:
-				"Kiroshi dialogue directement avec l’agent. Rien ne quitte jamais votre appareil.",
+				"Kiroshi dialogue directement avec l’agent. Rien ne quitte votre appareil.",
 			descriptionNamed:
 				"Kiroshi dialogue directement avec {{name}}. Rien ne quitte votre appareil.",
 		},

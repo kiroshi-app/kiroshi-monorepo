@@ -5,7 +5,7 @@ const chat = {
 		ready: {
 			title: "Start with the agent",
 			description:
-				"Kiroshi talks to the agent directly. Nothing ever leaves your device.",
+				"Kiroshi talks to the agent directly. Nothing leaves your device.",
 			descriptionNamed:
 				"Kiroshi talks to {{name}} directly. Nothing leaves your device.",
 		},
