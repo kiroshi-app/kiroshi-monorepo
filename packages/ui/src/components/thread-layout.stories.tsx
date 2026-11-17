@@ -880,15 +880,12 @@ const MISSION_OPENING = (
 	/>
 )
 
-const COLUMN_FRAME_PAIRS = [
+const COLUMN_FRAMES = [
+	{ label: "conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
+	{ label: "loaded conversation", columnWidth: SOLO_COLUMN_WIDTH },
+	{ label: "mission skeleton", skeleton: <MissionDetailSkeleton /> },
 	{
-		label: "conversation",
-		skeleton: <ThreadTranscriptSkeleton />,
-		columnWidth: SOLO_COLUMN_WIDTH,
-	},
-	{
-		label: "mission",
-		skeleton: <MissionDetailSkeleton />,
+		label: "loaded mission",
 		opening: MISSION_OPENING,
 		columnWidth: MISSION_COLUMN_WIDTH,
 	},
@@ -915,26 +912,21 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		<div className="flex flex-col gap-6">
 			{COLUMN_FRAME_WIDTHS.map(({ label, className }) => (
 				<div key={label} data-slot="column-frame-row" className="flex gap-6">
-					{COLUMN_FRAME_PAIRS.flatMap((pair) =>
-						[
-							{ frame: `${pair.label} skeleton`, skeleton: pair.skeleton },
-							{ frame: `loaded ${pair.label}`, opening: pair.opening },
-						].map((frame) => (
-							<div
-								key={frame.frame}
-								data-slot="column-frame"
-								className={cn("h-100 shrink-0", className)}
-							>
-								<ThreadLayout
-									{...args}
-									header={null}
-									label={`${label} ${frame.frame}`}
-									opening={frame.opening}
-									skeleton={frame.skeleton}
-								/>
-							</div>
-						)),
-					)}
+					{COLUMN_FRAMES.map((frame) => (
+						<div
+							key={frame.label}
+							data-slot="column-frame"
+							className={cn("h-100 shrink-0", className)}
+						>
+							<ThreadLayout
+								{...args}
+								header={null}
+								label={`${label} ${frame.label}`}
+								opening={frame.opening}
+								skeleton={frame.skeleton}
+							/>
+						</div>
+					))}
 				</div>
 			))}
 		</div>
@@ -960,9 +952,10 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		for (const row of rows) {
 			const frames = slotsIn(row, "column-frame")
 
-			for (const [index, { columnWidth }] of COLUMN_FRAME_PAIRS.entries()) {
-				const skeletonFrame = frames[2 * index]
-				const loadedFrame = frames[2 * index + 1]
+			for (let index = 0; index < frames.length; index += 2) {
+				const skeletonFrame = frames[index]
+				const loadedFrame = frames[index + 1]
+				const { columnWidth = 0 } = COLUMN_FRAMES[index + 1]
 				const skeleton = slotIn(skeletonFrame, "list-skeleton")
 				const loadedColumn = columnOf(
 					slotIn(loadedFrame, "message-scroller-content"),
