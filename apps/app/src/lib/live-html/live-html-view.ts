@@ -71,13 +71,18 @@ export const createLiveHtmlView = ({
 	let hasFailed = false
 	let isSettling = false
 
+	const fail = (reason: unknown) => {
+		if (!hasFailed) onFailure(reason)
+		hasFailed = true
+		void settle()
+	}
+
 	const attempt = async (answer: CommandAnswer, onDone: () => void) => {
 		try {
 			await answered(answer)
 			onDone()
 		} catch (reason) {
-			if (!hasFailed) onFailure(reason)
-			hasFailed = true
+			fail(reason)
 		}
 	}
 
@@ -149,5 +154,5 @@ export const createLiveHtmlView = ({
 		void settle()
 	}
 
-	return { follow, cover }
+	return { id, follow, cover, fail }
 }
