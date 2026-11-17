@@ -1,13 +1,16 @@
-import type { ComponentPropsWithoutRef } from "react"
+import { type ComponentPropsWithoutRef, useContext } from "react"
 import type { ExtraProps } from "react-markdown"
 
 import {
 	AttachmentChip,
 	extensionOf,
 } from "@workspace/ui/components/attachment-chip"
+import { AttachmentStandIn } from "@workspace/ui/components/attachment-stand-in"
 import {
 	attachmentPathOf,
 	isStoredAttachmentPath,
+	type MarkdownAttachments,
+	MarkdownInParagraphContext,
 	useMarkdownAttachments,
 } from "@workspace/ui/components/markdown/attachments"
 import { hostInitial } from "@workspace/ui/lib/host"
@@ -36,6 +39,32 @@ const HOST_CLASS = "whitespace-nowrap font-normal"
 const MARK_CLASS =
 	"mr-1 inline-grid size-3.5 select-none place-items-center rounded-xs bg-current/10 align-middle text-[0.65em] uppercase leading-none"
 
+type CitedAttachment = Pick<MarkdownLinkProps, "href" | "node">
+
+export const attachmentStandInOf = (
+	{ onOpenAttachment, renderAttachment }: MarkdownAttachments,
+	{ href, node }: CitedAttachment,
+) => {
+	const path = attachmentPathOf(href)
+	if (
+		path === null ||
+		!onOpenAttachment ||
+		!renderAttachment ||
+		!isStoredAttachmentPath(href)
+	)
+		return null
+	const rendering = renderAttachment(path)
+	if (rendering == null) return null
+	return (
+		<AttachmentStandIn
+			name={(node && textOf(node)) || path}
+			onOpen={() => onOpenAttachment(path)}
+		>
+			{rendering}
+		</AttachmentStandIn>
+	)
+}
+
 export const MarkdownLink = ({
 	node,
 	children,
@@ -44,9 +73,15 @@ export const MarkdownLink = ({
 	title,
 	...props
 }: MarkdownLinkProps) => {
-	const { onOpenAttachment } = useMarkdownAttachments()
+	const attachments = useMarkdownAttachments()
+	const isInParagraph = useContext(MarkdownInParagraphContext)
+	const { onOpenAttachment } = attachments
 	const path = attachmentPathOf(href)
 	if (path !== null && onOpenAttachment && isStoredAttachmentPath(href)) {
+		const standIn = isInParagraph
+			? null
+			: attachmentStandInOf(attachments, { href, node })
+		if (standIn !== null) return standIn
 		return (
 			<AttachmentChip
 				extension={extensionOf(path)}

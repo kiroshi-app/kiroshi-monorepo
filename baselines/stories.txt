@@ -292,6 +292,9 @@ conversation-markdown-markdown--answer-size
 conversation-markdown-markdown--appended-block
 conversation-markdown-markdown--attachment-file-among-code-paths
 conversation-markdown-markdown--attachment-file-mid-answer
+conversation-markdown-markdown--attachment-file-not-replaced
+conversation-markdown-markdown--attachment-file-replaced
+conversation-markdown-markdown--attachment-file-replaced-mid-sentence-and-in-list
 conversation-markdown-markdown--attachment-image-mid-answer
 conversation-markdown-markdown--attachment-path-with-spaces
 conversation-markdown-markdown--attachment-unresolved
@@ -417,6 +420,7 @@ conversation-message-answerstack--with-board-card
 conversation-message-attachmentchip--default
 conversation-message-attachmentchip--inline
 conversation-message-attachmentchip--long-name
+conversation-message-attachmentstandin--default
 conversation-message-authorline--default
 conversation-message-authorline--failed
 conversation-message-authorline--gap-above-a-person-line
@@ -514,6 +518,7 @@ conversation-message-messageactions--square-icon-buttons
 conversation-message-messageattachments--default
 conversation-message-messageattachments--empty
 conversation-message-messageattachments--error
+conversation-message-messageattachments--file-replaced
 conversation-message-messageattachments--image-menu-open
 conversation-message-messageattachments--in-transcript
 conversation-message-messageattachments--long-content

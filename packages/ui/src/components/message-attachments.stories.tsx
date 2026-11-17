@@ -7,6 +7,7 @@ import {
 	ROOFTOP_POOL,
 	ROOM_DOUBLE,
 } from "@workspace/ui/components/answer-blocks/answer-blocks.fixtures"
+import { LiveHtmlSlot } from "@workspace/ui/components/live-html-slot"
 import {
 	type MessageAttachment,
 	MessageAttachments,
@@ -378,6 +379,67 @@ export const Error = meta.story({
 			canvas.getByRole("button", { name: "Open capture.png" }),
 		)
 		await expect(args.onOpen).toHaveBeenCalledWith("screenshot")
+	},
+})
+
+const RENDERED_FILE = "release-notes.md"
+
+const renderReleaseNotesLive = (item: MessageAttachment) =>
+	item.name === RENDERED_FILE ? (
+		<LiveHtmlSlot
+			status="loading"
+			html=""
+			height={160}
+			onPlacementChange={fn()}
+		/>
+	) : null
+
+export const FileReplaced = meta.story({
+	args: { items: MIXED_ITEMS, renderAttachment: renderReleaseNotesLive },
+	render: (args) => (
+		<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
+			<MessageBubble variant="soft" align="start">
+				<MessageBubbleContent>
+					<MessageAttachments {...args} />
+					<p>{AGENT_REPLY}</p>
+				</MessageBubbleContent>
+			</MessageBubble>
+		</MessageBubbleGroup>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An agent reply whose row carries a screenshot and two documents, the app handing `renderAttachment` a live view for `release-notes.md` and nothing for `components.json`. Check that the live view stands where the first chip was, on its own line across the whole row, with an Open control under it that reports the item's id, while the second document keeps its chip and the screenshot its gallery tile. The live view is a story fake: the app picks the files and mounts the view.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const [row] = rowsIn(canvasElement)
+		await expectGalleryInBubble(row, 1)
+		const standIn = row.querySelector<HTMLElement>(
+			"[data-slot='attachment-stand-in']",
+		)
+		await expect(standIn).not.toBeNull()
+		await expect(
+			within(standIn as HTMLElement).getByRole("group", { name: "Live view" }),
+		).toBeVisible()
+		await expect(
+			row.querySelectorAll("[data-slot='attachment-chip']"),
+		).toHaveLength(1)
+		await expect(
+			within(row).getByRole("button", { name: "Open components.json" }),
+		).toHaveAttribute("data-slot", "attachment-chip")
+		await expect(standIn?.getBoundingClientRect().width).toBe(
+			row.getBoundingClientRect().width,
+		)
+		const open = within(standIn as HTMLElement).getByRole("button", {
+			name: `Open ${RENDERED_FILE}`,
+		})
+		open.focus()
+		await expect(open).toHaveFocus()
+		await userEvent.click(open)
+		await expect(args.onOpen).toHaveBeenCalledWith("notes")
 	},
 })
 
