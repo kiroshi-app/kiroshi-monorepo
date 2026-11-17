@@ -4737,6 +4737,8 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		let mut guest = Guest::of_two_spaces("library-rename").await;
 		let shelf = guest.effects.library().join(PERSONAL);
 		std::fs::write(shelf.join("plan.md"), "older").expect("the other file lands");
+		std::fs::write(shelf.join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let opened =
 			guest.called("library_open_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 		let base = opened["body"]["update"].as_str().expect("a yjs state").to_owned();
@@ -4772,7 +4774,7 @@ fn a_member_renames_a_library_document_then_its_update_lands_under_the_landed_na
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		let on_disk =
 			|name: &str| std::fs::read_to_string(shelf.join(name)).expect("the file reads");
-		assert_eq!(on_disk("plan (2).md"), "notes of personal kept");
+		assert_eq!(on_disk("plan (2).md"), "notes of personal kept ^aaaaaa");
 		assert_eq!(on_disk("plan.md"), "older");
 		assert!(!shelf.join("notes.md").exists());
 	});
@@ -4802,6 +4804,8 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let mut guest = Guest::of_two_spaces("library-shared-edit").await;
 		let app = guest.harness.app.handle().clone();
 		let library = guest.effects.library();
+		std::fs::write(library.join(PERSONAL).join("notes.md"), "notes of personal ^aaaaaa")
+			.expect("the file lands");
 		let (told, host_heard) = std::sync::mpsc::channel();
 		app.listen_any(DOCUMENT_UPDATED_EVENT, move |event| {
 			let payload: Value = serde_json::from_str(event.payload()).expect("a payload");
@@ -4825,7 +4829,7 @@ fn the_host_and_a_member_edit_one_library_document_and_every_update_merges_and_i
 		let read =
 			guest.called("library_read_document", a_library_entry_of("notes.md")(PERSONAL)).await;
 
-		let merged = "Host. notes of personal Member.";
+		let merged = "Host. notes of personal Member. ^aaaaaa";
 		assert_eq!(applied["status"], json!(200), "{applied}");
 		assert_eq!(read["body"]["content"], json!(merged), "{read}");
 		let on_disk = |space_id: &str| {
@@ -9526,7 +9530,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		let (mut harness, effects) = Harness::applying_host_effects("library-removed").await;
 		let shelf = effects.library().join(PERSONAL);
 		std::fs::create_dir_all(&shelf).expect("the library folder lands");
-		std::fs::write(shelf.join("notes.md"), "notes").expect("the document lands");
+		std::fs::write(shelf.join("notes.md"), "notes ^aaaaaa").expect("the document lands");
 		harness.seed(&[
 			cloud_member("guest", "guest@example.com", "member", "pending"),
 			cloud_member("joiner", "joiner@example.com", "member", "pending"),
@@ -9601,7 +9605,7 @@ fn a_removed_member_applying_a_library_update_is_refused_and_the_file_is_unchang
 		assert_eq!(applies, 1);
 		assert_eq!(
 			std::fs::read_to_string(shelf.join("notes.md")).expect("the file reads"),
-			"notes kept"
+			"notes kept ^aaaaaa"
 		);
 	});
 }
