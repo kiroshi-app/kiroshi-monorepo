@@ -19,7 +19,24 @@ use super::watch::Guard;
 use super::ViewToMount;
 
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
+const SCRIPT_ANSWER_TIMEOUT: Duration = Duration::from_secs(30);
+const NATIVE_STEP: Deadline = Deadline {
+	limit: MAIN_THREAD_TIMEOUT,
+	dropped: "the main thread dropped the native step",
+	missed: "the main thread did not run the native step in time",
+};
+const SCRIPT_ANSWER: Deadline = Deadline {
+	limit: SCRIPT_ANSWER_TIMEOUT,
+	dropped: "the view dropped the script before answering it",
+	missed: "the view did not answer the script in time",
+};
 pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
+
+struct Deadline {
+	limit: Duration,
+	dropped: &'static str,
+	missed: &'static str,
+}
 
 struct Shown {
 	webview: WebView,
@@ -46,7 +63,7 @@ pub async fn top_inset<R: Runtime>(main_window: &WebviewWindow<R>) -> Result<f64
 			}
 		})
 		.map_err(|failure| unplaced(failure.to_string()))?;
-	answered_in_time(answered).await
+	answered_in_time(NATIVE_STEP, answered).await
 }
 
 pub async fn mount<R: Runtime>(
@@ -167,7 +184,7 @@ pub async fn evaluate<R: Runtime>(
 		})
 	})
 	.await?;
-	answered_in_time(answered).await
+	answered_in_time(SCRIPT_ANSWER, answered).await
 }
 
 fn guarded(view: ViewToMount) -> WebViewBuilder<'static> {
@@ -214,16 +231,17 @@ async fn on_main_thread<R: Runtime, T: Send + 'static>(
 		}
 	})
 	.map_err(|failure| unplaced(failure.to_string()))?;
-	answered_in_time(answered).await
+	answered_in_time(NATIVE_STEP, answered).await
 }
 
 async fn answered_in_time<T>(
+	deadline: Deadline,
 	answered: oneshot::Receiver<Result<T, String>>,
 ) -> Result<T, LiveHtmlError> {
-	match tokio::time::timeout(MAIN_THREAD_TIMEOUT, answered).await {
+	match tokio::time::timeout(deadline.limit, answered).await {
 		Ok(Ok(stepped)) => stepped.map_err(unplaced),
-		Ok(Err(_)) => Err(unplaced("the main thread dropped the native step".to_owned())),
-		Err(_) => Err(unplaced("the main thread did not run the native step in time".to_owned())),
+		Ok(Err(_)) => Err(unplaced(deadline.dropped.to_owned())),
+		Err(_) => Err(unplaced(deadline.missed.to_owned())),
 	}
 }
 
@@ -314,4 +332,42 @@ fn holder_of(view: &NSView, marker: MainThreadMarker) -> Result<Retained<NSView>
 
 fn native_rectangle(frame: Frame) -> NSRect {
 	NSRect::new(NSPoint::new(frame.x, frame.y), NSSize::new(frame.width, frame.height))
+}
+
+#[cfg(test)]
+mod tests {
+	use std::time::Duration;
+
+	use tokio::sync::oneshot;
+
+	use super::{answered_in_time, LiveHtmlError, SCRIPT_ANSWER};
+
+	const HOSTILE_PAGE_BUSY_LOOP: Duration = Duration::from_secs(10);
+
+	#[tokio::test(start_paused = true)]
+	async fn a_live_html_script_is_answered_after_a_page_busy_loop_longer_than_a_native_step() {
+		let (answer, answered) = oneshot::channel();
+		tokio::spawn(async move {
+			tokio::time::sleep(HOSTILE_PAGE_BUSY_LOOP).await;
+			answer.send(Ok("undefined".to_owned()))
+		});
+
+		let result = answered_in_time(SCRIPT_ANSWER, answered).await;
+
+		assert_eq!(result, Ok("undefined".to_owned()));
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_live_html_script_never_answered_fails_on_the_view_not_on_the_main_thread() {
+		let (_answer, answered) = oneshot::channel::<Result<String, String>>();
+
+		let result = answered_in_time(SCRIPT_ANSWER, answered).await;
+
+		assert_eq!(
+			result,
+			Err(LiveHtmlError::Unplaced {
+				detail: "the view did not answer the script in time".to_owned()
+			})
+		);
+	}
 }
