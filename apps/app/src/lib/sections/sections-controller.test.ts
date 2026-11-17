@@ -38,6 +38,7 @@ const silentBots: BotSections = {
 	clear: () => undefined,
 	pin: () => undefined,
 	hostSpaceIdOf: (spaceRowId) => spaceRowId,
+	isOnScreen: () => true,
 	reload: async () => undefined,
 }
 
@@ -301,6 +302,28 @@ describe("createSectionsController", () => {
 
 		await vi.waitFor(() =>
 			expect(names(controller)).toEqual(["Writers", "Readers"]),
+		)
+	})
+
+	it("logs a pin refused in a Space not on screen and raises no notice", async () => {
+		const warned = vi.spyOn(console, "warn").mockReturnValue(undefined)
+		const store = createFakeTranscriptStore()
+		const writers = await store.createSection("personal", "Writers")
+		const readers = await store.createSection("personal", "Readers")
+		const controller = await entered(store, "personal", {
+			...silentBots,
+			isOnScreen: () => false,
+		})
+		vi.spyOn(store, "pinRoster").mockRejectedValue({ kind: "storage" })
+
+		await controller.pin("personal", [atTop(readers.id), atTop(writers.id)])
+
+		await vi.waitFor(() =>
+			expect(names(controller)).toEqual(["Writers", "Readers"]),
+		)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		expect(warned).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining("space: personal"),
 		)
 	})
 

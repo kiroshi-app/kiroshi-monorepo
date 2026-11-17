@@ -196,10 +196,14 @@ export const createSpacesController = (
 			),
 		)
 
-	const noteRefusedCreate = (reason: unknown) => {
-		choose({ hasFailedToCreate: true })
+	const reloadAfterRefusal = (reason: unknown) => {
 		reportFailure({ title: i18n.t("chat:screen.notice.failed") }, { reason })
 		return reload()
+	}
+
+	const noteRefusedCreate = (reason: unknown) => {
+		choose({ hasFailedToCreate: true })
+		return reloadAfterRefusal(reason)
 	}
 
 	const writes = createWriteLoop<SpaceDescription, Space>({
@@ -209,8 +213,8 @@ export const createSpacesController = (
 				store.updateSpace(id, name, colour ?? undefined),
 			),
 		apply: (_id, written) => apply(written),
-		onRefused: () => {
-			void reload()
+		onRefused: (_id, reason) => {
+			void reloadAfterRefusal(reason)
 		},
 	})
 
@@ -363,7 +367,7 @@ export const createSpacesController = (
 				return Promise.resolve()
 			}
 			hold(repositioned(spaces, ids))
-			return commit(() => store.reorderSpaces(ids)).catch(reload)
+			return commit(() => store.reorderSpaces(ids)).catch(reloadAfterRefusal)
 		},
 
 		remove: (id: string) =>
@@ -373,7 +377,7 @@ export const createSpacesController = (
 				const spaces = current().spaces.filter((space) => space.id !== id)
 				hold(spaces)
 				choose(listedChoice(spaces[0]?.id ?? null))
-			}).catch(reload),
+			}).catch(reloadAfterRefusal),
 
 		exportSpace,
 

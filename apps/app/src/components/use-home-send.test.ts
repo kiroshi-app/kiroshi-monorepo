@@ -28,6 +28,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Conversation } from "@/lib/conversations/store-contract"
 import { seatBots } from "@/lib/conversations/transcript-fixtures"
+import { nameCallOnFailure } from "@/lib/host/failed-call"
 import { hostOfflineOf } from "@/lib/host/host-offline"
 
 const PREVIEW = "blob:home-preview"
@@ -369,6 +370,41 @@ describe("a Home send", () => {
 			NEW_CONVERSATION_ID,
 		])
 		expect(workspace.openConversation).toHaveBeenCalledOnce()
+	})
+})
+
+describe("a Home send whose conversation the store refuses", () => {
+	it("raises the failed send with the refused call and its error kind", async () => {
+		vi.spyOn(console, "error").mockReturnValue(undefined)
+		const workspace = createWorkspace()
+		const home = mountHome({
+			...workspace,
+			conversations: {
+				...workspace.conversations,
+				startConversation: () =>
+					nameCallOnFailure(
+						"conversation_create",
+						Promise.reject({ kind: "storage" }),
+					),
+			},
+		})
+
+		act(() => home.result.current.onSubmit("look"))
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					title: "Couldn’t send that request",
+					report: expect.objectContaining({
+						context: expect.objectContaining({
+							command: "conversation_create",
+							errorKind: "storage",
+						}),
+					}),
+				}),
+			),
+		)
+		expect(workspace.openConversation).not.toHaveBeenCalled()
 	})
 })
 

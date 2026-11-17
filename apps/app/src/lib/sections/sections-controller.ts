@@ -1,9 +1,15 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { sectionQueryKeys } from "./section-query-keys"
 
+import {
+	describeFailure,
+	failureReporterIn,
+	type ReporterFacts,
+} from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -17,6 +23,7 @@ export type BotSections = {
 	clear: (sectionId: string) => void
 	pin: (pins: RosterPin[]) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
+	isOnScreen: (spaceRowId: string) => boolean
 	reload: () => Promise<void>
 }
 
@@ -76,6 +83,7 @@ const sectionsStateOf = (
 
 type SectionsControllerOptions = {
 	queryClient: QueryClient
+	reportFailure?: (notice: NoticeMessage, facts?: ReporterFacts) => void
 }
 
 export const sectionsIn = (state: SectionsState, spaceId: string) =>
@@ -85,6 +93,16 @@ export const spaceOfSection = (state: SectionsState, id: string) =>
 	Object.keys(state.sections).find((spaceId) =>
 		sectionsIn(state, spaceId).some((section) => section.id === id),
 	)
+
+const logRefusalOffScreen = (spaceId: string, reason: unknown) => {
+	console.warn(
+		[
+			"sections-controller: a write was refused in a Space not on screen",
+			`space: ${spaceId}`,
+			`reason: ${describeFailure(reason)}`,
+		].join(" | "),
+	)
+}
 
 const repositioned = (sections: Section[], pins: RosterPin[]) =>
 	sections
@@ -97,14 +115,34 @@ const repositioned = (sections: Section[], pins: RosterPin[]) =>
 export const createSectionsController = (
 	store: TranscriptStore,
 	bots: BotSections,
-	{ queryClient }: SectionsControllerOptions,
+	{
+		queryClient,
+		reportFailure = failureReporterIn("sections-controller"),
+	}: SectionsControllerOptions,
 ): SectionsController => {
 	const choiceStore = createStore(initialSectionsChoice)
 
 	const enqueue = createQueue()
 
-	const commit = <Result>(write: () => Promise<Result>) =>
-		enqueue(() => runMutation(queryClient, write))
+	const refuse = (reason: unknown, spaceId: string | undefined) => {
+		if (spaceId !== undefined && !bots.isOnScreen(spaceId)) {
+			logRefusalOffScreen(spaceId, reason)
+			return
+		}
+		reportFailure(
+			{ title: i18n.t("chat:screen.notice.failed") },
+			{ reason, space: spaceId },
+		)
+	}
+
+	const commit = <Result>(
+		spaceId: string | undefined,
+		write: () => Promise<Result>,
+	) =>
+		enqueue(() => runMutation(queryClient, write)).catch((reason: unknown) => {
+			refuse(reason, spaceId)
+			throw reason
+		})
 
 	const listQuery = (spaceId: string) => {
 		const hostSpaceId = bots.hostSpaceIdOf(spaceId)
@@ -157,7 +195,8 @@ export const createSectionsController = (
 		write: (id, name) =>
 			runMutation(queryClient, () => store.renameSection(id, name)),
 		apply: (_id, written) => apply(written),
-		onRefused: () => {
+		onRefused: (id, reason) => {
+			refuse(reason, spaceOf(id))
 			void reloadAll()
 		},
 	})
@@ -194,7 +233,7 @@ export const createSectionsController = (
 		},
 
 		create: (spaceId: string, name: string, botId: string | null = null) =>
-			commit(async () => {
+			commit(spaceId, async () => {
 				const created = await store.createSection(
 					bots.hostSpaceIdOf(spaceId),
 					name,
@@ -222,13 +261,13 @@ export const createSectionsController = (
 		pin: (spaceId: string, pins: RosterPin[]) => {
 			hold(spaceId, repositioned(sectionsIn(current(), spaceId), pins))
 			bots.pin(pins)
-			return commit(() =>
+			return commit(spaceId, () =>
 				store.pinRoster(bots.hostSpaceIdOf(spaceId), pins),
 			).catch(() => reload(spaceId))
 		},
 
 		remove: (id: string) =>
-			commit(async () => {
+			commit(spaceOf(id), async () => {
 				const spaceId = spaceOf(id)
 				if (!spaceId) {
 					return
@@ -243,7 +282,7 @@ export const createSectionsController = (
 			}).catch(reloadAll),
 
 		moveBot: (botId: string, sectionId: string | null) =>
-			commit(async () => {
+			commit(sectionId === null ? undefined : spaceOf(sectionId), async () => {
 				await store.moveBotToSection(botId, sectionId)
 				bots.move(botId, sectionId)
 			}).catch(bots.reload),
