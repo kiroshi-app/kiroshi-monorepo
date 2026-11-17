@@ -542,6 +542,8 @@ const PAGE = "<h1>Lisbon by night</h1>"
 
 const HTML_REPLY = fenced("html", PAGE)
 
+const LIVE_VIEW_FAILED = "Couldn’t show the live view. Here’s the code instead."
+
 const SLOT_VIEW_BOX = { x: 40, y: 120, width: 480, height: 320 }
 
 const WINDOW_BOX = { x: 0, y: 0, width: 1280, height: 800 }
@@ -648,6 +650,9 @@ describe("an html block of an agent reply", () => {
 		await waitFor(() => expect(htmlCodeBlock()).toBeTruthy())
 		expect(liveView()).toBeNull()
 		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: LIVE_VIEW_FAILED }),
+		)
 	})
 
 	it("gives two identical blocks a view each", async () => {

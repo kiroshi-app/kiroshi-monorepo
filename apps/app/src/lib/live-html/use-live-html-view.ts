@@ -9,11 +9,6 @@ import { useIsAppSurfaceOpen } from "@/lib/live-html/use-is-app-surface-open"
 
 const reportFailure = failureReporterIn("use-live-html-view")
 
-type PendingKeyTranslator = (key: string) => string
-
-const liveHtmlFailedTitle = () =>
-	(i18n.t as PendingKeyTranslator)("chat:liveHtml.failed")
-
 export const useLiveHtmlView = (html: string) => {
 	const [status, setStatus] = useState<LiveHtmlStatus>("loading")
 	const [view] = useState(() =>
@@ -23,7 +18,10 @@ export const useLiveHtmlView = (html: string) => {
 			onLive: () => setStatus("live"),
 			onFailure: (reason) => {
 				setStatus("unavailable")
-				void reportFailure({ title: liveHtmlFailedTitle() }, { reason })
+				void reportFailure(
+					{ title: i18n.t("chat:liveHtml.failed") },
+					{ reason },
+				)
 			},
 		}),
 	)
