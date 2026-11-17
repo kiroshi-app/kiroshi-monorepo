@@ -816,11 +816,7 @@ type ShardPlanning = {
 
 type ShardLoad = { testSeconds: number; tests: string[] }
 
-type PlannedShard = {
-	tests: string[]
-	testSeconds: number
-	wholeJobSeconds: number
-}
+type PlannedShard = ShardLoad & { wholeJobSeconds: number }
 
 export const plannedShards = ({
 	count,
