@@ -179,7 +179,8 @@ it("raises one notice per outage of a read until it answers again", async () => 
 it("opens no outage on a failure its meta keeps silent", async () => {
 	await fetchOutcomes(["silent", new Error("a"), new Error("b")])
 
-	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalled())
+	expect(raiseFailureNotice).toHaveBeenCalledOnce()
 })
 
 it("builds the failure notice from the failure the read met", async () => {
