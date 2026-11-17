@@ -166,6 +166,10 @@ export const GATE = {
 			name: "CODEOWNERS matcher unit tests",
 			command: "bun run test:code-owners",
 		},
+		{
+			name: "iOS stall detector unit tests",
+			command: "bun test scripts/ios-stalls.test.ts",
+		},
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
