@@ -16,8 +16,12 @@ extension RepeatedCallTests {
         TestHost.ok(call, TestHost.messagePage(conversationId, rows, hasMore: false))
     }
 
+    func timingOut(_ start: () throws -> Task<Void, Never>?) rethrows -> Task<Void, Never>? {
+        try TestRelayClock.$isTimingOut.withValue(true, operation: start)
+    }
+
     func timeOutTheCallInFlight() async {
-        await clock.wakeNextSleep(of: RelayConnection.callDeadline)
+        await clock.wakeTimingOutSleep(of: RelayConnection.callDeadline)
     }
 
     @Test func aSendTheHostAnswersAlreadyRanShowsWhatItsFirstRunStored() async throws {
@@ -44,7 +48,7 @@ extension RepeatedCallTests {
         await waitUntil { store.phase == .loaded }
 
         store.draft = "Ship it"
-        let sending = store.send()
+        let sending = timingOut { store.send() }
         let sent = try #require(await host.nextCall("conversation_send_turn"))
         let id = try sent.args(as: SendArgs.self).message.id
         transcript.withLock { $0.append(Self.yours(id, "Ship it", seq: 1, in: "chat-juniper")) }
@@ -96,7 +100,7 @@ extension RepeatedCallTests {
 
         store.draft = "Look at this"
         store.attachments = [Self.flow]
-        let sending = store.send()
+        let sending = timingOut { store.send() }
         _ = await host.nextCall("chat_store_attachments")
         await timeOutTheCallInFlight()
         await sending?.value
@@ -122,7 +126,7 @@ extension RepeatedCallTests {
         let host = questionHost()
         let (store, connection, following) = try await followQuestion(host)
 
-        let answering = try answerSummary(in: store)
+        let answering = try timingOut { try answerSummary(in: store) }
         let call = try #require(await host.nextCall("agent_answer_question"))
         await timeOutTheCallInFlight()
         await answering?.value
@@ -170,7 +174,7 @@ extension RepeatedCallTests {
             })
         let (store, connection, following) = await followList(host)
 
-        let creating = store.createGroup(with: ["juniper", "pico"])
+        let creating = timingOut { store.createGroup(with: ["juniper", "pico"]) }
         let call = try #require(await host.nextCall("conversation_create"))
         await timeOutTheCallInFlight()
         await creating?.value
@@ -222,7 +226,7 @@ extension RepeatedCallTests {
         let (store, connection, following) = await followMission(host)
 
         store.draft = "Go ahead"
-        let sending = store.send()
+        let sending = timingOut { store.send() }
         let sent = try #require(await host.nextCall("conversation_send_turn"))
         let id = try sent.args(as: SendArgs.self).message.id
         transcript.withLock {
@@ -274,7 +278,7 @@ extension RepeatedCallTests {
 
         store.draft = "Look at this"
         store.attachments = [Self.flow]
-        let sending = store.send()
+        let sending = timingOut { store.send() }
         _ = await host.nextCall("chat_store_attachments")
         await timeOutTheCallInFlight()
         await sending?.value
