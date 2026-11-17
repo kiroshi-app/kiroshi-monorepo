@@ -320,7 +320,8 @@ final class ThreadStore {
             repeated
             ?? Outgoing(
                 id: makeId(), turnId: makeId(), conversationId: conversationId, written: written,
-                picked: attachments, sentAt: now())
+                picked: attachments, storeCallKey: attachments.isEmpty ? nil : makeId(),
+                sentAt: now())
         lastSentId = outgoing.id
         draft = ""
         attachments = []
@@ -358,10 +359,11 @@ final class ThreadStore {
         defer { isSending = false }
         do {
             var content = content(of: outgoing.written)
-            if !outgoing.picked.isEmpty {
+            if let storeCallKey = outgoing.storeCallKey {
                 let paths = try await relay.storeAttachments(
                     await ConversationAttachments.encoding(
-                        outgoing.picked, in: outgoing.conversationId))
+                        outgoing.picked, in: outgoing.conversationId),
+                    callKey: storeCallKey)
                 content = AttachmentBlock.prompt(
                     text: content, paths: paths, sentAt: outgoing.sentAt)
             }
@@ -580,6 +582,7 @@ private struct Outgoing {
     let conversationId: String
     let written: String
     let picked: [PickedAttachment]
+    let storeCallKey: String?
     let sentAt: Date
 }
 

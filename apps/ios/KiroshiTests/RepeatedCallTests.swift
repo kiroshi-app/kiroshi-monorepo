@@ -14,9 +14,19 @@ struct RepeatedCallTests {
     struct SendArgs: Decodable {
         struct Message: Decodable {
             let id: String
+            let content: String
         }
 
         let message: Message
+    }
+
+    struct StoreArgs: Decodable {
+        struct File: Decodable {
+            let name: String
+        }
+
+        let conversationId: String
+        let attachments: [File]
     }
 
     struct RecordArgs: Decodable {
@@ -491,6 +501,113 @@ struct RepeatedCallTests {
         #expect(store.transcript.entries.map(\.id) == [id])
         #expect(store.sendProblem == nil)
         #expect(store.draft.isEmpty)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @MainActor
+    final class FileShelf {
+        private(set) var files: [String] = []
+        private var ledger: [String: [String]] = [:]
+
+        func store(_ call: TestCall) throws -> String {
+            let key = try RepeatedCallTests.callKey(of: call)
+            if let key, let kept = ledger[key] {
+                return Self.list(kept)
+            }
+            let args = try call.args(as: StoreArgs.self)
+            let paths = args.attachments.map { file in
+                "/d/attachments/\(args.conversationId)/\(files.count + 1)-\(file.name)"
+            }
+            files += paths
+            if let key {
+                ledger[key] = paths
+            }
+            return Self.list(paths)
+        }
+
+        static func list(_ paths: [String]) -> String {
+            "[\(paths.map { #""\#($0)""# }.joined(separator: ","))]"
+        }
+    }
+
+    static let flow = PickedAttachment(id: UUID(), name: "flow.png", data: Data([1, 2]))
+
+    @Test func sendAgainAfterItsFilesWereStoredLeavesOneCopyOnTheHost() async throws {
+        let host = TestHost(
+            messages: ["chat-juniper": []], holding: ["chat_store_attachments"],
+            answer: { call in
+                call.command == "conversation_send_turn" ? TestHost.ok(call, "1") : nil
+            })
+        let store = ThreadStore(subject: .companion(juniper), work: CompanionWork())
+        let connection = makeConnection()
+        let following = Task { await store.follow(connection) }
+        await connect(connection, to: host)
+        await waitUntil { store.phase == .loaded }
+        host.reply(Self.event("test://replay", "1", seq: 1))
+        let shelf = FileShelf()
+
+        store.draft = "Look at this"
+        store.attachments = [Self.flow]
+        let sending = store.send()
+        let stored = try #require(await host.nextCall("chat_store_attachments"))
+        _ = try shelf.store(stored)
+        host.reply(Self.resync(stored))
+        await sending?.value
+        #expect(store.attachments == [Self.flow])
+        let again = store.send()
+        let storedAgain = try #require(await host.nextCall("chat_store_attachments"))
+        host.reply(TestHost.ok(storedAgain, try shelf.store(storedAgain)))
+        let sent = try #require(await host.nextCall("conversation_send_turn"))
+        await again?.value
+
+        #expect(shelf.files == ["/d/attachments/chat-juniper/1-flow.png"])
+        let key = try #require(try Self.callKey(of: stored))
+        #expect(try Self.callKey(of: storedAgain) == key)
+        #expect(try Self.callKey(of: sent) != key)
+        #expect(try sent.args(as: SendArgs.self).message.content.contains(shelf.files[0]))
+        #expect(store.problem == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aMissionSendAgainAfterItsFilesWereStoredLeavesOneCopyOnTheHost() async throws {
+        let host = TestHost(
+            messages: ["thread-mission-1": []], holding: ["chat_store_attachments"],
+            answer: { call in
+                call.command == "conversation_send_turn" ? TestHost.ok(call, "1") : nil
+            })
+        var ids = (1...).lazy.map { "id-\($0)" }.makeIterator()
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork(),
+            newId: { ids.next()! })
+        let connection = makeConnection()
+        let following = Task { await store.follow(connection) }
+        await connect(connection, to: host)
+        await waitUntil { store.hasLoaded && store.isOnline }
+        host.reply(Self.event("test://replay", "1", seq: 1))
+        let shelf = FileShelf()
+
+        store.draft = "Look at this"
+        store.attachments = [Self.flow]
+        let sending = store.send()
+        let stored = try #require(await host.nextCall("chat_store_attachments"))
+        _ = try shelf.store(stored)
+        host.reply(Self.resync(stored))
+        await sending?.value
+        #expect(store.attachments == [Self.flow])
+        let again = store.send()
+        let storedAgain = try #require(await host.nextCall("chat_store_attachments"))
+        host.reply(TestHost.ok(storedAgain, try shelf.store(storedAgain)))
+        let sent = try #require(await host.nextCall("conversation_send_turn"))
+        await again?.value
+
+        #expect(shelf.files == ["/d/attachments/thread-mission-1/1-flow.png"])
+        let key = try #require(try Self.callKey(of: stored))
+        #expect(try Self.callKey(of: storedAgain) == key)
+        #expect(try Self.callKey(of: sent) != key)
+        #expect(try sent.args(as: SendArgs.self).message.content.contains(shelf.files[0]))
+        #expect(store.sendProblem == nil)
         following.cancel()
         await connection.stop()
     }

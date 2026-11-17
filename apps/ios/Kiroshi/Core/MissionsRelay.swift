@@ -38,8 +38,8 @@ struct MissionsRelay: Sendable {
             args: PageArgs(conversationId: conversationId, limit: Self.threadPageSize))
     }
 
-    func store(_ attachments: ConversationAttachments) async throws -> [String] {
-        try await ok("chat_store_attachments", args: attachments)
+    func store(_ attachments: ConversationAttachments, callKey: String) async throws -> [String] {
+        try await ok("chat_store_attachments", args: attachments, callKey: callKey)
     }
 
     func answer(_ answer: MissionAnswer) async throws {

@@ -76,8 +76,10 @@ struct ConversationRelay: Sendable {
             messages: page.messages.sorted { $0.seq < $1.seq }, hasMore: page.hasMore)
     }
 
-    func storeAttachments(_ attachments: ConversationAttachments) async throws -> [String] {
-        try await ask("chat_store_attachments", attachments, as: [String].self)
+    func storeAttachments(_ attachments: ConversationAttachments, callKey: String) async throws
+        -> [String]
+    {
+        try await ask("chat_store_attachments", attachments, callKey: callKey, as: [String].self)
     }
 
     func sendTurn(_ message: SentMessage, summoning companionIds: [Companion.ID]) async throws {
