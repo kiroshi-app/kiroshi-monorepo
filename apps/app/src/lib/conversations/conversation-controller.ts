@@ -1483,7 +1483,7 @@ export const createConversationController = (
 		botIds: string[],
 		describe: (names: string[]) => string = (names) =>
 			notStartedDescriptionOf(null, names),
-		reason?: TransportError,
+		reason?: TransportError | null,
 	) => {
 		if (!conversation || botIds.length === 0) {
 			return
@@ -1555,7 +1555,7 @@ export const createConversationController = (
 			dropped,
 			[dropped.botId],
 			(names) => notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
-			dropped.error ?? undefined,
+			dropped.error,
 		)
 	}
 
