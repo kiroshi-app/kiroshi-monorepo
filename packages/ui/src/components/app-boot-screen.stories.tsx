@@ -278,12 +278,11 @@ type ExitTimeline = {
 
 const watchExit = (screen: HTMLElement) => {
 	const timeline: ExitTimeline = { shownPerFrame: [] }
-	let frame = 0
 	const record = () => {
 		timeline.shownPerFrame.push(shownHexagonsOf(screen).length)
 		frame = requestAnimationFrame(record)
 	}
-	frame = requestAnimationFrame(record)
+	let frame = requestAnimationFrame(record)
 	const leave = new MutationObserver(() => {
 		if (screen.dataset.phase !== "leaving") return
 		timeline.hasEntranceEndedAtLeave ??=
