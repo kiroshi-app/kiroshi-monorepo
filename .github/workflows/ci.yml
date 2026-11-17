@@ -298,6 +298,9 @@ jobs:
         with:
           bun-version-file: package.json
 
+      - name: Stop the host services the tests do not use
+        run: scripts/ios-quiet-host.sh
+
       - name: Boot the simulator while the build products download
         run: |
           simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')

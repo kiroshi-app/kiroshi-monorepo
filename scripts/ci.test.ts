@@ -115,6 +115,7 @@ const SETUP_STEPS = new Set([
 	"Read the Rust version pinned in rust-toolchain.toml",
 	"Install XcodeGen",
 	"Pack the build products",
+	"Stop the host services the tests do not use",
 	"Boot the simulator while the build products download",
 	"Unpack the build products",
 	"Runner failure",
@@ -1431,6 +1432,19 @@ describe("the jobs of ci.yml", () => {
 		)
 		expect(IOS_SHARD_STEPS[0]?.command).toContain(
 			"-xctestrun apps/ios/build/Build/Products/*.xctestrun",
+		)
+	})
+
+	it("stops the host services the tests do not use before the simulator boots", () => {
+		const steps = workflow.jobs.ios?.steps ?? []
+		const indexOf = (name: string) =>
+			steps.findIndex((step) => step.name === name)
+		const quietHost = indexOf("Stop the host services the tests do not use")
+
+		expect(steps[quietHost]?.run?.trim()).toBe("scripts/ios-quiet-host.sh")
+		expect(quietHost).toBeGreaterThan(-1)
+		expect(quietHost).toBeLessThan(
+			indexOf("Boot the simulator while the build products download"),
 		)
 	})
 
