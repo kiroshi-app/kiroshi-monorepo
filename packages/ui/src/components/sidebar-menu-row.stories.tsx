@@ -1,11 +1,15 @@
 // Call sites: packages/ui/src/components/sidebar-list-row.tsx line 73 and
 // packages/ui/src/components/user-chip.tsx line 26
 
-import type { ReactNode } from "react"
-import { expect, fn } from "storybook/test"
+import type { ComponentProps, ReactNode } from "react"
+import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { lineHeightOf } from "@workspace/storybook/story-utils"
+import {
+	expectMutedUntilHoveredOrActive,
+	lineHeightOf,
+	tokenStyleIn,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { SidebarMenuRow } from "@workspace/ui/components/sidebar-menu-row"
 import { Item } from "@workspace/ui/components/ui/item"
@@ -155,3 +159,66 @@ export const WithSecondLine = meta.story({
 		await expect(row.getBoundingClientRect().height).toBeGreaterThan(36)
 	},
 })
+
+const ACTIVE = "Active"
+
+const COMPACT_ROW_STATES = ["At rest", "Hovered", ACTIVE]
+
+const iconOf = (row: HTMLElement) => row.querySelector("svg") as SVGElement
+
+const renderCompactRowStates = (
+	args: ComponentProps<typeof SidebarMenuRow>,
+) => (
+	<>
+		{COMPACT_ROW_STATES.map((state) => (
+			<SidebarMenuRow
+				{...args}
+				isActive={state === ACTIVE}
+				key={state}
+				label={state}
+				variant="compact"
+			>
+				{state}
+			</SidebarMenuRow>
+		))}
+	</>
+)
+
+const compactRowStatesStory = (globals?: { theme: "dark" }) => ({
+	globals,
+	render: renderCompactRowStates,
+	parameters: {
+		pseudo: { hover: "button:nth-of-type(2)" },
+		docs: {
+			description: {
+				story:
+					"Three compact rows, the variant the expanded sidebar draws its conversation and agent rows with: one at rest, one under the pointer, one the screen is on. Check the label sits in `--muted-foreground` at rest and in `--sidebar-foreground` under the pointer and on the current row, that the colour switches with no fade, and that the icon slot keeps `--muted-foreground` on all three, the colour an avatar placed there reads. Pick `navigation` for the sidebar top menu, which keeps its own colours.",
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const rows = COMPACT_ROW_STATES.map((name) =>
+			within(canvasElement).getByRole("button", { name }),
+		)
+		const [atRest, hovered, active] = rows
+
+		await expectMutedUntilHoveredOrActive({
+			states: { atRest, hovered, active },
+			inkedPartsOf: (row) => [within(row).getByText(row.textContent)],
+			steadyPartsOf: (row) => [iconOf(row)],
+			fullInk: "text-sidebar-foreground",
+		})
+		for (const row of rows)
+			await expect(getComputedStyle(iconOf(row)).color).toBe(
+				tokenStyleIn(atRest, "text-muted-foreground", "color"),
+			)
+	},
+})
+
+export const CompactRowAtRestHoveredAndActive = meta.story(
+	compactRowStatesStory(),
+)
+
+export const CompactRowAtRestHoveredAndActiveDark = meta.story(
+	compactRowStatesStory({ theme: "dark" }),
+)

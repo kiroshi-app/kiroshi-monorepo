@@ -43,7 +43,7 @@ export const MarkdownTaskCheckbox = ({
 
 	return (
 		<span
-			className="relative me-2.5 mt-[calc((1lh-1rem)/2)] inline-grid size-4 align-top before:absolute before:-inset-1"
+			className="relative -ms-6.5 me-2.5 mt-[calc((1lh-1rem)/2)] inline-grid size-4 align-top before:absolute before:-inset-1"
 			data-slot="markdown-task-checkbox"
 		>
 			<input
@@ -87,7 +87,9 @@ type TaskLabelProps = {
 
 const TaskLabel = ({ children }: TaskLabelProps) => (
 	// biome-ignore lint/a11y/noLabelWithoutControl: the GFM box arrives among the children
-	<label data-slot="markdown-task-label">{trimTextAfterBox(children)}</label>
+	<label data-slot="markdown-task-label" className="block w-fit ps-6.5">
+		{trimTextAfterBox(children)}
+	</label>
 )
 
 export const MarkdownListItem = ({

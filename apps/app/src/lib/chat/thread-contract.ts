@@ -1,3 +1,4 @@
+import type { ConversationNaming as NamingState } from "@workspace/ui/components/conversation-naming"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -49,6 +50,7 @@ export type ThreadMission = {
 export type ConversationThread = {
 	kind: "conversation"
 	conversation: Conversation
+	naming?: NamingState
 	runtimes: ConversationRuntimes
 	onOpenSettings: (conversationId: string) => void
 	mission?: ThreadMission

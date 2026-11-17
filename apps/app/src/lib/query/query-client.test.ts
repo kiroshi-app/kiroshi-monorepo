@@ -179,7 +179,8 @@ it("raises one notice per outage of a read until it answers again", async () => 
 it("opens no outage on a failure its meta keeps silent", async () => {
 	await fetchOutcomes(["silent", new Error("a"), new Error("b")])
 
-	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalled())
+	expect(raiseFailureNotice).toHaveBeenCalledOnce()
 })
 
 it("builds the failure notice from the failure the read met", async () => {
@@ -242,3 +243,26 @@ it.each(["hostOnly", "other"] as const)(
 		expect(raisedTitles()).toEqual(["Couldn’t read it.", LATER_TITLE])
 	},
 )
+
+it("hands the error the mutation met to the report, which names its call and kind", async () => {
+	const refusal = new HostRefused("kept", null, "hostOnly", {
+		command: "library_comment_create",
+		status: 403,
+	})
+
+	await executeFailingMutation(reportedMeta, refusal).executed
+
+	await vi.waitFor(() =>
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				report: expect.objectContaining({
+					context: expect.objectContaining({
+						command: "library_comment_create",
+						errorKind: "hostOnly",
+						httpStatus: 403,
+					}),
+				}),
+			}),
+		),
+	)
+})

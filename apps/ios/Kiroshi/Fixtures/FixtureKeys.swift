@@ -66,12 +66,12 @@
     extension RelayConnection {
         init(
             baseURL: URL, instanceId: Space.ID, bearer: String, environment: RelayEnvironment,
-            backoff: Backoff = Backoff()
+            accountId: String? = nil, backoff: Backoff = Backoff()
         ) {
             self.init(
                 baseURL: baseURL, instanceId: instanceId, bearer: bearer,
                 device: FixtureKeys.device, spaceKeys: FixtureKeys.spaceKeys,
-                environment: environment, backoff: backoff)
+                environment: environment, accountId: accountId, backoff: backoff)
         }
     }
 

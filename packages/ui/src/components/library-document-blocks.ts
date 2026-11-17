@@ -1,6 +1,7 @@
 import { markdownLanguage } from "@codemirror/lang-markdown"
 
 import type { CalloutTone } from "@workspace/ui/components/answer-blocks/callout"
+import { BOT_MENTION_PATTERN } from "@workspace/ui/components/markdown/bot-mentions"
 
 const TEXT_BLOCK_TYPES = [
 	"paragraph",
@@ -133,6 +134,17 @@ const withBlankLine = (gap: string) =>
 const blockTypeOf = (source: string): LibraryBlockType =>
 	parsedBlocksOf(source)[0]?.type ?? "paragraph"
 
+const codeSpansOf = (source: string) => {
+	const spans: Pick<ParsedBlock, "from" | "to">[] = []
+	markdownLanguage.parser.parse(source).iterate({
+		enter: ({ name, from, to }) => {
+			if (typeOfNode(name, source.slice(from, to)) === "code")
+				spans.push({ from, to })
+		},
+	})
+	return spans
+}
+
 const randomId = () =>
 	Array.from(
 		crypto.getRandomValues(new Uint8Array(ID_LENGTH)),
@@ -224,6 +236,118 @@ const markdownOf = ({ source, written }: LibraryBlock) => written ?? source
 
 const serializeBlocks = ({ lead, blocks }: LibraryBlockDocument) =>
 	lead + blocks.map((block) => markdownOf(block) + block.gap).join("")
+
+type LibraryBlockPassage = {
+	start: number
+	end: number
+	text: string
+}
+
+type LibraryBlockAnchor = {
+	blockId: string
+	passage?: LibraryBlockPassage
+}
+
+const passageAt = (text: string, start: number): LibraryBlockPassage => ({
+	start,
+	end: start + text.length,
+	text,
+})
+
+const foundAnchorIn = (
+	blocks: LibraryBlock[],
+	{ blockId, passage }: LibraryBlockAnchor,
+): LibraryBlockAnchor | undefined => {
+	const block = blocks.find(({ id }) => id === blockId)
+	if (!block) return undefined
+	if (!passage) return { blockId }
+	const { text, start } = passage
+	const at = block.source.startsWith(text, start)
+		? start
+		: block.source.indexOf(text)
+	return at === -1 ? undefined : { blockId, passage: passageAt(text, at) }
+}
+
+const UNSHOWN_NODE =
+	/Mark$|^(?:TableDelimiter|LinkTitle|TaskMarker|Image|CodeInfo)$/
+
+const inkOffsetsOf = (text: string) => {
+	const offsets: number[] = []
+	for (let at = 0; at < text.length; at++)
+		if (/\S/.test(text[at])) offsets.push(at)
+	return offsets
+}
+
+const shownOf = (source: string) => {
+	const isUnshown = new Array<boolean>(source.length).fill(false)
+	const tree = markdownLanguage.parser.parse(source)
+	tree.iterate({
+		enter: ({ name, from, to, node }) => {
+			const isWhole =
+				UNSHOWN_NODE.test(name) ||
+				(name === "URL" && node.parent?.name === "Link")
+			if (isWhole || name === "Escape")
+				isUnshown.fill(true, from, isWhole ? to : from + 1)
+			return !isWhole
+		},
+	})
+	const mentions = [...source.matchAll(BOT_MENTION_PATTERN)].flatMap(
+		({ 0: written, 1: id, index }) =>
+			/Code/.test(tree.resolveInner(index, 1).name)
+				? []
+				: [{ from: index, to: index + written.length, id }],
+	)
+	for (const { from, to } of mentions) isUnshown.fill(true, from + 1, to - 1)
+	return { isUnshown, mentions }
+}
+
+const shownInkOffsetsOf = (source: string) => {
+	const { isUnshown } = shownOf(source)
+	return inkOffsetsOf(source).filter((at) => !isUnshown[at])
+}
+
+const passageQuoteOf = (
+	source: string,
+	{ start, end }: LibraryBlockPassage,
+	mentionNameOf: (id: string) => string,
+) => {
+	const { isUnshown, mentions } = shownOf(source)
+	let quote = ""
+	for (let at = start; at < end; at++) {
+		const mention = mentions.find(({ from }) => from === at)
+		if (mention) {
+			quote += mentionNameOf(mention.id)
+			at = mention.to - 1
+		} else if (!isUnshown[at]) quote += source[at]
+	}
+	return quote.replace(/\s+/g, " ").trim()
+}
+
+type ShownSelection = {
+	shown: string
+	start: number
+	end: number
+}
+
+const passageOfShown = (
+	source: string,
+	{ shown, start, end }: ShownSelection,
+): LibraryBlockPassage | undefined => {
+	const written = shownInkOffsetsOf(source)
+	const drawn = inkOffsetsOf(shown)
+	if (
+		drawn.length !== written.length ||
+		drawn.some((at, index) => shown[at] !== source[written[index]])
+	)
+		return undefined
+	const first = drawn.findIndex((at) => at >= start)
+	const last = drawn.findLastIndex((at) => at < end)
+	if (first === -1 || last < first) return undefined
+	return passageAt(
+		source.slice(written[first], written[last] + 1),
+		written[first],
+	)
+}
 
 const offsetsOf = ({ lead, blocks }: LibraryBlockDocument) => {
 	let at = lead.length
@@ -717,6 +841,17 @@ const cellsOf = (line: string) =>
 
 const tableRowsOf = (source: string) => source.split("\n").map(cellsOf)
 
+const tableCellRangesOf = (source: string) => {
+	let at = 0
+	return tableRowsOf(source).map((cells) =>
+		cells.map((cell) => {
+			const from = source.indexOf(cell, at)
+			at = from + cell.length
+			return { from, to: at }
+		}),
+	)
+}
+
 const tableSourceOf = (rows: string[][]) =>
 	rows.map((cells) => `| ${cells.join(" | ")} |`).join("\n")
 
@@ -753,27 +888,35 @@ export {
 	checklistRowsOf,
 	checklistSourceOf,
 	codeLanguageOf,
+	codeSpansOf,
 	continuedMarkerOf,
 	conversionsOf,
 	convertSource,
 	fenceOf,
+	foundAnchorIn,
 	galleryItemsOf,
 	isTextBlockType,
 	keepIds,
 	type LibraryBlock,
+	type LibraryBlockAnchor,
 	type LibraryBlockDocument,
+	type LibraryBlockPassage,
 	type LibraryBlockType,
 	MARKERS,
 	marked,
 	movedTo,
 	offsetsOf,
 	parseBlocks,
+	passageOfShown,
+	passageQuoteOf,
 	relaid,
 	rowAfter,
+	type ShownSelection,
 	type SourceEdit,
 	serializeBlocks,
 	shiftedAcross,
 	shiftedOffset,
+	tableCellRangesOf,
 	tableRowsOf,
 	tableSourceOf,
 	toggledRow,

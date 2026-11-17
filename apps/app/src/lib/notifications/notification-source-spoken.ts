@@ -9,7 +9,7 @@ import type { Conversation } from "../conversations/store-contract"
 
 type SpokenWordNotifierOptions = Pick<
 	NotificationSourceOptions,
-	"roster" | "switches"
+	"roster" | "switches" | "namings"
 > & {
 	hasHostFocus: () => boolean
 	deliver: Deliver
@@ -21,6 +21,7 @@ const speakerNameIn = (conversation: Conversation, botId: string) =>
 export const createSpokenWordNotifier = ({
 	roster,
 	switches,
+	namings,
 	hasHostFocus,
 	deliver,
 }: SpokenWordNotifierOptions) => {
@@ -45,7 +46,10 @@ export const createSpokenWordNotifier = ({
 			[
 				{
 					target: { kind: "conversation", id: conversationId },
-					...spokenWordsFor({ title: conversationName(conversation), name }),
+					...spokenWordsFor({
+						title: conversationName(conversation, namings()),
+						name,
+					}),
 				},
 			],
 			reading,

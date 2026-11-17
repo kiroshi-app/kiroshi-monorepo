@@ -4,6 +4,7 @@ import {
 	type ReactNode,
 	type RefObject,
 	useEffect,
+	useState,
 	useSyncExternalStore,
 } from "react"
 import {
@@ -12,12 +13,15 @@ import {
 	fn,
 	screen,
 	spyOn,
+	type UserEventObject,
 	waitFor,
 	within,
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectCommentThreadCapped,
+	findHoverTooltip,
 	hueScopeOf,
 	isInBrowserRunner,
 	realPointer,
@@ -35,6 +39,33 @@ import {
 	selectInField,
 } from "@workspace/ui/components/library-block-text"
 import {
+	ATLAS,
+	BUDGET_THREAD,
+	COMMENT_COUNTS,
+	COMMENT_PARTICIPANTS,
+	DINNER_PASSAGE,
+	DOCUMENT_THREADS,
+	JUNIPER,
+	LONG_NAMED_AGENT,
+	LONG_THREAD_COMMENTS,
+	MARKET_BLOCK,
+	MARKET_PARAGRAPH,
+	MARKET_THREAD,
+	OFFSITE_DOCUMENT,
+	OPEN_THREADS,
+	OVERLAP_PASSAGE,
+	OVERLAP_THREAD,
+	passageIn,
+	RESOLVED_SESSION_THREAD,
+	SESSION_BLOCK,
+	SESSION_PARAGRAPH,
+	SESSION_PASSAGE,
+	SESSION_THREAD,
+	STEVE,
+} from "@workspace/ui/components/library-comments.fixtures"
+import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
+import type { LibraryDocumentThread } from "@workspace/ui/components/library-document-comments"
+import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
 	type LibraryDocumentEditorProps,
@@ -45,6 +76,7 @@ import {
 	NoticeSurface,
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
+import { RosterProvider } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 const t = i18n.getFixedT("en", "common")
@@ -218,11 +250,12 @@ const leaveBlock = () => keyboard("{Escape}")
 
 type EditorFrameProps = {
 	children?: ReactNode
+	isNarrow?: boolean
 }
 
-const EditorFrame = ({ children }: EditorFrameProps) => (
+const EditorFrame = ({ children, isNarrow = false }: EditorFrameProps) => (
 	<div
-		className="flex h-[832px] w-[1280px] bg-background ps-15 pe-1.5 pt-2 pb-2"
+		className={`flex h-[832px] bg-background ps-15 pe-1.5 pt-2 pb-2 ${isNarrow ? "w-[640px]" : "w-[1280px]"}`}
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>{children}</ContentCard>
@@ -1403,19 +1436,19 @@ export const AgentsWriting = meta.story({
 
 const ATLAS_WRITERS = LIBRARY_WRITERS.slice(0, 1)
 
-const createWritersStore = () => {
-	let writers = ATLAS_WRITERS
+const createWritersStore = (start = ATLAS_WRITERS) => {
+	let writers = start
 	const listeners = new Set<() => void>()
-	const write = (next: typeof ATLAS_WRITERS) => {
+	const write = (next: typeof start) => {
 		writers = next
 		for (const listener of listeners) listener()
 	}
 	return {
 		read: () => writers,
 		finish: () => write([]),
-		resume: () => write(ATLAS_WRITERS),
+		resume: () => write(start),
 		reset: () => {
-			writers = ATLAS_WRITERS
+			writers = start
 		},
 		subscribe: (listener: () => void) => {
 			listeners.add(listener)
@@ -2043,7 +2076,7 @@ export const A3ToolbarButtonHover = meta.story({
 		const bold = await canvas.findByRole("button", { name: "Bold" })
 		await expect(getComputedStyle(bold).transitionProperty).toBe("none")
 		await userEvent.hover(bold)
-		const tooltip = await screen.findByRole("tooltip")
+		const tooltip = await findHoverTooltip()
 		await expect(tooltip).toHaveTextContent("Bold⌘B")
 		await expect(
 			[...tooltip.children]
@@ -2621,3 +2654,2691 @@ export const GalleryImagesResolved = meta.story({
 			await expect(args.resolveImage).toHaveBeenCalledWith(src)
 	},
 })
+
+const LIGHT = { theme: "light" } as const
+
+const DARK = { theme: "dark" } as const
+
+const DRAFT_PIN = "comment-draft"
+
+const MARKET_PASSAGE = "the market in the old town"
+
+const commentBarOf = (isCommentMode: boolean) => ({
+	counts: COMMENT_COUNTS,
+	isCommentMode,
+	onCommentModeChange: fn(),
+	list: (
+		<LibraryCommentsList
+			counts={COMMENT_COUNTS}
+			onOpenThread={fn()}
+			onTabChange={fn()}
+			tab="open"
+			threads={OPEN_THREADS}
+		/>
+	),
+})
+
+const commentedDocument = (isCommentMode = false) => ({
+	...OFFSITE_DOCUMENT,
+	template: undefined,
+	threads: DOCUMENT_THREADS,
+	commentParticipants: COMMENT_PARTICIPANTS,
+	comments: commentBarOf(isCommentMode),
+	onOpenThread: fn(),
+	onStartComment: fn(),
+})
+
+const draftOn = (
+	target: NonNullable<LibraryDocumentEditorProps["commentDraft"]>["target"],
+) => ({
+	target,
+	author: STEVE,
+	value: "",
+	onValueChange: fn(),
+	onSubmit: fn(),
+	onClose: fn(),
+})
+
+const openThreadOf = (id: string) => ({
+	id,
+	reply: "",
+	onReplyChange: fn(),
+	onReply: fn(),
+	onResolve: fn(),
+	onReopen: fn(),
+	onMore: fn(),
+	onClose: fn(),
+})
+
+type CommentPlay = {
+	args: LibraryDocumentEditorProps
+	canvas: ReturnType<typeof within>
+	canvasElement: HTMLElement
+	userEvent: UserEventObject
+}
+
+const describedAs = (story: string) => ({
+	docs: { description: { story } },
+})
+
+const boxOf = (element: Element) => element.getBoundingClientRect()
+
+const blockOf = (canvasElement: HTMLElement, id: string) => {
+	const block = canvasElement.querySelector<HTMLElement>(
+		`[data-block-id="${id}"]`,
+	)
+	if (!block) throw new Error(`No block ${id}`)
+	return block
+}
+
+const bodyOf = (canvasElement: HTMLElement, id: string) =>
+	slotIn(blockOf(canvasElement, id), "library-document-block-body")
+
+const pinIn = (canvasElement: HTMLElement, pin: string) => {
+	const found = canvasElement.querySelector<HTMLElement>(
+		`[data-comment-pin="${pin}"]`,
+	)
+	if (!found) throw new Error(`No pin ${pin}`)
+	return found
+}
+
+const threadPinIn = (canvasElement: HTMLElement, id: string) =>
+	pinIn(canvasElement, `comment:${id}`)
+
+const shownPassageOf = (canvasElement: HTMLElement, text: string) => {
+	const passage = slotsIn(canvasElement, "library-document-passage").find(
+		(each) => each.textContent === text,
+	)
+	if (!passage) throw new Error(`No passage ${text}`)
+	return passage
+}
+
+const lastLineOf = (element: Element) => {
+	const line = [...element.getClientRects()].at(-1)
+	if (!line) throw new Error("No line drawn")
+	return line
+}
+
+const middleOf = ({ top, bottom }: DOMRect) => (top + bottom) / 2
+
+const washOf = (host: Element, percent: number, token = "primary") => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = `color-mix(in oklab, var(--${token}) ${percent}%, transparent)`
+	host.append(probe)
+	const colour = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return colour
+}
+
+const colourOf = (host: Element, token: string) => {
+	const probe = document.createElement("span")
+	probe.style.color = `var(--${token})`
+	host.append(probe)
+	const colour = getComputedStyle(probe).color
+	probe.remove()
+	return colour
+}
+
+const drawnShadowOf = (host: Element, value: string) => {
+	const probe = document.createElement("span")
+	probe.style.boxShadow = value
+	host.append(probe)
+	const shadow = getComputedStyle(probe).boxShadow
+	probe.remove()
+	return shadow
+}
+
+const shadowOf = (host: Element, token: string) =>
+	drawnShadowOf(host, `var(--${token})`)
+
+const expectCalledOnceWith = async (mock: unknown, ...sent: unknown[]) => {
+	await expect(mock).toHaveBeenCalledOnce()
+	await expect(mock).toHaveBeenCalledWith(...sent)
+}
+
+const expectClose = (actual: number, expected: number) =>
+	expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1)
+
+const expectTintAround = async (canvasElement: HTMLElement, id: string) => {
+	const block = blockOf(canvasElement, id)
+	const tint = boxOf(slotIn(block, "library-document-comment-tint"))
+	const box = boxOf(block)
+	await expectClose(tint.left, box.left - 8)
+	await expectClose(tint.right, box.right + 8)
+	await expectClose(tint.top, box.top - 8)
+	await expectClose(tint.bottom, box.bottom + 8)
+	return tint
+}
+
+const composerIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-comment-composer")
+
+const expectDraftFieldFocused = (canvas: ReturnType<typeof within>) =>
+	waitFor(() =>
+		expect(
+			canvas.getByRole("textbox", { name: "Comment, @ to mention" }),
+		).toHaveFocus(),
+	)
+
+const expectPassagePin = async (pin: HTMLElement, passage: HTMLElement) => {
+	const line = lastLineOf(passage)
+	await expectClose(boxOf(pin).left, line.right)
+	await expectClose(middleOf(boxOf(pin)), middleOf(line))
+}
+
+const expectPinAbovePassageEnd = async (
+	pin: HTMLElement,
+	passage: HTMLElement,
+) => {
+	const line = lastLineOf(passage)
+	await expectClose(boxOf(pin).left, line.right)
+	await expect(boxOf(pin).bottom).toBeCloseTo(line.top + 1, 1)
+}
+
+const doc1 = {
+	args: commentedDocument(),
+	parameters: describedAs(
+		"Artboard Doc 1: a document carrying three open threads, two on a passage and one on a paragraph. Check one pin per thread, the paragraph pin 16px right of the column and centred on the first line of its block, the pin of an agent under its own ringless shadow and the pin of a person under the pin shadow, each passage pin starting on the end of its passage and centred on its last line, the passages washed at 8 percent over a 2px underline, and that pressing a pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(3)
+
+		const column = slotIn(canvasElement, "library-document-column")
+		const article = boxOf(column.querySelector("article") as HTMLElement)
+		const marketPin = threadPinIn(canvasElement, MARKET_THREAD.id)
+		await expectClose(boxOf(marketPin).left, article.right + 16)
+		await expectClose(
+			middleOf(boxOf(marketPin)),
+			boxOf(blockOf(canvasElement, MARKET_BLOCK)).top + 12,
+		)
+		await expect(getComputedStyle(marketPin).boxShadow).toContain(
+			shadowOf(marketPin, "comment-pin-agent-shadow"),
+		)
+
+		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
+		const sessionPin = threadPinIn(canvasElement, SESSION_THREAD.id)
+		await expectPassagePin(sessionPin, passage)
+		await expect(getComputedStyle(sessionPin).boxShadow).toContain(
+			shadowOf(sessionPin, "comment-pin-shadow"),
+		)
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		const look = getComputedStyle(passage)
+		await expect(look.backgroundColor).toBe(washOf(passage, 8))
+		await expect(look.borderBottomWidth).toBe("2px")
+		await expect(look.borderBottomColor).toBe(washOf(passage, 50))
+
+		await userEvent.click(marketPin)
+		await expectCalledOnceWith(args.onOpenThread, MARKET_THREAD.id)
+		marketPin.blur()
+		await expect(args.onStartComment).not.toHaveBeenCalled()
+	},
+}
+
+export const Doc1PinsAtRest = meta.story({ ...doc1, globals: LIGHT })
+
+export const Doc1PinsAtRestDark = meta.story({ ...doc1, globals: DARK })
+
+const doc2 = {
+	args: commentedDocument(true),
+	parameters: describedAs(
+		"Artboard Doc 2: comment mode on, the pointer over a paragraph. Check the hint centred on the card 24px above its bottom, that Escape raises `onCommentModeChange` with false, and that the block under the pointer wears the tint 8px outside itself while the 20px pin cursor sets its tip on the pointer, its bottom left corner at 2px, under a 2px white ring and its own shadow.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const card = boxOf(slotIn(canvasElement, "library-document-editor"))
+		const hint = boxOf(slotIn(canvasElement, "library-comment-mode-hint"))
+		await expectClose(
+			(hint.left + hint.right) / 2,
+			(card.left + card.right) / 2,
+		)
+		await expectClose(hint.bottom, card.bottom - 24)
+
+		const toggle = slotIn(canvasElement, "library-comment-toggle")
+		toggle.focus()
+		await userEvent.keyboard("{Escape}")
+		await expectCalledOnceWith(args.comments?.onCommentModeChange, false)
+		toggle.blur()
+
+		const body = bodyOf(canvasElement, MARKET_BLOCK)
+		const at = {
+			clientX: boxOf(body).left + 240,
+			clientY: boxOf(body).top + 12,
+		}
+		await fireEvent.pointerMove(body, at)
+		await expectTintAround(canvasElement, MARKET_BLOCK)
+		const cursor = slotIn(canvasElement, "library-document-comment-cursor")
+		await expect(cursor).toBeVisible()
+		await expectClose(boxOf(cursor).left, at.clientX)
+		await expectClose(boxOf(cursor).bottom, at.clientY)
+		await expect(boxOf(cursor).width).toBe(20)
+		await expect(boxOf(cursor).height).toBe(20)
+		const look = getComputedStyle(cursor)
+		await expect(look.borderBottomLeftRadius).toBe("2px")
+		await expect(look.boxShadow).toContain("rgb(255, 255, 255) 0px 0px 0px 2px")
+		await expect(look.boxShadow).toContain(
+			shadowOf(cursor, "comment-cursor-shadow"),
+		)
+		await expect(getComputedStyle(body).cursor).toBe("none")
+	},
+}
+
+export const Doc2CommentMode = meta.story({ ...doc2, globals: LIGHT })
+
+export const Doc2CommentModeDark = meta.story({ ...doc2, globals: DARK })
+
+const doc3 = {
+	args: {
+		...commentedDocument(true),
+		threads: [SESSION_THREAD],
+		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
+	},
+	parameters: describedAs(
+		"Artboard Doc 3: a paragraph clicked in comment mode, the pointer still over it. Check one tint around the paragraph, never a second one from the pointer, the selected draft pin at the paragraph pin position, the 320px composer hanging 8px under the pin with their right edges aligned, and its field focused.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		const body = bodyOf(canvasElement, MARKET_BLOCK)
+		await fireEvent.pointerMove(body, {
+			clientX: boxOf(body).left + 240,
+			clientY: boxOf(body).top + 12,
+		})
+		await expect(
+			slotIn(canvasElement, "library-document-comment-cursor"),
+		).toBeVisible()
+		await expectTintAround(canvasElement, MARKET_BLOCK)
+		await expect(
+			slotsIn(canvasElement, "library-document-comment-tint"),
+		).toHaveLength(1)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		const composer = boxOf(composerIn(canvasElement))
+		await expect(composer.width).toBe(320)
+		await expectClose(composer.right, boxOf(pin).right)
+		await expectClose(composer.top, boxOf(pin).bottom + 8)
+		await expectDraftFieldFocused(canvas)
+	},
+}
+
+export const Doc3BlockDraft = meta.story({ ...doc3, globals: LIGHT })
+
+export const Doc3BlockDraftDark = meta.story({ ...doc3, globals: DARK })
+
+const doc4 = {
+	args: {
+		...commentedDocument(true),
+		commentDraft: draftOn({
+			blockId: SESSION_BLOCK,
+			passage: passageIn(SESSION_PARAGRAPH, DINNER_PASSAGE),
+			origin: "pointer",
+		}),
+	},
+	parameters: describedAs(
+		"Artboard Doc 4: a passage selected in comment mode. Check the passage in its selected wash over a solid underline, the selected draft pin on the end of the passage, the 320px composer 8px right of the pin with its top on the pin top, and its field focused.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		const passage = shownPassageOf(canvasElement, DINNER_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "selected")
+		await expect(getComputedStyle(passage).borderBottomColor).toBe(
+			getComputedStyle(pinIn(canvasElement, DRAFT_PIN)).backgroundColor,
+		)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expectPassagePin(pin, passage)
+		await waitFor(async () => {
+			const composer = boxOf(composerIn(canvasElement))
+			await expect(composer.width).toBe(320)
+			await expectClose(composer.left, boxOf(pin).right + 8)
+			await expectClose(composer.top, boxOf(pin).top)
+		})
+		await expectDraftFieldFocused(canvas)
+	},
+}
+
+export const Doc4PassageDraft = meta.story({ ...doc4, globals: LIGHT })
+
+export const Doc4PassageDraftDark = meta.story({ ...doc4, globals: DARK })
+
+const MAC_AGENT =
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+const WINDOWS_AGENT =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+
+const LINUX_AGENT =
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+
+const onPlatform = (agent: string) => () => {
+	const spy = spyOn(navigator, "userAgent", "get").mockReturnValue(agent)
+	return () => spy.mockRestore()
+}
+
+const doc5 = {
+	beforeEach: onPlatform(MAC_AGENT),
+	args: {
+		...commentedDocument(),
+		threads: [SESSION_THREAD],
+		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "shortcut" }),
+	},
+	parameters: describedAs(
+		"Artboard Doc 5: the comment shortcut pressed with the caret in a paragraph, out of comment mode, on macOS. Check the tint around the paragraph, the composer 4px under the tint with their right edges aligned, the keycap at the right of its first line reading the Mac symbols, and its field focused.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		const tint = await expectTintAround(canvasElement, MARKET_BLOCK)
+		const form = composerIn(canvasElement)
+		const composer = boxOf(form)
+		await expect(composer.width).toBe(320)
+		await expectClose(composer.right, tint.right)
+		await expectClose(composer.top, tint.bottom + 4)
+		const keycap = slotIn(form, "library-comment-composer-shortcut")
+		await expect(keycap).toHaveTextContent("⌘⌥M")
+		await expectClose(boxOf(keycap).right, composer.right - 12)
+		await expect(
+			canvasElement.querySelector('[data-slot="library-comment-mode-hint"]'),
+		).toBe(null)
+		await expectDraftFieldFocused(canvas)
+	},
+}
+
+export const Doc5ShortcutDraft = meta.story({ ...doc5, globals: LIGHT })
+
+export const Doc5ShortcutDraftDark = meta.story({ ...doc5, globals: DARK })
+
+const keycapOffMac = (agent: string) => ({
+	tags: ["test-only"],
+	beforeEach: onPlatform(agent),
+	args: doc5.args,
+	play: async ({ canvasElement }: CommentPlay) => {
+		const keycap = slotIn(canvasElement, "library-comment-composer-shortcut")
+		await expect(keycap).toHaveTextContent("Ctrl+Shift+M")
+		await expect(keycap).not.toHaveTextContent("Ctrl+Alt+M")
+	},
+})
+
+export const ShortcutKeycapOnWindows = meta.story(keycapOffMac(WINDOWS_AGENT))
+
+export const ShortcutKeycapOnLinux = meta.story(keycapOffMac(LINUX_AGENT))
+
+const threadOpen = (selectedWash: number) => ({
+	args: {
+		...commentedDocument(),
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
+		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "selected")
+		await expect(getComputedStyle(passage).backgroundColor).toBe(
+			washOf(passage, selectedWash),
+		)
+		const pin = threadPinIn(canvasElement, SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		await expectPassagePin(pin, passage)
+		const thread = canvas.getByRole("region", {
+			name: `On “${SESSION_PASSAGE}”`,
+		})
+		await waitFor(async () => {
+			await expect(boxOf(thread).width).toBe(360)
+			await expectClose(boxOf(thread).left, boxOf(pin).right + 8)
+			await expectClose(boxOf(thread).top, boxOf(pin).top)
+		})
+		await expect(within(thread).getAllByRole("listitem")).toHaveLength(3)
+
+		await userEvent.click(within(thread).getByRole("button", { name: "Close" }))
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+	},
+})
+
+export const Doc6ThreadOpen = meta.story({
+	...threadOpen(16),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 6: the thread of a passage open. Check its pin and its passage selected, the passage washed at 16 percent, the 360px thread 8px right of the pin with its top on the pin top, every comment of the thread listed, and Close raising `onClose`.",
+	),
+})
+
+export const CommentThreadLong = meta.story({
+	args: {
+		...commentedDocument(),
+		threads: [
+			{ ...SESSION_THREAD, comments: LONG_THREAD_COMMENTS },
+			MARKET_THREAD,
+			BUDGET_THREAD,
+		],
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"The thread of a passage holding thirty one comments. Check the card stops at 60 percent of the window height with its header and its reply field whole, and the comments scroll between them, the latest one in view, without handing their scroll over to the document.",
+	),
+	play: async ({ canvas }: CommentPlay) => {
+		await expectCommentThreadCapped(
+			canvas.getByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		)
+	},
+})
+
+const edge3 = threadOpen(20)
+
+const EDGE_3_PIN_GROUND = "rgb(42, 42, 42)"
+
+const EDGE_3_PIN_SHADOW = "0 2px 8px #00000066, 0 0 0 1px #ffffff1f"
+
+export const Edge3ThreadOpenDark = meta.story({
+	...edge3,
+	globals: DARK,
+	parameters: describedAs(
+		"Artboard Edge 3, the dark twin of Doc 6. Check the same placement, with the selected passage washed at 20 percent, and the 32px pin of an agent at rest on the dark pin surface, under the dark pin shadow and its 1px ring, around its 24px avatar.",
+	),
+	play: async (context: CommentPlay) => {
+		const agentPin = threadPinIn(context.canvasElement, MARKET_THREAD.id)
+		await expect(agentPin).toHaveAttribute("data-state", "rest")
+		const look = getComputedStyle(agentPin)
+		await expect(look.backgroundColor).toBe(EDGE_3_PIN_GROUND)
+		await expect(look.boxShadow).toContain(
+			drawnShadowOf(agentPin, EDGE_3_PIN_SHADOW),
+		)
+		await expect(boxOf(agentPin).width).toBe(32)
+		await expect(boxOf(agentPin).height).toBe(32)
+		await expect(boxOf(slotIn(agentPin, "library-comment-avatar")).width).toBe(
+			24,
+		)
+
+		await edge3.play(context)
+	},
+})
+
+const INTRO_BLOCK = "intro1"
+
+const START_ICON = "library-document-comment-start"
+
+const startIconIn = (canvasElement: HTMLElement, id: string) =>
+	within(blockOf(canvasElement, id)).queryByRole("button", { name: "Comment" })
+
+const shownStartIconIn = async (canvasElement: HTMLElement, id: string) => {
+	const icon = startIconIn(canvasElement, id)
+	if (!icon) throw new Error(`No comment icon on block ${id}`)
+	await expect(icon).toBeVisible()
+	await expect(boxOf(icon).width).toBe(24)
+	await expect(boxOf(icon).height).toBe(24)
+	await expect(boxOf(icon.querySelector("svg") as SVGElement).width).toBe(16)
+	await expect(getComputedStyle(icon).borderRadius).toBe("4px")
+	return icon
+}
+
+const startHintAbove = async (icon: HTMLElement) => {
+	const hint = await findHoverTooltip()
+	await expect(hint.querySelector(":scope > [data-side]")).not.toBeVisible()
+	await waitFor(() =>
+		expect(boxOf(icon).top - boxOf(hint).bottom).toBeCloseTo(12, 1),
+	)
+	return hint
+}
+
+const pointAcross = async (
+	canvasElement: HTMLElement,
+	id: string,
+	share: number,
+) => {
+	const box = boxOf(blockOf(canvasElement, id))
+	const at = { clientX: box.left + box.width * share, clientY: box.top + 12 }
+	const target = document.elementFromPoint(at.clientX, at.clientY)
+	if (!target) throw new Error(`Nothing drawn at ${share} of block ${id}`)
+	await fireEvent.pointerMove(target, at)
+}
+
+const IN_THE_MARGIN = 1.02
+
+const overMiddleOf = (target: HTMLElement) => {
+	const { left, right, top, bottom } = boxOf(target)
+	return {
+		target,
+		coords: { clientX: (left + right) / 2, clientY: (top + bottom) / 2 },
+	}
+}
+
+const articleOf = (canvasElement: HTMLElement) =>
+	boxOf(
+		slotIn(canvasElement, "library-document-column").querySelector(
+			"article",
+		) as HTMLElement,
+	)
+
+const expectInEmptyPinSlot = async (
+	canvasElement: HTMLElement,
+	id: string,
+	icon: HTMLElement,
+) => {
+	await expectClose(boxOf(icon).left, articleOf(canvasElement).right + 20)
+	await expectClose(
+		boxOf(icon).top,
+		boxOf(slotIn(blockOf(canvasElement, id), "library-block-handle")).top,
+	)
+}
+
+const iconAtRest = (glyph: string, hoverGround: string) => ({
+	args: commentedDocument(),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.5)
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBe(null)
+
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, INTRO_BLOCK)
+		await expectInEmptyPinSlot(canvasElement, INTRO_BLOCK, icon)
+		const look = getComputedStyle(icon)
+		await expect(look.color).toBe(glyph)
+		await expect(look.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+
+		await pointAcross(canvasElement, INTRO_BLOCK, IN_THE_MARGIN)
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBe(icon)
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(1)
+
+		if (!isInBrowserRunner()) return
+		const body = bodyOf(canvasElement, INTRO_BLOCK)
+		const pointer = await realPointer()
+		await pointer.hover(body, {
+			position: { x: boxOf(body).width * 0.9, y: 12 },
+		})
+		await expect(startIconIn(canvasElement, INTRO_BLOCK)).toBeVisible()
+		await expect(
+			getComputedStyle(
+				slotIn(blockOf(canvasElement, INTRO_BLOCK), "library-block-handle"),
+			).opacity,
+		).toBe("1")
+
+		await pointer.hover(icon)
+		await expect(getComputedStyle(icon).backgroundColor).toBe(
+			colourOf(icon, hoverGround),
+		)
+		await startHintAbove(icon)
+	},
+})
+
+export const Doc7CommentIconAtRest = meta.story({
+	...iconAtRest("rgb(107, 107, 107)", "background"),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 7: comment mode off, the pointer over the right part of a paragraph that has no pin. Check no icon while the pointer is over the left 70 percent, then the 24px icon of radius 4px with its 16px glyph in the muted tint on no ground, centred in the empty pin slot 20px right of the column with its top on the top of the left handle, kept while the pointer crosses the margin towards it, and the left handle shown on the same block. Under a real pointer, check the background ground once the pointer is on the icon, and its tooltip 12px above it with no arrow.",
+	),
+})
+
+export const Doc8CommentIconHovered = meta.story({
+	beforeEach: onPlatform(MAC_AGENT),
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 8: the pointer on the comment icon, on macOS. Check the background ground of radius 4px and the foreground glyph with no colour transition, the tooltip 12px above the icon with no arrow, reading Comment then the Mac symbols of the comment shortcut on a muted key, on the tooltip surface with a gap of 8px, and that a press raises `onStartComment` with the block alone and origin pointer while comment mode stays off.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		await pointAcross(canvasElement, INTRO_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, INTRO_BLOCK)
+		await expect(getComputedStyle(icon).transitionProperty).toBe("none")
+
+		await userEvent.pointer(overMiddleOf(icon))
+		const tooltip = await startHintAbove(icon)
+		await expect(tooltip).toHaveTextContent("Comment⌘⌥M")
+		const bubble = getComputedStyle(tooltip)
+		await expect(bubble.backgroundColor).toBe(colourOf(tooltip, "tooltip"))
+		await expect(bubble.color).toBe(colourOf(tooltip, "tooltip-foreground"))
+		await expect(bubble.columnGap).toBe("8px")
+		const key = getComputedStyle(slotIn(tooltip, "kbd"))
+		await expect(key.backgroundColor).toBe(colourOf(tooltip, "muted"))
+		await expect(key.color).toBe(colourOf(tooltip, "muted-foreground"))
+
+		if (isInBrowserRunner()) {
+			await (await realPointer()).hover(icon)
+			const look = getComputedStyle(icon)
+			await expect(look.backgroundColor).toBe(colourOf(icon, "background"))
+			await expect(look.color).toBe(colourOf(icon, "foreground"))
+		}
+
+		await userEvent.pointer({ ...overMiddleOf(icon), keys: "[MouseLeft]" })
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: INTRO_BLOCK,
+			origin: "pointer",
+		})
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(
+			slotIn(canvasElement, "library-comment-toggle"),
+		).toHaveAttribute("aria-pressed", "false")
+	},
+})
+
+export const Doc9CommentIconPressed = meta.story({
+	args: {
+		...commentedDocument(),
+		threads: [SESSION_THREAD],
+		commentDraft: draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 9: the comment icon of a paragraph pressed, comment mode still off. Check the same draft as Doc 3, the tint around the paragraph, the selected draft pin 16px right of the column in place of the icon, the 320px composer hanging 8px under the pin with their right edges aligned and its field focused, no icon on that paragraph while its draft is open, and the bar Comment button not pressed.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		await expect(startIconIn(canvasElement, MARKET_BLOCK)).toBe(null)
+		await expectTintAround(canvasElement, MARKET_BLOCK)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		await expectClose(boxOf(pin).left, articleOf(canvasElement).right + 16)
+		const composer = boxOf(composerIn(canvasElement))
+		await expect(composer.width).toBe(320)
+		await expectClose(composer.right, boxOf(pin).right)
+		await expectClose(composer.top, boxOf(pin).bottom + 8)
+		await expect(
+			slotIn(canvasElement, "library-comment-toggle"),
+		).toHaveAttribute("aria-pressed", "false")
+		await expect(
+			canvasElement.querySelector('[data-slot="library-comment-mode-hint"]'),
+		).toBe(null)
+		await expectDraftFieldFocused(canvas)
+	},
+})
+
+export const Doc10CommentIconBesideBlockPin = meta.story({
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 10: the pointer over the right part of a paragraph that already carries a block pin. Check the pin unmoved, 16px right of the column, and the icon 8px right of it, vertically centred on the 32px pin.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, MARKET_BLOCK)
+		const pin = boxOf(threadPinIn(canvasElement, MARKET_THREAD.id))
+		await expectClose(pin.left, articleOf(canvasElement).right + 16)
+		await expect(pin.height).toBe(32)
+		await expectClose(boxOf(icon).left, pin.right + 8)
+		await expectClose(middleOf(boxOf(icon)), middleOf(pin))
+	},
+})
+
+export const Doc11CommentIconBesidePassagePin = meta.story({
+	args: commentedDocument(),
+	globals: LIGHT,
+	parameters: describedAs(
+		"Artboard Doc 11: the pointer over the right part of a paragraph that carries only a passage pin. Check the icon in the same empty pin slot as Doc 7, and the passage pin unmoved on the end of its passage.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		await pointAcross(canvasElement, SESSION_BLOCK, 0.9)
+		const icon = await shownStartIconIn(canvasElement, SESSION_BLOCK)
+		await expectInEmptyPinSlot(canvasElement, SESSION_BLOCK, icon)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			shownPassageOf(canvasElement, SESSION_PASSAGE),
+		)
+	},
+})
+
+export const Doc12CommentIconAtRestDark = meta.story({
+	...iconAtRest("rgb(163, 163, 163)", "accent"),
+	globals: DARK,
+	parameters: describedAs(
+		"Artboard Doc 12, the dark twin of Doc 7. Check the same icon in the same slot, its glyph in the dark muted tint. Under a real pointer, check the accent ground once the pointer is on the icon, and the same tooltip 12px above it with no arrow.",
+	),
+})
+
+export const CommentIconAbsentInCommentMode = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(true),
+	play: async ({ canvasElement }: CommentPlay) => {
+		for (const share of [0.5, 0.9, IN_THE_MARGIN]) {
+			await pointAcross(canvasElement, INTRO_BLOCK, share)
+			await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+		}
+		await pointAcross(canvasElement, MARKET_BLOCK, 0.9)
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+	},
+})
+
+export const CommentIconReachedByKeyboard = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		await expect(slotsIn(canvasElement, START_ICON)).toHaveLength(0)
+		await caretAfter(canvasElement, "above the harbour.")
+		const icon = startIconIn(canvasElement, INTRO_BLOCK)
+		if (!icon) throw new Error("No comment icon while focus is in the block")
+		await expect(getComputedStyle(icon).opacity).toBe("0")
+
+		await userEvent.tab()
+		await expect(icon).toHaveFocus()
+		const look = getComputedStyle(icon)
+		await expect(look.opacity).toBe("1")
+		await expect(look.outlineStyle).toBe("solid")
+		await expect(look.outlineWidth).toBe("2px")
+
+		await userEvent.keyboard("{Enter}")
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: INTRO_BLOCK,
+			origin: "pointer",
+		})
+	},
+})
+
+type ThreadWork = Pick<LibraryDocumentThread, "workingAgent" | "workingAgents">
+
+const threadAtWork = (work: ThreadWork) => ({
+	...commentedDocument(),
+	threads: [{ ...SESSION_THREAD, ...work }, MARKET_THREAD, BUDGET_THREAD],
+	openThread: openThreadOf(SESSION_THREAD.id),
+})
+
+const workRowOf = (canvas: CommentPlay["canvas"]) =>
+	slotIn(
+		canvas.getByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		"library-comment-working",
+	)
+
+const expectOneAgentWorkLine = async ({ canvas }: CommentPlay) => {
+	const working = workRowOf(canvas)
+	await expect(slotIn(working, "thread-work-line")).toBeVisible()
+	await expect(within(working).getByText(ATLAS.name)).toBeVisible()
+	await expect(within(working).getByText("is thinking…")).toBeVisible()
+	await expect(within(working).queryByRole("button")).toBeNull()
+	await expect(within(working).getByRole("status").textContent).toBe(
+		`${ATLAS.name} is working on it`,
+	)
+}
+
+export const ThreadAgentAtWork = meta.story({
+	args: threadAtWork({ workingAgents: [{ ...ATLAS, state: "thinking" }] }),
+	globals: LIGHT,
+	parameters: describedAs(
+		"The thread of a passage open while the agent its first comment mentions has a turn on it, passed as the one entry of `workingAgents` of the thread. Check the card draws the one-agent work line of a conversation, Atlas thinking with no toggle, and that a status the screen does not show names Atlas.",
+	),
+	play: expectOneAgentWorkLine,
+})
+
+export const ThreadAgentAtWorkFromSingleField = meta.story({
+	tags: ["test-only"],
+	args: threadAtWork({ workingAgent: ATLAS }),
+	parameters: describedAs(
+		"The same thread with the agent passed through `workingAgent` alone, no `workingAgents`. Check the card still draws that agent thinking on the one-agent work line, with no toggle.",
+	),
+	play: expectOneAgentWorkLine,
+})
+
+const SEVERAL_AGENTS_AT_WORK = [JUNIPER, LONG_NAMED_AGENT].map((agent) => ({
+	...agent,
+	state: "thinking" as const,
+}))
+
+export const ThreadSeveralAgentsAtWork = meta.story({
+	args: threadAtWork({
+		workingAgent: ATLAS,
+		workingAgents: SEVERAL_AGENTS_AT_WORK,
+	}),
+	parameters: describedAs(
+		"The thread of a passage open while two agents have a turn on it, listed in `workingAgents`, with `workingAgent` still naming a third one. Check the card draws the group work line for the two listed agents alone, the pile, the headline naming both inside the 360px card and the toggle, that the toggle opens one row per listed agent, and that the agent of `workingAgent` is nowhere on the line.",
+	),
+	play: async ({ canvas, userEvent }: CommentPlay) => {
+		const working = workRowOf(canvas)
+		const toggleOf = () =>
+			within(working).getByRole("button", { name: "Each agent’s work" })
+		await expect(slotIn(working, "conversation-bot-pile")).toBeVisible()
+		for (const { name } of SEVERAL_AGENTS_AT_WORK) {
+			await expect(within(working).getByText(name)).toBeVisible()
+		}
+		await expect(working.scrollWidth).toBeLessThanOrEqual(working.clientWidth)
+		await expect(toggleOf()).toHaveAttribute("aria-expanded", "false")
+		await expect(within(working).queryByRole("list")).toBeNull()
+
+		await userEvent.click(toggleOf())
+
+		await expect(toggleOf()).toHaveAttribute("aria-expanded", "true")
+		const rows = within(within(working).getByRole("list")).getAllByRole(
+			"listitem",
+		)
+		await expect(rows).toHaveLength(SEVERAL_AGENTS_AT_WORK.length)
+		await expect(within(working).getByRole("status").textContent).toBe(
+			`${JUNIPER.name} and ${LONG_NAMED_AGENT.name} are working on it`,
+		)
+		await expect(within(working).queryByText(ATLAS.name)).toBeNull()
+	},
+})
+
+const GONE_LINE = "On text that’s no longer in the document"
+
+const edge1 = {
+	args: {
+		...commentedDocument(),
+		body: OFFSITE_DOCUMENT.body.replace(`, ${SESSION_PASSAGE}`, "."),
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		"Artboard Edge 1: the open thread sat on a passage since removed from the document. Check that the body draws no pin and no passage for it, that the two other threads keep their pins, and that the thread sits 48px under the top of the card, 4px under the comments counter, its right edge 202px in from the card, under the line naming the lost text.",
+	),
+	play: async ({ canvas, canvasElement }: CommentPlay) => {
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(2)
+		await expect(
+			canvasElement.querySelector(
+				`[data-comment-pin="comment:${SESSION_THREAD.id}"]`,
+			),
+		).toBe(null)
+		await expect(
+			slotsIn(canvasElement, "library-document-passage"),
+		).toHaveLength(1)
+
+		const card = boxOf(slotIn(canvasElement, "library-document-editor"))
+		const thread = boxOf(canvas.getByRole("region", { name: GONE_LINE }))
+		await expectClose(thread.top, card.top + 48)
+		await expectClose(
+			thread.top,
+			boxOf(slotIn(canvasElement, "library-comment-counter")).bottom + 4,
+		)
+		await expectClose(card.right - thread.right, 202)
+		await expect(thread.width).toBe(360)
+	},
+}
+
+export const Edge1AnchorGone = meta.story({ ...edge1, globals: LIGHT })
+
+export const Edge1AnchorGoneDark = meta.story({ ...edge1, globals: DARK })
+
+export const CommentModeClickStartsBlockComment = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(true),
+	play: async ({ args, canvasElement, userEvent }) => {
+		await userEvent.click(bodyOf(canvasElement, MARKET_BLOCK))
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: MARKET_BLOCK,
+			origin: "pointer",
+		})
+		await expect(canvasElement.querySelector(FIELD)).toBe(null)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+export const CommentModeSelectionStartsPassageComment = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(true),
+	play: async ({ args, canvasElement }) => {
+		const body = bodyOf(canvasElement, MARKET_BLOCK)
+		selectIn(body, MARKET_PASSAGE)
+		await fireEvent.click(body)
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: MARKET_BLOCK,
+			passage: passageIn(MARKET_PARAGRAPH, MARKET_PASSAGE),
+			origin: "pointer",
+		})
+
+		if (!isInBrowserRunner()) return
+		document.getSelection()?.removeAllRanges()
+		await (await realPointer()).dragAndDrop(body, body, {
+			sourcePosition: { x: 40, y: 12 },
+			targetPosition: { x: 220, y: 12 },
+		})
+		const dragged = (args.onStartComment as ReturnType<typeof fn>).mock
+			.lastCall?.[0]
+		await expect(dragged.blockId).toBe(MARKET_BLOCK)
+		await expect(dragged.origin).toBe("pointer")
+		await expect(MARKET_PARAGRAPH.slice(dragged.passage.start)).toMatch(
+			new RegExp(`^${dragged.passage.text}`),
+		)
+		await expect(dragged.passage.text.length).toBeGreaterThan(5)
+		await expect(canvasElement.querySelector(FIELD)).toBe(null)
+	},
+})
+
+const FORMATTED_PARAGRAPH =
+	"The **boat** leaves from [the dock](https://example.com/dock) at 17:30."
+
+const FORMATTED_BLOCK = "format"
+
+export const CommentModeSelectionAcrossFormatting = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		threads: [],
+		body: `${FORMATTED_PARAGRAPH} ^${FORMATTED_BLOCK}\n\n> [!NOTE]\n> Bring a coat.`,
+	},
+	play: async ({ args, canvasElement }) => {
+		const body = bodyOf(canvasElement, FORMATTED_BLOCK)
+		selectIn(body, "boat leaves from the dock")
+		await fireEvent.click(body)
+		const from = FORMATTED_PARAGRAPH.indexOf("boat")
+		const to = FORMATTED_PARAGRAPH.indexOf("dock]") + "dock".length
+		await expectCalledOnceWith(args.onStartComment, {
+			blockId: FORMATTED_BLOCK,
+			passage: {
+				start: from,
+				end: to,
+				text: FORMATTED_PARAGRAPH.slice(from, to),
+			},
+			origin: "pointer",
+		})
+
+		const callout = slotIn(
+			blockWith(canvasElement, "Bring a coat."),
+			"library-document-block-body",
+		)
+		const coat = within(callout).getByText("Bring a coat.").firstChild as Text
+		document.getSelection()?.setBaseAndExtent(coat, 0, coat, 5)
+		await fireEvent.click(callout)
+		await expect(args.onStartComment).toHaveBeenCalledOnce()
+
+		const boat = within(body).getByText("boat").firstChild as Text
+		document.getSelection()?.setBaseAndExtent(boat, 0, coat, 5)
+		await fireEvent.click(callout)
+		await expect(args.onStartComment).toHaveBeenCalledOnce()
+	},
+})
+
+export const ShortcutStartsComment = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const shortcut = `{${COMMAND}>}{Alt>}m{/Alt}{/${COMMAND}}`
+		await caretAfter(canvasElement, MARKET_PASSAGE)
+		await userEvent.keyboard(shortcut)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MARKET_BLOCK,
+			origin: "shortcut",
+		})
+
+		await selectText(canvasElement, MARKET_PASSAGE)
+		await userEvent.keyboard(shortcut)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MARKET_BLOCK,
+			passage: passageIn(MARKET_PARAGRAPH, MARKET_PASSAGE),
+			origin: "shortcut",
+		})
+		await expect(args.onStartComment).toHaveBeenCalledTimes(2)
+		await expect(args.onBodyChange).not.toHaveBeenCalled()
+	},
+})
+
+const letterTyped = (isCommentMode: boolean) => ({
+	tags: ["test-only"],
+	args: commentedDocument(isCommentMode),
+	play: async ({ args, canvasElement }: CommentPlay) => {
+		if (!isInBrowserRunner()) return
+		await caretAfter(canvasElement, "before the train.")
+		await keyboard("c")
+		await expect(lastBodyOf(args)).toContain(`${MARKET_PARAGRAPH}c`)
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(args.onStartComment).not.toHaveBeenCalled()
+	},
+})
+
+export const LetterTypedOutOfCommentMode = meta.story(letterTyped(false))
+
+export const LetterTypedInCommentMode = meta.story(letterTyped(true))
+
+const sourcePassageOf = (source: string, first: string, last: string) => {
+	const start = source.indexOf(first)
+	const end = source.indexOf(last, start) + last.length
+	return { start, end, text: source.slice(start, end) }
+}
+
+const piecesIn = (canvasElement: HTMLElement, id: string) =>
+	slotsIn(blockOf(canvasElement, id), "library-document-passage")
+
+const wordsOf = (pieces: HTMLElement[]) =>
+	pieces.map((piece) => piece.textContent).join("")
+
+const lastOf = (pieces: HTMLElement[]) => {
+	const last = pieces.at(-1)
+	if (!last) throw new Error("No passage drawn")
+	return last
+}
+
+const cardFrameOf = (card: HTMLElement) =>
+	card.closest<HTMLElement>(
+		'[data-slot="library-document-comment-card"]',
+	) as HTMLElement
+
+const FORMATTED_QUOTE = "boat leaves from the dock"
+
+const FORMATTED_THREAD = {
+	...BUDGET_THREAD,
+	id: "thread-formatted",
+	anchor: {
+		blockId: FORMATTED_BLOCK,
+		passage: sourcePassageOf(FORMATTED_PARAGRAPH, "boat", "the dock"),
+	},
+}
+
+const passageAcrossFormatting = {
+	args: {
+		...commentedDocument(),
+		body: `${FORMATTED_PARAGRAPH} ^${FORMATTED_BLOCK}`,
+		threads: [FORMATTED_THREAD],
+		openThread: openThreadOf(FORMATTED_THREAD.id),
+	},
+	parameters: describedAs(
+		"A commented passage that starts in bold text and ends in a link, its thread open. Check one highlight per run of text with the bold and the link kept, one pin on the end of the last one, a press on that pin opening the thread without following the link, and the thread line quoting the words as the document shows them, with no markdown character.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
+		const pieces = piecesIn(canvasElement, FORMATTED_BLOCK)
+		await expect(wordsOf(pieces)).toBe(FORMATTED_QUOTE)
+		await expect(pieces[0].closest("strong")).not.toBe(null)
+		await expect(lastOf(pieces).closest("a")).not.toBe(null)
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(1)
+		const pin = threadPinIn(canvasElement, FORMATTED_THREAD.id)
+		await expectPassagePin(pin, lastOf(pieces))
+
+		const line = `On “${FORMATTED_QUOTE}”`
+		const thread = canvas.getByRole("region", { name: line })
+		await expect(slotIn(thread, "library-comment-anchor")).toHaveTextContent(
+			line,
+		)
+
+		const followed = fn((event: Event) => event.defaultPrevented)
+		canvasElement.addEventListener("click", followed, { once: true })
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, FORMATTED_THREAD.id)
+		await expect(followed).toHaveReturnedWith(true)
+	},
+}
+
+export const PassageAcrossFormatting = meta.story({
+	...passageAcrossFormatting,
+	globals: LIGHT,
+})
+
+export const PassageAcrossFormattingDark = meta.story({
+	...passageAcrossFormatting,
+	globals: DARK,
+})
+
+const overlappingPassages = {
+	args: {
+		...commentedDocument(),
+		threads: [SESSION_THREAD, OVERLAP_THREAD],
+	},
+	parameters: describedAs(
+		"Two commented passages that share words. Check a highlight for each, the shared words washed twice, and a pin on the end of each passage.",
+	),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const pieces = piecesIn(canvasElement, SESSION_BLOCK)
+		const shared = "stops at 16:30."
+		await expect(pieces.map((piece) => piece.textContent)).toEqual([
+			SESSION_PASSAGE.slice(0, -shared.length),
+			shared,
+			shared,
+			OVERLAP_PASSAGE.slice(shared.length),
+		])
+		await expect(pieces[1].contains(pieces[2])).toBe(true)
+
+		await expect(slotsIn(canvasElement, "library-comment-pin")).toHaveLength(2)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			pieces[1],
+		)
+		await expectPassagePin(
+			threadPinIn(canvasElement, OVERLAP_THREAD.id),
+			lastOf(pieces),
+		)
+	},
+}
+
+export const OverlappingPassages = meta.story({
+	...overlappingPassages,
+	globals: LIGHT,
+})
+
+export const OverlappingPassagesDark = meta.story({
+	...overlappingPassages,
+	globals: DARK,
+})
+
+const resolved2 = {
+	args: {
+		...commentedDocument(),
+		threads: [RESOLVED_SESSION_THREAD, MARKET_THREAD, BUDGET_THREAD],
+		openThread: openThreadOf(RESOLVED_SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		"Artboard Resolved 2: a resolved thread drawn in place, open. Check its passage under the neutral wash and a 2px dashed underline, its pin in the resolved state with its left edge on the end of the passage and its bottom edge on the top of the last line of the passage, under the resolved pin shadow, the 360px thread in its resolved state 8px right of the pin with its top on the pin top, and Reopen raising `onReopen`.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }: CommentPlay) => {
+		const passage = shownPassageOf(canvasElement, SESSION_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "resolved")
+		const look = getComputedStyle(passage)
+		await expect(look.backgroundColor).toBe(washOf(passage, 5, "foreground"))
+		await expect(look.borderBottomWidth).toBe("2px")
+		await expect(look.borderBottomStyle).toBe("dashed")
+		await expect(look.borderBottomColor).toBe(colourOf(passage, "sketch-mark"))
+
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toHaveAttribute("aria-expanded", "true")
+		await expectPinAbovePassageEnd(pin, passage)
+		await expect(getComputedStyle(pin).boxShadow).toContain(
+			shadowOf(pin, "comment-pin-resolved-shadow"),
+		)
+		await expect(boxOf(slotIn(pin, "library-comment-pin-check")).width).toBe(24)
+
+		const thread = canvas.getByRole("region", {
+			name: `On “${SESSION_PASSAGE}”`,
+		})
+		await expect(thread).toHaveAttribute("data-resolved", "true")
+		await waitFor(async () => {
+			await expect(boxOf(thread).width).toBe(360)
+			await expectClose(boxOf(thread).left, boxOf(pin).right + 8)
+			await expectClose(boxOf(thread).top, boxOf(pin).top)
+		})
+		await expect(
+			slotIn(thread, "library-comment-resolution"),
+		).toHaveTextContent("Resolved by Steve")
+
+		await userEvent.click(
+			within(thread).getByRole("button", { name: "Reopen" }),
+		)
+		await expect(args.openThread?.onReopen).toHaveBeenCalledOnce()
+	},
+}
+
+export const Resolved2ThreadInPlace = meta.story({
+	...resolved2,
+	globals: LIGHT,
+})
+
+export const Resolved2ThreadInPlaceDark = meta.story({
+	...resolved2,
+	globals: DARK,
+})
+
+const resolvedCardClosed = { ...resolved2.args, openThread: undefined }
+
+export const ResolvedThreadInPlaceCardClosed = meta.story({
+	args: resolvedCardClosed,
+	globals: LIGHT,
+	parameters: describedAs(
+		"A resolved thread drawn in place, its card closed. Check its pin where Resolved 2 draws it, its left edge on the end of the passage and its bottom edge on the top of the last line of the passage, no thread card, and that pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "resolved")
+		await expect(pin).toHaveAttribute("aria-expanded", "false")
+		await expectPinAbovePassageEnd(
+			pin,
+			shownPassageOf(canvasElement, SESSION_PASSAGE),
+		)
+		await expect(
+			canvas.queryByRole("region", { name: `On “${SESSION_PASSAGE}”` }),
+		).toBe(null)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, RESOLVED_SESSION_THREAD.id)
+	},
+})
+
+export const ResolvedPinKeptWhileBlockFocused = meta.story({
+	tags: ["test-only"],
+	args: resolvedCardClosed,
+	play: async ({ canvasElement }) => {
+		const field = await openBlockWith(canvasElement, SESSION_PASSAGE)
+		const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPinAbovePassageEnd(pin, shownPassageOf(field, SESSION_PASSAGE))
+	},
+})
+
+export const BlockThreadOpensUnderPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		openThread: openThreadOf(MARKET_THREAD.id),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const pin = threadPinIn(canvasElement, MARKET_THREAD.id)
+		await expect(pin).toHaveAttribute("data-state", "selected")
+		const thread = boxOf(
+			canvas.getByRole("region", { name: "On this paragraph" }),
+		)
+		await expect(thread.width).toBe(360)
+		await expectClose(thread.right, boxOf(pin).right)
+		await expectClose(thread.top, boxOf(pin).bottom + 8)
+	},
+})
+
+export const PassageKeptWhileBlockFocused = meta.story({
+	tags: ["test-only"],
+	args: commentedDocument(),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const field = await openBlockWith(canvasElement, SESSION_PASSAGE)
+		const passage = shownPassageOf(field, SESSION_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		const pin = threadPinIn(canvasElement, SESSION_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, SESSION_THREAD.id)
+		await expect(field).toHaveFocus()
+
+		if (!isInBrowserRunner()) return
+		const end =
+			SESSION_PARAGRAPH.indexOf(SESSION_PASSAGE) + SESSION_PASSAGE.length
+		selectInField(field, end - 1)
+		await keyboard("{ArrowRight}")
+		await expect(fieldSelectionOf(field)?.start).toBe(end)
+		await keyboard("{ArrowRight}")
+		await expect(fieldSelectionOf(field)?.start).toBe(end + 1)
+		await keyboard("x")
+		await expect(lastBodyOf(args)).toContain(`${SESSION_PASSAGE} xThe boat`)
+	},
+})
+
+const PLAN_BLOCK = "plan01"
+
+const PLAN_TABLE = "| Day | Plan |\n| --- | --- |\n| Friday | Roadmap review |"
+
+const EDITED_BLOCKS = [
+	{
+		id: "note01",
+		source: "> [!NOTE]\n> Bring a coat for the boat.",
+		passage: "a coat",
+	},
+	{ id: PLAN_BLOCK, source: PLAN_TABLE, passage: "Roadmap" },
+]
+
+const editingSlotOf = (block: HTMLElement) =>
+	waitFor(() => {
+		const editing = slotIn(block, "library-document-block-editing")
+		expect(editing.contains(document.activeElement)).toBe(true)
+		return editing
+	})
+
+export const PassageKeptWhileBlockEditorFocused = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: EDITED_BLOCKS.map(({ id, source }) => `${source}\n\n^${id}`).join(
+			"\n\n",
+		),
+		threads: EDITED_BLOCKS.map(({ id, source, passage }) => ({
+			...BUDGET_THREAD,
+			id,
+			anchor: { blockId: id, passage: passageIn(source, passage) },
+		})),
+	},
+	play: async ({ canvasElement }) => {
+		for (const { id, passage: text } of EDITED_BLOCKS) {
+			const block = blockOf(canvasElement, id)
+			block.querySelector<HTMLElement>("[tabindex]")?.focus()
+			await editingSlotOf(block)
+			const passage = shownPassageOf(block, text)
+			await expect(passage).toBeVisible()
+			await expect(passage).toHaveAttribute("data-state", "rest")
+			const pin = threadPinIn(canvasElement, id)
+			await expect(pin).toBeVisible()
+			await expectPassagePin(pin, passage)
+		}
+	},
+})
+
+export const PassageAcrossTableCellsPinnedOnLastCell = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: `${PLAN_TABLE}\n\n^${PLAN_BLOCK}`,
+		threads: [
+			{
+				...BUDGET_THREAD,
+				anchor: {
+					blockId: PLAN_BLOCK,
+					passage: passageIn(PLAN_TABLE, "Friday | Roadmap"),
+				},
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, PLAN_BLOCK)
+		const shownPieces = () =>
+			piecesIn(canvasElement, PLAN_BLOCK).map((piece) => piece.textContent)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		await expectPassagePin(
+			threadPinIn(canvasElement, BUDGET_THREAD.id),
+			lastOf(piecesIn(canvasElement, PLAN_BLOCK)),
+		)
+
+		block.querySelector<HTMLElement>("[tabindex]")?.focus()
+		const editing = await editingSlotOf(block)
+		await expect(shownPieces()).toEqual(["Friday", "Roadmap"])
+		const pieces = piecesIn(canvasElement, PLAN_BLOCK)
+		await expect(pieces.every((piece) => editing.contains(piece))).toBe(true)
+		await expect(pieces[0].closest("td")).not.toBe(lastOf(pieces).closest("td"))
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(slotsIn(block, "library-comment-pin")).toHaveLength(1)
+		await expectPassagePin(pin, lastOf(pieces))
+	},
+})
+
+const SNIPPET_BLOCK = "snip01"
+
+const SNIPPET_PASSAGE = "await ship()"
+
+const SNIPPET_LINE = `const launch = ${SNIPPET_PASSAGE}`
+
+const SNIPPET_COLUMN = SNIPPET_LINE.indexOf(SNIPPET_PASSAGE)
+
+const SNIPPET_SOURCE = `\`\`\`ts\n${SNIPPET_LINE}\nawait announce(launch)\n\`\`\``
+
+const LONG_SNIPPET_SOURCE = `\`\`\`ts\nconst launch = ${"withRetries(".repeat(12)}${SNIPPET_PASSAGE}${")".repeat(12)}\n\`\`\``
+
+const CODE_FIELD = "Code"
+
+const snippetDocument = (source = SNIPPET_SOURCE, thread = BUDGET_THREAD) => ({
+	...commentedDocument(),
+	body: `${source}\n\n^${SNIPPET_BLOCK}`,
+	threads: [
+		{
+			...thread,
+			anchor: {
+				blockId: SNIPPET_BLOCK,
+				passage: passageIn(source, SNIPPET_PASSAGE),
+			},
+		},
+	],
+})
+
+const clippersOf = (element: Element): Element[] => {
+	const parent = element.parentElement
+	if (!parent) return []
+	const { overflowX, overflowY } = getComputedStyle(parent)
+	return [
+		...(overflowX === "visible" && overflowY === "visible" ? [] : [parent]),
+		...clippersOf(parent),
+	]
+}
+
+const expectDrawnWhole = async (pin: HTMLElement) => {
+	const box = boxOf(pin)
+	for (const clipper of clippersOf(pin)) {
+		const around = boxOf(clipper)
+		await expect(box.top).toBeGreaterThanOrEqual(around.top)
+		await expect(box.bottom).toBeLessThanOrEqual(around.bottom)
+		await expect(box.left).toBeGreaterThanOrEqual(around.left)
+		await expect(box.right).toBeLessThanOrEqual(around.right)
+	}
+	const centre = (box.left + box.right) / 2
+	for (const edge of [box.top + 1, box.bottom - 1])
+		await expect(pin.contains(document.elementFromPoint(centre, edge))).toBe(
+			true,
+		)
+}
+
+const paintOf = (pin: HTMLElement) =>
+	[pin, ...pin.querySelectorAll("*")].map((part) => {
+		const { color, backgroundColor, opacity } = getComputedStyle(part)
+		return { color, backgroundColor, opacity }
+	})
+
+const snippetScrollerIn = (block: HTMLElement) =>
+	within(block).getByRole("group", { name: "Code snippet, ts" })
+
+const expectPassageOnColumn = async (
+	passage: HTMLElement,
+	line: Element,
+	column: number,
+) => {
+	const { left, width } = boxOf(passage)
+	const characterWidth = width / (passage.textContent?.length ?? 1)
+	await expectClose(left, boxOf(line).left + column * characterWidth)
+}
+
+const codePassageAtRest = {
+	args: snippetDocument(),
+	parameters: describedAs(
+		"A commented passage on a code block at rest, drawn as the passage of artboard Doc 1. Check the wash at 8 percent over a 2px underline on exactly the commented characters, their syntax colours kept, the pin starting on the end of the passage and centred on its line, drawn whole over the block, and that pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expect(piecesIn(canvasElement, SNIPPET_BLOCK)).toHaveLength(1)
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		const look = getComputedStyle(passage)
+		await expect(look.backgroundColor).toBe(washOf(passage, 8))
+		await expect(look.borderBottomWidth).toBe("2px")
+		await expect(look.borderBottomColor).toBe(washOf(passage, 50))
+		const code = block.querySelector("code") as HTMLElement
+		await expectPassageOnColumn(passage, code, SNIPPET_COLUMN)
+		await waitFor(() =>
+			expect(passage.querySelector('[style*="--code-token"]')).not.toBeNull(),
+		)
+		await expect(passage).toHaveTextContent(SNIPPET_PASSAGE)
+
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expectPassagePin(pin, passage)
+		await expectDrawnWhole(pin)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+	},
+}
+
+export const CodePassageAtRest = meta.story({
+	...codePassageAtRest,
+	globals: LIGHT,
+})
+
+export const CodePassageAtRestDark = meta.story({
+	...codePassageAtRest,
+	globals: DARK,
+})
+
+const codePassageFocused = {
+	args: snippetDocument(),
+	parameters: describedAs(
+		"A commented passage on a code block whose field has focus. Check the passage keeps its wash and its underline under exactly the commented characters of the field, the text under the field stays invisible, the pin stays whole on the end of the passage, painted as at rest, pressing it raises `onOpenThread` with its thread and leaves the focus in the field, and after one character typed before the passage the highlight is still on the same characters, one column further, with its pin.",
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const paintAtRest = paintOf(threadPinIn(canvasElement, BUDGET_THREAD.id))
+		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expect(passage).toBeVisible()
+		await expect(passage).toHaveAttribute("data-state", "rest")
+		await expect(getComputedStyle(passage).backgroundColor).toBe(
+			washOf(passage, 8),
+		)
+		await expect(getComputedStyle(passage).font).toBe(
+			getComputedStyle(field).font,
+		)
+		await expectPassageOnColumn(passage, field, SNIPPET_COLUMN)
+		const underField = passage.parentElement as HTMLElement
+		await expect(boxOf(underField)).toEqual(boxOf(field))
+		await expect(underField).toHaveTextContent(field.value, {
+			normalizeWhitespace: false,
+		})
+		for (const part of [underField, ...underField.querySelectorAll("*")])
+			await expect(getComputedStyle(part).color).toBe("rgba(0, 0, 0, 0)")
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await expect(pin).toBeVisible()
+		await expect(underField.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+		await expectDrawnWhole(pin)
+		await expect(paintOf(pin)).toEqual(paintAtRest)
+
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+		await expect(field).toHaveFocus()
+
+		field.setSelectionRange(0, 0)
+		await userEvent.keyboard("x")
+		await expect(lastBodyOf(args)).toContain(`x${SNIPPET_LINE}`)
+		await expect(field).toHaveFocus()
+		const kept = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expectPassageOnColumn(kept, field, SNIPPET_COLUMN + 1)
+		await waitFor(() =>
+			expectPassagePin(threadPinIn(canvasElement, BUDGET_THREAD.id), kept),
+		)
+	},
+}
+
+export const CodePassageFocused = meta.story({
+	...codePassageFocused,
+	globals: LIGHT,
+})
+
+export const CodePassageFocusedDark = meta.story({
+	...codePassageFocused,
+	globals: DARK,
+})
+
+export const CodePassageScrolledOnLongLine = meta.story({
+	tags: ["test-only"],
+	args: snippetDocument(LONG_SNIPPET_SOURCE),
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const scroller = snippetScrollerIn(block)
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const atRest = boxOf(passage)
+		await expect(getComputedStyle(scroller).overflowX).toBe("auto")
+		await expect(boxOf(scroller).right).toBeLessThanOrEqual(boxOf(block).right)
+		await expect(atRest.left).toBeGreaterThan(boxOf(scroller).right)
+		await expect(pin).not.toBeVisible()
+
+		scroller.scrollLeft = scroller.scrollWidth
+		await expect(scroller.scrollLeft).toBeGreaterThan(0)
+		await expect(passage).toHaveTextContent(SNIPPET_PASSAGE)
+		await expectClose(boxOf(passage).left, atRest.left - scroller.scrollLeft)
+		await expect(boxOf(passage).left).toBeGreaterThanOrEqual(
+			boxOf(scroller).left,
+		)
+		await expect(boxOf(passage).right).toBeLessThanOrEqual(
+			boxOf(scroller).right,
+		)
+		await waitFor(() => expect(pin).toBeVisible())
+		await expectPassagePin(pin, passage)
+	},
+})
+
+const resolvedSnippet = snippetDocument(SNIPPET_SOURCE, RESOLVED_SESSION_THREAD)
+
+const expectResolvedPinWholeAbove = async (
+	canvasElement: HTMLElement,
+	line: Element,
+) => {
+	const pin = threadPinIn(canvasElement, RESOLVED_SESSION_THREAD.id)
+	await expect(pin).toHaveAttribute("data-state", "resolved")
+	await expect(pin).toBeVisible()
+	await expectPinAbovePassageEnd(
+		pin,
+		shownPassageOf(blockOf(canvasElement, SNIPPET_BLOCK), SNIPPET_PASSAGE),
+	)
+	await expect(boxOf(pin).top).toBeLessThan(boxOf(line).top)
+	await expectDrawnWhole(pin)
+}
+
+export const CodeResolvedPinWholeAtRest = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			snippetScrollerIn(blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
+})
+
+export const CodeResolvedPinWholeWhileFocused = meta.story({
+	tags: ["test-only"],
+	args: resolvedSnippet,
+	play: async ({ canvasElement }) =>
+		expectResolvedPinWholeAbove(
+			canvasElement,
+			await openBlock(canvasElement, blockOf(canvasElement, SNIPPET_BLOCK)),
+		),
+})
+
+export const CodeFieldTypedSelectedAndTabbed = meta.story({
+	tags: ["test-only"],
+	args: snippetDocument(),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const field = (await openBlock(canvasElement, block)) as HTMLTextAreaElement
+		await expect(within(block).getByRole("textbox", { name: CODE_FIELD })).toBe(
+			field,
+		)
+
+		field.setSelectionRange(field.value.length, field.value.length)
+		await userEvent.keyboard("!")
+		await expect(lastBodyOf(args)).toContain("await announce(launch)!")
+
+		if (!isInBrowserRunner()) return
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		const { left, width } = boxOf(passage)
+		const overShip =
+			left +
+			(width * (SNIPPET_PASSAGE.indexOf("ship") + 2)) / SNIPPET_PASSAGE.length
+		await (await realPointer()).dblClick(field, {
+			position: {
+				x: overShip - boxOf(field).left,
+				y: middleOf(boxOf(passage)) - boxOf(field).top,
+			},
+		})
+		await expect(
+			field.value.slice(field.selectionStart, field.selectionEnd),
+		).toBe("ship")
+
+		const typed = lastBodyOf(args)
+		await keyboard("{Tab}")
+		await expect(
+			within(block).getByRole("button", { name: "Copy code" }),
+		).toHaveFocus()
+		await expect(lastBodyOf(args)).toBe(typed)
+		await expect(shownPassageOf(block, SNIPPET_PASSAGE)).toBeVisible()
+		await keyboard("{Shift>}{Tab}{/Shift}")
+		await expect(field).toHaveFocus()
+	},
+})
+
+const NESTED_BLOCK = "nest01"
+
+const NESTED_SOURCE = `- Run the launch script:\n\n  \`\`\`ts\n  ${SNIPPET_LINE}\n  await announce(launch)\n  \`\`\``
+
+const TEAM_LINE = "Then tell the team."
+
+const TEAM_PASSAGE = "tell the team"
+
+type CodePlace = {
+	block: string
+	source: string
+}
+
+const TOP_LEVEL_CODE: CodePlace = {
+	block: SNIPPET_BLOCK,
+	source: SNIPPET_SOURCE,
+}
+
+const NESTED_CODE: CodePlace = { block: NESTED_BLOCK, source: NESTED_SOURCE }
+
+const FENCE = '[data-slot="markdown-fence"]'
+
+const codeBodyOf = ({ block, source }: CodePlace) =>
+	`${source}\n\n^${block}\n\n${TEAM_LINE}`
+
+const codeAnchorOf = ({ block, source }: CodePlace) => ({
+	blockId: block,
+	passage: passageIn(source, SNIPPET_PASSAGE),
+})
+
+const commentedCode = (place: CodePlace, thread?: LibraryDocumentThread) => ({
+	...commentedDocument(),
+	body: codeBodyOf(place),
+	threads: thread ? [{ ...thread, anchor: codeAnchorOf(place) }] : [],
+})
+
+const COMMENTED_CODE = {
+	rest: (place: CodePlace) => commentedCode(place, BUDGET_THREAD),
+	resolved: (place: CodePlace) => commentedCode(place, RESOLVED_SESSION_THREAD),
+	selected: (place: CodePlace) => ({
+		...commentedCode(place, BUDGET_THREAD),
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	}),
+	draft: (place: CodePlace) => ({
+		...commentedCode(place),
+		commentDraft: draftOn({ ...codeAnchorOf(place), origin: "pointer" }),
+	}),
+}
+
+type CommentKind = keyof typeof COMMENTED_CODE
+
+const COMMENT_PIN: Record<CommentKind, string> = {
+	rest: `comment:${BUDGET_THREAD.id}`,
+	resolved: `comment:${RESOLVED_SESSION_THREAD.id}`,
+	selected: `comment:${BUDGET_THREAD.id}`,
+	draft: DRAFT_PIN,
+}
+
+const PASSAGE_STATE: Record<CommentKind, string> = {
+	rest: "rest",
+	resolved: "resolved",
+	selected: "selected",
+	draft: "selected",
+}
+
+const commentCardIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-comment-card")
+
+const expectCommentedCode = async (
+	canvasElement: HTMLElement,
+	{ block }: CodePlace,
+	kind: CommentKind,
+) => {
+	const passage = shownPassageOf(blockOf(canvasElement, block), SNIPPET_PASSAGE)
+	await expect(passage).toBeVisible()
+	await expect(passage).toHaveAttribute("data-state", PASSAGE_STATE[kind])
+	const pin = pinIn(canvasElement, COMMENT_PIN[kind])
+	await waitFor(async () => {
+		await expect(pin).toBeVisible()
+		await (kind === "resolved" ? expectPinAbovePassageEnd : expectPassagePin)(
+			pin,
+			passage,
+		)
+	})
+	await expectDrawnWhole(pin)
+	if (kind === "selected" || kind === "draft")
+		await waitFor(async () => {
+			const card = boxOf(commentCardIn(canvasElement))
+			await expectClose(card.left, boxOf(pin).right + 8)
+			await expectClose(card.top, boxOf(pin).top)
+		})
+	return passage
+}
+
+const commentedCodeAtRest = (
+	place: CodePlace,
+	kind: CommentKind,
+	story: string,
+) => ({
+	args: COMMENTED_CODE[kind](place),
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const passage = await expectCommentedCode(canvasElement, place, kind)
+		await expect(passage.closest(FENCE)).not.toBeNull()
+	},
+})
+
+const commentedCodeFocused = (
+	place: CodePlace,
+	kind: CommentKind,
+	story: string,
+) => ({
+	args: COMMENTED_CODE[kind](place),
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const field = await openBlock(
+			canvasElement,
+			blockOf(canvasElement, place.block),
+		)
+		await expectCommentedCode(canvasElement, place, kind)
+		await expect(field).toHaveFocus()
+	},
+})
+
+const writerOn = (
+	agent: (typeof LIBRARY_AGENTS)[keyof typeof LIBRARY_AGENTS],
+	body: string,
+	text: string,
+) => ({
+	agent,
+	start: body.indexOf(text),
+	end: body.indexOf(text) + text.length,
+	elapsedSeconds: 44,
+	sentenceCount: 1,
+	section: "Launch",
+})
+
+const writtenCode = (place: CodePlace) => ({
+	...commentedCode(place),
+	onStop: fn(),
+	onStopAll: fn(),
+	onOpenConversation: fn(),
+})
+
+const letterAt = (root: HTMLElement, text: string) => {
+	const { node, offset } = shownPointAt(root, shownIn(root).indexOf(text) + 1)
+	const letter = document.createRange()
+	letter.setStart(node, offset - 1)
+	letter.setEnd(node, offset)
+	return letter.getBoundingClientRect()
+}
+
+const codeIn = (canvasElement: HTMLElement, { block }: CodePlace) =>
+	blockOf(canvasElement, block).querySelector("code") as HTMLElement
+
+const expectCaretOn = async (caret: HTMLElement, at: number, line: DOMRect) => {
+	await waitFor(() => expect(caret).toBeVisible())
+	await expect(boxOf(caret)).toMatchObject({ width: 2, height: 24 })
+	await expectClose(boxOf(caret).left, at)
+	await expectClose(middleOf(boxOf(caret)), middleOf(line))
+}
+
+const agentWritingCode = (place: CodePlace, story: string) => ({
+	args: {
+		...writtenCode(place),
+		writers: [
+			writerOn(LIBRARY_AGENTS.atlas, codeBodyOf(place), SNIPPET_PASSAGE),
+			writerOn(LIBRARY_AGENTS.mira, codeBodyOf(place), TEAM_PASSAGE),
+		],
+	},
+	parameters: describedAs(story),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const block = blockOf(canvasElement, place.block)
+		const text = blockWith(canvasElement, TEAM_PASSAGE)
+		const run = slotIn(block, "library-document-run")
+		await expect(run).toHaveTextContent(SNIPPET_PASSAGE)
+		await expect(run.closest(FENCE)).not.toBeNull()
+		await expect(run.className).toBe(
+			slotIn(text, "library-document-run").className,
+		)
+		await expect(getComputedStyle(run).backgroundColor).toBe(washOf(run, 12))
+
+		const caret = slotIn(block, "library-document-caret")
+		await expect(caret.className).toBe(
+			slotIn(text, "library-document-caret").className,
+		)
+		const line = lastLineOf(run)
+		await expectCaretOn(caret, line.right, line)
+		const flag = within(block).getByRole("button", { name: "Atlas is writing" })
+		await expectDrawnWhole(flag)
+
+		await userEvent.hover(flag)
+		await screen.findByRole("dialog", { name: "Atlas is writing…" })
+		await userEvent.click(screen.getByRole("button", { name: "Stop Atlas" }))
+		await expect(args.onStop).toHaveBeenCalledWith(LIBRARY_AGENTS.atlas)
+	},
+})
+
+const heldRunInCode = (place: CodePlace, story: string) => {
+	const writing = createWritersStore([
+		writerOn(LIBRARY_AGENTS.atlas, codeBodyOf(place), SNIPPET_PASSAGE),
+	])
+	return {
+		args: writtenCode(place),
+		beforeEach: writing.reset,
+		render: (args: LibraryDocumentEditorProps) => (
+			<FinishingWriterEditor {...args} writing={writing} />
+		),
+		parameters: describedAs(story),
+		play: async ({ canvasElement }: CommentPlay) => {
+			const block = blockOf(canvasElement, place.block)
+			const { writtenLook } = await stopWriting(canvasElement, writing)
+			const held = slotIn(block, "library-document-held-run")
+			await expect(held).toHaveTextContent(SNIPPET_PASSAGE)
+			await expect(held.closest(FENCE)).not.toBeNull()
+			await expect(getComputedStyle(held)).toMatchObject(writtenLook)
+			await expect(slotsIn(block, "library-document-caret")).toHaveLength(0)
+		},
+	}
+}
+
+const personInCode = (place: CodePlace, story: string) => ({
+	args: {
+		...writtenCode(place),
+		people: [{ ...LEA, caret: codeBodyOf(place).indexOf(SNIPPET_PASSAGE) }],
+	},
+	parameters: describedAs(story),
+	play: async ({ canvasElement }: CommentPlay) => {
+		const block = blockOf(canvasElement, place.block)
+		const caret = await within(block).findByRole("img", { name: LEA.name })
+		await expect(caret).toHaveAttribute(
+			"data-slot",
+			"library-document-person-caret",
+		)
+		const letter = letterAt(codeIn(canvasElement, place), SNIPPET_PASSAGE)
+		await expectCaretOn(caret, letter.left, letter)
+		await expectDrawnWhole(slotIn(caret, "library-document-person-flag"))
+	},
+})
+
+export const CodeSelectedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		TOP_LEVEL_CODE,
+		"selected",
+		"The thread of a passage open on a code block at rest. Check the passage in its selected state inside the fence, the selected pin whole on the end of the passage, and the thread card 8px right of the pin with its top on the pin top.",
+	),
+)
+
+export const CodeDraftPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		TOP_LEVEL_CODE,
+		"draft",
+		"A comment draft on a passage of a code block at rest. Check the passage in its selected state inside the fence, the draft pin whole on the end of the passage, and the composer 8px right of the pin with its top on the pin top.",
+	),
+)
+
+const agentWritingTopLevelCode = agentWritingCode(
+	TOP_LEVEL_CODE,
+	"Atlas writing inside a code block while Mira writes in the paragraph under it. Check the run in the fence wears the written look of the run in the paragraph, the named caret stands whole on the end of the run, centred on its line, and that its flag opens the card that stops Atlas.",
+)
+
+export const CodeAgentWritingAtRest = meta.story({
+	...agentWritingTopLevelCode,
+	globals: LIGHT,
+})
+
+export const CodeAgentWritingAtRestDark = meta.story({
+	...agentWritingTopLevelCode,
+	globals: DARK,
+})
+
+export const CodeHeldRunAtRest = meta.story(
+	heldRunInCode(
+		TOP_LEVEL_CODE,
+		"Atlas stops writing inside a code block. Check his finished run stays in the fence with its written look and that his caret leaves with him.",
+	),
+)
+
+export const CodePersonCaretAtRest = meta.story(
+	personInCode(
+		TOP_LEVEL_CODE,
+		"Léa has her caret inside a code block. Check her named caret stands on the character her caret points at, centred on its line, and that her flag is drawn whole.",
+	),
+)
+
+export const CodeSelectedPassageFocused = meta.story(
+	commentedCodeFocused(
+		TOP_LEVEL_CODE,
+		"selected",
+		"The thread of a passage open on a code block whose field has focus. Check the passage in its selected state under the field, the selected pin whole on the end of the passage, the thread card 8px right of the pin, and the focus kept in the field.",
+	),
+)
+
+export const CodeDraftPassageFocused = meta.story(
+	commentedCodeFocused(
+		TOP_LEVEL_CODE,
+		"draft",
+		"A comment draft on a passage of a code block whose field has focus. Check the passage in its selected state under the field, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+export const NestedCodePassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"rest",
+		"A commented passage on a code block nested under a list item, at rest. Check the passage at rest inside the fence and its pin whole on the end of the passage, centred on its line, as on a code block of its own.",
+	),
+)
+
+export const NestedCodeResolvedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"resolved",
+		"A resolved passage on a code block nested under a list item, at rest. Check the passage in its resolved state inside the fence and its pin whole above the end of the passage.",
+	),
+)
+
+export const NestedCodeSelectedPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"selected",
+		"The thread of a passage open on a code block nested under a list item, at rest. Check the passage in its selected state inside the fence, the selected pin whole on the end of the passage, and the thread card 8px right of the pin.",
+	),
+)
+
+export const NestedCodeDraftPassageAtRest = meta.story(
+	commentedCodeAtRest(
+		NESTED_CODE,
+		"draft",
+		"A comment draft on a passage of a code block nested under a list item, at rest. Check the passage in its selected state inside the fence, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+export const NestedCodeAgentWritingAtRest = meta.story(
+	agentWritingCode(
+		NESTED_CODE,
+		"Atlas writing inside a code block nested under a list item. Check the run in the fence wears the written look of the run in the paragraph, the named caret stands whole on the end of the run, and that its flag opens the card that stops Atlas.",
+	),
+)
+
+export const NestedCodeHeldRunAtRest = meta.story(
+	heldRunInCode(
+		NESTED_CODE,
+		"Atlas stops writing inside a code block nested under a list item. Check his finished run stays in the fence with its written look and that his caret leaves with him.",
+	),
+)
+
+export const NestedCodePersonCaretAtRest = meta.story(
+	personInCode(
+		NESTED_CODE,
+		"Léa has her caret inside a code block nested under a list item. Check her named caret stands on the character her caret points at, centred on its line, and that her flag is drawn whole.",
+	),
+)
+
+export const NestedCodePassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"rest",
+		"A commented passage on a code block nested under a list item whose field has focus. Check the passage at rest in the field and its pin whole on the end of the passage.",
+	),
+)
+
+export const NestedCodeResolvedPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"resolved",
+		"A resolved passage on a code block nested under a list item whose field has focus. Check the passage in its resolved state in the field and its pin whole above the end of the passage.",
+	),
+)
+
+export const NestedCodeSelectedPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"selected",
+		"The thread of a passage open on a code block nested under a list item whose field has focus. Check the passage in its selected state in the field, the selected pin whole on the end of the passage, and the thread card 8px right of the pin.",
+	),
+)
+
+export const NestedCodeDraftPassageFocused = meta.story(
+	commentedCodeFocused(
+		NESTED_CODE,
+		"draft",
+		"A comment draft on a passage of a code block nested under a list item whose field has focus. Check the passage in its selected state in the field, the draft pin whole on the end of the passage, and the composer 8px right of the pin.",
+	),
+)
+
+const LINE_END_SNIPPET_LINE = `const launch = ${"withRetries(".repeat(12)}${SNIPPET_PASSAGE}`
+
+const LINE_END_SNIPPET_SOURCE = `\`\`\`ts\n${LINE_END_SNIPPET_LINE}\n\`\`\``
+
+const expectApart = async (pin: HTMLElement, control: HTMLElement) => {
+	const isBeside =
+		boxOf(pin).right <= boxOf(control).left ||
+		boxOf(pin).left >= boxOf(control).right
+	const isAboveOrBelow =
+		boxOf(pin).bottom <= boxOf(control).top ||
+		boxOf(pin).top >= boxOf(control).bottom
+	await expect(isBeside || isAboveOrBelow).toBe(true)
+}
+
+export const CodePinClearOfCopy = meta.story({
+	args: snippetDocument(LINE_END_SNIPPET_SOURCE),
+	parameters: describedAs(
+		"A commented passage that ends where the first line of a code block ends, scrolled to that end, under the Copy button. Check the pin and Copy never share a pixel, both are drawn whole, pressing Copy copies the code and pressing the pin raises `onOpenThread` with its thread.",
+	),
+	play: async ({ args, canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+		const block = blockOf(canvasElement, SNIPPET_BLOCK)
+		const scroller = snippetScrollerIn(block)
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const copy = within(block).getByRole("button", { name: "Copy code" })
+		scroller.scrollLeft = scroller.scrollWidth
+		await waitFor(() => expect(pin).toBeVisible())
+		const passage = shownPassageOf(block, SNIPPET_PASSAGE)
+		await expectClose(boxOf(passage).right, boxOf(scroller).right)
+		await expectClose(middleOf(boxOf(pin)), middleOf(lastLineOf(passage)))
+		await expect(boxOf(pin).bottom).toBeGreaterThan(boxOf(copy).top)
+		await expect(boxOf(pin).top).toBeLessThan(boxOf(copy).bottom)
+		await expectApart(pin, copy)
+		await expectDrawnWhole(pin)
+		await expectDrawnWhole(copy)
+
+		await userEvent.click(copy)
+		await expect(writeText).toHaveBeenCalledWith(LINE_END_SNIPPET_LINE)
+		await userEvent.click(pin)
+		await expectCalledOnceWith(args.onOpenThread, BUDGET_THREAD.id)
+
+		writeText.mockRestore()
+	},
+})
+
+const expectCardBesideOrUnder = async (card: HTMLElement, pin: HTMLElement) => {
+	await expect(card).toHaveAttribute("data-placed")
+	const isBeside =
+		Math.abs(boxOf(card).left - boxOf(pin).right - 8) <= 1 &&
+		Math.abs(boxOf(card).top - boxOf(pin).top) <= 1
+	const isUnder = Math.abs(boxOf(card).top - boxOf(pin).bottom - 8) <= 1
+	await expect(isBeside || isUnder).toBe(true)
+}
+
+const expectCardGoneWithPin = async (card: HTMLElement, pin: HTMLElement) => {
+	await expect(pin).not.toBeVisible()
+	await expect(card).not.toHaveAttribute("data-placed")
+	await expect(getComputedStyle(card).opacity).toBe("0")
+	await expect(getComputedStyle(card).pointerEvents).toBe("none")
+}
+
+export const CodeThreadCardHidesWithPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...snippetDocument(LONG_SNIPPET_SOURCE),
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	},
+	play: async ({ canvasElement }) => {
+		const scroller = snippetScrollerIn(blockOf(canvasElement, SNIPPET_BLOCK))
+		const pin = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		const card = commentCardIn(canvasElement)
+		await expectCardGoneWithPin(card, pin)
+
+		scroller.scrollLeft = scroller.scrollWidth
+		await waitFor(() => expect(pin).toBeVisible())
+		await waitFor(() => expectCardBesideOrUnder(card, pin))
+
+		scroller.scrollLeft = 0
+		await waitFor(() => expectCardGoneWithPin(card, pin))
+	},
+})
+
+const WIDE_TABLE_BLOCK = "wide01"
+
+const WIDE_TABLE_PASSAGE = "review_session_1"
+
+const WIDE_TABLE_COLUMNS = Array.from({ length: 8 }, (_, index) => index)
+
+const WIDE_TABLE = [
+	WIDE_TABLE_COLUMNS.map((index) => `Column number ${index} heading`),
+	WIDE_TABLE_COLUMNS.map(() => "---"),
+	WIDE_TABLE_COLUMNS.map((index) => `roadmap_review_session_${index}`),
+]
+	.map((cells) => `| ${cells.join(" | ")} |`)
+	.join("\n")
+
+const scrollerIn = (block: HTMLElement) =>
+	[...block.querySelectorAll<HTMLElement>("*")].find(
+		(each) => getComputedStyle(each).overflowX === "auto",
+	) as HTMLElement
+
+export const TableThreadCardFollowsPin = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		body: `${WIDE_TABLE}\n\n^${WIDE_TABLE_BLOCK}`,
+		threads: [
+			{
+				...BUDGET_THREAD,
+				anchor: {
+					blockId: WIDE_TABLE_BLOCK,
+					passage: passageIn(WIDE_TABLE, WIDE_TABLE_PASSAGE),
+				},
+			},
+		],
+		openThread: openThreadOf(BUDGET_THREAD.id),
+	},
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, WIDE_TABLE_BLOCK)
+		const card = commentCardIn(canvasElement)
+		const atRest = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		await waitFor(() => expectCardBesideOrUnder(card, atRest))
+
+		const table = scrollerIn(block)
+		table.scrollLeft = 200
+		await waitFor(() => expectCardBesideOrUnder(card, atRest))
+		table.scrollLeft = table.scrollWidth
+		await expect(boxOf(atRest).right).toBeLessThan(boxOf(table).left)
+		await waitFor(() => expect(card).not.toHaveAttribute("data-placed"))
+
+		bodyOf(canvasElement, WIDE_TABLE_BLOCK).focus()
+		const editor = await waitFor(() => {
+			const field = block.querySelector<HTMLElement>(FIELD)
+			expect(field).not.toBeNull()
+			return scrollerIn(block)
+		})
+		const placed = threadPinIn(canvasElement, BUDGET_THREAD.id)
+		editor.scrollLeft = 0
+		await waitFor(() => expect(placed).toBeVisible())
+		await waitFor(() => expectCardBesideOrUnder(card, placed))
+		const unscrolled = boxOf(placed).left
+		editor.scrollLeft = 200
+		await waitFor(() => expect(boxOf(placed).left).toBeLessThan(unscrolled))
+		await expectCardBesideOrUnder(card, placed)
+		editor.scrollLeft = editor.scrollWidth
+		await waitFor(() => expectCardGoneWithPin(card, placed))
+	},
+})
+
+export const PassageDraftOnBlockBeingWritten = meta.story({
+	args: {
+		...commentedDocument(),
+		commentDraft: draftOn({
+			blockId: SESSION_BLOCK,
+			passage: passageIn(SESSION_PARAGRAPH, DINNER_PASSAGE),
+			origin: "shortcut",
+		}),
+	},
+	globals: LIGHT,
+	parameters: describedAs(
+		"A passage draft on a paragraph that is being written. Check the passage in its selected state inside the focused field, the selected draft pin outside the field on the end of the passage, and the 320px composer 8px right of the pin with its top on the pin top.",
+	),
+	play: async ({ canvasElement }) => {
+		const field = await openBlockWith(canvasElement, DINNER_PASSAGE)
+		const passage = shownPassageOf(field, DINNER_PASSAGE)
+		await expect(passage).toHaveAttribute("data-state", "selected")
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expect(pin).toBeVisible()
+		await expect(field.contains(pin)).toBe(false)
+		await expectPassagePin(pin, passage)
+		await waitFor(async () => {
+			const composer = boxOf(composerIn(canvasElement))
+			await expect(composer.width).toBe(320)
+			await expectClose(composer.left, boxOf(pin).right + 8)
+			await expectClose(composer.top, boxOf(pin).top)
+		})
+		await expect(field).toHaveFocus()
+	},
+})
+
+const START_PASSAGE = "We open with the roadmap review at 14:00"
+
+const START_THREAD = {
+	...BUDGET_THREAD,
+	id: "thread-start",
+	anchor: {
+		blockId: SESSION_BLOCK,
+		passage: passageIn(SESSION_PARAGRAPH, START_PASSAGE),
+	},
+}
+
+export const PassageCardKeptInsideEditor = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(),
+		threads: [START_THREAD],
+		openThread: openThreadOf(START_THREAD.id),
+	},
+	render: (args) => (
+		<EditorFrame isNarrow>
+			<LibraryDocumentEditor {...args} />
+		</EditorFrame>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const pin = threadPinIn(canvasElement, START_THREAD.id)
+		const thread = canvas.getByRole("region", {
+			name: `On “${START_PASSAGE}”`,
+		})
+		const editor = boxOf(slotIn(canvasElement, "library-document-editor"))
+		await waitFor(() =>
+			expect(getComputedStyle(cardFrameOf(thread)).opacity).toBe("1"),
+		)
+		await expect(boxOf(pin).right + 8 + 360).toBeGreaterThan(editor.right)
+		await expect(boxOf(thread).width).toBe(360)
+		await expect(boxOf(thread).right).toBeLessThanOrEqual(editor.right)
+		await expect(boxOf(thread).left).toBeGreaterThanOrEqual(editor.left)
+		await expectClose(boxOf(thread).right, boxOf(pin).right)
+		await expectClose(boxOf(thread).top, boxOf(pin).bottom + 8)
+	},
+})
+
+const MENTION_PARAGRAPH =
+	"Ask <@atlas> for the **notes** from [the dock](https://example.com/dock)."
+
+const MENTION_BLOCK = "mentio"
+
+const mentionDocument = {
+	...commentedDocument(true),
+	threads: [],
+	body: `${MENTION_PARAGRAPH} ^${MENTION_BLOCK}`,
+}
+
+const withRoster = [
+	(Story: ComponentType) => (
+		<RosterProvider bots={[ATLAS]}>
+			<Story />
+		</RosterProvider>
+	),
+]
+
+const textNodeWith = (root: Element, text: string) => {
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+	for (let node = walker.nextNode(); node; node = walker.nextNode())
+		if (node.textContent?.includes(text)) return node
+	throw new Error(`No text ${text}`)
+}
+
+export const CommentModeSelectionOverMention = meta.story({
+	tags: ["test-only"],
+	decorators: withRoster,
+	args: mentionDocument,
+	play: async ({ args, canvasElement }) => {
+		const body = bodyOf(canvasElement, MENTION_BLOCK)
+		const name = slotIn(body, "bot-mention-name")
+		await expect(name).toHaveTextContent("Atlas")
+		const ask = textNodeWith(body, "Ask")
+
+		document
+			.getSelection()
+			?.setBaseAndExtent(ask, 0, textNodeWith(body, " for the"), 4)
+		await fireEvent.click(body)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "for"),
+			origin: "pointer",
+		})
+
+		document
+			.getSelection()
+			?.setBaseAndExtent(ask, 0, name.firstChild as Text, 2)
+		await fireEvent.click(body)
+		await expect(args.onStartComment).toHaveBeenLastCalledWith({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "<@atlas>"),
+			origin: "pointer",
+		})
+		await expect(args.onStartComment).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const DraftQuoteAcrossMention = meta.story({
+	tags: ["test-only"],
+	decorators: withRoster,
+	args: {
+		...mentionDocument,
+		commentDraft: draftOn({
+			blockId: MENTION_BLOCK,
+			passage: sourcePassageOf(MENTION_PARAGRAPH, "Ask", "the dock"),
+			origin: "pointer",
+		}),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const composer = composerIn(canvasElement)
+		await expect(composer).toHaveTextContent(
+			"On “Ask Atlas for the notes from the dock”",
+		)
+		await waitFor(() =>
+			expect(getComputedStyle(cardFrameOf(composer)).opacity).toBe("1"),
+		)
+		const pieces = piecesIn(canvasElement, MENTION_BLOCK)
+		await expect(wordsOf(pieces)).toBe("Ask  for the notes from the dock")
+		await expectPassagePin(pinIn(canvasElement, DRAFT_PIN), lastOf(pieces))
+		await expectDraftFieldFocused(canvas)
+	},
+})
+
+const CARET_IN_PASSAGE = {
+	id: "lea",
+	name: "Léa Martin",
+	caret: OFFSITE_DOCUMENT.body.indexOf("session stops"),
+}
+
+export const CaretInsideCommentedPassage = meta.story({
+	tags: ["test-only"],
+	args: { ...commentedDocument(), people: [CARET_IN_PASSAGE] },
+	play: async ({ canvasElement }) => {
+		const block = blockOf(canvasElement, SESSION_BLOCK)
+		const caret = await within(block).findByRole("img", { name: "Léa Martin" })
+		const pieces = piecesIn(canvasElement, SESSION_BLOCK)
+		await expect(pieces.map((piece) => piece.textContent)).toEqual([
+			"so the second ",
+			"session stops at 16:30.",
+		])
+		await expect(
+			pieces[0].compareDocumentPosition(caret) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			caret.compareDocumentPosition(pieces[1]) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expectClose(boxOf(caret).left, boxOf(pieces[1]).left)
+		await expectPassagePin(
+			threadPinIn(canvasElement, SESSION_THREAD.id),
+			pieces[1],
+		)
+	},
+})
+
+const MIDWAY_BLOCK = "midway"
+
+const MIDWAY_PASSAGE = "Halfway through"
+
+const MIDWAY_PARAGRAPH = `${MIDWAY_PASSAGE}, the team meets again at the house. Everyone writes down one thing to keep and one thing to change for the next offsite. The notes go to the shared folder before Monday, and the photos follow once they are sorted. Whoever kept the receipts hands them in on the same day, so the budget closes that week.`
+
+const LAST_BLOCK = "train1"
+
+const weeksFrom = (first: number) =>
+	Array.from(
+		{ length: 20 },
+		(_, index) =>
+			`Week ${first + index} brings the next round of notes from the offsite.`,
+	)
+
+const longDocument = {
+	...commentedDocument(true),
+	threads: [],
+	body: [
+		OFFSITE_DOCUMENT.body,
+		...weeksFrom(1),
+		`${MIDWAY_PARAGRAPH} ^${MIDWAY_BLOCK}`,
+		...weeksFrom(21),
+		`The train home leaves on Saturday at 17:10. ^${LAST_BLOCK}`,
+	].join("\n\n"),
+	commentDraft: draftOn({ blockId: LAST_BLOCK, origin: "pointer" }),
+}
+
+const DraftOpenedByClick = ({
+	commentDraft,
+	onStartComment,
+	...args
+}: LibraryDocumentEditorProps) => {
+	const [target, setTarget] = useState<Parameters<typeof draftOn>[0]>()
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				commentDraft={
+					commentDraft && target ? { ...commentDraft, target } : undefined
+				}
+				onStartComment={(next) => {
+					setTarget(next)
+					onStartComment?.(next)
+				}}
+			/>
+		</EditorFrame>
+	)
+}
+
+const columnIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-document-column")
+
+const expectComposerInsideColumn = async (canvasElement: HTMLElement) => {
+	const column = boxOf(columnIn(canvasElement))
+	const composer = boxOf(composerIn(canvasElement))
+	await expect(composer.top).toBeGreaterThanOrEqual(column.top - 1)
+	await expect(composer.bottom).toBeLessThanOrEqual(column.bottom + 1)
+	await expect(composer.left).toBeGreaterThanOrEqual(column.left - 1)
+	await expect(composer.right).toBeLessThanOrEqual(column.right + 1)
+}
+
+const expectColumnAloneScrolledDown = async (canvasElement: HTMLElement) => {
+	const column = columnIn(canvasElement)
+	const offsets: number[] = [column.scrollLeft]
+	for (
+		let box = column.parentElement;
+		box && canvasElement.contains(box);
+		box = box.parentElement
+	)
+		offsets.push(box.scrollLeft, box.scrollTop)
+	await expect(column.scrollTop).toBeGreaterThan(0)
+	await expect(offsets.some(Boolean)).toBe(false)
+}
+
+export const CommentDraftBelowViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document at the top of its scroll, then a comment started on its last paragraph, far below the visible area, with no key typed. Check the paragraph starting below the column, then the document scrolled until the whole composer sits inside the column, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const last = bodyOf(canvasElement, LAST_BLOCK)
+		await expect(boxOf(last).top).toBeGreaterThan(boxOf(column).bottom)
+		await fireEvent.click(last)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentPassageDraftBelowViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document at the top of its scroll, then a comment started on the first words of a paragraph of several lines, far below the visible area, with more paragraphs after it and no key typed. Check the draft pin on the end of the passage with the paragraph running on under it, the composer 8px right of the pin with its top on the pin top, the document scrolled until the whole composer sits inside the column with its bottom edge on the bottom edge of the column, so the scroll aimed at the placed composer and never at the foot of the paragraph where it sits before it is placed, its field holding the focus, and nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const midway = bodyOf(canvasElement, MIDWAY_BLOCK)
+		await expect(boxOf(midway).top).toBeGreaterThan(boxOf(column).bottom)
+		selectIn(midway, MIDWAY_PASSAGE)
+		await fireEvent.click(midway)
+		await expectDraftFieldFocused(canvas)
+		const pin = pinIn(canvasElement, DRAFT_PIN)
+		await expectPassagePin(pin, shownPassageOf(canvasElement, MIDWAY_PASSAGE))
+		await expect(boxOf(midway).bottom).toBeGreaterThan(
+			boxOf(pin).bottom + boxOf(pin).height,
+		)
+		const composer = boxOf(composerIn(canvasElement))
+		await expectClose(composer.left, boxOf(pin).right + 8)
+		await expectClose(composer.top, boxOf(pin).top)
+		await expectComposerInsideColumn(canvasElement)
+		await expectClose(composer.bottom, boxOf(column).bottom)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentDraftInClippedShellScrollsColumnAlone = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => (
+		<div className="h-160 overflow-hidden">
+			<DraftOpenedByClick {...args} />
+		</div>
+	),
+	parameters: describedAs(
+		"The long document inside a shell shorter than the editor, which cuts the foot of the column and shows no scrollbar, then a comment started on the last paragraph, far below the visible area. Check the document scrolled until the whole composer sits inside the column, and the shell left where it was: nothing scrolled but the column, downwards alone, up to the story root.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await fireEvent.click(bodyOf(canvasElement, LAST_BLOCK))
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expectColumnAloneScrolledDown(canvasElement)
+	},
+})
+
+export const CommentDraftAboveViewScrollsIntoView = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document scrolled to its end, then a comment started on a paragraph far above the visible area. Check the paragraph ending above the column, then the document scrolled back until the whole composer sits inside the column, and its field holding the focus.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const first = bodyOf(canvasElement, SESSION_BLOCK)
+		column.scrollTop = column.scrollHeight
+		const atEnd = column.scrollTop
+		await expect(boxOf(first).bottom).toBeLessThan(boxOf(column).top)
+		await fireEvent.click(first)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expect(column.scrollTop).toBeLessThan(atEnd)
+	},
+})
+
+export const CommentDraftInViewKeepsScroll = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => <DraftOpenedByClick {...args} />,
+	parameters: describedAs(
+		"A long document scrolled until a paragraph sits at mid-height of the column, then a comment started on that paragraph. Check the whole composer inside the column, its field holding the focus, and the scroll position of the document exactly where it was.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		const midway = bodyOf(canvasElement, MIDWAY_BLOCK)
+		column.scrollTop += boxOf(midway).top - middleOf(boxOf(column))
+		const resting = column.scrollTop
+		await expect(resting).toBeGreaterThan(0)
+		await fireEvent.click(midway)
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+		await expect(column.scrollTop).toBe(resting)
+	},
+})
+
+export const CommentDraftScrollNeverAnimates = meta.story({
+	tags: ["test-only"],
+	args: longDocument,
+	render: (args) => (
+		<div className="**:data-[slot=library-document-column]:scroll-smooth">
+			<DraftOpenedByClick {...args} />
+		</div>
+	),
+	parameters: describedAs(
+		"The long document inside a column asked to scroll smoothly, then a comment started on its last paragraph, far below the visible area. Check the whole composer inside the column as soon as its field holds the focus, with no scroll still under way: the draft is brought into view in one step whatever the motion preference.",
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const column = columnIn(canvasElement)
+		await expect(getComputedStyle(column).scrollBehavior).toBe("smooth")
+		await fireEvent.click(bodyOf(canvasElement, LAST_BLOCK))
+		await expectDraftFieldFocused(canvas)
+		await expectComposerInsideColumn(canvasElement)
+	},
+})
+
+const EscapeLadderDocument = ({
+	commentDraft,
+	openThread,
+	...args
+}: LibraryDocumentEditorProps) => {
+	const [isDraftClosed, setDraftClosed] = useState(false)
+	const [isThreadClosed, setThreadClosed] = useState(false)
+
+	return (
+		<EditorFrame>
+			<LibraryDocumentEditor
+				{...args}
+				commentDraft={
+					commentDraft && !isDraftClosed
+						? {
+								...commentDraft,
+								onClose: () => {
+									setDraftClosed(true)
+									commentDraft.onClose()
+								},
+							}
+						: undefined
+				}
+				openThread={
+					openThread && !isThreadClosed
+						? {
+								...openThread,
+								onClose: () => {
+									setThreadClosed(true)
+									openThread.onClose()
+								},
+							}
+						: undefined
+				}
+			/>
+		</EditorFrame>
+	)
+}
+
+export const CommentEscapeClosesInnermost = meta.story({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		commentDraft: {
+			...draftOn({ blockId: MARKET_BLOCK, origin: "pointer" }),
+			value: "@",
+		},
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	render: (args) => <EscapeLadderDocument {...args} />,
+	parameters: describedAs(
+		"Comment mode on with a thread card open, a comment being written on another paragraph and its mention menu open, then Esc pressed four times with no click in between. Check the first Esc closing the menu alone with the draft and its @ kept, the second raising `onClose` of the draft alone, the third, sent from the page the focus fell back to, raising `onClose` of the thread card alone, comment mode kept all along, and the fourth raising `onCommentModeChange` with false.",
+	),
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const field = canvas.getByRole("textbox", { name: "Comment, @ to mention" })
+		await expectDraftFieldFocused(canvas)
+		await canvas.findByRole("listbox", { name: "Mention" })
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(canvas.queryByRole("listbox", { name: "Mention" })).toBeNull(),
+		)
+		await expect(field).toHaveValue("@")
+		await expect(field).toHaveFocus()
+		await expect(args.commentDraft?.onClose).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "library-comment-composer")).toEqual([]),
+		)
+		await expect(args.commentDraft?.onClose).toHaveBeenCalledOnce()
+		await expect(args.commentDraft?.onValueChange).not.toHaveBeenCalled()
+		await expect(args.openThread?.onClose).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() =>
+			expect(slotsIn(canvasElement, "library-comment-thread")).toEqual([]),
+		)
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+		await expect(args.commentDraft?.onClose).toHaveBeenCalledOnce()
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await expectCalledOnceWith(args.comments?.onCommentModeChange, false)
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+	},
+})
+
+const toggleIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "library-comment-toggle")
+
+const blockHandleIn = (canvasElement: HTMLElement) =>
+	within(
+		slotIn(blockOf(canvasElement, MARKET_BLOCK), "library-block-handle"),
+	).getAllByRole("button")[0]
+
+const threadEscapeFrom = (
+	place: string,
+	controlIn: (canvasElement: HTMLElement) => HTMLElement,
+) => ({
+	tags: ["test-only"],
+	args: {
+		...commentedDocument(true),
+		openThread: openThreadOf(SESSION_THREAD.id),
+	},
+	parameters: describedAs(
+		`Comment mode on with a thread card open and the focus on ${place}, then Esc. Check that Esc raises \`onClose\` of the thread card once, never \`onCommentModeChange\`, and that the hint of comment mode stays.`,
+	),
+	play: async ({ args, canvasElement, userEvent }: CommentPlay) => {
+		const control = controlIn(canvasElement)
+		control.focus()
+		await expect(control).toHaveFocus()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.openThread?.onClose).toHaveBeenCalledOnce()
+		await expect(args.comments?.onCommentModeChange).not.toHaveBeenCalled()
+		await expect(
+			slotIn(canvasElement, "library-comment-mode-hint"),
+		).toBeVisible()
+	},
+})
+
+export const CommentEscapeFromToggleClosesThread = meta.story(
+	threadEscapeFrom("the Comment toggle of the bar", toggleIn),
+)
+
+export const CommentEscapeFromBlockClosesThread = meta.story(
+	threadEscapeFrom("the handle of a paragraph of the body", blockHandleIn),
+)

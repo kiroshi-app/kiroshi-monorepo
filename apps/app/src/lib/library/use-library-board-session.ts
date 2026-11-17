@@ -120,7 +120,7 @@ export const useLibraryBoardSession = (spaceId: string, name: string) => {
 			setUnreadState(openedState)
 			void reportFailure(
 				{ title: i18n.t("common:library.failure.board.open") },
-				{ space: spaceId },
+				{ space: spaceId, reason: failure },
 			)
 			return
 		}

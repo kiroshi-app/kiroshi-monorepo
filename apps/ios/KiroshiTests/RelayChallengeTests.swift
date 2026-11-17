@@ -197,6 +197,32 @@ struct RelayChallengeTests {
         await connection.stop()
     }
 
+    @Test func aCallCancelledWhileWaitingForTheChallengeEndsAtOnceAndNeverLeaves() async throws {
+        let connection = makeConnection()
+        let host = makeHost(holdsHello: true)
+        await connection.start()
+        await transport.nextOpening().accept(host)
+        #expect(try await nextHeard(host).isHello)
+        let waiting = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        let deadline = try #require(await clock.nextSleep(of: RelayConnection.callDeadline))
+        let heldBefore = await connection.heldCallCount
+
+        waiting.cancel()
+        let ending = await waiting.ending
+
+        #expect(throws: CancellationError.self) { try ending?.get() }
+        #expect(await connection.heldCallCount == heldBefore - 1)
+        #expect(deadline.hasEnded)
+        try await host.answerTheHello()
+        #expect(try await nextHeard(host).command == "relay_shared_space")
+        _ = try await connection.call("mission_list", args: ["spaceId": "s-1"])
+        #expect(try await nextHeard(host).command == "mission_list")
+        #expect(await host.ran == ["relay_shared_space", "mission_list"])
+        await connection.stop()
+    }
+
     @Test func aHelloWhoseChallengeIsNotThirtyTwoBytesIsRefused() async throws {
         #expect(
             FrameHeader(

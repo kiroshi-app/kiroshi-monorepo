@@ -15,6 +15,7 @@ import {
 	expectRailSpaceHost,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
+	HOVER_TOOLTIP_WAIT,
 	hasOverlayScrollbars,
 	mergeA11y,
 	pictureOf,
@@ -870,7 +871,7 @@ export const CreateLabel = meta.story({
 			await waitFor(async () => {
 				await expect(label()).toBeVisible()
 				await expect(label()).toHaveTextContent(CREATE)
-			})
+			}, HOVER_TOOLTIP_WAIT)
 			const button = create.getBoundingClientRect()
 
 			await waitFor(async () => {

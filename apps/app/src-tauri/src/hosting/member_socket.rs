@@ -44,13 +44,16 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::LIBRARY_DOCUMENT_PRESENCE),
 	payload_of(events::LIBRARY_DOCUMENT_WRITER_FINISHED),
 	payload_of(events::LIBRARY_CHANGED),
+	payload_of(events::LIBRARY_COMMENT_THREAD_CHANGED),
+	payload_of(events::LIBRARY_COMMENT_AGENT_TURNS_CHANGED),
+	payload_of(events::LIBRARY_COMMENT_MENTIONED),
 	payload_of(events::MEMBERS_CHANGED),
 	payload_of(events::MISSION_CHANGED),
 	payload_of(events::ROUTINE_CHANGED),
 	payload_of(events::SPACE_DESCRIBED),
 ];
 
-const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];
+const FRAME_NAMES: [&str; 4] = ["CallFrame", "AnswerFrame", "EventFrame", "ResyncFrame"];
 
 const HUE_NAME: &str = "Hue";
 
@@ -142,6 +145,12 @@ fn frames() -> BTreeMap<String, Value> {
 					"command": { "type": "string" },
 					"args": { "type": "object" },
 					"computer": { "type": "string" },
+					"callKey": {
+						"description": "Chosen by the device and kept the same across repeats of one call. The host runs a call once per device and callKey, and answers a repeat with the status and body of that run. A call refused before the host ran it (400, 401, 403, 404, 413), or answered 502 because the host could not connect to its local api, keeps no answer: its repeat runs again. A 502 for a call that timed out or whose answer was cut is kept, since the command may have run.",
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 128,
+					},
 				},
 				"required": ["id", "command"],
 			}),
@@ -170,6 +179,14 @@ fn frames() -> BTreeMap<String, Value> {
 						"properties": {
 							"event": { "type": "string" },
 							"payload": true,
+							"deviceId": {
+								"description": "The relay device id of the member whose call caused the event: present beside callKey, and on the resolution of a question a member answered.",
+								"type": "string",
+							},
+							"callKey": {
+								"description": "The callKey of the call that caused the event.",
+								"type": "string",
+							},
 						},
 						"required": ["event", "payload"],
 					},
@@ -198,6 +215,23 @@ fn frames() -> BTreeMap<String, Value> {
 					},
 				},
 				"required": ["event"],
+			}),
+		),
+		(
+			"ResyncFrame".to_owned(),
+			json!({
+				"description": "The host tells one member device that the relay refused a frame sent to it. answered lists the ids of the calls the host answered to that device since it was last in step: a call among them still awaiting its answer lost it and ends. The device then resumes as on a seq jump, or re-reads when it holds no epoch.",
+				"type": "object",
+				"properties": {
+					"resync": {
+						"type": "object",
+						"properties": {
+							"answered": { "type": "array", "items": id },
+						},
+						"required": ["answered"],
+					},
+				},
+				"required": ["resync"],
 			}),
 		),
 		(

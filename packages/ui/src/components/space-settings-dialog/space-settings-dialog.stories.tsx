@@ -940,6 +940,34 @@ const expectRefusal = async (panel: HTMLElement, message: string) => {
 	await expect(panel).not.toHaveTextContent(INVITE_HINT)
 }
 
+export const NoAgentsEntry = meta.story({
+	name: "S1 No Agents entry",
+	globals: { theme: "dark" },
+	args: { ...membersArgs(), tab: "space" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard S1: the dialog of a space whose agents live on the Agents page, so it is given no agents. Check the rail reads Space, Members, Secrets, Skills, Applications, History, then Danger zone, opens on Space, and holds no Agents entry.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		await expect(
+			within(dialog)
+				.getAllByRole("tab")
+				.map((tab) => tab.textContent),
+		).toEqual(RAIL)
+		await expect(
+			within(dialog).getByRole("tab", { name: "Space" }),
+		).toHaveAttribute("aria-selected", "true")
+		await expect(
+			within(dialog).queryByRole("tab", { name: "Agents" }),
+		).toBeNull()
+	},
+})
+
 export const MembersI1 = meta.story({
 	args: membersArgs(),
 	parameters: {

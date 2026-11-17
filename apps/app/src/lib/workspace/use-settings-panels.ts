@@ -24,10 +24,7 @@ const railSettingsOf = (
 	openSettings: OpenSettings | null,
 ): AppRailSettings | undefined => {
 	if (openSettings?.kind === "user") return "you"
-	if (openSettings?.kind === "space") return "space"
-	return openSettings?.kind === "companion" && openSettings.isFromSpaceSettings
-		? "space"
-		: undefined
+	return openSettings?.kind === "space" ? "space" : undefined
 }
 
 type SettingsPanelsInput = {

@@ -268,9 +268,10 @@ describe("createSpacesController", () => {
 
 		await controller.create()
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: i18n.t("chat:screen.notice.failed"),
-		})
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{ title: i18n.t("chat:screen.notice.failed") },
+			{ reason: new Error("no record") },
+		)
 	})
 
 	it("clears the refused create once a create lands", async () => {

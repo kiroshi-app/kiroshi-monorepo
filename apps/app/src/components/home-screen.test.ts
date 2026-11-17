@@ -97,6 +97,7 @@ const spokenAtNoon = (conversations: Conversation[]): TodayRoster => ({
 		]),
 	),
 	hostStates: {},
+	namings: {},
 	now: NOON,
 })
 
@@ -296,6 +297,7 @@ const HomePage = ({ attachments, drafts, bots }: HomePageProps) => {
 		drafts,
 		runtimes: fixture.runtimes,
 		startConversation: () => Promise.resolve(fixture.room),
+		beginNaming: () => undefined,
 		discardConversation: () => Promise.resolve(),
 		openConversation: () => undefined,
 	})

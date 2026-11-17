@@ -122,17 +122,6 @@ final class QuestionPanelTests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", element.label)).firstMatch.exists
     }
 
-    func waitUntilStill(_ element: XCUIElement, timeout: TimeInterval = 5) {
-        let deadline = Date.now.addingTimeInterval(timeout)
-        var frame = element.frame
-        while Date.now < deadline {
-            Thread.sleep(forTimeInterval: 0.3)
-            let next = element.frame
-            if next == frame { return }
-            frame = next
-        }
-    }
-
     func panelTop(above firstOption: XCUIElement) -> CGFloat {
         firstOption.frame.minY - Self.headingHeight
     }
@@ -212,7 +201,6 @@ final class QuestionPanelTests: XCTestCase {
         let app = launchInEnglish("questions-4.1")
         let summary = option("Summary", in: app)
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
-        waitUntilStill(summary)
         let send = app.buttons["Send"].frame
 
         assertThePanelSitsOnTheArtboard(app, "4.1")
@@ -226,6 +214,16 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(summary.isSelected)
         assertThePanelSitsOnTheArtboard(app, "4.2")
+    }
+
+    func testThePanelIsInPlaceTheMomentItShows() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        let deadline = Date.now.addingTimeInterval(10)
+        while !summary.exists, Date.now < deadline {}
+        XCTAssertTrue(summary.exists)
+
+        assertThePanelSitsOnTheArtboard(app, "4.1")
     }
 
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
@@ -301,9 +299,20 @@ final class QuestionPanelTests: XCTestCase {
         return (label as NSString).size(withAttributes: [.font: font]).width
     }
 
-    func dragThePanel(by distance: CGFloat, in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
-        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+    func scrollThePanel(untilItShows element: XCUIElement, in app: XCUIApplication) {
+        let panel = app.scrollViews.containing(NSPredicate(format: "label == 'Other answer'"))
+            .firstMatch
+        for _ in 0..<10 where !panel.frame.contains(element.frame) {
+            let isBelow = element.frame.maxY > panel.frame.maxY
+            let distance = panel.frame.height / 3
+            let start = panel.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.5, dy: isBelow ? 0.75 : 0.25))
+            start.press(
+                forDuration: 0.1,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: isBelow ? -distance : distance)),
+                withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        XCTAssertTrue(panel.frame.contains(element.frame), element.label)
     }
 
     func testTheSegmentLabelsStayWholeAtTheLargestTextSize() throws {
@@ -313,19 +322,12 @@ final class QuestionPanelTests: XCTestCase {
         let question = text(Self.format, in: app)
         XCTAssertTrue(question.waitForExistence(timeout: 10))
         let summary = option("Summary", in: app)
-        let actionsTop = app.buttons["Skip"].frame.minY
-        for _ in 0..<6 where summary.frame.maxY > actionsTop {
-            dragThePanel(by: -200, in: app)
-        }
+        scrollThePanel(untilItShows: summary, in: app)
         summary.tap()
         app.buttons["Next"].tap()
         XCTAssertTrue(text("Who reads these notes first?", in: app).waitForExistence(timeout: 5))
         let segments = app.otherElements["Questions"]
-        var segmentsTop = -CGFloat.infinity
-        for _ in 0..<6 where segments.frame.minY != segmentsTop {
-            segmentsTop = segments.frame.minY
-            dragThePanel(by: 300, in: app)
-        }
+        scrollThePanel(untilItShows: segments, in: app)
 
         XCTAssertTrue(app.buttons["Audience"].isSelected)
         XCTAssertEqual(app.buttons["Format"].value as? String, "Answered")
@@ -414,11 +416,8 @@ final class QuestionPanelTests: XCTestCase {
         keep("4.1 Sticky · largest text", of: app)
         try auditThePanel(app, under: Self.format, atTheLargestSize: true)
 
-        let panel = question.firstMatch
         let blogPost = option("Blog post", in: app)
-        for _ in 0..<6 where !blogPost.isHittable {
-            panel.swipeUp()
-        }
+        scrollThePanel(untilItShows: blogPost, in: app)
         blogPost.tap()
         XCTAssertTrue(app.buttons["Send"].isEnabled)
         XCTAssertTrue(app.buttons["Send"].isHittable)

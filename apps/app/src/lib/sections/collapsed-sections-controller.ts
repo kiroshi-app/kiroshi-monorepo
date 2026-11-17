@@ -1,3 +1,7 @@
+import type { BotSections } from "./sections-controller"
+import { type ReportFailure, spaceWriteRefusalOf } from "./space-write-refusal"
+
+import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -14,6 +18,12 @@ export type CollapsedSectionsController = {
 	enter: (spaceId: string) => Promise<void>
 	keep: (spaceIds: string[]) => void
 	collapse: (spaceId: string, sectionId: string, isCollapsed: boolean) => void
+}
+
+export type SectionSpaces = Pick<BotSections, "hostSpaceIdOf" | "isOnScreen">
+
+type CollapsedSectionsOptions = {
+	reportFailure?: ReportFailure
 }
 
 const initialCollapsedSectionsState: CollapsedSectionsState = {
@@ -34,12 +44,21 @@ const withSection = (
 
 export const createCollapsedSectionsController = (
 	store: TranscriptStore,
-	hostSpaceIdOf: (spaceRowId: string) => string,
+	{ hostSpaceIdOf, isOnScreen }: SectionSpaces,
+	{
+		reportFailure = failureReporterIn("collapsed-sections-controller"),
+	}: CollapsedSectionsOptions = {},
 ): CollapsedSectionsController => {
 	const stateStore = createStore(initialCollapsedSectionsState)
 	const current = stateStore.getState
 
 	const enqueue = createQueue()
+
+	const refuse = spaceWriteRefusalOf({
+		raisedIn: "collapsed-sections-controller",
+		isOnScreen,
+		reportFailure,
+	})
 
 	const set = (collapsedBySpaceId: Record<string, string[]>) =>
 		stateStore.setState({ collapsedBySpaceId })
@@ -68,7 +87,10 @@ export const createCollapsedSectionsController = (
 			}),
 		apply: (spaceId, written) =>
 			hold(spaceId, written.collapsedSectionIds ?? []),
-		onRefused: reloadAll,
+		onRefused: (spaceId, reason) => {
+			refuse(reason, spaceId)
+			reloadAll()
+		},
 	})
 
 	return {

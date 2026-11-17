@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -5,6 +6,7 @@ import {
 	type AppSidebarSection,
 	badgeOf,
 	heldBotsOf,
+	isNeedingYou,
 	previewOf,
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
@@ -19,12 +21,15 @@ import {
 	useIsCompactRows,
 } from "@workspace/ui/components/compact-rows"
 import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
+import { conversationLabelOf } from "@workspace/ui/components/conversation-naming"
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	MissionCapsuleList,
 	type MissionOpening,
+	type MissionTreeRowWrap,
 } from "@workspace/ui/components/mission-capsule"
+import { TextSwap } from "@workspace/ui/components/motion/text-swap"
 import {
 	PinGroup,
 	type RosterPinActions,
@@ -67,6 +72,7 @@ interface ConversationRosterRowProps
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	wrapMission?: MissionTreeRowWrap
 	lift: Lifter
 }
 
@@ -91,15 +97,25 @@ const ConversationRosterRow = ({
 	onCreateSectionFor,
 	openMissionId,
 	onOpenMission,
+	wrapMission,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
+	const { t: tNaming } = useTranslation(["common", "chat"])
 	const { state } = useSidebar()
 	const isCompact = useIsCompactRows()
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const hasSurface =
 		state !== "collapsed" || Boolean(conversation.missions?.length)
 	const leadSide = isCompact ? COMPACT_LEAD_SIDE : ROW_ICON_SIDE
 	const stackedSurface = hasSurface ? SURFACE : undefined
 	const isAgentLine = isCompact && Boolean(conversation.agent)
+	const { naming } = conversation
+	const label = conversationLabelOf(tNaming, conversation.name, naming)
+	const isNamed = naming === undefined || naming === "arrived"
+	const isWorkingTitle =
+		isCompact &&
+		Boolean(workingBotOf(conversation)) &&
+		!isNeedingYou(conversation)
 
 	return (
 		<SidebarMenuItem
@@ -114,7 +130,7 @@ const ConversationRosterRow = ({
 			data-tauri-drag-region="false"
 			ref={(node) => keepFocus?.(conversation.id, node)}
 		>
-			<ContextMenu>
+			<ContextMenu onOpenChange={setIsMenuOpen}>
 				<ContextMenuTrigger
 					className={isCompact ? COMPACT_ROW_STACK : stackedSurface}
 				>
@@ -123,23 +139,36 @@ const ConversationRosterRow = ({
 						isLiftable
 						badge={badgeOf(conversation)}
 						geometry={isCompact ? "compact" : stackedGeometryOf(hasSurface)}
+						hasRowTooltip
 						isActive={isSelected}
 						isMiddleClickSelectable
+						isTooltipHidden={isLifted || isMenuOpen}
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
 							conversation.agent ? (
 								<BotRowAvatar bot={conversation.agent} size={leadSide} />
 							) : (
 								<ConversationSubjectIcon
-									hue={conversation.color}
-									icon={conversation.icon}
+									hue={isNamed ? conversation.color : null}
+									icon={isNamed ? conversation.icon : undefined}
 									isBare={isCompact}
-									isFilled={isSelected}
+									isFilled={isSelected || naming === "pending"}
+									isMuted={naming === "pending"}
 									side={leadSide}
 								/>
 							)
 						}
-						name={conversation.name}
+						name={label}
+						nameContent={
+							naming ? (
+								<TextSwap
+									className="block truncate"
+									isHeldUnderReducedMotion={isWorkingTitle}
+									isShimmering={naming === "pending" || isWorkingTitle}
+									text={label}
+								/>
+							) : undefined
+						}
 						onSelect={(modifiers) => {
 							if (lift.hasJustDropped()) return
 							onSelect?.(conversation.id, modifiers)
@@ -162,13 +191,15 @@ const ConversationRosterRow = ({
 						}
 					/>
 					<MissionCapsuleList
+						isTooltipHidden={isLifted || isMenuOpen}
 						missions={conversation.missions}
 						onOpenMission={onOpenMission}
 						openMissionId={openMissionId}
+						wrapMission={wrapMission}
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
-					aria-label={t("roster.actions", { name: conversation.name })}
+					aria-label={t("roster.actions", { name: label })}
 					className={STILL_UNDER_REDUCED_MOTION}
 				>
 					<PinGroup

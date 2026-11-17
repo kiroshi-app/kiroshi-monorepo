@@ -273,6 +273,27 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func aSendWhoseThreadClosesWhileItsFilesAreStoredStillRunsItsTurn() async throws {
+        let host = TestHost(holding: ["chat_store_attachments"]) { call in
+            call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        store.draft = "Look at this"
+        store.attachments = [PickedAttachment(id: UUID(), name: "flow.png", data: Data([1, 2]))]
+        let sending = store.send()
+        let stored = try #require(await host.nextCall("chat_store_attachments"))
+
+        following.cancel()
+        await following.value
+        host.reply(TestHost.ok(stored, #"["/d/attachments/chat-juniper/flow.png"]"#))
+        await sending?.value
+
+        #expect(store.entries.last?.attachedFiles == ["flow.png"])
+        #expect(store.sendFailure == nil)
+        await connection.stop()
+    }
+
     @Test func filesTooLargeToStoreStayPickedAndSaySo() async {
         let host = TestHost { call in
             guard call.command == "chat_store_attachments" else { return nil }

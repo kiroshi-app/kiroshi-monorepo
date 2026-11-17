@@ -9,9 +9,16 @@ const TAB_GLYPH_SIDE = 15
 type ConversationTabIconProps = {
 	icon?: string
 	hue?: number | null
+	isPending?: boolean
 }
 
-const ConversationTabIcon = ({ icon, hue }: ConversationTabIconProps) => {
+const ConversationTabIcon = ({
+	icon,
+	hue,
+	isPending = false,
+}: ConversationTabIconProps) => {
+	if (isPending)
+		return <ConversationSubjectIcon isBare isMuted side={TAB_GLYPH_SIDE} />
 	if (hue == null) {
 		const Glyph = ConversationIcons[conversationIconOf(icon)]
 		return <Glyph />

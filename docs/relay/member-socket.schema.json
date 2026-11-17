@@ -1656,6 +1656,12 @@
         "args": {
           "type": "object"
         },
+        "callKey": {
+          "description": "Chosen by the device and kept the same across repeats of one call. The host runs a call once per device and callKey, and answers a repeat with the status and body of that run. A call refused before the host ran it (400, 401, 403, 404, 413), or answered 502 because the host could not connect to its local api, keeps no answer: its repeat runs again. A 502 for a call that timed out or whose answer was cut is kept, since the command may have run.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
         "command": {
           "type": "string"
         },
@@ -3103,6 +3109,14 @@
         },
         "event": {
           "properties": {
+            "callKey": {
+              "description": "The callKey of the call that caused the event.",
+              "type": "string"
+            },
+            "deviceId": {
+              "description": "The relay device id of the member whose call caused the event: present beside callKey, and on the resolution of a question a member answered.",
+              "type": "string"
+            },
             "event": {
               "type": "string"
             },
@@ -3835,6 +3849,405 @@
       ],
       "type": "object"
     },
+    "LibraryComment": {
+      "properties": {
+        "author": {
+          "$ref": "#/$defs/LibraryCommentParty"
+        },
+        "createdAt": {
+          "type": "integer"
+        },
+        "mentions": {
+          "items": {
+            "$ref": "#/$defs/LibraryCommentParty"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "author",
+        "createdAt",
+        "text",
+        "mentions"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentAgentTurn": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/LibraryCommentAgentTurnState"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "threadId",
+        "agentId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentAgentTurnState": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "working"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "failedAt": {
+              "type": "integer"
+            },
+            "kind": {
+              "const": "failed"
+            },
+            "reason": {
+              "$ref": "#/$defs/LibraryCommentTurnFailure"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "failedAt"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LibraryCommentAgentTurnsChanged": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "threadId",
+        "agentId"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentAnchor": {
+      "anyOf": [
+        {
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "block"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "blockId": {
+              "type": "string"
+            },
+            "end": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "passage"
+            },
+            "quote": {
+              "type": "string"
+            },
+            "start": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "blockId",
+            "quote",
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "imagePoint"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "height": {
+              "type": "number"
+            },
+            "kind": {
+              "const": "imageZone"
+            },
+            "width": {
+              "type": "number"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "boardNode"
+            },
+            "nodeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "boardPoint"
+            },
+            "point": {
+              "$ref": "#/$defs/LibraryBoardPoint"
+            }
+          },
+          "required": [
+            "kind",
+            "point"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LibraryCommentCount": {
+      "properties": {
+        "itemName": {
+          "type": "string"
+        },
+        "openThreads": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "itemName",
+        "openThreads"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentMentioned": {
+      "properties": {
+        "authorName": {
+          "type": "string"
+        },
+        "itemKind": {
+          "$ref": "#/$defs/LibraryItemKind"
+        },
+        "itemName": {
+          "type": "string"
+        },
+        "people": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "itemName",
+        "itemKind",
+        "threadId",
+        "authorName",
+        "text",
+        "people"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentParty": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/LibraryCommentPartyKind"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentPartyKind": {
+      "enum": [
+        "person",
+        "agent"
+      ]
+    },
+    "LibraryCommentThread": {
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/LibraryCommentAnchor"
+        },
+        "comments": {
+          "items": {
+            "$ref": "#/$defs/LibraryComment"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "itemName": {
+          "type": "string"
+        },
+        "lastBoardPoint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryBoardPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolvedAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolvedBy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/LibraryCommentThreadState"
+        },
+        "targetMissing": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "spaceId",
+        "itemName",
+        "anchor",
+        "state",
+        "comments",
+        "targetMissing",
+        "resolvedBy",
+        "resolvedAt",
+        "lastBoardPoint"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentThreadChanged": {
+      "properties": {
+        "itemName": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "thread": {
+          "$ref": "#/$defs/LibraryCommentThread"
+        }
+      },
+      "required": [
+        "spaceId",
+        "itemName",
+        "thread"
+      ],
+      "type": "object"
+    },
+    "LibraryCommentThreadState": {
+      "enum": [
+        "open",
+        "resolved"
+      ]
+    },
+    "LibraryCommentTurnFailure": {
+      "enum": [
+        "noReply",
+        "turnFailed"
+      ]
+    },
     "LibraryDocument": {
       "properties": {
         "content": {
@@ -4283,6 +4696,77 @@
             "kind",
             "conversationId",
             "messageId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownThread"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "invalidAnchor"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "missingTarget"
+            },
+            "name": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "blankComment"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unknownAuthor"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }
@@ -6887,6 +7371,32 @@
         "id",
         "command",
         "args"
+      ],
+      "type": "object"
+    },
+    "ResyncFrame": {
+      "description": "The host tells one member device that the relay refused a frame sent to it. answered lists the ids of the calls the host answered to that device since it was last in step: a call among them still awaiting its answer lost it and ends. The device then resumes as on a seq jump, or re-reads when it holds no epoch.",
+      "properties": {
+        "resync": {
+          "properties": {
+            "answered": {
+              "items": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "answered"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "resync"
       ],
       "type": "object"
     },
@@ -12279,6 +12789,206 @@
         "$ref": "#/$defs/LibraryBoardSummary"
       }
     },
+    "library_comment_agent_turns": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentAgentTurn"
+        },
+        "type": "array"
+      }
+    },
+    "library_comment_counts": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentCount"
+        },
+        "type": "array"
+      }
+    },
+    "library_comment_create": {
+      "args": {
+        "properties": {
+          "anchor": {
+            "$ref": "#/$defs/LibraryCommentAnchor"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "anchor",
+          "text",
+          "mentions"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_reopen": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_reply": {
+      "args": {
+        "properties": {
+          "mentions": {
+            "items": {
+              "$ref": "#/$defs/LibraryCommentParty"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId",
+          "text",
+          "mentions"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_resolve": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryCommentThread"
+      }
+    },
+    "library_comment_threads": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LibraryCommentThread"
+        },
+        "type": "array"
+      }
+    },
     "library_create_board": {
       "args": {
         "properties": {
@@ -13972,6 +14682,21 @@
         "$ref": "#/$defs/LibraryChanged"
       }
     },
+    "library://comment-agent-turns-changed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentAgentTurnsChanged"
+      }
+    },
+    "library://comment-mentioned": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentMentioned"
+      }
+    },
+    "library://comment-thread-changed": {
+      "payload": {
+        "$ref": "#/$defs/LibraryCommentThreadChanged"
+      }
+    },
     "library://document-presence": {
       "payload": {
         "$ref": "#/$defs/LibraryDocumentPresence"
@@ -14017,6 +14742,9 @@
     },
     {
       "$ref": "#/$defs/EventFrame"
+    },
+    {
+      "$ref": "#/$defs/ResyncFrame"
     }
   ],
   "title": "Kiroshi relay member socket"

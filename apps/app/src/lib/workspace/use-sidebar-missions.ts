@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react"
 
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import type { MissionsPageProps } from "@workspace/ui/components/missions-page"
+import { i18n } from "@workspace/ui/lib/i18n"
 
+import { failureReporterIn } from "../failure-report"
 import {
 	type StoppableRuntimes,
 	useMissionMenus,
@@ -10,7 +13,9 @@ import type { RosterController } from "../bots/roster-controller"
 import { faceOfBot } from "../chat/thread-contract"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import type { MissionLanding } from "../missions/mission-actions"
+import type { Mission } from "../missions/mission-contract"
 import {
+	type MissionEntry,
 	missionRowIdOf,
 	type SpaceMissionGroups,
 } from "../missions/missions-model"
@@ -44,6 +49,7 @@ type SidebarMissionsCore = {
 
 type SidebarMissionsInput = {
 	core: SidebarMissionsCore
+	missionMarks: MissionEntry[]
 	navigation: Pick<SettingsNavigation, "openThread">
 }
 
@@ -55,10 +61,27 @@ type MissionsPageFeed = Pick<
 export type SidebarMissions = {
 	openCount: number
 	openMissionId: string | undefined
+	wrapSidebarRow: MissionTreeRowWrap
 	page: MissionsPageFeed
 }
 
+type PlacedMission = {
+	mission: Mission
+	conversationId: string
+}
+
 const NO_CONVERSATIONS: Conversation[] = []
+
+const reportUnopened = failureReporterIn("use-sidebar-missions")
+
+const raiseUnopened = (missionId: string) =>
+	reportUnopened(
+		{
+			title: i18n.t("bots:roster.mission.unavailable.title"),
+			description: i18n.t("bots:roster.mission.unavailable.description"),
+		},
+		{ mission: missionId },
+	)
 
 const facesOf = (rosters: Record<string, Bot[]>) =>
 	new Map(
@@ -81,8 +104,23 @@ const entriesOf = ({
 	earlierToday,
 }: SpaceMissionGroups) => [...waitingOnYou, ...inProgress, ...earlierToday]
 
+const withMarksOutsideFeed = (
+	entries: PlacedMission[],
+	missionMarks: MissionEntry[],
+): PlacedMission[] => {
+	const fedIds = new Set(entries.map(({ mission }) => mission.id))
+	const unfedMarks = missionMarks
+		.filter(({ mission }) => !fedIds.has(mission.id))
+		.map(({ mission }) => ({
+			mission,
+			conversationId: mission.originConversationId,
+		}))
+	return [...entries, ...unfedMarks]
+}
+
 export const useSidebarMissions = ({
 	core,
+	missionMarks,
 	navigation,
 }: SidebarMissionsInput): SidebarMissions => {
 	const {
@@ -97,9 +135,13 @@ export const useSidebarMissions = ({
 	useSpaceMissionsFailure(feed)
 
 	const entries = useMemo(() => entriesOf(feed), [feed])
-	const missions = useMemo(
-		() => entries.map(({ mission }) => mission),
-		[entries],
+	const knownEntries = useMemo(
+		() => withMarksOutsideFeed(entries, missionMarks),
+		[entries, missionMarks],
+	)
+	const knownMissions = useMemo(
+		() => knownEntries.map(({ mission }) => mission),
+		[knownEntries],
 	)
 	const opened = useSyncExternalStore(
 		openedMission.subscribe,
@@ -121,7 +163,7 @@ export const useSidebarMissions = ({
 
 	const missionRowOf = useCallback(
 		(missionId: string) => {
-			const entry = entries.find(({ mission }) => mission.id === missionId)
+			const entry = knownEntries.find(({ mission }) => mission.id === missionId)
 			if (!entry) {
 				return null
 			}
@@ -133,13 +175,14 @@ export const useSidebarMissions = ({
 			)
 			return { rowId, isConversation: rowId === conversationId }
 		},
-		[entries, listedConversationIds],
+		[knownEntries, listedConversationIds],
 	)
 
 	const openMission = useCallback(
 		(missionId: string, landing?: MissionLanding) => {
 			const row = missionRowOf(missionId)
 			if (!row || spaceRowId === null) {
+				void raiseUnopened(missionId)
 				return
 			}
 			const { rowId, isConversation } = row
@@ -172,6 +215,7 @@ export const useSidebarMissions = ({
 		(missionId: string) => {
 			const row = missionRowOf(missionId)
 			if (!row) {
+				void raiseUnopened(missionId)
 				return
 			}
 			navigation.openThread(
@@ -183,8 +227,8 @@ export const useSidebarMissions = ({
 		[missionRowOf, navigation],
 	)
 
-	const { wrapPageRow } = useMissionMenus({
-		missions,
+	const { wrapPageRow, wrapSidebarRow } = useMissionMenus({
+		missions: knownMissions,
 		runtimes: conversationRuntimes,
 		onOpenMission: openMission,
 		onChanged: feed.reload,
@@ -203,6 +247,7 @@ export const useSidebarMissions = ({
 	return {
 		openCount: feed.openCount,
 		openMissionId: opened?.missionId,
+		wrapSidebarRow,
 		page: {
 			missions: pageMissions,
 			status: missionsPageStatusOf(feed),

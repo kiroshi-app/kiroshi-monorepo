@@ -45,6 +45,7 @@ export type SpaceMissionsView = SpaceMissionGroups & {
 	isPending: boolean
 	hasFailed: boolean
 	isFailureRaised: boolean
+	readError: unknown
 	reload: () => void
 }
 
@@ -90,8 +91,9 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 			isPending,
 			hasFailed,
 			isFailureRaised,
+			readError: error,
 			reload,
 		}),
-		[groups, isPending, hasFailed, isFailureRaised, reload],
+		[groups, isPending, hasFailed, isFailureRaised, error, reload],
 	)
 }

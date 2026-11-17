@@ -1070,8 +1070,13 @@ mod tests {
 			host.answer(an_install("com.notion/mcp", "user")).await.expect("the install answers");
 		assert_eq!(from_the_directory["install"], json!({ "kind": "oauth" }));
 		let reports = app.state::<ApplicationReports>();
-		reports.record("b1", "superset", Standing::Holding);
-		reports.record("b1", "paper", Standing::LeftOut { reason: Some("refused".to_owned()) });
+		reports.record(reports.opening(), "b1", "superset", Standing::Holding);
+		reports.record(
+			reports.opening(),
+			"b1",
+			"paper",
+			Standing::LeftOut { reason: Some("refused".to_owned()) },
+		);
 		app.state::<AuthorizationAnswers>().answered("https://mcp.notion.test/mcp", true, now_ms());
 
 		let host = &host;

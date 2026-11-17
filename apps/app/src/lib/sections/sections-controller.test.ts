@@ -38,6 +38,7 @@ const silentBots: BotSections = {
 	clear: () => undefined,
 	pin: () => undefined,
 	hostSpaceIdOf: (spaceRowId) => spaceRowId,
+	isOnScreen: () => true,
 	reload: async () => undefined,
 }
 
@@ -213,48 +214,6 @@ describe("createSectionsController", () => {
 		expect(cleared).toEqual([written.id])
 	})
 
-	it("reports the section a companion is moved into", async () => {
-		const store = createFakeTranscriptStore()
-		const written = await store.createSection("personal", "Writers")
-		const moves: (string | null)[] = []
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			move: (_botId, sectionId) => moves.push(sectionId),
-		})
-
-		await controller.moveBot("default", written.id)
-		await controller.moveBot("default", null)
-
-		expect(moves).toEqual([written.id, null])
-		expect((await store.bots("personal"))[0].sectionId).toBeNull()
-	})
-
-	it("reports nothing when the record refuses a companion move", async () => {
-		const store = createFakeTranscriptStore()
-		const moves: string[] = []
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			move: (botId) => moves.push(botId),
-		})
-
-		await controller.moveBot("default", "gone")
-
-		expect(moves).toEqual([])
-	})
-
-	it("reads the roster again when the record refuses a companion move", async () => {
-		const store = createFakeTranscriptStore()
-		const reload = vi.fn(async () => undefined)
-		const controller = await entered(store, "personal", {
-			...silentBots,
-			reload,
-		})
-
-		await controller.moveBot("default", "gone")
-
-		expect(reload).toHaveBeenCalledOnce()
-	})
-
 	it("raises a failure notice and holds no section when a space cannot be read", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createSection("personal", "Writers")
@@ -301,6 +260,28 @@ describe("createSectionsController", () => {
 
 		await vi.waitFor(() =>
 			expect(names(controller)).toEqual(["Writers", "Readers"]),
+		)
+	})
+
+	it("logs a pin refused in a Space not on screen and raises no notice", async () => {
+		const warned = vi.spyOn(console, "warn").mockReturnValue(undefined)
+		const store = createFakeTranscriptStore()
+		const writers = await store.createSection("personal", "Writers")
+		const readers = await store.createSection("personal", "Readers")
+		const controller = await entered(store, "personal", {
+			...silentBots,
+			isOnScreen: () => false,
+		})
+		vi.spyOn(store, "pinRoster").mockRejectedValue({ kind: "storage" })
+
+		await controller.pin("personal", [atTop(readers.id), atTop(writers.id)])
+
+		await vi.waitFor(() =>
+			expect(names(controller)).toEqual(["Writers", "Readers"]),
+		)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		expect(warned).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining("space: personal"),
 		)
 	})
 

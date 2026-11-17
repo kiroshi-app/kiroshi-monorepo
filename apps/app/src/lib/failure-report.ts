@@ -5,11 +5,16 @@ import {
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 
-import { readFailureLog } from "./failure-log"
+import { readFailureLogAfterWriting } from "./failure-log"
 import { readFailureSpecs } from "./failure-specs"
 import { scrubFailureText } from "./failure-text-scrubber"
 
-import { isUnknownCommandRefusal } from "./host/host-refused"
+import { failedCallOf } from "./host/failed-call"
+import {
+	type HostRefused,
+	isHostRefused,
+	isUnknownCommandRefusal,
+} from "./host/host-refused"
 
 export type FailureCorrelation = Pick<
 	FailureContext,
@@ -24,6 +29,7 @@ export type FailureCorrelation = Pick<
 
 export type FailureFacts = FailureCorrelation & {
 	raisedIn: string
+	reason?: unknown
 	count?: number
 	command?: string
 	httpStatus?: number
@@ -44,7 +50,14 @@ type FailureFields = {
 	table?: unknown
 }
 
+type FailureOrigin = Pick<
+	FailureContext,
+	"command" | "errorKind" | "httpStatus"
+>
+
 const REPORT_READ_BUDGET = 500
+
+const NAME_OF_CALL_OR_KIND = /^[\w:|-]+$/
 
 const fieldsOf = (reason: unknown): FailureFields =>
 	typeof reason === "object" && reason !== null ? reason : {}
@@ -109,8 +122,27 @@ const readOrLeaveOut = <Group>(
 			.finally(() => clearTimeout(budget))
 	})
 
+const nameOrNone = (text: string | undefined): string | undefined =>
+	text !== undefined && NAME_OF_CALL_OR_KIND.test(text) ? text : undefined
+
+const reportedKindOf = ({ refusalKind }: HostRefused) =>
+	refusalKind === "other" ? undefined : refusalKind
+
+const originOf = (reason: unknown): FailureOrigin =>
+	isHostRefused(reason)
+		? {
+				command: reason.command,
+				errorKind: reportedKindOf(reason),
+				httpStatus: reason.status,
+			}
+		: {
+				command: failedCallOf(reason),
+				errorKind: textOf(fieldsOf(reason).kind),
+			}
+
 const contextOf = ({
 	raisedIn,
+	reason,
 	command,
 	httpStatus,
 	side,
@@ -122,21 +154,35 @@ const contextOf = ({
 	conversation,
 	session,
 	turn,
-}: FailureFacts): FailureContext => ({
-	raisedAt: new Date().toISOString(),
-	raisedIn,
-	side,
-	space,
-	mission,
-	botId,
-	botName: botName && scrubFailureText(botName),
-	conversation,
-	session,
-	turn,
-	command,
-	httpStatus,
-	count,
-})
+}: FailureFacts): FailureContext => {
+	const origin = originOf(reason)
+	return {
+		raisedAt: new Date().toISOString(),
+		raisedIn,
+		side,
+		space,
+		mission,
+		botId,
+		botName: botName && scrubFailureText(botName),
+		conversation,
+		session,
+		turn,
+		command: command ?? nameOrNone(origin.command),
+		errorKind: nameOrNone(origin.errorKind),
+		httpStatus: httpStatus ?? origin.httpStatus,
+		count,
+	}
+}
+
+const failureLineOf = ({ raisedIn, command, errorKind }: FailureContext) =>
+	[
+		"failure",
+		`raisedIn=${raisedIn}`,
+		command && `command=${command}`,
+		errorKind && `errorKind=${errorKind}`,
+	]
+		.filter(Boolean)
+		.join(" ")
 
 const specsOn = (
 	specs: FailureSpecs | undefined,
@@ -150,7 +196,7 @@ export const buildFailureReport = async (
 	const context = contextOf(facts)
 	const [specs, log] = await Promise.all([
 		readOrLeaveOut(readFailureSpecs),
-		readOrLeaveOut(readFailureLog),
+		readOrLeaveOut(() => readFailureLogAfterWriting(failureLineOf(context))),
 	])
 	return { specs: specsOn(specs, facts.side), context, log }
 }
@@ -165,16 +211,14 @@ export const raiseReportedFailure = async (
 		report: await buildFailureReport(facts),
 	})
 
-export type ReporterFacts = Omit<FailureFacts, "raisedIn"> & {
-	reason?: unknown
-}
+export type ReporterFacts = Omit<FailureFacts, "raisedIn">
 
 export const failureReporterIn =
 	(raisedIn: string) =>
 	async (
 		notice: UnreportedFailureNotice,
-		{ reason, ...facts }: ReporterFacts = {},
+		facts: ReporterFacts = {},
 	): Promise<string | undefined> =>
-		isUnknownCommandRefusal(reason)
+		isUnknownCommandRefusal(facts.reason)
 			? undefined
 			: raiseReportedFailure(notice, { ...facts, raisedIn })

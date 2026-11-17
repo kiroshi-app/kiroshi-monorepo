@@ -481,6 +481,7 @@ struct Runs {
 
 #[derive(Debug, Clone, Deserialize)]
 struct CheckRun {
+	id: u64,
 	name: String,
 	status: String,
 	conclusion: Option<String>,
@@ -1133,8 +1134,8 @@ fn entry(kind: MissionEventKind, payload: serde_json::Value) -> MissionEntry {
 }
 
 fn concluded(runs: &Runs) -> Settled {
-	let failed: Vec<String> = runs
-		.check_runs
+	let latest = latest_by_name(&runs.check_runs);
+	let failed: Vec<String> = latest
 		.iter()
 		.filter(|run| red(run.conclusion.as_deref()))
 		.map(|run| run.name.clone())
@@ -1142,13 +1143,25 @@ fn concluded(runs: &Runs) -> Settled {
 	if !failed.is_empty() {
 		return Settled { checks: Checks::Failed, failed };
 	}
-	if runs.check_runs.is_empty() {
+	if latest.is_empty() {
 		return Settled::holding(Checks::None);
 	}
-	match runs.check_runs.iter().all(|run| run.status == "completed") {
+	match latest.iter().all(|run| run.status == "completed") {
 		true => Settled::holding(Checks::Passed),
 		false => Settled::holding(Checks::Pending),
 	}
+}
+
+fn latest_by_name(runs: &[CheckRun]) -> Vec<&CheckRun> {
+	let mut latest: Vec<&CheckRun> = Vec::new();
+	for run in runs {
+		match latest.iter_mut().find(|held| held.name == run.name) {
+			Some(held) if run.id > held.id => *held = run,
+			Some(_) => {}
+			None => latest.push(run),
+		}
+	}
+	latest
 }
 
 fn red(conclusion: Option<&str>) -> bool {
@@ -1871,7 +1884,7 @@ mod tests {
 	}
 
 	fn a_run_named(name: &str, status: &str, conclusion: Option<&str>) -> Value {
-		json!({ "check_runs": [{ "name": name, "status": status, "conclusion": conclusion }] })
+		json!({ "check_runs": [{ "id": 1, "name": name, "status": status, "conclusion": conclusion }] })
 	}
 
 	async fn planted() -> (Database, RemovedOnDrop) {
@@ -2260,9 +2273,9 @@ mod tests {
 		stub.answering(a_pull("open", "def", false), "\"two\"").await;
 		stub.checking(json!({
 			"check_runs": [
-				{ "name": A_CHECK, "status": "completed", "conclusion": "failure" },
-				{ "name": "lint", "status": "completed", "conclusion": "success" },
-				{ "name": "types", "status": "completed", "conclusion": "timed_out" },
+				{ "id": 1, "name": A_CHECK, "status": "completed", "conclusion": "failure" },
+				{ "id": 2, "name": "lint", "status": "completed", "conclusion": "success" },
+				{ "id": 3, "name": "types", "status": "completed", "conclusion": "timed_out" },
 			]
 		}))
 		.await;
@@ -2336,6 +2349,101 @@ mod tests {
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn the_code_owners_runs_of_pr_2554() -> Value {
+		json!({ "check_runs": [
+			{ "id": 134015035780_u64, "name": "disarm", "status": "completed", "conclusion": "skipped", "started_at": "2026-11-17T11:41:34Z" },
+			{ "id": 134014911690_u64, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:22Z" },
+			{ "id": 134014909694_u64, "name": "disarm", "status": "completed", "conclusion": "cancelled", "started_at": "2026-11-17T11:41:19Z" },
+			{ "id": 134014886177_u64, "name": "find", "status": "completed", "conclusion": "cancelled", "started_at": "2026-11-17T11:41:16Z" },
+		] })
+	}
+
+	fn read_runs(runs: Value) -> Runs {
+		serde_json::from_value(runs).expect("the check runs are readable")
+	}
+
+	#[tokio::test]
+	async fn cancelled_runs_with_a_newer_green_run_of_the_same_name_leave_no_failed_check() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		stub.checking(the_code_owners_runs_of_pr_2554()).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(red_checks_of(&database, &mission.id).await, 0);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_run_with_no_newer_run_lists_its_name_in_the_failed_checks() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		stub.checking(a_run_named("find", "completed", Some("cancelled"))).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::ChecksFailed,
+				json!({ "pullRequest": 7, "checks": ["find"] }),
+			)),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn runs_of_one_name_started_at_the_same_second_are_judged_by_the_higher_run_id() {
+		let settled = concluded(&read_runs(json!({ "check_runs": [
+			{ "id": 2, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:16Z" },
+			{ "id": 1, "name": "find", "status": "completed", "conclusion": "cancelled", "started_at": "2026-11-17T11:41:16Z" },
+		] })));
+
+		assert_eq!(settled.checks, Checks::Passed);
+		assert!(settled.failed.is_empty());
+	}
+
+	#[test]
+	fn a_newer_queued_run_not_yet_started_reads_the_checks_as_pending() {
+		let settled = concluded(&read_runs(json!({ "check_runs": [
+			{ "id": 1, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:16Z" },
+			{ "id": 2, "name": "find", "status": "queued", "conclusion": null, "started_at": null },
+		] })));
+
+		assert_eq!(settled.checks, Checks::Pending);
+	}
+
+	#[test]
+	fn a_newer_run_still_in_progress_reads_the_checks_as_pending() {
+		let settled = concluded(&read_runs(json!({ "check_runs": [
+			{ "id": 1, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:16Z" },
+			{ "id": 2, "name": "find", "status": "in_progress", "conclusion": null, "started_at": "2026-11-17T11:41:18Z" },
+		] })));
+
+		assert_eq!(settled.checks, Checks::Pending);
+	}
+
+	#[test]
+	fn a_newer_cancelled_run_lists_its_name_even_after_an_older_green_run() {
+		let settled = concluded(&read_runs(json!({ "check_runs": [
+			{ "id": 1, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:16Z" },
+			{ "id": 2, "name": "find", "status": "completed", "conclusion": "cancelled", "started_at": "2026-11-17T11:41:18Z" },
+		] })));
+
+		assert_eq!(settled.checks, Checks::Failed);
+		assert_eq!(settled.failed, vec!["find".to_owned()]);
 	}
 
 	#[tokio::test]

@@ -90,9 +90,9 @@ const TABLE = `| nest | occupants | status | archived |
 
 const WIDE_TABLE = `| nest | occupants | joined | left | role | invited by | last sync | note |
 | --- | ---: | --- | --- | --- | --- | --- | --- |
-| nest_42 | 3 | 2026-01-04 | — | resident | nest_01 | 2026-08-18 09:12 | rejoined after the archive pass |
-| nest_43 | 0 | 2025-11-27 | 2026-02-02 | visitor | nest_42 | 2026-08-18 09:12 | last occupant left before the sync |
-| nest_44 | 12 | 2024-07-19 | — | resident | nest_01 | 2026-08-17 23:58 | the widest roster on record |`
+| nest_42 | 3 | 2026-01-04T08:30:00Z | — | resident | nest_01 | 2026-08-18T09:12:44Z | rejoined after the archive pass |
+| nest_43 | 0 | 2025-11-27T17:05:00Z | 2026-02-02T10:41:00Z | visitor | nest_42 | 2026-08-18T09:12:44Z | last occupant left before the sync |
+| nest_44 | 12 | 2024-07-19T06:20:00Z | — | resident | nest_01 | 2026-08-17T23:58:10Z | the widest roster on record |`
 
 const NARROW_TABLE = `| nest | occupants |
 | --- | ---: |
@@ -900,7 +900,7 @@ export const TableWide = meta.story({
 		docs: {
 			description: {
 				story:
-					"Eight columns in a column built for prose. The table keeps every cell on one line and scrolls on its own axis instead of squeezing each column into wrapped fragments. Check that the frame stops at the container edge, that the scroll ends flush with the last column, and that `Tab` reaches the table itself — the viewport is a tab stop with a visible ring, so the arrow keys scroll it without a mouse. " +
+					"Eight columns in a column built for prose. Cells wrap at word boundaries first, and these eight columns, three of them unbreakable timestamps, still do not fit once wrapped, so the table scrolls on its own axis. Check that the frame stops at the container edge, that the scroll ends flush with the last column, and that `Tab` reaches the table itself: the viewport is a tab stop with a visible ring, so the arrow keys scroll it without a mouse. " +
 					RENDERED_BY_TURN_BODY,
 			},
 		},

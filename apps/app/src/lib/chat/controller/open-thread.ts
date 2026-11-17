@@ -27,12 +27,12 @@ export const createOpenThread = ({
 		}
 	}
 
-	const reloadPage = (bot: BotChat) => {
+	const reloadPage = async (bot: BotChat) => {
 		const conversationId = bot.state.conversationId
 		if (!conversationId) {
 			return
 		}
-		enqueue(() => transcript.load(conversationId)).catch((reason) =>
+		await enqueue(() => transcript.load(conversationId)).catch((reason) =>
 			reportRead(bot, reason),
 		)
 	}

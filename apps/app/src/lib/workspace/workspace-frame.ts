@@ -14,6 +14,7 @@ type SidebarNavigateKey =
 	| "onOpenSpaceSettings"
 	| "onOpenSettings"
 	| "onNewConversation"
+	| "onSelectAgents"
 	| "onSelectMissions"
 	| "onSelectLibrary"
 

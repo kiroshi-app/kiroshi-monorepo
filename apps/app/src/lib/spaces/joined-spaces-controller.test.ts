@@ -610,11 +610,14 @@ describe("leaving a space", () => {
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 		expect(gear.hosts.forget).not.toHaveBeenCalled()
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Something went wrong with this space",
-			description:
-				"Kiroshi couldn’t finish the request. Try again in a moment.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Something went wrong with this space",
+				description:
+					"Kiroshi couldn’t finish the request. Try again in a moment.",
+			},
+			{ reason: new Error("disk full") },
+		)
 	})
 
 	it("keeps a space its owner tries to leave and says an owner can’t leave", async () => {
@@ -626,10 +629,13 @@ describe("leaving a space", () => {
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 		expect(gear.hosts.forget).not.toHaveBeenCalled()
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "You own this space",
-			description: "An owner can’t leave their own space.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "You own this space",
+				description: "An owner can’t leave their own space.",
+			},
+			{ reason: refusal },
+		)
 	})
 
 	it("keeps a space the cloud could not be reached to leave and says to retry", async () => {
@@ -643,11 +649,14 @@ describe("leaving a space", () => {
 		await expect(gear.joined.leave(GARAGE.id)).rejects.toBe(refusal)
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Couldn’t leave this space",
-			description:
-				"Kiroshi couldn’t reach its cloud. Check your network, then try again.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t leave this space",
+				description:
+					"Kiroshi couldn’t reach its cloud. Check your network, then try again.",
+			},
+			{ reason: refusal },
+		)
 	})
 
 	it("keeps a space the cloud refused to let go and says it didn’t confirm", async () => {
@@ -658,11 +667,14 @@ describe("leaving a space", () => {
 		await expect(gear.joined.leave(GARAGE.id)).rejects.toBe(refusal)
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Couldn’t leave this space",
-			description:
-				"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t leave this space",
+				description:
+					"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
+			},
+			{ reason: refusal },
+		)
 	})
 })
 
@@ -1369,11 +1381,14 @@ describe("describing a joined space", () => {
 		await settle()
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE, ATTIC])
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Couldn’t save the name and colour",
-			description:
-				"Its computer is offline. Try again once it’s back online. The space kept its previous name and colour.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t save the name and colour",
+				description:
+					"Its computer is offline. Try again once it’s back online. The space kept its previous name and colour.",
+			},
+			{ reason: { kind: "hostOffline", id: GARAGE.id } },
+		)
 	})
 
 	it("sends no colour to the joined describe when No colour is picked and holds the space it returns", async () => {
@@ -1486,6 +1501,7 @@ describe("describing a joined space", () => {
 		expect(gear.hosts.connect).not.toHaveBeenCalledWith(GARAGE.id)
 		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ title: "Couldn’t save the name and colour" }),
+			{ reason: expect.anything() },
 		)
 	})
 
@@ -1496,11 +1512,14 @@ describe("describing a joined space", () => {
 		gear.joined.describe(GARAGE.id, { name: "Workshop", colour: 40 })
 		await settle()
 
-		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Couldn’t save the name and colour",
-			description:
-				"Kiroshi couldn’t finish the request. Try again in a moment. The space kept its previous name and colour.",
-		})
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "Couldn’t save the name and colour",
+				description:
+					"Kiroshi couldn’t finish the request. Try again in a moment. The space kept its previous name and colour.",
+			},
+			{ reason: new Error("disk full") },
+		)
 	})
 
 	it("sends nothing while the host of the space is offline", async () => {

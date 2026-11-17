@@ -1,6 +1,10 @@
 import { expect, vi } from "vitest"
 
-import { type ChatController, createChatController } from "../chat-controller"
+import {
+	type ChatController,
+	type ChatControllerOptions,
+	createChatController,
+} from "../chat-controller"
 import type { ChatDriver } from "../driver"
 import { createFakeChatDriver, type FakeChatDriver } from "../fake-driver"
 import type { PostedRequest } from "../posted-question"
@@ -228,6 +232,8 @@ type HarnessOptions = {
 	botId?: string
 	onMessageStored?: MessageStoredListener
 	announceReportTurn?: ReportTurnAnnouncer
+	onReconnected?: ChatControllerOptions["onReconnected"]
+	isListedInOpenSpace?: ChatControllerOptions["isListedInOpenSpace"]
 }
 
 let launches = 0
@@ -258,6 +264,8 @@ export const createHarness = (options: HarnessOptions = {}): Harness => {
 		promptsPerRun: options.promptsPerRun,
 		onMessageStored: options.onMessageStored,
 		announceReportTurn: options.announceReportTurn,
+		onReconnected: options.onReconnected,
+		isListedInOpenSpace: options.isListedInOpenSpace,
 	})
 	return { driver: fake, store, controller, detach: controller.attach() }
 }

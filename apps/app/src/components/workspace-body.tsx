@@ -18,7 +18,9 @@ import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
 import type { Thread } from "@/lib/chat/thread-contract"
 import type { Chat } from "@/lib/chat/use-chat"
+import type { NamingStates } from "@/lib/conversations/conversation-namings"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
+import { namingOf } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type HomeVisits, visitOf } from "@/lib/home/home-visits"
@@ -50,6 +52,7 @@ export type WorkspaceBodyProps = {
 	bots: Bot[]
 	conversation?: Conversation
 	conversationRuntimes: ConversationRuntimes
+	conversationNamings: NamingStates
 	home?: HomeSeat
 	chat: Chat
 	attachments: AttachmentsController
@@ -70,6 +73,7 @@ export type WorkspaceBodyProps = {
 const threadOf = ({
 	bot,
 	conversation,
+	conversationNamings,
 	conversationRuntimes,
 	chat,
 	isOverlayOpen,
@@ -80,6 +84,7 @@ const threadOf = ({
 		return {
 			kind: "conversation",
 			conversation,
+			naming: namingOf(conversation, conversationNamings),
 			runtimes: conversationRuntimes,
 			onOpenSettings: onOpenConversationSettings,
 		}
@@ -133,6 +138,7 @@ const HomeView = ({ body, seat, bot }: HomeViewProps) => {
 		drafts: body.drafts,
 		runtimes: body.conversationRuntimes,
 		startConversation: seat.startConversation,
+		beginNaming: seat.beginNaming,
 		discardConversation: seat.discardConversation,
 		openConversation: seat.openConversation,
 	})

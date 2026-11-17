@@ -8,10 +8,11 @@ use super::contract::{
 	LibraryBoardBounds, LibraryBoardNode, LibraryBoardSummary, LibraryError, LibraryItem,
 };
 use super::{
-	accepted_type, created, document_text, is_plain_name, rename_document, resolve, AcceptedType,
-	ResolvedItem,
+	accepted_type, created, document_text, is_plain_name, rename_linked_document, resolve,
+	AcceptedType, ResolvedItem,
 };
 use crate::board::import_canvas;
+use crate::db::Database;
 
 const EXTENSION: &str = "canvas";
 
@@ -105,15 +106,16 @@ pub(crate) fn create_board(
 	created(root, space_id, &file_name, BLANK.as_bytes())
 }
 
-pub(crate) fn rename_board<R: Runtime>(
+pub(crate) async fn rename_board<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &Database,
 	root: &Path,
 	space_id: &str,
 	name: &str,
 	new_name: &str,
 ) -> Result<LibraryItem, LibraryError> {
 	a_board(root, space_id, name)?;
-	rename_document(app, root, space_id, name, new_name)
+	rename_linked_document(app, database, root, space_id, name, new_name).await
 }
 
 pub(crate) fn summarise_board(

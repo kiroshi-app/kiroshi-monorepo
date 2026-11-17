@@ -55,6 +55,7 @@ const harness = vi.hoisted(
 
 const LIBRARY_ANSWERS: Record<string, (args: unknown) => unknown> = {
 	library_list: () => harness.listed,
+	library_comment_agent_turns: () => [],
 	library_read_document: (args) => ({
 		name: (args as ImportCall).name,
 		format: "text",

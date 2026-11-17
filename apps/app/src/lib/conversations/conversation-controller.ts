@@ -1,6 +1,7 @@
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { NamingProgress } from "./conversation-namings"
 import { createArrivalsListener } from "./create-arrivals-listener"
 import {
 	createMessageStoredListener,
@@ -113,6 +114,7 @@ import {
 	isWorthKeeping,
 } from "../chat/reply-endings"
 import { needsFreshSession, shownTextOf } from "../chat/screen-model"
+import { waitingQuestionIdsIn } from "../chat/waiting-questions"
 import {
 	heldWorkFor,
 	type WorkingState,
@@ -203,6 +205,16 @@ export type ConversationController = {
 	shutdown: () => Promise<void>
 }
 
+export const NAMING_TIMEOUT_MS = 30_000
+
+const answeredInTime = (asked: Promise<ConversationNaming | null>) => {
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	const unanswered = new Promise<null>((resolve) => {
+		timeout = setTimeout(() => resolve(null), NAMING_TIMEOUT_MS)
+	})
+	return Promise.race([asked, unanswered]).finally(() => clearTimeout(timeout))
+}
+
 export type CompanionArrivalListener = (
 	listener: (arrival: CompanionArrival) => void,
 ) => Promise<() => void>
@@ -211,6 +223,7 @@ export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
 	onNamed?: (conversationId: string, naming: ConversationNaming) => void
+	namings?: NamingProgress
 	readReportedRuns?: ReportedRunsReader
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
@@ -251,6 +264,17 @@ type SentPrompt = {
 
 type FailedTurn = Summons & {
 	turn: OpenTurn
+}
+
+type SentRun = {
+	turn: OpenTurn
+	summoned: Summons[]
+	naming: string | null
+}
+
+type RefusedSend = {
+	message: RefusedMessage
+	run: SentRun | null
 }
 
 type HandedMention = {
@@ -430,7 +454,7 @@ export const createConversationController = (
 	const speakers = new Map<string, Speaker>()
 	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
-	let refused: RefusedMessage | null = null
+	let refused: RefusedSend | null = null
 	let reportedCauses: ReportedRunsByTurnId = NO_REPORTED_RUNS
 	let latestError: ChatError | null = null
 	let arrivedBotIds: string[] = []
@@ -622,14 +646,14 @@ export const createConversationController = (
 			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			failedBotIds: failedTurns.map(({ botId }) => botId),
-			refusedMessage: refused,
+			refusedMessage: refused?.message ?? null,
 			pendingPrompt: oldestPrompt(),
 			latestError,
 			reportedCauses,
 		})
 	}
 
-	transcript.subscribe(sync)
+	transcript.subscribe(() => syncRecordedRefusal())
 
 	const write = (operation: () => Promise<unknown>, shown?: () => void) => {
 		void enqueue(operation).then(
@@ -1112,16 +1136,52 @@ export const createConversationController = (
 		}
 	}
 
-	const routeOpen = (conversationId: string, pending: ScopedEvent[]) => {
-		if (isOpenConversation(conversationId)) {
-			pending.forEach(route)
+	const questionIdsShownIn = (conversationId: string) => [
+		...runningSpeakers().flatMap(({ pending }) =>
+			pending?.kind === "question" ? [pending.request.id] : [],
+		),
+		...foreignTurns
+			.speakersIn(conversationId)
+			.flatMap(({ question }) => (question ? [question.id] : [])),
+	]
+
+	const withdrawQuestion = (id: string) => {
+		const held = speakerAsked(id)
+		if (held) {
+			settlePrompt(held, id)
+			return
+		}
+		const foreign = foreignTurns.scopeAsking(id)
+		if (foreign) {
+			foreignTurns.release(foreign, id)
+			sync()
 		}
 	}
 
+	const withdrawUnheld = (shownIds: string[], pending: ScopedEvent[]) => {
+		const heldIds = waitingQuestionIdsIn(pending)
+		shownIds.filter((id) => !heldIds.has(id)).forEach(withdrawQuestion)
+	}
+
+	const routeOpen = (
+		conversationId: string,
+		shownIds: string[],
+		pending: ScopedEvent[],
+	) => {
+		if (!isOpenConversation(conversationId)) {
+			return
+		}
+		withdrawUnheld(shownIds, pending)
+		pending.forEach(route)
+	}
+
 	const routePendingQuestions = async (conversationId: string) => {
+		const shownIds = isOpenConversation(conversationId)
+			? questionIdsShownIn(conversationId)
+			: []
 		try {
 			const pending = await driver.pendingQuestions(conversationId)
-			await enqueue(async () => routeOpen(conversationId, pending))
+			await enqueue(async () => routeOpen(conversationId, shownIds, pending))
 		} catch (reason) {
 			noteFailure(toReadError(reason))
 			sync()
@@ -1179,6 +1239,9 @@ export const createConversationController = (
 	const catchUpAfterReconnection = () => {
 		shouldRebuildForeignTurns = true
 		void reloadOpenPage()
+		if (conversation) {
+			void routePendingQuestions(conversation.id)
+		}
 	}
 
 	const rebuildForeignTurns = (shown: StoredConversation) => {
@@ -1432,6 +1495,7 @@ export const createConversationController = (
 		botIds: string[],
 		describe: (names: string[]) => string = (names) =>
 			notStartedDescriptionOf(null, names),
+		reason?: TransportError | null,
 	) => {
 		if (!conversation || botIds.length === 0) {
 			return
@@ -1448,7 +1512,7 @@ export const createConversationController = (
 					}),
 					description: describe(names),
 				},
-				notStartedFacts(run, spaceId, botIds, names),
+				{ ...notStartedFacts(run, spaceId, botIds, names), reason },
 			)
 		} catch (reason) {
 			noteFailure(toTransportError(reason))
@@ -1499,8 +1563,11 @@ export const createConversationController = (
 			void raiseNotStarted(dropped, [dropped.botId], neverStartedDescriptionOf)
 			return
 		}
-		void raiseNotStarted(dropped, [dropped.botId], (names) =>
-			notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+		void raiseNotStarted(
+			dropped,
+			[dropped.botId],
+			(names) => notStartedDescriptionOf(dropped.error ?? NO_SESSION, names),
+			dropped.error,
 		)
 	}
 
@@ -1537,21 +1604,34 @@ export const createConversationController = (
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
-		const naming = await driver.namingFor(text).catch(() => null)
-		if (naming?.title) {
-			options.onNamed?.(conversationId, naming)
+		options.namings?.begin(conversationId)
+		const naming = await answeredInTime(driver.namingFor(text)).catch(
+			() => null,
+		)
+		if (!naming?.title) {
+			options.namings?.fail(conversationId)
+			return
 		}
+		options.onNamed?.(conversationId, naming)
+		options.namings?.arrive(conversationId)
 	}
 
-	const refuse = (said: TranscriptMessage, text: string) => {
+	const refuse = (
+		said: TranscriptMessage,
+		text: string,
+		run: SentRun | null,
+	) => {
 		refused = {
-			id: said.id,
-			text,
-			repliedToMessageId: said.repliedToMessageId,
-			replyLinks: said.replyLinks ?? [],
-			documents: said.documents ?? [],
+			message: {
+				id: said.id,
+				text,
+				repliedToMessageId: said.repliedToMessageId,
+				replyLinks: said.replyLinks ?? [],
+				documents: said.documents ?? [],
+			},
+			run,
 		}
-		sync()
+		syncRecordedRefusal()
 	}
 
 	const interruptRunningTurn = () => {
@@ -1585,27 +1665,40 @@ export const createConversationController = (
 		})
 
 		if (!(await loadLatest())) {
-			refuse(said, trimmed)
+			refuse(said, trimmed, null)
 			return false
 		}
 		if (conversation?.id !== conversationId) {
 			return false
 		}
 
-		const summoned = summonedBy(said, answered)
+		const run: SentRun = {
+			turn,
+			summoned: summonedBy(said, answered),
+			naming: isNamingItself && trimmed.length > 0 ? trimmed : null,
+		}
 		try {
-			await enqueue(() => storePrompt(said, summoned))
+			await enqueue(() => storePrompt(said, run.summoned))
 		} catch {
-			refuse(said, trimmed)
+			refuse(said, trimmed, run)
 			return false
 		}
 
 		refused = null
-		failedTurns = []
-		if (isNamingItself && trimmed.length > 0) {
-			void nameFrom(conversationId, trimmed)
-		}
 		transcript.append(said)
+		startRun(conversationId, said, run)
+		return true
+	}
+
+	const startRun = (
+		conversationId: string,
+		said: TranscriptMessage,
+		{ turn, summoned, naming }: SentRun,
+	) => {
+		failedTurns = []
+		if (naming) {
+			void nameFrom(conversationId, naming)
+		}
 		noteUnseatedIn(said)
 		interruptRunningTurn()
 		dropWaiting("interrupted")
@@ -1613,11 +1706,43 @@ export const createConversationController = (
 		activeTurn = turn
 		sync()
 		drive()
-		return true
+	}
+
+	const isTurnRunning = () => speakers.size > 0 || queue.waiting.length > 0
+
+	const failSummoned = ({ turn, summoned }: SentRun) => {
+		forgetFailedTurns(summoned.map(({ botId }) => botId))
+		failedTurns = [
+			...failedTurns,
+			...summoned.map((summons) => ({ ...summons, turn })),
+		]
+		sync()
+	}
+
+	const continueRecorded = (recorded: TranscriptMessage, run: SentRun) => {
+		if (isTurnRunning()) {
+			failSummoned(run)
+			return
+		}
+		startRun(recorded.conversationId, recorded, run)
+	}
+
+	const recordedRefusal = ({ message }: RefusedSend) =>
+		readTranscript().messages.find(({ id }) => id === message.id)
+
+	const syncRecordedRefusal = () => {
+		const held = refused
+		const recorded = held?.run && recordedRefusal(held)
+		if (!held?.run || !recorded) {
+			sync()
+			return
+		}
+		refused = null
+		continueRecorded(recorded, held.run)
 	}
 
 	const sendAgain = async (messageId: string) => {
-		const held = refused
+		const held = refused?.message
 		if (held?.id === messageId) {
 			await send(held.text, held.replyLinks, held.documents)
 		}
@@ -2130,8 +2255,11 @@ export const createConversationController = (
 	}
 
 	const shutdownRun = (scope: RuntimeScope) =>
-		driver.shutdown(scope).catch((reason) => {
-			console.error("conversation controller: agent_shutdown failed", reason)
+		driver.shutdown(scope).catch((reason: unknown) => {
+			void reportFailure(
+				{ title: i18n.t("chat:screen.notice.failed") },
+				{ reason, conversation: scope.conversationId, botId: scope.botId },
+			)
 		})
 
 	const shutdownSpeaker = (held: Speaker) =>

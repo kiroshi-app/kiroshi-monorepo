@@ -72,6 +72,7 @@ const atRest = (
 	working: {},
 	previews,
 	notSent: {},
+	namings: {},
 	personOf: personNamedFromRecord,
 })
 
@@ -213,6 +214,7 @@ describe("toRosterConversations", () => {
 					},
 				},
 				notSent: {},
+				namings: {},
 				personOf: hostedPersonOf,
 			},
 			NOW,
@@ -334,6 +336,7 @@ describe("toRosterConversations", () => {
 				working: { "c-1": [working("b-2", "searching")] },
 				previews: {},
 				notSent: {},
+				namings: {},
 				personOf: personNamedFromRecord,
 			},
 			NOW,
@@ -370,6 +373,7 @@ describe("toRosterConversations", () => {
 				},
 				previews: {},
 				notSent: {},
+				namings: {},
 				personOf: personNamedFromRecord,
 			},
 			NOW,
@@ -389,6 +393,7 @@ describe("toRosterConversations", () => {
 				working: {},
 				previews: {},
 				notSent: {},
+				namings: {},
 				personOf: personNamedFromRecord,
 			},
 			NOW,
@@ -417,6 +422,7 @@ describe("toRosterConversations", () => {
 				},
 				previews: {},
 				notSent: {},
+				namings: {},
 				personOf: personNamedFromRecord,
 			},
 			NOW,
@@ -442,6 +448,7 @@ describe("toRosterConversations", () => {
 					working: { "c-1": [working("b-1", "waiting")] },
 					previews: {},
 					notSent: {},
+					namings: {},
 					personOf: personNamedFromRecord,
 				},
 				NOW,
@@ -580,41 +587,26 @@ describe("toConversationLook", () => {
 })
 
 describe("conversationName", () => {
-	it("calls a nameless conversation by the names of the companions seated in it", () => {
-		expect(
-			conversationName(
-				conversation({
-					title: "",
-					participants: [
-						participant({ botId: "b-1", name: "Chef" }),
-						participant({ botId: "b-2", name: "Sous-chef" }),
-					],
-				}),
-			),
-		).toBe("Chef, Sous-chef")
+	const nameless = conversation({
+		title: "",
+		participants: [participant({ botId: "b-1", name: "Chef" })],
 	})
 
-	it("leaves out of the name a companion that has left the conversation", () => {
-		expect(
-			conversationName(
-				conversation({
-					title: "",
-					participants: [
-						participant({ botId: "b-1", name: "Chef" }),
-						participant({ botId: "b-2", name: "Sous-chef", leftAt: 4 }),
-					],
-				}),
-			),
-		).toBe("Chef")
+	it("labels a conversation being named as a new conversation", () => {
+		expect(conversationName(nameless, { "c-1": "pending" })).toBe(
+			"New conversation",
+		)
 	})
 
-	it("falls back on the untitled copy when no companion is seated", () => {
-		expect(
-			conversationName(conversation({ title: "", participants: [] })),
-		).toBe("Untitled conversation")
+	it("labels a nameless conversation as untitled, never by its agent", () => {
+		expect(conversationName(nameless, {})).toBe("Untitled conversation")
 	})
 
 	it("keeps the name a conversation carries", () => {
-		expect(conversationName(conversation())).toBe("Launch")
+		expect(conversationName(conversation(), {})).toBe("Launch")
+	})
+
+	it("keeps the name given after a naming that failed", () => {
+		expect(conversationName(conversation(), { "c-1": "failed" })).toBe("Launch")
 	})
 })

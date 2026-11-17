@@ -5,6 +5,7 @@ import { createElement, type ReactElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
+import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import {
 	MissionMenu,
 	type MissionMenuProps,
@@ -22,6 +23,7 @@ import type {
 	MissionState,
 } from "@/lib/missions/mission-contract"
 import { aMission, aSpacePage } from "@/lib/missions/mission-fixtures"
+import { type MissionEntry, missionsByRow } from "@/lib/missions/missions-model"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import type { MissionSpeakingRuntimes } from "@/lib/missions/use-live-missions"
@@ -120,6 +122,19 @@ const ELSEWHERE = anEntry({
 	conversationId: "c-9",
 })
 
+const aMark = (id: string, originConversationId: string): MissionEntry => ({
+	mission: aMission({ id, botId: BOT.id, originConversationId }),
+})
+
+const MARKED_ON_LISTED = aMark("m-marked-listed", "c-2")
+const MARKED_ON_UNLISTED = aMark("m-marked-unlisted", "c-7")
+const MARKS = [MARKED_ON_LISTED, MARKED_ON_UNLISTED]
+
+const treeRowOf = (missionId: string) =>
+	Object.entries(missionsByRow(MARKS, [LISTED])).find(([, missions]) =>
+		missions.some(({ id }) => id === missionId),
+	)?.[0]
+
 const sidebarMissionsWiring = () => {
 	const select = vi.fn()
 	const selectConversation = vi.fn()
@@ -137,7 +152,10 @@ const sidebarMissionsWiring = () => {
 			return held && { ...held, stop: vi.fn(async () => undefined) }
 		},
 	}
-	const inputFor = (selectedSpaceId: string | null) => ({
+	const inputFor = (
+		selectedSpaceId: string | null,
+		missionMarks: MissionEntry[],
+	) => ({
 		core: {
 			conversationOpening: { open: openConversation },
 			conversationRuntimes: runtimes,
@@ -152,6 +170,7 @@ const sidebarMissionsWiring = () => {
 			},
 			spaces: { state: { selectedSpaceId } },
 		},
+		missionMarks,
 		navigation: { openThread },
 	})
 	return {
@@ -165,10 +184,14 @@ const sidebarMissionsWiring = () => {
 	}
 }
 
-const renderSidebarMissions = (spaceId: string | null = "s-1") => {
+const renderSidebarMissions = (
+	spaceId: string | null = "s-1",
+	missionMarks: MissionEntry[] = [],
+) => {
 	const { inputFor, ...spies } = sidebarMissionsWiring()
 	const rendered = renderHook(
-		({ selectedSpaceId }) => useSidebarMissions(inputFor(selectedSpaceId)),
+		({ selectedSpaceId }) =>
+			useSidebarMissions(inputFor(selectedSpaceId, missionMarks)),
 		{
 			wrapper: createQueryTestWrapper().wrapper,
 			initialProps: { selectedSpaceId: spaceId },
@@ -184,6 +207,13 @@ type MissionsPageRowState = MissionsPageRow["props"]["mission"]["state"]
 const pageRowOf = (id: string, state: MissionsPageRowState) =>
 	createElement("li", { mission: { id, state } }) as unknown as MissionsPageRow
 
+type SidebarRow = Parameters<MissionTreeRowWrap>[0]
+
+type SidebarRowState = SidebarRow["props"]["mission"]["state"]
+
+const sidebarRowOf = (id: string, state: SidebarRowState) =>
+	createElement("li", { mission: { id, state } }) as unknown as SidebarRow
+
 type RenderedMissions = ReturnType<typeof renderSidebarMissions>["result"]
 
 const menuOf = (
@@ -193,6 +223,11 @@ const menuOf = (
 ) =>
 	result.current.page.wrap?.(
 		pageRowOf(id, state),
+	) as ReactElement<MissionMenuProps>
+
+const sidebarMenuOf = (result: RenderedMissions, id: string) =>
+	result.current.wrapSidebarRow(
+		sidebarRowOf(id, "working"),
 	) as ReactElement<MissionMenuProps>
 
 const shownIdsOf = (result: RenderedMissions) =>
@@ -388,6 +423,111 @@ describe("useSidebarMissions", () => {
 			"waiting_human",
 			"working",
 		])
+	})
+
+	it("wraps a sidebar mission row in the menu its mission gets on the Missions page", async () => {
+		const { result } = renderSidebarMissions()
+		await missionsRead(result)
+
+		const menu = result.current.wrapSidebarRow(
+			sidebarRowOf("m-waiting", "waiting"),
+		) as ReactElement<MissionMenuProps>
+
+		expect(menu.type).toBe(MissionMenu)
+		expect(menu.props.state).toBe("waiting_human")
+	})
+
+	it("leaves a sidebar mission row without a menu when neither the feed nor the marks hold such mission", async () => {
+		const { result } = renderSidebarMissions()
+		await missionsRead(result)
+		const row = sidebarRowOf("m-unknown", "working")
+
+		expect(result.current.wrapSidebarRow(row)).toBe(row)
+	})
+
+	it("opens a sidebar mission outside the loaded feed pages on a click, under the row the tree drew it under", async () => {
+		const { result, openThread } = renderSidebarMissions("s-1", MARKS)
+		await missionsRead(result)
+
+		result.current.page.onOpen(MARKED_ON_LISTED.mission.id)
+		result.current.page.onOpen(MARKED_ON_UNLISTED.mission.id)
+
+		expect(openThread.mock.calls).toEqual([
+			[
+				{
+					conversation: treeRowOf(MARKED_ON_LISTED.mission.id),
+					mission: MARKED_ON_LISTED.mission.id,
+				},
+			],
+			[
+				{
+					bot: treeRowOf(MARKED_ON_UNLISTED.mission.id),
+					mission: MARKED_ON_UNLISTED.mission.id,
+				},
+			],
+		])
+	})
+
+	it("opens a sidebar mission outside the loaded feed pages from Open mission of its menu, under the row the tree drew it under", async () => {
+		const { result, open, select, selectConversation } = renderSidebarMissions(
+			"s-1",
+			MARKS,
+		)
+		await missionsRead(result)
+
+		const menus = MARKS.map(({ mission }) => sidebarMenuOf(result, mission.id))
+		expect(menus.map(({ type }) => type)).toEqual([MissionMenu, MissionMenu])
+		act(() => {
+			for (const menu of menus) {
+				menu.props.onOpen()
+			}
+		})
+
+		expect(open.mock.calls).toEqual(
+			MARKS.map(({ mission }) => [
+				{
+					missionId: mission.id,
+					rowId: treeRowOf(mission.id),
+					spaceId: "s-1",
+				},
+			]),
+		)
+		expect(selectConversation).toHaveBeenCalledWith(
+			treeRowOf(MARKED_ON_LISTED.mission.id),
+		)
+		expect(select).toHaveBeenCalledWith(
+			treeRowOf(MARKED_ON_UNLISTED.mission.id),
+		)
+	})
+
+	it("raises a notice and opens nothing when the mission is unknown to the feed and the marks", async () => {
+		const { result, openThread } = renderSidebarMissions("s-1", MARKS)
+		await missionsRead(result)
+
+		result.current.page.onOpen("m-unknown")
+
+		await waitFor(() => expect(notice).toHaveBeenCalledTimes(1))
+		expect(notice.mock.calls[0][0]).toMatchObject({
+			title: "Couldn’t load missions",
+			description: "Restart Kiroshi to retry.",
+		})
+		expect(openThread).not.toHaveBeenCalled()
+	})
+
+	it("raises a notice and opens nothing from Open mission when no space row is rostered", async () => {
+		const { result, open, openConversation } = renderSidebarMissions(
+			null,
+			MARKS,
+		)
+
+		sidebarMenuOf(result, MARKED_ON_LISTED.mission.id).props.onOpen()
+
+		await waitFor(() => expect(notice).toHaveBeenCalledTimes(1))
+		expect(notice.mock.calls[0][0]).toMatchObject({
+			title: "Couldn’t load missions",
+		})
+		expect(open).not.toHaveBeenCalled()
+		expect(openConversation).not.toHaveBeenCalled()
 	})
 
 	it("opens the mission of a row from its menu, landing on the composer", async () => {

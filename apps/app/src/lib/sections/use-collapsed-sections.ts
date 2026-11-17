@@ -2,6 +2,7 @@ import {
 	type CollapsedSectionsController,
 	type CollapsedSectionsState,
 	createCollapsedSectionsController,
+	type SectionSpaces,
 } from "./collapsed-sections-controller"
 
 import { useController } from "../use-controller"
@@ -14,6 +15,6 @@ export type CollapsedSections = {
 
 export const useCollapsedSections = (
 	store: TranscriptStore,
-	hostSpaceIdOf: (spaceRowId: string) => string,
+	spaces: SectionSpaces,
 ): CollapsedSections =>
-	useController(() => createCollapsedSectionsController(store, hostSpaceIdOf))
+	useController(() => createCollapsedSectionsController(store, spaces))

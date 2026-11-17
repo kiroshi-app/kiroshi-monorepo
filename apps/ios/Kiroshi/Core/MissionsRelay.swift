@@ -4,6 +4,7 @@ enum MissionsCallError: Error, Equatable {
     case refused(status: Int)
     case unreadableCursor
     case unknownToTheHost
+    case refusedByTheRelay
 }
 
 struct MissionsRelay: Sendable {
@@ -37,24 +38,26 @@ struct MissionsRelay: Sendable {
             args: PageArgs(conversationId: conversationId, limit: Self.threadPageSize))
     }
 
-    func store(_ attachments: ConversationAttachments) async throws -> [String] {
-        try await ok("chat_store_attachments", args: attachments)
+    func store(_ attachments: ConversationAttachments, callKey: String) async throws -> [String] {
+        try await ok("chat_store_attachments", args: attachments, callKey: callKey)
     }
 
     func answer(_ answer: MissionAnswer) async throws {
-        let _: Int = try await ok("conversation_send_turn", args: answer)
+        let _: Int = try await ok(
+            "conversation_send_turn", args: answer, callKey: answer.message.id)
     }
 
-    private func ok<Body: Decodable>(_ command: String, args: some Encodable & Sendable)
-        async throws -> Body
-    {
-        let answer = try await connection.call(command, args: args)
+    private func ok<Body: Decodable>(
+        _ command: String, args: some Encodable & Sendable, callKey: String? = nil
+    ) async throws -> Body {
+        let answer = try await connection.call(command, args: args, callKey: callKey)
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
         return try answer.body(as: Body.self)
     }
 
     private static func refusal(of answer: RelayAnswer) -> MissionsCallError {
         if answer.isUnknownToTheHost { return .unknownToTheHost }
+        if answer.isRefusedByTheRelay { return .refusedByTheRelay }
         if (try? answer.body(as: Refusal.self))?.kind == "unreadableCursor" {
             return .unreadableCursor
         }

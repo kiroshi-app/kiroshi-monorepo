@@ -40,7 +40,7 @@ fn temp_root() -> RemovedOnDrop {
 	RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-library-{}", Uuid::new_v4())))
 }
 
-fn put(root: &Path, space_id: &str, name: &str, content: &[u8]) {
+pub(crate) fn put(root: &Path, space_id: &str, name: &str, content: &[u8]) {
 	let dir = space_dir(root, space_id);
 	fs::create_dir_all(&dir).expect("the space folder lands");
 	fs::write(dir.join(name), content).expect("the file lands");
@@ -348,13 +348,13 @@ fn an_oversized_image_is_refused_without_reading_its_bytes() {
 	);
 }
 
-fn a_host(name: &str) -> AppOfItsOwn {
+pub(crate) fn a_host(name: &str) -> AppOfItsOwn {
 	let app = an_app_of_its_own(&format!("library-{name}"), mock_builder());
 	app.manage(db::bootstrap(app.handle()));
 	app
 }
 
-async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
+pub(crate) async fn a_space(app: &App<MockRuntime>, name: &str) -> String {
 	let state = app.state::<db::DatabaseState>();
 	let database = state.as_ref().expect("the database opens");
 	database.spaces().create(name.to_owned()).await.expect("the space lands").id
@@ -1219,7 +1219,7 @@ async fn merged_in_order(is_host_first: bool) {
 	let app = a_host(&format!("merge-{is_host_first}"));
 	let space_id = a_space(&app, "Work").await;
 	let root = root(app.handle()).expect("the library root resolves");
-	put(&root, &space_id, "notes.md", b"base");
+	put(&root, &space_id, "notes.md", b"base ^aaaaaa");
 	let heard = heard_updates(&app);
 	let base = opened(&app, &space_id, "notes.md").await;
 	let host = YjsClient::of(&base).inserted(0, "Host. ");
@@ -1230,7 +1230,7 @@ async fn merged_in_order(is_host_first: bool) {
 		applied(&app, &space_id, "notes.md", update).await.expect("the update merges");
 	}
 
-	let merged = "Host. base Member.";
+	let merged = "Host. base Member. ^aaaaaa";
 	let read = library_read_document(
 		app.handle().clone(),
 		app.state(),
@@ -1265,6 +1265,38 @@ async fn host_and_member_edits_on_one_base_merge_with_the_host_first() {
 #[tokio::test]
 async fn host_and_member_edits_on_one_base_merge_with_the_member_first() {
 	merged_in_order(false).await;
+}
+
+#[tokio::test]
+async fn an_open_marks_each_unmarked_or_duplicated_block_once_and_announces_it() {
+	let app = a_host("open-marks");
+	let space_id = a_space(&app, "Work").await;
+	let root = root(app.handle()).expect("the library root resolves");
+	put(&root, &space_id, "notes.md", b"# Launch ^aaaaaa\n\nShip it. ^aaaaaa\n\nThen rest.\n");
+	put(&root, &space_id, "notes.txt", b"Plain words.\n");
+	let heard = heard_updates(&app);
+
+	let served = YjsClient::of(&opened(&app, &space_id, "notes.md").await);
+	let marked = on_disk(&root, &space_id, "notes.md");
+	let reopened = opened(&app, &space_id, "notes.md").await;
+	opened(&app, &space_id, "notes.txt").await;
+
+	let ids: Vec<String> =
+		blocks::blocks_of(&marked).into_iter().filter_map(|block| block.id).collect();
+	assert_eq!(ids.len(), 3);
+	assert_eq!(ids[0], "aaaaaa");
+	assert!(ids[1] != ids[0] && ids[2] != ids[1] && ids[2] != ids[0], "{marked}");
+	assert_eq!(served.text(), marked);
+	assert_eq!(YjsClient::of(&reopened).text(), marked);
+	assert_eq!(on_disk(&root, &space_id, "notes.md"), marked);
+	assert_eq!(on_disk(&root, &space_id, "notes.txt"), "Plain words.\n");
+	let [imported, marking, text_imported] =
+		<[LibraryDocumentUpdated; 3]>::try_from(heard_count(&heard, 3)).expect("three updates");
+	let editor = YjsClient::of(&imported.update);
+	editor.applied(&marking.update);
+	assert_eq!(editor.text(), marked);
+	assert_eq!((marking.name.as_str(), text_imported.name.as_str()), ("notes.md", "notes.txt"));
+	assert!(heard.try_recv().is_err());
 }
 
 #[tokio::test]
@@ -2000,7 +2032,7 @@ async fn a_renamed_document_moves_with_its_shared_state_and_is_announced() {
 	let app = a_host("rename");
 	let space_id = a_space(&app, "Work").await;
 	let root = root(app.handle()).expect("the library root resolves");
-	put(&root, &space_id, "notes.md", b"base");
+	put(&root, &space_id, "notes.md", b"base ^aaaaaa");
 	let heard = heard_renames(&app);
 	let before = opened(&app, &space_id, "notes.md").await;
 
@@ -2008,10 +2040,10 @@ async fn a_renamed_document_moves_with_its_shared_state_and_is_announced() {
 
 	assert_eq!(
 		(item.name.as_str(), item.kind, item.bytes),
-		("plan.md", LibraryItemKind::Document, 4)
+		("plan.md", LibraryItemKind::Document, 12)
 	);
 	assert_eq!(names(&root, &space_id), ["plan.md"]);
-	assert_eq!(on_disk(&root, &space_id, "plan.md"), "base");
+	assert_eq!(on_disk(&root, &space_id, "plan.md"), "base ^aaaaaa");
 	assert_eq!(opened(&app, &space_id, "plan.md").await, before);
 	let states = root.join(".documents").join(&space_id);
 	assert!(states.join("plan.md.yjs").exists());
@@ -2066,7 +2098,7 @@ async fn updates_sent_before_and_to_the_former_name_after_a_rename_both_land_in_
 	let app = a_host("rename-updates");
 	let space_id = a_space(&app, "Work").await;
 	let root = root(app.handle()).expect("the library root resolves");
-	put(&root, &space_id, "notes.md", b"base");
+	put(&root, &space_id, "notes.md", b"base ^aaaaaa");
 	let heard = heard_updates(&app);
 	let member = YjsClient::of(&opened(&app, &space_id, "notes.md").await);
 	let before = member.inserted(4, " before");
@@ -2076,7 +2108,7 @@ async fn updates_sent_before_and_to_the_former_name_after_a_rename_both_land_in_
 	let after = member.inserted(11, " after");
 	applied(&app, &space_id, "notes.md", &after).await.expect("the late update merges");
 
-	assert_eq!(on_disk(&root, &space_id, "plan.md"), "base before after");
+	assert_eq!(on_disk(&root, &space_id, "plan.md"), "base before after ^aaaaaa");
 	assert_eq!(names(&root, &space_id), ["plan.md"]);
 	let announced: Vec<String> =
 		heard_count(&heard, 3).into_iter().map(|updated| updated.name).collect();
@@ -2215,7 +2247,7 @@ async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_lat
 	let app = a_host("rename-case");
 	let space_id = a_space(&app, "Work").await;
 	let root = root(app.handle()).expect("the library root resolves");
-	put(&root, &space_id, "notes.md", b"base");
+	put(&root, &space_id, "notes.md", b"base ^aaaaaa");
 	let heard = heard_renames(&app);
 	let heard_edits = heard_updates(&app);
 	let before = opened(&app, &space_id, "notes.md").await;
@@ -2225,7 +2257,7 @@ async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_lat
 
 	assert_eq!(item.name, "Notes.md");
 	assert_eq!(names(&root, &space_id), ["Notes.md"]);
-	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base");
+	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base ^aaaaaa");
 	assert_eq!(state_names(&root, &space_id), ["Notes.md.yjs"]);
 	assert_eq!(opened(&app, &space_id, "Notes.md").await, before);
 	assert_eq!(
@@ -2239,8 +2271,8 @@ async fn a_case_only_rename_lands_on_the_exact_name_with_its_state_and_takes_lat
 	applied(&app, &space_id, "notes.md", &member.inserted(4, "!")).await.expect("merges");
 	let reopened = YjsClient::of(&opened(&app, &space_id, "Notes.md").await);
 
-	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base!");
-	assert_eq!(reopened.text(), "base!");
+	assert_eq!(on_disk(&root, &space_id, "Notes.md"), "base! ^aaaaaa");
+	assert_eq!(reopened.text(), "base! ^aaaaaa");
 	let announced: Vec<String> =
 		heard_count(&heard_edits, 2).into_iter().map(|updated| updated.name).collect();
 	assert_eq!(announced, ["notes.md", "Notes.md"]);
@@ -2609,7 +2641,7 @@ async fn a_document_attached_to_a_sent_message_reads_back_with_it_and_follows_it
 	);
 }
 
-const A_BOARD: &str = r#"{
+pub(crate) const A_BOARD: &str = r#"{
 	"nodes": [
 		{ "id": "a", "type": "text", "text": "Hello", "x": -40, "y": 10, "width": 100, "height": 50, "color": "3" },
 		{ "id": "b", "type": "group", "label": "Launch", "x": 200, "y": -20, "width": 300, "height": 200 }

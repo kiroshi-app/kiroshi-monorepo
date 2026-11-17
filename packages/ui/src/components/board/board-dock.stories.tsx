@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	colourTransitionsOf,
+	findHoverTooltip,
 	isInBrowserRunner,
 	resolvedRootColor,
 	slotIn,
@@ -131,7 +132,7 @@ const expectInstantColours = async (button: HTMLElement) => {
 	const resting = getComputedStyle(button).backgroundColor
 	await pointer.hover(button)
 	await expect(getComputedStyle(button).backgroundColor).not.toBe(resting)
-	await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+	await expect(await findHoverTooltip()).toHaveTextContent(
 		button.getAttribute("aria-label") ?? "",
 	)
 	await pointer.unhover(button)

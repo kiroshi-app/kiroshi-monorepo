@@ -146,6 +146,10 @@ pub(crate) fn prompts_settled_by(event: &AgentEvent) -> Option<SettledPrompts<'_
 	}
 }
 
+fn moves_a_question(event: &AgentEvent) -> bool {
+	matches!(event, AgentEvent::QuestionRequested { .. }) || prompts_settled_by(event).is_some()
+}
+
 pub trait TurnSink: Send + Sync + 'static {
 	fn emit(&self, event: AgentEvent, turn: Option<EventTurn>);
 }
@@ -225,7 +229,7 @@ async fn write_then_forward<R: Runtime>(
 			Entry::Event(event) => {
 				let turn = desk.turn_named_by(&event);
 				desk.record(&event).await;
-				desk.inner.emit(event, turn);
+				desk.forward(event, turn).await;
 			}
 			Entry::FollowUp(FollowUp::Started) => desk.open_continuation().await,
 			Entry::FollowUp(FollowUp::FoldedIn) => desk.fold_in_parked().await,
@@ -425,7 +429,15 @@ impl<R: Runtime> Desk<R> {
 		let turn = self.open_turn_named();
 		for event in events {
 			self.record_follow_up(&event).await;
-			self.inner.emit(event, turn.clone());
+			self.forward(event, turn.clone()).await;
+		}
+	}
+
+	async fn forward(&self, event: AgentEvent, turn: Option<EventTurn>) {
+		let moves_a_question = moves_a_question(&event);
+		self.inner.emit(event, turn);
+		if moves_a_question {
+			self.store.observe().await;
 		}
 	}
 
@@ -593,10 +605,6 @@ impl<R: Runtime> Desk<R> {
 			return;
 		}
 		let kept = match event {
-			AgentEvent::QuestionRequested { request } => {
-				self.holds_prompts = true;
-				self.store.hold_prompt(&request.id, PromptKind::Question, request).await
-			}
 			AgentEvent::PermissionRequested { request } => {
 				self.holds_prompts = true;
 				self.store.hold_prompt(&request.id, PromptKind::Permission, request).await
@@ -814,6 +822,16 @@ impl<R: Runtime> Store<R> {
 
 	async fn observe_state(&self, database: &db::Database) {
 		conversation_state::observe_reporting(&self.app, database, &self.conversation_id).await;
+	}
+
+	async fn observe(&self) {
+		match self.database() {
+			Ok(database) => self.observe_state(database).await,
+			Err(failure) => log::warn!(
+				"the state of conversation {} was not read after a question moved: {failure:?}",
+				self.conversation_id
+			),
+		}
 	}
 
 	async fn start_continuation(
@@ -2593,17 +2611,14 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_question_and_a_permission_request_stay_persisted_until_each_is_resolved() {
+	async fn a_permission_request_stays_persisted_until_resolved_and_a_question_never_is() {
 		let written = Written::new("prompts-resolved").await;
 		let mut desk = written.desk();
 		desk.open_turn(submitted("t1", "p1")).await;
 
 		desk.record(&question("q1")).await;
 		desk.record(&a_permission_request("w1")).await;
-		assert_eq!(
-			held_prompts(&written).await,
-			[held("q1", "question"), held("w1", "permission")]
-		);
+		assert_eq!(held_prompts(&written).await, [held("w1", "permission")]);
 
 		desk.record(&resolved("q1")).await;
 		assert_eq!(held_prompts(&written).await, [held("w1", "permission")]);
@@ -2629,31 +2644,62 @@ mod tests {
 		let written = Written::new("prompts-quit").await;
 		let mut desk = written.desk();
 		desk.open_turn(submitted("t1", "p1")).await;
-		desk.record(&question("q1")).await;
+		desk.record(&a_permission_request("w1")).await;
 
 		commands::a_quitting_host(written.app.handle());
 		desk.record(&turn_ended()).await;
 
-		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
+		assert_eq!(held_prompts(&written).await, [held("w1", "permission")]);
+	}
+
+	impl Written {
+		fn heard_states(&self) -> Arc<Mutex<Vec<serde_json::Value>>> {
+			let heard = Arc::new(Mutex::new(Vec::new()));
+			let kept = heard.clone();
+			self.app.handle().listen(
+				crate::conversations::contract::STATE_CHANGED_EVENT,
+				move |event| {
+					let payload: serde_json::Value =
+						serde_json::from_str(event.payload()).expect("the payload is JSON");
+					kept.lock().expect("the list is kept").push(payload["state"].clone());
+				},
+			);
+			heard
+		}
+
+		fn a_live_run(&self) -> impl TurnSink {
+			let live = RuntimeScope {
+				conversation_id: self.conversation_id.clone(),
+				bot_id: DEFAULT_BOT_ID.to_owned(),
+				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
+				epoch: 1,
+			};
+			commands::a_run_held_by_the_app(self.app.handle(), live)
+		}
 	}
 
 	#[tokio::test]
 	async fn a_held_prompt_announces_its_conversation_needs_you_and_its_release_that_it_does_not() {
 		let written = Written::new("prompts-announced").await;
-		let heard = Arc::new(Mutex::new(Vec::new()));
-		let kept = heard.clone();
-		written.app.handle().listen(
-			crate::conversations::contract::STATE_CHANGED_EVENT,
-			move |event| {
-				let payload: serde_json::Value =
-					serde_json::from_str(event.payload()).expect("the payload is JSON");
-				kept.lock().expect("the list is kept").push(payload["state"].clone());
-			},
-		);
+		let heard = written.heard_states();
 		let mut desk = written.desk();
+		written.a_live_run();
 
-		desk.record(&question("q1")).await;
-		desk.record(&resolved("q1")).await;
+		desk.record(&a_permission_request("w1")).await;
+		desk.record(&resolved("w1")).await;
+
+		assert_eq!(*heard.lock().expect("the list is kept"), [json!("needs_you"), json!("idle")]);
+	}
+
+	#[tokio::test]
+	async fn a_forwarded_question_announces_its_conversation_needs_you_and_its_answer_that_it_does_not(
+	) {
+		let written = Written::new("questions-announced").await;
+		let heard = written.heard_states();
+		let desk = written.desk_telling(Arc::new(written.a_live_run()));
+
+		desk.forward(question("q1"), None).await;
+		desk.forward(resolved("q1"), None).await;
 
 		assert_eq!(*heard.lock().expect("the list is kept"), [json!("needs_you"), json!("idle")]);
 	}
@@ -2912,7 +2958,6 @@ mod tests {
 			continues_turn_id: Some("t1".to_owned()),
 		};
 		assert_eq!(the_question_heard(&heard), Some(&Some(continuation)));
-		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
 	}
 
 	#[tokio::test]
@@ -2933,6 +2978,5 @@ mod tests {
 			continues_turn_id: Some("t1".to_owned()),
 		};
 		assert_eq!(the_question_heard(&heard), Some(&Some(continuation)));
-		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
 	}
 }

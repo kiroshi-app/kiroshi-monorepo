@@ -1,29 +1,17 @@
 import { AppBootNotice } from "@workspace/ui/components/app-boot-notice"
-import {
-	type AppBootAgent,
-	AppBootScreen,
-} from "@workspace/ui/components/app-boot-screen"
+import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
-import type { Bot } from "@/lib/bindings"
 import { useWindowRevealOnMount } from "@/lib/host/launch-reveal"
 
 type StartupScreenProps = {
-	agents: Bot[]
 	hasFailed: boolean
 	isExiting: boolean
 	onExitComplete: () => void
 	onRetry: () => void
 }
 
-const launchAgentOf = ({ id, name, avatarBlot }: Bot): AppBootAgent => ({
-	id,
-	name,
-	hue: avatarBlot,
-})
-
 export const StartupScreen = ({
-	agents,
 	hasFailed,
 	isExiting,
 	onExitComplete,
@@ -44,7 +32,6 @@ export const StartupScreen = ({
 
 	return (
 		<AppBootScreen
-			agents={agents.map(launchAgentOf)}
 			data-tauri-drag-region="deep"
 			isExiting={isExiting}
 			onExitComplete={onExitComplete}

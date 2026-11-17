@@ -140,11 +140,17 @@ const countingBots = (store: TranscriptStore) => {
 	return { count: () => count }
 }
 
+const openedConversation = async (controller: RosterController) => {
+	const created = await controller.createUnselectedConversation([])
+	controller.selectConversation(created?.id ?? "")
+	return created
+}
+
 const seatedConversation = async (
 	controller: RosterController,
 	botIds: string[],
 ) => {
-	const created = await controller.createConversation()
+	const created = await openedConversation(controller)
 	for (const botId of botIds) {
 		await controller.recruitToConversation(created?.id ?? "", botId)
 	}
@@ -218,40 +224,6 @@ describe("createRosterController", () => {
 		expect(names(state.bots)).toEqual(["Claude"])
 		expect(state.selectedBotId).toBe("default")
 		expect(listed).not.toHaveBeenCalled()
-	})
-
-	it("seats a drafted companion without moving the reader to it", async () => {
-		const controller = await loaded(createFakeTranscriptStore())
-
-		const written = await controller.createFromDraft({
-			name: "Scout",
-			job: "a research assistant",
-			description: "Dig into the questions I bring.",
-		})
-
-		expect(names(controller.getState().bots)).toEqual(["Claude", "Scout"])
-		expect(controller.getState().selectedBotId).toBe("default")
-		expect(written.title).toBe("a research assistant")
-	})
-
-	it("refuses a drafted companion while the roster is in no space", async () => {
-		const controller = mountRoster(createFakeTranscriptStore())
-
-		await expect(
-			controller.createFromDraft({
-				name: "Scout",
-				job: "a research assistant",
-				description: "Dig into the questions I bring.",
-			}),
-		).rejects.toEqual({ kind: "unknownSpace", id: "" })
-	})
-
-	it("refuses a drafted companion the store turns down", async () => {
-		const controller = await loaded(createFakeTranscriptStore())
-
-		await expect(
-			controller.createFromDraft({ name: " ", job: "", description: "" }),
-		).rejects.toEqual({ kind: "namelessBot" })
 	})
 
 	it("opens on nothing when the record holds no companion", async () => {
@@ -448,12 +420,24 @@ describe("createRosterController", () => {
 		expect((await reloaded(store)).bots).toHaveLength(2)
 	})
 
-	it("leaves the roster as it was when the copy is refused", async () => {
+	it("rejects a refused copy and leaves the roster as it was", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 		vi.spyOn(store, "duplicateBot").mockRejectedValue(new Error("no room"))
 
-		await controller.duplicate("default")
+		await expect(controller.duplicate("default")).rejects.toThrow("no room")
+
+		const state = controller.getState()
+		expect(state.bots.map((bot) => bot.id)).toEqual(["default"])
+		expect(state.selectedBotId).toBe("default")
+	})
+
+	it("rejects a refused creation and leaves the roster as it was", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		vi.spyOn(store, "createBot").mockRejectedValue(new Error("no room"))
+
+		await expect(controller.create()).rejects.toThrow("no room")
 
 		const state = controller.getState()
 		expect(state.bots.map((bot) => bot.id)).toEqual(["default"])
@@ -710,7 +694,7 @@ describe("createRosterController", () => {
 		expect(held(controller, "default").memory).toBe("")
 	})
 
-	it("keeps the memory a companion already had when the command refuses", async () => {
+	it("rejects a refused memory and keeps the one a companion already had", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotMemory("default", "They bake on Sundays.")
 		const controller = await loaded({
@@ -718,9 +702,27 @@ describe("createRosterController", () => {
 			setBotMemory: () => Promise.reject({ kind: "storage" }),
 		})
 
-		await controller.remember("default", "They ski.")
+		await expect(controller.remember("default", "They ski.")).rejects.toEqual({
+			kind: "storage",
+		})
 
 		expect(held(controller, "default").memory).toBe("They bake on Sundays.")
+	})
+
+	it("rejects a refused picture and leaves the companion without one", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		vi.spyOn(store, "setBotAvatarImage").mockRejectedValue(
+			new Error("not an image"),
+		)
+
+		await expect(
+			controller.uploadAvatar("default", {
+				arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+			} as File),
+		).rejects.toThrow("not an image")
+
+		expect(held(controller, "default").avatarImagePath).toBeNull()
 	})
 
 	it("puts the reader back on what the store holds when a write is refused", async () => {
@@ -924,87 +926,15 @@ describe("createRosterController on a space", () => {
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		vi.spyOn(store, "duplicateBot").mockRejectedValue(new Error("no room"))
 
-		const copy = await controller.duplicate("default", elsewhere.id)
+		await expect(controller.duplicate("default", elsewhere.id)).rejects.toThrow(
+			"no room",
+		)
 
 		const state = controller.getState()
-		expect(copy).toBeNull()
 		expect(state.spaceRowId).toBe("personal")
 		expect(state.selectedBotId).toBe("default")
 		expect(state.rosters[elsewhere.id]).toEqual([])
 		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
-	})
-
-	it("hands the companion over to the space it is moved to and opens that space on it", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const section = await store.createSection("personal", "Writers")
-		await store.moveBotToSection("default", section.id)
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-
-		const moved = await controller.moveToSpace("default", elsewhere.id)
-
-		const state = controller.getState()
-		expect(moved?.id).toBe("default")
-		expect(state.spaceRowId).toBe(elsewhere.id)
-		expect(state.selectedBotId).toBe("default")
-		expect(state.rosters.personal).toEqual([])
-		expect(state.rosters[elsewhere.id].map((bot) => bot.id)).toEqual([
-			"default",
-		])
-		expect(state.rosters[elsewhere.id][0].sectionId).toBeNull()
-		expect((await store.bots(elsewhere.id)).map((bot) => bot.id)).toEqual([
-			"default",
-		])
-	})
-
-	it("reads the rosters again when the move to another space is refused", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-		vi.spyOn(store, "moveBotToSpace").mockRejectedValue(new Error("no room"))
-
-		const moved = await controller.moveToSpace("default", elsewhere.id)
-
-		const state = controller.getState()
-		expect(moved).toBeNull()
-		expect(state.spaceRowId).toBe("personal")
-		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
-		expect(state.rosters[elsewhere.id]).toEqual([])
-	})
-
-	it("writes nothing when the companion is already in the space it is moved to", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = mountRoster(store)
-		await controller.load(opening())
-		const write = vi.spyOn(store, "moveBotToSpace")
-
-		const moved = await controller.moveToSpace("default", "personal")
-
-		expect(moved).toBeNull()
-		expect(write).not.toHaveBeenCalled()
-	})
-
-	it("empties the seats a moved companion held in the space it leaves", async () => {
-		const store = createFakeTranscriptStore()
-		const elsewhere = await store.createSpace("Vocca")
-		const room = await store.createConversation({
-			spaceId: "personal",
-			sectionId: null,
-			title: "Launch",
-			botIds: ["default"],
-		})
-		const controller = mountRoster(store)
-		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-
-		await controller.moveToSpace("default", elsewhere.id)
-
-		const left = controller.getState().conversationRosters.personal[0]
-		expect(seatedIn(left)).toEqual([])
-		expect(left.participants.map((seat) => seat.botId)).toContain("default")
-		expect(seatedIn((await store.conversations("personal"))[0])).toEqual([])
-		expect(room.id).toBe(left.id)
 	})
 
 	it("leaves the roster of the other spaces untouched when a companion is deleted", async () => {
@@ -1084,6 +1014,22 @@ describe("createRosterController on memberships", () => {
 			controller.getState().rosters[elsewhere.id].map((bot) => bot.id),
 		).toEqual(["default"])
 		expect(reads.count()).toBe(0)
+	})
+
+	it("rejects a refused addition to a space and leaves that space without the companion", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = mountRoster(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		vi.spyOn(store, "addBotToSpace").mockRejectedValue(new Error("no room"))
+
+		await expect(
+			controller.addToSpace("default", elsewhere.id),
+		).rejects.toThrow("no room")
+
+		const state = controller.getState()
+		expect(state.rosters[elsewhere.id]).toEqual([])
+		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
 	})
 
 	it("drops a companion from the space it is removed from without reading every roster", async () => {
@@ -1397,37 +1343,10 @@ describe("createRosterController on conversations", () => {
 		])
 	})
 
-	it("shows a created conversation in the roster and selects it", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-
-		const created = await controller.createConversation()
-
-		const state = controller.getState()
-		expect(created?.title).toBe("")
-		expect(created ? seatedIn(created) : null).toEqual([])
-		expect(state.conversations.map((held) => held.id)).toEqual([created?.id])
-		expect(state.selectedConversationId).toBe(created?.id)
-		expect(state.selectedBotId).toBeNull()
-	})
-
-	it("seats the companions it is handed in the conversation it creates and selects", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		controller.select("default")
-
-		const created = await controller.createConversation(["default"])
-
-		const state = controller.getState()
-		expect(created ? seatedIn(created) : null).toEqual(["default"])
-		expect(state.selectedConversationId).toBe(created?.id)
-		expect(state.selectedBotId).toBeNull()
-	})
-
 	it("keeps a created conversation after a reload", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await controller.createUnselectedConversation([])
 
 		const state = await reloaded(store)
 
@@ -1437,7 +1356,7 @@ describe("createRosterController on conversations", () => {
 	it("leaves no companion selected while a conversation is selected", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.select("default")
 		expect(controller.getState().selectedConversationId).toBeNull()
@@ -1450,7 +1369,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.moveConversationToSection(created?.id ?? "", section.id)
 
@@ -1460,11 +1379,27 @@ describe("createRosterController on conversations", () => {
 		)
 	})
 
+	it("rejects a refused move into a section and keeps the conversation out of it", async () => {
+		const store = createFakeTranscriptStore()
+		const section = await store.createSection("personal", "Rooms")
+		const controller = await loaded(store)
+		const created = await openedConversation(controller)
+		vi.spyOn(store, "updateConversation").mockRejectedValue(
+			new Error("no record"),
+		)
+
+		await expect(
+			controller.moveConversationToSection(created?.id ?? "", section.id),
+		).rejects.toThrow("no record")
+
+		expect(controller.getState().conversations[0].sectionId).toBeNull()
+	})
+
 	it("carries no section for every conversation a dropped section held", async () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		await controller.moveConversationToSection(created?.id ?? "", section.id)
 
 		controller.clearSection(section.id)
@@ -1475,7 +1410,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the name and the instructions that are written", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.describeConversation(created?.id ?? "", {
 			name: "Menu",
@@ -1493,7 +1428,7 @@ describe("createRosterController on conversations", () => {
 	it("keeps the icon and the colour a conversation wears when it is renamed or moved", async () => {
 		const store = createFakeTranscriptStore()
 		const section = await store.createSection("personal", "Rooms")
-		const created = await (await loaded(store)).createConversation()
+		const created = await openedConversation(await loaded(store))
 		const id = created?.id ?? ""
 		await store.updateConversation(id, {
 			title: "Launch",
@@ -1527,7 +1462,7 @@ describe("createRosterController on conversations", () => {
 	it("shows at once and stores the icon and the colour picked, beside the name and the instructions", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 		controller.describeConversation(id, {
 			name: "Menu",
 			instructions: "Stay short.",
@@ -1554,7 +1489,7 @@ describe("createRosterController on conversations", () => {
 	it("stores a hue outside the presets unchanged and reads it back after a reload", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.styleConversation(id, { color: 210 })
 
@@ -1566,7 +1501,7 @@ describe("createRosterController on conversations", () => {
 
 	it("stores no colour when none is picked", async () => {
 		const store = createFakeTranscriptStore()
-		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		const id = (await openedConversation(await loaded(store)))?.id ?? ""
 		await store.updateConversation(id, {
 			title: "Launch",
 			instructions: "",
@@ -1595,7 +1530,7 @@ describe("createRosterController on conversations", () => {
 			updateConversation: () =>
 				Promise.reject({ kind: "storage", failure: { kind: "staleWrite" } }),
 		})
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.styleConversation(id, { icon: "Rocket" })
 		expect(controller.getState().conversations[0].icon).toBe("Rocket")
@@ -1615,7 +1550,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the icon a naming carries with the title, in one write", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 		const sent = vi.spyOn(store, "updateConversation")
 
 		controller.nameConversation(id, { title: "Menu", icon: "Rocket" })
@@ -1636,7 +1571,7 @@ describe("createRosterController on conversations", () => {
 
 	it("keeps the icon a conversation wears when a naming brings another", async () => {
 		const store = createFakeTranscriptStore()
-		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		const id = (await openedConversation(await loaded(store)))?.id ?? ""
 		await store.updateConversation(id, {
 			title: "",
 			instructions: "",
@@ -1660,7 +1595,7 @@ describe("createRosterController on conversations", () => {
 	it("stores no icon when a naming brings none", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const id = (await controller.createConversation())?.id ?? ""
+		const id = (await openedConversation(controller))?.id ?? ""
 
 		controller.nameConversation(id, { title: "Menu", icon: null })
 
@@ -1676,7 +1611,7 @@ describe("createRosterController on conversations", () => {
 	it("stores the name a nameless conversation is given", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		controller.nameConversation(created?.id ?? "", {
 			title: "Menu",
@@ -1693,7 +1628,7 @@ describe("createRosterController on conversations", () => {
 	it("leaves alone the name of a conversation that has one", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		controller.nameConversation(created?.id ?? "", {
 			title: "Launch",
 			icon: null,
@@ -1786,7 +1721,7 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const second = await store.createBot(newBotIdentity([]), "personal")
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.recruitToConversation(created?.id ?? "", second.id)
 		await controller.recruitToConversation(created?.id ?? "", "default")
@@ -1807,7 +1742,7 @@ describe("createRosterController on conversations", () => {
 			{ reportFailure },
 		)
 		await refusing.load(opening())
-		const created = await refusing.createConversation()
+		const created = await openedConversation(refusing)
 
 		const seated = await refusing.recruitToConversation(
 			created?.id ?? "",
@@ -1886,7 +1821,7 @@ describe("createRosterController on conversations", () => {
 	it("drops a deleted conversation and lands on the first row of the roster", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 
 		await controller.removeConversation(created?.id ?? "")
 
@@ -1925,6 +1860,22 @@ describe("createRosterController on conversations", () => {
 		expect(state.selectedBotId).toBeNull()
 	})
 
+	it("rejects a refused unselected conversation and keeps the roster", async () => {
+		const { store, room } = await aStoreWithARoom()
+		const controller = await loaded(store)
+		vi.spyOn(store, "createConversation").mockRejectedValue(
+			new Error("no room"),
+		)
+
+		await expect(
+			controller.createUnselectedConversation(["default"]),
+		).rejects.toThrow("no room")
+
+		expect(controller.getState().conversations.map((held) => held.id)).toEqual([
+			room.id,
+		])
+	})
+
 	it("keeps the prior selection once an unselected conversation is discarded", async () => {
 		const { store, room } = await aStoreWithARoom()
 		const controller = await loaded(store)
@@ -1955,7 +1906,7 @@ describe("createRosterController on conversations", () => {
 	it("rejects a refused deletion and keeps the conversation shown", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
-		const created = await controller.createConversation()
+		const created = await openedConversation(controller)
 		const id = created?.id ?? ""
 		vi.spyOn(store, "deleteConversation").mockRejectedValue(
 			new Error("no record"),

@@ -45,6 +45,7 @@ import {
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { ToolApproval } from "@workspace/ui/components/tool-approval"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -181,7 +182,7 @@ type HomePanelProps = { children: ReactNode; height: number }
 
 const HomePanel = ({ children, height }: HomePanelProps) => (
 	<div
-		className="w-343 overflow-clip rounded-xl border border-foreground/6 bg-card"
+		className="relative w-343 overflow-clip rounded-xl border border-foreground/6 bg-card"
 		data-content-card=""
 		style={{ height }}
 	>
@@ -189,11 +190,15 @@ const HomePanel = ({ children, height }: HomePanelProps) => (
 	</div>
 )
 
-type EmptyStageProps = { children: ReactNode; below?: ReactNode }
+type EmptyStageProps = {
+	children: ReactNode
+	above?: ReactNode
+	below?: ReactNode
+}
 
-const EmptyStage = ({ children, below }: EmptyStageProps) => (
+const EmptyStage = ({ children, above, below }: EmptyStageProps) => (
 	<ScreenLayout width="full">
-		<HomeLayout below={below} stage="empty">
+		<HomeLayout above={above} below={below} stage="empty">
 			{children}
 		</HomeLayout>
 	</ScreenLayout>
@@ -269,6 +274,7 @@ type EmptyHomeProps = {
 	attachments?: PromptAttachment[]
 	isSending?: boolean
 	arrivalKey?: string
+	notice?: ReactNode
 	after?: ReactNode
 	today?: HomeTodayRow[]
 }
@@ -282,10 +288,17 @@ const EmptyHome = ({
 	attachments,
 	isSending,
 	arrivalKey,
+	notice,
 	after,
 	today,
 }: EmptyHomeProps) => (
 	<EmptyStage
+		above={
+			<>
+				<HomeGreeting agent={agent} firstName={firstName} period={period} />
+				{notice}
+			</>
+		}
 		below={
 			today ? (
 				<HomeTodayList
@@ -296,7 +309,6 @@ const EmptyHome = ({
 			) : undefined
 		}
 	>
-		<HomeGreeting agent={agent} firstName={firstName} period={period} />
 		<NewPageComposer
 			agent={agent}
 			agents={AGENTS}
@@ -327,7 +339,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Home panel, one story per artboard of the Paper file Kiroshi, Home. The Home centres the greeting and the composer. The title bar and the rail stay out: they are drawn by the app frame around this panel.",
+					"The Home panel, one story per artboard of the Paper file Kiroshi, Home. The Home anchors the input card in the middle of the panel: the greeting grows upward from it, the card and the lines under it grow downward. The title bar and the rail stay out: they are drawn by the app frame around this panel.",
 			},
 		},
 	},
@@ -370,31 +382,61 @@ const inWindowAround = (panelHeight: number) => {
 	}
 }
 
+const besideARestingHome = (home: ReactNode) => (
+	<>
+		{home}
+		<div
+			aria-hidden
+			className="invisible absolute inset-0"
+			data-slot="resting-home"
+			inert
+		>
+			<EmptyHome hasBand={false} />
+		</div>
+	</>
+)
+
 const emptyStageBoxesOf = (canvasElement: HTMLElement) => {
-	const block = slotIn(canvasElement, "home-layout").firstElementChild
-	if (!block) throw new globalThis.Error("The empty Home draws no block")
+	const restingHome = slotIn(canvasElement, "resting-home")
 
 	return {
 		contentArea: slotIn(
 			canvasElement,
 			"screen-layout-scroller",
 		).getBoundingClientRect(),
-		block: block.getBoundingClientRect(),
+		card: slotIn(canvasElement, "prompt-input").getBoundingClientRect(),
+		greeting: slotIn(canvasElement, "home-greeting").getBoundingClientRect(),
+		restingCard: slotIn(restingHome, "prompt-input").getBoundingClientRect(),
+		restingGreeting: slotIn(
+			restingHome,
+			"home-greeting",
+		).getBoundingClientRect(),
 	}
 }
 
-const expectBlockInTheMiddle = async (canvasElement: HTMLElement) => {
-	const { contentArea, block } = emptyStageBoxesOf(canvasElement)
+const expectCardTopAtRest = async (canvasElement: HTMLElement) => {
+	const { card, restingCard } = emptyStageBoxesOf(canvasElement)
+
+	await expect(Math.abs(card.top - restingCard.top)).toBeLessThanOrEqual(1)
+}
+
+const expectRestingCardInTheMiddle = async (canvasElement: HTMLElement) => {
+	const { contentArea, card, restingCard } = emptyStageBoxesOf(canvasElement)
 	const panel = slotIn(canvasElement, "screen-layout").parentElement
 
 	await expect(Math.round(contentArea.height)).toBe(panel?.clientHeight)
 	await expect(
-		Math.abs(block.top - contentArea.top - (contentArea.bottom - block.bottom)),
+		Math.abs(
+			restingCard.top -
+				contentArea.top -
+				(contentArea.bottom - restingCard.bottom),
+		),
 	).toBeLessThanOrEqual(1)
+	await expectCardTopAtRest(canvasElement)
 	await expect(
-		Math.abs(block.left - contentArea.left - (contentArea.right - block.right)),
+		Math.abs(card.left - contentArea.left - (contentArea.right - card.right)),
 	).toBeLessThanOrEqual(1)
-	await expect(Math.round(block.width)).toBe(HOME_COLUMN_WIDTH)
+	await expect(Math.round(card.width)).toBe(HOME_COLUMN_WIDTH)
 }
 
 export const WithAFirstName = meta.story({
@@ -430,31 +472,31 @@ const TALL_WINDOW = inWindowAround(1200)
 
 export const CentredInThePanel = meta.story({
 	name: "Fresh page in the middle of the panel",
-	render: () => <EmptyHome />,
+	render: () => besideARestingHome(<EmptyHome />),
 	globals: ARTBOARD_WINDOW.globals,
 	parameters: {
 		...ARTBOARD_WINDOW.parameters,
 		...withDescription(
-			"The fresh page at the artboard panel height, mounted inside ScreenLayout the way the app nests it. Check that the greeting and composer block has as much space above it as below it, within 1px, and keeps its column width centred.",
+			"The fresh page at the artboard panel height, mounted inside ScreenLayout the way the app nests it. Check that the input card at rest, with no band, has as much space above it as below it, within 1px, that the card here starts at the same pixel, and that it keeps its column width centred.",
 		),
 	},
 	play: async ({ canvasElement }) => {
-		await expectBlockInTheMiddle(canvasElement)
+		await expectRestingCardInTheMiddle(canvasElement)
 	},
 })
 
 export const CentredInATallPanel = meta.story({
 	name: "Fresh page in the middle of a tall panel",
-	render: () => <EmptyHome />,
+	render: () => besideARestingHome(<EmptyHome />),
 	globals: TALL_WINDOW.globals,
 	parameters: {
 		...TALL_WINDOW.parameters,
 		...withDescription(
-			"The fresh page in a taller window: the block follows the content area and stays in its vertical middle, within 1px. Pick the twin above for the artboard height.",
+			"The fresh page in a taller window: the input card at rest follows the content area and stays in its vertical middle, within 1px. Pick the twin above for the artboard height.",
 		),
 	},
 	play: async ({ canvasElement }) => {
-		await expectBlockInTheMiddle(canvasElement)
+		await expectRestingCardInTheMiddle(canvasElement)
 	},
 })
 
@@ -708,31 +750,177 @@ export const Sending = meta.story({
 	},
 })
 
-const SHORT_WINDOW = inWindowAround(400)
-
 const GROWN_DRAFT = Array.from({ length: 24 }, () => FLIGHTS_ASK).join("\n")
+
+const expectCardGrownDownward = async (canvasElement: HTMLElement) => {
+	const { card, restingCard } = emptyStageBoxesOf(canvasElement)
+
+	await expect(card.bottom).toBeGreaterThan(restingCard.bottom)
+}
+
+export const DraftAtTheRowCap = meta.story({
+	name: "Draft at the row cap grows the card downward",
+	render: () => besideARestingHome(<EmptyHome draft={GROWN_DRAFT} />),
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"A draft longer than the field shows: the field stops at its row cap and scrolls inside. Check that the card starts at the pixel where the resting card starts and that all its growth went downward.",
+		),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const field = canvas.getByRole("textbox")
+
+		await expect(field.scrollHeight).toBeGreaterThan(field.clientHeight)
+		await expectRestingCardInTheMiddle(canvasElement)
+		await expectCardGrownDownward(canvasElement)
+	},
+})
+
+export const FilesAttachedWithALongDraft = meta.story({
+	name: "Files attached with a long draft keep the card top in place",
+	render: () =>
+		besideARestingHome(
+			<EmptyHome attachments={LONG_PROMPT_ATTACHMENTS} draft={GROWN_DRAFT} />,
+		),
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"Files staged above a draft at the row cap, with the band under the field: the tallest the card gets. Check that the card starts at the pixel where the resting card starts and that the chips, the lines and the band all pushed its bottom edge down.",
+		),
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(canvas.getAllByRole("listitem")).toHaveLength(
+			LONG_PROMPT_ATTACHMENTS.length,
+		)
+		await expectRestingCardInTheMiddle(canvasElement)
+		await expectCardGrownDownward(canvasElement)
+	},
+})
+
+const LONG_FIRST_NAME = "Maximiliana Alexandrina Featherstonehaugh"
+
+export const TwoLineGreeting = meta.story({
+	name: "Two-line greeting grows upward",
+	render: () => besideARestingHome(<EmptyHome firstName={LONG_FIRST_NAME} />),
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"A first name long enough to wrap the greeting onto a second line. Check that the greeting keeps its bottom edge and grows upward, and that the card starts at the pixel where the resting card starts.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const { greeting, restingGreeting } = emptyStageBoxesOf(canvasElement)
+
+		await expect(greeting.height).toBeGreaterThan(restingGreeting.height)
+		await expect(
+			Math.abs(greeting.bottom - restingGreeting.bottom),
+		).toBeLessThanOrEqual(1)
+		await expectRestingCardInTheMiddle(canvasElement)
+	},
+})
+
+export const SpaceAccessNoticeAboveTheCard = meta.story({
+	name: "Space access notice grows upward above the card",
+	render: () =>
+		besideARestingHome(
+			<EmptyHome
+				notice={
+					<SpaceAccessBanner
+						host="Sam's MacBook"
+						reason="offline"
+						space="Lisbon offsite"
+					/>
+				}
+			/>,
+		),
+	globals: ARTBOARD_WINDOW.globals,
+	parameters: {
+		...ARTBOARD_WINDOW.parameters,
+		...withDescription(
+			"A joined Space whose host is offline: the space access notice hangs under the greeting, above the card. Check that the notice ends above the card, that it pushed the greeting upward, and that the card starts at the pixel where the resting card starts.",
+		),
+	},
+	play: async ({ canvasElement }) => {
+		const { card, greeting, restingGreeting } = emptyStageBoxesOf(canvasElement)
+		const banner = slotIn(
+			canvasElement,
+			"space-access-banner",
+		).getBoundingClientRect()
+
+		await expectRestingCardInTheMiddle(canvasElement)
+		await expect(banner.bottom).toBeLessThan(card.top)
+		await expect(greeting.top).toBeLessThan(restingGreeting.top)
+	},
+})
+
+const HomeWithALateBand = () => {
+	const [hasBand, setHasBand] = useState(false)
+
+	return (
+		<EmptyHome
+			after={
+				<Button onClick={() => setHasBand(true)} variant="outline">
+					Resolve the Applications read
+				</Button>
+			}
+			hasBand={hasBand}
+		/>
+	)
+}
+
+export const BandArrivesAfterTheRead = meta.story({
+	name: "Band arriving after the read leaves the card top in place",
+	tags: ["test-only"],
+	render: () => besideARestingHome(<HomeWithALateBand />),
+	parameters: withDescription(
+		"Proves the band landing once the Applications read resolves: the card grows by the band, downward, and its top edge stays on the pixel it had before.",
+	),
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const before = emptyStageBoxesOf(canvasElement).card
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Resolve the Applications read" }),
+		)
+
+		const after = emptyStageBoxesOf(canvasElement).card
+		await expect(
+			canvas.getByRole("button", { name: "Hide this suggestion" }),
+		).toBeVisible()
+		await expect(after.top).toBe(before.top)
+		await expect(after.bottom).toBeGreaterThan(before.bottom)
+		await expectCardTopAtRest(canvasElement)
+	},
+})
+
+const SHORT_WINDOW = inWindowAround(160)
 
 export const ComposerGrownPastAShortPanel = meta.story({
 	name: "Composer grown past a short panel scrolls from the greeting",
-	render: () => (
-		<EmptyHome attachments={LONG_PROMPT_ATTACHMENTS} draft={GROWN_DRAFT} />
-	),
+	render: () =>
+		besideARestingHome(
+			<EmptyHome attachments={LONG_PROMPT_ATTACHMENTS} draft={GROWN_DRAFT} />,
+		),
 	globals: SHORT_WINDOW.globals,
 	parameters: {
 		...SHORT_WINDOW.parameters,
 		...withDescription(
-			"A draft of many lines with files attached, until the block is taller than the content area. Check that the greeting starts at the top of the content area, never above it, and that the content area scrolls to reach the rest.",
+			"A panel shorter than the greeting plus the resting card, holding a draft at the row cap with files attached. Check that the greeting starts inside the content area, never above its top, that the card starts at the pixel where the resting card starts in the same panel, and that the content area scrolls to reach the rest.",
 		),
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const { contentArea, block } = emptyStageBoxesOf(canvasElement)
-		const greeting = canvas
-			.getByRole("heading", { name: "Morning, Sam. What’s next?" })
-			.getBoundingClientRect()
+	play: async ({ canvasElement }) => {
+		const { contentArea, greeting, restingGreeting, restingCard } =
+			emptyStageBoxesOf(canvasElement)
 		const scroller = slotIn(canvasElement, "screen-layout-scroller")
 
-		await expect(block.height).toBeGreaterThan(contentArea.height)
+		await expect(contentArea.height).toBeLessThan(
+			restingGreeting.height + restingCard.height,
+		)
 		await expect(greeting.top).toBeGreaterThanOrEqual(contentArea.top)
+		await expectCardTopAtRest(canvasElement)
+		await expectCardGrownDownward(canvasElement)
 		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
 	},
 })
@@ -866,8 +1054,9 @@ export const MissionBlocked = meta.story({
 export const ApprovalWaits = meta.story({
 	name: "An approval waits on you",
 	render: () => (
-		<EmptyStage>
-			<HomeGreeting agent={ATLAS} firstName="Sam" period="afternoon" />
+		<EmptyStage
+			above={<HomeGreeting agent={ATLAS} firstName="Sam" period="afternoon" />}
+		>
 			<HomeRequest
 				askedBy={<HomeAskedByLine agent={PICO} room={LISBON_OFFSITE} />}
 			>
@@ -905,14 +1094,14 @@ const colourOf = (row: HTMLElement, slot: string) =>
 	getComputedStyle(slotIn(row, slot)).color
 
 const expectTodayUnderTheComposer = async (canvasElement: HTMLElement) => {
-	const { block } = emptyStageBoxesOf(canvasElement)
+	const { card } = emptyStageBoxesOf(canvasElement)
 	const list = slotIn(canvasElement, "home-today-list").getBoundingClientRect()
 
-	await expectBlockInTheMiddle(canvasElement)
-	await expect(Math.round(list.top - block.bottom)).toBe(
+	await expectRestingCardInTheMiddle(canvasElement)
+	await expect(Math.round(list.top - card.bottom)).toBe(
 		TODAY_GAP_UNDER_THE_COMPOSER,
 	)
-	await expect(Math.round(list.left)).toBe(Math.round(block.left))
+	await expect(Math.round(list.left)).toBe(Math.round(card.left))
 	await expect(Math.round(list.width)).toBe(HOME_COLUMN_WIDTH)
 }
 
@@ -924,12 +1113,12 @@ const expectCutOnOneLine = async (text: HTMLElement) => {
 
 export const NoConversationToday = meta.story({
 	name: "Today 1 · No conversation today, nothing drawn",
-	render: () => <EmptyHome today={[]} />,
+	render: () => besideARestingHome(<EmptyHome today={[]} />),
 	globals: ARTBOARD_WINDOW.globals,
 	parameters: {
 		...ARTBOARD_WINDOW.parameters,
 		...withDescription(
-			"Reach for this when the agent has no conversation today: the list draws nothing, header included, and the greeting and composer stay in the middle of the panel.",
+			"Reach for this when the agent has no conversation today: the list draws nothing, header included, and the input card stays where it rests in the middle of the panel.",
 		),
 	},
 	play: async ({ canvas, canvasElement }) => {
@@ -938,13 +1127,13 @@ export const NoConversationToday = meta.story({
 		).toBeNull()
 		await expect(canvas.queryByText("Today with Atlas")).toBeNull()
 		await expect(slotIn(canvasElement, "home-layout-below")).not.toBeVisible()
-		await expectBlockInTheMiddle(canvasElement)
+		await expectRestingCardInTheMiddle(canvasElement)
 	},
 })
 
 export const OneConversationToday = meta.story({
 	name: "Today 2 · One conversation today",
-	render: () => <EmptyHome today={[TODAY_WORKING]} />,
+	render: () => besideARestingHome(<EmptyHome today={[TODAY_WORKING]} />),
 	globals: ARTBOARD_WINDOW.globals,
 	parameters: {
 		...ARTBOARD_WINDOW.parameters,
@@ -992,7 +1181,7 @@ export const OneConversationToday = meta.story({
 
 export const ThreeTodayMixedStates = meta.story({
 	name: "Today 3 · Three today, mixed states",
-	render: () => <EmptyHome today={TODAY_MIXED} />,
+	render: () => besideARestingHome(<EmptyHome today={TODAY_MIXED} />),
 	globals: ARTBOARD_WINDOW.globals,
 	parameters: {
 		...ARTBOARD_WINDOW.parameters,
@@ -1040,19 +1229,19 @@ const PANEL_BOTTOM_PADDING = 16
 
 export const ThreeTodayInAShortPanel = meta.story({
 	name: "Today · Three rows in a short panel, reached by scrolling",
-	render: () => <EmptyHome today={TODAY_MIXED} />,
+	render: () => besideARestingHome(<EmptyHome today={TODAY_MIXED} />),
 	globals: TODAY_SHORT_WINDOW.globals,
 	parameters: {
 		...TODAY_SHORT_WINDOW.parameters,
 		...withDescription(
-			"Three conversations today in a 560px panel, too short to show the list under the centred composer. Check that the greeting and composer stay in the middle and that the content area scrolls until the third row is whole, with the panel bottom padding under it.",
+			"Three conversations today in a 560px panel, too short to show the list under the input card. Check that the card stays where it rests in the middle and that the content area scrolls until the third row is whole, with the panel bottom padding under it.",
 		),
 	},
 	play: async ({ canvasElement }) => {
 		const scroller = slotIn(canvasElement, "screen-layout-scroller")
 		const third = todayRowsIn(canvasElement)[2]
 
-		await expectBlockInTheMiddle(canvasElement)
+		await expectRestingCardInTheMiddle(canvasElement)
 		await expect(third.getBoundingClientRect().bottom).toBeGreaterThan(
 			scroller.getBoundingClientRect().bottom,
 		)
@@ -1065,6 +1254,34 @@ export const ThreeTodayInAShortPanel = meta.story({
 		await expect(
 			Math.abs(contentArea.bottom - row.bottom - PANEL_BOTTOM_PADDING),
 		).toBeLessThanOrEqual(1)
+	},
+})
+
+export const ManyLinesBelowTheCard = meta.story({
+	name: "Today · Many lines below the card leave it in place while typing",
+	render: () =>
+		besideARestingHome(<EmptyHome today={[...TODAY_MIXED, TODAY_FOURTH]} />),
+	globals: TODAY_SHORT_WINDOW.globals,
+	parameters: {
+		...TODAY_SHORT_WINDOW.parameters,
+		...withDescription(
+			"As many lines as the page hangs under the card, in a panel too short to show them all. Check that the content area scrolls, that the card starts at the pixel where the resting card starts, and that a draft typed up to the row cap grows the card downward without moving its top edge.",
+		),
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const before = emptyStageBoxesOf(canvasElement).card
+
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+		await expectRestingCardInTheMiddle(canvasElement)
+
+		await userEvent.click(canvas.getByRole("textbox"))
+		await userEvent.paste(GROWN_DRAFT)
+
+		const after = emptyStageBoxesOf(canvasElement).card
+		await expect(after.bottom).toBeGreaterThan(before.bottom)
+		await expect(after.top).toBe(before.top)
+		await expectCardTopAtRest(canvasElement)
 	},
 })
 

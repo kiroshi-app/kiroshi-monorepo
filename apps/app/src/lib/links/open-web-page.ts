@@ -7,7 +7,10 @@ import { failureReporterIn } from "../failure-report"
 const reportFailure = failureReporterIn("open-web-page")
 
 export const openWebPage = (url: string) => {
-	void openInBrowser(url).catch(() =>
-		reportFailure({ title: i18n.t("chat:answerBlock.webPage.openFailed") }),
+	void openInBrowser(url).catch((reason: unknown) =>
+		reportFailure(
+			{ title: i18n.t("chat:answerBlock.webPage.openFailed") },
+			{ reason },
+		),
 	)
 }

@@ -18,6 +18,7 @@ import { createSpokenWordNotifier } from "./notification-source-spoken"
 import type { JoinedSpace } from "../bindings"
 import type { ReporterFacts } from "../failure-report"
 import type { ChatState } from "../chat/chat-state"
+import type { NamingStates } from "../conversations/conversation-namings"
 import type { SpokenWords } from "../conversations/spoken-words"
 import type { Conversation } from "../conversations/store-contract"
 import type {
@@ -69,7 +70,7 @@ type JoinedSpacesSource = {
 
 type ConversationsSource = Pick<
 	ConversationTabOpening,
-	"open" | "openInTab" | "showOverHome"
+	"open" | "openInSpace" | "showOverHome"
 >
 
 type MissionsSource = {
@@ -98,6 +99,7 @@ export type NotificationSourceOptions = {
 	conversations: ConversationsSource
 	missions: MissionsSource
 	spokenWords: Pick<SpokenWords, "subscribe">
+	namings: () => NamingStates
 	notifications: NotificationPort
 	switches: () => NotificationSourceSwitches
 	hasFocus: () => boolean
@@ -180,6 +182,7 @@ export const startNotificationSource = ({
 	conversations,
 	missions,
 	spokenWords,
+	namings,
 	notifications,
 	switches,
 	hasFocus,
@@ -202,9 +205,11 @@ export const startNotificationSource = ({
 		chat,
 		runtimes,
 		roster,
+		namings,
 	})
 	const notifySpokenWord = createSpokenWordNotifier({
 		roster,
+		namings,
 		switches,
 		hasHostFocus,
 		deliver,

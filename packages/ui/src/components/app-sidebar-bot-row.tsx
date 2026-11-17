@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -23,6 +23,7 @@ import { CompanionMenuContent } from "@workspace/ui/components/companion-menu"
 import {
 	MissionCapsuleList,
 	type MissionOpening,
+	type MissionTreeRowWrap,
 } from "@workspace/ui/components/mission-capsule"
 import type { RosterPinActions } from "@workspace/ui/components/roster-menu-items"
 import { SidebarListRow } from "@workspace/ui/components/sidebar-list-row"
@@ -68,6 +69,7 @@ interface BotRosterRowProps
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	wrapMission?: MissionTreeRowWrap
 	lift: Lifter
 }
 
@@ -98,10 +100,12 @@ const BotRosterRow = ({
 	onCreateSectionFor,
 	openMissionId,
 	onOpenMission,
+	wrapMission,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
 	const isCompact = useIsCompactRows()
+	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const rowRef = useRef<HTMLElement | null>(null)
 
 	const focusAfterClose = useRef<HTMLElement | null>(null)
@@ -128,7 +132,7 @@ const BotRosterRow = ({
 			data-tauri-drag-region="false"
 			ref={mergeRefs<HTMLElement>(rowRef, (node) => keepFocus?.(bot.id, node))}
 		>
-			<ContextMenu>
+			<ContextMenu onOpenChange={setIsMenuOpen}>
 				<ContextMenuTrigger
 					className={isCompact ? COMPACT_ROW_STACK : undefined}
 				>
@@ -137,8 +141,10 @@ const BotRosterRow = ({
 						isLiftable
 						badge={bot.badge}
 						geometry={isCompact ? "compact" : "agent"}
+						hasRowTooltip
 						isActive={isSelected}
 						isMiddleClickSelectable
+						isTooltipHidden={isLifted || isMenuOpen}
 						isWorking={working}
 						media={
 							<BotRowAvatar
@@ -165,9 +171,11 @@ const BotRosterRow = ({
 					/>
 					{isCompact ? (
 						<MissionCapsuleList
+							isTooltipHidden={isLifted || isMenuOpen}
 							missions={bot.missions}
 							onOpenMission={onOpenMission}
 							openMissionId={openMissionId}
+							wrapMission={wrapMission}
 						/>
 					) : null}
 				</ContextMenuTrigger>

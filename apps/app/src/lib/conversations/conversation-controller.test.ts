@@ -3,11 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	type ConversationController,
 	createConversationController,
+	NAMING_TIMEOUT_MS,
 } from "./conversation-controller"
+import {
+	type ConversationNamings,
+	createConversationNamings,
+} from "./conversation-namings"
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { KEPT_RUN_GRACE_MS } from "./kept-runs"
 import { readConversation } from "./read-conversation"
+import { RefusedWrite } from "./refused-write"
 import {
 	createScriptedDriver,
 	type ScriptedDriver,
@@ -116,9 +122,11 @@ type Harness = {
 	controller: ConversationController
 	conversation: Conversation
 	named: [string, ConversationNaming][]
+	namings: ConversationNamings
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
+	reportFailure: ReturnType<typeof vi.fn>
 }
 
 const settled = async () => {
@@ -202,7 +210,9 @@ const createHarness = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const named: [string, ConversationNaming][] = []
+	const namings = createConversationNamings()
 	let minted = 0
+	const reportFailure = vi.fn()
 	const controller = createConversationController(
 		withFakeHostWrites(driver, store),
 		store,
@@ -213,6 +223,8 @@ const createHarness = async (
 			},
 			now: () => minted,
 			onNamed: (conversationId, naming) => named.push([conversationId, naming]),
+			namings,
+			reportFailure,
 		},
 	)
 	const detach = controller.attach()
@@ -225,9 +237,11 @@ const createHarness = async (
 		controller,
 		conversation,
 		named,
+		namings,
 		detach,
 		settled,
 		refuseNextWrite,
+		reportFailure,
 	}
 }
 
@@ -1128,11 +1142,8 @@ describe("createConversationController", () => {
 			)
 		})
 
-		it("leaves the companion removed when the release fails", async () => {
+		it("leaves the companion removed and reports it when the release fails", async () => {
 			holdTheClock()
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			vi.spyOn(harness.driver, "shutdown").mockRejectedValue({
 				kind: "transitionInProgress",
 			})
@@ -1146,17 +1157,16 @@ describe("createConversationController", () => {
 				[null, `<@${nyx}> take the walls`],
 				[nyx, "walls are held"],
 			])
-			expect(reported).toHaveBeenCalledWith(
-				"conversation controller: agent_shutdown failed",
-				{ kind: "transitionInProgress" },
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					reason: { kind: "transitionInProgress" },
+					botId: nyx,
+				}),
 			)
-			reported.mockRestore()
 		})
 
 		it("releases the scopes left when one release rejects on shutdown", async () => {
-			const reported = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => undefined)
 			const nyx = idOf(harness.conversation, "Nyx")
 			const iris = idOf(harness.conversation, "Iris")
 			await harness.controller.send("@Nyx then @Iris")
@@ -1174,7 +1184,10 @@ describe("createConversationController", () => {
 
 			expect(released).toEqual([iris])
 			expect(harness.controller.getState().latestError).toBeNull()
-			reported.mockRestore()
+			expect(harness.reportFailure).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ reason: new Error("refused"), botId: nyx }),
+			)
 		})
 
 		it("resumes the next turn of a companion from the session its closed scope stored", async () => {
@@ -2176,6 +2189,23 @@ describe("naming a conversation from its first message", () => {
 	const namelessWith = (namingFor: () => Promise<ConversationNaming | null>) =>
 		createHarness(["Ada"], { title: "", namingFor })
 
+	const namelessAnsweredLater = async () => {
+		let answer: (naming: ConversationNaming | null) => void = () => undefined
+		const harness = await namelessWith(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve
+				}),
+		)
+		return {
+			harness,
+			answer: (naming: ConversationNaming | null) => answer(naming),
+		}
+	}
+
+	const namingOf = (harness: Harness) =>
+		harness.namings.getState()[harness.conversation.id]
+
 	it("keeps the title and the icon the runtime reads in the first message", async () => {
 		const harness = await namelessWith(() =>
 			Promise.resolve({ title: "Holding the walls", icon: "Shield" }),
@@ -2211,6 +2241,67 @@ describe("naming a conversation from its first message", () => {
 		await harness.settled()
 
 		expect(harness.named).toEqual([])
+	})
+
+	it("is pending while the runtime names it, then arrived with the title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+		expect(harness.named).toEqual([])
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+
+		expect(namingOf(harness)).toBe("arrived")
+		expect(harness.named).toEqual([
+			[harness.conversation.id, { title: "Holding the walls", icon: null }],
+		])
+	})
+
+	it.each([
+		{ answered: "no title", namingFor: () => Promise.resolve(null) },
+		{
+			answered: "an empty title",
+			namingFor: () => Promise.resolve({ title: "", icon: null }),
+		},
+		{
+			answered: "a refusal",
+			namingFor: () => Promise.reject(new Error("runtime gone")),
+		},
+	])(
+		"fails without a notice when the runtime answers $answered",
+		async ({ namingFor }) => {
+			const harness = await namelessWith(namingFor)
+
+			await harness.controller.send("how do we hold the walls?")
+			await harness.settled()
+
+			expect(namingOf(harness)).toBe("failed")
+			expect(harness.named).toEqual([])
+			expect(harness.reportFailure).not.toHaveBeenCalled()
+		},
+	)
+
+	it("fails once the runtime stays silent past the timeout, and drops a late title", async () => {
+		const { harness, answer } = await namelessAnsweredLater()
+		holdTheClock()
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		vi.advanceTimersByTime(NAMING_TIMEOUT_MS - 1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("pending")
+
+		vi.advanceTimersByTime(1)
+		await harness.settled()
+		expect(namingOf(harness)).toBe("failed")
+
+		answer({ title: "Holding the walls", icon: null })
+		await harness.settled()
+		expect(harness.named).toEqual([])
+		expect(namingOf(harness)).toBe("failed")
 	})
 
 	it("leaves alone the name of a conversation that has one", async () => {
@@ -3577,6 +3668,7 @@ describe("the mentions a finished turn carries", () => {
 		title: string,
 		description: string,
 		companion?: DroppedCompanion,
+		reason?: TransportError,
 	) => [
 		{ title, description },
 		{
@@ -3584,6 +3676,7 @@ describe("the mentions a finished turn carries", () => {
 			turn: expect.any(String),
 			space: SPACE,
 			...companion,
+			reason,
 		},
 	]
 
@@ -3803,6 +3896,7 @@ describe("the mentions a finished turn carries", () => {
 				"Iris didn’t start",
 				"Couldn’t start Iris (no binary). Restart the session.",
 				{ botId: room.iris, botName: "Iris" },
+				{ kind: "spawnFailed", detail: "no binary" },
 			),
 		)
 		room.detach()
@@ -4107,5 +4201,113 @@ describe("the mentions a finished turn carries", () => {
 
 		expect(room.reportFailure).toHaveBeenCalledTimes(1)
 		expect(room.stopDrops).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("a send whose answer the relay refused", () => {
+	type HostAnswer = "accepted" | "recorded" | "unrecorded"
+
+	const refusingRoom = async () => {
+		const base = createFakeTranscriptStore()
+		let answer: HostAnswer = "accepted"
+		const store: TranscriptStore = {
+			...base,
+			sendUserMessage: async (sent, summoned) => {
+				if (answer === "accepted") {
+					return base.sendUserMessage(sent, summoned)
+				}
+				if (answer === "recorded") {
+					await base.sendUserMessage(sent, summoned)
+				}
+				throw new RefusedWrite(
+					"conversation_send_user_message",
+					undefined,
+					new Error("relay closed"),
+				)
+			},
+		}
+		const bots = await seatBots(store, SPACE, ["Nyx"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		let replay: () => void = () => undefined
+		const driver = createScriptedDriver()
+		const controller = createConversationController(
+			withFakeHostWrites(driver, store),
+			store,
+			{
+				onReconnected: (listener) => {
+					replay = listener
+					return () => undefined
+				},
+			},
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await settled()
+
+		const sent = async (text: string, hostAnswer: HostAnswer) => {
+			answer = hostAnswer
+			await controller.send(text)
+			await settled()
+			answer = "accepted"
+		}
+		const replayed = async () => {
+			replay()
+			await settled()
+		}
+		return {
+			controller,
+			driver,
+			nyx: idOf(conversation, "Nyx"),
+			sent,
+			replayed,
+			detach,
+		}
+	}
+
+	it("shows the message the replay brings back once, as sent, and starts its agent", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([
+			[null, `<@${room.nyx}> hold the line`],
+		])
+		expect(room.controller.getState().refusedMessage).toBeNull()
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("starts nothing and offers each summoned agent its retry when the replay lands during a turn", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx take the walls", "accepted")
+		await room.sent("@Nyx hold the line", "recorded")
+
+		await room.replayed()
+
+		const state = room.controller.getState()
+		expect(state.refusedMessage).toBeNull()
+		expect(state.failedBotIds).toEqual([room.nyx])
+		expect(submittedIn(room)).toEqual([room.nyx])
+		room.detach()
+	})
+
+	it("keeps the message refused, with its retry, when the replay does not bring it back", async () => {
+		const room = await refusingRoom()
+		await room.sent("@Nyx hold the line", "unrecorded")
+
+		await room.replayed()
+
+		expect(spokenIn(room.controller)).toEqual([])
+		expect(room.controller.getState().refusedMessage).toMatchObject({
+			text: "@Nyx hold the line",
+		})
+		expect(submittedIn(room)).toEqual([])
+		room.detach()
 	})
 })

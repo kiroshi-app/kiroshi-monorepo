@@ -307,9 +307,15 @@ const settings = {
 			caption: "Every agent in {{space}}. Pick one to change how it works.",
 			create: "Create an agent",
 			empty: "No agents in this space yet.",
+			emptyDescription:
+				"Create one to give it a name, instructions and skills.",
 			counts: "{{skills}} · {{applications}}",
 			countsUnreadable:
 				"Couldn’t read the skills and applications of the agents. Open Agents again to retry.",
+			failure: {
+				title: "Couldn’t load agents",
+				description: "The agents are still there; only the list didn’t load.",
+			},
 			skills_zero: "no skills",
 			skills_one: "{{count}} skill",
 			skills_other: "{{count}} skills",

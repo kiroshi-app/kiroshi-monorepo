@@ -39,11 +39,13 @@ export const HomeRoute = () => {
 						conversations,
 						previews: conversationPreviews,
 						hostStates,
+						namings: body.conversationNamings,
 						now: rosterLines.now,
 					},
 					onSelectAgent: pickAgent,
 					startConversation:
 						core.roster.controller.createUnselectedConversation,
+					beginNaming: core.conversationNamings.begin,
 					discardConversation: core.roster.controller.discardConversation,
 					openConversation,
 				}}

@@ -2,8 +2,10 @@ import {
 	createRootRouteWithContext,
 	createRoute,
 	createRouter,
+	redirect,
 } from "@tanstack/react-router"
 
+import { AgentsRoute } from "@/components/agents-route"
 import { ConversationsScreen } from "@/components/conversations-screen"
 import { HomeRoute } from "@/components/home-route"
 import { LibraryRoute } from "@/components/library-route"
@@ -17,6 +19,7 @@ import {
 } from "@/components/workspace-settings"
 import { validateLibrarySearch } from "@/lib/navigation/library-search"
 import {
+	FORMER_AGENTS_ENTRY,
 	validateCompanionSettingsSearch,
 	validateSettingsSearch,
 } from "@/lib/navigation/settings-search"
@@ -54,6 +57,12 @@ const libraryRoute = createRoute({
 	component: LibraryRoute,
 })
 
+const agentsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/agents",
+	component: AgentsRoute,
+})
+
 const missionsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/missions",
@@ -64,6 +73,11 @@ const spaceSettingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/settings/space/$spaceId",
 	validateSearch: validateSettingsSearch,
+	beforeLoad: ({ search }) => {
+		if (search.entry === FORMER_AGENTS_ENTRY) {
+			throw redirect({ to: "/agents", replace: true })
+		}
+	},
 	component: SpaceSettingsRoute,
 })
 
@@ -92,6 +106,7 @@ const routeTree = rootRoute.addChildren([
 	conversationsRoute,
 	homeRoute,
 	libraryRoute,
+	agentsRoute,
 	missionsRoute,
 	spaceSettingsRoute,
 	userSettingsRoute,
