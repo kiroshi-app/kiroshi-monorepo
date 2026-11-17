@@ -23,7 +23,7 @@ const RESOLVED_SUFFIXES = [
 
 export const SCANNED_MODULE = /\.(ts|tsx|js)$/
 
-const TEST_FILE = /\.test\.tsx?$/
+export const TEST_FILE = /\.test\.tsx?$/
 
 const JAVASCRIPT = new Bun.Transpiler({ loader: "js" })
 

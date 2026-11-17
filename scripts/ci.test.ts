@@ -924,6 +924,15 @@ describe("the ci:fast unit test scope", () => {
 		})
 	})
 
+	it("runs a changed test file under a shared path as a changed test file, not as a shared module", () => {
+		expect(
+			fastUnitTestScope({
+				changedPaths: [VOCABULARY_TEST],
+				repo: NO_REPO,
+			}),
+		).toEqual({ scope: "changed" })
+	})
+
 	it("runs the changed test files when no changed module is shared", () => {
 		expect(
 			decidedIn(fixtureRepo({ directImporters: 1, relayImporters: 0 }), [

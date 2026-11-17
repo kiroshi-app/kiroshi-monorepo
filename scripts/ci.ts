@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url"
 import { touchedJobs } from "./ci-changes"
 import {
 	SCANNED_MODULE,
+	TEST_FILE,
 	TEST_SOURCE_ROOTS,
 	testImports,
 } from "./test-importers"
@@ -427,7 +428,9 @@ export const fastUnitTestScope = ({
 		if (rule !== undefined && !isGraphedModule(path))
 			return { scope: "full", path, rule }
 	}
-	const graphed = changedPaths.filter(isGraphedModule)
+	const graphed = changedPaths.filter(
+		(path) => isGraphedModule(path) && !TEST_FILE.test(path),
+	)
 	if (graphed.length === 0) return { scope: "changed" }
 	const started = performance.now()
 	const elapsed = () => Math.round(performance.now() - started)
