@@ -140,11 +140,19 @@ describe("evolution source", () => {
 			driver.failToRecord("bot-1", bundle)
 
 			expect(reportFailure).toHaveBeenCalledTimes(1)
-			expect(reportFailure).toHaveBeenCalledWith({
-				title,
-				description:
-					"The change is still saved, but you can’t undo it from History (index.lock exists). Open settings to review it.",
-			})
+			expect(reportFailure).toHaveBeenCalledWith(
+				{
+					title,
+					description:
+						"The change is still saved, but you can’t undo it from History (index.lock exists). Open settings to review it.",
+				},
+				{
+					reason: expect.objectContaining({
+						type: "botEvolutionFailed",
+						detail: "index.lock exists",
+					}),
+				},
+			)
 		},
 	)
 
@@ -158,6 +166,24 @@ describe("evolution source", () => {
 
 		expect(panels.roster.reload).not.toHaveBeenCalled()
 		expect(panels.rereadPlugin).not.toHaveBeenCalled()
+	})
+
+	it("reports with its reason a subscription the driver refuses", async () => {
+		const panels = createPanels()
+		const reportFailure = vi.fn()
+		const refusal = { kind: "notStarted" }
+
+		startEvolutionSource({
+			driver: { subscribe: () => Promise.reject(refusal) },
+			reportFailure,
+			...panels,
+		})
+		await flush()
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(
+			{ title: "Couldn’t send that request" },
+			{ reason: refusal },
+		)
 	})
 
 	it("ignores an unrecorded change without a runtime scope", () => {

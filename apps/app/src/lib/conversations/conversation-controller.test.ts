@@ -3578,6 +3578,7 @@ describe("the mentions a finished turn carries", () => {
 		title: string,
 		description: string,
 		companion?: DroppedCompanion,
+		reason?: TransportError,
 	) => [
 		{ title, description },
 		{
@@ -3585,6 +3586,7 @@ describe("the mentions a finished turn carries", () => {
 			turn: expect.any(String),
 			space: SPACE,
 			...companion,
+			reason,
 		},
 	]
 
@@ -3804,6 +3806,7 @@ describe("the mentions a finished turn carries", () => {
 				"Iris didn’t start",
 				"Couldn’t start Iris (no binary). Restart the session.",
 				{ botId: room.iris, botName: "Iris" },
+				{ kind: "spawnFailed", detail: "no binary" },
 			),
 		)
 		room.detach()

@@ -27,6 +27,7 @@ export type HostRefusal = {
 	command?: string
 	status?: number
 	side?: FailureReport["side"]
+	reason?: unknown
 }
 
 type HostConnection = {
@@ -193,6 +194,7 @@ export const raiseRefusalNotice = (
 			command: refusal.command,
 			httpStatus: refusal.status,
 			side: refusal.side,
+			reason: refusal.reason,
 		},
 	)
 
@@ -267,6 +269,7 @@ export const createHttpHost = ({
 			command,
 			status,
 			side: "member",
+			reason,
 		}
 		onRefused(refusal)
 		throw new HostRefused(refusal.message, reason, refusalKindOf(refusal), {

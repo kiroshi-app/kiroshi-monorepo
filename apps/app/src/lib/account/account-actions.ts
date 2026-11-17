@@ -11,8 +11,8 @@ export const ACCOUNT_RAISED_IN = "use-account"
 
 const ACCOUNT_PAGE_URL = "https://kiroshi.app/account"
 
-const reportFailure = (title: string) =>
-	raiseReportedFailure({ title }, { raisedIn: ACCOUNT_RAISED_IN })
+const reportFailure = (title: string, reason: unknown) =>
+	raiseReportedFailure({ title }, { raisedIn: ACCOUNT_RAISED_IN, reason })
 
 export const performAccountCommand = async (command: AccountCommand) => {
 	const result = await command()
@@ -32,13 +32,14 @@ export const copySignInLinkOf = (state: AccountState | undefined) => () => {
 				type: "info",
 				title: i18n.t("settings:account.signInLinkCopied"),
 			}),
-		() => reportFailure(i18n.t("settings:account.copySignInLinkFailed")),
+		(reason: unknown) =>
+			reportFailure(i18n.t("settings:account.copySignInLinkFailed"), reason),
 	)
 }
 
 export const manageAccount = () => {
-	openInBrowser(ACCOUNT_PAGE_URL).catch(() =>
-		reportFailure(i18n.t("settings:account.manageAccountFailed")),
+	openInBrowser(ACCOUNT_PAGE_URL).catch((reason: unknown) =>
+		reportFailure(i18n.t("settings:account.manageAccountFailed"), reason),
 	)
 }
 

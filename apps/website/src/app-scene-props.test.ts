@@ -33,6 +33,7 @@ const LEFT_OUT_OF_THE_SIDEBAR: Record<string, string> = {
 	isSettingsShown: "no settings screen opens in the scene",
 	incomingTab: "no tab arrives from another window on a web page",
 	onSelectLibrary: "the scene opens no Library, so its rail draws no entry",
+	onSelectAgents: "the scene opens no Agents page, so its rail draws no entry",
 	onToggleSidebar: "the scene keeps its sidebar open, so it draws no toggle",
 }
 

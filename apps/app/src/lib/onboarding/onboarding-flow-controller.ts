@@ -182,8 +182,9 @@ export const createOnboardingFlowController = (
 		})
 
 	const reportShotoMissing = () =>
-		report(i18n.t("chat:onboarding.arrival.firstCompanionMissing"), {
-			kind: "unknownBot",
+		reportFailure({
+			title: i18n.t("chat:onboarding.arrival.firstCompanionMissing"),
+			description: i18n.t("chat:onboarding.arrival.unknownCompanion"),
 		})
 
 	const completesShotoRun = async (shotoId: string | null) => {

@@ -159,6 +159,7 @@ describe("invoke over http", () => {
 			command: "agent_models",
 			status: 500,
 			side: "member",
+			reason: "the host broke",
 		})
 	})
 
@@ -228,6 +229,7 @@ describe("invoke over http", () => {
 			command: "agent_models",
 			status: 401,
 			side: "member",
+			reason: "the call carried no valid bearer token",
 		})
 	})
 
@@ -240,6 +242,7 @@ describe("invoke over http", () => {
 			command: "agent_models",
 			status: undefined,
 			side: "member",
+			reason: expect.objectContaining({ message: "Failed to fetch" }),
 		})
 	})
 })
@@ -351,6 +354,7 @@ describe("a host that is offline", () => {
 			command: "bot_list",
 			status: 502,
 			side: "member",
+			reason: "the host broke",
 		})
 		expect(onDown).not.toHaveBeenCalled()
 	})

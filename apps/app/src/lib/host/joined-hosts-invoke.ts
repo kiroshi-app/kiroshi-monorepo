@@ -200,6 +200,7 @@ export const createJoinedHostsInvoke = ({
 		reportFailure({
 			message: describeFailure(reason),
 			command: LOCAL_IDS_COMMAND,
+			reason,
 		})
 	}
 
