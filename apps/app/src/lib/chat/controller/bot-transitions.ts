@@ -1,3 +1,5 @@
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { BotChat, BotTransition, TransitionKind } from "./bot-chat"
 import type { ChatContext } from "./chat-context"
 import type { ConversationOpening } from "./conversation-opening"
@@ -12,7 +14,15 @@ type BotTransitionsParts = {
 }
 
 export const createBotTransitions = (
-	{ driver, bots, transitions, botFor, publish, report }: ChatContext,
+	{
+		driver,
+		bots,
+		transitions,
+		botFor,
+		publish,
+		report,
+		reportFailure,
+	}: ChatContext,
 	{ openConversation, openedFor, pump }: BotTransitionsParts,
 ) => {
 	let chosenBotId: string | null = null
@@ -41,7 +51,12 @@ export const createBotTransitions = (
 		if (!runtime) {
 			return
 		}
-		await driver.shutdown(runtime).catch(() => undefined)
+		await driver.shutdown(runtime).catch((reason: unknown) => {
+			void reportFailure(
+				{ title: i18n.t("chat:screen.notice.failed") },
+				{ reason, botId },
+			)
+		})
 	}
 
 	const forget = (botId: string, transition: BotTransition) => {

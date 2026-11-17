@@ -64,6 +64,7 @@ const rosterOf = (roster: Partial<TodayRoster> = {}): TodayRoster => ({
 	conversations: [],
 	previews: {},
 	hostStates: {},
+	namings: {},
 	now: NOON,
 	...roster,
 })
@@ -177,4 +178,18 @@ it("falls back to the last message as done when the host names no pending prompt
 	expect(todayRowsOf(todayRead, rosterOf())).toMatchObject([
 		{ id: "silent", state: "done", preview: "Waiting on you" },
 	])
+})
+
+it("labels a conversation being named as a new conversation", () => {
+	const roster = rosterOf({ namings: { naming: "pending" } })
+
+	expect(todayRowsOf([readRow("naming", { title: "" })], roster)).toMatchObject(
+		[{ id: "naming", title: "New conversation" }],
+	)
+})
+
+it("labels a conversation left without a title as untitled, never by its agent", () => {
+	expect(
+		todayRowsOf([readRow("nameless", { title: "" })], rosterOf()),
+	).toMatchObject([{ id: "nameless", title: "Untitled conversation" }])
 })

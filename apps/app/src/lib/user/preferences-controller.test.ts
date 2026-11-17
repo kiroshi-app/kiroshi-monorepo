@@ -50,9 +50,6 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 		if (command === "user_set_preferences") {
 			held = (args as { preferences: UserPreferences }).preferences
 		}
-		if (command === "user_set_profile_picture") {
-			held = { ...held, profilePicturePath: WORN }
-		}
 		if (command === "user_set_onboarding_step") {
 			held = { ...held, onboardingStep: (args as OnboardingStepArgs).step }
 		}
@@ -76,11 +73,6 @@ const aHost = (record: UserPreferences = DEFAULTS) => {
 
 	return () => held
 }
-
-const aPicture = () =>
-	({
-		arrayBuffer: () => Promise.resolve(new Uint8Array([1, 2, 3]).buffer),
-	}) as File
 
 const loaded = async () => {
 	const controller = createUserController()
@@ -145,61 +137,6 @@ describe("the reader's own record", () => {
 		})
 	})
 
-	it("shows a name on the keystroke and writes the record whole", async () => {
-		const host = aHost({ ...DEFAULTS, colorScheme: "dark" })
-		const controller = await loaded()
-
-		controller.rename("Ny")
-		controller.rename("Nyx")
-
-		expect(controller.getState().preferences.displayName).toBe("Nyx")
-		await vi.waitFor(() =>
-			expect(host()).toEqual({
-				...DEFAULTS,
-				displayName: "Nyx",
-				colorScheme: "dark",
-			}),
-		)
-	})
-
-	it("wears the picture the host answered with", async () => {
-		aHost()
-		const controller = await loaded()
-
-		await controller.uploadPicture(aPicture())
-
-		expect(hostInvoke).toHaveBeenCalledWith("user_set_profile_picture", {
-			bytes: new Uint8Array([1, 2, 3]),
-		})
-		expect(controller.getState().preferences.profilePicturePath).toBe(WORN)
-	})
-
-	it("takes the picture off the record the host holds", async () => {
-		const host = aHost()
-		const controller = await loaded()
-		await controller.uploadPicture(aPicture())
-
-		await controller.removePicture()
-
-		expect(host().profilePicturePath).toBeNull()
-		expect(controller.getState().preferences.profilePicturePath).toBeNull()
-	})
-
-	it("keeps showing what the host last answered with when a write is refused", async () => {
-		aHost({ ...DEFAULTS, displayName: "Nyx" })
-		const controller = await loaded()
-		hostInvoke.mockRejectedValue({
-			kind: "storage",
-			failure: { kind: "sqlite", detail: "disk I/O error" },
-		})
-
-		controller.rename("Nix")
-
-		await vi.waitFor(() =>
-			expect(controller.getState().preferences.displayName).toBe("Nyx"),
-		)
-	})
-
 	it("shows the switch on the press and writes the record whole", async () => {
 		const host = aHost({ ...DEFAULTS, displayName: "Nyx", colorScheme: "dark" })
 		const controller = await loaded()
@@ -233,22 +170,6 @@ describe("the reader's own record", () => {
 		})
 
 		expect(controller.getState().preferences.notifyOnQuestion).toBe(true)
-	})
-
-	it("holds a scheme chosen between a keystroke's read and its write", async () => {
-		const host = aHost({ ...DEFAULTS, displayName: "Nyx" })
-		const controller = await loaded()
-
-		controller.rename("Nyxie")
-		await controller.setColorScheme("dark")
-
-		await vi.waitFor(() =>
-			expect(host()).toEqual({
-				...DEFAULTS,
-				displayName: "Nyxie",
-				colorScheme: "dark",
-			}),
-		)
 	})
 
 	it("reads a field the record leaves out as none, and writes nothing for it", async () => {

@@ -36,7 +36,7 @@ const reportFailure = (action: FailedAction) => (reason: unknown) => {
 	console.error(`mission menu: ${action} failed`, reason)
 	raiseReportedFailure(
 		{ title: i18n.t(`chat:missions.menu.failed.${action}`) },
-		{ raisedIn: "mission-actions" },
+		{ raisedIn: "mission-actions", reason },
 	)
 }
 

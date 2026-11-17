@@ -21,6 +21,7 @@ import { createChatDriver } from "../chat/create-driver"
 import { createDraftsController } from "../chat/drafts-controller"
 import { useChat } from "../chat/use-chat"
 import { withSettledSettings } from "../chat/with-settled-settings"
+import { createConversationNamings } from "../conversations/conversation-namings"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createTranscriptStore } from "../conversations/create-store"
 import { pluginScopeOf } from "../conversations/plugin-scope"
@@ -61,14 +62,16 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		isListedInOpenSpace: (botId) =>
 			roster.controller.getState().bots.some((bot) => bot.id === botId),
 	})
+	const conversationNamings = useMemo(createConversationNamings, [])
 	const conversationRuntimes = useMemo(
 		() =>
 			createConversationRuntimes(driver, store, {
 				onNamed: roster.controller.nameConversation,
+				namings: conversationNamings,
 				rereadConversation: roster.controller.rereadConversationRow,
 				senderAccountId,
 			}),
-		[driver, store, roster.controller, senderAccountId],
+		[driver, store, roster.controller, conversationNamings, senderAccountId],
 	)
 
 	useEffect(
@@ -100,17 +103,20 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	)
 	const openedRoutine = useMemo(createOpenedRoutineController, [])
 	const messageLandings = useMemo(createMessageLandingController, [])
+	const isOnScreen = (spaceRowId: string) =>
+		roster.controller.getState().spaceRowId === spaceRowId
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
 		pin: roster.controller.pin,
 		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
+		isOnScreen,
 		reload: roster.controller.reload,
 	})
-	const collapsedSections = useCollapsedSections(
-		store,
-		roster.controller.hostSpaceIdOf,
-	)
+	const collapsedSections = useCollapsedSections(store, {
+		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
+		isOnScreen,
+	})
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const spaces = useSpaces(store)
@@ -177,6 +183,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		collapsedSections,
 		companionPlugin,
 		conversationOpening,
+		conversationNamings,
 		conversationRuntimes,
 		drafts,
 		driver,

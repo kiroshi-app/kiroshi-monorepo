@@ -4,6 +4,7 @@ import { expect, fn, mocked, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	centredInWindowOf,
+	emulateMotion,
 	expectCellsIn,
 	expectCentredInWindow,
 	isInBrowserRunner,
@@ -92,6 +93,7 @@ const CLUSTER_CELLS = 3
 const SMALLEST_APP_AVATAR = 16
 const EXIT_BUDGET_SECONDS = 0.5
 const ENTRANCE_SEEN_AFTER = 1600
+const ENTRANCE_CUT_AFTER = 300
 const EXIT_REPORTED_WITHIN = { timeout: 5000 }
 
 const secondsIn = (list: string) =>
@@ -265,22 +267,73 @@ const expectExitReportedOnce = async ({ args, canvasElement }: ExitContext) => {
 	return screen
 }
 
+const allowMotionBeforeMount = async () => {
+	if (isInBrowserRunner()) await emulateMotion("no-preference")
+}
+
+type ExitTimeline = {
+	hasEntranceEndedAtLeave?: boolean
+	shownPerFrame: number[]
+}
+
+const watchExit = (screen: HTMLElement) => {
+	const timeline: ExitTimeline = { shownPerFrame: [] }
+	const record = () => {
+		timeline.shownPerFrame.push(shownHexagonsOf(screen).length)
+		frame = requestAnimationFrame(record)
+	}
+	let frame = requestAnimationFrame(record)
+	const leave = new MutationObserver(() => {
+		if (screen.dataset.phase !== "leaving") return
+		timeline.hasEntranceEndedAtLeave ??=
+			slotsIn(screen, "app-boot-cell").every(
+				(cell) => cell.getAnimations().length === 0,
+			) && shownHexagonsOf(screen).length === CLUSTER_CELLS
+	})
+	leave.observe(screen, { attributeFilter: ["data-phase"] })
+	return {
+		timeline,
+		stop: () => {
+			cancelAnimationFrame(frame)
+			leave.disconnect()
+		},
+	}
+}
+
+const ascending = (counts: number[]) => counts.toSorted((a, b) => a - b)
+
+const expectNoCellPopping = async (shownPerFrame: number[]) => {
+	const peak = shownPerFrame.indexOf(Math.max(...shownPerFrame))
+	const arriving = shownPerFrame.slice(0, peak + 1)
+	const leaving = shownPerFrame.slice(peak)
+
+	await expect(shownPerFrame[peak]).toBe(CLUSTER_CELLS)
+	await expect(arriving).toEqual(ascending(arriving))
+	await expect(leaving).toEqual(ascending(leaving).reverse())
+}
+
 const provesExit = async (context: ExitContext) => {
 	if (!isInBrowserRunner()) {
 		await expectExitReportedOnce(context)
 		return
 	}
 
-	await withMotionAllowed(async () => {
+	try {
+		const exit = watchExit(slotIn(context.canvasElement, "app-boot-screen"))
 		const screen = await expectExitReportedOnce(context)
+		exit.stop()
 		const stage = getComputedStyle(slotIn(screen, "app-boot-stage"))
 
+		await expect(exit.timeline.hasEntranceEndedAtLeave).toBe(true)
 		await expect(screen).not.toHaveAttribute("data-still")
 		await expect(stage.opacity).toBe("0")
 		await expect(stage.scale).toBe("0.5")
 		await expect(stage.rotate).toBe("60deg")
+		await expectNoCellPopping(exit.timeline.shownPerFrame)
 		await expectHexagonsKept(screen)
-	})
+	} finally {
+		await emulateMotion("reduce")
+	}
 }
 
 const provesStillExit = async (context: ExitContext) => {
@@ -296,17 +349,6 @@ const provesStillExit = async (context: ExitContext) => {
 	)
 }
 
-const provesExitAtMount = async ({ args, canvasElement }: ExitContext) => {
-	const screen = slotIn(canvasElement, "app-boot-screen")
-
-	await waitFor(() => expect(args.onExitComplete).toHaveBeenCalledOnce())
-	await expect(screen.dataset.phase).toBe("leaving")
-	await expect(shownHexagonsOf(screen)).toHaveLength(0)
-	await expect(within(screen).getByRole("status")).toHaveTextContent(
-		"Starting Kiroshi",
-	)
-}
-
 const describedAs = (story: string) => ({ docs: { description: { story } } })
 
 const meta = preview.meta({
@@ -317,7 +359,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The surface a desktop window opens on while it reads the record: the whole window in the background of the scheme in force, with the three-cell Hive mark at launch size in its centre. Each cell is a full avatar hexagon: the first three of `agents`, completed with ink cells when fewer are known, so a first launch draws three ink cells. It says the app is starting and nothing more: no spinner, no progress bar, no product name, no way out. The host mounts it for as long as its first read is in flight, turns `isExiting` on at whatever moment the answer lands, and swaps in the shell when `onExitComplete` fires, once per exit. The mark alone carries the message, so when the reader asks for reduced motion the mark stands still and the status string is drawn under it instead of being left to screen readers. Reach for it on launch, never for a read a reader triggered: a refresh inside the app belongs to a skeleton where the data will land, not to a screen that takes the window back.",
+					"The surface a desktop window opens on while it reads the record: the whole window in the background of the scheme in force, with the three-cell Hive mark at launch size in its centre. Each cell is a full avatar hexagon: the first three of `agents`, completed with ink cells when fewer are known, so a first launch draws three ink cells. It says the app is starting and nothing more: no spinner, no progress bar, no product name, no way out. The host mounts it for as long as its first read is in flight, turns `isExiting` on at whatever moment the answer lands, and swaps in the shell when `onExitComplete` fires, once per exit. An exit asked before the three cells have docked waits for them: the entrance always plays to its end before the trio folds away. The mark alone carries the message, so when the reader asks for reduced motion the mark stands still and the status string is drawn under it instead of being left to screen readers. Reach for it on launch, never for a read a reader triggered: a refresh inside the app belongs to a skeleton where the data will land, not to a screen that takes the window back.",
 			},
 		},
 	},
@@ -374,6 +416,7 @@ export const Dark = Default.extend({
 
 export const Exit = meta.story({
 	args: { exitsAfter: ENTRANCE_SEEN_AFTER },
+	beforeEach: allowMotionBeforeMount,
 	parameters: describedAs(
 		"The way out. The story turns `isExiting` on by itself 1.6s after the mount, the same thing the `exit` control does at any other moment: the trio folds to half size with a sixth of a turn and fades in 300ms, then `onExitComplete` fires once, with nothing left on the window. Flip `replay` to watch it again.",
 	),
@@ -389,7 +432,15 @@ export const ExitStill = meta.story({
 export const ExitAtMount = meta.story({
 	tags: ["test-only"],
 	args: { exit: true },
-	play: provesExitAtMount,
+	beforeEach: allowMotionBeforeMount,
+	play: provesExit,
+})
+
+export const ExitMidEntrance = meta.story({
+	tags: ["test-only"],
+	args: { exitsAfter: ENTRANCE_CUT_AFTER },
+	beforeEach: allowMotionBeforeMount,
+	play: provesExit,
 })
 
 export const CentredIn700pxWindow = meta.story({

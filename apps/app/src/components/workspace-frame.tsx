@@ -61,6 +61,7 @@ const sidebarAskingFirst = (
 	onOpenSpaceSettings: askFirst(sidebar.onOpenSpaceSettings),
 	onOpenSettings: askFirst(sidebar.onOpenSettings),
 	onNewConversation: askFirst(sidebar.onNewConversation),
+	onSelectAgents: askFirst(sidebar.onSelectAgents),
 	onSelectMissions: askFirst(sidebar.onSelectMissions),
 	onSelectLibrary: askFirst(sidebar.onSelectLibrary),
 	onOpenConversation: askFirst(sidebar.onOpenConversation),

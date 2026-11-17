@@ -119,6 +119,7 @@ describe("createLibraryCommentMentionOpening", () => {
 					title: "Couldn’t bring Kiroshi to the front. Switch to it yourself.",
 					description: "no window to reveal",
 				},
+				expect.objectContaining({ message: "no window to reveal" }),
 			],
 		])
 		expect(opening.askForThread).toHaveBeenCalledTimes(1)

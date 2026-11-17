@@ -54,13 +54,13 @@ describe("createChatController", () => {
 		)
 	})
 
-	it("opens a session on preflight and collapses concurrent calls into one", async () => {
+	it("opens a session on restart and collapses concurrent calls into one", async () => {
 		const { driver, controller } = await bootedHarness()
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
 		const [first, second] = await Promise.all([
-			controller.preflight(),
-			controller.preflight(),
+			controller.restart(),
+			controller.restart(),
 		])
 		await vi.runAllTimersAsync()
 
@@ -120,7 +120,7 @@ describe("createChatController", () => {
 		})
 	})
 
-	it("reports an unavailable binary on preflight without opening a session", async () => {
+	it("reports an unavailable binary on restart without opening a session", async () => {
 		const { driver, controller } = createHarness()
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 		vi.spyOn(driver, "check").mockResolvedValue({
@@ -131,7 +131,7 @@ describe("createChatController", () => {
 		})
 
 		await controller.open(BOT, null)
-		expect(await controller.preflight()).toBeNull()
+		expect(await controller.restart()).toBeNull()
 		expect(startSpy).not.toHaveBeenCalled()
 		const state = controller.getState()
 		expect(state.connection).toBe("unavailable")

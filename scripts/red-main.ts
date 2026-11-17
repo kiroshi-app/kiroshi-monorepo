@@ -9,9 +9,12 @@ export type Run = {
 	url: string
 	commitMessage: string
 	commitAuthor: string
+	attempt: number
 }
 
-export type Job = { name: string; conclusion: string | null }
+export type JobStep = { name: string; conclusion: string | null }
+
+export type Job = { name: string; conclusion: string | null; steps: JobStep[] }
 
 export type PullRequest = { number: number; authorLogin: string }
 
@@ -30,12 +33,15 @@ export type SinceGreen =
 	| { kind: "none" }
 	| { kind: "unavailable"; reason: string }
 
-export type RunReport = {
+export type FailedRun = {
 	run: Run
 	jobs: Job[]
 	pullRequests: PullRequest[]
-	sinceGreen: SinceGreen
 }
+
+export type RunReport = FailedRun & { sinceGreen: SinceGreen }
+
+export type RunnerFailureReport = FailedRun & { rerunRefusal?: string }
 
 export type IssueInput = {
 	teamId: string
@@ -49,6 +55,7 @@ export type IssueInput = {
 export type GitHub = {
 	readRun: (runId: string) => Promise<Run>
 	readJobs: (runId: string) => Promise<Job[]>
+	rerunFailedJobs: (runId: string) => Promise<void>
 	readPullRequests: (sha: string) => Promise<PullRequest[]>
 	readLastGreenSha: (createdBefore: string) => Promise<string | undefined>
 	readCommits: (base: string, head: string) => Promise<Commit[]>
@@ -78,6 +85,8 @@ const TODO_STATE_ID = "84f63beb-26f5-47ff-89e4-1c41e9128f6c"
 
 const FAILED_JOB_CONCLUSIONS = ["failure", "timed_out"]
 
+const RUNNER_FAILURE_STEP = "Runner failure"
+
 const REQUEST_TIMEOUT_MS = 30_000
 
 const ISSUES_REPORTING_RUN = `query IssuesReportingRun($teamId: ID!, $runUrl: String!) {
@@ -104,12 +113,28 @@ const shortSha = (sha: string) => sha.slice(0, 7)
 
 const firstLine = (text: string) => text.split("\n")[0] ?? ""
 
-const failedJobNames = (jobs: Job[]) => {
-	const failed = jobs
-		.filter((job) => FAILED_JOB_CONCLUSIONS.includes(job.conclusion ?? ""))
+export const isRunnerFailure = ({ name, steps }: Job) =>
+	name.startsWith("ios") &&
+	(steps.every((step) => step.conclusion === null) ||
+		steps.some(
+			(step) =>
+				step.name === RUNNER_FAILURE_STEP && step.conclusion === "failure",
+		))
+
+const classifiedFailures = (jobs: Job[]) => {
+	const failed = jobs.filter((job) =>
+		FAILED_JOB_CONCLUSIONS.includes(job.conclusion ?? ""),
+	)
+	const runnerFailures = failed.filter(isRunnerFailure).map((job) => job.name)
+	const others = failed
+		.filter((job) => !isRunnerFailure(job))
 		.map((job) => job.name)
-	const withoutVerify = failed.filter((name) => name !== "verify")
-	return withoutVerify.length > 0 ? withoutVerify : failed
+	const withoutVerify = others.filter((name) => name !== "verify")
+	const redJobs =
+		withoutVerify.length > 0 || runnerFailures.length > 0
+			? withoutVerify
+			: others
+	return { redJobs, runnerFailures }
 }
 
 const pullRequestLine = (pullRequests: PullRequest[]) => {
@@ -150,23 +175,50 @@ const FILED_IN = {
 	stateId: TODO_STATE_ID,
 }
 
-export const redMainIssue = ({
-	run,
-	jobs,
-	pullRequests,
-	sinceGreen,
-}: RunReport): IssueInput => ({
-	...FILED_IN,
-	title: `Red main: ${failedJobNames(jobs).join(", ")} at ${shortSha(run.headSha)}`,
-	description: [
-		`Run: ${run.url}`,
-		`Commit: ${firstLine(run.commitMessage)}`,
-		pullRequestLine(pullRequests),
-		`Commit author: ${run.commitAuthor}`,
-		...rangeSections(run, sinceGreen),
-		"Classify: flake or break",
-	].join("\n\n"),
-})
+const commitLines = ({ run, pullRequests }: FailedRun) => [
+	`Commit: ${firstLine(run.commitMessage)}`,
+	pullRequestLine(pullRequests),
+	`Commit author: ${run.commitAuthor}`,
+]
+
+export const redMainIssue = (report: RunReport): IssueInput => {
+	const { run, jobs, sinceGreen } = report
+	const { redJobs, runnerFailures } = classifiedFailures(jobs)
+	return {
+		...FILED_IN,
+		title: `Red main: ${redJobs.join(", ")} at ${shortSha(run.headSha)}`,
+		description: [
+			`Run: ${run.url}`,
+			...(runnerFailures.length > 0
+				? [`Runner failures: ${runnerFailures.join(", ")}`]
+				: []),
+			...commitLines(report),
+			...rangeSections(run, sinceGreen),
+			"Classify: flake or break",
+		].join("\n\n"),
+	}
+}
+
+const rerunLine = ({ run, rerunRefusal }: RunnerFailureReport) => {
+	const ended = `Attempt ${run.attempt}: every failed job ended before its first test started`
+	return rerunRefusal === undefined
+		? `${ended}, after the failed jobs were rerun once`
+		: `${ended}. Rerun refused: ${rerunRefusal}`
+}
+
+export const runnerFailureIssue = (report: RunnerFailureReport): IssueInput => {
+	const { run, jobs } = report
+	const { runnerFailures } = classifiedFailures(jobs)
+	return {
+		...FILED_IN,
+		title: `Runner failure: ${runnerFailures.join(", ")} at ${shortSha(run.headSha)}`,
+		description: [
+			`Run: ${run.url}`,
+			...commitLines(report),
+			rerunLine(report),
+		].join("\n\n"),
+	}
+}
 
 const askLinear = async (
 	linear: LinearTransport,
@@ -236,6 +288,15 @@ const readSinceGreen = async (
 	}
 }
 
+const refusalOfTheRerun = async (github: GitHub, runId: string) => {
+	try {
+		await github.rerunFailedJobs(runId)
+		return undefined
+	} catch (failure) {
+		return (failure as Error).message
+	}
+}
+
 export const reportRedMain = async (
 	runId: string,
 	{ github, linear }: Ports,
@@ -243,17 +304,28 @@ export const reportRedMain = async (
 	const run = await github.readRun(runId)
 	const reason = skipReason(run)
 	if (reason) return `no issue: ${reason}`
+	const jobs = await github.readJobs(runId)
+	const { redJobs, runnerFailures } = classifiedFailures(jobs)
+	const hasRunnerFailuresOnly =
+		redJobs.length === 0 && runnerFailures.length > 0
+	const mustRerun = hasRunnerFailuresOnly && run.attempt === 1
+	const rerunRefusal = mustRerun
+		? await refusalOfTheRerun(github, runId)
+		: undefined
+	if (mustRerun && rerunRefusal === undefined)
+		return `no issue: reran the failed jobs of run ${run.id}, each a runner failure (${runnerFailures.join(", ")})`
 	const existing = await issueReportingRun(linear, run.url)
 	if (existing) return `no issue: ${existing} already reports ${run.url}`
-	const [jobs, pullRequests, sinceGreen] = await Promise.all([
-		github.readJobs(runId),
-		github.readPullRequests(run.headSha),
-		readSinceGreen(github, run),
-	])
-	const issue = await createIssue(
-		linear,
-		redMainIssue({ run, jobs, pullRequests, sinceGreen }),
-	)
+	const pullRequests = await github.readPullRequests(run.headSha)
+	const input = hasRunnerFailuresOnly
+		? runnerFailureIssue({ run, jobs, pullRequests, rerunRefusal })
+		: redMainIssue({
+				run,
+				jobs,
+				pullRequests,
+				sinceGreen: await readSinceGreen(github, run),
+			})
+	const issue = await createIssue(linear, input)
 	return `created ${issue.identifier} ${issue.url}`
 }
 
@@ -266,12 +338,17 @@ type GitHubRun = {
 	head_sha: string
 	created_at: string
 	html_url: string
+	run_attempt: number
 	head_commit: { message: string; author: { name: string } } | null
 }
 
 type GitHubPullRequest = { number: number; user: { login: string } }
 
-type GitHubJob = { name: string; conclusion: string | null }
+type GitHubJob = {
+	name: string
+	conclusion: string | null
+	steps?: JobStep[]
+}
 
 type GitHubCommit = { sha: string; commit: { message: string } }
 
@@ -286,13 +363,15 @@ const toRun = (run: GitHubRun): Run => ({
 	url: run.html_url,
 	commitMessage: run.head_commit?.message ?? "",
 	commitAuthor: run.head_commit?.author.name ?? "unknown",
+	attempt: run.run_attempt,
 })
 
 export const createGitHub = (repository: string, token: string): GitHub => {
-	const read = async <T>(step: string, path: string): Promise<T> => {
+	const answered = async (step: string, path: string, method = "GET") => {
 		const response = await fetch(
 			`https://api.github.com/repos/${repository}${path}`,
 			{
+				method,
 				headers: {
 					Accept: "application/vnd.github+json",
 					Authorization: `Bearer ${token}`,
@@ -302,8 +381,10 @@ export const createGitHub = (repository: string, token: string): GitHub => {
 		)
 		if (!response.ok)
 			throw new Error(`${step}: GitHub answered ${response.status}`)
-		return (await response.json()) as T
+		return response
 	}
+	const read = async <T>(step: string, path: string): Promise<T> =>
+		(await (await answered(step, path)).json()) as T
 	return {
 		readRun: async (runId) => {
 			const run = await read<GitHubRun>(
@@ -317,7 +398,21 @@ export const createGitHub = (repository: string, token: string): GitHub => {
 				"read the jobs of the run",
 				`/actions/runs/${runId}/jobs?filter=latest&per_page=100`,
 			)
-			return jobs.map(({ name, conclusion }) => ({ name, conclusion }))
+			return jobs.map(({ name, conclusion, steps = [] }) => ({
+				name,
+				conclusion,
+				steps: steps.map((step) => ({
+					name: step.name,
+					conclusion: step.conclusion,
+				})),
+			}))
+		},
+		rerunFailedJobs: async (runId) => {
+			await answered(
+				"rerun the failed jobs of the run",
+				`/actions/runs/${runId}/rerun-failed-jobs`,
+				"POST",
+			)
 		},
 		readPullRequests: async (sha) => {
 			const pullRequests = await read<GitHubPullRequest[]>(

@@ -105,8 +105,9 @@ struct ThreadScreen<Model: ThreadModel>: View {
         reduceMotion ? .opacity : .move(edge: .bottom)
     }
 
-    private var barAnimation: Animation {
-        reduceMotion ? .easeInOut : .snappy
+    private var barAnimation: Animation? {
+        guard UIView.areAnimationsEnabled else { return nil }
+        return reduceMotion ? .easeInOut : .snappy
     }
 
     private var askedId: String? {

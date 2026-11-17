@@ -17,6 +17,7 @@ import {
 	expectMutedUntilHoveredOrActive,
 	expectNeedingYou,
 	expectQuestionCutInsideTheRow,
+	expectTitleSwappedIn,
 	expectTooltipOnOneLine,
 	expectTooltipPastTheSidebarEdge,
 	expectTooltipWrappedWhole,
@@ -30,6 +31,7 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
+	TitleArrival,
 	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 	withMotionAllowed,
@@ -51,11 +53,13 @@ import {
 import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
 import { CompactRowsContext } from "@workspace/ui/components/compact-rows"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import type { MissionTreeRowWrap } from "@workspace/ui/components/mission-capsule"
 import { MissionMenu } from "@workspace/ui/components/mission-menu"
 import { NO_CLICK_MODIFIERS } from "@workspace/ui/components/sidebar-menu-row"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
+import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Sidebar,
 	SidebarContent,
@@ -1743,5 +1747,196 @@ export const MissionRowWithoutAMenuOpensNoMenu = meta.story({
 			"data-popup-open",
 		)
 		await expect(screen.queryByRole("menu")).toBeNull()
+	},
+})
+
+const namingRoomOf = (naming: ConversationNaming): AppSidebarConversation => ({
+	...DESK_ROOM,
+	color: BLOT_HUES.red,
+	icon: "Rocket",
+	naming,
+})
+
+const namedLabelIn = (row: HTMLElement) =>
+	slotIn(slotIn(row, "roster-row-name"), "text-swap")
+
+export const NamingPending = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("pending") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while a new conversation waits for its generated title, as artboard B2 draws its row. Check that the name reads New conversation in a shimmer, that the icon is the untinted message square, filled, in `--muted-foreground` whatever hue and icon the room carries, and that the preview, the agents and the time stay as they are. Pick `NamingPendingSwapsToATitle` for the moment the title lands.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+		const shimmer = slotIn(namedLabelIn(row), "shimmer-text")
+
+		await expect(row).toHaveAccessibleName(/New conversation/)
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(icon).toHaveAttribute("data-hue", "")
+		await expect(icon.style.color).toBe("var(--muted-foreground)")
+		await expect(getComputedStyle(shimmer).animationName).toBe("none")
+		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+			DESK_ROOM.timestamp ?? "",
+		)
+	},
+})
+
+export const NamingArrived = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("arrived") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the generated title has landed, as artboard B3 draws its row. Check that the name is the title in `--foreground` at the pending size and weight, with no shimmer, and that the icon is the room's own in its hue. Pick `NamingFailed` when no title came back.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+
+		await expect(row).toHaveAccessibleName(new RegExp(DESK_ROOM.name))
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(0)
+		await expect(getComputedStyle(namedLabelIn(row)).color).toBe(
+			tokenStyleIn(namedLabelIn(row), "text-foreground", "color"),
+		)
+		await expect(slotIn(row, "conversation-subject-icon")).toHaveAttribute(
+			"data-hue",
+			String(BLOT_HUES.red),
+		)
+	},
+})
+
+export const NamingFailed = meta.story({
+	globals: DARK,
+	args: { conversation: namingRoomOf("failed") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the title generator gave nothing back, as artboard B4 draws its row. Check that the name reads Untitled conversation in `--foreground` and that the icon is the default untinted message square, as for a room with no icon or colour. Pick `NamingArrived` for a title that landed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+
+		await expect(row).toHaveAccessibleName(/Untitled conversation/)
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(0)
+		await expect(icon).toHaveAttribute("data-hue", "")
+		await expect(icon.style.color).toBe("var(--conversation-icon-foreground)")
+	},
+})
+
+export const NamingPendingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to watch a pending row name give way to the generated title: press Title arrives. Check that New conversation leaves upward with a blur and the title rises in from below, that only opacity, blur and transform move, and that the row keeps its height and its ellipsis. Pick `NamingPending` for the waiting state alone.",
+			},
+		},
+	},
+	render: (args) => (
+		<TitleArrival>
+			{(naming, arrive) => (
+				<>
+					<ConversationRosterRow
+						{...args}
+						conversation={namingRoomOf(naming)}
+					/>
+					<li className="p-2">
+						<Button onClick={arrive} variant="outline">
+							Title arrives
+						</Button>
+					</li>
+				</>
+			)}
+		</TitleArrival>
+	),
+	play: async ({ canvasElement }) =>
+		expectTitleSwappedIn({
+			host: rowIn(canvasElement),
+			arrive: within(canvasElement).getByRole("button", {
+				name: "Title arrives",
+			}),
+			title: DESK_ROOM.name,
+		}),
+})
+
+export const NamingPendingLight = meta.story({
+	args: { conversation: namingRoomOf("pending") },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pending row of `NamingPending` in the light theme. Check that the name and the message square both sit in the light `--muted-foreground`, on the light untinted hexagon. Pick `NamingPending` for the dark artboard.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const icon = slotIn(row, "conversation-subject-icon")
+		const shimmer = slotIn(namedLabelIn(row), "shimmer-text")
+		const muted = tokenStyleIn(row, "text-muted-foreground", "color")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(getComputedStyle(icon).color).toBe(muted)
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
+	},
+})
+
+export const CompactWorkingRowNamingSwapsToATitle = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the usual new conversation in the compact sidebar: an agent is already working while the title is generated. Press Title arrives. Check that the row reads New conversation in a shimmer, that the title then swaps in through the same exit up and entrance from below, still shimmering while the agent works, and that assistive tech still hears working. Pick `NamingPendingSwapsToATitle` for the default density.",
+			},
+		},
+	},
+	render: (args) => (
+		<CompactRowsContext.Provider value>
+			<TitleArrival>
+				{(naming, arrive) => (
+					<>
+						<ConversationRosterRow
+							{...args}
+							conversation={namingRoomOf(naming)}
+						/>
+						<li className="p-2">
+							<Button onClick={arrive} variant="outline">
+								Title arrives
+							</Button>
+						</li>
+					</>
+				)}
+			</TitleArrival>
+		</CompactRowsContext.Provider>
+	),
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const title = slotIn(row, "roster-row-name")
+
+		await expect(namedLabelIn(row)).toHaveTextContent("New conversation")
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
+
+		await expectTitleSwappedIn({
+			host: row,
+			arrive: within(canvasElement).getByRole("button", {
+				name: "Title arrives",
+			}),
+			title: DESK_ROOM.name,
+		})
+		await expect(slotsIn(namedLabelIn(row), "shimmer-text")).toHaveLength(1)
+		await expect(within(title).getByText("working")).toHaveClass("sr-only")
 	},
 })

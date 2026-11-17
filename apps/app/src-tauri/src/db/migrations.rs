@@ -81,6 +81,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 72, statements: LIBRARY_COMMENTS },
 	Migration { version: 73, statements: COMMENT_AGENT_TURNS },
 	Migration { version: 74, statements: LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT },
+	Migration { version: 75, statements: MEMBER_CALL_ANSWERS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1549,6 +1550,31 @@ ALTER TABLE library_comment_threads ADD COLUMN resolved_at INTEGER CHECK (
 ALTER TABLE library_comment_threads ADD COLUMN last_board_x INTEGER;
 ALTER TABLE library_comment_threads ADD COLUMN last_board_y INTEGER
 	CHECK ((last_board_y IS NULL) = (last_board_x IS NULL));
+";
+
+const MEMBER_CALL_ANSWERS: &str = "
+CREATE TABLE member_call_answers (
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	device_id TEXT NOT NULL,
+	call_key TEXT NOT NULL,
+	seq INTEGER NOT NULL,
+	status INTEGER,
+	body TEXT,
+	PRIMARY KEY (space_id, device_id, call_key),
+	UNIQUE (space_id, device_id, seq),
+	CHECK ((status IS NULL) = (body IS NULL)),
+	CHECK (status BETWEEN 100 AND 999)
+);
+
+CREATE INDEX member_call_answers_kept ON member_call_answers (space_id, device_id, seq)
+WHERE status IS NOT NULL;
+
+CREATE TRIGGER member_call_answers_leave_with_their_device
+AFTER DELETE ON space_roster
+BEGIN
+	DELETE FROM member_call_answers
+	WHERE space_id = OLD.space_id AND device_id = OLD.relay_device_id;
+END;
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

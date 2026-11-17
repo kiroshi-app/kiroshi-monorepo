@@ -608,6 +608,43 @@
 	}
 }
 
+/* Text states swap, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/cli/free/text-states-swap.md */
+@keyframes ui-text-swap-exit {
+	to {
+		opacity: 0;
+		filter: blur(var(--text-swap-blur));
+		transform: translateY(calc(-1 * var(--text-swap-translate-y)));
+	}
+}
+
+@keyframes ui-text-swap-enter {
+	from {
+		opacity: 0;
+		filter: blur(var(--text-swap-blur));
+		transform: translateY(var(--text-swap-translate-y));
+	}
+}
+
+@utility text-swap {
+	--text-swap-dur: 150ms;
+	--text-swap-translate-y: 4px;
+	--text-swap-blur: 2px;
+	--text-swap-ease: ease-in-out;
+
+	&[data-phase="exit"] {
+		animation: ui-text-swap-exit var(--text-swap-dur) var(--text-swap-ease)
+			forwards;
+	}
+
+	&[data-phase="enter"] {
+		animation: ui-text-swap-enter var(--text-swap-dur) var(--text-swap-ease);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		--text-swap-dur: 0.01ms;
+	}
+}
+
 @keyframes ui-launch-arrive {
 	from {
 		opacity: 0;

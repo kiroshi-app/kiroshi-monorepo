@@ -844,7 +844,7 @@ fn received(wire: &Wire<'_>, opened: OpenedFrame, ids: Ids<'_>) -> Received {
 		Some(Err(refusal)) => return Received::Answer(sender, refusal),
 		None => {}
 	}
-	match bridge::member_call(text, &sender.account_id) {
+	match bridge::member_call(text, &sender.account_id, &sender.relay_device_id) {
 		Ok(call) => Received::Call(sender, call),
 		Err(refusal) => Received::Answer(sender, refusal),
 	}

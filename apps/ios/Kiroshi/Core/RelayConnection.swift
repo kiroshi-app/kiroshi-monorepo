@@ -9,6 +9,7 @@ enum RelayCallError: Error, Equatable {
     case timedOut
     case counterUnreadable
     case challengeRefused
+    case alreadyRan
 }
 
 actor RelayConnection {
@@ -16,11 +17,18 @@ actor RelayConnection {
     static let silentPingsBeforeDrop = 3
     static let sharedSpaceDeadline = Duration.seconds(30)
     static let callDeadline = Duration.seconds(300)
+    static let resumeDeadline = Duration.seconds(300)
+    static let resumeCommand = "relay_resume"
     static let hello = Data(#"{"hello":{}}"#.utf8)
     static let noKeyId: UInt32 = 0
+    static let subscriberBuffer = 64
+    static let heldEventsBound = subscriberBuffer
+    static let answerRefusedByTheRelay =
+        "the relay refused the host's answer: Device socket is full"
 
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
+    private let accountId: String?
     private let request: URLRequest
     private let device: RelayDevice
     private var spaceKeys: SpaceKeys?
@@ -40,6 +48,12 @@ actor RelayConnection {
     private var flights: [Int: RelayFlight] = [:]
     private var callTasks: [Int: Task<Void, Never>] = [:]
     private var subscribers: [UUID: AsyncStream<RelayUpdate>.Continuation] = [:]
+    private var sequence = EventSequence()
+    private var resumeCall: RelayResumeCall?
+    private var isRereadDue = false
+    private var eventsAfterTheReread: [RelayEvent] = []
+    private var owedRereads: Set<UUID> = []
+    private var laggingSubscribers: Set<UUID> = []
 
     init(
         baseURL: URL,
@@ -48,9 +62,11 @@ actor RelayConnection {
         device: RelayDevice,
         spaceKeys: SpaceKeys?,
         environment: RelayEnvironment,
+        accountId: String? = nil,
         backoff: Backoff = Backoff()
     ) {
         self.instanceId = instanceId
+        self.accountId = accountId
         request = Self.memberRequest(
             baseURL: baseURL, instanceId: instanceId, bearer: bearer, device: device.relayId)
         self.device = device
@@ -68,18 +84,31 @@ actor RelayConnection {
 
     func updates() -> AsyncStream<RelayUpdate> {
         let (stream, continuation) = AsyncStream.makeStream(
-            of: RelayUpdate.self, bufferingPolicy: .bufferingNewest(64))
+            of: RelayUpdate.self, bufferingPolicy: .bufferingNewest(Self.subscriberBuffer))
         let id = UUID()
         continuation.onTermination = { [weak self] _ in
             Task { await self?.drop(id) }
         }
         continuation.yield(.state(state))
+        if isOnline {
+            continuation.yield(.reread)
+        } else {
+            owedRereads.insert(id)
+        }
         subscribers[id] = continuation
         return stream
     }
 
     var subscriberCount: Int {
         subscribers.count
+    }
+
+    var heldEventCount: Int {
+        eventsAfterTheReread.count
+    }
+
+    var heldCallCount: Int {
+        Set(pendingCalls.keys).union(flights.keys).union(callTasks.keys).count
     }
 
     func start() {
@@ -92,45 +121,65 @@ actor RelayConnection {
         run?.cancel()
         run = nil
         socket?.close()
-        socket = nil
-        challenge = nil
-        failPendingCalls()
+        endSocket(failing: .connectionClosed)
+        isRereadDue = false
         publish(.paused)
         for subscriber in subscribers.values {
             subscriber.finish()
         }
         subscribers = [:]
+        owedRereads = []
+        laggingSubscribers = []
     }
 
     func call(_ command: String) async throws -> RelayAnswer {
         try await call(command, args: RelayNoArgs?.none, deadline: Self.callDeadline)
     }
 
-    func call(_ command: String, args: some Encodable & Sendable) async throws -> RelayAnswer {
-        try await call(command, args: args, deadline: Self.callDeadline)
+    nonisolated var relayDeviceId: String {
+        device.relayId
+    }
+
+    func call(
+        _ command: String, args: some Encodable & Sendable, callKey: String? = nil
+    ) async throws -> RelayAnswer {
+        let answer = try await call(
+            command, args: args, callKey: callKey, deadline: Self.callDeadline)
+        guard callKey != nil, answer.hasAlreadyRun else { return answer }
+        reread()
+        throw RelayCallError.alreadyRan
     }
 
     private func call(
-        _ command: String, args: (some Encodable)?, deadline: Duration
+        _ command: String, args: (some Encodable)?, callKey: String? = nil, deadline: Duration
     ) async throws -> RelayAnswer {
         guard socket != nil, outbox != nil else { throw RelayCallError.notConnected }
         let id = nextCallId
         nextCallId += 1
-        let frame = try JSONEncoder().encode(RelayCallFrame(id: id, command: command, args: args))
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingCalls[id] = continuation
-            flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
-            if challenge != nil {
-                queue(id)
-            }
-            callTasks[id] = Task { [clock] in
-                do {
-                    try await clock.sleep(for: deadline)
-                } catch {
+        let frame = try JSONEncoder().encode(
+            RelayCallFrame(id: id, command: command, args: args, callKey: callKey))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
                     return
                 }
-                self.settle(id, with: .failure(RelayCallError.timedOut))
+                pendingCalls[id] = continuation
+                flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
+                if challenge != nil {
+                    queue(id)
+                }
+                callTasks[id] = Task { [clock] in
+                    do {
+                        try await clock.sleep(for: deadline)
+                    } catch {
+                        return
+                    }
+                    self.settle(id, with: .failure(RelayCallError.timedOut))
+                }
             }
+        } onCancel: {
+            Task { await self.settle(id, with: .failure(CancellationError())) }
         }
     }
 
@@ -184,6 +233,7 @@ actor RelayConnection {
         keyAskedUnder = nil
         self.outbox = outbox
         outbox.yield(.hello)
+        follow(sequence.opened())
         backoff.reset()
         silentPings = 0
         let ending = await withTaskGroup(of: RelayEnding?.self) { group in
@@ -199,17 +249,24 @@ actor RelayConnection {
                 }
             }
             opened.close()
+            if !Task.isCancelled {
+                endSocket(failing: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
+            }
             group.cancelAll()
             return ending
         }
         outbox.finish()
-        if !Task.isCancelled {
-            socket = nil
-            self.outbox = nil
-            challenge = nil
-            failPendingCalls(with: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
-        }
         return ending
+    }
+
+    private func endSocket(failing failure: RelayCallError) {
+        socket = nil
+        outbox = nil
+        challenge = nil
+        failPendingCalls(with: failure)
+        sequence.closed()
+        endResumeCall()
+        dropHeldEvents()
     }
 
     private func awaitKey(on socket: any RelaySocket) async -> KeyWait {
@@ -485,12 +542,15 @@ actor RelayConnection {
         }
         if !Task.isCancelled {
             publish(.online(sharedSpaceId: shared.spaceId))
+            rereadIfDue()
         }
         return nil
     }
 
     private func drop(_ id: UUID) {
         subscribers[id] = nil
+        owedRereads.remove(id)
+        laggingSubscribers.remove(id)
     }
 
     private func heardPong() {
@@ -516,11 +576,142 @@ actor RelayConnection {
             guard opened.header.to == device.keys.deviceId, let fresh = opened.header.challenge
             else { return }
             heardChallenge(fresh)
+        } else if let resync = head.resync {
+            guard opened.header.to == device.keys.deviceId else { return }
+            resynced(endingAnswersTo: resync.answered)
         } else if let event = head.event {
-            broadcast(.event(RelayEvent(name: event.event, frame: frame)))
+            let heard = RelayEvent(name: event.event, frame: frame)
+            guard let stamped = head.stamped(heard, at: accountId) else {
+                follow(SequenceOutcome(applied: [heard]))
+                return
+            }
+            follow(sequence.heard(stamped))
+        } else if let resume = head.resumeAnswer {
+            guard resume.token == sequence.pendingToken else { return }
+            follow(sequence.answered(token: resume.token, isTooOld: resume.tooOld == true))
         } else if let id = head.id, let status = head.status {
             settle(id, with: .success(RelayAnswer(status: status, frame: frame)))
         }
+    }
+
+    private func follow(_ outcome: SequenceOutcome) {
+        if sequence.pendingToken != resumeCall?.token {
+            endResumeCall()
+        }
+        if outcome.rereads {
+            reread()
+        }
+        for event in outcome.applied {
+            deliver(event)
+        }
+        if let resume = outcome.resume {
+            send(resume)
+        }
+        rereadLagging()
+    }
+
+    private func reread() {
+        isRereadDue = true
+        guard case .online = state else { return }
+        rereadIfDue()
+    }
+
+    private func rereadIfDue() {
+        if isRereadDue {
+            broadcast(.reread)
+        } else {
+            for id in owedRereads {
+                subscribers[id]?.yield(.reread)
+            }
+        }
+        isRereadDue = false
+        owedRereads = []
+        let held = eventsAfterTheReread
+        eventsAfterTheReread = []
+        for event in held {
+            broadcast(.event(event))
+        }
+        rereadLagging()
+    }
+
+    private func rereadLagging() {
+        guard !laggingSubscribers.isEmpty else { return }
+        relayLog.notice(
+            "\(self.laggingSubscribers.count, privacy: .public) subscribers of Space \(self.instanceId, privacy: .public) fell behind its events"
+        )
+        let lagging = laggingSubscribers
+        laggingSubscribers = []
+        guard isOnline else {
+            owedRereads.formUnion(lagging)
+            return
+        }
+        for id in lagging {
+            subscribers[id]?.yield(.state(state))
+            subscribers[id]?.yield(.reread)
+        }
+    }
+
+    private var isOnline: Bool {
+        guard case .online = state else { return false }
+        return true
+    }
+
+    private func deliver(_ event: RelayEvent) {
+        guard !isRereadDue, eventsAfterTheReread.isEmpty, isOnline || owedRereads.isEmpty else {
+            hold(event)
+            return
+        }
+        broadcast(.event(event))
+    }
+
+    private func hold(_ event: RelayEvent) {
+        guard eventsAfterTheReread.count < Self.heldEventsBound else {
+            dropHeldEvents()
+            return
+        }
+        eventsAfterTheReread.append(event)
+    }
+
+    private func dropHeldEvents() {
+        guard !eventsAfterTheReread.isEmpty else { return }
+        eventsAfterTheReread = []
+        isRereadDue = true
+    }
+
+    private func send(_ resume: RelayResume) {
+        let id = nextCallId
+        nextCallId += 1
+        guard
+            let frame = try? JSONEncoder().encode(
+                RelayCallFrame(id: id, command: Self.resumeCommand, args: resume))
+        else { return }
+        flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
+        if challenge != nil {
+            queue(id)
+        }
+        let token = resume.token
+        let deadline = Task { [weak self, clock] in
+            do {
+                try await clock.sleep(for: Self.resumeDeadline)
+            } catch {
+                return
+            }
+            await self?.resumeLapsed(token)
+        }
+        resumeCall = RelayResumeCall(id: id, token: token, deadline: deadline)
+    }
+
+    private func resumeLapsed(_ token: String) {
+        relayLog.notice(
+            "No answer to the relay resume of Space \(self.instanceId, privacy: .public)")
+        follow(sequence.abandoned(token: token))
+    }
+
+    private func endResumeCall() {
+        guard let resumeCall else { return }
+        resumeCall.deadline.cancel()
+        flights[resumeCall.id] = nil
+        self.resumeCall = nil
     }
 
     private func dropped(_ frame: RelayWireFrame, holding held: SpaceKeys) {
@@ -581,12 +772,32 @@ actor RelayConnection {
         }
     }
 
+    private func resynced(endingAnswersTo answered: [Int]) {
+        for id in answered where pendingCalls[id] != nil {
+            settle(id, with: .success(Self.refusedAnswer(to: id)))
+        }
+        follow(sequence.resynced())
+    }
+
+    private static func refusedAnswer(to id: Int) -> RelayAnswer {
+        RelayAnswer(
+            status: 413,
+            frame: Data(#"{"id":\#(id),"status":413,"body":"\#(answerRefusedByTheRelay)"}"#.utf8))
+    }
+
     private func queue(_ id: Int) {
         flights[id]?.stage = .queued
         outbox?.yield(.call(id))
     }
 
     private func settle(_ id: Int, with result: Result<RelayAnswer, any Error>) {
+        if let resumeCall, resumeCall.id == id {
+            relayLog.notice(
+                "The relay resume of Space \(self.instanceId, privacy: .public) ended without its answer"
+            )
+            follow(sequence.abandoned(token: resumeCall.token))
+            return
+        }
         callTasks.removeValue(forKey: id)?.cancel()
         flights[id] = nil
         pendingCalls.removeValue(forKey: id)?.resume(with: result)
@@ -605,8 +816,9 @@ actor RelayConnection {
     }
 
     private func broadcast(_ update: RelayUpdate) {
-        for subscriber in subscribers.values {
-            subscriber.yield(update)
+        for (id, subscriber) in subscribers {
+            guard case .dropped = subscriber.yield(update) else { continue }
+            laggingSubscribers.insert(id)
         }
     }
 
@@ -669,6 +881,12 @@ private enum RelayOutgoing: Sendable {
     case keyRequest
 }
 
+private struct RelayResumeCall {
+    let id: Int
+    let token: String
+    let deadline: Task<Void, Never>
+}
+
 private struct RelayFlight: Sendable {
     enum Stage: Sendable {
         case awaitingChallenge
@@ -690,6 +908,7 @@ private struct RelayCallFrame<Args: Encodable>: Encodable {
     let id: Int
     let command: String
     let args: Args?
+    var callKey: String?
 }
 
 private struct RelaySharedSpace: Decodable {
@@ -703,17 +922,64 @@ private struct RelayFrameHead: Decodable {
 
     struct Hello: Decodable {}
 
+    struct ResumeAnswer: Decodable {
+        let token: String
+        let replayed: Int?
+        let tooOld: Bool?
+    }
+
+    struct Resync: Decodable {
+        let answered: [Int]
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            answered = try container.decode([CallId].self, forKey: .answered).compactMap(\.number)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case answered
+        }
+
+        private struct CallId: Decodable {
+            let number: Int?
+
+            init(from decoder: any Decoder) throws {
+                number = try? decoder.singleValueContainer().decode(Int.self)
+            }
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case status
         case event
         case hello
+        case resync
+        case epoch
+        case seq
+        case seqs
+        case rest
+        case token
+        case body
     }
 
     let id: Int?
     let status: Int?
     let event: Event?
     let hello: Hello?
+    let resync: Resync?
+    let epoch: String?
+    let seq: Int?
+    let seqs: [String: Int]?
+    let rest: Int?
+    let token: String?
+    let resumeAnswer: ResumeAnswer?
+
+    func stamped(_ event: RelayEvent, at accountId: String?) -> StampedEvent? {
+        let place = accountId.flatMap { seqs?[$0] } ?? rest ?? seq
+        guard let epoch, let place else { return nil }
+        return StampedEvent(event: event, epoch: epoch, seq: place, token: token)
+    }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -721,5 +987,13 @@ private struct RelayFrameHead: Decodable {
         status = try? container.decodeIfPresent(Int.self, forKey: .status)
         event = try? container.decodeIfPresent(Event.self, forKey: .event)
         hello = try? container.decodeIfPresent(Hello.self, forKey: .hello)
+        resync = try? container.decodeIfPresent(Resync.self, forKey: .resync)
+        epoch = try? container.decodeIfPresent(String.self, forKey: .epoch)
+        seq = try? container.decodeIfPresent(Int.self, forKey: .seq)
+        seqs = try? container.decodeIfPresent([String: Int].self, forKey: .seqs)
+        rest = try? container.decodeIfPresent(Int.self, forKey: .rest)
+        token = try? container.decodeIfPresent(String.self, forKey: .token)
+        resumeAnswer = (try? container.decodeIfPresent(ResumeAnswer.self, forKey: .body))
+            .flatMap { $0.replayed != nil || $0.tooOld != nil ? $0 : nil }
     }
 }

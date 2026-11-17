@@ -13,6 +13,7 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
 import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
+import type { RosterState } from "../bots/roster-controller"
 import { toSpaceBadges, withBadges } from "../chat/sidebar-badges"
 import { withNeedsYou } from "../conversations/host-state-rows"
 import { toRosterConversations } from "../conversations/roster-conversations"
@@ -26,19 +27,29 @@ import {
 	withMissions,
 } from "../missions/missions-model"
 
+type RosterRead = Pick<
+	RosterState,
+	"hasFailedToLoad" | "bots" | "conversations"
+>
+
+export const hasRosterFailedWithNothingHeld = ({
+	hasFailedToLoad,
+	bots,
+	conversations,
+}: RosterRead) =>
+	hasFailedToLoad && bots.length === 0 && conversations.length === 0
+
 type RosterListStatusInput = {
 	isSkeletonShown: boolean
-	hasFailedToLoad: boolean
-	isEmpty: boolean
+	hasFailedWithNothingHeld: boolean
 }
 
 const rosterListStatusOf = ({
 	isSkeletonShown,
-	hasFailedToLoad,
-	isEmpty,
+	hasFailedWithNothingHeld,
 }: RosterListStatusInput): ExpandedSidebarListStatus => {
 	if (isSkeletonShown) return "loading"
-	if (hasFailedToLoad && isEmpty) return "failed"
+	if (hasFailedWithNothingHeld) return "failed"
 	return "ready"
 }
 
@@ -55,7 +66,7 @@ export const useRosterLists = ({
 	rosterLines,
 	rosterView,
 }: RosterListsInput) => {
-	const { conversationRuntimes, roster } = core
+	const { conversationNamings, conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
 	const { now, rosters, working } = rosterLines
 	const { bots, missions, rosteredSpaceId, soloThreads } = rosterView
@@ -66,6 +77,7 @@ export const useRosterLists = ({
 		hostStates,
 		previews,
 	} = useControllerState(roster.controller)
+	const namingStates = useControllerState(conversationNamings)
 	const personOfSpace = useSpacePersonOf(core)
 
 	const rosterBots = useSharedStructure(
@@ -123,6 +135,7 @@ export const useRosterLists = ({
 									working: conversationWorkers,
 									previews: conversationPreviews,
 									notSent: notSentConversations,
+									namings: namingStates,
 									personOf: personOfSpace(rosteredSpaceId),
 								},
 								now,
@@ -140,6 +153,7 @@ export const useRosterLists = ({
 				conversationWorkers,
 				conversationPreviews,
 				notSentConversations,
+				namingStates,
 				personOfSpace,
 				now,
 				conversationBadges,
@@ -164,6 +178,7 @@ export const useRosterLists = ({
 											working: conversationWorkers,
 											previews: conversationPreviews,
 											notSent: notSentConversations,
+											namings: namingStates,
 											personOf: personOfSpace(spaceId),
 										},
 										now,
@@ -182,6 +197,7 @@ export const useRosterLists = ({
 				conversationWorkers,
 				conversationPreviews,
 				notSentConversations,
+				namingStates,
 				personOfSpace,
 				now,
 				conversationBadges,
@@ -203,8 +219,7 @@ export const useRosterLists = ({
 
 	const rosterSkeletonPhase = useSkeletonTiming(roster.state.isRosterPending)
 	const expandedListStatus = rosterListStatusOf({
-		hasFailedToLoad: roster.state.hasFailedToLoad,
-		isEmpty: rosterConversations.length === 0,
+		hasFailedWithNothingHeld: hasRosterFailedWithNothingHeld(roster.state),
 		isSkeletonShown:
 			rosterSkeletonPhase === "skeleton" || roster.state.isRosterPending,
 	})

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react"
+import { useMemo } from "react"
 
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
@@ -41,10 +41,6 @@ export const useRosterLines = ({
 	const { settingsBotId, soloThreads } = rosterView
 
 	const rosters = roster.state.rosters
-
-	const startConversation = useCallback(() => {
-		void roster.controller.createConversation()
-	}, [roster.controller])
 
 	const conversationSeating = useMemo<ConversationSeating>(
 		() => ({
@@ -100,7 +96,6 @@ export const useRosterLines = ({
 		now,
 		rosters,
 		sidebarActions,
-		startConversation,
 		updateBadge,
 		working,
 	}

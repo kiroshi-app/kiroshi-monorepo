@@ -27,6 +27,7 @@ type ConversationSubjectIconProps = {
 	isBare?: boolean
 	isFilled?: boolean
 	isSquare?: boolean
+	isMuted?: boolean
 }
 
 const untintedStyleOf = (roles: string[]) =>
@@ -69,6 +70,7 @@ const ConversationSubjectIcon = ({
 	isBare = false,
 	isFilled = false,
 	isSquare = false,
+	isMuted = false,
 }: ConversationSubjectIconProps) => {
 	const drawn =
 		isBare && !isFilled ? ConversationOutlineIcons : ConversationIcons
@@ -85,7 +87,7 @@ const ConversationSubjectIcon = ({
 			data-slot="conversation-subject-icon"
 			style={{
 				...scope.style,
-				color: inkOf(hue, isBare),
+				color: isMuted ? "var(--muted-foreground)" : inkOf(hue, isBare),
 				width: side,
 				height: side,
 			}}

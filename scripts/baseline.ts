@@ -214,9 +214,21 @@ type SuiteRun = {
 	into: string
 	files?: string[]
 	retries?: number
+	testTimeoutMs?: number
 }
 
-const vitestReport = ({ suite, into, files = [], retries = 0 }: SuiteRun) => {
+const timeoutArguments = (testTimeoutMs: number | undefined) =>
+	testTimeoutMs === undefined
+		? []
+		: [`--testTimeout=${testTimeoutMs}`, `--hookTimeout=${testTimeoutMs}`]
+
+const vitestReport = ({
+	suite,
+	into,
+	files = [],
+	retries = 0,
+	testTimeoutMs,
+}: SuiteRun) => {
 	const path = join(into, `${suite.name}.json`)
 	const label = `the ${suite.name} vitest suite`
 	const exitCode = runInherited({
@@ -230,6 +242,7 @@ const vitestReport = ({ suite, into, files = [], retries = 0 }: SuiteRun) => {
 			...files.map((file) => join(REPO, file)),
 			...(files.length > 0 ? ["--passWithNoTests"] : []),
 			...(retries > 0 ? [`--retry=${retries}`] : []),
+			...timeoutArguments(testTimeoutMs),
 			"--reporter=default",
 			"--reporter=json",
 			`--outputFile.json=${path}`,
@@ -463,12 +476,21 @@ const writeItems = ({ area, items }: AreaItems) => {
 
 type Live = Record<string, string[]>
 
-type SuitesRun = { suites: VitestSuite[]; into: string; retries?: number }
+export type RunOptions = {
+	retries: number
+	testTimeoutMs?: number
+	testFiles: string[]
+}
 
-const runSuites = ({ suites, into, retries }: SuitesRun) => {
+type SuitesRun = Omit<RunOptions, "testFiles"> & {
+	suites: VitestSuite[]
+	into: string
+}
+
+const runSuites = ({ suites, into, retries, testTimeoutMs }: SuitesRun) => {
 	const ran = suites.map((suite) => ({
 		suite,
-		...vitestReport({ suite, into, retries }),
+		...vitestReport({ suite, into, retries, testTimeoutMs }),
 	}))
 	reportRetriedTests(ran.flatMap(({ report }) => vitestRetriedPasses(report)))
 	return ran
@@ -489,29 +511,29 @@ const attributedFailures = (outcomes: SuiteOutcome[]) => {
 
 const newReportFolder = () => mkdtempSync(join(tmpdir(), "kiroshi-baseline-"))
 
-const collectVitest = (retries: number): Live => {
+const collectVitest = (options: RunOptions): Live => {
 	const into = newReportFolder()
-	const ran = runSuites({ suites: VITEST_SUITES, into, retries })
+	const ran = runSuites({ ...options, suites: VITEST_SUITES, into })
 	return {
 		[TESTS]: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
 		[STORIES]: indexedStoryIds(into),
 	}
 }
 
-const collectStorybook = (retries: number): Live => {
+const collectStorybook = (options: RunOptions): Live => {
 	const ran = runSuites({
+		...options,
 		suites: [STORYBOOK_SUITE],
 		into: newReportFolder(),
-		retries,
 	})
 	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
-const collectUnit = (retries: number): Live => {
+const collectUnit = (options: RunOptions): Live => {
 	const ran = runSuites({
+		...options,
 		suites: UNIT_SUITES,
 		into: newReportFolder(),
-		retries,
 	})
 	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
@@ -519,22 +541,27 @@ const collectUnit = (retries: number): Live => {
 const existingChangedPaths = () =>
 	pathsChangedSinceMain().filter((path) => existsSync(join(REPO, path)))
 
-type ChangedRun = { suite: UnitSuite; paths: string[]; into: string }
-
-const runChangedTests = ({ suite, paths, into }: ChangedRun) => {
-	const files = changedTestFiles({ paths, root: suite.root })
-	console.log(
-		`baseline  ${suite.name} unit test files changed since origin/main: ${files.join(", ") || "none"}`,
-	)
-	if (files.length === 0) return []
-	return [{ suite, ...vitestReport({ suite, into, files }) }]
+type ChangedRun = {
+	suite: UnitSuite
+	paths: string[]
+	into: string
+	testTimeoutMs?: number
 }
 
-const collectChanged = (): Live => {
+const runChangedTests = ({ suite, paths, into, testTimeoutMs }: ChangedRun) => {
+	const files = changedTestFiles({ paths, root: suite.root })
+	console.log(
+		`baseline  ${suite.name} unit test files changed since origin/main or passed with --test-file: ${files.join(", ") || "none"}`,
+	)
+	if (files.length === 0) return []
+	return [{ suite, ...vitestReport({ suite, into, files, testTimeoutMs }) }]
+}
+
+const collectChanged = ({ testFiles, testTimeoutMs }: RunOptions): Live => {
 	const into = newReportFolder()
-	const paths = existingChangedPaths()
+	const paths = [...new Set([...existingChangedPaths(), ...testFiles])]
 	const ran = UNIT_SUITES.flatMap((suite) =>
-		runChangedTests({ suite, paths, into }),
+		runChangedTests({ suite, paths, into, testTimeoutMs }),
 	)
 	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
@@ -544,7 +571,7 @@ const collectLint = (): Live => ({
 	knip: knipItems(),
 })
 
-type ScopeRun = { collect: (retries: number) => Live; suites: string[] }
+type ScopeRun = { collect: (options: RunOptions) => Live; suites: string[] }
 
 const suiteNames = (suites: VitestSuite[]) => suites.map((suite) => suite.name)
 
@@ -642,13 +669,13 @@ const prune = ({ live, suites }: Collected) => {
 	return 0
 }
 
-type Collection = { scopes: Scope[]; retries: number }
+type Collection = { scopes: Scope[]; options: RunOptions }
 
-const collect = ({ scopes, retries }: Collection): Collected => {
+const collect = ({ scopes, options }: Collection): Collected => {
 	const live: Live = {}
 	for (const scope of scopes) {
 		for (const [area, found] of Object.entries(
-			SCOPES[scope].collect(retries),
+			SCOPES[scope].collect(options),
 		)) {
 			live[area] = [...(live[area] ?? []), ...withOrdinals(found)]
 		}
@@ -656,11 +683,36 @@ const collect = ({ scopes, retries }: Collection): Collected => {
 	return { live, suites: scopes.flatMap((scope) => SCOPES[scope].suites) }
 }
 
+const flagValues = (argv: string[], flag: string) =>
+	argv
+		.filter((argument) => argument.startsWith(`${flag}=`))
+		.map((argument) => argument.slice(flag.length + 1))
+
+const testTimeoutOf = (argv: string[]) => {
+	const values = flagValues(argv, "--test-timeout")
+	if (values.length === 0) return undefined
+	if (values.length > 1 || !/^[1-9]\d*$/.test(values[0]))
+		throw new Error(
+			`--test-timeout takes one positive number of milliseconds, received ${values.join(", ")}`,
+		)
+	return Number(values[0])
+}
+
+export const runOptionsOf = (argv: string[]): RunOptions => {
+	const testFiles = flagValues(argv, "--test-file")
+	if (testFiles.length > 0 && !requestedScopes(argv).includes("changed"))
+		throw new Error("--test-file runs only with the changed scope")
+	return {
+		retries: argv.includes("--retry") ? 1 : 0,
+		testTimeoutMs: testTimeoutOf(argv),
+		testFiles,
+	}
+}
+
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
 	assertSubsetScopesCheckAlone(scopes, argv)
-	const retries = argv.includes("--retry") ? 1 : 0
-	const collected = collect({ scopes, retries })
+	const collected = collect({ scopes, options: runOptionsOf(argv) })
 	if (argv.includes("--prune")) return prune(collected)
 	if (argv.includes("--update")) return update(collected.live)
 	return check(collected)

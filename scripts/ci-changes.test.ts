@@ -469,12 +469,13 @@ describe("the paths each job watches", () => {
 		})
 	})
 
-	it("runs rust and vitest on an app source file, since a hosting::bridge test reads every one", () => {
-		expect(touching("apps/app/src/main.tsx")).toEqual({
-			...none,
-			rust: true,
-			vitest: true,
-		})
+	it("runs only vitest on a pull_request changing only an app source file no Rust source reads", () => {
+		expect(
+			decideJobs({
+				event: "pull_request",
+				paths: ["apps/app/src/components/thread-screen.tsx"],
+			}),
+		).toEqual({ ...none, vitest: true })
 	})
 
 	it("runs only website on a file under apps/website", () => {

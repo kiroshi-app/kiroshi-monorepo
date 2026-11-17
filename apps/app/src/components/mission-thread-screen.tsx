@@ -58,6 +58,7 @@ type MissionThreadProps = {
 	bots: Bot[]
 	events: MissionEventModel[]
 	hasFailedToRead: boolean
+	readError: unknown
 	runtimes: ConversationRuntimes
 	attachments: AttachmentsController
 	drafts: DraftsController
@@ -77,6 +78,7 @@ const MissionThread = ({
 	bots,
 	events,
 	hasFailedToRead,
+	readError,
 	runtimes,
 	attachments,
 	drafts,
@@ -88,7 +90,7 @@ const MissionThread = ({
 }: MissionThreadProps) => {
 	const now = useRosterClock()
 
-	useMissionReadFailure(hasFailedToRead)
+	useMissionReadFailure(hasFailedToRead, readError)
 
 	const thread = useMemo<Thread>(
 		() => ({
@@ -147,10 +149,8 @@ export function MissionThreadScreen({
 	onOpenMission,
 	onOpenMissionInNewTab,
 }: MissionThreadScreenProps) {
-	const { read, isPending, hasFailedToRead, onRetry } = useMissionDetail(
-		opening.missionId,
-		opening.spaceId,
-	)
+	const { read, isPending, hasFailedToRead, readError, onRetry } =
+		useMissionDetail(opening.missionId, opening.spaceId)
 	const detailSkeleton = useSkeletonSlot(isPending, MISSION_DETAIL_SKELETON)
 	const pathLabel = missionPathLabelOf(
 		opening.missionId,
@@ -189,6 +189,7 @@ export function MissionThreadScreen({
 			drafts={drafts}
 			events={read.events}
 			hasFailedToRead={hasFailedToRead}
+			readError={readError}
 			landings={landings}
 			mission={read.mission}
 			onLeave={onLeave}

@@ -58,9 +58,20 @@ export const CompanionScreenHost = ({
 		return null
 	}
 
+	const leave = search.isFromAgentsPage
+		? navigation.backToAgents
+		: navigation.back
+
 	const refuseDeletion = (reason: unknown) => {
 		void reportFailure(
 			{ title: i18n.t("bots:danger.failed") },
+			{ botId: settingsBot.id, reason },
+		)
+	}
+
+	const refuseSettingsWrite = (reason: unknown) => {
+		void reportFailure(
+			{ title: i18n.t("bots:roster.settingsUnsaved") },
 			{ botId: settingsBot.id, reason },
 		)
 	}
@@ -69,12 +80,12 @@ export const CompanionScreenHost = ({
 		<CompanionSettingsScreenBody
 			guardLeave={guardLeave}
 			backLabel={
-				search.isFromSpaceSettings
+				search.isFromAgentsPage
 					? i18n.t("settings:screen.backToAgents")
 					: undefined
 			}
 			entry={search.entry ?? GENERAL_ENTRY}
-			onBack={navigation.back}
+			onBack={leave}
 			onEntryChange={navigation.showEntry}
 			onOpenApplication={navigation.openApplication}
 			history={botHistory}
@@ -107,13 +118,17 @@ export const CompanionScreenHost = ({
 			outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
 			memory={settingsBot.memory}
 			onMemoryChange={(memory) => {
-				void roster.controller.remember(settingsBot.id, memory)
+				void roster.controller
+					.remember(settingsBot.id, memory)
+					.catch(refuseSettingsWrite)
 			}}
 			onAvatarUpload={(file) => {
-				void roster.controller.uploadAvatar(settingsBot.id, file)
+				void roster.controller
+					.uploadAvatar(settingsBot.id, file)
+					.catch(refuseSettingsWrite)
 			}}
 			onDelete={() => {
-				void deleteBot(settingsBot.id).then(navigation.back, refuseDeletion)
+				void deleteBot(settingsBot.id).then(leave, refuseDeletion)
 			}}
 			onOutputStyleChange={(outputStyle) => {
 				if (outputStyle === settingsBot.outputStyle) {

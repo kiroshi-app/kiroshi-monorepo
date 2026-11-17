@@ -25,12 +25,12 @@ type WindowAction =
 	| "snap"
 	| "pointer"
 
-const raiseWindowFailure = (action: WindowAction) => () => {
+const raiseWindowFailure = (action: WindowAction) => (reason: unknown) => {
 	raiseReportedFailure(
 		{
 			title: i18n.t(`common:windowControls.failure.${action}`),
 		},
-		{ raisedIn: "window-caption-controls" },
+		{ raisedIn: "window-caption-controls", reason },
 	)
 }
 
@@ -46,10 +46,10 @@ const boundsOf = (button: HTMLButtonElement): MaximizeButtonBounds => {
 
 const createSnapDeclaration = () => {
 	let hasFailed = false
-	const raiseOnce = () => {
+	const raiseOnce = (reason: unknown) => {
 		if (hasFailed) return
 		hasFailed = true
-		raiseWindowFailure("snap")()
+		raiseWindowFailure("snap")(reason)
 	}
 	return (bounds: MaximizeButtonBounds | null) => {
 		declareMaximizeButton(bounds).catch(raiseOnce)
@@ -98,11 +98,11 @@ const useMaximizeButtonState = (): MaximizeButtonState => {
 		const resetWhenBlurred = (isFocused: boolean) => {
 			if (!isFocused) follow("idle")
 		}
-		const failOnce = () => {
+		const failOnce = (reason: unknown) => {
 			if (hasFailed) return
 			hasFailed = true
 			setState("idle")
-			raiseWindowFailure("pointer")()
+			raiseWindowFailure("pointer")(reason)
 		}
 		const watches = [
 			watchMaximizeButton(follow),

@@ -1430,25 +1430,29 @@ describe("Move to new window", () => {
 			() =>
 				Promise.resolve({ status: "error", error: { kind: "unavailable" } }),
 			"The tab stayed here (unavailable). Choose Move to new window from the tab’s menu to try again.",
+			{ kind: "unavailable" },
 		],
 		[
 			"fails",
 			() => Promise.reject(new Error("window lost")),
 			"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
+			new Error("window lost"),
 		],
 		[
 			"fails with no reason",
 			() => Promise.reject(),
 			"The tab stayed here. Choose Move to new window from the tab’s menu to try again.",
+			undefined,
 		],
 		[
 			"fails with an empty reason",
 			() => Promise.reject(new Error("")),
 			"The tab stayed here. Choose Move to new window from the tab’s menu to try again.",
+			new Error(""),
 		],
 	])(
 		"keeps the tab and raises one notice when opening the window %s",
-		async (_, opening, description) => {
+		async (_, opening, description, reason) => {
 			windowHost.windowOpen.mockImplementation(opening)
 			const tabs = tabsOn(threadOf("stays"))
 
@@ -1457,7 +1461,7 @@ describe("Move to new window", () => {
 			expect(shownHrefs(tabs)).toEqual(["/", threadOf("stays")])
 			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
 				{ title: "Couldn’t open a new window", description },
-				{ raisedIn: "workspace-tabs", command: "window_open" },
+				{ raisedIn: "workspace-tabs", command: "window_open", reason },
 			)
 		},
 	)
@@ -1529,7 +1533,11 @@ describe("Tear off", () => {
 					description:
 						"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
 				},
-				{ raisedIn: "workspace-tabs", command: "window_open" },
+				{
+					raisedIn: "workspace-tabs",
+					command: "window_open",
+					reason: new Error("window lost"),
+				},
 			),
 		)
 		expect(shownHrefs(tabs)).toEqual([
@@ -1623,7 +1631,11 @@ describe("a tab dropped past the strip", () => {
 				description:
 					"The tab stayed here (window lost). Choose Move to new window from the tab’s menu to try again.",
 			},
-			{ raisedIn: "workspace-tabs", command: "window_open" },
+			{
+				raisedIn: "workspace-tabs",
+				command: "window_open",
+				reason: new Error("window lost"),
+			},
 		)
 		expect(shownHrefs(opened)).toEqual([threadOf("stays")])
 		expect(viewOf(opened).canGoBack).toBe(false)
@@ -1905,7 +1917,11 @@ describe("the windows open at quit", () => {
 		await vi.waitFor(() =>
 			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
 				{ title: "Couldn’t close Kiroshi." },
-				{ raisedIn: "workspace-tabs", command: undefined },
+				{
+					raisedIn: "workspace-tabs",
+					command: undefined,
+					reason: new Error("refused"),
+				},
 			),
 		)
 	})
@@ -1988,7 +2004,11 @@ describe("the windows open at quit", () => {
 				description:
 					"Its tabs were closed (unavailable). Open them again from the sidebar.",
 			},
-			{ raisedIn: "workspace-tabs", command: "window_open" },
+			{
+				raisedIn: "workspace-tabs",
+				command: "window_open",
+				reason: { kind: "unavailable" },
+			},
 		)
 		expect(keysOf(SECONDARY)).toEqual([])
 		expect(await relaunch()).toEqual([])
@@ -2090,7 +2110,11 @@ describe("the File menu", () => {
 		await vi.waitFor(() =>
 			expect(windowHost.raiseReportedFailure).toHaveBeenCalledExactlyOnceWith(
 				{ title: "Couldn’t open a new window" },
-				{ raisedIn: "workspace-tabs", command: "window_open" },
+				{
+					raisedIn: "workspace-tabs",
+					command: "window_open",
+					reason: { kind: "unavailable" },
+				},
 			),
 		)
 	})

@@ -1,5 +1,10 @@
 import { OverlayScrollbars } from "overlayscrollbars"
-import type { ComponentType, CSSProperties, ReactNode } from "react"
+import {
+	type ComponentType,
+	type CSSProperties,
+	type ReactNode,
+	useState,
+} from "react"
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
@@ -19,6 +24,7 @@ import {
 	BLOT_HUES,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/companion-colour"
+import type { ConversationNaming } from "@workspace/ui/components/conversation-naming"
 import {
 	COMPACT_EDGE,
 	edgeWidthOf,
@@ -1567,4 +1573,77 @@ export const expectTooltipWrappedWhole = async (
 	await expect(lines.length).toBeLessThanOrEqual(
 		Math.ceil(textWidth / lineWidth) + 1,
 	)
+}
+
+type TitleArrivalProps = {
+	children: (naming: ConversationNaming, arrive: () => void) => ReactNode
+}
+
+export const TitleArrival = ({ children }: TitleArrivalProps) => {
+	const [naming, setNaming] = useState<ConversationNaming>("pending")
+	return children(naming, () => setNaming("arrived"))
+}
+
+const KEYFRAME_TIMING = new Set([
+	"offset",
+	"computedOffset",
+	"easing",
+	"composite",
+])
+
+const TEXT_SWAP_PROPERTIES = ["filter", "opacity", "transform"]
+
+const animatedPropertiesOf = (element: Element) =>
+	element
+		.getAnimations()
+		.flatMap((animation) =>
+			animation.effect instanceof KeyframeEffect
+				? animation.effect.getKeyframes().flatMap(Object.keys)
+				: [],
+		)
+		.filter((property) => !KEYFRAME_TIMING.has(property))
+
+type TitleSwap = {
+	host: HTMLElement
+	arrive: HTMLElement
+	title: string
+}
+
+export const expectTitleSwappedIn = async ({
+	host,
+	arrive,
+	title,
+}: TitleSwap) => {
+	if (!isInBrowserRunner()) return
+	const height = host.getBoundingClientRect().height
+	const phases: string[] = []
+	const animated = new Set<string>()
+	const record = (event: AnimationEvent) => {
+		if (!(event.target instanceof HTMLElement)) return
+		if (event.target.dataset.slot !== "text-swap") return
+		phases.push(event.animationName)
+		for (const property of animatedPropertiesOf(event.target))
+			animated.add(property)
+	}
+
+	host.addEventListener("animationstart", record)
+	try {
+		await withMotionAllowed(async () => {
+			await userEvent.click(arrive)
+			await waitFor(() =>
+				expect(phases).toEqual(["ui-text-swap-exit", "ui-text-swap-enter"]),
+			)
+		})
+	} finally {
+		host.removeEventListener("animationstart", record)
+	}
+
+	const swap = slotIn(host, "text-swap")
+	await expect(swap).toHaveTextContent(title)
+	await expect([...animated].sort()).toEqual(TEXT_SWAP_PROPERTIES)
+	await expect(getComputedStyle(swap).textOverflow).toBe("ellipsis")
+	await expect(host.getBoundingClientRect().height).toBe(height)
+	await expect(
+		getComputedStyle(swap).getPropertyValue("--text-swap-dur").trim(),
+	).toBe("0.01ms")
 }

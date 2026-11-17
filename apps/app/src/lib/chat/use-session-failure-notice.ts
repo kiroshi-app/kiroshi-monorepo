@@ -165,7 +165,11 @@ export const useSessionFailureNotice = ({
 					}),
 					onClose: dismissUnlessReleased,
 				},
-				{ raisedIn: "use-session-failure-notice", ...context },
+				{
+					raisedIn: "use-session-failure-notice",
+					...context,
+					reason: error.error,
+				},
 			),
 		}
 		raised.current = failure

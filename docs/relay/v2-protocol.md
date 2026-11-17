@@ -159,6 +159,10 @@ ids of every device with its public keys.
   builds the AAD and the subkey from that row's `device_id`. The wire `from` names
   a key the receiver already holds and is trusted for nothing else: a frame whose
   `from` resolves to no roster row is dropped.
+- The host keys the `callKey` of a call frame by the relay device id of the wire
+  `from` once it opened, and names that relay device id as `deviceId` on the events
+  the call causes ([`member-socket.md`](member-socket.md#a-repeated-call)). A
+  `callKey` never crosses from one device to another.
 
 The host drops a frame that is not `"v": 2`, resolves to no roster row or fails a
 step of Open, and a member drops a host frame the same way. It sends nothing back and logs one line naming the Space, the wire

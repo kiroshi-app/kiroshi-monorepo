@@ -61,7 +61,7 @@ const originLabelOf = (
 		({ id }) => id === originConversationId,
 	)
 	if (conversation) {
-		return conversationName(conversation)
+		return conversationName(conversation, {})
 	}
 	const soloBotId = soloThreads[originConversationId]?.botId
 	return bots.find(({ id }) => id === soloBotId)?.name

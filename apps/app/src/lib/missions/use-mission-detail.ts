@@ -31,6 +31,7 @@ export type MissionDetailRead = {
 	isReading: boolean
 	isPending: boolean
 	hasFailedToRead: boolean
+	readError: unknown
 	onRetry: () => void
 }
 
@@ -65,7 +66,7 @@ export const useMissionDetail = (
 		queryFn: host === null ? skipToken : () => readMission(host, missionId),
 		meta: { rendersErrorInline: true },
 	})
-	const { data, isPending, refetch } = detail
+	const { data, error, isPending, refetch } = detail
 	const read = data ?? null
 	const hasFailedToRead = hasLastReadFailed(detail)
 	const isReading = isPending || isRetrying
@@ -85,8 +86,9 @@ export const useMissionDetail = (
 			isReading,
 			isPending: isFirstPending,
 			hasFailedToRead,
+			readError: error,
 			onRetry,
 		}),
-		[read, isReading, isFirstPending, hasFailedToRead, onRetry],
+		[read, isReading, isFirstPending, hasFailedToRead, error, onRetry],
 	)
 }

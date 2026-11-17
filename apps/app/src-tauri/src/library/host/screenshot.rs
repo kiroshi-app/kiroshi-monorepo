@@ -8,7 +8,7 @@ use image::imageops::FilterType;
 use image::{DynamicImage, ImageFormat};
 use serde::{Deserialize, Serialize};
 use tauri::{
-	AppHandle, LogicalSize, Manager, Runtime, State, Theme, WebviewUrl, WebviewWindow,
+	AppHandle, LogicalSize, Manager, Runtime, State, WebviewUrl, WebviewWindow,
 	WebviewWindowBuilder,
 };
 use tokio::sync::oneshot;
@@ -232,15 +232,18 @@ fn hidden_window<R: Runtime>(
 	size: LogicalSize<f64>,
 ) -> tauri::Result<WebviewWindow<R>> {
 	let route = SCREENSHOT_ROUTE.trim_start_matches('/');
-	WebviewWindowBuilder::new(app, window_label(request_id), WebviewUrl::App(route.into()))
-		.inner_size(size.width, size.height)
-		.visible(false)
-		.focused(false)
-		.focusable(false)
-		.skip_taskbar(true)
-		.decorations(false)
-		.theme(Some(Theme::Light))
-		.build()
+	let window =
+		WebviewWindowBuilder::new(app, window_label(request_id), WebviewUrl::App(route.into()))
+			.inner_size(size.width, size.height)
+			.visible(false)
+			.focused(false)
+			.focusable(false)
+			.skip_taskbar(true)
+			.decorations(false)
+			.build()?;
+	#[cfg(target_os = "macos")]
+	macos::paint_light(&window)?;
+	Ok(window)
 }
 
 fn fitted(png: &str, scale: Scale) -> Result<Shot, ToolRefusal> {
@@ -316,4 +319,28 @@ pub(super) fn screenshots<R: Runtime>(app: &AppHandle<R>) -> State<'_, Screensho
 		app.manage(Screenshots::default());
 	}
 	app.state::<Screenshots>()
+}
+
+#[cfg(target_os = "macos")]
+mod macos {
+	use objc2::rc::Retained;
+	use objc2_app_kit::{NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSWindow};
+	use tauri::{Runtime, WebviewWindow};
+
+	pub(super) fn paint_light<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+		let label = window.label().to_owned();
+		window.with_webview(move |webview| {
+			let Some(ns_window) =
+				(unsafe { Retained::retain(webview.ns_window().cast::<NSWindow>()) })
+			else {
+				log::error!("the screenshot window {label} has no NSWindow to paint light");
+				return;
+			};
+			let light = NSAppearance::appearanceNamed(unsafe { NSAppearanceNameAqua });
+			if light.is_none() {
+				log::error!("macOS has no Aqua appearance for the screenshot window {label}");
+			}
+			ns_window.setAppearance(light.as_deref());
+		})
+	}
 }

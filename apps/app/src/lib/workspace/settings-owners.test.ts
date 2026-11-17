@@ -19,11 +19,7 @@ const SCRIBE_LISTED = { bots: [{ id: "scribe" } as Bot] }
 
 const VOCCA_SETTINGS = { kind: "space", spaceId: "vocca" } as const
 
-const SCRIBE_SETTINGS = {
-	kind: "companion",
-	companionId: "scribe",
-	isFromSpaceSettings: false,
-} as const
+const SCRIBE_SETTINGS = { kind: "companion", companionId: "scribe" } as const
 
 describe("settings owners", () => {
 	it("owns the companion whose settings are open in the selected space", () => {

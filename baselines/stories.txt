@@ -379,8 +379,11 @@ conversation-markdown-markdownspan--bot-mention
 conversation-markdown-markdownspan--plain-text
 conversation-markdown-markdowntable--default
 conversation-markdown-markdowntable--header-only
+conversation-markdown-markdowntable--long-cell-wraps-in-a-reply
 conversation-markdown-markdowntable--wider-than-the-block
 conversation-markdown-markdowntaskcheckbox--default
+conversation-markdown-markdowntaskcheckbox--long-item-hangs-under-its-words
+conversation-markdown-markdowntaskcheckbox--long-loose-item-hangs-under-its-words
 conversation-markdown-markdowntaskcheckbox--loose-checklist
 conversation-markdown-markdowntaskcheckbox--loose-checklist-dark
 conversation-markdown-markdowntaskcheckbox--nested-checklist
@@ -1032,6 +1035,7 @@ feedback-appbootscreen--dark
 feedback-appbootscreen--default
 feedback-appbootscreen--exit
 feedback-appbootscreen--exit-at-mount
+feedback-appbootscreen--exit-mid-entrance
 feedback-appbootscreen--exit-still
 feedback-appbootscreen--first-launch
 feedback-appbootscreen--still
@@ -1384,6 +1388,18 @@ layout-workspaceshell--tall-content
 layout-workspaceshell--tall-host
 layout-workspaceshell--toggle-during-drag-swaps-at-once
 layout-workspaceshell--toggle-during-slide-turns-back
+navigation-agentspage--actions-menu-open
+navigation-agentspage--default
+navigation-agentspage--empty
+navigation-agentspage--failed
+navigation-agentspage--failed-light
+navigation-agentspage--failed-without-retry
+navigation-agentspage--keyboard-focus
+navigation-agentspage--light
+navigation-agentspage--loading
+navigation-agentspage--long-name-and-title
+navigation-agentspage--narrow
+navigation-agentspage--single-agent
 navigation-appframe--connecting-space
 navigation-appframe--holding-companion-settings
 navigation-appframe--holding-conversation-settings
@@ -1573,6 +1589,7 @@ navigation-appsidebarbotrow--working-bot-waiting-on-two-background-tasks
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active
 navigation-appsidebarconversationrow--compact-row-at-rest-hovered-and-active-dark
+navigation-appsidebarconversationrow--compact-working-row-naming-swaps-to-a-title
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark
 navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
@@ -1607,6 +1624,11 @@ navigation-appsidebarconversationrow--muted-tint-row
 navigation-appsidebarconversationrow--muted-tint-row-dark
 navigation-appsidebarconversationrow--muted-tint-row-free-hue
 navigation-appsidebarconversationrow--muted-tint-row-free-hue-dark
+navigation-appsidebarconversationrow--naming-arrived
+navigation-appsidebarconversationrow--naming-failed
+navigation-appsidebarconversationrow--naming-pending
+navigation-appsidebarconversationrow--naming-pending-light
+navigation-appsidebarconversationrow--naming-pending-swaps-to-a-title
 navigation-appsidebarconversationrow--no-tooltip-while-the-row-is-lifted
 navigation-appsidebarconversationrow--not-sent-selected
 navigation-appsidebarconversationrow--not-sent-selected-dark
@@ -1924,6 +1946,8 @@ navigation-documentpanel--narrowed-to-the-thread-floor-then-scrolled
 navigation-expandedsidebar--a-1-slots-composed-as-the-app-expanded
 navigation-expandedsidebar--active-row-hovered-expanded
 navigation-expandedsidebar--active-row-hovered-light-expanded
+navigation-expandedsidebar--agents-at-rest-expanded
+navigation-expandedsidebar--agents-selected-expanded
 navigation-expandedsidebar--compact-coloured-icons-expanded
 navigation-expandedsidebar--compact-focus-expanded
 navigation-expandedsidebar--compact-hover-expanded
@@ -1982,6 +2006,11 @@ navigation-headerconversationbutton--default
 navigation-headerconversationbutton--expanded
 navigation-headerconversationbutton--in-layout
 navigation-headerconversationbutton--long-content
+navigation-headerconversationbutton--naming-arrived
+navigation-headerconversationbutton--naming-failed
+navigation-headerconversationbutton--naming-pending
+navigation-headerconversationbutton--naming-pending-light
+navigation-headerconversationbutton--naming-pending-swaps-to-a-title
 navigation-headerconversationbutton--single-bot
 navigation-headerconversationbutton--themes-group
 navigation-headerconversationbutton--themes-group-free-hue
@@ -2591,6 +2620,11 @@ navigation-titlebartabs--coloured-conversation-tabs-dark
 navigation-titlebartabs--library-document-tab
 navigation-titlebartabs--library-image-tab
 navigation-titlebartabs--long-name-truncated
+navigation-titlebartabs--naming-arrived
+navigation-titlebartabs--naming-failed
+navigation-titlebartabs--naming-pending
+navigation-titlebartabs--naming-pending-light
+navigation-titlebartabs--naming-pending-swaps-to-a-title
 navigation-titlebartabs--no-search-without-handler
 navigation-titlebartabs--search-after-forward
 navigation-titlebartabs--tabs-at-rest-hovered-and-selected
@@ -2860,6 +2894,7 @@ primitives-sharedmark--stable-box
 primitives-shimmertext--default
 primitives-shimmertext--long-content
 primitives-shimmertext--reduced-motion
+primitives-textswap--default
 primitives-tooltipbutton--default
 primitives-tooltipbutton--long-content
 primitives-tooltipbutton--states
@@ -3278,6 +3313,7 @@ settings-space-spacesettingsdialog--members-signed-out
 settings-space-spacesettingsdialog--members-with-invitations
 settings-space-spacesettingsdialog--members-withdraw-failed
 settings-space-spacesettingsdialog--members-withdraw-pending
+settings-space-spacesettingsdialog--no-agents-entry
 settings-space-spacesettingsdialog--opens-on-an-application
 settings-space-spacesettingsdialog--skills
 settings-space-spacesettingsdialog--transfer

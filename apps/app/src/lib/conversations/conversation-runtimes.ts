@@ -24,6 +24,7 @@ type HeldRuntime = {
 export type ConversationRuntimesOptions = Pick<
 	ConversationControllerOptions,
 	| "onNamed"
+	| "namings"
 	| "readReportedRuns"
 	| "onCompanionArrived"
 	| "onReconnected"
