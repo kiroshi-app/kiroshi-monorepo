@@ -133,10 +133,7 @@ const expectEveryRefusalHandedOn = <Rig>(
 
 			await vi.waitFor(() => expect(refusable.hasRefused(refuses)).toBe(true))
 			await vi.waitFor(() =>
-				expect({
-					isHandedToCaller: isRefusal(rejection),
-					isRaised: hasRaisedTheCall(refuses),
-				}).not.toEqual({ isHandedToCaller: false, isRaised: false }),
+				expect(isRefusal(rejection) || hasRaisedTheCall(refuses)).toBe(true),
 			)
 		},
 	)
