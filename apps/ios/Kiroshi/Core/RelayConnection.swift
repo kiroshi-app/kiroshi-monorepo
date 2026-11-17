@@ -135,17 +135,24 @@ actor RelayConnection {
         try await call(command, args: RelayNoArgs?.none, deadline: Self.callDeadline)
     }
 
-    func call(_ command: String, args: some Encodable & Sendable) async throws -> RelayAnswer {
-        try await call(command, args: args, deadline: Self.callDeadline)
+    nonisolated var relayDeviceId: String {
+        device.relayId
+    }
+
+    func call(
+        _ command: String, args: some Encodable & Sendable, callKey: String? = nil
+    ) async throws -> RelayAnswer {
+        try await call(command, args: args, callKey: callKey, deadline: Self.callDeadline)
     }
 
     private func call(
-        _ command: String, args: (some Encodable)?, deadline: Duration
+        _ command: String, args: (some Encodable)?, callKey: String? = nil, deadline: Duration
     ) async throws -> RelayAnswer {
         guard socket != nil, outbox != nil else { throw RelayCallError.notConnected }
         let id = nextCallId
         nextCallId += 1
-        let frame = try JSONEncoder().encode(RelayCallFrame(id: id, command: command, args: args))
+        let frame = try JSONEncoder().encode(
+            RelayCallFrame(id: id, command: command, args: args, callKey: callKey))
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard !Task.isCancelled else {
@@ -896,6 +903,7 @@ private struct RelayCallFrame<Args: Encodable>: Encodable {
     let id: Int
     let command: String
     let args: Args?
+    var callKey: String?
 }
 
 private struct RelaySharedSpace: Decodable {
