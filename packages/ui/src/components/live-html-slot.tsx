@@ -9,6 +9,7 @@ import {
 } from "@workspace/ui/components/markdown/answer-card"
 import { AnswerFence } from "@workspace/ui/components/markdown/code"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { cn } from "@workspace/ui/lib/utils"
 
 type LiveHtmlStatus = "live" | "loading" | "unavailable"
 
@@ -37,8 +38,6 @@ type Edges = {
 	right: number
 	bottom: number
 }
-
-const DEFAULT_HEIGHT = 320
 
 const isClipping = (element: Element) => {
 	const { overflowX, overflowY } = getComputedStyle(element)
@@ -118,7 +117,7 @@ const isSamePlacement = (
 const LiveHtmlSlot = ({
 	status,
 	html,
-	height = DEFAULT_HEIGHT,
+	height,
 	onPlacementChange,
 }: LiveHtmlSlotProps) => {
 	const { t } = useTranslation("chat")
@@ -174,7 +173,7 @@ const LiveHtmlSlot = ({
 				<div
 					ref={setReserved}
 					data-slot="live-html-slot-view"
-					className="flex-1"
+					className={cn("flex-1", height === undefined && "h-80")}
 					style={{ height }}
 				>
 					{isLoading ? (

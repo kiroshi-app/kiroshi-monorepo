@@ -1,4 +1,5 @@
-import { expect, fn, waitFor } from "storybook/test"
+import { useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { MarkdownProse } from "@workspace/storybook/story-utils"
@@ -7,6 +8,7 @@ import {
 	LiveHtmlSlot,
 	type LiveHtmlSlotProps,
 } from "@workspace/ui/components/live-html-slot"
+import { Button } from "@workspace/ui/components/ui/button"
 
 const HTML_SOURCE = `<!doctype html>
 <html>
@@ -16,6 +18,18 @@ const HTML_SOURCE = `<!doctype html>
     <script src="chart.js"></script>
   </body>
 </html>`
+
+const SHORT_PAGE_HEIGHT = 160
+const TALL_PAGE_HEIGHT = 2400
+const GROWN_PAGE_HEIGHT = 640
+
+const slotOf = (canvasElement: HTMLElement) => {
+	const slot = canvasElement.querySelector<HTMLElement>(
+		"[data-slot='live-html-slot']",
+	)
+	if (!slot) throw new Error("The slot did not render.")
+	return slot
+}
 
 const viewOf = (canvasElement: HTMLElement) => {
 	const view = canvasElement.querySelector<HTMLElement>(
@@ -72,6 +86,22 @@ const scrollPast = (scroller: Element, view: HTMLElement, share: number) => {
 		view.offsetHeight * share
 }
 
+const expectSizedToPage = async (
+	canvasElement: HTMLElement,
+	height: number,
+) => {
+	const slot = slotOf(canvasElement)
+	const view = viewOf(canvasElement)
+	const paragraph = within(canvasElement).getByTestId("paragraph-above")
+	const line = paragraph.getBoundingClientRect().height
+	await expect(
+		Math.abs(view.getBoundingClientRect().height - height),
+	).toBeLessThanOrEqual(line)
+	await expect(slot.offsetWidth).toBe(paragraph.offsetWidth)
+	for (const element of [slot, view])
+		await expect(element.scrollHeight).toBe(element.clientHeight)
+}
+
 const ScrollingReply = (props: LiveHtmlSlotProps) => (
 	<section
 		aria-label="Agent reply"
@@ -87,6 +117,18 @@ const ScrollingReply = (props: LiveHtmlSlotProps) => (
 		</MarkdownProse>
 	</section>
 )
+
+const PageMeasuredAgain = (props: LiveHtmlSlotProps) => {
+	const [height, setHeight] = useState(props.height)
+	return (
+		<>
+			<Button onClick={() => setHeight(GROWN_PAGE_HEIGHT)}>
+				Measure the page again
+			</Button>
+			<ScrollingReply {...props} height={height} />
+		</>
+	)
+}
 
 const meta = preview.meta({
 	title: "Conversation/Markdown/LiveHtmlSlot",
@@ -112,7 +154,7 @@ export const Live = meta.story({
 		docs: {
 			description: {
 				story:
-					"A live view at the default height, in a reply that scrolls. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
+					"A live view whose page height is not known yet, in a reply that scrolls: the reserved area holds a 20rem placeholder. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
 			},
 		},
 	},
@@ -193,6 +235,88 @@ export const ScrolledOutOfView = meta.story({
 				clip: { width: 0, height: 0 },
 			}),
 		)
+	},
+})
+
+export const ShortPage = meta.story({
+	args: { height: SHORT_PAGE_HEIGHT },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A page shorter than the placeholder: the reserved area is exactly the page height at the width of the reply, with no scrollbar in the slot, and the clip covers the whole rect.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const mounted = await reportFollows(args.onPlacementChange, () =>
+			placementIn(view, scroller),
+		)
+		await expectSizedToPage(canvasElement, SHORT_PAGE_HEIGHT)
+		await expect(mounted.clip).toEqual(mounted.rect)
+	},
+})
+
+export const TallPage = meta.story({
+	args: { height: TALL_PAGE_HEIGHT },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A page several screens tall: the reserved area takes its full height, only the reply scrolls, and the clip is the part of the reserved area the reply shows, every row of the reply viewport once scrolled to its middle.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const placed = () => placementIn(view, scroller)
+		const mounted = await reportFollows(args.onPlacementChange, placed)
+		await expectSizedToPage(canvasElement, TALL_PAGE_HEIGHT)
+		await expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+		await expect(mounted.clip.height).toBeLessThan(mounted.rect.height)
+
+		scrollPast(scroller, view, 0.5)
+		const midway = await reportFollows(args.onPlacementChange, placed, mounted)
+		const reply = rectOf(scroller)
+		await expect(midway.clip).toEqual({
+			x: midway.rect.x,
+			y: reply.y,
+			width: midway.rect.width,
+			height: reply.height,
+		})
+	},
+})
+
+export const HeightChangesAfterMount = meta.story({
+	args: { height: SHORT_PAGE_HEIGHT },
+	render: (args) => <PageMeasuredAgain {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The page is measured again, taller, after the slot mounted: the reserved area grows to the new height in place and the reported rect and clip follow it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const placed = () => placementIn(view, scroller)
+		const mounted = await reportFollows(args.onPlacementChange, placed)
+		await expectSizedToPage(canvasElement, SHORT_PAGE_HEIGHT)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Measure the page again" }),
+		)
+		const grown = await reportFollows(args.onPlacementChange, placed, mounted)
+		await expectSizedToPage(canvasElement, GROWN_PAGE_HEIGHT)
+		await expect(grown.rect.y).toBe(mounted.rect.y)
+		await expect(grown.clip.height).toBeLessThan(grown.rect.height)
 	},
 })
 
