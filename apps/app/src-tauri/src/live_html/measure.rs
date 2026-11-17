@@ -1,13 +1,12 @@
-pub(crate) const MIN_LENGTH: f64 = 1.0;
-pub(crate) const MAX_LENGTH: f64 = 20_000.0;
+const MIN_LENGTH: f64 = 1.0;
+const MAX_LENGTH: f64 = 20_000.0;
 
 pub(crate) const SCRIPT: &str = r#"(() => {
 	if (window.top === window || window.parent !== window.top) return;
 	const channel = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ipc;
 	if (!channel) return;
-	const report = (width, height) => channel.postMessage(JSON.stringify([width, height]));
+	const root = document.documentElement;
 	const measure = () => {
-		const root = document.documentElement;
 		const scroller = document.scrollingElement || root;
 		root.style.removeProperty("transform");
 		root.style.removeProperty("height");
@@ -20,14 +19,14 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 			root.style.setProperty("transform", `scale(${scale})`, "important");
 			root.style.setProperty("height", `${height * scale}px`, "important");
 		}
-		report(width, height * scale);
+		channel.postMessage(JSON.stringify([width, height * scale]));
 	};
 	addEventListener(
 		"load",
 		() => {
-			document.documentElement.style.setProperty("overflow", "hidden", "important");
+			root.style.setProperty("overflow", "hidden", "important");
 			const observer = new ResizeObserver(measure);
-			observer.observe(document.documentElement);
+			observer.observe(root);
 			if (document.body) observer.observe(document.body);
 		},
 		{ once: true },
