@@ -787,7 +787,8 @@ impl Observations {
 		let build_gap =
 			requested.map(|requested| self.heartbeat.longest_gap(creation_began, requested));
 		let run_gap = requested.map(|requested| self.heartbeat.longest_gap(requested, settled));
-		let baseline_gap = self.heartbeat.longest_gap(self.baseline.0, self.baseline.1).length;
+		let baseline = self.heartbeat.longest_gap(self.baseline.0, self.baseline.1);
+		let baseline_gap = baseline.length;
 		let is_within_the_limit =
 			|gap: Option<Gap>| gap.is_some_and(|gap| gap.length <= HEARTBEAT_GAP_LIMIT);
 		let gaps_above_the_limit: Vec<Value> = [
@@ -807,11 +808,11 @@ impl Observations {
 		})
 		.collect();
 		let length_ms = |gap: Option<Gap>| gap.map(|gap| gap.length.as_millis());
-		let longest_gap = self.longest_gap_between_steps([
-			("baseline", Some(self.baseline)),
-			("creation", requested.map(|requested| (creation_began, requested))),
-			("run", requested.map(|requested| (requested, settled))),
-			("busy loop", busy_loop),
+		let longest_gap = self.longest_gap_with_its_steps([
+			("baseline", Some(baseline)),
+			("creation", build_gap),
+			("run", run_gap),
+			("busy loop", busy_gap),
 		]);
 		let is_responsive = match self.host_readings {
 			Some(_) => {
@@ -841,16 +842,10 @@ impl Observations {
 		}
 	}
 
-	fn longest_gap_between_steps<const WINDOWS: usize>(
-		&self,
-		windows: [(&'static str, Option<(Instant, Instant)>); WINDOWS],
-	) -> Value {
+	fn longest_gap_with_its_steps(&self, windows: [(&'static str, Option<Gap>); 4]) -> Value {
 		let Some((window, gap)) = windows
 			.into_iter()
-			.filter_map(|(window, bounds)| {
-				let (from, to) = bounds?;
-				Some((window, self.heartbeat.longest_gap(from, to)))
-			})
+			.filter_map(|(window, gap)| Some((window, gap?)))
 			.max_by_key(|(_, gap)| gap.length)
 		else {
 			return Value::Null;
