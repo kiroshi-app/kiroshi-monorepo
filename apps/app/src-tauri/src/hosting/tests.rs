@@ -6864,15 +6864,21 @@ impl Authoring {
 	}
 
 	async fn answered_from(&self, account_id: &str, device: &str, frame: Value) -> Value {
+		self.answered_through(self.local.clone(), account_id, device, frame).await
+	}
+
+	async fn answered_through(
+		&self,
+		local: LocalApi,
+		account_id: &str,
+		device: &str,
+		frame: Value,
+	) -> Value {
 		let call = super::bridge::member_call(&frame.to_string(), account_id, device)
 			.expect("a member call");
-		let answer = super::bridge::bridged(
-			self.app.handle().clone(),
-			self.local.clone(),
-			PERSONAL.to_owned(),
-			call,
-		)
-		.await;
+		let answer =
+			super::bridge::bridged(self.app.handle().clone(), local, PERSONAL.to_owned(), call)
+				.await;
 		serde_json::from_str(&answer).expect("a json answer")
 	}
 
@@ -10864,10 +10870,7 @@ impl Authoring {
 		drop(closed);
 		let down = LocalApi::new(format!("http://{address}"), LOCAL_TOKEN.to_owned())
 			.expect("the local client builds");
-		let call = bridge::member_call(&frame.to_string(), GUEST, GUEST_DEVICE).expect("a call");
-		let answer =
-			bridge::bridged(self.app.handle().clone(), down, PERSONAL.to_owned(), call).await;
-		serde_json::from_str(&answer).expect("a json answer")
+		self.answered_through(down, GUEST, GUEST_DEVICE, frame).await
 	}
 }
 
