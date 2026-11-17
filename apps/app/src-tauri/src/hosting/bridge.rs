@@ -750,11 +750,10 @@ mod tests {
 	#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 	struct HostOnlyCommand {
 		command: String,
-		#[serde(default)]
 		screen: Option<String>,
 	}
 
-	fn host_only_commands_held() -> Vec<HostOnlyCommand> {
+	fn host_only_commands_held() -> BTreeSet<HostOnlyCommand> {
 		let path =
 			Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts").join(HOST_ONLY_COMMANDS);
 		let text = std::fs::read_to_string(&path)
@@ -762,7 +761,7 @@ mod tests {
 		serde_json::from_str(&text).expect("the host-only commands file is a json list")
 	}
 
-	fn host_only_commands_live() -> Vec<HostOnlyCommand> {
+	fn host_only_commands_live() -> BTreeSet<HostOnlyCommand> {
 		reach::REACHES
 			.iter()
 			.filter(|(_, reach)| *reach == Reach::HostOnly)
@@ -778,8 +777,8 @@ mod tests {
 
 	#[test]
 	fn the_committed_host_only_commands_are_the_reach_table_ones_with_their_screens() {
-		let held: BTreeSet<HostOnlyCommand> = host_only_commands_held().into_iter().collect();
-		let live: BTreeSet<HostOnlyCommand> = host_only_commands_live().into_iter().collect();
+		let held = host_only_commands_held();
+		let live = host_only_commands_live();
 		let differing: BTreeSet<&str> =
 			held.symmetric_difference(&live).map(|entry| entry.command.as_str()).collect();
 
