@@ -167,6 +167,14 @@ describe("a runner failure", () => {
 		expect(isRunnerFailure(endedBeforeItsFirstTest("ios (2)"))).toBe(true)
 	})
 
+	it.each(["ios (1)", "ios (5)"])(
+		"reads %s by the rule of every ios shard",
+		(name) => {
+			expect(isRunnerFailure(endedBeforeItsFirstTest(name))).toBe(true)
+			expect(isRunnerFailure(failedOnATest(name))).toBe(false)
+		},
+	)
+
 	it("is an ios job whose setup failed before its gate, the Runner failure step saying so", () => {
 		const lostItsBuildProducts = job("ios (3)", "failure", [
 			step("Set up job", "success"),
@@ -466,6 +474,23 @@ describe("reporting a run", () => {
 
 		expect(outcome).toBe(
 			"no issue: reran the failed jobs of run 101, each a runner failure (ios (2), ios (3))",
+		)
+		expect(asked).toEqual(["rerun the failed jobs of 101"])
+		expect(requests).toEqual([])
+	})
+
+	it("reruns the failed jobs once when the fifth ios shard ended before its first test", async () => {
+		const { linear, requests } = linearAnswering()
+		const { github, asked } = fakeGitHub(
+			redRun,
+			[],
+			[endedBeforeItsFirstTest("ios (5)"), job("verify", "failure")],
+		)
+
+		const outcome = await reportRedMain("101", { github, linear })
+
+		expect(outcome).toBe(
+			"no issue: reran the failed jobs of run 101, each a runner failure (ios (5))",
 		)
 		expect(asked).toEqual(["rerun the failed jobs of 101"])
 		expect(requests).toEqual([])
