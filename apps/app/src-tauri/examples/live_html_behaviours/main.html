@@ -102,12 +102,15 @@
 					if (isMet()) return
 					await pause(50)
 				}
-				fail(reason)
+				fail(typeof reason === "function" ? reason() : reason)
 			}
 			const sizesOf = (id) => JSON.stringify(measuredFor(id).map(({ width, height }) => [width, height]))
 			const expectSizes = async (id, sizes) => {
 				const expected = JSON.stringify(sizes)
-				await until(() => sizesOf(id) === expected, `${id} measured ${sizesOf(id)}, expected ${expected}`)
+				await until(
+					() => sizesOf(id) === expected,
+					() => `${id} measured ${sizesOf(id)}, expected ${expected}`,
+				)
 			}
 			const expectSizesHeld = async (id, sizes) => {
 				await expectSizes(id, sizes)
@@ -178,7 +181,10 @@
 
 				await invoke("live_html_mount", { id: "flood", html: FLOOD_PAGE, rectangle: SHOWN })
 				const lastFlooded = () => measuredFor("flood").at(-1)?.height
-				await until(() => lastFlooded() === FLOODED_LAST_HEIGHT, `flood last measured ${lastFlooded()}`)
+				await until(
+					() => lastFlooded() === FLOODED_LAST_HEIGHT,
+					() => `flood last measured ${lastFlooded()}`,
+				)
 				await pause(500)
 				const flooded = measuredFor("flood").length
 				expect(flooded <= 11 && lastFlooded() === FLOODED_LAST_HEIGHT, `flood emitted ${flooded}, last ${lastFlooded()}`)

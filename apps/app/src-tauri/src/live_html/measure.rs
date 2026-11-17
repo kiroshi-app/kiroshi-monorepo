@@ -10,19 +10,19 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 	const channel = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ipc;
 	if (!channel) return;
 	const root = document.documentElement;
-	const clipped = (element) => {
+	const pinned = (element, overflow) => {
 		const style = element.style;
-		if (style.getPropertyValue("overflow") !== "hidden" || style.getPropertyPriority("overflow") !== "important") {
-			style.setProperty("overflow", "hidden", "important");
+		if (style.getPropertyValue("overflow") !== overflow || style.getPropertyPriority("overflow") !== "important") {
+			style.setProperty("overflow", overflow, "important");
 		}
 	};
 	let watchedBody = null;
 	const pinning = new MutationObserver(() => pin());
 	const pin = () => {
-		clipped(root);
+		pinned(root, "hidden");
 		const body = document.body;
 		if (!body) return;
-		clipped(body);
+		pinned(body, "visible");
 		if (body === watchedBody) return;
 		watchedBody = body;
 		pinning.observe(body, { attributes: true, attributeFilter: ["style"] });
@@ -33,8 +33,6 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 		"scroll",
 		() => {
 			if (scrollX || scrollY) scrollTo(0, 0);
-			const body = document.body;
-			if (body && (body.scrollTop || body.scrollLeft)) body.scrollTo(0, 0);
 		},
 		{ capture: true, passive: true },
 	);
