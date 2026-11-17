@@ -24,6 +24,8 @@ type TurnRun = (String, String);
 
 type Expiry = Pin<Box<dyn Future<Output = ()> + Send>>;
 
+type PendingExpiries = Arc<Mutex<Vec<Expiry>>>;
+
 pub struct TurnRunDeadlines {
 	firing: Firing,
 	armed: Arc<Mutex<Armed>>,
@@ -31,11 +33,11 @@ pub struct TurnRunDeadlines {
 
 enum Firing {
 	After(Duration),
-	ByHand(Arc<Mutex<Vec<Expiry>>>),
+	ByHand(PendingExpiries),
 }
 
 pub struct DeadlineTrigger {
-	pending: Arc<Mutex<Vec<Expiry>>>,
+	pending: PendingExpiries,
 }
 
 #[derive(Default)]
@@ -56,7 +58,7 @@ impl TurnRunDeadlines {
 	}
 
 	pub fn fired_by_hand() -> (Self, DeadlineTrigger) {
-		let pending = Arc::<Mutex<Vec<Expiry>>>::default();
+		let pending = PendingExpiries::default();
 		let deadlines = Self { firing: Firing::ByHand(pending.clone()), armed: Arc::default() };
 		(deadlines, DeadlineTrigger { pending })
 	}
