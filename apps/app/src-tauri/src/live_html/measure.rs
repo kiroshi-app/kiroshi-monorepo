@@ -114,7 +114,7 @@ impl SizeReport {
 }
 
 fn reserved_length(length: f64) -> Option<f64> {
-	(length.is_finite() && length >= 0.0).then(|| length.ceil().clamp(MIN_LENGTH, MAX_LENGTH))
+	(length.is_finite() && length > 0.0).then(|| length.ceil().clamp(MIN_LENGTH, MAX_LENGTH))
 }
 
 #[cfg(test)]
@@ -196,12 +196,27 @@ mod tests {
 	}
 
 	#[test]
-	fn an_empty_size_is_clamped_to_one_pixel() {
-		assert_eq!(page_size("[0, 0.0]"), Some(PageSize { width: MIN_LENGTH, height: MIN_LENGTH }));
+	fn an_empty_size_is_dropped() {
+		assert_eq!(page_size("[0, 0.0]"), None);
+		assert_eq!(page_size("[480, 0]"), None);
+		assert_eq!(page_size("[0, 120]"), None);
+		assert_eq!(page_size("[480, -0.0]"), None);
+	}
+
+	#[test]
+	fn a_size_under_one_pixel_is_clamped_to_one_pixel() {
 		assert_eq!(
-			page_size("[0, -0.0]"),
+			page_size("[0.4, 0.01]"),
 			Some(PageSize { width: MIN_LENGTH, height: MIN_LENGTH })
 		);
+	}
+
+	#[test]
+	fn a_size_after_an_empty_one_is_still_emitted() {
+		let mut report = SizeReport::default();
+
+		assert_eq!(page_size("[480, 0]"), None);
+		assert_eq!(report.posted(size(120.0)), Some(size(120.0)));
 	}
 
 	#[test]
