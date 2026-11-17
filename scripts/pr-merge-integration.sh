@@ -3,11 +3,11 @@ set -euo pipefail
 
 readonly REPOSITORY="kiroshi-app/kiroshi-monorepo"
 readonly USAGE_ERROR=64
-readonly PULL_REQUEST_STATE='"\(.baseRefName) \(.headRefOid) \(.mergeable)",
-	([.statusCheckRollup[]
-		| {name: (.name // .context), outcome: (if (.conclusion // "") != "" then .conclusion else (.state // .status) end)}
-		| select(.outcome | IN("SUCCESS", "NEUTRAL", "SKIPPED") | not)
-		| "\(.name) (\(.outcome))"] | join(", "))'
+readonly PULL_REQUEST_STATE='[.statusCheckRollup[]
+		| {name: (.name // .context), outcome: (if (.conclusion // "") != "" then .conclusion else (.state // .status) end)}] as $checks
+	| "\(.baseRefName) \(.headRefOid) \(.mergeable)",
+	([$checks[] | select(.outcome | IN("SUCCESS", "NEUTRAL", "SKIPPED") | not) | "\(.name) (\(.outcome))"] | join(", ")),
+	"\(any($checks[]; .outcome == "SUCCESS")) \(any($checks[]; .name == "verify" and .outcome == "SUCCESS"))"'
 
 fail() {
 	echo "pr-merge-integration.sh: $1" >&2
@@ -36,6 +36,7 @@ number=$open_pull_requests
 pull_request=$(gh pr view "$number" --repo "$REPOSITORY" --json baseRefName,headRefOid,mergeable,statusCheckRollup --jq "$PULL_REQUEST_STATE")
 read -r base head_sha mergeable <<<"$(head -n 1 <<<"$pull_request")"
 checks_not_passing=$(sed -n 2p <<<"$pull_request")
+read -r has_succeeded_check has_passed_fast_gate <<<"$(sed -n 3p <<<"$pull_request")"
 
 case "$base" in
 feature/*) ;;
@@ -43,6 +44,12 @@ feature/*) ;;
 esac
 if [ -n "$checks_not_passing" ]; then
 	fail "PR #$number has checks not passing: $checks_not_passing"
+fi
+if [ "$has_succeeded_check" != "true" ]; then
+	fail "PR #$number has no check that succeeded on its head commit, CI did not run: $base may predate the feature/** pull_request trigger of ci.yml"
+fi
+if [ "$has_passed_fast_gate" != "true" ]; then
+	fail "PR #$number did not pass the fast gate into $base: verify did not succeed on its head commit"
 fi
 if [ "$mergeable" = "CONFLICTING" ]; then
 	fail "PR #$number conflicts with $base, rebase it first"
