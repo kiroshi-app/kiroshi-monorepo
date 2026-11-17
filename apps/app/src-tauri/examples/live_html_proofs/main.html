@@ -3,6 +3,11 @@
 	<head>
 		<meta charset="utf-8" />
 		<title>Live HTML proofs</title>
+		<style>
+			body {
+				min-height: 20000px;
+			}
+		</style>
 	</head>
 	<body>
 		<p id="sentinel"></p>
@@ -39,6 +44,22 @@
 				const payload = { instance, secret, snapshot: integritySnapshot() }
 				invoke("plugin:event|emit", { event: "spike-heartbeat", payload }).catch((cause) => {
 					document.title = `heartbeat failed: ${cause}`
+				})
+			}
+
+			let wheels = 0
+			addEventListener(
+				"wheel",
+				() => {
+					wheels += 1
+				},
+				{ passive: true },
+			)
+
+			window.__spikeScrollReading = (reading) => {
+				const payload = { reading, x: scrollX, y: scrollY, wheels }
+				invoke("plugin:event|emit", { event: "spike-main-scroll", payload }).catch((cause) => {
+					document.title = `scroll reading failed: ${cause}`
 				})
 			}
 

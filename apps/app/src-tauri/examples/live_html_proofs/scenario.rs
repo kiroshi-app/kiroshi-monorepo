@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -13,16 +13,17 @@ use serde_json::json;
 use tauri::async_runtime::block_on;
 use tauri::{AppHandle, Listener as _, WebviewWindow};
 
-use crate::host::{HostState, Tick};
+use crate::host::{HostState, MainScroll, Tick};
 use crate::probe::{self, HostReading, MountedView};
 use crate::proofs::{
-	AttemptAlone, GridObservation, HostReadings, Observations, RescaledFrames, ViewObservation,
-	WindowUrl, LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS, LOOPBACK_TRIPWIRE_ATTEMPTS,
-	LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS, SCALES_FORCED_IN_TURN,
+	AttemptAlone, GridObservation, HostReadings, Observations, RescaledFrames, ScrolledGesture,
+	ViewObservation, WindowUrl, LAN_TRIPWIRE_ATTEMPTS, LAN_TRIPWIRE_NAVIGATIONS,
+	LOOPBACK_TRIPWIRE_ATTEMPTS, LOOPBACK_TRIPWIRE_NAVIGATIONS, NAVIGATION_ATTEMPTS,
+	SCALES_FORCED_IN_TURN,
 };
 use crate::sensors::{
-	drawn_frames, force_backing_scale, non_loopback_ipv4, Targets, Tripwire, ViewRecord,
-	READER_ROLE, WRITER_ROLE,
+	drawn_frames, force_backing_scale, non_loopback_ipv4, send_scroll, Pointer, ScrollDevice,
+	ScrollStep, Targets, Tripwire, ViewRecord, READER_ROLE, WRITER_ROLE,
 };
 
 pub const FIRST_VIEW_LABEL: &str = "view-1";
@@ -35,6 +36,26 @@ const FRACTIONAL_SLOT: LiveHtmlRectangle =
 const FRACTIONAL_CLIP: LiveHtmlRectangle =
 	LiveHtmlRectangle { x: 0.0, y: 112.8, width: 700.5, height: 240.25 };
 const HEARTBEAT_EVENT: &str = "spike-heartbeat";
+const MAIN_SCROLL_EVENT: &str = "spike-main-scroll";
+const SCROLL_TO_THE_TOP_SCRIPT: &str = "scrollTo(0, 0)";
+const SCROLL_STEP_INTERVAL: Duration = Duration::from_millis(16);
+const SCROLL_SETTLE: Duration = Duration::from_millis(800);
+const SCROLL_READING_TIMEOUT: Duration = Duration::from_secs(2);
+const WHEEL_NOTCHES: [ScrollStep; 3] = [ScrollStep { delta: -3, phase: 0, momentum_phase: 0 }; 3];
+const TRACKPAD_SWIPE: [ScrollStep; 12] = [
+	ScrollStep { delta: -8, phase: 1, momentum_phase: 0 },
+	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
+	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
+	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
+	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
+	ScrollStep { delta: 0, phase: 4, momentum_phase: 0 },
+	ScrollStep { delta: -12, phase: 0, momentum_phase: 1 },
+	ScrollStep { delta: -8, phase: 0, momentum_phase: 2 },
+	ScrollStep { delta: -6, phase: 0, momentum_phase: 2 },
+	ScrollStep { delta: -4, phase: 0, momentum_phase: 2 },
+	ScrollStep { delta: -2, phase: 0, momentum_phase: 2 },
+	ScrollStep { delta: 0, phase: 0, momentum_phase: 3 },
+];
 const RUN_SIGNAL: &str = "run";
 const BEAT_SCRIPT: &str = "window.__spikeBeat?.()";
 const WAKE_SCRIPT: &str = "void 0";
@@ -48,7 +69,7 @@ const SETTLE: Duration = Duration::from_millis(1500);
 const ALONE_TIMEOUT: Duration = Duration::from_millis(2500);
 const ALONE_SETTLE: Duration = Duration::from_secs(3);
 const RUN_LIMIT: Duration = Duration::from_secs(240);
-const PROOFS: usize = 9;
+const PROOFS: usize = 10;
 const HARNESS_FAILURE: i32 = 1;
 const RED_PROOFS: i32 = 3;
 const DECISIONS: [&str; 6] = [
@@ -123,6 +144,13 @@ pub fn start(
 		Ok(tick) => heartbeat_host.record_tick(tick),
 		Err(cause) => eprintln!("unreadable heartbeat: {cause}"),
 	});
+	let scroll_host = Arc::clone(&host);
+	app.listen(MAIN_SCROLL_EVENT, move |event| {
+		match serde_json::from_str::<MainScroll>(event.payload()) {
+			Ok(scroll) => scroll_host.record_main_scroll(scroll),
+			Err(cause) => eprintln!("unreadable main scroll: {cause}"),
+		}
+	});
 	let paced_window = main_window.clone();
 	thread::spawn(move || loop {
 		thread::sleep(HEARTBEAT_INTERVAL);
@@ -144,6 +172,7 @@ pub fn start(
 			sensors,
 			main_window,
 			started: Instant::now(),
+			scroll_readings: AtomicU64::new(0),
 		};
 		match run.play() {
 			Ok(green) if green == PROOFS => std::process::exit(0),
@@ -164,6 +193,7 @@ struct Run {
 	sensors: Sensors,
 	main_window: WebviewWindow,
 	started: Instant,
+	scroll_readings: AtomicU64,
 }
 
 struct Mounted {
@@ -230,6 +260,7 @@ impl Run {
 
 		let first = self.open_view(FIRST_VIEW_LABEL, WRITER_ROLE, FIRST_VIEW_TIMEOUT, SETTLE)?;
 		let first_reading = self.host_reading(&first);
+		let scrolled = self.scrolled_gestures(&first);
 		let grid = self.grid_observation(&first);
 		let writer = self.close_view(first)?;
 		let main_url_after =
@@ -293,6 +324,7 @@ impl Run {
 			}),
 			attempts_alone,
 			grid,
+			scrolled,
 		};
 		let proofs = observations.proofs();
 		let green = proofs.iter().filter(|proof| proof.is_green()).count();
@@ -402,6 +434,50 @@ impl Run {
 				}),
 			})
 			.into()
+	}
+
+	fn scrolled_gestures(&self, view: &OpenView) -> Result<Vec<ScrolledGesture>, String> {
+		view.mounted.as_ref().map_err(Clone::clone)?;
+		let gestures = [
+			(ScrollDevice::MouseWheel, &WHEEL_NOTCHES[..]),
+			(ScrollDevice::Trackpad, &TRACKPAD_SWIPE[..]),
+		];
+		let mut scrolled = Vec::new();
+		for (device, steps) in gestures {
+			for pointer in [Pointer::BesideTheView, Pointer::OverTheView] {
+				scrolled.push(self.scrolled_gesture(device, steps, pointer)?);
+			}
+		}
+		Ok(scrolled)
+	}
+
+	fn scrolled_gesture(
+		&self,
+		device: ScrollDevice,
+		steps: &[ScrollStep],
+		pointer: Pointer,
+	) -> Result<ScrolledGesture, String> {
+		self.main_window.eval(SCROLL_TO_THE_TOP_SCRIPT).map_err(|cause| cause.to_string())?;
+		thread::sleep(SCROLL_SETTLE);
+		let before = self.main_scroll()?;
+		let mut sent = Vec::new();
+		for step in steps {
+			sent.push((*step, send_scroll(&self.main_window, device, *step, pointer)?));
+			thread::sleep(SCROLL_STEP_INTERVAL);
+		}
+		thread::sleep(SCROLL_SETTLE);
+		Ok(ScrolledGesture { device, pointer, sent, before, after: self.main_scroll()? })
+	}
+
+	fn main_scroll(&self) -> Result<MainScroll, String> {
+		let reading = self.scroll_readings.fetch_add(1, Ordering::SeqCst);
+		self.main_window
+			.eval(format!("window.__spikeScrollReading?.({reading})"))
+			.map_err(|cause| cause.to_string())?;
+		wait_until(SCROLL_READING_TIMEOUT, || self.host.main_scroll(reading).is_some());
+		self.host
+			.main_scroll(reading)
+			.ok_or_else(|| format!("the main page gave no scroll reading {reading}"))
 	}
 
 	fn host_reading(&self, view: &OpenView) -> HostReading {
