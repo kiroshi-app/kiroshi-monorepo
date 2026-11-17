@@ -9,6 +9,7 @@ enum RelayCallError: Error, Equatable {
     case timedOut
     case counterUnreadable
     case challengeRefused
+    case alreadyRan
 }
 
 actor RelayConnection {
@@ -142,7 +143,11 @@ actor RelayConnection {
     func call(
         _ command: String, args: some Encodable & Sendable, callKey: String? = nil
     ) async throws -> RelayAnswer {
-        try await call(command, args: args, callKey: callKey, deadline: Self.callDeadline)
+        let answer = try await call(
+            command, args: args, callKey: callKey, deadline: Self.callDeadline)
+        guard callKey != nil, answer.hasAlreadyRun else { return answer }
+        reread()
+        throw RelayCallError.alreadyRan
     }
 
     private func call(

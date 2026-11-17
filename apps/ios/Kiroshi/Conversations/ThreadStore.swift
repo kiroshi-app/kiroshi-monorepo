@@ -187,6 +187,7 @@ final class ThreadStore {
         } catch is CancellationError {
             answering = nil
             return
+        } catch RelayCallError.alreadyRan {
         } catch {
             answering = nil
             guard answersResolvedHere.contains(id) else {
@@ -356,18 +357,9 @@ final class ThreadStore {
         defer { isSending = false }
         var outgoing = outgoing
         do {
-            var content = outgoing.content
-            if let storeCallKey = outgoing.storeCallKey, outgoing.storedPaths == nil {
-                let paths = try await relay.storeAttachments(
-                    await ConversationAttachments.encoding(
-                        outgoing.picked, in: outgoing.conversationId),
-                    callKey: storeCallKey)
-                outgoing.storedPaths = paths
-            }
-            if let paths = outgoing.storedPaths {
-                content = AttachmentBlock.prompt(
-                    text: content, paths: paths, sentAt: outgoing.sentAt)
-            }
+            let content = try await outgoing.prompt(
+                storingFilesBy: { try await relay.storeAttachments($0, callKey: $1) },
+                makeId: makeId)
             let message = SentMessage(
                 id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
                 content: content, createdAt: outgoing.sentAt.milliseconds,
@@ -379,6 +371,8 @@ final class ThreadStore {
                     id: message.id, writer: .you, text: message.content,
                     sentAt: message.createdAt))
         } catch is CancellationError {
+            return
+        } catch RelayCallError.alreadyRan {
             return
         } catch {
             guard !entries.contains(where: { $0.id == outgoing.id }) else { return }

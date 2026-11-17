@@ -143,18 +143,8 @@ final class MissionThreadStore {
         refusedSend = nil
         defer { isSending = false }
         do {
-            var content = outgoing.content
-            if let storeCallKey = outgoing.storeCallKey, outgoing.storedPaths == nil {
-                let paths = try await relay.store(
-                    await ConversationAttachments.encoding(
-                        outgoing.picked, in: outgoing.conversationId),
-                    callKey: storeCallKey)
-                outgoing.storedPaths = paths
-            }
-            if let paths = outgoing.storedPaths {
-                content = AttachmentBlock.prompt(
-                    text: content, paths: paths, sentAt: outgoing.sentAt)
-            }
+            let content = try await outgoing.prompt(
+                storingFilesBy: { try await relay.store($0, callKey: $1) }, makeId: newId)
             let message = MissionAnswer.Message(
                 id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
                 content: content, createdAt: Int(outgoing.sentAt.timeIntervalSince1970 * 1000))
@@ -168,6 +158,8 @@ final class MissionThreadStore {
             clearDraft(sent: outgoing.written, picked: outgoing.picked)
         } catch is CancellationError {
             return
+        } catch RelayCallError.alreadyRan {
+            clearDraft(sent: outgoing.written, picked: outgoing.picked)
         } catch {
             guard !messages.contains(where: { $0.id == outgoing.id }) else {
                 clearDraft(sent: outgoing.written, picked: outgoing.picked)
