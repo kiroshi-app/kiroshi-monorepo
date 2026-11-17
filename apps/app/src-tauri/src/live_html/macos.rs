@@ -262,27 +262,13 @@ fn place_native(
 	let holder = holder_of(view, marker)?;
 	let parent = unsafe { holder.superview() }.ok_or("the holder of the webview is in no view")?;
 	let window = parent.window().ok_or("the holder of the webview is in no window")?;
-	let backing_scale = window.backingScaleFactor();
 	let frames = placement.frames(&ContentView {
 		height: parent.bounds().size.height,
 		is_flipped: parent.isFlipped(),
-		backing_scale,
+		backing_scale: window.backingScaleFactor(),
 	});
 	holder.setFrame(native_rectangle(frames.holder));
 	view.setFrame(native_rectangle(frames.view));
-	draw_at_backing_scale(&holder, backing_scale)?;
-	draw_at_backing_scale(view, backing_scale)?;
-	Ok(())
-}
-
-fn draw_at_backing_scale(view: &NSView, backing_scale: f64) -> Result<(), String> {
-	let layer: *mut AnyObject = unsafe { msg_send![view, layer] };
-	if layer.is_null() {
-		return Err("a live view has no layer to draw at the backing scale".to_owned());
-	}
-	unsafe {
-		let _: () = msg_send![layer, setContentsScale: backing_scale];
-	}
 	Ok(())
 }
 

@@ -168,8 +168,7 @@ mod tests {
 		]
 	}
 
-	#[test]
-	fn a_fractional_rectangle_lands_its_frames_on_the_device_pixel_grid_at_scale_2() {
+	fn assert_fractional_rectangles_land_on_the_grid(content: &ContentView) {
 		let rectangles = [
 			(rectangle(312.5, 412.296875, 671.203125, 360.0), None),
 			(
@@ -183,9 +182,9 @@ mod tests {
 			(rectangle(0.3, -120.66, 99.9, 360.1), Some(rectangle(0.0, 0.25, 640.0, 480.4))),
 		];
 		for (rectangle, clip) in rectangles {
-			let frames = Placement { rectangle, clip, top_inset: INSET }.frames(&CONTENT);
+			let frames = Placement { rectangle, clip, top_inset: INSET }.frames(content);
 			for edge in device_pixel_edges(frames) {
-				let device_pixels = edge * CONTENT.backing_scale;
+				let device_pixels = edge * content.backing_scale;
 				assert_eq!(
 					device_pixels,
 					device_pixels.round(),
@@ -193,5 +192,18 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn a_fractional_rectangle_lands_its_frames_on_the_device_pixel_grid_at_scale_2() {
+		assert_fractional_rectangles_land_on_the_grid(&CONTENT);
+	}
+
+	#[test]
+	fn a_fractional_rectangle_lands_its_frames_on_whole_points_at_scale_1() {
+		assert_fractional_rectangles_land_on_the_grid(&ContentView {
+			backing_scale: 1.0,
+			..CONTENT
+		});
 	}
 }
