@@ -34,6 +34,7 @@ import {
 	OPEN_THREADS,
 } from "@workspace/ui/components/library-comments.fixtures"
 import { LibraryCommentsList } from "@workspace/ui/components/library-comments-list"
+import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import type { LibraryItem } from "@workspace/ui/components/library-grid"
 import type {
 	LibraryBarComments,
@@ -59,6 +60,7 @@ type LibraryWithLightboxProps = LibraryItemActions<
 		| "isSavingToLibrary"
 		| "dragRegion"
 		| "comments"
+		| "presence"
 	> & {
 		openedAt: number | null
 		images?: LibraryLightboxImage[]
@@ -80,6 +82,7 @@ const LibraryWithLightbox = ({
 	isSavingToLibrary,
 	dragRegion,
 	comments,
+	presence,
 	...actions
 }: LibraryWithLightboxProps) => {
 	const [shownAt, setShownAt] = useState(openedAt)
@@ -110,6 +113,7 @@ const LibraryWithLightbox = ({
 							isSavingToLibrary={isSavingToLibrary}
 							onCopyImage={onCopyImage}
 							onSaveToLibrary={onSaveToLibrary}
+							presence={presence}
 							image={shownAt === null ? null : (images[shownAt] ?? null)}
 							onClose={() => {
 								onClose()
@@ -1640,5 +1644,123 @@ export const CommentModeOn = meta.story({
 			"aria-pressed",
 			"true",
 		)
+	},
+})
+
+const PEOPLE_PRESENT = [
+	{ id: "lea", name: "Lea Martin" },
+	{ id: "noor", name: "Noor Haddad" },
+]
+
+const PRESENCE_AVATAR_SIZE = 22
+
+const expectPeopleBeforeComments = async (popup: HTMLElement) => {
+	const actions = slotIn(barIn(popup), "library-bar-actions")
+	const people = slotIn(actions, "library-document-people")
+	const { controls } = commentControlsIn(popup)
+	const capsule = slotIn(actions, "app-header-capsule")
+	const close = within(actions).getByRole("button", { name: "Close" })
+
+	await expect(Array.from(actions.children).slice(0, 4)).toEqual([
+		people,
+		controls,
+		capsule,
+		close,
+	])
+	await expect(getComputedStyle(actions).columnGap).toBe("8px")
+
+	const avatars = within(people).getAllByRole("img")
+	await expect(
+		avatars.map((avatar) => avatar.getAttribute("aria-label")),
+	).toEqual(PEOPLE_PRESENT.map(({ name }) => name))
+	for (const avatar of avatars)
+		await expect(sizeOf(avatar)).toEqual([
+			PRESENCE_AVATAR_SIZE,
+			PRESENCE_AVATAR_SIZE,
+		])
+	const [first, second] = avatars
+	if (!first || !second) throw new Error("The bar lost a person")
+	await expect(
+		second.getBoundingClientRect().left - first.getBoundingClientRect().right,
+	).toBe(2)
+	await expect(sizeOf(close)).toEqual([32, 32])
+}
+
+export const OverlayWithPeoplePresent = meta.story({
+	args: {
+		images: LIBRARY_LIGHTBOX_IMAGES.with(1, ARTBOARD_IMAGE),
+		presence: <LibraryDocumentPresence people={PEOPLE_PRESENT} writers={[]} />,
+		comments: BAR_COMMENTS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The image fitted to the stage with two people looking at it, as artboard I7a draws it. Check that the two 22 px avatars, 2 apart and not overlapping, open the right group of the bar 8 before the comment counter, the Comment button, the capsule and Close, exactly where the open document draws them in I6a. The artboard predates comments, so its bar shows neither the counter nor the Comment button.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		await expectStaticHeaderBar(popup)
+		await expectPeopleBeforeComments(popup)
+	},
+})
+
+export const OverlayWithNobodyPresent = meta.story({
+	args: {
+		images: LIBRARY_LIGHTBOX_IMAGES.with(1, ARTBOARD_IMAGE),
+		presence: <LibraryDocumentPresence people={[]} writers={[]} />,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The image fitted to the stage with presence given but nobody there. Check that the bar draws no avatar and leaves no gap before the capsule, which opens the right group as in `OverlayFitted`.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		const actions = slotIn(barIn(popup), "library-bar-actions")
+		await expect(
+			actions.querySelector("[data-slot=library-document-people]"),
+		).toBe(null)
+		const { capsule } = await expectBarControls(popup)
+		await expect(capsule.getBoundingClientRect().left).toBe(
+			actions.getBoundingClientRect().left,
+		)
+	},
+})
+
+export const NarrowLongNameWithPeoplePresent = meta.story({
+	args: {
+		images: LIBRARY_LIGHTBOX_IMAGES.with(1, LONG_NAMED_IMAGE),
+		isNarrow: true,
+		presence: <LibraryDocumentPresence people={PEOPLE_PRESENT} writers={[]} />,
+		comments: BAR_COMMENTS,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long image name in a 440 wide overlay with two people present. Check that the name ends with an ellipsis on its one 18 px line while the two 22 px avatars, the comment controls, the capsule and Close keep their full size, 12 from the end of the bar.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await lightbox()
+		const bar = await expectStaticHeaderBar(popup)
+		const name = within(popup).getByRole("heading", {
+			name: LONG_NAMED_IMAGE.name,
+		})
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(name.getBoundingClientRect().height).toBe(18)
+		await expectPeopleBeforeComments(popup)
+		const actions = slotIn(bar, "library-bar-actions")
+		await expect(actions.scrollWidth).toBe(actions.clientWidth)
+		await expect(
+			bar.getBoundingClientRect().right - actions.getBoundingClientRect().right,
+		).toBe(12)
 	},
 })

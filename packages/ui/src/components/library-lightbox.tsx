@@ -18,6 +18,8 @@ import {
 } from "@workspace/ui/components/image-menu"
 import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
 import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
+import { LibraryPresenceInBar } from "@workspace/ui/components/library-document-agents"
+import type { LibraryDocumentBarProps } from "@workspace/ui/components/library-document-view"
 import {
 	LibraryImageComments,
 	type LibraryImageCommentsProps,
@@ -274,6 +276,7 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		dragRegion?: "deep"
 		comments?: LibraryBarComments
 		imageComments?: LibraryLightboxImageComments
+		presence?: LibraryDocumentBarProps<LibraryLightboxImage>["presence"]
 	}
 
 const LibraryLightbox = ({
@@ -289,6 +292,7 @@ const LibraryLightbox = ({
 	dragRegion,
 	comments,
 	imageComments,
+	presence,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -364,6 +368,11 @@ const LibraryLightbox = ({
 									actions={handlers}
 									comments={comments}
 									item={image}
+									leading={
+										<LibraryPresenceInBar value={true}>
+											{presence}
+										</LibraryPresenceInBar>
+									}
 									onClose={onClose}
 									onConfirmingDeleteChange={setConfirmingDelete}
 									onMenuOpenChange={recordMenuToggle}
