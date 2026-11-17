@@ -387,9 +387,9 @@ export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
 	const importFromPicker = async () => {
 		const files = (await pickFilePaths()).map(localFileAt)
 		if (files.length === 0) {
-			return []
+			return
 		}
-		return importQueued(
+		await importQueued(
 			files.map((file) => ({
 				id: crypto.randomUUID(),
 				name: file.name,
