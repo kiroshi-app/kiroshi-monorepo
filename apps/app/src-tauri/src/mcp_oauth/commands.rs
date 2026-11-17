@@ -23,7 +23,7 @@ use crate::agent::sidecar::Opening;
 use crate::agent::translate::now_ms;
 use crate::bundles::{self, McpServer};
 use crate::conversations::contract::TranscriptStoreError;
-use crate::conversations::host_turn::retire_idle_run;
+use crate::conversations::host_turn::retire_once_idle;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::commands::writable_root;
 use crate::environment::contract::{
@@ -256,7 +256,7 @@ async fn reopen_sessions_served_by<R: Runtime>(app: &AppHandle<R>, owner: &EnvOw
 	for scope in live_runs(app) {
 		let bot_id = scope.bot_id.clone();
 		let reopened = match serves(app, owner, &scope).await {
-			Ok(true) => retire_idle_run(app, scope).await.map_err(|error| format!("{error:?}")),
+			Ok(true) => retire_once_idle(app, scope).await.map_err(|error| format!("{error:?}")),
 			Ok(false) => continue,
 			Err(error) => Err(format!("{error:?}")),
 		};
@@ -316,7 +316,7 @@ fn kept(
 	credentials::store(root, scope, grant)?;
 	credentials::bind(root, scope, url)?;
 	credentials::mark_connected(root, scope, now_ms())?;
-	reports.forget(name);
+	reports.connected(name);
 	Ok(())
 }
 
@@ -566,6 +566,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: Option<&str>, held: &Value
 mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
+	use crate::agent::stub_session::{a_busy_session, until};
 	use crate::bundles::AuthorizationWithheld;
 	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{OAUTH_CONNECTED_AT, OAUTH_SERVER_URL};
@@ -759,9 +760,9 @@ mod tests {
 		let root = fixture_root("mcp-oauth-connect-clears");
 		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 		let reports = ApplicationReports::default();
-		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
-		reports.record("b2", "granola", Standing::NeedsAuth { reason: None });
-		reports.record("b1", "clock", Standing::Holding);
+		reports.record(reports.opening(), "b1", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b2", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b1", "clock", Standing::Holding);
 
 		kept(&root, &a_server("granola"), "granola", GRANOLA_URL, &a_live_grant(), &reports)
 			.expect("the grant is stored");
@@ -780,6 +781,51 @@ mod tests {
 		assert_eq!(readings.row(granola).status, ApplicationStatus::Connected);
 		assert_eq!(reports.last("b2", "granola"), None);
 		assert_eq!(reports.last("b1", "clock"), Some(Standing::Holding));
+	}
+
+	#[tokio::test]
+	async fn a_connect_while_the_session_of_the_agent_runs_reads_connected_once_its_turn_ends() {
+		let app = an_app_of_its_own("mcp-oauth-connect-busy", mock_builder());
+		app.manage(AgentState::default());
+		app.manage(ApplicationReports::default());
+		let root = writable_root(app.handle()).expect("the data dir is writable");
+		let reports = app.state::<ApplicationReports>();
+		let granola = a_server("granola");
+		credentials::store(&root, &granola, &a_live_grant()).expect("the grant is written");
+		credentials::bind(&root, &granola, GRANOLA_URL).expect("the grant is bound");
+		let opened = reports.opening();
+		reports.record(opened, "b1", "granola", Standing::NeedsAuth { reason: None });
+		let run = RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			runtime_session_id: "session-of-b1".to_owned(),
+			epoch: 1,
+		};
+		let busy = a_busy_session(app.handle(), &run).await;
+		let row = || async {
+			let rows = renewed_rows(
+				&root,
+				&a_bot(),
+				granola_declared(),
+				&McpOauthState::default(),
+				&reports,
+				&AuthorizationAnswers::default(),
+				|_| async { Err(TransportError::NotStarted) },
+			)
+			.await
+			.expect("the rows read");
+			rows[0].status.clone()
+		};
+		assert!(matches!(row().await, ApplicationStatus::Failed { .. }), "not the field state");
+
+		kept(&root, &granola, "granola", GRANOLA_URL, &a_renewed_grant(), &reports)
+			.expect("the grant is stored");
+		reopen_sessions_served_by(app.handle(), &a_bot()).await;
+		reports.record(opened, "b1", "granola", Standing::NeedsAuth { reason: None });
+		busy.ends_its_turn().await;
+		until(|| live_runs(app.handle()).is_empty()).await;
+
+		assert_eq!(row().await, ApplicationStatus::Connected);
 	}
 
 	fn a_bot() -> EnvOwner {
@@ -1152,9 +1198,14 @@ mod tests {
 		app.manage(McpOauthState::default());
 		app.manage(ApplicationReports::default());
 		let reports = app.state::<ApplicationReports>();
-		reports.record("b-disconnect-test", "granola", Standing::Holding);
-		reports.record("b-other", "granola", Standing::NeedsAuth { reason: None });
-		reports.record("b-disconnect-test", "clock", Standing::Holding);
+		reports.record(reports.opening(), "b-disconnect-test", "granola", Standing::Holding);
+		reports.record(
+			reports.opening(),
+			"b-other",
+			"granola",
+			Standing::NeedsAuth { reason: None },
+		);
+		reports.record(reports.opening(), "b-disconnect-test", "clock", Standing::Holding);
 		let owner =
 			EnvOwner::Bot { id: "b-disconnect-test".to_owned(), space_id: "s-test".to_owned() };
 
@@ -1245,7 +1296,7 @@ mod tests {
 		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 		let reports = ApplicationReports::default();
-		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b1", "granola", Standing::NeedsAuth { reason: None });
 
 		let rows = renewed_rows(
 			&root,
@@ -1276,7 +1327,7 @@ mod tests {
 		granted(&root, "granola", &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 		let reports = ApplicationReports::default();
-		reports.record("b1", "granola", Standing::Holding);
+		reports.record(reports.opening(), "b1", "granola", Standing::Holding);
 		crate::private_files::interrupt_the_write_after(0);
 
 		let rows = renewed_rows(
@@ -1478,8 +1529,8 @@ mod tests {
 	async fn a_status_read_sends_no_request_to_a_server_whose_row_reads_no_answer() {
 		let root = a_root("asked-only-where-read");
 		let reports = ApplicationReports::default();
-		reports.record("b1", "holding", Standing::Holding);
-		reports.record("b1", "waiting", Standing::NeedsAuth { reason: None });
+		reports.record(reports.opening(), "b1", "holding", Standing::Holding);
+		reports.record(reports.opening(), "b1", "waiting", Standing::NeedsAuth { reason: None });
 		credentials::remember_refusal(&root, &a_server("refused"), "invalid_grant")
 			.expect("the reason is written");
 		granted(&root, "granted", &a_live_grant()).expect("the grant is written");
@@ -1511,6 +1562,7 @@ mod tests {
 
 	fn left_out_by_a_session(reports: &ApplicationReports) {
 		reports.record(
+			reports.opening(),
 			"b1",
 			"granola",
 			Standing::LeftOut { reason: Some("it read failed".to_owned()) },
