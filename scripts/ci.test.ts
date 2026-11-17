@@ -110,6 +110,7 @@ const SETUP_STEPS = new Set([
 	"Boot the simulator while the build products download",
 	"Unpack the build products",
 	"Runner failure",
+	"Collect the simulator log",
 	"Read the changed test files against the base the merge ref was built on",
 ])
 
@@ -1423,6 +1424,54 @@ describe("the jobs of ci.yml", () => {
 		expect(IOS_SHARD_STEPS[0]?.command).toContain(
 			"-xctestrun apps/ios/build/Build/Products/*.xctestrun",
 		)
+	})
+
+	it("samples the runner and the simulator from the boot step, uploads the samples after every gate and the simulator log after a failed one", () => {
+		const steps = workflow.jobs.ios?.steps ?? []
+		const indexOf = (name: string) =>
+			steps.findIndex((step) => step.name === name)
+		const boot =
+			stepNamed("ios", "Boot the simulator while the build products download")
+				?.run ?? ""
+		const samples = steps[indexOf("Upload the runner and simulator samples")]
+		const collect = stepNamed("ios", "Collect the simulator log")
+		const log = steps[indexOf("Upload the simulator log")]
+		const runnerTemp = steps[indexOf("Download the build products")]?.with?.path
+		const shardThree = { matrix: { shard: 3 } }
+		const gateEndedIn = (conclusion: string) => ({
+			steps: { gate: { conclusion, outputs: {} } },
+		})
+
+		expect(boot).toContain(
+			'nohup scripts/ios-sampler.sh "$simulator" >> "$RUNNER_TEMP/ios-sampler.txt" 2>&1 &',
+		)
+		expect(boot.indexOf("ios-sampler.sh")).toBeLessThan(
+			boot.indexOf("simctl boot"),
+		)
+		expect(samples?.if).toContain("!cancelled()")
+		expect(interpolate(String(samples?.with?.name), shardThree)).toBe(
+			"ios-sampler-3",
+		)
+		expect(samples?.with?.path).toBe(`${runnerTemp}/ios-sampler.txt`)
+		expect(samples?.with?.["if-no-files-found"]).toBe("error")
+		expect(collect?.run).toBe(
+			'xcrun simctl spawn "$SIMULATOR" log collect --output "$RUNNER_TEMP/ios-simulator.logarchive"',
+		)
+		expect(interpolate(String(log?.with?.name), shardThree)).toBe(
+			"ios-simulator-log-3",
+		)
+		expect(log?.with?.path).toBe(`${runnerTemp}/ios-simulator.logarchive`)
+		for (const step of [collect, log]) {
+			expect(evaluate(step?.if ?? "true", gateEndedIn("failure"))).toBe(true)
+			expect(evaluate(step?.if ?? "true", gateEndedIn("success"))).toBe(false)
+		}
+		for (const name of [
+			"Upload the runner and simulator samples",
+			"Collect the simulator log",
+			"Upload the simulator log",
+		]) {
+			expect(indexOf(name)).toBeGreaterThan(indexOf("Gate"))
+		}
 	})
 
 	it.each([
