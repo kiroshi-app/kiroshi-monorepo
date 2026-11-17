@@ -43,6 +43,7 @@ export type ThreadMission = {
 	events: MissionEventModel[]
 	now: number
 	opening: OpenedMission
+	pathLabel?: string
 	onLeave: () => void
 }
 

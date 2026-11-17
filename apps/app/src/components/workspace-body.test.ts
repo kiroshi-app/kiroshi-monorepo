@@ -348,6 +348,12 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			isLibraryOpen: false,
 			isOverlayOpen: false,
 			landings: createMessageLandingController(),
+			missionOrigins: {
+				bots: [bot],
+				conversations: [],
+				missionMarks: [],
+				soloThreads: {},
+			},
 			missions,
 			onOpenConversationSettings: () => undefined,
 			onOpenThreadInNewTab: () => undefined,
@@ -772,6 +778,43 @@ describe("WorkspaceBody missions", () => {
 
 		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 		expect(missionHeaderSkeleton()).toBeNull()
+	})
+
+	it("names the conversation of origin it already knows on the loading mission bar, and keeps it once the mission arrives", async () => {
+		const { workspace, mission } = await seed((opened) => ({
+			mission: opened,
+			events: [],
+		}))
+		let deliver: (detail: MissionDetail) => void = () => undefined
+		readMission.mockReturnValue(
+			new Promise((delivered) => {
+				deliver = delivered
+			}),
+		)
+		const pathOf = (header: Element | null) =>
+			header?.querySelector('[data-slot="app-header-path-link"]')?.textContent
+		render(
+			workspace.body({
+				overrides: {
+					missionOrigins: {
+						bots: [workspace.bot],
+						conversations: [workspace.conversation],
+						missionMarks: [{ mission }],
+						soloThreads: {},
+					},
+				},
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		await openMission()
+		expect(pathOf(missionHeaderSkeleton())).toBe("Walls")
+
+		await act(async () => deliver({ mission, events: [] }))
+		await settle()
+
+		expect(pathOf(missionHeader())).toBe("Walls")
 	})
 
 	it("reads the mission again when the read failure is retried", async () => {
