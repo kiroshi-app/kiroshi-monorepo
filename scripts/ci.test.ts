@@ -30,9 +30,14 @@ import {
 	IOS_BUILD_STEPS,
 	IOS_SHARD_STEPS,
 	loggedCargoStep,
+	measuredIosTimings,
+	measuredTestSeconds,
 	offPullRequestNote,
+	parsedRunIds,
 	parsedShard,
+	plannedShards,
 	RUST_PULL_REQUEST_STEPS,
+	readIosTimings,
 	retriedTestAnnotation,
 	retriedTestSummary,
 	retryOf,
@@ -42,15 +47,17 @@ import {
 	SIMULATOR_LOOKUP,
 	type Step,
 	scopeLine,
-	shardPlannedSeconds,
-	shardTests,
+	shardOverPlanWarning,
+	shardTimingSummary,
 	skipReason,
 	spawnedCommand,
 	startedATest,
 	type UnitTestScope,
 	uiTestClasses,
+	uiTestSuite,
 	unitTestScope,
 	unitTestSteps,
+	unmeasuredTestWarnings,
 	vitestRetryStep,
 	wallTimeLines,
 } from "./ci"
@@ -1513,10 +1520,10 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("splits ios over five jobs, each told its shard out of the matrix size", () => {
+	it("splits ios over eleven jobs, each told its shard out of the matrix size", () => {
 		expect(workflow.jobs.ios?.strategy).toEqual({
 			"fail-fast": false,
-			matrix: { shard: [1, 2, 3, 4, 5] },
+			matrix: { shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
 		})
 		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
 
@@ -1527,7 +1534,7 @@ describe("the jobs of ci.yml", () => {
 					strategy: { "job-total": shards.length },
 				}),
 			),
-		).toEqual(["1/5", "2/5", "3/5", "4/5", "5/5"])
+		).toEqual(Array.from({ length: 11 }, (_, position) => `${position + 1}/11`))
 	})
 
 	it.each([
@@ -1948,7 +1955,6 @@ describe("the jobs of ci.yml", () => {
 describe("the ios shards", () => {
 	const UI_TESTS = new URL("../apps/ios/KiroshiUITests/", import.meta.url)
 	const TEST_PLAN = new URL("../apps/ios/Kiroshi.xctestplan", import.meta.url)
-	const CLASSES = ["Alpha", "Bravo", "Charlie", "Delta", "Echo"]
 
 	it("reads k/n and refuses anything else", () => {
 		expect(parsedShard("2/3")).toEqual({ index: 2, count: 3 })
@@ -1957,75 +1963,230 @@ describe("the ios shards", () => {
 		}
 	})
 
-	it("counts the unit tests in the load of the first shard before dealing the UI classes", () => {
-		expect(shardTests({ index: 1, count: 2 }, ["Alpha"])).toEqual([
-			"KiroshiTests",
+	const SUITE = [
+		{ name: "Alpha", methods: ["testOne", "testTwo"] },
+		{ name: "Bravo", methods: ["testOne"] },
+		{ name: "Charlie", methods: ["testOne", "testNew"] },
+	]
+	const TIMINGS = {
+		overheadSeconds: 300,
+		testSeconds: {
+			KiroshiTests: 20,
+			"KiroshiUITests/Alpha/testOne": 500,
+			"KiroshiUITests/Alpha/testTwo": 450,
+			"KiroshiUITests/Bravo/testOne": 300,
+			"KiroshiUITests/Charlie/testOne": 100,
+		},
+	}
+	const fixtureShards = () =>
+		plannedShards({ count: 2, suite: SUITE, timings: TIMINGS })
+	const workflowShardCount = () =>
+		(workflow.jobs.ios?.strategy?.matrix?.shard ?? []).length
+	const workflowShards = (count: number) =>
+		plannedShards({ count, suite: uiTestSuite(), timings: readIosTimings() })
+	const largestWholeJobSeconds = (count: number) =>
+		Math.max(...workflowShards(count).map((shard) => shard.wholeJobSeconds))
+
+	it("reads the test methods of each UI class from its source", () => {
+		const directory = mkdtempSync(join(tmpdir(), "ui-tests-"))
+		writeFileSync(
+			join(directory, "AlphaTests.swift"),
+			"final class AlphaTests: XCTestCase {\n\tfunc testOne() {}\n\tfunc testTwo() throws {}\n\tprivate func helper() {}\n}\n",
+		)
+		writeFileSync(join(directory, "Helpers.swift"), "func testLike() {}\n")
+
+		expect(uiTestSuite(directory)).toEqual([
+			{ name: "AlphaTests", methods: ["testOne", "testTwo"] },
 		])
-		expect(shardTests({ index: 2, count: 2 }, ["Alpha"])).toEqual([
-			"KiroshiUITests/Alpha",
+		rmSync(directory, { recursive: true })
+	})
+
+	it("splits a class that cannot fit one whole job into its methods, dealt across shards", () => {
+		expect(
+			fixtureShards().map(({ tests, testSeconds, wholeJobSeconds }) => [
+				tests.map(({ id }) => id),
+				testSeconds,
+				wholeJobSeconds,
+			]),
+		).toEqual([
+			[
+				[
+					"KiroshiTests",
+					"KiroshiUITests/Alpha/testTwo",
+					"KiroshiUITests/Bravo",
+				],
+				770,
+				1070,
+			],
+			[["KiroshiUITests/Alpha/testOne", "KiroshiUITests/Charlie"], 700, 1000],
 		])
 	})
 
-	it("deals unmeasured UI classes in turn, from the shard without the unit tests", () => {
-		expect(shardTests({ index: 1, count: 2 }, CLASSES)).toEqual([
-			"KiroshiTests",
-			"KiroshiUITests/Bravo",
-			"KiroshiUITests/Delta",
-		])
-		expect(shardTests({ index: 2, count: 2 }, CLASSES)).toEqual([
-			"KiroshiUITests/Alpha",
-			"KiroshiUITests/Charlie",
-			"KiroshiUITests/Echo",
+	it("plans a method with no measured time at the median of its class, warning with the refresh", () => {
+		const [first, second] = fixtureShards()
+
+		expect(second?.tests[1]).toEqual({
+			id: "KiroshiUITests/Charlie",
+			seconds: 200,
+			unmeasured: ["KiroshiUITests/Charlie/testNew"],
+		})
+		expect(
+			[first, second].map((planned) =>
+				unmeasuredTestWarnings({
+					planned: planned ?? { tests: [], testSeconds: 0, wholeJobSeconds: 0 },
+					run: "42",
+				}),
+			),
+		).toEqual([
+			[],
+			[
+				"::warning title=ios test not measured::Charlie/testNew has no entry in scripts/ios-shard-seconds.json, planned at the median of its class. Refresh it with bun scripts/ci.ts ios-timings 42",
+			],
 		])
 	})
 
-	it("gives each measured UI class to the lightest shard, longest class first", () => {
-		const measured = [
-			"ConversationsAccessibilityTests",
-			"InvitationAccessibilityTests",
-			"QuestionPanelTests",
-			"SoloConversationTests",
-		]
-
-		expect(shardTests({ index: 1, count: 2 }, measured)).toEqual([
-			"KiroshiTests",
-			"KiroshiUITests/ConversationsAccessibilityTests",
-			"KiroshiUITests/InvitationAccessibilityTests",
-		])
-		expect(shardTests({ index: 2, count: 2 }, measured)).toEqual([
-			"KiroshiUITests/QuestionPanelTests",
-			"KiroshiUITests/SoloConversationTests",
-		])
-	})
-
-	it("runs KiroshiTests and every UI class of the directory in exactly one shard of the workflow", () => {
-		const classes = uiTestClasses()
-		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
-		const dealt = shards.flatMap((_, position) =>
-			shardTests({ index: position + 1, count: shards.length }, classes),
+	it("runs KiroshiTests and every UI test method of the directory exactly once over the shards of the workflow", () => {
+		const suite = uiTestSuite()
+		const methodsOf = (id: string) => {
+			const uiClass = suite.find(({ name }) => `KiroshiUITests/${name}` === id)
+			return uiClass ? uiClass.methods.map((method) => `${id}/${method}`) : [id]
+		}
+		const dealt = workflowShards(workflowShardCount()).flatMap((shard) =>
+			shard.tests.flatMap(({ id }) => methodsOf(id)),
 		)
 
-		expect(classes.length).toBeGreaterThan(0)
+		expect(suite.length).toBeGreaterThan(0)
 		expect(dealt.sort()).toEqual(
 			[
 				"KiroshiTests",
-				...classes.map((name) => `KiroshiUITests/${name}`),
+				...suite.flatMap(({ name, methods }) =>
+					methods.map((method) => `KiroshiUITests/${name}/${method}`),
+				),
 			].sort(),
 		)
 	})
 
-	it("plans no shard of the workflow above 16 minutes", () => {
-		const classes = uiTestClasses()
-		const shards = workflow.jobs.ios?.strategy?.matrix?.shard ?? []
-		const plannedSeconds = shards.map((_, position) =>
-			shardPlannedSeconds(
-				{ index: position + 1, count: shards.length },
-				classes,
-			),
+	it("plans no shard of the workflow above 20 minutes of whole job", () => {
+		expect(largestWholeJobSeconds(workflowShardCount())).toBeLessThanOrEqual(
+			20 * 60,
 		)
+	})
 
-		expect(plannedSeconds).toHaveLength(5)
-		expect(Math.max(...plannedSeconds)).toBeLessThanOrEqual(16 * 60)
+	it("runs the fewest shards that keep every whole job within 20 minutes", () => {
+		expect(largestWholeJobSeconds(workflowShardCount() - 1)).toBeGreaterThan(
+			20 * 60,
+		)
+	})
+
+	it("measures each UI test method from its test case line and KiroshiTests from its test run", () => {
+		const log = [
+			"ios (5)\tUNKNOWN STEP\t2026-11-17T09:25:00.1Z ✔ Test run with 769 tests in 85 suites passed after 18.348 seconds.",
+			"Test Case '-[KiroshiUITests.PagingTests testA]' started.",
+			"Test Case '-[KiroshiUITests.PagingTests testA]' passed (41.234 seconds).",
+			"Test Case '-[KiroshiUITests.GroupThreadTests testB]' failed (12.06 seconds).",
+			"Test Case '-[KiroshiTests.ParserTests testC]' passed (1.0 seconds).",
+		].join("\n")
+
+		expect(measuredTestSeconds(log)).toEqual({
+			"KiroshiUITests/GroupThreadTests/testB": 12.1,
+			KiroshiTests: 18.3,
+			"KiroshiUITests/PagingTests/testA": 41.2,
+		})
+	})
+
+	it("plans each test at the highest time measured and the time outside the tests at the highest job", () => {
+		const timings = measuredIosTimings({
+			suite: [
+				{ name: "Alpha", methods: ["testOne"] },
+				{ name: "Bravo", methods: ["testOne"] },
+			],
+			jobs: [
+				{
+					wholeJobSeconds: 900,
+					testSeconds: {
+						KiroshiTests: 20,
+						"KiroshiUITests/Alpha/testOne": 500,
+						"KiroshiUITests/Gone/testOne": 40,
+					},
+				},
+				{
+					wholeJobSeconds: 1000,
+					testSeconds: {
+						"KiroshiUITests/Alpha/testOne": 520,
+						"KiroshiUITests/Bravo/testOne": 300,
+					},
+				},
+			],
+		})
+
+		expect(timings).toEqual({
+			overheadSeconds: 380,
+			testSeconds: {
+				KiroshiTests: 20,
+				"KiroshiUITests/Alpha/testOne": 520,
+				"KiroshiUITests/Bravo/testOne": 300,
+			},
+		})
+	})
+
+	it("reads the run ids the timings are measured from", () => {
+		expect(parsedRunIds(["44050574038", "7"])).toEqual([44050574038, 7])
+		for (const texts of [[], ["abc"], ["-1"], ["1.5"]]) {
+			expect(() => parsedRunIds(texts)).toThrow(
+				"expected the id of one or more GitHub Actions runs",
+			)
+		}
+	})
+
+	describe("when a shard ends", () => {
+		const shardRun = (measured: Record<string, number>) => ({
+			shard: "2/2",
+			planned: fixtureShards()[1] ?? {
+				tests: [],
+				testSeconds: 0,
+				wholeJobSeconds: 0,
+			},
+			timings: TIMINGS,
+			measured,
+			run: "42",
+		})
+
+		it("summarises each test planned against measured, marking an unmeasured plan, and the ratio of the shard", () => {
+			expect(
+				shardTimingSummary(
+					shardRun({
+						"KiroshiUITests/Alpha/testOne": 510.4,
+						"KiroshiUITests/Charlie/testOne": 90,
+					}),
+				),
+			).toBe(
+				[
+					"### ios shard 2/2: 600 s of tests measured for 700 s planned, ratio 0.86",
+					"",
+					"Planned whole job: 1000 s, 300 s of it outside the tests.",
+					"",
+					"| Test | Planned s | Measured s |",
+					"| --- | ---: | ---: |",
+					"| Alpha/testOne | 500 | 510 |",
+					"| Charlie | 200 (not measured) | 90 |",
+					"",
+					"",
+				].join("\n"),
+			)
+		})
+
+		it("warns only past 25 percent over the planned test time, naming the refresh", () => {
+			const measured = (charlie: number) =>
+				shardRun({
+					"KiroshiUITests/Alpha/testOne": 600,
+					"KiroshiUITests/Charlie/testOne": charlie,
+				})
+
+			expect(shardOverPlanWarning(measured(275))).toBeUndefined()
+			expect(shardOverPlanWarning(measured(276))).toBe(
+				"::warning title=ios shard over its plan::ios shard 2/2 ran its tests in 876 s for 700 s planned. Refresh scripts/ios-shard-seconds.json with bun scripts/ci.ts ios-timings 42",
+			)
+		})
 	})
 
 	it("tests a shard from the built products alone, keeping the log that tells whether a test started", () => {
