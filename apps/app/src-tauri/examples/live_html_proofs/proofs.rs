@@ -251,6 +251,7 @@ pub struct Observations {
 	pub handler_events: Vec<HandlerEvent>,
 	pub window_urls: Vec<WindowUrl>,
 	pub first_view_open: (Instant, Instant),
+	pub first_view_mounted: Option<Instant>,
 	pub writer: ViewObservation,
 	pub reader: Option<ViewObservation>,
 	pub host_readings: Option<HostReadings>,
@@ -806,6 +807,12 @@ impl Observations {
 		})
 		.collect();
 		let length_ms = |gap: Option<Gap>| gap.map(|gap| gap.length.as_millis());
+		let longest_gap = self.longest_gap_between_steps([
+			("baseline", Some(self.baseline)),
+			("creation", requested.map(|requested| (creation_began, requested))),
+			("run", requested.map(|requested| (requested, settled))),
+			("busy loop", busy_loop),
+		]);
 		let is_responsive = match self.host_readings {
 			Some(_) => {
 				is_within_the_limit(run_gap)
@@ -829,8 +836,62 @@ impl Observations {
 				"hostile_view_ran_ms": requested.map(|requested| settled.duration_since(requested).as_millis()),
 				"longest_heartbeat_gap_while_the_hostile_view_ran_ms": length_ms(run_gap),
 				"gaps_above_the_limit": gaps_above_the_limit,
+				"longest_heartbeat_gap": longest_gap,
 			}),
 		}
+	}
+
+	fn longest_gap_between_steps<const WINDOWS: usize>(
+		&self,
+		windows: [(&'static str, Option<(Instant, Instant)>); WINDOWS],
+	) -> Value {
+		let Some((window, gap)) = windows
+			.into_iter()
+			.filter_map(|(window, bounds)| {
+				let (from, to) = bounds?;
+				Some((window, self.heartbeat.longest_gap(from, to)))
+			})
+			.max_by_key(|(_, gap)| gap.length)
+		else {
+			return Value::Null;
+		};
+		let creation_began = self.first_view_open.0;
+		let steps = self.timed_steps();
+		let ended = gap.started + gap.length;
+		let timed = |step: &(String, Instant)| {
+			json!({
+				"step": step.0,
+				"ms_after_the_view_window_creation_began": signed_ms(creation_began, step.1),
+			})
+		};
+		json!({
+			"window": window,
+			"gap_ms": gap.length.as_millis(),
+			"started_ms_after_the_view_window_creation_began": signed_ms(creation_began, gap.started),
+			"last_step_before_the_gap": steps.iter().filter(|step| step.1 <= gap.started).max_by_key(|step| step.1).map(timed),
+			"steps_inside_the_gap": steps.iter().filter(|step| step.1 > gap.started && step.1 < ended).map(timed).collect::<Vec<_>>(),
+			"first_step_after_the_gap": steps.iter().filter(|step| step.1 >= ended).min_by_key(|step| step.1).map(timed),
+		})
+	}
+
+	fn timed_steps(&self) -> Vec<(String, Instant)> {
+		let record = &self.writer.record;
+		let (creation_began, settled) = self.first_view_open;
+		let harness_steps = [
+			("baseline began", Some(self.baseline.0)),
+			("baseline ended", Some(self.baseline.1)),
+			("view window creation began", Some(creation_began)),
+			("view mount returned", self.first_view_mounted),
+			("first document request", record.first_document_request),
+			("view settled", Some(settled)),
+		];
+		let harness_steps =
+			harness_steps.into_iter().filter_map(|(step, at)| Some((step.to_owned(), at?)));
+		let page_beacons = record
+			.beacons
+			.iter()
+			.map(|beacon| (format!("beacon {}/{}", beacon.attempt, beacon.outcome), beacon.at));
+		harness_steps.chain(page_beacons).collect()
 	}
 
 	fn storage_not_shared_between_views(&self) -> Proof {

@@ -169,6 +169,7 @@ struct Run {
 struct Mounted {
 	token: String,
 	wrapper_url: String,
+	mount_returned: Instant,
 }
 
 struct OpenView {
@@ -208,6 +209,7 @@ struct PlayedView {
 	window_url_after: Option<Result<String, String>>,
 	creation_error: Option<String>,
 	open: (Instant, Instant),
+	mount_returned: Option<Instant>,
 }
 
 impl Run {
@@ -285,6 +287,7 @@ impl Run {
 			handler_events: self.host.handler_events(),
 			window_urls,
 			first_view_open: writer.open,
+			first_view_mounted: writer.mount_returned,
 			writer: writer.observation,
 			reader: Some(reader.observation),
 			host_readings: Some(HostReadings {
@@ -420,6 +423,7 @@ impl Run {
 		let html = HOSTILE_HTML.replace(TARGETS_PLACEHOLDER, &targets);
 		block_on(self.views.mount(&self.app, label.to_owned(), html, SLOT))
 			.map_err(|failure| format!("{failure:?}"))?;
+		let mount_returned = Instant::now();
 		let wrapper_url = block_on(self.views.url(&self.app, label.to_owned()))
 			.map_err(|failure| format!("{failure:?}"))?;
 		let token = wrapper_url
@@ -427,7 +431,7 @@ impl Run {
 			.ok()
 			.and_then(|url| Some(url.path_segments()?.next()?.to_owned()))
 			.ok_or("the mounted view url carries no token")?;
-		Ok(Mounted { token, wrapper_url })
+		Ok(Mounted { token, wrapper_url, mount_returned })
 	}
 
 	fn open_view(
@@ -497,6 +501,7 @@ impl Run {
 			window_url_after,
 			creation_error,
 			open: (view.creation_began, view.settled_at),
+			mount_returned: view.mounted.as_ref().ok().map(|mounted| mounted.mount_returned),
 		})
 	}
 }
