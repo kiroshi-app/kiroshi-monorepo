@@ -125,6 +125,11 @@ const barAboveTitle =
 		</div>
 	)
 
+const openMoreIn = async (actions: HTMLElement, userEvent: UserEventObject) => {
+	await userEvent.click(within(actions).getByRole("button", { name: "More" }))
+	return screen.findByRole("menu", { name: "Actions for Spring launch brief" })
+}
+
 const pickRename = async (more: HTMLElement, userEvent: UserEventObject) => {
 	await userEvent.click(more)
 	const menu = await screen.findByRole("menu")
@@ -764,10 +769,7 @@ export const DuplicateFromTheBar = meta.story({
 		await expect(args.onDuplicate).toHaveBeenCalledOnce()
 		await expect(args.onDuplicate).toHaveBeenCalledWith(SPRING_BRIEF)
 
-		await userEvent.click(within(actions).getByRole("button", { name: "More" }))
-		const menu = await screen.findByRole("menu", {
-			name: "Actions for Spring launch brief",
-		})
+		const menu = await openMoreIn(actions, userEvent)
 		await expect(
 			within(menu).queryByRole("menuitem", { name: "Duplicate" }),
 		).toBe(null)
@@ -790,10 +792,7 @@ export const CopyFromMore = meta.story({
 		const announcement = actions.querySelector("[aria-live=polite]")
 		await expect(announcement).toHaveTextContent("")
 
-		await userEvent.click(within(actions).getByRole("button", { name: "More" }))
-		const menu = await screen.findByRole("menu", {
-			name: "Actions for Spring launch brief",
-		})
+		const menu = await openMoreIn(actions, userEvent)
 		await userEvent.click(within(menu).getByRole("menuitem", { name: "Copy" }))
 
 		await expect(args.onCopy).toHaveBeenCalledWith(SPRING_BRIEF)
@@ -816,10 +815,7 @@ export const DuplicateNotShownForTheItem = meta.story({
 		const actions = actionsIn(canvasElement)
 		await expect(barButtonNames(actions)).toEqual(["Download", "More", "Close"])
 
-		await userEvent.click(within(actions).getByRole("button", { name: "More" }))
-		const menu = await screen.findByRole("menu", {
-			name: "Actions for Spring launch brief",
-		})
+		const menu = await openMoreIn(actions, userEvent)
 		await expect(
 			within(menu).queryByRole("menuitem", { name: "Duplicate" }),
 		).toBe(null)
