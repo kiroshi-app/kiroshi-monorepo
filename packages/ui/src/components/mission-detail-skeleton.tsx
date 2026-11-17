@@ -46,6 +46,10 @@ const missionItemAt = (index: number) =>
 		index % MISSION_CYCLE_FROM_THE_COMPOSER.length
 	]
 
-const MissionDetailSkeleton = () => <TranscriptSkeleton row={missionItemAt} />
+const MissionDetailSkeleton = () => (
+	<div className="contents" data-slot="mission-detail-skeleton">
+		<TranscriptSkeleton row={missionItemAt} />
+	</div>
+)
 
 export { MissionDetailSkeleton }
