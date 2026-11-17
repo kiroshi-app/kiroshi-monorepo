@@ -56,6 +56,7 @@ import {
 	uiTestClasses,
 	unitTestScope,
 	unitTestSteps,
+	unmeasuredClassWarnings,
 	vitestRetryStep,
 	wallTimeLines,
 } from "./ci"
@@ -1957,12 +1958,51 @@ describe("the ios shards", () => {
 		])
 	})
 
-	it("refuses to plan a UI class the data file has no seconds for", () => {
-		expect(() =>
-			plannedShards({ count: 2, classes: ["Foxtrot"], timings: TIMINGS }),
-		).toThrow(
-			"scripts/ios-shard-seconds.json plans no seconds for Foxtrot, measure it with bun scripts/ci.ts ios-timings <run id>",
-		)
+	it("plans a UI class the data file has no seconds for at the median of the file, warning with the refresh", () => {
+		const planned = plannedShards({
+			count: 2,
+			classes: ["Alpha", "Foxtrot"],
+			timings: TIMINGS,
+		})
+
+		expect(
+			planned.map(({ tests, testSeconds }) => [tests, testSeconds]),
+		).toEqual([
+			[["KiroshiTests", "KiroshiUITests/Foxtrot"], 170],
+			[["KiroshiUITests/Alpha"], 400],
+		])
+		expect(
+			planned.map((shard) =>
+				unmeasuredClassWarnings({
+					planned: shard,
+					timings: TIMINGS,
+					run: "42",
+				}),
+			),
+		).toEqual([
+			[
+				"::warning title=ios class not measured::Foxtrot has no entry in scripts/ios-shard-seconds.json, planned at 150 s. Refresh it with bun scripts/ci.ts ios-timings 42",
+			],
+			[],
+		])
+	})
+
+	it("summarises a class the data file has no seconds for at its fallback, marked not measured", () => {
+		const [planned] = plannedShards({
+			count: 2,
+			classes: ["Alpha", "Foxtrot"],
+			timings: TIMINGS,
+		})
+
+		expect(
+			shardTimingSummary({
+				shard: "1/2",
+				planned: planned ?? { tests: [], testSeconds: 0, wholeJobSeconds: 0 },
+				timings: TIMINGS,
+				measured: { Foxtrot: 160 },
+				run: "42",
+			}),
+		).toContain("| Foxtrot | 150 (not measured) | 160 |")
 	})
 
 	it("runs KiroshiTests and every UI class of the directory in exactly one shard of the workflow", () => {
@@ -1980,15 +2020,6 @@ describe("the ios shards", () => {
 				...classes.map((name) => `KiroshiUITests/${name}`),
 			].sort(),
 		)
-	})
-
-	it("has measured seconds for KiroshiTests and every UI class of the directory", () => {
-		const { classSeconds } = readIosTimings()
-		const unmeasured = ["KiroshiTests", ...uiTestClasses()].filter(
-			(name) => classSeconds[name] === undefined,
-		)
-
-		expect(unmeasured).toEqual([])
 	})
 
 	it("plans no shard of the workflow above 20 minutes of whole job", () => {

@@ -799,14 +799,11 @@ type IosTimings = {
 export const readIosTimings = (): IosTimings =>
 	JSON.parse(readFileSync(join(REPO, IOS_TIMINGS), "utf8"))
 
-const plannedClassSeconds = (timings: IosTimings, name: string) => {
-	const seconds = timings.classSeconds[name]
-	if (seconds === undefined)
-		throw new Error(
-			`${IOS_TIMINGS} plans no seconds for ${name}, measure it with ${IOS_TIMINGS_REFRESH} <run id>`,
-		)
-	return seconds
-}
+const unmeasuredClassSeconds = (timings: IosTimings) =>
+	median(Object.values(timings.classSeconds))
+
+const plannedClassSeconds = (timings: IosTimings, name: string) =>
+	timings.classSeconds[name] ?? unmeasuredClassSeconds(timings)
 
 type ShardPlanning = {
 	count: number
@@ -1002,7 +999,10 @@ export const shardTimingSummary = (shardRun: ShardRun) => {
 	const ratio = (testSeconds / planned.testSeconds).toFixed(2)
 	const rows = planned.tests.map((test) => {
 		const name = classNameOf(test)
-		return `| ${name} | ${timings.classSeconds[name]} | ${measured[name] ?? "not measured"} |`
+		const plannedSeconds =
+			timings.classSeconds[name] ??
+			`${unmeasuredClassSeconds(timings)} (not measured)`
+		return `| ${name} | ${plannedSeconds} | ${measured[name] ?? "not measured"} |`
 	})
 	return [
 		`### ios shard ${shard}: ${testSeconds} s of tests measured for ${planned.testSeconds} s planned, ratio ${ratio}`,
@@ -1025,6 +1025,25 @@ export const shardOverPlanWarning = (shardRun: ShardRun) => {
 		`ios shard ${shard} ran its tests in ${testSeconds} s for ${planned.testSeconds} s planned. Refresh ${IOS_TIMINGS} with ${IOS_TIMINGS_REFRESH} ${run}`,
 	)}`
 }
+
+export const unmeasuredClassWarnings = ({
+	planned,
+	timings,
+	run,
+}: Omit<ShardRun, "shard" | "measured">) =>
+	planned.tests
+		.map(classNameOf)
+		.filter((name) => timings.classSeconds[name] === undefined)
+		.map(
+			(name) =>
+				`::warning title=ios class not measured::${escapedAnnotationData(
+					`${name} has no entry in ${IOS_TIMINGS}, planned at ${unmeasuredClassSeconds(timings)} s. Refresh it with ${IOS_TIMINGS_REFRESH} ${run}`,
+				)}`,
+		)
+
+const currentRun = () =>
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	process.env.GITHUB_RUN_ID ?? "<run id>"
 
 export const startedATest = (log: string) =>
 	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
@@ -1055,6 +1074,12 @@ const selectIosTests = (): SelectedShard | undefined => {
 	console.log(
 		`\nci  ios shard ${shard} runs ${planned.tests.join(", ")}, planned ${planned.wholeJobSeconds} s of whole job`,
 	)
+	for (const warning of unmeasuredClassWarnings({
+		planned,
+		timings,
+		run: currentRun(),
+	}))
+		console.log(warning)
 	return { shard, planned, timings }
 }
 
@@ -1086,8 +1111,7 @@ const reportShardTimings = (selected: SelectedShard, log: string) => {
 	const shardRun: ShardRun = {
 		...selected,
 		measured: measuredClassSeconds(log),
-		// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
-		run: process.env.GITHUB_RUN_ID ?? "<run id>",
+		run: currentRun(),
 	}
 	const warning = shardOverPlanWarning(shardRun)
 	if (warning) console.log(warning)
