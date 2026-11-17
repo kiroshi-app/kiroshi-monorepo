@@ -814,9 +814,18 @@ const CATALOGUE_PATHS = [
 	"packages/ui/src/lib/i18n-fr.ts",
 ]
 
+const CHAT_CATALOGUE_PATHS = [
+	"packages/ui/src/lib/i18n-en/chat.ts",
+	"packages/ui/src/lib/i18n-fr/chat.ts",
+]
+
 const VOCABULARY_TEST = "packages/ui/src/lib/i18n-vocabulary.test.ts"
 
+const I18N_TEST = "packages/ui/src/lib/i18n.test.ts"
+
 const ACCOUNT_TEST = "apps/app/src/lib/account/use-account.test.ts"
+
+const TOOL_QUESTION_TEST = "packages/ui/src/components/tool-question.test.tsx"
 
 const catalogueRepo = () => {
 	const repo = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-catalogue-"))
@@ -824,15 +833,28 @@ const catalogueRepo = () => {
 		mkdirSync(dirname(join(repo, path)), { recursive: true })
 		writeFileSync(join(repo, path), source)
 	}
-	write(CATALOGUE_PATHS[0], "export const en = {}\n")
-	write(CATALOGUE_PATHS[1], "export const fr = {}\n")
+	write(CHAT_CATALOGUE_PATHS[0], 'export const chat = { send: "Send" }\n')
+	write(CHAT_CATALOGUE_PATHS[1], 'export const chat = { send: "Envoyer" }\n')
 	write(
-		"packages/ui/src/lib/i18n.ts",
-		'import { en } from "./i18n-en"\nimport { fr } from "./i18n-fr"\nexport const i18n = { en, fr }\n',
+		CATALOGUE_PATHS[0],
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\n\nconst en = { chat } as const\n\nexport { en }\n',
 	)
 	write(
+		CATALOGUE_PATHS[1],
+		'import type { en } from "@workspace/ui/lib/i18n-en"\nimport { chat } from "@workspace/ui/lib/i18n-fr/chat"\n\nconst fr = { chat } as const satisfies Record<keyof typeof en, unknown>\n\nexport { fr }\n',
+	)
+	write(
+		"packages/ui/src/lib/i18n.ts",
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\n\nexport const i18n = { en, fr }\n\nexport const languageOf = (language: string) => (language in i18n ? language : "en")\n',
+	)
+	write(I18N_TEST, 'import { i18n } from "@workspace/ui/lib/i18n"\ni18n\n')
+	write(
 		VOCABULARY_TEST,
-		'import { en } from "./i18n-en"\nimport { fr } from "./i18n-fr"\nen\nfr\n',
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\nen\nfr\n',
+	)
+	write(
+		TOOL_QUESTION_TEST,
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\nchat\n',
 	)
 	write(ACCOUNT_TEST, 'import { en } from "@workspace/ui/lib/i18n-en"\nen\n')
 	for (let index = 0; index < SHARED_IMPORTER_THRESHOLD; index++)
@@ -855,7 +877,7 @@ describe("the ci:fast unit test scope", () => {
 		for (const repo of repos) rmSync(repo, { recursive: true, force: true })
 	})
 
-	it("runs the test files importing the catalogue directly when only the catalogue changed, never the whole unit projects", () => {
+	it("runs the test files importing the catalogue entry, and the own test of the module consuming it, never the whole unit projects", () => {
 		const scope = decidedIn(catalogueRepo(), CATALOGUE_PATHS)
 
 		expect(scope).toEqual({
@@ -864,28 +886,57 @@ describe("the ci:fast unit test scope", () => {
 				{
 					path: CATALOGUE_PATHS[0],
 					reason: "packages/ui/src/lib/**",
-					testFiles: [ACCOUNT_TEST, VOCABULARY_TEST],
+					testFiles: [ACCOUNT_TEST, VOCABULARY_TEST, I18N_TEST],
 				},
 				{
 					path: CATALOGUE_PATHS[1],
 					reason: "packages/ui/src/lib/**",
-					testFiles: [VOCABULARY_TEST],
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
 				},
 			],
 			graphMs: expect.any(Number),
 		})
 		expect(fastSteps(CATALOGUE_PATHS, scope).at(-1)).toEqual({
 			name: "Unit tests changed since origin/main or importing a shared changed module, against the baseline",
-			command: `bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${VOCABULARY_TEST}' ${FAST_TIMEOUT}`,
+			command: `bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
 		})
 	})
 
+	it("walks up the re-export catalogue entries from a changed catalogue sub-file to the vocabulary and i18n tests, never to the tests importing the i18n runtime", () => {
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: CHAT_CATALOGUE_PATHS[0],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [
+						ACCOUNT_TEST,
+						TOOL_QUESTION_TEST,
+						VOCABULARY_TEST,
+						I18N_TEST,
+					],
+				},
+				{
+					path: CHAT_CATALOGUE_PATHS[1],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+		expect(fastSteps(CHAT_CATALOGUE_PATHS, scope).at(-1)?.command).toBe(
+			`bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${TOOL_QUESTION_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
+		)
+	})
+
 	it("prints every test file the unit step runs for each shared catalogue path", () => {
-		const scope = decidedIn(catalogueRepo(), CATALOGUE_PATHS)
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
 
 		expect(fastScopeLines(scope).slice(1)).toEqual([
-			`ci    ${CATALOGUE_PATHS[0]} is shared (packages/ui/src/lib/**), runs ${ACCOUNT_TEST}, ${VOCABULARY_TEST}`,
-			`ci    ${CATALOGUE_PATHS[1]} is shared (packages/ui/src/lib/**), runs ${VOCABULARY_TEST}`,
+			`ci    ${CHAT_CATALOGUE_PATHS[0]} is shared (packages/ui/src/lib/**), runs ${ACCOUNT_TEST}, ${TOOL_QUESTION_TEST}, ${VOCABULARY_TEST}, ${I18N_TEST}`,
+			`ci    ${CHAT_CATALOGUE_PATHS[1]} is shared (packages/ui/src/lib/**), runs ${VOCABULARY_TEST}, ${I18N_TEST}`,
 		])
 	})
 
@@ -902,7 +953,7 @@ describe("the ci:fast unit test scope", () => {
 			expect(step.command).not.toContain("--test-timeout")
 	})
 
-	it(`runs the direct importers when ${SHARED_IMPORTER_THRESHOLD} test files reach a changed module, naming them`, () => {
+	it(`runs the test files importing it directly or through a re-export module when ${SHARED_IMPORTER_THRESHOLD} test files reach a changed module, naming them`, () => {
 		const scope = decidedIn(
 			fixtureRepo({
 				directImporters: 1,
@@ -917,7 +968,13 @@ describe("the ci:fast unit test scope", () => {
 				{
 					path: SHARED_MODULE,
 					reason: `${SHARED_IMPORTER_THRESHOLD + 1} test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}`,
-					testFiles: ["packages/ui/src/components/direct-0.test.ts"],
+					testFiles: [
+						"packages/ui/src/components/direct-0.test.ts",
+						...Array.from(
+							{ length: SHARED_IMPORTER_THRESHOLD },
+							(_, index) => `apps/app/src/relay-${index}.test.ts`,
+						),
+					].sort(),
 				},
 			],
 			graphMs: expect.any(Number),
@@ -995,7 +1052,7 @@ describe("the ci:fast wall time", () => {
 		).toEqual(["ci  ci:fast took 1m 4s, limit 120 s"])
 	})
 
-	it("names the step during which it went past its limit, and reports it without failing", () => {
+	it("names its slowest step and its duration when it went past its limit, and reports it without failing", () => {
 		expect(
 			wallTimeLines([
 				{ name: "the unit test scope decision", ms: 4_000 },
@@ -1005,7 +1062,7 @@ describe("the ci:fast wall time", () => {
 			]),
 		).toEqual([
 			"ci  ci:fast took 2m 15s, limit 120 s",
-			"ci  ci:fast went past 120 s during fast / Unit, which took 0m 30s: reported, the duration alone refuses no push",
+			"ci  ci:fast went past 120 s, its slowest step fast / Types took 1m 40s: reported, the duration alone refuses no push",
 		])
 	})
 })

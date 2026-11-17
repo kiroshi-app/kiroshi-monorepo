@@ -16,6 +16,7 @@ import {
 	TEST_FILE,
 	TEST_SOURCE_ROOTS,
 	type TestImports,
+	testFilesGuarding,
 	testImports,
 } from "./test-importers"
 
@@ -277,9 +278,11 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // runs the format, Biome and knip against the baseline, the types, the
 // pr-dequeue or pr-enqueue script tests when the diff touches that script
 // or its tests, then the changed test files. A shared changed module adds
-// the test files importing it directly, never the whole unit projects,
-// which only a shared path outside the import graph or a failed graph
-// build brings back. Its unit tests time out after FAST_TEST_TIMEOUT_MS so
+// the test files importing it directly, then walks up the modules that only
+// gather imports and re-export them, adding the tests importing each and
+// the own test file of each module consuming one, never the whole unit
+// projects, which only a shared path outside the import graph or a failed
+// graph build brings back. Its unit tests time out after FAST_TEST_TIMEOUT_MS so
 // a loaded machine slows them without failing them, and it reports its
 // wall time against FAST_LIMIT_SECONDS without failing on it. The pull
 // request job keeps the widening of bun scripts/ci.ts changed, and bun run
@@ -409,11 +412,11 @@ const sharedReason = (path: string, importers: TestImports["importers"]) => {
 }
 
 const sharedModulesOf = ({ changedPaths, repo }: ScopeInputs) => {
-	const { importers, directTestImporters } = testImports(repo)
+	const imports = testImports(repo)
 	return changedPaths.flatMap((path) => {
-		const reason = sharedReason(path, importers)
+		const reason = sharedReason(path, imports.importers)
 		if (reason === undefined) return []
-		const testFiles = [...(directTestImporters.get(path) ?? [])].sort()
+		const testFiles = testFilesGuarding({ repo, imports, path })
 		return [{ path, reason, testFiles }]
 	})
 }
@@ -446,7 +449,7 @@ export const fastUnitTestScope = ({
 export const fastScopeLines = (scope: FastUnitTestScope) => {
 	if (scope.scope !== "importers") return [scopeLine(scope)]
 	return [
-		`ci  unit test scope: changed test files and the test files importing a shared changed module directly${graphTime(scope)}`,
+		`ci  unit test scope: changed test files and the test files importing a shared changed module directly or through re-export modules${graphTime(scope)}`,
 		...scope.shared.map(
 			({ path, reason, testFiles }) =>
 				`ci    ${path} is shared (${reason}), runs ${testFiles.join(", ") || "no test file"}`,
@@ -478,23 +481,19 @@ export const fastUnitTestStep = (scope: FastUnitTestScope): Step => {
 
 export type StepTiming = { name: string; ms: number }
 
-const stepPastLimit = (timings: StepTiming[]) => {
-	let elapsed = 0
-	for (const timing of timings) {
-		elapsed += timing.ms
-		if (elapsed > FAST_LIMIT_SECONDS * 1000) return timing
-	}
-	return undefined
-}
+const slowestStep = (timings: StepTiming[]) =>
+	timings.reduce((slowest, timing) =>
+		timing.ms > slowest.ms ? timing : slowest,
+	)
 
 export const wallTimeLines = (timings: StepTiming[]) => {
 	const total = timings.reduce((sum, { ms }) => sum + ms, 0)
 	const wallTime = `ci  ci:fast took ${elapsedText(total)}, limit ${FAST_LIMIT_SECONDS} s`
-	const past = stepPastLimit(timings)
-	if (past === undefined) return [wallTime]
+	if (total <= FAST_LIMIT_SECONDS * 1000) return [wallTime]
+	const slowest = slowestStep(timings)
 	return [
 		wallTime,
-		`ci  ci:fast went past ${FAST_LIMIT_SECONDS} s during ${past.name}, which took ${elapsedText(past.ms)}: reported, the duration alone refuses no push`,
+		`ci  ci:fast went past ${FAST_LIMIT_SECONDS} s, its slowest step ${slowest.name} took ${elapsedText(slowest.ms)}: reported, the duration alone refuses no push`,
 	]
 }
 
