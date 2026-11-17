@@ -186,6 +186,12 @@ pub async fn evaluate<R: Runtime>(
 		})
 	})
 	.await?;
+	script_answered(answered).await
+}
+
+async fn script_answered(
+	answered: oneshot::Receiver<Result<String, String>>,
+) -> Result<String, LiveHtmlError> {
 	answered_in_time(SCRIPT_ANSWER, answered).await
 }
 
@@ -392,7 +398,7 @@ mod tests {
 
 	use tokio::sync::oneshot;
 
-	use super::{answered_in_time, LiveHtmlError, SCRIPT_ANSWER};
+	use super::{script_answered, LiveHtmlError};
 
 	const HOSTILE_PAGE_BUSY_LOOP: Duration = Duration::from_secs(10);
 
@@ -404,7 +410,7 @@ mod tests {
 			answer.send(Ok("undefined".to_owned()))
 		});
 
-		let result = answered_in_time(SCRIPT_ANSWER, answered).await;
+		let result = script_answered(answered).await;
 
 		assert_eq!(result, Ok("undefined".to_owned()));
 	}
@@ -413,7 +419,7 @@ mod tests {
 	async fn a_live_html_script_never_answered_fails_on_the_view_not_on_the_main_thread() {
 		let (_answer, answered) = oneshot::channel::<Result<String, String>>();
 
-		let result = answered_in_time(SCRIPT_ANSWER, answered).await;
+		let result = script_answered(answered).await;
 
 		assert_eq!(
 			result,
