@@ -3,9 +3,9 @@ use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
 	account, agent, applications, attachments, badge, claude_import, companions, conversations,
-	crypto, devices, environment, hosting, invitations, joined_spaces, library, logging, mcp_oauth,
-	menu_contract, missions, notifications, plugins, remote_image, routines, save_csv, search,
-	sections, spaces, updates, user, window_controls,
+	crypto, devices, environment, hosting, invitations, joined_spaces, library, live_html, logging,
+	mcp_oauth, menu_contract, missions, notifications, plugins, remote_image, routines, save_csv,
+	search, sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -108,6 +108,11 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_save::<tauri::Wry>,
 		library::commands::library_copy::<tauri::Wry>,
 		library::commands::library_reveal::<tauri::Wry>,
+		live_html::commands::live_html_mount::<tauri::Wry>,
+		live_html::commands::live_html_place::<tauri::Wry>,
+		live_html::commands::live_html_hide::<tauri::Wry>,
+		live_html::commands::live_html_show::<tauri::Wry>,
+		live_html::commands::live_html_remove::<tauri::Wry>,
 		library::commands::library_read_image::<tauri::Wry>,
 		library::commands::library_read_file::<tauri::Wry>,
 		library::commands::library_save_bytes::<tauri::Wry>,
