@@ -854,7 +854,7 @@ export const TableWide = meta.story({
 		docs: {
 			description: {
 				story:
-					"Eight columns in a column built for prose. Cells wrap at word boundaries first, and these eight columns, three of them unbreakable timestamps, still do not fit once wrapped, so the table scrolls on its own axis. Check that the frame stops at the container edge, that the scroll ends flush with the last column, and that `Tab` reaches the table itself — the viewport is a tab stop with a visible ring, so the arrow keys scroll it without a mouse. " +
+					"Eight columns in a column built for prose. Cells wrap at word boundaries first, and these eight columns, three of them unbreakable timestamps, still do not fit once wrapped, so the table scrolls on its own axis. Check that the frame stops at the container edge, that the scroll ends flush with the last column, and that `Tab` reaches the table itself: the viewport is a tab stop with a visible ring, so the arrow keys scroll it without a mouse. " +
 					RENDERED_BY_TURN_BODY,
 			},
 		},
