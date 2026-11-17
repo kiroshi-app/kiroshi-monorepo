@@ -39,4 +39,15 @@ pub enum LiveHtmlError {
 	Unplaced {
 		detail: String,
 	},
+	OutsideAttachments,
+	NotHtml,
+	#[serde(rename_all = "camelCase")]
+	TooLarge {
+		bytes: u64,
+		limit: u64,
+	},
+	#[serde(rename_all = "camelCase")]
+	Unreadable {
+		detail: String,
+	},
 }

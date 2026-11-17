@@ -41,6 +41,7 @@ export const commands = {
 	libraryCopy: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy", { spaceId, name })),
 	libraryReveal: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_reveal", { spaceId, name })),
 	liveHtmlMount: (id: string, html: string, rectangle: LiveHtmlRectangle) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount", { id, html, rectangle })),
+	liveHtmlMountAttachment: (id: string, path: string, rectangle: LiveHtmlRectangle) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount_attachment", { id, path, rectangle })),
 	liveHtmlPlace: (id: string, rectangle: LiveHtmlRectangle, clip: {
 	x: number | null,
 	y: number | null,
@@ -1393,7 +1394,7 @@ export type LibraryWriter = {
 
 export type LibraryWriterKind = "agent" | "person" | "member";
 
-export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string };
+export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string } | { kind: "outsideAttachments" } | { kind: "notHtml" } | { kind: "tooLarge"; bytes: number; limit: number } | { kind: "unreadable"; detail: string };
 
 export type LiveHtmlRectangle = {
 	x: number | null,
