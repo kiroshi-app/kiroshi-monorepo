@@ -9,7 +9,8 @@ const TIMED_OUT_QUERY = "Timed out while evaluating UI query"
 const QUERY_STEP =
 	/^(Checking existence of|Find the|Get number of matches for|Get all elements|Requesting snapshot)/
 
-const TIMESTAMPED = /^﻿?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (.*)$/
+const TIMESTAMPED =
+	/^\uFEFF?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (.*)$/
 const TEST_STARTED = /^Test Case '-\[(\S+) (\S+)\]' started\.$/
 const TEST_ENDED =
 	/^Test Case '-\[(\S+) (\S+)\]' (?:passed|failed|skipped) \((\d+(?:\.\d+)?) seconds\)\.$/

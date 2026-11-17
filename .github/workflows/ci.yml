@@ -302,6 +302,7 @@ jobs:
         run: |
           simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
           echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
+          echo "SIMULATOR_BOOTED_AT=$(date +%s)" >> "$GITHUB_ENV"
           nohup scripts/ios-sampler.sh "$simulator" >> "$RUNNER_TEMP/ios-sampler.txt" 2>&1 &
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
 
@@ -331,13 +332,15 @@ jobs:
         with:
           name: ios-sampler-${{ matrix.shard }}
           path: ${{ runner.temp }}/ios-sampler.txt
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
           overwrite: true
 
       - name: Collect the simulator log
         if: failure() && steps.gate.conclusion == 'failure'
-        run: xcrun simctl spawn "$SIMULATOR" log collect --output "$RUNNER_TEMP/ios-simulator.logarchive"
+        timeout-minutes: 5
+        continue-on-error: true
+        run: xcrun simctl spawn "$SIMULATOR" log collect --start "@$SIMULATOR_BOOTED_AT" --output "$RUNNER_TEMP/ios-simulator.logarchive"
 
       - name: Upload the simulator log
         if: failure() && steps.gate.conclusion == 'failure'
@@ -345,7 +348,7 @@ jobs:
         with:
           name: ios-simulator-log-${{ matrix.shard }}
           path: ${{ runner.temp }}/ios-simulator.logarchive
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
           overwrite: true
 

@@ -64,6 +64,7 @@ type WorkflowStep = {
 	run?: string
 	if?: string
 	"timeout-minutes"?: number
+	"continue-on-error"?: boolean
 	env?: Record<string, string>
 	with?: Record<string, unknown>
 }
@@ -1453,9 +1454,15 @@ describe("the jobs of ci.yml", () => {
 			"ios-sampler-3",
 		)
 		expect(samples?.with?.path).toBe(`${runnerTemp}/ios-sampler.txt`)
-		expect(samples?.with?.["if-no-files-found"]).toBe("error")
+		expect(boot).toContain(
+			'echo "SIMULATOR_BOOTED_AT=$(date +%s)" >> "$GITHUB_ENV"',
+		)
+		expect(samples?.with?.["if-no-files-found"]).toBe("warn")
+		expect(log?.with?.["if-no-files-found"]).toBe("warn")
+		expect(collect?.["timeout-minutes"]).toBe(5)
+		expect(collect?.["continue-on-error"]).toBe(true)
 		expect(collect?.run).toBe(
-			'xcrun simctl spawn "$SIMULATOR" log collect --output "$RUNNER_TEMP/ios-simulator.logarchive"',
+			'xcrun simctl spawn "$SIMULATOR" log collect --start "@$SIMULATOR_BOOTED_AT" --output "$RUNNER_TEMP/ios-simulator.logarchive"',
 		)
 		expect(interpolate(String(log?.with?.name), shardThree)).toBe(
 			"ios-simulator-log-3",
