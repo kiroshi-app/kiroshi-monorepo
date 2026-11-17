@@ -130,6 +130,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		library::commands::library_templates,
 		library::commands::library_create_document::<tauri::Wry>,
 		library::commands::library_create_board::<tauri::Wry>,
+		library::commands::library_duplicate::<tauri::Wry>,
 		library::commands::library_board_summary::<tauri::Wry>,
 		library::commands::library_open_document::<tauri::Wry>,
 		library::commands::library_apply_update::<tauri::Wry>,

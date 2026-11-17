@@ -46,6 +46,7 @@ export const commands = {
 	libraryTemplates: () => __TAURI_INVOKE<LibraryTemplate[]>("library_templates"),
 	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
 	libraryCreateBoard: (spaceId: string, name: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_board", { spaceId, name })),
+	libraryDuplicate: (spaceId: string, name: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_duplicate", { spaceId, name })),
 	libraryBoardSummary: (spaceId: string, name: string) => typedError<LibraryBoardSummary, LibraryError>(__TAURI_INVOKE("library_board_summary", { spaceId, name })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),

@@ -133,6 +133,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("library_templates", Reach::Free),
 	("library_create_document", Reach::Scoped(SPACE_ID)),
 	("library_create_board", Reach::Scoped(SPACE_ID)),
+	("library_duplicate", Reach::Scoped(SPACE_ID)),
 	("library_board_summary", Reach::Scoped(SPACE_ID)),
 	("library_open_document", Reach::Scoped(SPACE_ID)),
 	("library_apply_update", Reach::Scoped(SPACE_ID)),
