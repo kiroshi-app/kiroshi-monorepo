@@ -116,9 +116,10 @@ being the relay device id that sent the call:
 - What a call left behind decides whether its answer is kept. A call that failed
   before it could store anything leaves no answer behind, and its repeat runs
   again: a call refused before the host ran it (400, 401, 403, 404, 413), and a
-  call the host could not run on its side (502). Every other answer is kept,
-  success or failure, a 500 included, since the command may have stored something
-  before it failed: its repeat gets that answer and the command never runs twice.
+  502 where the host could not connect to its local api. Every other answer is
+  kept, success or failure, since the command may have stored something before it
+  failed: a 500, and a 502 where the call timed out or its answer was cut. Its
+  repeat gets that answer and the command never runs twice.
 - The host keeps the last 1024 answers of each device in each shared space and
   forgets older ones, and it forgets them all when it restarts. A repeat of a
   forgotten key runs as a new call.
