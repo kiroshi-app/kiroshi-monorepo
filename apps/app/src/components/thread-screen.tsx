@@ -454,6 +454,7 @@ const ThreadHeader = ({
 				isWorking={liveMissionIds.has(mission.mission.id)}
 				objective={mission.mission.objective}
 				onBack={mission.onLeave}
+				pathLabel={mission.pathLabel}
 				state={mission.mission.state}
 				dragRegion="deep"
 			/>

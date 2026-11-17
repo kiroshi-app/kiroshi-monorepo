@@ -27,6 +27,12 @@ export const useWorkspaceBodyProps = (): SharedBodyProps => {
 		isOverlayOpen: overlay.isOverlayOpen,
 		landings: core.messageLandings,
 		missions: core.openedMission,
+		missionOrigins: {
+			bots: rosterView.bots,
+			conversations: rosterView.conversations,
+			missionMarks: drivers.missionMarks,
+			soloThreads: rosterView.soloThreads,
+		},
 		onboardingCreation:
 			onboardingCreationOf(drivers.onboarding.state) ?? undefined,
 		onOpenConversationSettings:

@@ -118,6 +118,10 @@ import { hasCaptionWindowControls } from "@/lib/host"
 import { base64Of } from "@/lib/library/library-document-session"
 import type { Mission, MissionChanged } from "@/lib/missions/mission-contract"
 import { missionSummonsFor } from "@/lib/missions/mission-summons"
+import {
+	type MissionOrigins,
+	missionPathLabelOf,
+} from "@/lib/missions/mission-thread-model"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
 	createOpenedMissionController,
@@ -3594,6 +3598,141 @@ describe("ThreadScreen of a mission, which has no Space id of its own", () => {
 			expect(importPaths).toHaveBeenCalledWith(SCREEN_SPACE, [ATTACHED]),
 		)
 		expect(listMissions).toHaveBeenCalledWith("c-bot-1")
+	})
+})
+
+describe("ThreadScreen of a mission saying where it came from", () => {
+	const ORIGIN_ID = SOLO_MISSION.originConversationId
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	const originsOf = (
+		room: Room,
+		more: Partial<MissionOrigins>,
+	): MissionOrigins => ({
+		bots: room.bots,
+		conversations: [],
+		missionMarks: [],
+		soloThreads: {},
+		...more,
+	})
+
+	const originNamed = (room: Room, title: string): Conversation => ({
+		...room.thread.conversation,
+		id: ORIGIN_ID,
+		title,
+	})
+
+	const missionScreenOf = (
+		room: Room,
+		origins: MissionOrigins,
+		onLeave: () => void = () => undefined,
+	) => {
+		const shown = room.thread.mission
+		if (!shown) {
+			throw new Error("the room holds no mission")
+		}
+		return screenOf(
+			{
+				...room.thread,
+				mission: {
+					...shown,
+					onLeave,
+					pathLabel: missionPathLabelOf(
+						shown.mission.id,
+						shown.mission,
+						origins,
+					),
+				},
+			},
+			room.bots,
+		)
+	}
+
+	const pathLink = (name: string) => screen.queryByRole("button", { name })
+
+	it("names the conversation of origin on the path line, and its new title once renamed", async () => {
+		const room = await missionRoomOf({ events: [] })
+		const { rerender } = render(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof")] }),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		expect(pathLink("Roof")).toBeTruthy()
+
+		rerender(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof works")] }),
+			),
+		)
+
+		expect(pathLink("Roof works")).toBeTruthy()
+		expect(pathLink("Roof")).toBeNull()
+	})
+
+	it("names the companion of a solo conversation of origin as the sidebar does", async () => {
+		const room = await missionRoomOf({ events: [] })
+		render(
+			missionScreenOf(
+				room,
+				originsOf(room, {
+					soloThreads: {
+						[ORIGIN_ID]: { spaceId: SPACE, botId: room.idOf("Ada") },
+					},
+				}),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		expect(pathLink("Ada")).toBeTruthy()
+	})
+
+	it("falls back to Missions when the conversation of origin cannot be read", async () => {
+		const room = await missionRoomOf({ events: [] })
+		render(missionScreenOf(room, originsOf(room, {})), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(pathLink("Missions")).toBeTruthy()
+	})
+
+	it("leaves the mission from the path line naming its origin", async () => {
+		const room = await missionRoomOf({ events: [] })
+		const onLeave = vi.fn()
+		render(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof")] }),
+				onLeave,
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		fireEvent.click(screen.getByRole("button", { name: "Roof" }))
+
+		expect(onLeave).toHaveBeenCalledOnce()
 	})
 })
 
