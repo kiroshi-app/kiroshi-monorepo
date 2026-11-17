@@ -15,7 +15,6 @@ const bots = {
 		createMenu: "Create",
 		conversation: {
 			create: "Start a conversation",
-			createFailed: "Couldn’t start the conversation. Retry.",
 			others: "+{{count}}",
 			preview: "{{name}}: {{text}}",
 			you: "You",

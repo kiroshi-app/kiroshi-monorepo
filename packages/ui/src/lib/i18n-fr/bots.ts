@@ -6,7 +6,6 @@ const bots = {
 		createMenu: "Créer",
 		conversation: {
 			create: "Démarrer une conversation",
-			createFailed: "Impossible de démarrer la conversation. Réessayez.",
 			others: "+{{count}}",
 			preview: "{{name}} : {{text}}",
 			you: "Vous",
