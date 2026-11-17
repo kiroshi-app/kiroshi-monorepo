@@ -783,7 +783,7 @@ describe("an html file an agent attaches to its reply", () => {
 
 		renderStoredReply(ATTACHING_REPLY, isWriting)
 
-		expect(screen.getByRole("button", { name: STORED_PAGE_CHIP })).toBeTruthy()
+		expect(attachmentChipOf(STORED_PAGE)).toBeTruthy()
 		expect(liveView()).toBeNull()
 		expect(host.liveHtml).not.toHaveBeenCalled()
 	})
@@ -810,9 +810,7 @@ describe("an html file an agent attaches to its reply", () => {
 			renderStoredReply(ATTACHING_REPLY)
 
 			await waitFor(() => expect(liveView()).toBeNull())
-			expect(
-				screen.getByRole("button", { name: STORED_PAGE_CHIP }),
-			).toBeTruthy()
+			expect(attachmentChipOf(STORED_PAGE)).toBeTruthy()
 			expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
 			expect(raiseFailureNotice).toHaveBeenCalledWith(
 				expect.objectContaining({ title: LIVE_VIEW_FAILED }),
