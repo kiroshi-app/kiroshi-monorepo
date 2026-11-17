@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 
 const USAGE_ERROR = 64
 
-export type OwnedPath = {
+type OwnedPath = {
 	path: string
 	line: number
 	pattern: string
@@ -87,7 +87,7 @@ export const findOwnedPaths = (
 	})
 }
 
-export const describeOwnedPath = ({ path, line, pattern }: OwnedPath) =>
+const describeOwnedPath = ({ path, line, pattern }: OwnedPath) =>
 	`${path} is owned by CODEOWNERS line ${line}: ${pattern}`
 
 if (import.meta.main) {
