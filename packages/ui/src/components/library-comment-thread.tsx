@@ -311,7 +311,7 @@ const LibraryCommentThread = ({
 						</p>
 						<Button
 							className={cn(
-								"shrink-0 rounded-full bg-transparent text-compact text-foreground leading-4 transition-none hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
+								"shrink-0 bg-transparent text-compact text-foreground leading-4 transition-none hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
 								COMMENT_RULE,
 							)}
 							onClick={onReopen}

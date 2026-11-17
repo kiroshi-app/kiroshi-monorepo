@@ -22,6 +22,8 @@ The `@theme inline` block derives every step from `--radius-root`, which is froz
 
 `xl` and `2xl` both resolve to the `lg` step. Every surface the reader meets — a menu, a button, a card, a sidebar row, a panel — carries the same corner, and reaching for a rounder step does not get you one. `xs`, `sm` and `md` stay tighter for marks, strips and inline code, `3xl` and `4xl` stay rounder for the composer, and `bubble` holds the message bubble's own step.
 
+`button` is the one corner of every button and every control that reads as one: bar buttons, icon buttons, toggle items, the Library filters and their sliding pill. It points at the `lg` step, and the vendored Button and Toggle reach it through their `rounded-2xl`, so changing `--radius-button` reshapes every button at once and leaves inputs, items, cards and menus on `lg`.
+
 <RadiusScale />
 
 ## Shadows

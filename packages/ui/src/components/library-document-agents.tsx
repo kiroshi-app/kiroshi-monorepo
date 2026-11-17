@@ -62,7 +62,7 @@ const FOCUS_OUTLINE =
 	"focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
 
 const CHIP = cn(
-	"gap-1.5 rounded-full bg-foreground/8 ps-2 pe-2.5 font-medium text-foreground transition-none hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/12",
+	"gap-1.5 bg-foreground/8 ps-2 pe-2.5 font-medium text-foreground transition-none hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/12",
 	FOCUS_OUTLINE,
 )
 
@@ -268,7 +268,7 @@ const AgentCard = ({ writer, onStop, onOpenConversation }: AgentCardProps) => {
 					{onOpenConversation ? (
 						<Button
 							className={cn(
-								"h-7 rounded-full px-2 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6",
+								"h-7 px-2 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6",
 								FOCUS_OUTLINE,
 							)}
 							onClick={() => onOpenConversation(agent)}

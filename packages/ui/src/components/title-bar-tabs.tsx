@@ -152,7 +152,7 @@ const TABS_KEEP_THE_DOCKED_ROOM =
 	"[[data-sidebar-layout=collapsed][data-sidebar-sliding=true]_&]:pe-(--history-travel)"
 
 const BAR_BUTTON =
-	"grid size-7 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
+	"grid size-7 shrink-0 place-items-center rounded-button text-muted-foreground hover:bg-title-bar-highlight hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.75"
 
 const SIDEBAR_TOGGLE = cn(
 	BAR_BUTTON,

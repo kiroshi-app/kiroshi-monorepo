@@ -86,7 +86,7 @@ function MessageAction({ label, onClick, children }: MessageActionProps) {
 			aria-label={label}
 			tooltip={label}
 			onClick={onClick}
-			className="rounded-sm text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
+			className="text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
 		>
 			{children}
 		</TooltipButton>

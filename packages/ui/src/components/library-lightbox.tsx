@@ -228,7 +228,7 @@ const ZoomStage = ({
 								? t("library.lightbox.fitToStage")
 								: t("library.lightbox.zoomThenFit", { percent })
 						}
-						className="h-7 w-13 rounded-full px-0 font-medium text-compact text-foreground leading-4 tabular-nums transition-none hover:bg-foreground/8"
+						className="h-7 w-13 px-0 font-medium text-compact text-foreground leading-4 tabular-nums transition-none hover:bg-foreground/8"
 						onClick={() => setZoom(null)}
 						tooltip={t("library.lightbox.fitToStage")}
 						variant="ghost"

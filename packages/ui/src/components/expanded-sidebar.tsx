@@ -65,7 +65,7 @@ const LIST_FAILED =
 	"flex flex-col items-start gap-2 p-3 text-start text-compact text-muted-foreground leading-5"
 
 const LIST_RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-4.5 transition-none"
+	"h-auto border-input bg-transparent p-1.5 font-medium text-compact text-foreground leading-4.5 transition-none"
 
 const MISSION_COUNT =
 	"w-16 shrink-0 text-end text-[11px] text-sidebar-muted-foreground leading-4 tabular-nums"

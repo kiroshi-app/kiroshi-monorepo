@@ -24,7 +24,7 @@ const HEADER_TITLE =
 
 const HEADER_ACTIONS = "flex items-center gap-0.5"
 
-const HEADER_ACTION = "rounded-md text-muted-foreground [&_svg]:stroke-2!"
+const HEADER_ACTION = "text-muted-foreground [&_svg]:stroke-2!"
 
 const ROSTER_SURFACE = "min-h-10 flex-1"
 

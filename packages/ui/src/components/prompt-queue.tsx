@@ -41,7 +41,7 @@ const QueuedRowActions = ({ onSendNow, onRemove }: QueuedRowActionsProps) => {
 				<Button
 					variant="ghost"
 					onClick={onSendNow}
-					className="h-7 gap-1.5 rounded-full bg-foreground/8 px-2.5 text-compact text-foreground leading-4"
+					className="h-7 gap-1.5 bg-foreground/8 px-2.5 text-compact text-foreground leading-4"
 				>
 					<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
 					{t("queue.sendNow")}
@@ -53,7 +53,7 @@ const QueuedRowActions = ({ onSendNow, onRemove }: QueuedRowActionsProps) => {
 					size="icon-sm"
 					aria-label={t("queue.remove")}
 					onClick={onRemove}
-					className="rounded-full text-faint-foreground"
+					className="text-faint-foreground"
 				>
 					<Icons.Close aria-hidden="true" className="size-3.5" />
 				</Button>

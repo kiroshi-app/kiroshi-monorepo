@@ -78,7 +78,7 @@ const LibraryCalloutEditor = ({
 					/>
 					<ToggleGroup
 						aria-label={t("library.editor.blocks.callout.tone")}
-						className="rounded-full bg-card/70 p-[3px]"
+						className="rounded-[calc(var(--radius-button)+3px)] bg-card/70 p-[3px]"
 						data-slot="library-callout-tones"
 						onValueChange={([chosen]) => {
 							const next = TONES.find((each) => each === chosen)
@@ -90,7 +90,7 @@ const LibraryCalloutEditor = ({
 					>
 						{TONES.map((each) => (
 							<ToggleGroupItem
-								className="h-6 min-w-0 rounded-full p-1 font-medium text-muted-foreground text-xs leading-4 transition-none hover:bg-transparent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:inset-ring aria-pressed:inset-ring-foreground/8"
+								className="h-6 min-w-0 p-1 font-medium text-muted-foreground text-xs leading-4 transition-none hover:bg-transparent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:inset-ring aria-pressed:inset-ring-foreground/8"
 								key={each}
 								value={each}
 							>

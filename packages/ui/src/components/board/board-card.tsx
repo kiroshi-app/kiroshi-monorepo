@@ -132,7 +132,7 @@ const BoardCard = ({
 				<Button
 					aria-describedby={titleId}
 					className={cn(
-						"h-auto shrink-0 gap-1.5 rounded-full border-border p-1.5 text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8",
+						"h-auto shrink-0 gap-1.5 border-border p-1.5 text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8",
 						FOCUS_OUTLINE,
 					)}
 					onClick={onOpen}

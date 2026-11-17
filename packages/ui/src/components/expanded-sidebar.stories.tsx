@@ -1233,7 +1233,9 @@ export const L2FailedExpanded = meta.story({
 		await expect(canvas.getByText("Couldn’t load your agents.")).toBeVisible()
 		await expect(sectionHeadersIn(canvasElement)).toEqual([])
 		const retry = canvas.getByRole("button", { name: "Retry" })
-		await expect(getComputedStyle(retry).borderTopLeftRadius).toBe("6px")
+		await expect(getComputedStyle(retry).borderTopLeftRadius).toBe(
+			tokenStyleIn(retry, "rounded-button", "borderTopLeftRadius"),
+		)
 		await expect(boxOf(retry).left).toBe(
 			boxOf(canvas.getByText("Couldn’t load your agents.")).left,
 		)

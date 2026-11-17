@@ -78,7 +78,7 @@ const MissionProperties = ({
 							>
 								<Button
 									aria-label={t("missions.properties.openCodingSession")}
-									className="rounded-full text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5"
+									className="text-muted-foreground transition-none [&_svg:not([class*='size-'])]:size-3.5"
 									onClick={onOpenCodingSession}
 									size="icon-xs"
 									variant="ghost"

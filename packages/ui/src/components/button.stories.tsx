@@ -178,3 +178,50 @@ export const ClassNameOverridesProjectTokens = meta.story({
 		await expect(button).not.toHaveClass("text-sm")
 	},
 })
+
+export const EverySizeWearsTheButtonRadius = meta.story({
+	render: () => (
+		<div className="flex flex-col gap-4">
+			{BUTTON_VARIANTS.map((variant) => (
+				<Row key={variant}>
+					{BUTTON_SIZES.map((size) =>
+						isIconSize(size) ? (
+							<Button
+								aria-label={`${variant} ${size}`}
+								key={size}
+								size={size}
+								variant={variant}
+							>
+								<Icons.Add />
+							</Button>
+						) : (
+							<Button key={size} size={size} variant={variant}>
+								{size}
+							</Button>
+						),
+					)}
+				</Row>
+			))}
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every variant at every size. Check that each one takes its corner from `--radius-button`, the one radius every button and every control that reads as one shares across the app.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const buttonRadius = resolveStyle(
+			canvasElement,
+			"borderTopLeftRadius",
+			"var(--radius-button)",
+		)
+
+		for (const button of canvas.getAllByRole("button"))
+			await expect(getComputedStyle(button).borderTopLeftRadius).toBe(
+				buttonRadius,
+			)
+	},
+})

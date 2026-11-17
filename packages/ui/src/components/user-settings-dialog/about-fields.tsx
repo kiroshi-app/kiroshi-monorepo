@@ -167,14 +167,9 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 	)
 }
 
-const ACTION_CLASS = "rounded-lg"
+const DESTRUCTIVE_ACTION_CLASS = "dark:bg-destructive/14"
 
-const DESTRUCTIVE_ACTION_CLASS = cn(ACTION_CLASS, "dark:bg-destructive/14")
-
-const OUTLINE_ACTION_CLASS = cn(
-	ACTION_CLASS,
-	"bg-background shadow-xs dark:bg-background",
-)
+const OUTLINE_ACTION_CLASS = "bg-background shadow-xs dark:bg-background"
 
 type UpdateActionProps = Pick<
 	AboutFieldsProps,
@@ -206,7 +201,7 @@ const UpdateAction = ({
 			)
 		case "available":
 			return (
-				<Button className={ACTION_CLASS} onClick={onDownload} size="sm">
+				<Button onClick={onDownload} size="sm">
 					{t("about.action.download")}
 				</Button>
 			)
@@ -227,7 +222,6 @@ const UpdateAction = ({
 		case "ready":
 			return (
 				<Button
-					className={ACTION_CLASS}
 					disabled={update.runningCompanions > 0}
 					onClick={onRestart}
 					size="sm"

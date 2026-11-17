@@ -13,7 +13,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const CHEVRON_STROKE = 1.6
 
 const ARROW_CLASS =
-	"size-8 rounded-full bg-clip-border transition-none data-disabled:pointer-events-none data-disabled:text-muted-foreground data-disabled:opacity-35"
+	"size-8 bg-clip-border transition-none data-disabled:pointer-events-none data-disabled:text-muted-foreground data-disabled:opacity-35"
 
 const ACTION_CLASS = "h-10 px-6"
 

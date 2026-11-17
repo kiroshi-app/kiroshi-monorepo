@@ -142,7 +142,7 @@ const CompanionsSection = ({
 					</p>
 				</div>
 				<Button
-					className="rounded-lg border-input text-compact text-foreground leading-4"
+					className="border-input text-compact text-foreground leading-4"
 					onClick={onCreate}
 					variant="outline"
 				>

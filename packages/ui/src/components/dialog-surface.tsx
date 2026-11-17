@@ -32,7 +32,7 @@ const DialogSurface = ({
 				aria-label={t("dialog.close")}
 				render={
 					<Button
-						className="absolute top-4 right-4 rounded-[calc(var(--radius-2xl)-var(--spacing)*4)]"
+						className="absolute top-4 right-4"
 						size="icon-sm"
 						variant="ghost"
 					/>

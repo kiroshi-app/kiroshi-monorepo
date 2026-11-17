@@ -28,8 +28,7 @@ const LIBRARY_DOCUMENT_TEMPLATES: LibraryDocumentTemplate[] = [
 	...LIBRARY_TEMPLATES,
 ]
 
-const PILL =
-	"h-9 rounded-full px-4 font-medium text-sm leading-4.5 transition-none"
+const PILL = "h-9 px-4 font-medium text-sm leading-4.5 transition-none"
 
 type SketchSection = {
 	heading?: string

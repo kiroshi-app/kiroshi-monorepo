@@ -174,7 +174,7 @@ const AuthorLineFailed = ({ onRetry }: AuthorLineFailedProps) => {
 				<Button
 					variant="ghost"
 					onClick={onRetry}
-					className="h-5.5 shrink-0 rounded-sm border-foreground/15 px-2 font-medium text-foreground text-xs"
+					className="h-5.5 shrink-0 border-foreground/15 px-2 font-medium text-foreground text-xs"
 				>
 					{t("turn.retry")}
 				</Button>
@@ -293,7 +293,6 @@ const AuthorLineQueued = ({ onCancel }: AuthorLineQueuedProps) => {
 						size="icon-xs"
 						aria-label={t("turn.cancel")}
 						onClick={onCancel}
-						className="rounded-sm"
 					>
 						<Icons.Close aria-hidden="true" className="size-3" />
 					</Button>
