@@ -211,7 +211,6 @@ export type RosterController = {
 	selectConversation: (id: string) => void
 	showList: () => void
 	create: () => Promise<void>
-	createConversation: (botIds?: string[]) => Promise<Conversation | null>
 	createUnselectedConversation: (
 		botIds: string[],
 	) => Promise<Conversation | null>
@@ -333,8 +332,6 @@ const NOTHING_SELECTED: Landing = {
 }
 
 const NO_TITLE = ""
-
-const NOBODY_SEATED: string[] = []
 
 const NO_BOTS: Bot[] = []
 
@@ -751,15 +748,6 @@ export const createRosterController = (
 			...rosterIn(current().conversationRosters, spaceRowId),
 			written,
 		])
-
-	const admitConversation = (written: Conversation, spaceRowId: string) => {
-		enrolConversation(written, spaceRowId)
-		choose({
-			spaceRowId,
-			chosenBotId: null,
-			chosenConversationId: written.id,
-		})
-	}
 
 	const applyConversation = (written: Conversation) => {
 		const { spaceRowId, conversations } = current()
@@ -1206,9 +1194,6 @@ export const createRosterController = (
 				)
 				admit(written, current().spaceRowId)
 			}).catch(reloadAndReject),
-
-		createConversation: (botIds = NOBODY_SEATED) =>
-			writeConversation(botIds, admitConversation).catch(reloadAndReject),
 
 		createUnselectedConversation: (botIds) =>
 			writeConversation(botIds, enrolConversation).catch(reloadAndReject),
