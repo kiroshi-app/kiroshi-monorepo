@@ -18,6 +18,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const AVATAR_SIZE = 24
 
+const LABEL = "min-w-0 truncate"
+
 type HeaderConversationButtonProps = Pick<
 	ConversationSubjectIconProps,
 	"icon"
@@ -60,12 +62,12 @@ const HeaderConversationButton = ({
 			/>
 			{naming ? (
 				<TextSwap
-					className="min-w-0 truncate"
+					className={LABEL}
 					isShimmering={naming === "pending"}
 					text={label}
 				/>
 			) : (
-				<span className="min-w-0 truncate">{name}</span>
+				<span className={LABEL}>{name}</span>
 			)}
 			<Icons.Settings aria-hidden="true" className="text-muted-foreground" />
 		</Button>

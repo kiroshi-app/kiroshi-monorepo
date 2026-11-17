@@ -689,6 +689,11 @@ const TitleBarTabItem = ({
 	)
 	const PinIcon = tab.isPinned ? Icons.Unpin : Icons.Pin
 	const title = titleOf(tab, t)
+	const titleClass = cn(
+		TAB_TITLE,
+		tab.naming === "pending" && "text-muted-foreground",
+		needsYou && "text-warning",
+	)
 
 	return (
 		<ContextMenu>
@@ -742,18 +747,9 @@ const TitleBarTabItem = ({
 							/>
 						) : null}
 						{tab.naming ? (
-							<TextSwap
-								className={cn(
-									TAB_TITLE,
-									tab.naming === "pending" && "text-muted-foreground",
-									needsYou && "text-warning",
-								)}
-								text={title}
-							/>
+							<TextSwap className={titleClass} text={title} />
 						) : (
-							<span className={cn(TAB_TITLE, needsYou && "text-warning")}>
-								{title}
-							</span>
+							<span className={titleClass}>{title}</span>
 						)}
 					</>
 				)}
