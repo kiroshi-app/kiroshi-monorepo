@@ -9,10 +9,9 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { createElement, type ReactNode } from "react"
+import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import type { MarkdownPreProps } from "@workspace/ui/components/markdown/code"
 import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import {
 	raiseFailureNotice,
@@ -53,41 +52,6 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	raiseFailureNotice: vi.fn(() => "notice"),
 	raiseTransientNotice: vi.fn(() => "notice"),
 }))
-
-vi.mock("@workspace/ui/components/markdown/code", async (importOriginal) => {
-	const code =
-		await importOriginal<
-			typeof import("@workspace/ui/components/markdown/code")
-		>()
-	const { useMarkdownAnswerActions } = await import(
-		"@workspace/ui/components/markdown/answer-actions"
-	)
-	type HtmlBlockEntry = {
-		renderHtmlBlock?: (source: string) => ReactNode
-	}
-	const htmlSourceOf = ({ node }: MarkdownPreProps) => {
-		const fence = node?.children.find(
-			(child) => child.type === "element" && child.tagName === "code",
-		)
-		if (fence?.type !== "element") return undefined
-		const names = fence.properties?.className
-		if (!Array.isArray(names) || !names.includes("language-html")) {
-			return undefined
-		}
-		return fence.children
-			.map((child) => (child.type === "text" ? child.value : ""))
-			.join("")
-			.replace(/\n$/, "")
-	}
-	const MarkdownPreWithHtmlBlockEntry = (props: MarkdownPreProps) => {
-		const entry = useMarkdownAnswerActions() as HtmlBlockEntry | null
-		const source = htmlSourceOf(props)
-		return entry?.renderHtmlBlock && source !== undefined
-			? entry.renderHtmlBlock(source)
-			: createElement(code.MarkdownPre, props)
-	}
-	return { ...code, MarkdownPre: MarkdownPreWithHtmlBlockEntry }
-})
 
 vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
 

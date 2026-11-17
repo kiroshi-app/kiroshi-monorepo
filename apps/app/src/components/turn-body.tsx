@@ -5,7 +5,6 @@ import {
 	imageMenuActionsFor,
 } from "@workspace/ui/components/image-menu"
 import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
-import type { MarkdownAnswerActions } from "@workspace/ui/components/markdown/answer-actions"
 import type { MarkdownAttachments } from "@workspace/ui/components/markdown/attachments"
 import {
 	type MessageAttachment,
@@ -28,7 +27,6 @@ import { answerTableSaverOf } from "@/lib/chat/save-answer-table"
 import { showsLiveHtml } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
-import { withHtmlBlock } from "@/lib/live-html/live-html-ui-shapes"
 
 type LibraryReferences = Pick<
 	MarkdownProps,
@@ -137,13 +135,8 @@ export const TurnBody = ({
 
 const renderLiveHtmlBlock = (source: string) => <LiveHtmlBlock html={source} />
 
-const withLiveHtmlWhenWritten = (
-	answerActions: MarkdownAnswerActions,
-	isWriting: boolean,
-) =>
-	isWriting || !showsLiveHtml()
-		? answerActions
-		: withHtmlBlock(answerActions, renderLiveHtmlBlock)
+const liveHtmlRendererWhen = (isWriting: boolean) =>
+	isWriting || !showsLiveHtml() ? undefined : renderLiveHtmlBlock
 
 type AnswerBodyProps = MessageContent &
 	LibraryReferences & {
@@ -177,18 +170,16 @@ export const AnswerBody = ({
 
 	return (
 		<TurnBody
-			answerActions={withLiveHtmlWhenWritten(
-				{
-					agentName,
-					onUseValues: actions.insert,
-					onOpenImage: actions.openImage,
-					onOpenWebPage: openWebPage,
-					onDownloadTable: answerTableSaverOf(agentName),
-					imageMenu: actions.imageActions,
-					isSavingImage: actions.imageActions.isSavingImage,
-				},
-				isWriting,
-			)}
+			answerActions={{
+				agentName,
+				onUseValues: actions.insert,
+				onOpenImage: actions.openImage,
+				onOpenWebPage: openWebPage,
+				onDownloadTable: answerTableSaverOf(agentName),
+				imageMenu: actions.imageActions,
+				isSavingImage: actions.imageActions.isSavingImage,
+				renderHtmlBlock: liveHtmlRendererWhen(isWriting),
+			}}
 			attachments={attachments}
 			isWriting={isWriting}
 			renderBoardLink={renderBoardLink}

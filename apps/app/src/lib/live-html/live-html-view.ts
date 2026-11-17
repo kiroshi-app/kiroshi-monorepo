@@ -1,7 +1,9 @@
-import type { LiveHtmlRect } from "@workspace/ui/components/live-html-slot"
+import type {
+	LiveHtmlPlacement,
+	LiveHtmlRect,
+} from "@workspace/ui/components/live-html-slot"
 
 import { commands, type LiveHtmlError } from "@/lib/bindings"
-import type { LiveHtmlGeometry } from "@/lib/live-html/live-html-ui-shapes"
 
 type CommandAnswer = Promise<
 	{ status: "ok"; data: null } | { status: "error"; error: LiveHtmlError }
@@ -16,7 +18,7 @@ type LiveHtmlViewOptions = {
 
 type DrawnView = {
 	isMounted: boolean
-	geometry: LiveHtmlGeometry | null
+	placement: LiveHtmlPlacement | null
 	isHidden: boolean
 }
 
@@ -24,17 +26,17 @@ type Step = () => Promise<void>
 
 const UNMOUNTED: DrawnView = {
 	isMounted: false,
-	geometry: null,
+	placement: null,
 	isHidden: false,
 }
 
 const isSameRect = (a: LiveHtmlRect, b: LiveHtmlRect) =>
 	a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
-const isSameGeometry = (a: LiveHtmlGeometry | null, b: LiveHtmlGeometry) =>
+const isSamePlacement = (a: LiveHtmlPlacement | null, b: LiveHtmlPlacement) =>
 	a !== null && isSameRect(a.rect, b.rect) && isSameRect(a.clip, b.clip)
 
-const isInSight = ({ clip }: LiveHtmlGeometry) =>
+const isInSight = ({ clip }: LiveHtmlPlacement) =>
 	clip.width > 0 && clip.height > 0
 
 const answered = async (answer: CommandAnswer) => {
@@ -48,7 +50,7 @@ export const createLiveHtmlView = ({
 	onLive,
 	onFailure,
 }: LiveHtmlViewOptions) => {
-	let wantedGeometry: LiveHtmlGeometry | null = null
+	let wantedPlacement: LiveHtmlPlacement | null = null
 	let isCovered = false
 	let drawn = UNMOUNTED
 	let hasFailed = false
@@ -70,19 +72,22 @@ export const createLiveHtmlView = ({
 	}
 
 	const mount =
-		(geometry: LiveHtmlGeometry): Step =>
+		(placement: LiveHtmlPlacement): Step =>
 		() =>
-			attempt(commands.liveHtmlMount(id, html, geometry.rect), () => {
-				drawn = { isMounted: true, geometry: null, isHidden: false }
+			attempt(commands.liveHtmlMount(id, html, placement.rect), () => {
+				drawn = { isMounted: true, placement: null, isHidden: false }
 				onLive()
 			})
 
 	const place =
-		(geometry: LiveHtmlGeometry): Step =>
+		(placement: LiveHtmlPlacement): Step =>
 		() =>
-			attempt(commands.liveHtmlPlace(id, geometry.rect, geometry.clip), () => {
-				drawn = { ...drawn, geometry }
-			})
+			attempt(
+				commands.liveHtmlPlace(id, placement.rect, placement.clip),
+				() => {
+					drawn = { ...drawn, placement }
+				},
+			)
 
 	const hide: Step = () =>
 		attempt(commands.liveHtmlHide(id), () => {
@@ -94,22 +99,22 @@ export const createLiveHtmlView = ({
 			drawn = { ...drawn, isHidden: false }
 		})
 
-	const stepTowards = (geometry: LiveHtmlGeometry): Step | null => {
-		const isSeen = isInSight(geometry)
+	const stepTowards = (placement: LiveHtmlPlacement): Step | null => {
+		const isSeen = isInSight(placement)
 		const shouldHide = isCovered || !isSeen
-		if (!drawn.isMounted) return isSeen ? mount(geometry) : null
+		if (!drawn.isMounted) return isSeen ? mount(placement) : null
 		if (shouldHide && !drawn.isHidden) return hide
-		if (isSeen && !isSameGeometry(drawn.geometry, geometry)) {
-			return place(geometry)
+		if (isSeen && !isSamePlacement(drawn.placement, placement)) {
+			return place(placement)
 		}
 		return !shouldHide && drawn.isHidden ? show : null
 	}
 
 	const nextStep = (): Step | null => {
-		if (hasFailed || wantedGeometry === null) {
+		if (hasFailed || wantedPlacement === null) {
 			return drawn.isMounted ? remove : null
 		}
-		return stepTowards(wantedGeometry)
+		return stepTowards(wantedPlacement)
 	}
 
 	const settle = async () => {
@@ -119,8 +124,8 @@ export const createLiveHtmlView = ({
 		isSettling = false
 	}
 
-	const follow = (geometry: LiveHtmlGeometry | null) => {
-		wantedGeometry = geometry
+	const follow = (placement: LiveHtmlPlacement | null) => {
+		wantedPlacement = placement
 		void settle()
 	}
 

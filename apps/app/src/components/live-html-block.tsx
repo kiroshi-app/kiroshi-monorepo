@@ -7,9 +7,13 @@ type LiveHtmlBlockProps = {
 }
 
 export const LiveHtmlBlock = ({ html }: LiveHtmlBlockProps) => {
-	const { status, onRectChange } = useLiveHtmlView(html)
+	const { status, onPlacementChange } = useLiveHtmlView(html)
 
 	return (
-		<LiveHtmlSlot html={html} onRectChange={onRectChange} status={status} />
+		<LiveHtmlSlot
+			html={html}
+			onPlacementChange={onPlacementChange}
+			status={status}
+		/>
 	)
 }
