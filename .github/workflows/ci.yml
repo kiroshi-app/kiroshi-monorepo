@@ -22,7 +22,7 @@ concurrency:
 # pull_request into main or a feature/** branch: changes, lint, vitest on the test files the diff changed against that base, rust on its library tests, verify.
 # pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
 # pull_request labelled ci:ios: ios-build and ios too.
-# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over four jobs, verify.
+# push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over five jobs, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
@@ -284,7 +284,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       IOS_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:

@@ -731,11 +731,16 @@ const balancedShards = (count: number, classes: string[]) => {
 		lightest.tests.push(`KiroshiUITests/${name}`)
 		lightest.seconds += secondsOf(name)
 	}
-	return shards.map((shard) => shard.tests)
+	return shards
 }
 
 export const shardTests = ({ index, count }: Shard, classes: string[]) =>
-	balancedShards(count, classes)[index - 1] ?? []
+	balancedShards(count, classes)[index - 1]?.tests ?? []
+
+export const shardPlannedSeconds = (
+	{ index, count }: Shard,
+	classes: string[],
+) => balancedShards(count, classes)[index - 1]?.seconds ?? 0
 
 export const startedATest = (log: string) =>
 	/^(Test Case '.+'|◇ Test (?!run ).+) started\.$/m.test(log)
