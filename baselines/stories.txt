@@ -287,7 +287,9 @@ conversation-markdown-interactiveview--send-values
 conversation-markdown-interactiveview--thumb-focus-ring
 conversation-markdown-livehtmlslot--height-changes-after-mount
 conversation-markdown-livehtmlslot--live
+conversation-markdown-livehtmlslot--live-dark
 conversation-markdown-livehtmlslot--loading
+conversation-markdown-livehtmlslot--loading-dark
 conversation-markdown-livehtmlslot--scrolled-out-of-view
 conversation-markdown-livehtmlslot--short-page
 conversation-markdown-livehtmlslot--tall-page

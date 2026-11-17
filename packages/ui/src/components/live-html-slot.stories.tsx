@@ -95,6 +95,26 @@ const expectSizedToPage = async (
 		await expect(element.scrollHeight).toBe(element.clientHeight)
 }
 
+const expectUnframed = (element: Element) => {
+	const style = getComputedStyle(element)
+	expect(style.boxShadow).toBe("none")
+	expect(style.outlineStyle).toBe("none")
+	expect(style.borderLeftWidth).toBe("0px")
+	expect(style.borderRightWidth).toBe("0px")
+	expect(style.borderBottomWidth).toBe("0px")
+}
+
+const expectFlushView = async (canvasElement: HTMLElement) => {
+	const slot = within(canvasElement).getByRole("group", { name: "Live view" })
+	const view = viewOf(canvasElement)
+	expectUnframed(slot)
+	const slotBox = slot.getBoundingClientRect()
+	const viewBox = view.getBoundingClientRect()
+	await expect(viewBox.left).toBe(slotBox.left)
+	await expect(viewBox.right).toBe(slotBox.right)
+	await expect(viewBox.bottom).toBe(slotBox.bottom)
+}
+
 const ScrollingReply = (props: LiveHtmlSlotProps) => (
 	<section
 		aria-label="Agent reply"
@@ -147,7 +167,7 @@ export const Live = meta.story({
 		docs: {
 			description: {
 				story:
-					"A live view whose page height is not known yet, in a reply that scrolls: the reserved area holds a 20rem placeholder. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
+					"A live view whose page height is not known yet, in a reply that scrolls: the reserved area holds a 20rem placeholder, edge to edge under the header, with no outline around the slot. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
 			},
 		},
 	},
@@ -158,6 +178,7 @@ export const Live = meta.story({
 
 		const mounted = await reportFollows(args.onPlacementChange, placed)
 		await expect(mounted.clip).toEqual(mounted.rect)
+		await expectFlushView(canvasElement)
 		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
 
 		const reportCount = (args.onPlacementChange as ReturnType<typeof fn>).mock
@@ -187,6 +208,28 @@ export const Live = meta.story({
 		const above = canvas.getByTestId("paragraph-above")
 		above.textContent = `${above.textContent} `.repeat(12)
 		await reportFollows(args.onPlacementChange, placed, resized)
+	},
+})
+
+export const LiveDark = meta.story({
+	globals: { theme: "dark" },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same live slot as `Live` on the dark thread: the reserved area runs edge to edge under the header, with no outline around the slot, and the reported rect and clip match it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const mounted = await reportFollows(args.onPlacementChange, () =>
+			placementIn(view, scroller),
+		)
+		await expect(mounted.clip).toEqual(mounted.rect)
+		await expectFlushView(canvasElement)
 	},
 })
 
@@ -320,7 +363,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The live view is on its way: a skeleton fills the reserved area, the slot reads busy and the header holds no button.",
+					"The live view is on its way: a skeleton fills the reserved area edge to edge, with no outline around the slot, the slot reads busy and the header holds no button.",
 			},
 		},
 	},
@@ -331,7 +374,23 @@ export const Loading = meta.story({
 		await expect(
 			viewOf(canvasElement).querySelector("[data-slot='skeleton']"),
 		).toBeInTheDocument()
+		await expectFlushView(canvasElement)
 		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
+	},
+})
+
+export const LoadingDark = meta.story({
+	args: Loading.input.args,
+	globals: { theme: "dark" },
+	render: Loading.input.render,
+	play: Loading.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same loading slot as `Loading` on the dark thread: the skeleton fills the reserved area edge to edge, with no outline around the slot.",
+			},
+		},
 	},
 })
 
@@ -346,10 +405,13 @@ export const Unavailable = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expect(
 			canvas.getByRole("group", { name: "Code snippet, html" }),
 		).toBeInTheDocument()
+		const fence = canvasElement.querySelector("[data-slot='markdown-fence']")
+		if (!fence) throw new Error("The html fence did not render.")
+		await expect(getComputedStyle(fence).boxShadow).not.toBe("none")
 		await expect(args.onPlacementChange).not.toHaveBeenCalled()
 	},
 })

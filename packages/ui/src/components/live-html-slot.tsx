@@ -163,23 +163,22 @@ const LiveHtmlSlot = ({
 	return (
 		<AnswerCard
 			slot="live-html-slot"
+			isOutlined={false}
 			data-status={status}
 			role="group"
 			aria-label={t("liveHtml.label")}
 			aria-busy={isLoading}
 		>
 			<AnswerCardHeader label={t("liveHtml.label")} />
-			<div className="flex p-2">
-				<div
-					ref={setReserved}
-					data-slot="live-html-slot-view"
-					className={cn("flex-1", height === undefined && "h-80")}
-					style={{ height }}
-				>
-					{isLoading ? (
-						<Skeleton aria-hidden className="size-full rounded-md" />
-					) : null}
-				</div>
+			<div
+				ref={setReserved}
+				data-slot="live-html-slot-view"
+				className={cn(height === undefined && "h-80")}
+				style={{ height }}
+			>
+				{isLoading ? (
+					<Skeleton aria-hidden className="size-full rounded-none" />
+				) : null}
 			</div>
 		</AnswerCard>
 	)

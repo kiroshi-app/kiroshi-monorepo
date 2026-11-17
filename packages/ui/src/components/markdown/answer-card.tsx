@@ -8,6 +8,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type AnswerCardProps = Omit<ComponentProps<"div">, "className" | "slot"> & {
 	slot: string
+	isOutlined?: boolean
 	children: ReactNode
 }
 
@@ -28,7 +29,9 @@ type AnswerCardActionProps = {
 	children: string
 }
 
-const ANSWER_CARD_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-4 overflow-hidden rounded-[1rem] ring-1 ring-border`
+const ANSWER_CARD_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-4 overflow-hidden rounded-[1rem]`
+
+const ANSWER_CARD_OUTLINE_CLASS = "ring-1 ring-border"
 
 const ANSWER_CARD_HEADER_CLASS =
 	"flex h-10 items-center justify-between gap-2 border-answer-card-divider border-b ps-1.5 pe-1"
@@ -36,8 +39,17 @@ const ANSWER_CARD_HEADER_CLASS =
 const ANSWER_CARD_LABEL_CLASS =
 	"min-w-0 truncate ps-2 text-muted-foreground text-xs"
 
-const AnswerCard = ({ slot, children, ...props }: AnswerCardProps) => (
-	<div {...props} data-slot={slot} className={ANSWER_CARD_CLASS}>
+const AnswerCard = ({
+	slot,
+	isOutlined = true,
+	children,
+	...props
+}: AnswerCardProps) => (
+	<div
+		{...props}
+		data-slot={slot}
+		className={cn(ANSWER_CARD_CLASS, isOutlined && ANSWER_CARD_OUTLINE_CLASS)}
+	>
 		{children}
 	</div>
 )
