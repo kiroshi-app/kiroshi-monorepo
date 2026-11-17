@@ -27,6 +27,7 @@ final class CompanionPictures {
             let answer = try await connection.call("relay_avatar", args: PictureArgs(file: file))
             pictures[file] = try await Self.picture(of: answer)
             settled.insert(file)
+        } catch is CancellationError {
         } catch let error as RelayCallError {
             CompanionAvatarEngine.log.info(
                 "The picture \(file) wasn't fetched: \(String(describing: error))")
