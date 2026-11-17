@@ -485,7 +485,6 @@ struct CheckRun {
 	name: String,
 	status: String,
 	conclusion: Option<String>,
-	started_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1157,16 +1156,12 @@ fn latest_by_name(runs: &[CheckRun]) -> Vec<&CheckRun> {
 	let mut latest: Vec<&CheckRun> = Vec::new();
 	for run in runs {
 		match latest.iter_mut().find(|held| held.name == run.name) {
-			Some(held) if started_order(run) > started_order(held) => *held = run,
+			Some(held) if run.id > held.id => *held = run,
 			Some(_) => {}
 			None => latest.push(run),
 		}
 	}
 	latest
-}
-
-fn started_order(run: &CheckRun) -> (Option<&str>, u64) {
-	(run.started_at.as_deref(), run.id)
 }
 
 fn red(conclusion: Option<&str>) -> bool {
@@ -2418,6 +2413,16 @@ mod tests {
 
 		assert_eq!(settled.checks, Checks::Passed);
 		assert!(settled.failed.is_empty());
+	}
+
+	#[test]
+	fn a_newer_queued_run_not_yet_started_reads_the_checks_as_pending() {
+		let settled = concluded(&read_runs(json!({ "check_runs": [
+			{ "id": 1, "name": "find", "status": "completed", "conclusion": "success", "started_at": "2026-11-17T11:41:16Z" },
+			{ "id": 2, "name": "find", "status": "queued", "conclusion": null, "started_at": null },
+		] })));
+
+		assert_eq!(settled.checks, Checks::Pending);
 	}
 
 	#[test]
