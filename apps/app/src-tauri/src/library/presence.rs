@@ -13,7 +13,7 @@ use super::canvas::a_board;
 use super::contract::{
 	LibraryDocumentPresence, LibraryError, LibraryPresenceAt, LibraryWriter, LibraryWriterKind,
 };
-use super::{a_document, decoded_content, undecodable};
+use super::{a_document, an_image, decoded_content, undecodable};
 use crate::db::repositories::messages::AccountAuthor;
 use crate::events;
 
@@ -278,6 +278,7 @@ fn placed(
 				_ => Ok(()),
 			}
 		}
+		LibraryPresenceAt::Image => an_image(root, space_id, name),
 	}
 }
 

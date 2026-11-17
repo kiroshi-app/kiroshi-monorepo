@@ -241,7 +241,7 @@ async fn a_write_lands_in_more_than_one_update_with_the_caret_after_what_it_wrot
 		.filter_map(|presence| presence.writers.into_iter().next())
 		.filter_map(|writer| match writer.at {
 			LibraryPresenceAt::Text { anchor } => Some(anchor),
-			LibraryPresenceAt::Board { .. } => None,
+			LibraryPresenceAt::Board { .. } | LibraryPresenceAt::Image => None,
 		})
 		.collect();
 	let held = Doc::new();
@@ -1645,6 +1645,99 @@ async fn a_board_position_with_an_oversized_node_is_refused_and_publishes_nothin
 	tokio::time::sleep(BOARD_PACE_PASSED).await;
 
 	assert_eq!(positions(&all_of(&presences)), [vec![on_the_board(0, 0, Some(&"n".repeat(256)))]]);
+}
+
+const IMAGE: &str = "cover.png";
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_image_position_shared_through_the_command_is_published_as_its_kind_alone() {
+	let builder = mock_builder().invoke_handler(crate::commands::invoke_handler());
+	let (app, root) = a_host_built("share-image-presence", builder).await;
+	put_bytes(&root, IMAGE, &png_of(4));
+	let window = a_window_of(&app);
+	let presences = heard::<Value>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+
+	invoked_with(&window, IMAGE, json!({ "kind": "image" })).expect("the image position is seated");
+
+	let published = presences.recv_timeout(Duration::from_secs(5)).expect("the image is published");
+	assert_eq!(published["name"], IMAGE);
+	assert_eq!(published["writers"][0]["kind"], "person");
+	assert_eq!(published["writers"][0]["at"], json!({ "kind": "image" }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_member_image_position_is_published_at_once_without_the_board_pace() {
+	let (app, root) = a_host("image-unpaced").await;
+	put_bytes(&root, IMAGE, &png_of(4));
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+
+	shared_by_a_member(&app, &root, IMAGE, LibraryPresenceAt::Image)
+		.expect("the image position is seated");
+
+	let published = all_of(&presences);
+	assert_eq!(positions(&published), [vec![LibraryPresenceAt::Image]]);
+	assert_eq!(named(&published[0].writers), [(LibraryWriterKind::Member, Some("Ana"))]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_image_position_on_a_document_a_board_or_a_missing_item_is_refused_and_publishes_nothing(
+) {
+	let (app, root) = a_host("image-wrong-kind").await;
+	put(&root, SPACE, "notes.md", "Notes.");
+	put(&root, SPACE, BOARD, EMPTY_BOARD);
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let in_the_image = |name: &str| shared_by_a_member(&app, &root, name, LibraryPresenceAt::Image);
+
+	let refused = [in_the_image("notes.md"), in_the_image(BOARD), in_the_image("gone.png")];
+	tokio::time::sleep(BOARD_PACE_PASSED).await;
+
+	assert_eq!(
+		refused,
+		[
+			Err(LibraryError::NotAnImage { name: "notes.md".to_owned() }),
+			Err(LibraryError::NotAnImage { name: BOARD.to_owned() }),
+			Err(LibraryError::Missing { name: "gone.png".to_owned() }),
+		]
+	);
+	assert!(all_of(&presences).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_member_image_position_lapses_after_its_lease() {
+	let (app, root) = a_host("image-lease").await;
+	put_bytes(&root, IMAGE, &png_of(4));
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+
+	shared_by_a_member(&app, &root, IMAGE, LibraryPresenceAt::Image)
+		.expect("the image position is seated");
+	tokio::time::sleep(Duration::from_secs(29)).await;
+	assert_eq!(positions(&all_of(&presences)), [vec![LibraryPresenceAt::Image]]);
+
+	tokio::time::sleep(Duration::from_secs(2)).await;
+
+	assert_eq!(positions(&all_of(&presences)), [vec![]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_member_image_position_sent_again_renews_its_lease_in_one_seat() {
+	let (app, root) = a_host("image-renewed").await;
+	put_bytes(&root, IMAGE, &png_of(4));
+	let presences =
+		heard::<LibraryDocumentPresence>(&app, events::LIBRARY_DOCUMENT_PRESENCE.name());
+	let shared = || shared_by_a_member(&app, &root, IMAGE, LibraryPresenceAt::Image);
+
+	shared().expect("the image position is seated");
+	tokio::time::sleep(Duration::from_secs(20)).await;
+	shared().expect("the image position is renewed");
+	tokio::time::sleep(Duration::from_secs(20)).await;
+	assert!(all_of(&presences).iter().all(|presence| presence.writers.len() == 1));
+
+	tokio::time::sleep(Duration::from_secs(15)).await;
+
+	assert_eq!(positions(&all_of(&presences)), [vec![]]);
 }
 
 #[test]

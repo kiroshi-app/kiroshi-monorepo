@@ -206,6 +206,15 @@ fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryErro
 	}
 }
 
+fn an_image(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
+	match resolve(root, space_id, name)?.accepted {
+		AcceptedType::Image { .. } => Ok(()),
+		AcceptedType::Document(_) | AcceptedType::Board => {
+			Err(LibraryError::NotAnImage { name: name.to_owned() })
+		}
+	}
+}
+
 pub(crate) fn held_document<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
