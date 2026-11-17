@@ -1456,3 +1456,137 @@ describe("the document bar", () => {
 		expect(documentOpen()).toBeInstanceOf(HTMLElement)
 	})
 })
+
+describe("the presence of an open Library image", () => {
+	const CHART = itemNamed("chart.png", "image")
+	const MEMBER_LEASE_MS = 30_000
+
+	const sharesOn = (name: string) =>
+		callsOf("library_share_presence").filter(
+			(args) => (args as NamedCall).name === name,
+		)
+
+	const imageSeatOn = (name: string) => ({
+		spaceId: SPACE_ID,
+		name,
+		at: { kind: "image" },
+	})
+
+	const clearedSeatOn = (name: string) => ({
+		spaceId: SPACE_ID,
+		name,
+		at: null,
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it.each(SPACES)(
+		"is shared on the image the lightbox opens, on %s",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await openImage()
+
+			await waitFor(() =>
+				expect(sharesOn("diagram.png")).toEqual([imageSeatOn("diagram.png")]),
+			)
+		},
+	)
+
+	it("is renewed before the member lease ends while the image stays open", async () => {
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: true })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS - 1)
+		})
+
+		expect(sharesOn("diagram.png").length).toBeGreaterThan(1)
+		expect(sharesOn("diagram.png")).not.toContainEqual(
+			clearedSeatOn("diagram.png"),
+		)
+	})
+
+	it("moves to the next image and clears the one left", async () => {
+		harness.listed = [DOCUMENT, IMAGE, CHART]
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+
+		await press(
+			screen.getByRole("button", { name: common("library.lightbox.next") }),
+		)
+
+		await waitFor(() =>
+			expect(sharesOn("chart.png")).toEqual([imageSeatOn("chart.png")]),
+		)
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS)
+		})
+		expect(sharesOn("diagram.png")).toHaveLength(2)
+	})
+
+	it("is cleared when the lightbox closes, and no longer renewed", async () => {
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: false })
+
+		await press(await openImage())
+
+		await waitFor(() => expect(lightboxBack()).toBeNull())
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS)
+		})
+		expect(sharesOn("diagram.png")).toHaveLength(2)
+	})
+
+	it("is cleared when the screen unmounts with the image open", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		cleanup()
+
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+	})
+
+	it("is shared once however often the screen renders", async () => {
+		const { rerender } = await renderLibraryScreen({ isJoined: false })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		rerender()
+		rerender()
+
+		expect(sharesOn("diagram.png")).toEqual([imageSeatOn("diagram.png")])
+		expect(lightboxBack()).toBeInstanceOf(HTMLElement)
+	})
+
+	it("is logged when the host refuses it, and the image stays open with no notice", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		harness.refused = "library_share_presence"
+		await renderLibraryScreen({ isJoined: true })
+
+		await openImage()
+
+		await waitFor(() => expect(logged).toHaveBeenCalled())
+		expect(lightboxBack()).toBeInstanceOf(HTMLElement)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+	})
+})

@@ -1889,3 +1889,76 @@ describe("a gallery in a joined Space", () => {
 		)
 	})
 })
+
+const SOFA_IMAGE = "sofa-green.jpg"
+
+const lookingAtImage = (writer: LibraryWriter): LibraryWriter => ({
+	...writer,
+	at: { kind: "image" },
+})
+
+const peopleInLightboxBar = () =>
+	[
+		...document.querySelectorAll(
+			"[data-slot='library-lightbox'] [data-slot='library-document-people'] [role='img']",
+		),
+	].map((person) => person.getAttribute("aria-label"))
+
+const openImageTile = async (name: string) => {
+	const tile = await waitFor(() => {
+		const found = screen
+			.getAllByRole("button")
+			.find((button) => button.textContent?.includes(name))
+		expect(found).toBeInstanceOf(HTMLElement)
+		return found as HTMLElement
+	})
+	await act(async () => {
+		fireEvent.click(tile, { detail: 1 })
+	})
+	await waitFor(() =>
+		expect(
+			document.querySelector("[data-slot='library-lightbox']"),
+		).toBeInstanceOf(HTMLElement),
+	)
+	await waitFor(() => expect(presenceListenerCount()).toBe(1))
+}
+
+describe.each([
+	{
+		place: "on the host",
+		isJoined: false,
+		hostId: null,
+		own: writerOf(OWN_WINDOW, "person", "", "Me"),
+		other: writerOf("account-ines", "member", "", "Ines"),
+	},
+	{
+		place: "in a joined Space",
+		isJoined: true,
+		hostId: "host-1",
+		own: writerOf(OWN_ACCOUNT, "member", "", "Me"),
+		other: writerOf(OWN_WINDOW, "person", "", "Host"),
+	},
+])(
+	"the bar of an open Library image $place",
+	({ isJoined, hostId, own, other }) => {
+		it("shows the avatar of another person who has the image open, never the own seat", async () => {
+			host.images = [imageNamed(SOFA_IMAGE)]
+			await renderLibraryScreen(isJoined)
+			await openImageTile(SOFA_IMAGE)
+
+			announcePresence(SOFA_IMAGE, [own, other].map(lookingAtImage), hostId)
+
+			await waitFor(() => expect(peopleInLightboxBar()).toEqual([other.name]))
+		})
+
+		it("shows no avatar while nobody else has the image open", async () => {
+			host.images = [imageNamed(SOFA_IMAGE)]
+			await renderLibraryScreen(isJoined)
+			await openImageTile(SOFA_IMAGE)
+
+			announcePresence(SOFA_IMAGE, [lookingAtImage(own)], hostId)
+
+			expect(peopleInLightboxBar()).toEqual([])
+		})
+	},
+)

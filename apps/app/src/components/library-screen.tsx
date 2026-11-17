@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 
+import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
@@ -52,6 +53,7 @@ import { useLibraryDocumentComments } from "@/lib/library/use-library-document-c
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
 import { useLibraryImageComments } from "@/lib/library/use-library-image-comments"
+import { useLibraryImagePresence } from "@/lib/library/use-library-image-presence"
 import {
 	useLibraryImageResolver,
 	useLibraryImageSources,
@@ -497,6 +499,11 @@ export const LibraryScreen = ({
 		name: images[imageIndex]?.id,
 		people: commentPeople,
 	})
+	const imagePeople = useLibraryImagePresence({
+		spaceId,
+		name: images[imageIndex]?.id,
+		isJoined,
+	})
 
 	const close = () => {
 		setHeldDraft(null)
@@ -679,6 +686,9 @@ export const LibraryScreen = ({
 						onPrevious={() => openImageAt(imageIndex - 1)}
 						onSaveToLibrary={saveToLibrary}
 						position={imageIndex + 1}
+						presence={
+							<LibraryDocumentPresence people={imagePeople} writers={[]} />
+						}
 					/>
 					<LibraryNewDocumentDialog
 						defaultTemplate={pickedTemplate ?? undefined}
