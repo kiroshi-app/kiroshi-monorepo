@@ -11187,11 +11187,11 @@ fn a_send_repeated_after_further_answers_is_refused_and_runs_the_agents_of_its_t
 
 		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
 
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
 		assert_eq!(
 			status_and_body(&repeated),
 			(json!(410), json!(keyed_calls::ANSWER_NO_LONGER_KEPT))
 		);
-		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
 	});
 }
 
@@ -11218,10 +11218,10 @@ fn a_group_created_again_after_further_answers_is_refused_and_left_once() {
 
 		let repeated = host.answered(keyed(a_group_created(2), "group-1")).await;
 
+		assert_eq!(host.groups(), 1);
 		assert_eq!(
 			status_and_body(&repeated),
 			(json!(410), json!(keyed_calls::ANSWER_NO_LONGER_KEPT))
 		);
-		assert_eq!(host.groups(), 1);
 	});
 }
