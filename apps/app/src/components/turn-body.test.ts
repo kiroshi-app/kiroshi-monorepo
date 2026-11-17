@@ -30,12 +30,17 @@ import {
 } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 
-const host = vi.hoisted(() => ({ saveCsvFile: vi.fn() }))
+const host = vi.hoisted(() => ({
+	saveCsvFile: vi.fn(),
+	liveHtml: vi.fn(),
+	isMacOs: false,
+}))
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@tauri-apps/api/core")>()),
 	invoke: async (command: string, args: unknown) => {
 		if (command === "save_csv_file") return host.saveCsvFile(args)
+		if (command.startsWith("live_html_")) return host.liveHtml(command, args)
 		throw new Error(`unanswered host call ${command}`)
 	},
 }))
@@ -53,6 +58,7 @@ vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
 vi.mock("@/lib/host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host")>()),
 	assetSrc: (path: string) => `host-file://${encodeURIComponent(path)}`,
+	showsLiveHtml: () => host.isMacOs,
 }))
 
 afterEach(() => {
@@ -61,6 +67,8 @@ afterEach(() => {
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.mocked(raiseTransientNotice).mockClear()
 	host.saveCsvFile.mockReset()
+	host.liveHtml.mockReset()
+	host.isMacOs = false
 })
 
 const fenced = (label: string, body: string) =>
@@ -527,5 +535,172 @@ describe("a stored message carrying the attachments block", () => {
 		expect(attachmentChipOf(CITED_FILE)).toBeTruthy()
 		expect(screen.getByText("Have a look")).toBeTruthy()
 		expect(screen.queryByText(/Attached to this message/)).toBeNull()
+	})
+})
+
+const PAGE = "<h1>Lisbon by night</h1>"
+
+const HTML_REPLY = fenced("html", PAGE)
+
+const LIVE_VIEW_FAILED = "Couldn’t show the live view. Here’s the code instead."
+
+const SLOT_VIEW_BOX = { x: 40, y: 120, width: 480, height: 320 }
+
+const WINDOW_BOX = { x: 0, y: 0, width: 1280, height: 800 }
+
+const boxOf = (element: HTMLElement) =>
+	DOMRect.fromRect(
+		element.dataset.slot === "live-html-slot-view" ? SLOT_VIEW_BOX : WINDOW_BOX,
+	)
+
+const layOutSlotViews = () => {
+	vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+		function (this: HTMLElement) {
+			return boxOf(this)
+		},
+	)
+	vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(
+		WINDOW_BOX.width,
+	)
+	vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+		WINDOW_BOX.height,
+	)
+}
+
+const renderReply = (text: string, isWriting = false) =>
+	render(
+		createElement(
+			MarkdownSizeContext,
+			{ value: "answer" },
+			createElement(
+				AnswerActionsContext,
+				{ value: actionsSpy() },
+				createElement(AnswerBody, {
+					attachments: [],
+					text,
+					agentName: "Ada",
+					isWriting,
+				}),
+			),
+		),
+	)
+
+const liveHtmlCallsOf = (command: string) =>
+	host.liveHtml.mock.calls.flatMap(([called, args]) =>
+		called === command ? [args] : [],
+	)
+
+const htmlCodeBlock = () =>
+	screen.queryByRole("group", { name: "Code snippet, html" })
+
+const liveView = () => screen.queryByRole("group", { name: "Live view" })
+
+const showOnMacOs = () => {
+	host.isMacOs = true
+	host.liveHtml.mockResolvedValue(null)
+	layOutSlotViews()
+}
+
+describe("an html block of an agent reply", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	it("shows the page live at the place of its slot once the reply is written", async () => {
+		showOnMacOs()
+
+		renderReply(HTML_REPLY)
+
+		expect(liveView()).toBeTruthy()
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_place")).toEqual([
+				{
+					id: expect.any(String),
+					rectangle: SLOT_VIEW_BOX,
+					clip: SLOT_VIEW_BOX,
+				},
+			]),
+		)
+		expect(liveHtmlCallsOf("live_html_mount")).toEqual([
+			{ id: expect.any(String), html: PAGE, rectangle: SLOT_VIEW_BOX },
+		])
+		expect(htmlCodeBlock()).toBeNull()
+	})
+
+	it.each([
+		["while the reply is writing", true, true],
+		["off macOS", false, false],
+	])("stays a code block %s", (_case, isMacOs, isWriting) => {
+		showOnMacOs()
+		host.isMacOs = isMacOs
+
+		renderReply(HTML_REPLY, isWriting)
+
+		expect(htmlCodeBlock()).toBeTruthy()
+		expect(liveView()).toBeNull()
+		expect(host.liveHtml).not.toHaveBeenCalled()
+	})
+
+	it("raises a notice and falls back to the code block when a command fails", async () => {
+		showOnMacOs()
+		host.liveHtml.mockRejectedValue({ kind: "mainWindowMissing" })
+
+		renderReply(HTML_REPLY)
+
+		await waitFor(() => expect(htmlCodeBlock()).toBeTruthy())
+		expect(liveView()).toBeNull()
+		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: LIVE_VIEW_FAILED }),
+		)
+	})
+
+	it("gives two identical blocks a view each", async () => {
+		showOnMacOs()
+
+		renderReply(`${HTML_REPLY}\n\n${HTML_REPLY}`)
+
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_mount")).toHaveLength(2),
+		)
+		const [first, second] = liveHtmlCallsOf("live_html_mount")
+		expect(first.id).not.toBe(second.id)
+	})
+
+	it("removes its view when the reply leaves the screen", async () => {
+		showOnMacOs()
+		const { unmount } = renderReply(HTML_REPLY)
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_place")).toHaveLength(1),
+		)
+		const [{ id }] = liveHtmlCallsOf("live_html_mount")
+
+		unmount()
+
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_remove")).toEqual([{ id }]),
+		)
+	})
+
+	it("hides its view while a dialog is open, and shows it once it closes", async () => {
+		showOnMacOs()
+		renderReply(HTML_REPLY)
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_place")).toHaveLength(1),
+		)
+		const [{ id }] = liveHtmlCallsOf("live_html_mount")
+		const dialog = document.createElement("div")
+		dialog.setAttribute("role", "dialog")
+		dialog.setAttribute("data-open", "")
+
+		document.body.append(dialog)
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_hide")).toEqual([{ id }]),
+		)
+		dialog.remove()
+
+		await waitFor(() =>
+			expect(liveHtmlCallsOf("live_html_show")).toEqual([{ id }]),
+		)
 	})
 })

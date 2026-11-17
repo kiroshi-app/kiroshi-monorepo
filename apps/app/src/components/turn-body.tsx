@@ -11,6 +11,7 @@ import {
 	MessageAttachments,
 } from "@workspace/ui/components/message-attachments"
 
+import { LiveHtmlBlock } from "@/components/live-html-block"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
@@ -23,6 +24,7 @@ import {
 	resolveCitedImage,
 } from "@/lib/chat/message-attachments"
 import { answerTableSaverOf } from "@/lib/chat/save-answer-table"
+import { showsLiveHtml } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 import { openWebPage } from "@/lib/links/open-web-page"
 
@@ -131,6 +133,11 @@ export const TurnBody = ({
 	)
 }
 
+const renderLiveHtmlBlock = (source: string) => <LiveHtmlBlock html={source} />
+
+const liveHtmlRendererWhen = (isWriting: boolean) =>
+	isWriting || !showsLiveHtml() ? undefined : renderLiveHtmlBlock
+
 type AnswerBodyProps = MessageContent &
 	LibraryReferences & {
 		agentName: string
@@ -171,6 +178,7 @@ export const AnswerBody = ({
 				onDownloadTable: answerTableSaverOf(agentName),
 				imageMenu: actions.imageActions,
 				isSavingImage: actions.imageActions.isSavingImage,
+				renderHtmlBlock: liveHtmlRendererWhen(isWriting),
 			}}
 			attachments={attachments}
 			isWriting={isWriting}
