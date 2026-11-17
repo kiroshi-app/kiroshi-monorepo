@@ -118,7 +118,9 @@ final class MissionThreadStore {
         let turnId = repeated?.turnId ?? newId()
         lastSentId = id
         isSending = true
-        let task = Task { await deliver(id, turnId: turnId, through: relay) }
+        let task = Task {
+            await deliver(id, turnId: turnId, storeCallKey: repeated?.storeCallKey, through: relay)
+        }
         sending = task
         return task
     }
@@ -137,19 +139,23 @@ final class MissionThreadStore {
             time: ConversationTime(now: now(), calendar: calendar), authorship: authorship)
     }
 
-    private func deliver(_ id: String, turnId: String, through relay: MissionsRelay) async {
+    private func deliver(
+        _ id: String, turnId: String, storeCallKey kept: String?, through relay: MissionsRelay
+    ) async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let picked = attachments
+        let storeCallKey = picked.isEmpty ? nil : kept ?? newId()
         sendProblem = nil
         refusedSend = nil
         defer { isSending = false }
         do {
             let sentAt = now()
             var content = text
-            if !picked.isEmpty {
+            if let storeCallKey {
                 let paths = try await relay.store(
                     await ConversationAttachments.encoding(
-                        picked, in: mission.threadConversationId))
+                        picked, in: mission.threadConversationId),
+                    callKey: storeCallKey)
                 content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
             }
             let message = MissionAnswer.Message(
@@ -177,7 +183,8 @@ final class MissionThreadStore {
                 case RelayCallError.hostOffline: .offline
                 default: .couldNotSend
                 }
-            refusedSend = RefusedSend(id: id, turnId: turnId, text: text, picked: picked)
+            refusedSend = RefusedSend(
+                id: id, turnId: turnId, text: text, picked: picked, storeCallKey: storeCallKey)
         }
     }
 
@@ -276,6 +283,7 @@ private struct RefusedSend {
     let turnId: String
     let text: String
     let picked: [PickedAttachment]
+    let storeCallKey: String?
 }
 
 extension MissionThreadStore: ThreadModel {
