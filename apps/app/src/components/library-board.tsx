@@ -49,7 +49,10 @@ type LibraryBoardProps = {
 	name: string
 	title: string
 	summary: LibraryBoardSummary | undefined
+	detail: string | undefined
 	onBack: () => void
+	onDownload: () => void
+	onCopy: () => Promise<void>
 	onDelete: () => void
 }
 
@@ -156,7 +159,10 @@ export const LibraryBoard = ({
 	name,
 	title,
 	summary,
+	detail,
 	onBack,
+	onDownload,
+	onCopy,
 	onDelete,
 }: LibraryBoardProps) => {
 	const board = useLibraryBoardSession(spaceId, name)
@@ -188,8 +194,11 @@ export const LibraryBoard = ({
 					comments={comments.bar}
 					dragRegion="deep"
 					item={{ name: title }}
+					meta={detail}
 					onBack={onBack}
+					onCopy={onCopy}
 					onDelete={onDelete}
+					onDownload={onDownload}
 					presence={
 						<LibraryDocumentPresence
 							activity="drawing"

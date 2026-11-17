@@ -29,6 +29,7 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
+	detailOf,
 	documentFormatOf,
 	documentNamedAs,
 	matchesQuery,
@@ -190,11 +191,13 @@ const openingStatusOf = (read: OpeningRead) => {
 
 type OpenedBoard = {
 	summary: LibraryBoardSummary | undefined
+	detail: string | undefined
 	hasFailedToRead: boolean
 }
 
 const NO_OPENED_BOARD: OpenedBoard = {
 	summary: undefined,
+	detail: undefined,
 	hasFailedToRead: false,
 }
 
@@ -207,6 +210,7 @@ const openedBoardOf = (
 	}
 	return {
 		summary: library.summaryOf(listed),
+		detail: detailOf(listed, library.readAt),
 		hasFailedToRead: library.hasSummaryFailed(listed),
 	}
 }
@@ -266,11 +270,14 @@ type LibraryOpeningStateProps = {
 	commentPeople: LibraryCommentPeople
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
+	boardDetail: string | undefined
 	isMissing: boolean
 	hasFailedToRead: boolean
 	skeleton: ReactNode
 	onCloseTab?: () => void
 	onBackToLibrary: () => void
+	onDownload: () => void
+	onCopy: () => Promise<void>
 	onDelete: () => void
 }
 
@@ -282,7 +289,10 @@ type LibraryBoardOpeningProps = Pick<
 	| "commentPeople"
 	| "opening"
 	| "boardSummary"
+	| "boardDetail"
 	| "onBackToLibrary"
+	| "onDownload"
+	| "onCopy"
 	| "onDelete"
 >
 
@@ -293,17 +303,23 @@ const LibraryBoardOpening = ({
 	commentPeople,
 	opening: { name },
 	boardSummary,
+	boardDetail,
 	onBackToLibrary,
+	onDownload,
+	onCopy,
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
 		bots={bots}
 		commentPeople={commentPeople}
+		detail={boardDetail}
 		isJoined={isJoined}
 		key={name}
 		name={name}
 		onBack={onBackToLibrary}
+		onCopy={onCopy}
 		onDelete={onDelete}
+		onDownload={onDownload}
 		spaceId={spaceId}
 		summary={boardSummary}
 		title={titleOf({ kind: "board", name })}
@@ -408,7 +424,10 @@ export const LibraryScreen = ({
 	const editor = useRef<LibraryDocumentEditorHandle>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const createBoard = useCreateLibraryBoard(spaceId)
-	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
+	const { importingItems, importDropped, importFromPicker } = useLibraryImports(
+		spaceId,
+		isJoined,
+	)
 	const toShown = (item: LibraryItem) =>
 		toShownItem(
 			item,
@@ -600,8 +619,10 @@ export const LibraryScreen = ({
 	}
 
 	if (opening && !openingWait.isImageShown) {
+		const openingItem = { id: opening.name }
 		return (
 			<LibraryOpeningState
+				boardDetail={openedBoard.detail}
 				boardSummary={openedBoard.summary}
 				bots={bots}
 				commentPeople={commentPeople}
@@ -610,7 +631,9 @@ export const LibraryScreen = ({
 				isMissing={isMissing}
 				onBackToLibrary={close}
 				onCloseTab={onCloseTab}
-				onDelete={() => deleteAndClose({ id: opening.name })}
+				onCopy={() => copyAndWait(openingItem)}
+				onDelete={() => deleteAndClose(openingItem)}
+				onDownload={() => save(openingItem)}
 				opening={opening}
 				skeleton={openingWait.skeleton}
 				spaceId={spaceId}
@@ -628,6 +651,7 @@ export const LibraryScreen = ({
 			onCopy={copy}
 			onDelete={remove}
 			onDownload={save}
+			onImport={importFromPicker}
 			onNewBoard={newBoard}
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpen={openItem}
