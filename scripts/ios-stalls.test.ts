@@ -105,7 +105,7 @@ const ASSERTION_FAILURE = [
 
 const jobLog = (...tests: string[][]) =>
 	[
-		"﻿2026-11-17T12:08:26.2510880Z Current runner version: '2.338.2'",
+		"\uFEFF2026-11-17T12:08:26.2510880Z Current runner version: '2.338.2'",
 		at(
 			"12:14:57.300",
 			"KiroshiUITests-Runner[8166:30311] [Default] Running tests...",

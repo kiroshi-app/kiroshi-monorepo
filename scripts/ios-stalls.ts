@@ -5,7 +5,8 @@ const TIMED_OUT_QUERY = "Timed out while evaluating UI query"
 const QUERY_STEP =
 	/^(Checking existence of|Find the|Get number of matches for|Get all elements|Requesting snapshot)/
 
-const TIMESTAMPED = /^﻿?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (.*)$/
+const TIMESTAMPED =
+	/^\uFEFF?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) (.*)$/
 const TEST_STARTED = /^Test Case '-\[(\S+) (\S+)\]' started\.$/
 const TEST_ENDED =
 	/^Test Case '-\[(\S+) (\S+)\]' (?:passed|failed|skipped) \((\d+(?:\.\d+)?) seconds\)\.$/
@@ -213,13 +214,13 @@ const listShardJobs = async (runId: number) => {
 	)
 }
 
-const seconds = (value: number | undefined) =>
+const shownSeconds = (value: number | undefined) =>
 	value === undefined ? "?" : `${Math.round(value)}s`
 
 const describeJob = async (job: ApiJob, event: string) => {
 	const shard = SHARD_JOB.exec(job.name)?.[1]
 	const setup = setupSteps(job.steps)
-		.map(({ name, seconds: took }) => `${name} ${seconds(took)}`)
+		.map(({ name, seconds }) => `${name} ${shownSeconds(seconds)}`)
 		.join("; ")
 	const head = `${job.run_id} | ${event} | ${shard} | ${job.conclusion}`
 	try {
@@ -230,7 +231,7 @@ const describeJob = async (job: ApiJob, event: string) => {
 		])
 		const environment = readJobEnvironment(log)
 		const stalls = findStalls(log)
-		return `${head} | ${environment.imageVersion ?? "?"} | ${environment.xcodeVersion ?? "?"} | ${environment.simulatorRuntime ?? "?"} | ${setup} | ${seconds(environment.gateToFirstTestSeconds)} | ${stalls.length} | ${stalls[0] ? seconds(stalls[0].offsetSeconds) : "-"}`
+		return `${head} | ${environment.imageVersion ?? "?"} | ${environment.xcodeVersion ?? "?"} | ${environment.simulatorRuntime ?? "?"} | ${setup} | ${shownSeconds(environment.gateToFirstTestSeconds)} | ${stalls.length} | ${stalls[0] ? shownSeconds(stalls[0].offsetSeconds) : "-"}`
 	} catch (error) {
 		return `${head} | log unreadable: ${error instanceof Error ? error.message : String(error)} | ${setup}`
 	}
