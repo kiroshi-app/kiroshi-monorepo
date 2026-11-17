@@ -19,6 +19,7 @@ import { onboardingStepOf } from "@/lib/onboarding/onboarding-flow-controller"
 import { onboardingScreenStepOf } from "@/lib/onboarding/onboarding-screen"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
+import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 import { haveLaunchReadsSettled } from "@/lib/workspace/launch-reads"
 import { useWorkspaceAssembly } from "@/lib/workspace/use-workspace-assembly"
 import { WorkspaceContext } from "@/lib/workspace/workspace-context"
@@ -49,6 +50,11 @@ export const WorkspaceLayout = () => {
 		rosterView.rosteredSpaceId === scopes.openRowId &&
 		!roster.state.isRosterPending
 
+	const leaveLaunchLoader = () => {
+		setHasLeftLaunchLoader(true)
+		warmCodeHighlighter()
+	}
+
 	useInvokePhaseEnd("boot", hasLeftLaunchLoader ? "startup screen gone" : null)
 	useInvokePhaseEnd(
 		"space switch",
@@ -63,7 +69,7 @@ export const WorkspaceLayout = () => {
 					hasLoadedPreferences: user.state.hasLoaded,
 					roster: roster.state,
 				})}
-				onExitComplete={() => setHasLeftLaunchLoader(true)}
+				onExitComplete={leaveLaunchLoader}
 				onRetry={loadSpaces}
 			/>
 		)
