@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -15,7 +15,7 @@ use wry::http::Request;
 use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
 
 use super::contract::{LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
-use super::measure::{self, PageSize};
+use super::measure::{self, PageSize, SizeReport};
 use super::placement::{ContentView, Frame, Placement};
 use super::watch::Guard;
 use super::ViewToMount;
@@ -202,22 +202,50 @@ fn guarded<R: Runtime>(app: AppHandle<R>, view: ViewToMount) -> WebViewBuilder<'
 }
 
 fn reporting_size<R: Runtime>(app: AppHandle<R>, id: String) -> impl Fn(Request<String>) {
-	let reported = Cell::new(None);
+	let report = Arc::new(Mutex::new(SizeReport::default()));
 	move |message| {
 		let Some(size) = measure::page_size(message.body()) else {
 			return;
 		};
-		let is_mounted = MOUNTED.with_borrow(|mounted| mounted.contains_key(&id));
-		if !is_mounted || reported.get() == Some(size) {
-			return;
-		}
-		reported.set(Some(size));
-		let PageSize { width, height } = size;
-		let measured = LiveHtmlMeasured { id: id.clone(), width, height };
-		if let Err(failure) = events::emit(&app, events::LIVE_HTML_MEASURED, measured) {
-			log::error!("live view {id}: its size reached no window: {failure}");
+		if let Some(size) = locked(&report).posted(size) {
+			emit_and_hold(&app, &id, &report, size);
 		}
 	}
+}
+
+fn emit_and_hold<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	report: &Arc<Mutex<SizeReport>>,
+	size: PageSize,
+) {
+	if !MOUNTED.with_borrow(|mounted| mounted.contains_key(id)) {
+		return;
+	}
+	let PageSize { width, height } = size;
+	let measured = LiveHtmlMeasured { id: id.to_owned(), width, height };
+	if let Err(failure) = events::emit(app, events::LIVE_HTML_MEASURED, measured) {
+		log::error!("live view {id}: its size reached no window: {failure}");
+	}
+	let (app, id, report) = (app.clone(), id.to_owned(), Arc::downgrade(report));
+	tauri::async_runtime::spawn(async move {
+		tokio::time::sleep(measure::REPORT_WINDOW).await;
+		let (on_main, view) = (app.clone(), id.clone());
+		let ended = app.run_on_main_thread(move || {
+			if let Some(report) = report.upgrade() {
+				if let Some(size) = locked(&report).window_ended() {
+					emit_and_hold(&on_main, &id, &report, size);
+				}
+			}
+		});
+		if let Err(failure) = ended {
+			log::error!("live view {view}: its held size was never reported: {failure}");
+		}
+	});
+}
+
+fn locked(report: &Mutex<SizeReport>) -> std::sync::MutexGuard<'_, SizeReport> {
+	report.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn rectangle_below_the_inset(placement: Placement) -> Rect {

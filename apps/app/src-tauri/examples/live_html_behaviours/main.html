@@ -71,9 +71,26 @@
 				</div>`,
 				"setInterval(() => scrollTo(9999, 9999), 50)",
 			)
+			const FLOOD_PAGE = PAGE(
+				"",
+				"const ipc = window.webkit.messageHandlers.ipc; for (let batch = 0; batch < 10; batch++) setTimeout(() => { for (let posted = 0; posted < 1000; posted++) ipc.postMessage(JSON.stringify([480, 200 + batch * 1000 + posted])) }, batch * 100)",
+			)
+			const FLOODED_LAST_HEIGHT = 200 + 9999
+			const VIEWPORT_PAGE = `<!doctype html><html><head><style>body { min-height: 100vh; background: #ff00ff }</style></head><body></body></html>`
+			const TOP_STRIPE = `<div style="height:100px;background:#00ffff"></div><div style="height:2900px;background:#ff00ff"></div>`
+			const SCROLLED_PAGE = PAGE(TOP_STRIPE, "setInterval(() => scrollTo(0, 500), 50)")
+			const SCROLLING_BODY_PAGE = PAGE(
+				`<style>body { overflow: scroll !important; height: 100vh }</style>${TOP_STRIPE}`,
+				"setInterval(() => { document.body.scrollTop = 500 }, 50)",
+			)
 			const NOWHERE = { x: 0, y: 0, width: 0, height: 0 }
 			const TOLERANCE = 3
 			const measurements = []
+			const followed = new Set()
+			const follow = ({ id, width, height }) =>
+				invoke("live_html_place", { id, rectangle: { ...SHOWN, width, height }, clip: null }).catch((failure) =>
+					invoke("finish_run", { failure: `placing ${id} failed: ${JSON.stringify(failure)}` }),
+				)
 			const measuredFor = (id) => measurements.filter((payload) => payload.id === id)
 			const fail = (reason) => {
 				throw reason
@@ -98,11 +115,25 @@
 				expect(sizesOf(id) === JSON.stringify(sizes), `${id} measured ${sizesOf(id)} once settled`)
 			}
 
+			const expectUnscrolled = async (id, html) => {
+				await invoke("live_html_mount", { id, html, rectangle: SHOWN })
+				await until(() => measuredFor(id).length > 0, `${id} was never measured`)
+				const { magenta_drawn_in_window_points: rest, cyan_drawn_in_window_points: top } = await capture(id, SHOWN, null)
+				const drawn = JSON.stringify({ top, rest })
+				expect(top && rest, `${id} drew ${drawn}`)
+				expect(near(top.y, SHOWN.y) && near(top.height, 100), `${id} scrolled: ${drawn}`)
+				expect(near(rest.y, SHOWN.y + 100) && near(rest.height, SHOWN.height - 100), `${id} scrolled: ${drawn}`)
+				await invoke("live_html_remove", { id })
+			}
+
 			const measure = async () => {
 				await invoke("plugin:event|listen", {
 					event: MEASURED_EVENT,
 					target: { kind: "Any" },
-					handler: transformCallback(({ payload }) => measurements.push(payload)),
+					handler: transformCallback(({ payload }) => {
+						measurements.push(payload)
+						if (followed.has(payload.id)) follow(payload)
+					}),
 				})
 				paint(NOWHERE)
 
@@ -144,6 +175,27 @@
 				expect(near(right.x - left.x, SHOWN.width / 2) && near(right.y, left.y), `the wide halves are ${halves}`)
 				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 120]]), `wide measured ${sizesOf("wide")}`)
 				await invoke("live_html_remove", { id: "wide" })
+
+				await invoke("live_html_mount", { id: "flood", html: FLOOD_PAGE, rectangle: SHOWN })
+				const lastFlooded = () => measuredFor("flood").at(-1)?.height
+				await until(() => lastFlooded() === FLOODED_LAST_HEIGHT, `flood last measured ${lastFlooded()}`)
+				await pause(500)
+				const flooded = measuredFor("flood").length
+				expect(flooded <= 11 && lastFlooded() === FLOODED_LAST_HEIGHT, `flood emitted ${flooded}, last ${lastFlooded()}`)
+				await invoke("live_html_remove", { id: "flood" })
+
+				followed.add("viewport")
+				await invoke("live_html_mount", { id: "viewport", html: VIEWPORT_PAGE, rectangle: SHOWN })
+				await until(() => measuredFor("viewport").length > 0, "viewport was never measured")
+				await pause(2000)
+				const settled = sizesOf("viewport")
+				const lastViewport = measuredFor("viewport").at(-1).height
+				expect(measuredFor("viewport").length <= 3, `viewport measured ${settled}`)
+				expect(lastViewport < SHOWN.height + 100, `viewport measured ${settled}`)
+				await invoke("live_html_remove", { id: "viewport" })
+
+				await expectUnscrolled("scrolled", SCROLLED_PAGE)
+				await expectUnscrolled("scrolling-body", SCROLLING_BODY_PAGE)
 			}
 
 			const afterReload = async () => {
