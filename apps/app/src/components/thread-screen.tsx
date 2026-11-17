@@ -493,7 +493,8 @@ const ThreadHeader = ({
 				) : (
 					<HeaderConversationButton
 						{...toConversationLook(thread.conversation)}
-						name={thread.conversation.title}
+						name={thread.conversation.title.trim()}
+						naming={thread.naming}
 						onOpenSettings={() => thread.onOpenSettings(thread.conversation.id)}
 					/>
 				)

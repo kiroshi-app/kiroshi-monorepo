@@ -66,7 +66,7 @@ export const useRosterLists = ({
 	rosterLines,
 	rosterView,
 }: RosterListsInput) => {
-	const { conversationRuntimes, roster } = core
+	const { conversationNamings, conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
 	const { now, rosters, working } = rosterLines
 	const { bots, missions, rosteredSpaceId, soloThreads } = rosterView
@@ -77,6 +77,7 @@ export const useRosterLists = ({
 		hostStates,
 		previews,
 	} = useControllerState(roster.controller)
+	const namingStates = useControllerState(conversationNamings)
 	const personOfSpace = useSpacePersonOf(core)
 
 	const rosterBots = useSharedStructure(
@@ -134,6 +135,7 @@ export const useRosterLists = ({
 									working: conversationWorkers,
 									previews: conversationPreviews,
 									notSent: notSentConversations,
+									namings: namingStates,
 									personOf: personOfSpace(rosteredSpaceId),
 								},
 								now,
@@ -151,6 +153,7 @@ export const useRosterLists = ({
 				conversationWorkers,
 				conversationPreviews,
 				notSentConversations,
+				namingStates,
 				personOfSpace,
 				now,
 				conversationBadges,
@@ -175,6 +178,7 @@ export const useRosterLists = ({
 											working: conversationWorkers,
 											previews: conversationPreviews,
 											notSent: notSentConversations,
+											namings: namingStates,
 											personOf: personOfSpace(spaceId),
 										},
 										now,
@@ -193,6 +197,7 @@ export const useRosterLists = ({
 				conversationWorkers,
 				conversationPreviews,
 				notSentConversations,
+				namingStates,
 				personOfSpace,
 				now,
 				conversationBadges,

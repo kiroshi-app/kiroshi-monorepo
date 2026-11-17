@@ -71,6 +71,18 @@ describe("the face of a tab", () => {
 		},
 	)
 
+	it.each(["pending", "arrived", "failed"] as const)(
+		"carries the %s naming of a room to its tab",
+		(naming) => {
+			const face = tabFaceOf("/?conversation=room", {
+				...SOURCES,
+				conversations: [{ ...ROOM, naming }],
+			})
+
+			expect(face.naming).toBe(naming)
+		},
+	)
+
 	it("draws the glyph of a room with a colour in that hue, with no tile, and follows a change of colour", () => {
 		const iconAt = (color: number) =>
 			rootOf(

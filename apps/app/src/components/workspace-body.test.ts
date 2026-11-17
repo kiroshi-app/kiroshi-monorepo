@@ -341,6 +341,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			bots: [bot],
 			chat: { state: initialChatState, controller: chatController },
 			conversation: selected,
+			conversationNamings: {},
 			conversationRuntimes: runtimes,
 			drafts: createDraftsController(),
 			haveSpacesFailed: false,
@@ -762,6 +763,51 @@ describe("WorkspaceBody frame", () => {
 	})
 })
 
+describe("WorkspaceBody conversation header", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([])
+		listenToMissions.mockResolvedValue(() => undefined)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+	})
+
+	afterEach(cleanup)
+
+	const headerText = () =>
+		document
+			.querySelector('[data-slot="header-conversation-button"]')
+			?.getAttribute("aria-label")
+
+	it("labels a nameless conversation like its row, through pending and arrived", async () => {
+		const workspace = await workspaceOf()
+		const nameless = { ...workspace.conversation, title: "" }
+		const { rerender } = render(workspace.body({ selected: nameless }))
+		await settle()
+		expect(headerText()).toContain("Untitled conversation")
+		expect(headerText()).not.toContain("Nyx")
+
+		rerender(
+			workspace.body({
+				selected: nameless,
+				overrides: { conversationNamings: { [nameless.id]: "pending" } },
+			}),
+		)
+		await settle()
+		expect(headerText()).toContain("New conversation")
+
+		rerender(
+			workspace.body({
+				selected: { ...nameless, title: "Holding the walls" },
+				overrides: { conversationNamings: { [nameless.id]: "arrived" } },
+			}),
+		)
+		await settle()
+		expect(headerText()).toContain("Holding the walls")
+	})
+})
+
 describe("WorkspaceBody Home", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -808,6 +854,7 @@ describe("WorkspaceBody Home", () => {
 							},
 							onSelectAgent: () => undefined,
 							startConversation: () => Promise.resolve(null),
+							beginNaming: () => undefined,
 							discardConversation: () => Promise.resolve(),
 							openConversation: () => undefined,
 						},

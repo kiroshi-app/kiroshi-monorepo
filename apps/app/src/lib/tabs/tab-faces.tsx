@@ -30,13 +30,16 @@ import { APPLICATIONS_ENTRY } from "../navigation/settings-search"
 
 const BOT_AVATAR_SIDE = 16
 
-export type TabFace = Pick<TitleBarTab, "title" | "icon" | "descriptor">
+export type TabFace = Pick<
+	TitleBarTab,
+	"title" | "icon" | "descriptor" | "naming"
+>
 
 export type TabBot = Pick<AppSidebarBot, "id" | "name" | "blot" | "image">
 
 export type TabConversation = Pick<
 	AppSidebarConversation,
-	"id" | "name" | "icon" | "color"
+	"id" | "name" | "icon" | "color" | "naming"
 >
 
 export type TabFaceSources = {
@@ -129,9 +132,11 @@ const conversationFaceOf = ({
 	name,
 	icon,
 	color,
+	naming,
 }: TabConversation): TabFace => ({
 	title: name,
 	icon: <ConversationTabIcon hue={color} icon={icon} />,
+	naming,
 })
 
 const unknownRowFace = (): TabFace => ({

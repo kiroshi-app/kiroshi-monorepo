@@ -24,8 +24,14 @@ import {
 	type ChatController,
 	createChatController,
 } from "../chat/chat-controller"
+import type { ChatDriver } from "../chat/driver"
 import { createConversationController } from "../conversations/conversation-controller"
+import {
+	type ConversationNamings,
+	createConversationNamings,
+} from "../conversations/conversation-namings"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
+import { withFakeHostWrites } from "../conversations/fake-host-writes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { createScriptedDriver } from "../conversations/scripted-driver"
 import type {
@@ -95,6 +101,7 @@ type RosterListsWiring = {
 	roster: RosterController
 	chat?: HeldChat
 	conversationRuntimes?: HeldConversations
+	conversationNamings?: ConversationNamings
 	joinedSpaces?: JoinedSpace[]
 }
 
@@ -104,6 +111,7 @@ const rosterListsOn = ({
 	roster,
 	chat = NO_HELD_CHAT,
 	conversationRuntimes = NO_HELD_CONVERSATIONS,
+	conversationNamings = createConversationNamings(),
 	joinedSpaces = [],
 }: RosterListsWiring) => {
 	const { bots, rosters, soloThreads, spaceRowId } = roster.getState()
@@ -112,6 +120,7 @@ const rosterListsOn = ({
 			account: { state: SIGNED_IN },
 			joinedSpaces: { state: { joinedSpaces } },
 			chat: { controller: chat },
+			conversationNamings,
 			conversationRuntimes,
 			roster: { controller: roster, state: { isRosterPending: false } },
 		},
@@ -397,6 +406,79 @@ describe("useRosterLists", () => {
 			"Older word",
 		])
 		expect(row).toMatchObject({ lastMessage: "Newer word", lastActivityAt: 2 })
+	})
+})
+
+type NamingAnswer = Awaited<ReturnType<ChatDriver["namingFor"]>>
+
+const namelessRoom = async (namingFor: ChatDriver["namingFor"]) => {
+	const store = createFakeTranscriptStore()
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "",
+		botIds: [BOT],
+	})
+	const roster = await loadedRoster(store)
+	const conversationNamings = createConversationNamings()
+	const room = createConversationController(
+		withFakeHostWrites({ ...createScriptedDriver(), namingFor }, store),
+		store,
+		{ onNamed: roster.nameConversation, namings: conversationNamings },
+	)
+	await act(() => room.open(conversation))
+	const result = renderRosterLists({ roster, conversationNamings })
+	const row = () =>
+		result.current.rosterConversations.find(({ id }) => id === conversation.id)
+	return { room, row }
+}
+
+const answeredLater = () => {
+	let answer: (naming: NamingAnswer) => void = () => undefined
+	const namingFor = () =>
+		new Promise<NamingAnswer>((resolve) => {
+			answer = resolve
+		})
+	return { namingFor, answer: (naming: NamingAnswer) => answer(naming) }
+}
+
+describe("the name on the row of a conversation being named", () => {
+	it("reads untitled, never the agent name, while nothing names it", async () => {
+		const { row } = await namelessRoom(answeredLater().namingFor)
+
+		expect(row()).toMatchObject({ name: "", naming: "failed" })
+	})
+
+	it("is pending while naming runs, then shows the title once it arrives", async () => {
+		const naming = answeredLater()
+		const { room, row } = await namelessRoom(naming.namingFor)
+
+		await act(() => room.send("how do we hold the walls?"))
+		await waitFor(() => expect(row()?.naming).toBe("pending"))
+		expect(row()?.name).toBe("")
+
+		act(() => naming.answer({ title: "Holding the walls", icon: null }))
+
+		await waitFor(() =>
+			expect(row()).toMatchObject({
+				name: "Holding the walls",
+				naming: "arrived",
+			}),
+		)
+	})
+
+	it("is pending while naming runs, then fails when the runtime answers no title", async () => {
+		const naming = answeredLater()
+		const { room, row } = await namelessRoom(naming.namingFor)
+
+		await act(() => room.send("how do we hold the walls?"))
+		await waitFor(() => expect(row()?.naming).toBe("pending"))
+
+		act(() => naming.answer(null))
+
+		await waitFor(() =>
+			expect(row()).toMatchObject({ name: "", naming: "failed" }),
+		)
 	})
 })
 
