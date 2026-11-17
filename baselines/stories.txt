@@ -379,8 +379,11 @@ conversation-markdown-markdownspan--bot-mention
 conversation-markdown-markdownspan--plain-text
 conversation-markdown-markdowntable--default
 conversation-markdown-markdowntable--header-only
+conversation-markdown-markdowntable--long-cell-wraps-in-a-reply
 conversation-markdown-markdowntable--wider-than-the-block
 conversation-markdown-markdowntaskcheckbox--default
+conversation-markdown-markdowntaskcheckbox--long-item-hangs-under-its-words
+conversation-markdown-markdowntaskcheckbox--long-loose-item-hangs-under-its-words
 conversation-markdown-markdowntaskcheckbox--loose-checklist
 conversation-markdown-markdowntaskcheckbox--loose-checklist-dark
 conversation-markdown-markdowntaskcheckbox--nested-checklist
