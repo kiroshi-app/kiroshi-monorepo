@@ -39,6 +39,7 @@ export const HomeRoute = () => {
 						conversations,
 						previews: conversationPreviews,
 						hostStates,
+						namings: body.conversationNamings,
 						now: rosterLines.now,
 					},
 					onSelectAgent: pickAgent,

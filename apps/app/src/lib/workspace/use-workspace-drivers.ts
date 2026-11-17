@@ -24,6 +24,7 @@ export const useWorkspaceDrivers = (
 ) => {
 	const {
 		chat,
+		conversationNamings,
 		conversationOpening,
 		conversationRuntimes,
 		driver,
@@ -87,6 +88,7 @@ export const useWorkspaceDrivers = (
 		conversations: conversationOpening,
 		missions: openedMission,
 		spokenWords,
+		namings: conversationNamings,
 		user: user.controller,
 		isDriverWindow,
 	})

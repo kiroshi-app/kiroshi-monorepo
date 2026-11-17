@@ -850,6 +850,7 @@ describe("WorkspaceBody Home", () => {
 								conversations: [],
 								previews: {},
 								hostStates: {},
+								namings: {},
 								now: Date.now(),
 							},
 							onSelectAgent: () => undefined,

@@ -97,6 +97,7 @@ const spokenAtNoon = (conversations: Conversation[]): TodayRoster => ({
 		]),
 	),
 	hostStates: {},
+	namings: {},
 	now: NOON,
 })
 

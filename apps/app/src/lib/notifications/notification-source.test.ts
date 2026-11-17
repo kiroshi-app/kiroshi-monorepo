@@ -276,6 +276,7 @@ const start = async (
 		conversations: tabOpening,
 		missions,
 		spokenWords,
+		namings: () => ({}),
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
@@ -691,6 +692,38 @@ describe("startNotificationSource on a conversation", () => {
 
 		expect(harness.notifications.sent).toEqual([
 			{ target: ROOM, title: "Release", body: "Finished its turn" },
+		])
+	})
+
+	it("names a conversation being named as a new conversation, never by its agent", async () => {
+		const harness = await start(
+			{ namings: () => ({ "room-one": "pending" }) },
+			undefined,
+			[conversation("room-one", "", [seatOf("bot-one", "Nyx")])],
+		)
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "New conversation", body: "Finished its turn" },
+		])
+	})
+
+	it("names a conversation left without a title as untitled, never by its agent", async () => {
+		const harness = await start({}, undefined, [
+			conversation("room-one", "", [seatOf("bot-one", "Nyx")]),
+		])
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{
+				target: ROOM,
+				title: "Untitled conversation",
+				body: "Finished its turn",
+			},
 		])
 	})
 
@@ -1116,6 +1149,23 @@ describe("startNotificationSource on missions", () => {
 
 		expect(harness.notifications.sent).toEqual([
 			{ target: ROOM, title: "Release", body: "Nyx said something" },
+		])
+	})
+
+	it("titles a spoken word in a conversation being named as a new conversation, still naming who spoke", async () => {
+		const harness = await start(
+			{ namings: () => ({ "room-one": "pending" }) },
+			undefined,
+			[conversation("room-one", "", [seatOf("bot-one", "Nyx")])],
+		)
+
+		harness.spokenWords.announce({
+			conversationId: "room-one",
+			authorBotId: "bot-one",
+		})
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "New conversation", body: "Nyx said something" },
 		])
 	})
 

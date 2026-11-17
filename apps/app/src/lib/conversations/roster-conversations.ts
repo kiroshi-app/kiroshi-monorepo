@@ -3,7 +3,10 @@ import type {
 	AppSidebarBot,
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
-import type { ConversationNaming as NamingState } from "@workspace/ui/components/conversation-naming"
+import {
+	conversationLabelOf,
+	type ConversationNaming as NamingState,
+} from "@workspace/ui/components/conversation-naming"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
 import type { ConversationIconName } from "@workspace/ui/components/icons"
@@ -147,18 +150,24 @@ export const namingOf = (
 	namings: NamingStates,
 ): NamingState | undefined => {
 	const naming = namings[conversation.id]
-	if (naming === "pending" || !isNameless(conversation)) {
+	if (naming === "pending") {
 		return naming
 	}
-	return "failed"
+	if (isNameless(conversation)) {
+		return "failed"
+	}
+	return naming === "arrived" ? naming : undefined
 }
 
-export const conversationName = (conversation: Conversation): string =>
-	conversation.title.trim() ||
-	presentParticipants(conversation)
-		.map((participant) => participant.name)
-		.join(i18n.t("chat:namelessConversation.separator")) ||
-	i18n.t("chat:conversationSettings.untitled")
+export const conversationName = (
+	conversation: Conversation,
+	namings: NamingStates,
+): string =>
+	conversationLabelOf(
+		i18n.getFixedT(null, ["common", "chat"]),
+		conversation.title.trim(),
+		namingOf(conversation, namings),
+	)
 
 export const toConversationSettingsValue = (
 	conversation: Conversation,
