@@ -228,18 +228,17 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 
 	const source = sourceOf(code)
 	const language = languageOf(code)
+	const isPending = Boolean(node?.properties?.[PENDING_PROPERTY])
 
 	if (language === MATH_LANGUAGE)
 		return <MarkdownMath display source={source} />
 	if (language === MERMAID_LANGUAGE) return <MarkdownMermaid source={source} />
-	if (language === HTML_LANGUAGE) {
+	if (language === HTML_LANGUAGE && !isPending) {
 		const html = answerActions?.renderHtmlBlock?.(source)
 		if (html != null) return html
 	}
 	if (isAnswerBlockLabel(language)) {
-		if (node?.properties?.[PENDING_PROPERTY]) {
-			return <PendingAnswerBlock label={language} />
-		}
+		if (isPending) return <PendingAnswerBlock label={language} />
 		const block = readAnswerBlock(language, source, {
 			hasImageResolver: resolveImage !== undefined,
 		})

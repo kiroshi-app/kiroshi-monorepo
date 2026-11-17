@@ -370,7 +370,7 @@ export const HtmlBlockWithRenderer = meta.story({
 		docs: {
 			description: {
 				story:
-					"An `html` block while `answerActions` carries `renderHtmlBlock`: the block draws what the app returns for its source, here a live view, in place of the fence. The app decides what a streaming or unsupported block shows; returning nothing keeps the fence.",
+					"An `html` block while `answerActions` carries `renderHtmlBlock`: the block draws what the app returns for its source, here a live view, in place of the fence, once its fence closes. A block still streaming stays code and never reaches the renderer; returning nothing keeps the fence.",
 			},
 		},
 	},

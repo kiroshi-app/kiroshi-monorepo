@@ -570,6 +570,28 @@ describe("html blocks", () => {
 		).toBe(today)
 	})
 
+	it("keeps an html fence being written as today's code, then hands the closed fence its full source", () => {
+		const renderHtmlBlock = vi.fn<HtmlRenderer>(() => <div data-slot="live" />)
+		const unclosed = `Here it is.\n\n\`\`\`html\n${PAGE}`
+		const writing = render(unclosed, {
+			isWriting: true,
+			...withRenderer(renderHtmlBlock),
+		})
+
+		expect(writing).toBe(render(unclosed, { isWriting: true }))
+		expect(writing).toContain(slot("markdown-fence"))
+		expect(writing).not.toContain(LIVE)
+		expect(renderHtmlBlock).not.toHaveBeenCalled()
+
+		const closed = render(fenced("html", PAGE), {
+			isWriting: true,
+			...withRenderer(renderHtmlBlock),
+		})
+
+		expect(closed).toContain(LIVE)
+		expect(renderHtmlBlock).toHaveBeenCalledWith(PAGE)
+	})
+
 	it("hands no other fence label to the html renderer", () => {
 		const renderHtmlBlock = vi.fn<HtmlRenderer>(() => <div data-slot="live" />)
 
