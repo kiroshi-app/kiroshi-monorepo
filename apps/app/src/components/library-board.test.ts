@@ -252,8 +252,12 @@ const COMMENT_PEOPLE: LibraryCommentPeople = {
 	workingAgentsOf: () => [],
 }
 
+const BOARD_DETAIL = "JSON · 2 KB · 3 min ago"
+
 type BoardElementOptions = {
 	onBack?: () => void
+	onDownload?: () => void
+	onCopy?: () => Promise<void>
 	name?: string
 	summary?: LibraryBoardSummary
 	isJoined?: boolean
@@ -261,6 +265,8 @@ type BoardElementOptions = {
 
 const boardElement = ({
 	onBack = vi.fn(),
+	onDownload = vi.fn(),
+	onCopy = vi.fn(async () => {}),
 	name = NAME,
 	summary = SUMMARY,
 	isJoined = false,
@@ -273,7 +279,10 @@ const boardElement = ({
 		name,
 		title: "Roadmap",
 		summary,
+		detail: BOARD_DETAIL,
 		onBack,
+		onDownload,
+		onCopy,
 		onDelete: vi.fn(),
 	})
 
@@ -423,6 +432,39 @@ describe("a Library board on its live session", () => {
 		fireEvent.click(back)
 
 		expect(onBack).toHaveBeenCalledOnce()
+	})
+
+	it("shows Library then the board detail in its bar, and Download then Copy calling their handlers", async () => {
+		fakeHost()
+		const onDownload = vi.fn()
+		const onCopy = vi.fn(async () => {})
+		render(boardElement({ onDownload, onCopy }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = within(
+			document.querySelector('[data-slot="app-header"]') as HTMLElement,
+		)
+		const download = header.getByRole("button", {
+			name: common("library.document.download"),
+		})
+		const copy = header.getByRole("button", {
+			name: common("library.document.copy"),
+		})
+
+		expect(
+			header.getByRole("button", { name: common("library.document.back") }),
+		).toBeInstanceOf(HTMLElement)
+		expect(header.getByText(BOARD_DETAIL)).toBeInstanceOf(HTMLElement)
+		expect(
+			download.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		fireEvent.click(download)
+		fireEvent.click(copy)
+
+		expect(onDownload).toHaveBeenCalledOnce()
+		await waitFor(() => expect(onCopy).toHaveBeenCalledOnce())
 	})
 
 	it("deletes the focused object through the session and brings it back on undo", async () => {

@@ -120,19 +120,20 @@ export const toBoardLibraryItem = (
 export const matchesQuery = (item: LibraryItem, query: string) =>
 	item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
 
-export type DroppedFile = { id: string; file: File }
+export type ImportingFile = { id: string; name: string; isImage: boolean }
 
 export const toImportingItem = ({
 	id,
-	file,
-}: DroppedFile): ShownLibraryItem => {
+	name,
+	isImage,
+}: ImportingFile): ShownLibraryItem => {
 	const importing = { id, detail: "", importProgress: 0 }
-	return file.type.startsWith("image/")
-		? { ...importing, kind: "image", name: file.name, src: "" }
+	return isImage
+		? { ...importing, kind: "image", name, src: "" }
 		: {
 				...importing,
 				kind: "document",
-				name: titleOf({ kind: "document", name: file.name }),
+				name: titleOf({ kind: "document", name }),
 				excerpt: "",
 			}
 }
