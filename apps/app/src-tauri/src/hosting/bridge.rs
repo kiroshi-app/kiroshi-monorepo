@@ -13,13 +13,14 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::{self, RelayedMember};
-use super::keyed_calls::{self, Answered, CallingDevice, Claim, Ran};
+use super::keyed_calls::{self, Answered, Claim, Ran};
 use super::reach::{self, Reach};
 use super::Hosting;
 
 use crate::account::session::{trimmed_to, DEVICE_NAME_LIMIT};
 use crate::attachments;
 use crate::avatars::Avatars;
+use crate::db::repositories::member_call_answers::MemberCallKey;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::db::{Database, DatabaseState};
 use crate::events::CallOrigin;
@@ -269,18 +270,21 @@ async fn ran_once<R: Runtime>(
 	local: LocalApi,
 	shared_space_id: String,
 	call: MemberCall,
-	key: String,
+	call_key: String,
 ) -> Answered {
-	let device =
-		CallingDevice { space_id: shared_space_id.clone(), device_id: call.device.clone() };
-	let claimed = app.state::<Hosting>().keyed_calls.claim(device, key);
+	let key = MemberCallKey {
+		space_id: shared_space_id.clone(),
+		device_id: call.device.clone(),
+		call_key,
+	};
+	let claimed = app.state::<Hosting>().keyed_calls.claim(key);
 	let watching = match claimed {
-		Claim::Answered(answered) => return answered,
 		Claim::Running(watching) => watching,
 		Claim::First(first) => {
 			let watching = first.watching();
 			tauri::async_runtime::spawn(async move {
-				first.settle(ran(app, local, shared_space_id, call).await);
+				let run = ran(app.clone(), local, shared_space_id, call);
+				first.answered_once(&app.state::<DatabaseState>(), run).await;
 			});
 			watching
 		}

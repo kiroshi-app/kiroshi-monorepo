@@ -30,7 +30,6 @@ use super::contract::{
 };
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
-use super::reach;
 use super::relay::relay_socket_config;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
@@ -38,6 +37,7 @@ use super::sealing_member::{
 	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
 use super::wire::{host_keys, HELLO, NO_KEY_ID};
+use super::{keyed_calls, reach};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::account::contract::SignedOutReason;
 use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
@@ -6755,16 +6755,47 @@ struct Authoring {
 	window: WebviewWindow<MockRuntime>,
 	local: LocalApi,
 	conversation_id: String,
+	cloud: String,
 	_root: RemovedOnDrop,
+}
+
+fn an_authoring_app() -> AppOfItsOwn {
+	an_app_of_its_own(
+		"hosting-authorship",
+		mock_builder().invoke_handler(crate::commands::invoke_handler()),
+	)
+}
+
+async fn hosted_over(
+	app: &AppOfItsOwn,
+	cloud: &str,
+	root: &std::path::Path,
+) -> (WebviewWindow<MockRuntime>, LocalApi) {
+	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
+	restore(app.handle().clone()).await;
+	app.manage(webhook::start(app.handle().clone()));
+	let local = super::local_api(app.handle()).expect("the local host api listens");
+	app.manage(Hosting::new(cloud, Some(local.clone())));
+	app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
+		Some(SpaceMembers {
+			members: vec![Member {
+				user_id: GUEST.to_owned(),
+				name: None,
+				email: GUEST_EMAIL.to_owned(),
+				status: MemberStatus::Joined,
+			}],
+			invitations: Vec::new(),
+		});
+	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
+		.build()
+		.expect("the window builds");
+	(window, local)
 }
 
 impl Authoring {
 	async fn new(bearer: Option<&str>) -> Self {
 		let cloud = served(Router::new().route("/me", get(me))).await;
-		let app = an_app_of_its_own(
-			"hosting-authorship",
-			mock_builder().invoke_handler(crate::commands::invoke_handler()),
-		);
+		let app = an_authoring_app();
 		app.manage(db::bootstrap(app.handle()));
 		let root = RemovedOnDrop(
 			std::env::temp_dir()
@@ -6774,24 +6805,7 @@ impl Authoring {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
-		restore(app.handle().clone()).await;
-		app.manage(webhook::start(app.handle().clone()));
-		let local = super::local_api(app.handle()).expect("the local host api listens");
-		app.manage(Hosting::new(&cloud, Some(local.clone())));
-		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
-			Some(SpaceMembers {
-				members: vec![Member {
-					user_id: GUEST.to_owned(),
-					name: None,
-					email: GUEST_EMAIL.to_owned(),
-					status: MemberStatus::Joined,
-				}],
-				invitations: Vec::new(),
-			});
-		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
-			.build()
-			.expect("the window builds");
+		let (window, local) = hosted_over(&app, &cloud, &root).await;
 		let mut preferences = direct(&window, "user_preferences", json!({}));
 		preferences["displayName"] = json!(HOST_NAME);
 		direct(&window, "user_set_preferences", json!({ "preferences": preferences }));
@@ -6802,7 +6816,25 @@ impl Authoring {
 			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Shared", "botIds": ["default"] }),
 		);
 		let conversation_id = room["id"].as_str().expect("the room holds an id").to_owned();
-		Self { app, window, local, conversation_id, _root: root }
+		Self { app, window, local, conversation_id, cloud, _root: root }
+	}
+
+	async fn restarted(&self) -> Self {
+		let app = an_authoring_app();
+		let folder = self.app.path().app_data_dir().expect("the data folder resolves");
+		app.manage(Ok::<_, db::DatabaseError>(db::open(&folder)));
+		let (window, local) = hosted_over(&app, &self.cloud, &self._root).await;
+		if self.app.try_state::<commands::AgentState>().is_some() {
+			app.manage(commands::AgentState::default());
+		}
+		Self {
+			app,
+			window,
+			local,
+			conversation_id: self.conversation_id.clone(),
+			cloud: self.cloud.clone(),
+			_root: RemovedOnDrop(self._root.to_path_buf()),
+		}
 	}
 
 	async fn main_of(&self, owner: ChatOwner) -> String {
@@ -11107,5 +11139,89 @@ fn a_question_a_member_answers_names_the_answering_device_on_its_resolution() {
 		assert_eq!(resolved[0]["payload"]["event"]["type"], json!("permissionResolved"));
 		assert_eq!(resolved[0]["deviceId"], json!(GUEST_DEVICE));
 		assert_eq!(resolved[0]["callKey"], json!("answer-1"));
+	});
+}
+
+impl Authoring {
+	async fn answered_further_keyed_calls(&self) {
+		for n in 0..keyed_calls::ANSWERS_KEPT_PER_DEVICE {
+			let listed =
+				json!({ "id": n, "command": "conversation_list", "args": { "spaceId": PERSONAL } });
+			self.relayed(keyed(listed, &format!("list-{n}"))).await;
+		}
+	}
+}
+
+fn agent_runs(frames: &[Value]) -> usize {
+	frames_of(frames, SUMMONS_DROPPED_EVENT).len()
+}
+
+fn status_and_body(answer: &Value) -> (Value, Value) {
+	(answer["status"].clone(), answer["body"].clone())
+}
+
+#[test]
+fn a_send_repeated_after_a_restart_gets_its_answer_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		let first = host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		let restarted = host.restarted().await;
+		let mut published_after = events::subscribed(restarted.app.handle());
+
+		let repeated = restarted.answered(keyed(restarted.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(status_and_body(&repeated), status_and_body(&first));
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+		assert_eq!(agent_runs(&published_frames(&mut published_after)), 0);
+	});
+}
+
+#[test]
+fn a_send_repeated_after_further_answers_is_refused_and_runs_the_agents_of_its_turn_once() {
+	run(async {
+		let host = Authoring::with_an_agent().await;
+		let mut published = events::subscribed(host.app.handle());
+		host.answered(keyed(host.send(1, "m1"), "send-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(host.send(2, "m1"), "send-1")).await;
+
+		assert_eq!(
+			status_and_body(&repeated),
+			(json!(410), json!(keyed_calls::ANSWER_NO_LONGER_KEPT))
+		);
+		assert_eq!(agent_runs(&published_frames(&mut published)), 1);
+	});
+}
+
+#[test]
+fn a_group_created_again_after_a_restart_is_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let first = host.relayed(keyed(a_group_created(1), "group-1")).await;
+		let restarted = host.restarted().await;
+
+		let repeated = restarted.relayed(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(repeated, first);
+		assert_eq!(restarted.groups(), 1);
+	});
+}
+
+#[test]
+fn a_group_created_again_after_further_answers_is_refused_and_left_once() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.relayed(keyed(a_group_created(1), "group-1")).await;
+		host.answered_further_keyed_calls().await;
+
+		let repeated = host.answered(keyed(a_group_created(2), "group-1")).await;
+
+		assert_eq!(
+			status_and_body(&repeated),
+			(json!(410), json!(keyed_calls::ANSWER_NO_LONGER_KEPT))
+		);
+		assert_eq!(host.groups(), 1);
 	});
 }

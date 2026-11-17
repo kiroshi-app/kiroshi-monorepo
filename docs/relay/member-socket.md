@@ -122,15 +122,23 @@ being the relay device id that sent the call:
   repeat gets that answer and the command never runs twice.
 - A repeat whose key holds an answer gets that answer whatever its `args`: the
   host does not compare payloads under a key. A call with a different payload
-  that reaches the command, under a forgotten key or a new one, and names an id
-  the host already stored with other values, is refused as a conflict: status
-  500, body `{ "kind": "conflict", "id": "<id>", "field": "<field>" }`, `field`
-  naming the first value that differs, `content` for a message. That answer is
-  kept under its key like any 500: its repeat gets the same status and body
-  without running the command.
-- The host keeps the last 1024 answers of each device in each shared space and
-  forgets older ones, and it forgets them all when it restarts. A repeat of a
-  forgotten key runs as a new call.
+  that reaches the command under a new key, and names an id the host already
+  stored with other values, is refused as a conflict: status 500, body
+  `{ "kind": "conflict", "id": "<id>", "field": "<field>" }`, `field` naming the
+  first value that differs, `content` for a message. That answer is kept under
+  its key like any 500: its repeat gets the same status and body without running
+  the command.
+- The host keeps its record of a call on disk: a repeat that arrives after the
+  host restarted gets the first run's answer too.
+- The host keeps the answers of the last 1024 calls of each device in each shared
+  space. A repeat of an older key does not run: it answers `410` with
+  `"this call already ran and the host no longer keeps its answer"`. The events
+  that first run published carried its `callKey`; read the state again to learn
+  what it did.
+- A call the host was still running when it stopped left no answer behind: its
+  repeat runs.
+- Removing a device from the shared space, or removing the shared space, forgets
+  every call of that device, or of that space.
 - The same `callKey` from another device, or in another shared space, is another
   call.
 
@@ -149,7 +157,7 @@ A call without `callKey` runs each time it arrives, as before.
 | Status | `body` |
 |---|---|
 | 200 | `commands.<command>.ok` |
-| 500 | `commands.<command>.error`, or a string when the host could not read the args |
+| 500 | `commands.<command>.error`, or a string when the host could not read the args, or its record of a keyed call |
 | 400 | a string: the frame is not `{id, command, args}` with `args` an object |
 | 400 | `commands.chat_store_attachments.error` with `kind` `unreadable`: an attachment of [Attachments](#attachments) carries no content the host can read |
 | 403 | `"this command belongs to the host"`: the command is not open to members |
@@ -159,6 +167,7 @@ A call without `callKey` runs each time it arrives, as before.
 | 413 | a string: the call is larger than the host accepts |
 | 413 | `commands.chat_store_attachments.error` with `kind` `tooLarge`, `tooLargeTogether` or `tooMany`: the attachments exceed a limit of [Attachments](#attachments) |
 | 502 | a string: the host could not run the call on its side |
+| 410 | `"this call already ran and the host no longer keeps its answer"`: a repeat of a `callKey` older than the last 1024 calls of the device, see [A repeated call](#a-repeated-call) |
 
 The host bounds each call at 300 seconds. A client that hears no answer by then
 fails the call.
