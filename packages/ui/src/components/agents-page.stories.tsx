@@ -196,6 +196,27 @@ const changesColourAtOnce = (control: Element) => {
 	return transitionProperty === "none" || transitionDuration === "0s"
 }
 
+const expectAppHeaderBar = async (canvasElement: HTMLElement) => {
+	const page = slotIn(canvasElement, "agents-page")
+	const bar = slotIn(page, "app-header")
+	await expect(Array.from(page.querySelectorAll("header"))).toEqual([bar])
+	await expect(bar).toHaveAttribute("data-tauri-drag-region", "deep")
+	await expect(
+		within(page.parentElement as HTMLElement).getByRole("region", {
+			name: "Agents",
+		}),
+	).toBe(page)
+	await expect(
+		within(slotIn(bar, "app-header-leading")).getByRole("heading", {
+			name: "Agents",
+			level: 1,
+		}),
+	).toBeVisible()
+	await expect(
+		within(bar).getByRole("button", { name: "Create an agent" }),
+	).toBeVisible()
+}
+
 const meta = preview.meta({
 	title: "Navigation/AgentsPage",
 	component: AgentsPage,
@@ -241,12 +262,10 @@ export const Default = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expectLaptopWindow()
+		await expectAppHeaderBar(canvasElement)
 		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
-		await expect(slotIn(canvasElement, "agents-page-count")).toHaveTextContent(
-			/^6$/,
-		)
+			slotIn(slotIn(canvasElement, "app-header-leading"), "agents-page-count"),
+		).toHaveTextContent(/^6$/)
 		await expect(
 			canvas.getByText(
 				"Every agent in Kiroshi. Pick one to change how it works.",
@@ -327,9 +346,7 @@ export const Empty = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
+		await expectAppHeaderBar(canvasElement)
 		await expect(
 			canvasElement.querySelector('[data-slot="agents-page-count"]'),
 		).toBeNull()
@@ -381,6 +398,7 @@ export const Loading = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
+		await expectAppHeaderBar(canvasElement)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 		await expect(
 			boxOf(slotIn(canvasElement, "agents-page-skeleton")).bottom,
@@ -423,9 +441,7 @@ export const Failed = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
+		await expectAppHeaderBar(canvasElement)
 		const alert = within(
 			slotIn(canvasElement, "agents-page-failure"),
 		).getByRole("alert")

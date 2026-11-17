@@ -404,6 +404,7 @@ const LibraryPanel = ({
 }
 
 export {
+	BarAction,
 	type LibraryFilter,
 	LibraryOverlayContainer,
 	LibraryPanel,
