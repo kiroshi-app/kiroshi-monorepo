@@ -152,8 +152,6 @@ const createRefusals = (): Refusals => {
 	}
 }
 
-const settledTasks = () => new Promise((resolve) => setTimeout(resolve, 0))
-
 const NOT_A_WRITE = "not a write"
 
 type WriteCase<Rig> = {
@@ -198,7 +196,7 @@ const hasRaisedTheCall = (call: string) =>
 		)
 
 const settleRaisedBefore = async () => {
-	await settledTasks()
+	await new Promise((resolve) => setTimeout(resolve, 0))
 	vi.mocked(raiseFailureNotice).mockClear()
 }
 
