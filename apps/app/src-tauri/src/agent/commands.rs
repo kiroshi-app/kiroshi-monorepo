@@ -44,7 +44,7 @@ use crate::json::JsonValue;
 use crate::library::host::LibraryHost;
 use crate::logging;
 use crate::mcp_oauth::refresh;
-use crate::mcp_oauth::reports::StandingHost;
+use crate::mcp_oauth::reports::{ApplicationReports, StandingHost};
 use crate::missions::commands::announce_thread_moved;
 use crate::missions::contract::LivenessSigns;
 use crate::missions::host::MissionHost;
@@ -1366,6 +1366,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		attachments.clone(),
 		announcing,
 	));
+	let opened = app.try_state::<ApplicationReports>().map(|reports| reports.opening());
 	let identity = match runtime_identity(&app, database, &scope, &sidecar).await {
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
@@ -1397,6 +1398,7 @@ pub(crate) async fn start_run<R: Runtime>(
 			app.clone(),
 			scope.bot_id.clone(),
 			Some(identity.space_id),
+			opened,
 		)))
 		.hosting(hosted(ApplicationHost::new(
 			app.clone(),
