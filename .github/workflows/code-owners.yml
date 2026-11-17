@@ -3,7 +3,7 @@ name: Code owners
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, auto_merge_enabled]
+    types: [synchronize, reopened, ready_for_review, auto_merge_enabled]
 
 permissions:
   contents: read
