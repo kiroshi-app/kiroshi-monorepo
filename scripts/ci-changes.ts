@@ -31,7 +31,6 @@ export const PATHS_RUST_READS_OUTSIDE_SRC_TAURI = [
 	".claude/settings.json",
 	"apps/app/contracts",
 	"apps/app/shared/filter-vocabulary.json",
-	"apps/app/src",
 	"apps/app/src/lib/bindings.ts",
 	"apps/app/src/lib/conversations/transcript-contract.ts",
 	"apps/app/src/lib/host/index.ts",

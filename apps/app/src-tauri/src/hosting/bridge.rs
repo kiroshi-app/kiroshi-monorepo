@@ -552,6 +552,7 @@ pub(super) fn answer(id: Value, status: StatusCode, body: Value) -> String {
 
 #[cfg(test)]
 mod tests {
+	use std::collections::BTreeSet;
 	use std::path::Path;
 	use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -744,96 +745,78 @@ mod tests {
 
 	const HOST_ONLY_SCREENS: &[(&str, &str)] = &[("mcp_oauth_connect", "Applications")];
 
-	const LOCAL_COMMANDS_OPENING: &str = "LOCAL_COMMANDS: ReadonlySet<string> = new Set([";
+	const HOST_ONLY_COMMANDS: &str = "host-only-commands.json";
 
-	struct AppSources {
-		sources: Vec<String>,
-		kept_on_this_mac: Vec<String>,
+	const REGENERATE: &str = "bun run snapshots";
+
+	#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+	struct HostOnlyCommand {
+		command: String,
+		screen: Option<String>,
 	}
 
-	impl AppSources {
-		fn read() -> Self {
-			let sources: Vec<String> =
-				app_source_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../src"))
+	fn host_only_commands_path() -> std::path::PathBuf {
+		Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts").join(HOST_ONLY_COMMANDS)
+	}
+
+	fn host_only_commands_live() -> Vec<HostOnlyCommand> {
+		reach::REACHES
+			.iter()
+			.filter(|(_, reach)| *reach == Reach::HostOnly)
+			.map(|(command, _)| HostOnlyCommand {
+				command: (*command).to_owned(),
+				screen: HOST_ONLY_SCREENS
 					.iter()
-					.map(|path| std::fs::read_to_string(path).expect("the app source reads"))
-					.collect();
-			let kept_on_this_mac = sources
-				.iter()
-				.find_map(|source| source.split_once(LOCAL_COMMANDS_OPENING))
-				.and_then(|(_, rest)| rest.split_once("])"))
-				.expect("the app declares LOCAL_COMMANDS")
-				.0
-				.split(',')
-				.map(str::trim)
-				.filter(|entry| !entry.is_empty())
-				.map(|entry| match entry.strip_prefix('"') {
-					Some(quoted) => quoted.trim_end_matches('"').to_owned(),
-					None => text_constant(&sources, entry),
-				})
-				.collect();
-			Self { sources, kept_on_this_mac }
-		}
-
-		fn sends_to_a_joined_host(&self, command: &str) -> bool {
-			let named = format!("\"{command}\"");
-			!self.kept_on_this_mac.iter().any(|kept| kept == command)
-				&& self.sources.iter().any(|source| source.contains(&named))
-		}
-	}
-
-	fn app_source_files(dir: &Path) -> Vec<std::path::PathBuf> {
-		std::fs::read_dir(dir)
-			.expect("the app source dir reads")
-			.map(|entry| entry.expect("an entry").path())
-			.flat_map(|path| match path.is_dir() {
-				true => app_source_files(&path),
-				false => vec![path],
-			})
-			.filter(|path| {
-				let name = path.to_string_lossy();
-				(name.ends_with(".ts") || name.ends_with(".tsx"))
-					&& !name.contains(".test.")
-					&& !path.ends_with("lib/bindings.ts")
+					.find(|(shown, _)| shown == command)
+					.map(|(_, screen)| (*screen).to_owned()),
 			})
 			.collect()
 	}
 
-	fn text_constant(sources: &[String], name: &str) -> String {
-		let declared = format!("const {name} = \"");
-		sources
+	fn host_only_commands_file(entries: &[HostOnlyCommand]) -> String {
+		let lines: Vec<String> = entries
 			.iter()
-			.find_map(|source| source.split_once(&declared))
-			.and_then(|(_, rest)| rest.split('"').next())
-			.unwrap_or_else(|| panic!("the app declares no text constant {name}"))
-			.to_owned()
-	}
-
-	#[test]
-	fn the_app_sources_tell_a_command_kept_on_this_mac_from_one_sent_to_a_joined_host() {
-		let app = AppSources::read();
-
-		assert!(!app.sends_to_a_joined_host("space_list"));
-		assert!(!app.sends_to_a_joined_host("conversation_local_ids"));
-		assert!(!app.sends_to_a_joined_host("a_command_no_screen_names"));
-		assert!(app.sends_to_a_joined_host("conversation_today_of_agent"));
-	}
-
-	#[test]
-	fn a_host_only_command_the_app_sends_to_a_joined_host_is_listed_with_its_host_only_screen() {
-		let app = AppSources::read();
-		let mut sent: Vec<&str> = reach::REACHES
-			.iter()
-			.filter(|(command, reach)| {
-				*reach == Reach::HostOnly && app.sends_to_a_joined_host(command)
+			.map(|HostOnlyCommand { command, screen }| match screen {
+				Some(screen) => format!(
+					"\t{{ \"command\": {}, \"screen\": {} }}",
+					Value::from(command.as_str()),
+					Value::from(screen.as_str())
+				),
+				None => format!("\t{{ \"command\": {} }}", Value::from(command.as_str())),
 			})
-			.map(|(command, _)| *command)
 			.collect();
-		let mut listed: Vec<&str> = HOST_ONLY_SCREENS.iter().map(|(command, _)| *command).collect();
-		sent.sort_unstable();
-		listed.sort_unstable();
+		format!("[\n{}\n]\n", lines.join(",\n"))
+	}
 
-		assert_eq!(sent, listed);
+	fn differing_commands(held: &str, live: Vec<HostOnlyCommand>) -> String {
+		let held: BTreeSet<HostOnlyCommand> =
+			serde_json::from_str(held).expect("the host-only commands file is a json list");
+		let live: BTreeSet<HostOnlyCommand> = live.into_iter().collect();
+		let differing: BTreeSet<&str> =
+			held.symmetric_difference(&live).map(|entry| entry.command.as_str()).collect();
+		match differing.is_empty() {
+			true => "no command, only its order or layout".to_owned(),
+			false => differing.into_iter().collect::<Vec<_>>().join(", "),
+		}
+	}
+
+	#[test]
+	fn the_committed_host_only_commands_are_the_reach_table_ones_with_their_screens() {
+		let live = host_only_commands_live();
+		let written = host_only_commands_file(&live);
+		if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+			std::fs::write(host_only_commands_path(), &written)
+				.expect("the host-only commands file is written");
+			return;
+		}
+		let held = std::fs::read_to_string(host_only_commands_path())
+			.expect("the host-only commands file reads");
+
+		assert!(
+			held == written,
+			"apps/app/contracts/{HOST_ONLY_COMMANDS} differs from reach::REACHES and HOST_ONLY_SCREENS on {}, regenerate it with `{REGENERATE}`",
+			differing_commands(&held, live)
+		);
 	}
 
 	fn registered_commands() -> Vec<String> {
