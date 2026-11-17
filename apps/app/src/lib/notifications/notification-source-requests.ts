@@ -19,7 +19,7 @@ export type NotifiedBot = {
 
 type NotificationRequestsOptions = Pick<
 	NotificationSourceOptions,
-	"chat" | "runtimes" | "roster"
+	"chat" | "runtimes" | "roster" | "namings"
 >
 
 const forgetBeyond = <Held>(seen: Map<string, Held>, ids: string[]) => {
@@ -37,6 +37,7 @@ export const createNotificationRequests = ({
 	chat,
 	runtimes,
 	roster,
+	namings,
 }: NotificationRequestsOptions) => {
 	const seen = new Map<string, ChatState>()
 	const seenRounds = new Map<string, ConversationRound>()
@@ -120,7 +121,7 @@ export const createNotificationRequests = ({
 				{
 					target: { kind: "conversation" as const, id: conversation.id },
 					...notificationWordsFor({
-						name: conversationName(conversation),
+						name: conversationName(conversation, namings()),
 						event: "finishedTurn",
 					}),
 				},
