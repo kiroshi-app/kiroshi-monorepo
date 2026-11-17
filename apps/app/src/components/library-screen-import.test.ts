@@ -8,7 +8,15 @@ import {
 	within,
 } from "@testing-library/react"
 import { createElement, Fragment } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vitest"
 
 import {
 	raiseFailureNotice,
@@ -30,6 +38,8 @@ type Harness = {
 	listed: LibraryItem[]
 	imports: ImportCall[]
 	answerImport: ImportAnswer
+	pickFiles: Mock
+	importPaths: Mock
 }
 
 const SPACE_ID = "space"
@@ -50,6 +60,8 @@ const harness = vi.hoisted(
 		listed: [],
 		imports: [],
 		answerImport: () => Promise.reject(new Error("unanswered")),
+		pickFiles: vi.fn(),
+		importPaths: vi.fn(),
 	}),
 )
 
@@ -81,6 +93,16 @@ vi.mock("@/lib/host/index", async (importOriginal) => {
 	}
 	return { ...actual, invoke, isDesktopHost: () => false }
 })
+
+vi.mock("@/lib/bindings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/bindings")>()
+	return {
+		...actual,
+		commands: { ...actual.commands, libraryImportPaths: harness.importPaths },
+	}
+})
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: harness.pickFiles }))
 
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal<
@@ -167,6 +189,8 @@ beforeEach(() => {
 	harness.listed = [itemNamed("notes.txt", "document")]
 	harness.imports = []
 	harness.answerImport = () => Promise.reject(new Error("unanswered"))
+	harness.pickFiles.mockReset()
+	harness.importPaths.mockReset()
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.mocked(raiseTransientNotice).mockClear()
 })
@@ -380,6 +404,108 @@ describe("files dropped on the Library", () => {
 		)
 		expect(harness.imports).toEqual([])
 		expect(shown.queryByRole("progressbar")).toBeNull()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+	})
+})
+
+const importOf = (item: LibraryItem) => ({ status: "imported", item })
+
+const pressImport = (shown: ReturnType<typeof within>) =>
+	fireEvent.click(shown.getByRole("button", { name: common("library.import") }))
+
+describe("files picked with Import", () => {
+	it("opens the picker for any file, draws the picked files importing, then lists them and says how many were added", async () => {
+		const { shown } = await renderLibraryScreen(false)
+		const added = [
+			itemNamed("brief.pdf", "document"),
+			itemNamed("chart.png", "image"),
+		]
+		let finishImport = () => {}
+		harness.pickFiles.mockResolvedValue([
+			"/Users/me/brief.pdf",
+			"/Users/me/chart.png",
+		])
+		harness.importPaths.mockImplementation(
+			(_space: string, [path]: string[]) =>
+				new Promise((resolve) => {
+					const item = added.find(({ name }) => path.endsWith(name))
+					const previous = finishImport
+					finishImport = () => {
+						previous()
+						if (item) harness.listed = [item, ...harness.listed]
+						resolve({ status: "ok", data: [item && importOf(item)] })
+					}
+				}),
+		)
+
+		pressImport(shown)
+
+		expect(
+			await shown.findByRole("progressbar", {
+				name: importingLabelOf("chart.png"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(harness.pickFiles).toHaveBeenCalledWith({
+			multiple: true,
+			directory: false,
+		})
+		expect(harness.importPaths).toHaveBeenCalledWith(SPACE_ID, [
+			"/Users/me/brief.pdf",
+		])
+		expect(harness.importPaths).toHaveBeenCalledWith(SPACE_ID, [
+			"/Users/me/chart.png",
+		])
+
+		finishImport()
+
+		expect(
+			await shown.findByRole("button", { name: /chart\.png/ }),
+		).toBeInstanceOf(HTMLElement)
+		expect(shown.queryByRole("progressbar")).toBeNull()
+		await waitFor(() =>
+			expect(raiseTransientNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.added.title", { count: 2 }),
+				}),
+			),
+		)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("imports nothing and says nothing when the picker is cancelled", async () => {
+		const { shown } = await renderLibraryScreen(false)
+		harness.pickFiles.mockResolvedValue(null)
+
+		pressImport(shown)
+
+		await waitFor(() => expect(harness.pickFiles).toHaveBeenCalled())
+		expect(harness.importPaths).not.toHaveBeenCalled()
+		expect(shown.queryByRole("progressbar")).toBeNull()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("drops the row of a picked file the host refuses and names it in a failure notice", async () => {
+		const { shown } = await renderLibraryScreen(false)
+		harness.pickFiles.mockResolvedValue(["/Users/me/clip.exe"])
+		harness.importPaths.mockResolvedValue({
+			status: "ok",
+			data: [
+				{ status: "refused", error: { kind: "unsupported", name: "clip.exe" } },
+			],
+		})
+
+		pressImport(shown)
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				importFailureOf(
+					"clip.exe",
+					common("library.failure.import.unsupported"),
+				),
+			),
+		)
+		await waitFor(() => expect(shown.queryByRole("progressbar")).toBeNull())
 		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 })
