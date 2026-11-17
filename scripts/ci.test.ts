@@ -14,10 +14,16 @@ import { SCOPES, UNIT_SUITES } from "./baseline"
 import {
 	CHANGED_UNIT_TESTS,
 	elapsedText,
+	FAST_LIMIT_SECONDS,
 	FAST_STEP_NAMES,
+	FAST_TEST_TIMEOUT_MS,
+	type FastUnitTestScope,
 	FULL_UNIT_TESTS,
 	failedRustTargets,
+	fastScopeLines,
 	fastSteps,
+	fastUnitTestScope,
+	fastUnitTestStep,
 	GATE,
 	GROUP_ORDER,
 	type Group,
@@ -46,6 +52,7 @@ import {
 	unitTestScope,
 	unitTestSteps,
 	vitestRetryStep,
+	wallTimeLines,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
 import { TEST_SOURCE_ROOTS } from "./test-importers"
@@ -514,15 +521,11 @@ describe("ci:fast", () => {
 			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
 		],
 		[
-			"the importer threshold",
-			{ scope: "full", path: "apps/app/src/a.ts", importers: 20, graphMs: 5 },
-		],
-		[
 			"an import graph failure",
 			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
 		],
-	] satisfies [string, UnitTestScope][]
-	const BASELINE_SCOPE = /^bun run baseline (\w+)$/
+	] satisfies [string, FastUnitTestScope][]
+	const BASELINE_SCOPE = /^bun run baseline (\w+)/
 	const baselineScopesOf = (steps: Step[]) =>
 		steps.flatMap((step) => {
 			const scope = BASELINE_SCOPE.exec(step.command)?.[1]
@@ -537,7 +540,12 @@ describe("ci:fast", () => {
 				(name) => SCOPES[name].suites,
 			)
 
-			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([FULL_UNIT_TESTS])
+			expect(steps.slice(FAST_STEP_NAMES.length)).toEqual([
+				{
+					...FULL_UNIT_TESTS,
+					command: `bun run baseline unit --test-timeout=${FAST_TEST_TIMEOUT_MS}`,
+				},
+			])
 			expect(steps.filter((step) => step.heavy)).toEqual([])
 			for (const step of GATE.vitest) expect(steps).not.toContainEqual(step)
 			expect(baselineScopesOf(steps)).toEqual(["lint", "unit"])
@@ -767,15 +775,15 @@ describe("the unit test scope of a pull request", () => {
 	it.each([
 		[
 			{ scope: "full", path: "baselines/a.json", rule: "baselines/**" },
-			"ci  unit test scope: full suite: baselines/a.json is shared (baselines/**)",
+			"ci  unit test scope: the app and ui unit projects: baselines/a.json is shared (baselines/**)",
 		],
 		[
 			{ scope: "full", path: SHARED_MODULE, importers: 24, graphMs: 812 },
-			`ci  unit test scope: full suite: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
+			`ci  unit test scope: the app and ui unit projects: ${SHARED_MODULE} is shared (24 test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}), import graph build took 812 ms`,
 		],
 		[
 			{ scope: "full", error: "Error: ENOENT", graphMs: 3 },
-			"ci  unit test scope: full suite: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
+			"ci  unit test scope: the app and ui unit projects: building the import graph failed: Error: ENOENT, import graph build took 3 ms",
 		],
 		[
 			{ scope: "changed", graphMs: 640 },
@@ -800,8 +808,266 @@ describe("the unit test scope of a pull request", () => {
 	})
 })
 
+const CATALOGUE_PATHS = [
+	"packages/ui/src/lib/i18n-en.ts",
+	"packages/ui/src/lib/i18n-fr.ts",
+]
+
+const CHAT_CATALOGUE_PATHS = [
+	"packages/ui/src/lib/i18n-en/chat.ts",
+	"packages/ui/src/lib/i18n-fr/chat.ts",
+]
+
+const VOCABULARY_TEST = "packages/ui/src/lib/i18n-vocabulary.test.ts"
+
+const I18N_TEST = "packages/ui/src/lib/i18n.test.ts"
+
+const ACCOUNT_TEST = "apps/app/src/lib/account/use-account.test.ts"
+
+const TOOL_QUESTION_TEST = "packages/ui/src/components/tool-question.test.tsx"
+
+const catalogueRepo = () => {
+	const repo = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-catalogue-"))
+	const write = (path: string, source: string) => {
+		mkdirSync(dirname(join(repo, path)), { recursive: true })
+		writeFileSync(join(repo, path), source)
+	}
+	write(CHAT_CATALOGUE_PATHS[0], 'export const chat = { send: "Send" }\n')
+	write(CHAT_CATALOGUE_PATHS[1], 'export const chat = { send: "Envoyer" }\n')
+	write(
+		CATALOGUE_PATHS[0],
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\n\nconst en = { chat } as const\n\nexport { en }\n',
+	)
+	write(
+		CATALOGUE_PATHS[1],
+		'import type { en } from "@workspace/ui/lib/i18n-en"\nimport { chat } from "@workspace/ui/lib/i18n-fr/chat"\n\nconst fr = { chat } as const satisfies Record<keyof typeof en, unknown>\n\nexport { fr }\n',
+	)
+	write(
+		"packages/ui/src/lib/i18n.ts",
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\n\nexport const i18n = { en, fr }\n\nexport const languageOf = (language: string) => (language in i18n ? language : "en")\n',
+	)
+	write(I18N_TEST, 'import { i18n } from "@workspace/ui/lib/i18n"\ni18n\n')
+	write(
+		VOCABULARY_TEST,
+		'import { en } from "@workspace/ui/lib/i18n-en"\nimport { fr } from "@workspace/ui/lib/i18n-fr"\nen\nfr\n',
+	)
+	write(
+		TOOL_QUESTION_TEST,
+		'import { chat } from "@workspace/ui/lib/i18n-en/chat"\nchat\n',
+	)
+	write(ACCOUNT_TEST, 'import { en } from "@workspace/ui/lib/i18n-en"\nen\n')
+	for (let index = 0; index < SHARED_IMPORTER_THRESHOLD; index++)
+		write(
+			`apps/app/src/screen-${index}.test.ts`,
+			'import { i18n } from "@workspace/ui/lib/i18n"\ni18n\n',
+		)
+	return repo
+}
+
+describe("the ci:fast unit test scope", () => {
+	const repos: string[] = []
+	const decidedIn = (repo: string, changedPaths: string[]) => {
+		repos.push(repo)
+		return fastUnitTestScope({ changedPaths, repo })
+	}
+	const FAST_TIMEOUT = `--test-timeout=${FAST_TEST_TIMEOUT_MS}`
+
+	afterAll(() => {
+		for (const repo of repos) rmSync(repo, { recursive: true, force: true })
+	})
+
+	it("runs the test files importing the catalogue entry, and the own test of the module consuming it, never the whole unit projects", () => {
+		const scope = decidedIn(catalogueRepo(), CATALOGUE_PATHS)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: CATALOGUE_PATHS[0],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [ACCOUNT_TEST, VOCABULARY_TEST, I18N_TEST],
+				},
+				{
+					path: CATALOGUE_PATHS[1],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+		expect(fastSteps(CATALOGUE_PATHS, scope).at(-1)).toEqual({
+			name: "Unit tests changed since origin/main or importing a shared changed module, against the baseline",
+			command: `bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
+		})
+	})
+
+	it("walks up the re-export catalogue entries from a changed catalogue sub-file to the vocabulary and i18n tests, never to the tests importing the i18n runtime", () => {
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: CHAT_CATALOGUE_PATHS[0],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [
+						ACCOUNT_TEST,
+						TOOL_QUESTION_TEST,
+						VOCABULARY_TEST,
+						I18N_TEST,
+					],
+				},
+				{
+					path: CHAT_CATALOGUE_PATHS[1],
+					reason: "packages/ui/src/lib/**",
+					testFiles: [VOCABULARY_TEST, I18N_TEST],
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+		expect(fastSteps(CHAT_CATALOGUE_PATHS, scope).at(-1)?.command).toBe(
+			`bun run baseline changed '--test-file=${ACCOUNT_TEST}' '--test-file=${TOOL_QUESTION_TEST}' '--test-file=${VOCABULARY_TEST}' '--test-file=${I18N_TEST}' ${FAST_TIMEOUT}`,
+		)
+	})
+
+	it("prints every test file the unit step runs for each shared catalogue path", () => {
+		const scope = decidedIn(catalogueRepo(), CHAT_CATALOGUE_PATHS)
+
+		expect(fastScopeLines(scope).slice(1)).toEqual([
+			`ci    ${CHAT_CATALOGUE_PATHS[0]} is shared (packages/ui/src/lib/**), runs ${ACCOUNT_TEST}, ${TOOL_QUESTION_TEST}, ${VOCABULARY_TEST}, ${I18N_TEST}`,
+			`ci    ${CHAT_CATALOGUE_PATHS[1]} is shared (packages/ui/src/lib/**), runs ${VOCABULARY_TEST}, ${I18N_TEST}`,
+		])
+	})
+
+	it("keeps the pull request job on the whole unit projects, without the ci:fast timeout, for the same catalogue change", () => {
+		const repo = catalogueRepo()
+		repos.push(repo)
+
+		expect(
+			unitTestSteps(unitTestScope({ changedPaths: CATALOGUE_PATHS, repo })),
+		).toEqual([FULL_UNIT_TESTS])
+		expect(FULL_UNIT_TESTS.command).toBe("bun run baseline unit")
+		expect(CHANGED_UNIT_TESTS.command).toBe("bun run baseline changed")
+		for (const step of GROUP_ORDER.flatMap((group) => GATE[group]))
+			expect(step.command).not.toContain("--test-timeout")
+	})
+
+	it(`runs the test files importing it directly or through a re-export module when ${SHARED_IMPORTER_THRESHOLD} test files reach a changed module, naming them`, () => {
+		const scope = decidedIn(
+			fixtureRepo({
+				directImporters: 1,
+				relayImporters: SHARED_IMPORTER_THRESHOLD,
+			}),
+			[SHARED_MODULE],
+		)
+
+		expect(scope).toEqual({
+			scope: "importers",
+			shared: [
+				{
+					path: SHARED_MODULE,
+					reason: `${SHARED_IMPORTER_THRESHOLD + 1} test files reach it, threshold ${SHARED_IMPORTER_THRESHOLD}`,
+					testFiles: [
+						"packages/ui/src/components/direct-0.test.ts",
+						...Array.from(
+							{ length: SHARED_IMPORTER_THRESHOLD },
+							(_, index) => `apps/app/src/relay-${index}.test.ts`,
+						),
+					].sort(),
+				},
+			],
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it("runs a changed test file under a shared path as a changed test file, not as a shared module", () => {
+		expect(
+			fastUnitTestScope({
+				changedPaths: [VOCABULARY_TEST],
+				repo: NO_REPO,
+			}),
+		).toEqual({ scope: "changed" })
+	})
+
+	it("runs the changed test files when no changed module is shared", () => {
+		expect(
+			decidedIn(fixtureRepo({ directImporters: 1, relayImporters: 0 }), [
+				SHARED_MODULE,
+			]),
+		).toEqual({ scope: "changed", graphMs: expect.any(Number) })
+	})
+
+	it.each([
+		["apps/app/vitest.config.ts", "apps/app/vitest.config.ts"],
+		["baselines/tests.txt", "baselines/**"],
+		["packages/ui/src/styles/globals.css", "packages/ui/src/styles/**"],
+	])(
+		"runs the app and ui unit projects when %s, a shared path outside the import graph, changed",
+		(path, rule) => {
+			const scope = fastUnitTestScope({
+				changedPaths: [...CATALOGUE_PATHS, path],
+				repo: NO_REPO,
+			})
+
+			expect(scope).toEqual({ scope: "full", path, rule })
+			expect(fastScopeLines(scope)).toEqual([
+				`ci  unit test scope: the app and ui unit projects: ${path} is shared (${rule})`,
+			])
+		},
+	)
+
+	it("runs the app and ui unit projects and carries the error when building the import graph throws", () => {
+		expect(
+			fastUnitTestScope({ changedPaths: CATALOGUE_PATHS, repo: NO_REPO }),
+		).toEqual({
+			scope: "full",
+			error: expect.stringContaining("ENOENT"),
+			graphMs: expect.any(Number),
+		})
+	})
+
+	it("gives every unit test of ci:fast a timeout a loaded machine does not reach, on every scope", () => {
+		expect(FAST_TEST_TIMEOUT_MS).toBe(30_000)
+		expect(fastUnitTestStep({ scope: "changed" })).toEqual({
+			...CHANGED_UNIT_TESTS,
+			command: `bun run baseline changed ${FAST_TIMEOUT}`,
+		})
+		expect(
+			fastUnitTestStep({ scope: "full", path: "baselines/a", rule: "x" }),
+		).toEqual({
+			...FULL_UNIT_TESTS,
+			command: `bun run baseline unit ${FAST_TIMEOUT}`,
+		})
+	})
+})
+
+describe("the ci:fast wall time", () => {
+	it(`prints the total next to its ${FAST_LIMIT_SECONDS} s limit`, () => {
+		expect(
+			wallTimeLines([
+				{ name: "the unit test scope decision", ms: 4_000 },
+				{ name: "fast / Types", ms: 60_000 },
+			]),
+		).toEqual(["ci  ci:fast took 1m 4s, limit 120 s"])
+	})
+
+	it("names its slowest step and its duration when it went past its limit, and reports it without failing", () => {
+		expect(
+			wallTimeLines([
+				{ name: "the unit test scope decision", ms: 4_000 },
+				{ name: "fast / Types", ms: 100_000 },
+				{ name: "fast / Unit", ms: 30_000 },
+				{ name: "fast / After", ms: 1_000 },
+			]),
+		).toEqual([
+			"ci  ci:fast took 2m 15s, limit 120 s",
+			"ci  ci:fast went past 120 s, its slowest step fast / Types took 1m 40s: reported, the duration alone refuses no push",
+		])
+	})
+})
+
 describe("the push to main retry", () => {
-	const FULL_SCOPE: UnitTestScope = {
+	const FULL_SCOPE: FastUnitTestScope = {
 		scope: "full",
 		path: "baselines/a.json",
 		rule: "baselines/**",
@@ -810,7 +1076,7 @@ describe("the push to main retry", () => {
 		["the changed scope", CHANGED_SCOPE],
 		["the full scope", FULL_SCOPE],
 	] as const
-	const everyStep = (scope: UnitTestScope) => [
+	const everyStep = (scope: FastUnitTestScope) => [
 		...new Set([
 			...GROUP_ORDER.flatMap((group) => GATE[group]),
 			...RUST_PULL_REQUEST_STEPS,
@@ -820,7 +1086,7 @@ describe("the push to main retry", () => {
 			...fastSteps(["scripts/pr-dequeue.sh", "scripts/pr-enqueue.sh"], scope),
 		]),
 	]
-	type RetriedOn = { ref: string | undefined; scope: UnitTestScope }
+	type RetriedOn = { ref: string | undefined; scope: FastUnitTestScope }
 	const retried = ({ ref, scope }: RetriedOn) =>
 		everyStep(scope).flatMap((step) => {
 			const retry = retryOf(step, ref)
