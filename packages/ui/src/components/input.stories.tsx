@@ -71,16 +71,15 @@ export const Default = meta.story({
 		await expect(field).toHaveValue("")
 		await expect(field).toHaveAttribute("placeholder", SEARCH_LABEL)
 		await expect(field.getBoundingClientRect().height).toBe(28)
-		await expect(getComputedStyle(field).borderTopLeftRadius).toBe(
+		const radius = getComputedStyle(field).borderTopLeftRadius
+		await expect(radius).toBe(
 			tokenStyleIn(
 				field.parentElement as HTMLElement,
 				"rounded-lg",
 				"borderTopLeftRadius",
 			),
 		)
-		await expect(
-			Number.parseFloat(getComputedStyle(field).borderTopLeftRadius),
-		).toBeGreaterThan(0)
+		await expect(Number.parseFloat(radius)).toBeGreaterThan(0)
 	},
 })
 
