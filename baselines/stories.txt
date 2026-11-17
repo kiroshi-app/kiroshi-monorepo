@@ -560,6 +560,7 @@ conversation-message-messagescroller--holds-the-reader-when-a-block-cut-at-the-t
 conversation-message-messagescroller--holds-the-reader-when-a-block-cut-at-the-top-shrinks
 conversation-message-messagescroller--holds-the-reader-while-scrolling-back
 conversation-message-messagescroller--keeps-following-when-a-block-grows
+conversation-message-messagescroller--reaches-the-end-while-a-block-grows
 conversation-message-messagescroller--scrolled-back
 conversation-message-messageselection--copy-pressed
 conversation-message-messageselection--dismissed

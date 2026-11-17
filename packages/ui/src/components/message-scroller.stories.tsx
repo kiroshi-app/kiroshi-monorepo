@@ -45,15 +45,25 @@ const GROWING_RANK = 20
 
 const BLOCK_CHANGE = 120
 
+const GROWTH_FRAMES = 12
+
+const GROWTH_STEP = 20
+
 const GROWING_BLOCK = "h-40 rounded-xl border border-border bg-muted"
 
 type ThreadProps = {
 	lines: string[]
 	viewportClassName?: string
 	growingRank?: number
+	behavior?: ScrollBehavior
 }
 
-const Thread = ({ lines, viewportClassName, growingRank }: ThreadProps) => (
+const Thread = ({
+	lines,
+	viewportClassName,
+	growingRank,
+	behavior = "auto",
+}: ThreadProps) => (
 	<MessageScrollerProvider autoScroll defaultScrollPosition="end">
 		<div className={FRAME}>
 			<MessageScroller className="min-h-0">
@@ -82,7 +92,7 @@ const Thread = ({ lines, viewportClassName, growingRank }: ThreadProps) => (
 					</MessageScrollerContent>
 				</MessageScrollerViewport>
 				<MessageScrollerButton
-					behavior="auto"
+					behavior={behavior}
 					className="rounded-full shadow-xl tabular-nums"
 					size="sm"
 					variant="secondary"
@@ -161,6 +171,13 @@ const placeBlockAt = async (
 const resize = async (block: HTMLElement, by: number) => {
 	block.style.height = `${block.getBoundingClientRect().height + by}px`
 	await nextFrames()
+}
+
+const growEachFrame = async (block: HTMLElement) => {
+	for (let frame = 0; frame < GROWTH_FRAMES; frame += 1) {
+		await new Promise(requestAnimationFrame)
+		block.style.height = `${block.getBoundingClientRect().height + GROWTH_STEP}px`
+	}
 }
 
 const itemAfter = (block: HTMLElement) => {
@@ -435,6 +452,45 @@ export const KeepsFollowingWhenABlockGrows = meta.story({
 		}, FRAME_POLL)
 
 		await resize(block, viewport.clientHeight)
+
+		await waitFor(async () => {
+			await expect(
+				viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight,
+			).toBeLessThanOrEqual(line)
+		}, FRAME_POLL)
+	},
+})
+
+export const ReachesTheEndWhileABlockGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader is scrolled back and presses the jump button, which scrolls smoothly, while a block of the thread gets taller on every frame of the scroll the way a streaming reply or a settling live HTML view does. Check that the scroll is never cut short: the reader lands on the end of the thread.",
+			},
+		},
+	},
+	render: () => (
+		<Thread
+			behavior="smooth"
+			growingRank={GROWING_RANK}
+			lines={SCROLLED_THREAD}
+		/>
+	),
+	play: async ({ canvasElement, userEvent }) => {
+		const viewport = viewportIn(canvasElement)
+		const button = buttonIn(canvasElement)
+		const line = lineHeightIn(canvasElement)
+
+		await releaseFollow(viewport)
+		viewport.scrollTop = 0
+		await waitFor(async () => {
+			await expect(button.dataset.active).toBe("true")
+		}, FRAME_POLL)
+
+		await userEvent.click(button)
+		await growEachFrame(growingBlockIn(canvasElement))
 
 		await waitFor(async () => {
 			await expect(

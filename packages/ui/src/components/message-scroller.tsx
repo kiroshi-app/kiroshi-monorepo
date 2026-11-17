@@ -104,10 +104,11 @@ const holdReaderInPlace = (content: HTMLDivElement | null) => {
 
 	const restoreReader = () => {
 		if (held?.element.isConnected && viewport.scrollTop === held.scrollTop) {
-			const offset =
+			const drift =
 				held.element.getBoundingClientRect().top -
-				viewport.getBoundingClientRect().top
-			viewport.scrollTop += offset - held.offset
+				viewport.getBoundingClientRect().top -
+				held.offset
+			if (drift !== 0) viewport.scrollTop += drift
 		}
 		pickReader()
 	}
