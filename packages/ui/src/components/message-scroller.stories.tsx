@@ -132,6 +132,15 @@ const lineHeightIn = (canvasElement: HTMLElement) => {
 
 const topOf = (element: Element) => element.getBoundingClientRect().top
 
+const expectInPlace = async (
+	canvasElement: HTMLElement,
+	element: Element,
+	formerTop: number,
+) =>
+	expect(Math.abs(topOf(element) - formerTop)).toBeLessThanOrEqual(
+		lineHeightIn(canvasElement),
+	)
+
 const releaseFollow = async (viewport: HTMLElement) => {
 	await waitFor(async () => {
 		await expect(viewport).not.toHaveAttribute("data-autoscrolling")
@@ -319,9 +328,7 @@ export const HoldsTheReaderWhenABlockCutAtTheTopGrows = meta.story({
 
 		await resize(block, BLOCK_CHANGE)
 
-		await expect(Math.abs(topOf(reader) - readerTop)).toBeLessThanOrEqual(
-			lineHeightIn(canvasElement),
-		)
+		await expectInPlace(canvasElement, reader, readerTop)
 	},
 })
 
@@ -346,9 +353,7 @@ export const HoldsTheReaderWhenABlockCutAtTheTopShrinks = meta.story({
 
 		await resize(block, -block.offsetHeight / 4)
 
-		await expect(Math.abs(topOf(reader) - readerTop)).toBeLessThanOrEqual(
-			lineHeightIn(canvasElement),
-		)
+		await expectInPlace(canvasElement, reader, readerTop)
 	},
 })
 
@@ -373,9 +378,7 @@ export const HoldsTheReaderWhenABlockAboveGrows = meta.story({
 
 		await resize(block, BLOCK_CHANGE)
 
-		await expect(Math.abs(topOf(reader) - readerTop)).toBeLessThanOrEqual(
-			lineHeightIn(canvasElement),
-		)
+		await expectInPlace(canvasElement, reader, readerTop)
 	},
 })
 
@@ -405,9 +408,7 @@ export const HoldsTheContentAboveWhenABlockInViewGrows = meta.story({
 
 		await resize(block, BLOCK_CHANGE)
 
-		await expect(Math.abs(topOf(above) - aboveTop)).toBeLessThanOrEqual(
-			lineHeightIn(canvasElement),
-		)
+		await expectInPlace(canvasElement, above, aboveTop)
 	},
 })
 
