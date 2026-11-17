@@ -1505,9 +1505,14 @@ describe("the jobs of ci.yml", () => {
 	}
 
 	it.each([
-		[pushToMain(7), "CI-refs/heads/main", "false"],
+		[pushToMain(7), "CI-refs/heads/main", "true"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
 		[releaseTag(9), "CI-9", "false"],
+		[
+			{ event_name: "workflow_dispatch", ref: "refs/heads/main", run_id: "12" },
+			"CI-refs/heads/main",
+			"false",
+		],
 	])(
 		"puts %p in the concurrency group %s, cancel-in-progress %s",
 		(github, group, cancelsInProgress) => {
@@ -1515,9 +1520,19 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("queues a push to main behind the run of an earlier push to main", () => {
+	it("cancels the run of an earlier push to main still in progress", () => {
 		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
-		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("false")
+		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("true")
+	})
+
+	it("diffs a push to main following a cancelled run against the last green push run, never the cancelled one", () => {
+		const lookup =
+			(workflow.jobs.changes?.steps ?? []).find((step) => step.id === "green")
+				?.run ?? ""
+
+		expect(lookup).toContain("--status success")
+		expect(lookup).not.toContain("--status completed")
+		expect(lookup).not.toContain("--status cancelled")
 	})
 
 	it("keeps one concurrency group per pull_request ref", () => {
