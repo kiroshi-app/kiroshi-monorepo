@@ -67,6 +67,12 @@ mod tests {
 		Store { attachments, outside, _base: base }
 	}
 
+	impl Store {
+		fn stored(&self, name: &str) -> PathBuf {
+			self.attachments.join("c1").join(name)
+		}
+	}
+
 	fn written(path: PathBuf, content: &[u8]) -> PathBuf {
 		fs::write(&path, content).expect("a written file");
 		path
@@ -75,7 +81,7 @@ mod tests {
 	#[test]
 	fn an_html_attachment_inside_the_folder_reads_as_its_page() {
 		let store = a_store();
-		let page = written(store.attachments.join("c1").join("page.HTML"), PAGE.as_bytes());
+		let page = written(store.stored("page.HTML"), PAGE.as_bytes());
 
 		assert_eq!(read_page(&store.attachments, &page), Ok(PAGE.to_owned()));
 	}
@@ -83,10 +89,7 @@ mod tests {
 	#[test]
 	fn a_page_at_the_limit_reads() {
 		let store = a_store();
-		let page = written(
-			store.attachments.join("c1").join("page.html"),
-			&vec![b'a'; MAX_PAGE_BYTES as usize],
-		);
+		let page = written(store.stored("page.html"), &vec![b'a'; MAX_PAGE_BYTES as usize]);
 
 		assert_eq!(
 			read_page(&store.attachments, &page).map(|html| html.len() as u64),
@@ -98,8 +101,7 @@ mod tests {
 	fn a_path_climbing_out_through_dot_dot_is_refused() {
 		let store = a_store();
 		written(store.outside.join("page.html"), PAGE.as_bytes());
-		let climbing =
-			store.attachments.join("c1").join("..").join("..").join("outside").join("page.html");
+		let climbing = store.stored("..").join("..").join("outside").join("page.html");
 
 		assert_eq!(
 			read_page(&store.attachments, &climbing),
@@ -112,7 +114,7 @@ mod tests {
 	fn a_symlink_leading_out_of_the_folder_is_refused() {
 		let store = a_store();
 		let target = written(store.outside.join("page.html"), PAGE.as_bytes());
-		let link = store.attachments.join("c1").join("link.html");
+		let link = store.stored("link.html");
 		std::os::unix::fs::symlink(&target, &link).expect("a symlink");
 
 		assert_eq!(read_page(&store.attachments, &link), Err(LiveHtmlError::OutsideAttachments));
@@ -121,7 +123,7 @@ mod tests {
 	#[test]
 	fn a_file_that_is_not_html_is_refused() {
 		let store = a_store();
-		let text = written(store.attachments.join("c1").join("page.txt"), PAGE.as_bytes());
+		let text = written(store.stored("page.txt"), PAGE.as_bytes());
 
 		assert_eq!(read_page(&store.attachments, &text), Err(LiveHtmlError::NotHtml));
 	}
@@ -130,8 +132,7 @@ mod tests {
 	fn a_page_above_the_limit_is_refused_with_its_size() {
 		let store = a_store();
 		let bytes = MAX_PAGE_BYTES + 1;
-		let page =
-			written(store.attachments.join("c1").join("page.html"), &vec![b'a'; bytes as usize]);
+		let page = written(store.stored("page.html"), &vec![b'a'; bytes as usize]);
 
 		assert_eq!(
 			read_page(&store.attachments, &page),
@@ -142,7 +143,7 @@ mod tests {
 	#[test]
 	fn a_missing_page_is_unreadable() {
 		let store = a_store();
-		let missing = store.attachments.join("c1").join("missing.html");
+		let missing = store.stored("missing.html");
 
 		assert!(matches!(
 			read_page(&store.attachments, &missing),
@@ -153,7 +154,7 @@ mod tests {
 	#[test]
 	fn a_page_that_is_not_utf8_is_unreadable() {
 		let store = a_store();
-		let page = written(store.attachments.join("c1").join("page.html"), &[0xff, 0xfe, 0xfd]);
+		let page = written(store.stored("page.html"), &[0xff, 0xfe, 0xfd]);
 
 		assert!(matches!(
 			read_page(&store.attachments, &page),
@@ -164,7 +165,7 @@ mod tests {
 	#[test]
 	fn a_folder_named_like_a_page_is_unreadable() {
 		let store = a_store();
-		let folder = store.attachments.join("c1").join("folder.html");
+		let folder = store.stored("folder.html");
 		fs::create_dir(&folder).expect("a folder");
 
 		assert!(matches!(
