@@ -50,14 +50,11 @@ const splitAtStandIns = (
 
 const trimEdges = (run: ReactNode[]) =>
 	run
-		.map((piece, index) =>
-			typeof piece === "string" && index === 0 ? piece.trimStart() : piece,
-		)
-		.map((piece, index) =>
-			typeof piece === "string" && index === run.length - 1
-				? piece.trimEnd()
-				: piece,
-		)
+		.map((piece, index) => {
+			if (typeof piece !== "string") return piece
+			const start = index === 0 ? piece.trimStart() : piece
+			return index === run.length - 1 ? start.trimEnd() : start
+		})
 		.filter((piece) => piece !== "")
 
 export const MarkdownParagraph = ({
