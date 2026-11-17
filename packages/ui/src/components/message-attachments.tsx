@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Gallery } from "@workspace/ui/components/answer-blocks/gallery"
@@ -7,6 +8,7 @@ import {
 	AttachmentChip,
 	extensionOf,
 } from "@workspace/ui/components/attachment-chip"
+import { AttachmentStandIn } from "@workspace/ui/components/attachment-stand-in"
 import {
 	type ImageMenuActions,
 	imageMenuActionsFor,
@@ -19,10 +21,13 @@ export type MessageAttachment = {
 	previewUrl?: string
 }
 
+export type RenderMessageAttachment = (item: MessageAttachment) => ReactNode
+
 export interface MessageAttachmentsProps {
 	items: MessageAttachment[]
 	onOpen: (id: string) => void
 	imageMenu?: ImageMenuActions<string>
+	renderAttachment?: RenderMessageAttachment
 	className?: string
 }
 
@@ -30,6 +35,7 @@ export function MessageAttachments({
 	items,
 	onOpen,
 	imageMenu,
+	renderAttachment,
 	className,
 }: MessageAttachmentsProps) {
 	const { t } = useTranslation("chat")
@@ -62,15 +68,28 @@ export function MessageAttachments({
 					/>
 				</li>
 			) : null}
-			{files.map((item) => (
-				<li key={item.id} data-slot="message-attachment">
-					<AttachmentChip
-						name={item.name}
-						extension={extensionOf(item.name)}
-						onOpen={() => onOpen(item.id)}
-					/>
-				</li>
-			))}
+			{files.map((item) => {
+				const rendering = renderAttachment?.(item)
+				return rendering == null ? (
+					<li key={item.id} data-slot="message-attachment">
+						<AttachmentChip
+							name={item.name}
+							extension={extensionOf(item.name)}
+							onOpen={() => onOpen(item.id)}
+						/>
+					</li>
+				) : (
+					<li
+						key={item.id}
+						data-slot="message-attachment"
+						className="min-w-0 basis-full"
+					>
+						<AttachmentStandIn name={item.name} onOpen={() => onOpen(item.id)}>
+							{rendering}
+						</AttachmentStandIn>
+					</li>
+				)
+			})}
 		</ul>
 	)
 }

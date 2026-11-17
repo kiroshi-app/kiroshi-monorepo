@@ -14,7 +14,8 @@ import {
 	LIBRARY_STORED_IMAGES,
 	resolvedLibraryImageOf,
 } from "@workspace/ui/components/library.fixtures"
-import { Markdown } from "@workspace/ui/components/markdown"
+import { LiveHtmlSlot } from "@workspace/ui/components/live-html-slot"
+import { Markdown, type MarkdownProps } from "@workspace/ui/components/markdown"
 import type { MarkdownBoardLinkRenderer } from "@workspace/ui/components/markdown/board-link"
 import { MarkdownSizeContext } from "@workspace/ui/components/markdown/size"
 import {
@@ -2241,6 +2242,163 @@ export const AttachmentPathWithSpaces = meta.story({
 		await expect(args.onOpenAttachment).toHaveBeenCalledWith(
 			CITED_SPACED_FILE_PATH,
 		)
+	},
+})
+
+const CITED_PAGE_PATH = `${ATTACHMENT_STORE}/7c2e9a41-3f6d-4b85-a0e7-5d1c8b3f9e62.html`
+
+const CITED_PAGE_TEXT = "the pricing page"
+
+const FILES_CITED_ONE_RENDERED = `Here is [${CITED_PAGE_TEXT}](<${CITED_PAGE_PATH}>) as it stands, and the numbers behind it are in [${CITED_FILE_TEXT}](<${CITED_FILE_PATH}>).`
+
+const PAGE_BEFORE_TEXT = "I rebuilt"
+
+const PAGE_AFTER_TEXT = "with the new tiers, so the yearly plan reads first."
+
+const LIST_ITEM_TEXT = "The draft:"
+
+const PAGE_CITED_MID_SENTENCE_AND_IN_LIST = `${PAGE_BEFORE_TEXT} [${CITED_PAGE_TEXT}](<${CITED_PAGE_PATH}>) ${PAGE_AFTER_TEXT}
+
+- ${LIST_ITEM_TEXT} [${CITED_PAGE_TEXT}](<${CITED_PAGE_PATH}>)
+- The ledger stays as it is.`
+
+const renderCitedPageLive = (path: string) =>
+	path === CITED_PAGE_PATH ? (
+		<LiveHtmlSlot
+			status="loading"
+			html=""
+			height={160}
+			onPlacementChange={fn()}
+		/>
+	) : null
+
+const LIVE_VIEW_FAKE =
+	"The live view is a story fake: the app picks the files it renders and mounts the view."
+
+const standInsIn = (canvasElement: HTMLElement) =>
+	Array.from(
+		canvasElement.querySelectorAll<HTMLElement>(
+			"[data-slot='attachment-stand-in']",
+		),
+	)
+
+const inAnswerColumn = (args: MarkdownProps) => (
+	<MarkdownSizeContext value="answer">
+		<Markdown {...args} />
+	</MarkdownSizeContext>
+)
+
+export const AttachmentFileReplaced = meta.story({
+	args: {
+		children: FILES_CITED_ONE_RENDERED,
+		onOpenAttachment: fn(),
+		renderAttachment: fn(renderCitedPageLive),
+	},
+	render: inAnswerColumn,
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing two stored files, the app handing \`renderAttachment\` a live view for the html page and nothing for the pdf. Check the page stands at the place of its citation as a block across the whole column, with an Open control under it that hands \`onOpenAttachment\` the cited path, while the pdf keeps its inline chip in the sentence. ${LIVE_VIEW_FAKE}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const [standIn, ...others] = standInsIn(canvasElement)
+		await expect(others).toHaveLength(0)
+		await expect(
+			within(standIn).getByRole("group", { name: "Live view" }),
+		).toBeVisible()
+		await expect(
+			canvasElement.querySelectorAll("[data-slot='attachment-chip']"),
+		).toHaveLength(1)
+		await expect(
+			canvas.getByRole("button", { name: `Open ${CITED_FILE_TEXT}` }),
+		).toHaveAttribute("data-slot", "attachment-chip")
+		const markdown = canvasElement.querySelector("[data-slot='markdown']")
+		await expect(standIn.getBoundingClientRect().width).toBe(
+			markdown?.getBoundingClientRect().width,
+		)
+		const open = within(standIn).getByRole("button", {
+			name: `Open ${CITED_PAGE_TEXT}`,
+		})
+		open.focus()
+		await expect(open).toHaveFocus()
+		await userEvent.click(open)
+		await expect(args.onOpenAttachment).toHaveBeenCalledWith(CITED_PAGE_PATH)
+	},
+})
+
+export const AttachmentFileReplacedMidSentenceAndInList = meta.story({
+	args: {
+		children: PAGE_CITED_MID_SENTENCE_AND_IN_LIST,
+		onOpenAttachment: fn(),
+		renderAttachment: fn(renderCitedPageLive),
+	},
+	render: inAnswerColumn,
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing the same stored page mid-sentence and inside a list item, the app handing \`renderAttachment\` a live view for it. Check the sentence breaks around the view, the words before it above and the words after it below, with no view inside a paragraph, and that the view in the list stays inside its item, under the bullet, at the item's indent. ${LIVE_VIEW_FAKE}`,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [inSentence, inList] = standInsIn(canvasElement)
+		await expect(standInsIn(canvasElement)).toHaveLength(2)
+		await expect(
+			canvasElement.querySelector("[data-slot='attachment-chip']"),
+		).toBeNull()
+		for (const standIn of [inSentence, inList])
+			await expect(standIn.closest("p")).toBeNull()
+
+		const before = canvas.getByText(PAGE_BEFORE_TEXT)
+		const after = canvas.getByText(PAGE_AFTER_TEXT)
+		await expect(before.tagName).toBe("P")
+		await expect(after.tagName).toBe("P")
+		await expect(
+			before.compareDocumentPosition(inSentence) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			inSentence.compareDocumentPosition(after) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		const item = inList.closest("li")
+		await expect(item).toHaveTextContent(LIST_ITEM_TEXT)
+		await expect(item?.parentElement?.tagName).toBe("UL")
+		await expect(inList.getBoundingClientRect().left).toBeGreaterThan(
+			after.getBoundingClientRect().left,
+		)
+		await expect(inList.getBoundingClientRect().right).toBe(
+			item?.getBoundingClientRect().right,
+		)
+	},
+})
+
+export const AttachmentFileNotReplaced = meta.story({
+	args: {
+		children: FILE_CITED_MID_ANSWER,
+		onOpenAttachment: fn(),
+		renderAttachment: fn(() => null),
+	},
+	render: inAnswerColumn,
+	parameters: {
+		docs: {
+			description: {
+				story: `An answer citing a stored file the app has no view for: \`renderAttachment\` answers null. Check the file keeps its inline chip inside the sentence, exactly as with no \`renderAttachment\` at all, and that no live view stands anywhere. ${ATTACHMENT_FAKES}`,
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		await expect(args.renderAttachment).toHaveBeenCalledWith(CITED_FILE_PATH)
+		const chip = canvas.getByRole("button", {
+			name: `Open ${CITED_FILE_TEXT}`,
+		})
+		await expect(chip).toHaveAttribute("data-slot", "attachment-chip")
+		await expect(chip.closest("p")).not.toBeNull()
+		await expect(getComputedStyle(chip).display).toBe("inline-flex")
+		await expect(standInsIn(canvasElement)).toHaveLength(0)
 	},
 })
 

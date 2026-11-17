@@ -13,6 +13,7 @@ import {
 	keepDrivePaths,
 	MarkdownAttachmentsContext,
 	type OpenAttachment,
+	type RenderAttachment,
 	useMarkdownAttachments,
 } from "@workspace/ui/components/markdown/attachments"
 import {
@@ -67,6 +68,7 @@ export interface MarkdownProps {
 	resolveImage?: ResolveImage
 	resolveAttachment?: ResolveImage
 	onOpenAttachment?: OpenAttachment
+	renderAttachment?: RenderAttachment
 }
 
 const MARKDOWN_REMARK_PLUGINS = [
@@ -105,6 +107,7 @@ export const Markdown = ({
 	resolveImage,
 	resolveAttachment,
 	onOpenAttachment,
+	renderAttachment,
 }: MarkdownProps) => {
 	const scope = useId()
 	const size = useContext(MarkdownSizeContext)
@@ -139,6 +142,9 @@ export const Markdown = ({
 											onOpenAttachment:
 												onOpenAttachment ??
 												inheritedAttachments.onOpenAttachment,
+											renderAttachment:
+												renderAttachment ??
+												inheritedAttachments.renderAttachment,
 										}}
 									>
 										<ReactMarkdown

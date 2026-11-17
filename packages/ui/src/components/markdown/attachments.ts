@@ -1,16 +1,21 @@
-import { createContext, useContext } from "react"
+import { createContext, type ReactNode, useContext } from "react"
 import { defaultUrlTransform } from "react-markdown"
 
 import type { ResolveImage } from "@workspace/ui/hooks/use-shown-images"
 
 export type OpenAttachment = (path: string) => void
 
+export type RenderAttachment = (path: string) => ReactNode
+
 export type MarkdownAttachments = {
 	resolveAttachment?: ResolveImage
 	onOpenAttachment?: OpenAttachment
+	renderAttachment?: RenderAttachment
 }
 
 const MarkdownAttachmentsContext = createContext<MarkdownAttachments>({})
+
+const MarkdownInParagraphContext = createContext(false)
 
 const useMarkdownAttachments = () => useContext(MarkdownAttachmentsContext)
 
@@ -62,5 +67,6 @@ export {
 	isStoredAttachmentPath,
 	keepDrivePaths,
 	MarkdownAttachmentsContext,
+	MarkdownInParagraphContext,
 	useMarkdownAttachments,
 }
