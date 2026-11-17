@@ -44,8 +44,15 @@ jobs:
       - name: Log the files of the PR owned in CODEOWNERS
         id: owned
         shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          bun scripts/code-owners.ts "$RUNNER_TEMP/CODEOWNERS" <"$RUNNER_TEMP/files" | tee "$RUNNER_TEMP/owned"
+          if [ -f scripts/code-owners.ts ]; then
+            bun scripts/code-owners.ts "$RUNNER_TEMP/CODEOWNERS" <"$RUNNER_TEMP/files" | tee "$RUNNER_TEMP/owned"
+          else
+            echo "::warning::scripts/code-owners.ts is missing on main, every file of PR #$PR_NUMBER is treated as owned"
+            sed 's/$/ is treated as owned: no matcher on main/' "$RUNNER_TEMP/files" | tee "$RUNNER_TEMP/owned"
+          fi
           delimiter="owned_$(openssl rand -hex 16)"
           {
             echo "files<<$delimiter"
