@@ -407,7 +407,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released. A new `transcriptKey` forgets both and lands at the end again. `opening` is what stands at the top of the thread, over the first row: it sits 24px under the top of the scrolling content and 16px over the first row, scrolls away with the rows, and stays out until `older` has no page left. An `opening` that renders nothing lays out no box and leaves the rows where a thread with no opening puts them.",
+					"Scroll container for a streamed transcript, composed on the shadcn MessageScroller primitive. Every row is mounted: nothing is windowed and no row height is guessed. It holds the live edge while the reader sits there, hands scroll control back the moment they move up, and shows a return control that takes them back and resumes following. `older` parks a sentinel above the first row for the host to page from, shows a message-row skeleton there while a page is in flight, and the reading position survives the page being prepended above it. `rows` is one entry per run, with the `messageIds` it anchors, and a row marked `isAnchor` is a message the reader sent: with `anchorOnSend` the newest one is parked near the top of the viewport with a peek of the previous turn while the answer fills the room below. `marksNewMessages` draws a session-local separator where the reader was released. A new `transcriptKey` forgets both and lands at the end again. `opening` is what stands at the top of the thread, over the first row: it sits 24px under the top of the scrolling content and 16px over the first row, scrolls away with the rows, stays out until `older` has no page left, and then takes the place of the start of history line. An `opening` that renders nothing lays out no box and leaves the rows where a thread with no opening puts them.",
 			},
 		},
 	},
@@ -876,7 +876,7 @@ export const OpeningWaitsForTheStartOfHistory = meta.story({
 		docs: {
 			description: {
 				story:
-					"A thread given an `opening` while a page of older messages is still to load. Check that the opening stays out as long as `older` has a next page, since the first row on screen is not the first of the thread, that it takes its place over the first row once the last page has landed, under the start of history line, and that the row the reader was looking at keeps its screen position through the swap. Nothing in `apps/app` passes `opening` yet.",
+					"A thread given an `opening` while a page of older messages is still to load. Check that the opening stays out as long as `older` has a next page, since the first row on screen is not the first of the thread, that it takes its place over the first row once the last page has landed, standing in for the start of history line, and that the row the reader was looking at keeps its screen position through the swap. Nothing in `apps/app` passes `opening` yet.",
 			},
 		},
 	},
@@ -912,11 +912,9 @@ export const OpeningWaitsForTheStartOfHistory = meta.story({
 			Math.abs(anchor.getBoundingClientRect().top - before),
 		).toBeLessThanOrEqual(2)
 		await expectOpeningOverTheRows(viewport)
-		await expect(
-			slotIn(viewport, "transcript-start-of-history").compareDocumentPosition(
-				slotIn(viewport, "transcript-opening"),
-			) & Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy()
+		await expect(slotsIn(viewport, "transcript-start-of-history")).toHaveLength(
+			0,
+		)
 	},
 })
 

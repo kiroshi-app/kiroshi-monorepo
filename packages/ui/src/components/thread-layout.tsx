@@ -28,6 +28,8 @@ import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 const THREAD_WIDTHS =
 	"[--prompt-overhang:calc(var(--spacing)*5)] [--thread-width:calc(var(--spacing)*184)]"
 
+const OPENING_THREAD_WIDTH = "[--thread-width:calc(var(--spacing)*174)]"
+
 const THREAD_COLUMN =
 	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
 
@@ -157,6 +159,7 @@ function ThreadLayout({
 					className={cn(
 						"relative",
 						THREAD_WIDTHS,
+						opening && !skeleton && OPENING_THREAD_WIDTH,
 						aside && "min-w-0 flex-1",
 						className,
 					)}

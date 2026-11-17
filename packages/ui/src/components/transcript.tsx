@@ -372,7 +372,7 @@ const TranscriptBody = ({
 					"scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 				)}
 			>
-				{older ? (
+				{older && !shownOpening ? (
 					<TranscriptOlderEdge
 						contentClassName={contentClassName}
 						older={older}

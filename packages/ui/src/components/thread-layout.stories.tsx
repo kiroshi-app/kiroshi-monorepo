@@ -683,23 +683,41 @@ const overhangOf = (frame: HTMLElement) => {
 	}
 }
 
-export const PromptOverhangsTheThread = meta.story({
-	render: (args) => (
-		<div className="flex flex-col gap-6">
-			<div data-slot="overhang-frame" className="h-100 w-[1072px]">
-				<ThreadLayout {...args} label="Widest thread" />
-			</div>
-			<div data-slot="overhang-frame" className="h-100 w-120">
-				<ThreadLayout {...args} header={null} label="Narrow thread" />
-			</div>
+const columnWidthOf = (frame: HTMLElement) => {
+	const column = slotIn(frame, "message-scroller-content")
+	const { paddingLeft, paddingRight } = getComputedStyle(column)
+	return Math.round(
+		column.getBoundingClientRect().width -
+			Number.parseFloat(paddingLeft) -
+			Number.parseFloat(paddingRight),
+	)
+}
+
+const SOLO_COLUMN_WIDTH = 680
+
+const NARROW_FRAME_WIDTH = 480
+
+const HISTORY_LOADED = { hasNextPage: false, isFetchingNextPage: false }
+
+const inOverhangFrames = (args: ThreadLayoutProps) => (
+	<div className="flex flex-col gap-6">
+		<div data-slot="overhang-frame" className="h-100 w-[1072px]">
+			<ThreadLayout {...args} label="Widest thread" />
 		</div>
-	),
-	args: { rows: CONVERSATION_ROWS, children: null },
+		<div data-slot="overhang-frame" className="h-100 w-120">
+			<ThreadLayout {...args} header={null} label="Narrow thread" />
+		</div>
+	</div>
+)
+
+export const PromptOverhangsTheThread = meta.story({
+	render: inOverhangFrames,
+	args: { rows: CONVERSATION_ROWS, children: null, older: HISTORY_LOADED },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges.",
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges, and that a thread with no `opening` keeps its start of history line once the last page has landed. Pick `PromptOverhangsTheMissionThread` for a mission thread.",
 			},
 		},
 	},
@@ -712,6 +730,8 @@ export const PromptOverhangsTheThread = meta.story({
 		await expect(
 			slotIn(widest, "prompt-input").getBoundingClientRect().width,
 		).toBe(720)
+		await expect(columnWidthOf(widest)).toBe(SOLO_COLUMN_WIDTH)
+		await expect(slotsIn(widest, "transcript-start-of-history")).toHaveLength(1)
 		await expect(overhangOf(narrow)).toEqual({
 			start: PROMPT_OVERHANG,
 			end: PROMPT_OVERHANG,
@@ -1349,6 +1369,46 @@ export const Opening = meta.story({
 			block.top - boxOf(slotIn(layout, "app-header")).bottom,
 			boxOf(firstTurn).top - block.bottom,
 		]).toEqual([OPENING_UNDER_THE_BAR, OPENING_OVER_THE_FIRST_TURN])
+	},
+})
+
+const MISSION_COLUMN_WIDTH = 640
+
+export const PromptOverhangsTheMissionThread = meta.story({
+	render: inOverhangFrames,
+	args: {
+		rows: CONVERSATION_ROWS,
+		children: null,
+		older: HISTORY_LOADED,
+		opening: MISSION_OPENING,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Measured on the Final page, artboards 3a to 3e: a thread given an `opening`, the properties of a mission, lays its column at 640 instead of the 680 of `PromptOverhangsTheThread`, and opens on the properties block with no start of history line above it. Check that the prompt still overhangs that column by 20 on each side, so it is 680 wide, and that in a 480 wide thread the column shrinks inside the same gutters a solo thread keeps. The app assembles it at `apps/app/src/components/thread-screen.tsx:1977`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [widest, narrow] = slotsIn(canvasElement, "overhang-frame")
+		const gutter =
+			Number.parseFloat(tokenLengthOf("--shell-inset")) + PROMPT_OVERHANG
+
+		for (const frame of [widest, narrow]) {
+			await expect(slotsIn(frame, "transcript-start-of-history")).toHaveLength(
+				0,
+			)
+			await expect(overhangOf(frame)).toEqual({
+				start: PROMPT_OVERHANG,
+				end: PROMPT_OVERHANG,
+			})
+		}
+		await expect(columnWidthOf(widest)).toBe(MISSION_COLUMN_WIDTH)
+		await expect(
+			slotIn(widest, "prompt-input").getBoundingClientRect().width,
+		).toBe(MISSION_COLUMN_WIDTH + 2 * PROMPT_OVERHANG)
+		await expect(columnWidthOf(narrow)).toBe(NARROW_FRAME_WIDTH - 2 * gutter)
 	},
 })
 

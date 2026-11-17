@@ -1326,6 +1326,7 @@ layout-threadlayout--opening-held-back-by-skeleton
 layout-threadlayout--opening-that-renders-nothing
 layout-threadlayout--outside-content-card
 layout-threadlayout--pending
+layout-threadlayout--prompt-overhangs-the-mission-thread
 layout-threadlayout--prompt-overhangs-the-thread
 layout-threadlayout--skeleton-in-the-transcript-column
 layout-threadlayout--solo-1-a
