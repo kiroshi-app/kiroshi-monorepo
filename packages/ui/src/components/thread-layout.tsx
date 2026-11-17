@@ -30,6 +30,9 @@ const THREAD_WIDTHS =
 
 const OPENING_THREAD_WIDTH = "[--thread-width:calc(var(--spacing)*174)]"
 
+const MISSION_SKELETON_THREAD_WIDTH =
+	"has-data-[slot=mission-detail-skeleton]:[--thread-width:calc(var(--spacing)*174)]"
+
 const THREAD_COLUMN =
 	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
 
@@ -160,6 +163,7 @@ function ThreadLayout({
 						"relative",
 						THREAD_WIDTHS,
 						opening && OPENING_THREAD_WIDTH,
+						MISSION_SKELETON_THREAD_WIDTH,
 						aside && "min-w-0 flex-1",
 						className,
 					)}

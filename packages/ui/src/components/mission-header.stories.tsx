@@ -605,15 +605,22 @@ const SHORT_THREAD = turnsOf(TWO_MESSAGES)
 type MissionThreadProps = {
 	header: ReactNode
 	notice?: ReactNode
+	opening?: ReactNode
 	skeleton?: ReactNode
 }
 
-const MissionThread = ({ header, notice, skeleton }: MissionThreadProps) => (
+const MissionThread = ({
+	header,
+	notice,
+	opening,
+	skeleton,
+}: MissionThreadProps) => (
 	<div className="h-svh bg-card" data-content-card="">
 		<ThreadLayout
 			composer={<PromptInput onSubmit={fn()} />}
 			header={header}
 			notice={notice}
+			opening={opening}
 			rows={SHORT_THREAD}
 			skeleton={skeleton}
 		>
@@ -642,9 +649,53 @@ const MissionOnItsWay = (args: MissionHeaderProps) => {
 					<Button onClick={() => setIsLoaded(true)}>Load the mission</Button>
 				)
 			}
+			opening={
+				isLoaded ? <MissionProperties {...ARTBOARD_PROPERTIES} /> : undefined
+			}
 			skeleton={isLoaded ? undefined : <MissionDetailSkeleton />}
 		/>
 	)
+}
+
+const PROMPT_OVERHANG = 20
+
+const columnOf = (layout: HTMLElement, columnSlot: string) => {
+	const column = slotIn(layout, columnSlot)
+	const { paddingLeft, paddingRight } = getComputedStyle(column)
+	const box = boxOf(column)
+	const left = box.left + Number.parseFloat(paddingLeft)
+	return {
+		left: Math.round(left),
+		width: Math.round(box.right - Number.parseFloat(paddingRight) - left),
+	}
+}
+
+const promptOverhangOf = (layout: HTMLElement, columnSlot: string) => {
+	const column = columnOf(layout, columnSlot)
+	const prompt = boxOf(slotIn(layout, "prompt-input"))
+	return {
+		start: Math.round(column.left - prompt.left),
+		end: Math.round(prompt.right - column.left - column.width),
+	}
+}
+
+const MissionSkeletonThread = (args: MissionHeaderProps) => (
+	<MissionThread
+		header={
+			<MissionHeaderSkeleton onBack={args.onBack} pathLabel={args.pathLabel} />
+		}
+		skeleton={<MissionDetailSkeleton />}
+	/>
+)
+
+const expectSkeletonInTheMissionColumn = async (layout: HTMLElement) => {
+	await expect(columnOf(layout, "thread-skeleton-column").width).toBe(
+		COLUMN_WIDTH,
+	)
+	await expect(promptOverhangOf(layout, "thread-skeleton-column")).toEqual({
+		start: PROMPT_OVERHANG,
+		end: PROMPT_OVERHANG,
+	})
 }
 
 const leadingGeometryOf = (bar: HTMLElement) => {
@@ -673,23 +724,14 @@ export const MissionSkeleton = meta.story({
 		docs: {
 			description: {
 				story:
-					"The mission thread while the mission is still on its way. Check that the skeleton header is the same static 56px bar as `Mission3a`, with the path link already live so the reader can leave, a 32px hexagon and a bar where the avatar and the objective land, and no state. `apps/app/src/components/mission-thread-screen.tsx:156` renders the mission-loading branch of a thread.",
+					"The mission thread while the mission is still on its way. Check that the skeleton header is the same static 56px bar as `Mission3a`, with the path link already live so the reader can leave, a 32px hexagon and a bar where the avatar and the objective land, and no state. Check too that the skeleton already lays the 640 column of `Mission3a` under a prompt overhanging it by 20 on each side, with no `opening` given. `apps/app/src/components/mission-thread-screen.tsx:162` renders the mission-loading branch of a thread. Pick `MissionSkeletonDark` for the dark theme.",
 			},
 		},
 	},
-	render: (args) => (
-		<MissionThread
-			header={
-				<MissionHeaderSkeleton
-					onBack={args.onBack}
-					pathLabel={args.pathLabel}
-				/>
-			}
-			skeleton={<MissionDetailSkeleton />}
-		/>
-	),
+	render: (args) => <MissionSkeletonThread {...args} />,
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const layout = slotIn(canvasElement, "chat-layout")
+		await expectSkeletonInTheMissionColumn(layout)
 		const bar = await expectStaticHeaderBar(layout)
 		const skeleton = slotIn(layout, "mission-header-skeleton")
 		const [hexagon] = slotsIn(bar, "skeleton")
@@ -710,6 +752,23 @@ export const MissionSkeleton = meta.story({
 	},
 })
 
+export const MissionSkeletonDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The mission thread still on its way, in the dark theme. Check that the skeleton keeps the geometry of `MissionSkeleton`, its 640 column under the overhanging prompt, and draws its bars from the dark tokens.",
+			},
+		},
+	},
+	render: (args) => <MissionSkeletonThread {...args} />,
+	play: async ({ canvasElement }) => {
+		await expectSkeletonInTheMissionColumn(slotIn(canvasElement, "chat-layout"))
+	},
+})
+
 export const MissionSkeletonThenLoaded = meta.story({
 	tags: ["test-only"],
 	args: ARTBOARD_HEADER,
@@ -719,7 +778,7 @@ export const MissionSkeletonThenLoaded = meta.story({
 		docs: {
 			description: {
 				story:
-					"The mission thread first on its skeleton, then loaded once *Load the mission* is pressed. Check that the bar keeps its 56px, and that the avatar, the path link and the objective land exactly where the hexagon, the path link and the bar stood, so nothing moves when the mission arrives.",
+					"The mission thread first on its skeleton, then loaded once *Load the mission* is pressed. Check that the bar keeps its 56px, that the avatar, the path link and the objective land exactly where the hexagon, the path link and the bar stood, and that the 640 column keeps its left edge and its width, so nothing moves when the mission arrives.",
 			},
 		},
 	},
@@ -730,7 +789,10 @@ export const MissionSkeletonThenLoaded = meta.story({
 			slotIn(slotIn(layout, "mission-header-skeleton"), "app-header"),
 		)
 
+		const loadingColumn = columnOf(layout, "thread-skeleton-column")
+
 		await expect(loading.bar).toBe(56)
+		await expect(loadingColumn.width).toBe(COLUMN_WIDTH)
 
 		await userEvent.click(
 			within(canvasElement).getByRole("button", { name: "Load the mission" }),
@@ -739,6 +801,9 @@ export const MissionSkeletonThenLoaded = meta.story({
 
 		await expect(leadingGeometryOf(slotIn(header, "app-header"))).toEqual(
 			loading,
+		)
+		await expect(columnOf(layout, "message-scroller-content")).toEqual(
+			loadingColumn,
 		)
 		await expectStaticHeaderBar(layout)
 	},

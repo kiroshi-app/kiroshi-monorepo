@@ -701,6 +701,8 @@ const columnWidthOf = (
 
 const SOLO_COLUMN_WIDTH = 680
 
+const MISSION_COLUMN_WIDTH = 640
+
 const NARROW_FRAME_WIDTH = 480
 
 const HISTORY_LOADED = { hasNextPage: false, isFetchingNextPage: false }
@@ -868,10 +870,28 @@ const COLUMN_FRAME_WIDTHS = [
 	{ label: "Narrow", className: "w-120" },
 ]
 
-const COLUMN_FRAMES = [
-	{ label: "conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
-	{ label: "mission skeleton", skeleton: <MissionDetailSkeleton /> },
-	{ label: "loaded thread" },
+const MISSION_OPENING = (
+	<MissionProperties
+		now={MISSION_NOW}
+		onOpenCodingSession={fn()}
+		openedAt={MISSION_NOW - 7_200_000}
+		pullRequest={MISSION_PULL_REQUEST}
+		ticket={MISSION_TICKET}
+	/>
+)
+
+const COLUMN_FRAME_PAIRS = [
+	{
+		label: "conversation",
+		skeleton: <ThreadTranscriptSkeleton />,
+		columnWidth: SOLO_COLUMN_WIDTH,
+	},
+	{
+		label: "mission",
+		skeleton: <MissionDetailSkeleton />,
+		opening: MISSION_OPENING,
+		columnWidth: MISSION_COLUMN_WIDTH,
+	},
 ]
 
 const columnOf = (element: HTMLElement, frame: HTMLElement) => {
@@ -895,20 +915,26 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		<div className="flex flex-col gap-6">
 			{COLUMN_FRAME_WIDTHS.map(({ label, className }) => (
 				<div key={label} data-slot="column-frame-row" className="flex gap-6">
-					{COLUMN_FRAMES.map((frame) => (
-						<div
-							key={frame.label}
-							data-slot="column-frame"
-							className={cn("h-100 shrink-0", className)}
-						>
-							<ThreadLayout
-								{...args}
-								header={null}
-								label={`${label} ${frame.label}`}
-								skeleton={frame.skeleton}
-							/>
-						</div>
-					))}
+					{COLUMN_FRAME_PAIRS.flatMap((pair) =>
+						[
+							{ frame: `${pair.label} skeleton`, skeleton: pair.skeleton },
+							{ frame: `loaded ${pair.label}`, opening: pair.opening },
+						].map((frame) => (
+							<div
+								key={frame.frame}
+								data-slot="column-frame"
+								className={cn("h-100 shrink-0", className)}
+							>
+								<ThreadLayout
+									{...args}
+									header={null}
+									label={`${label} ${frame.frame}`}
+									opening={frame.opening}
+									skeleton={frame.skeleton}
+								/>
+							</div>
+						)),
+					)}
 				</div>
 			))}
 		</div>
@@ -920,7 +946,7 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"The conversation skeleton and the mission skeleton beside the loaded transcript, at 1072 wide then at 480 wide, in both themes. Every skeleton takes the column the layout hands the loaded transcript, so check that the bubbles start and end on the same edges across a row, and that each skeleton fills the whole surface down to the composer. Pick `Default` for the loaded transcript alone.",
+					"The conversation skeleton beside the loaded conversation, then the mission skeleton, given no `opening` as the app gives it none, beside the loaded mission, at 1072 wide then at 480 wide, in both themes. Every skeleton takes the column the layout hands its loaded transcript, 680 for a conversation and 640 for a mission, so check that the bubbles start and end on the same edges within each pair, that at 480 wide both columns shrink inside the same gutters, and that each skeleton fills the whole surface down to the composer. Pick `Default` for the loaded transcript alone.",
 			},
 		},
 	},
@@ -928,22 +954,34 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		const rows = slotsIn(canvasElement, "column-frame-row")
 		await expect(rows).toHaveLength(COLUMN_FRAME_WIDTHS.length * BOTH_THEMES)
 
+		const gutter =
+			Number.parseFloat(tokenLengthOf("--shell-inset")) + PROMPT_OVERHANG
+
 		for (const row of rows) {
 			const frames = slotsIn(row, "column-frame")
-			const loadedFrame = frames.at(-1) as HTMLElement
-			const loadedColumn = columnOf(
-				slotIn(loadedFrame, "message-scroller-content"),
-				loadedFrame,
-			)
-			const loadedSurface = surfaceOf(
-				slotIn(loadedFrame, "message-scroller-viewport"),
-				loadedFrame,
-			)
 
-			for (const frame of frames.slice(0, -1)) {
-				const skeleton = slotIn(frame, "list-skeleton")
-				await expect(columnOf(skeleton, frame)).toEqual(loadedColumn)
-				await expect(surfaceOf(skeleton, frame)).toEqual(loadedSurface)
+			for (const [index, { columnWidth }] of COLUMN_FRAME_PAIRS.entries()) {
+				const skeletonFrame = frames[2 * index]
+				const loadedFrame = frames[2 * index + 1]
+				const skeleton = slotIn(skeletonFrame, "list-skeleton")
+				const loadedColumn = columnOf(
+					slotIn(loadedFrame, "message-scroller-content"),
+					loadedFrame,
+				)
+
+				await expect(columnOf(skeleton, skeletonFrame)).toEqual(loadedColumn)
+				await expect(surfaceOf(skeleton, skeletonFrame)).toEqual(
+					surfaceOf(
+						slotIn(loadedFrame, "message-scroller-viewport"),
+						loadedFrame,
+					),
+				)
+				await expect(Math.round(loadedColumn.width)).toBe(
+					Math.min(
+						columnWidth,
+						loadedFrame.getBoundingClientRect().width - 2 * gutter,
+					),
+				)
 			}
 		}
 	},
@@ -1343,16 +1381,6 @@ const OPENING_UNDER_THE_BAR = 24
 
 const OPENING_OVER_THE_FIRST_TURN = 16
 
-const MISSION_OPENING = (
-	<MissionProperties
-		now={MISSION_NOW}
-		onOpenCodingSession={fn()}
-		openedAt={MISSION_NOW - 7_200_000}
-		pullRequest={MISSION_PULL_REQUEST}
-		ticket={MISSION_TICKET}
-	/>
-)
-
 export const Opening = meta.story({
 	args: { ...THREAD_UNDER_THE_BAR, opening: MISSION_OPENING },
 	parameters: {
@@ -1377,8 +1405,6 @@ export const Opening = meta.story({
 		]).toEqual([OPENING_UNDER_THE_BAR, OPENING_OVER_THE_FIRST_TURN])
 	},
 })
-
-const MISSION_COLUMN_WIDTH = 640
 
 export const PromptOverhangsTheMissionThread = meta.story({
 	render: inOverhangFrames,
