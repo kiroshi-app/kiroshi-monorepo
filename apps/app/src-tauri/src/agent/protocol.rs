@@ -97,6 +97,7 @@ pub enum Frame {
 	TurnSettled(ResultFrame),
 	TasksPending(TasksPendingFrame),
 	Heartbeat,
+	ProviderUnreachable,
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	HostRequest(HostRequestFrame),

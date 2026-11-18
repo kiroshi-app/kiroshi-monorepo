@@ -204,6 +204,7 @@ fn frame_names(frame: Frame) -> Vec<&'static str> {
 			vec!["server_env_rejected"]
 		}
 		Frame::Heartbeat => vec!["heartbeat"],
+		Frame::ProviderUnreachable => vec!["provider_unreachable"],
 		Frame::InterruptFailed(held) => {
 			assert_eq!(held.detail.as_deref(), Some("the query refused the interrupt"));
 			vec!["interrupt_failed"]
@@ -368,6 +369,7 @@ fn every_frame_the_sidecar_sends_reads_as_the_variant_the_host_matches() {
 				"mcp_oauth_revoke",
 				"models",
 				"opened",
+				"provider_unreachable",
 				"ready",
 				"result",
 				"server_env_rejected",

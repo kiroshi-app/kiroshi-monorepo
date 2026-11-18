@@ -21,7 +21,7 @@ use crate::agent::commands::{
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
-	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome, TurnState,
+	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnFailure, TurnOutcome, TurnState,
 };
 use crate::agent::reply_writer::prompts_settled_by;
 use crate::agent::session::{Handed, LinePlace};
@@ -787,7 +787,7 @@ impl<R: Runtime> HostTurn<R> {
 			detail_of(&reason)
 		);
 		self.abandon(&scope.bot_id).await;
-		let failed = [AgentEvent::Failed { error: reason }, ended_as(TurnOutcome::Failed)];
+		let failed = [AgentEvent::Failed { error: reason }, failed_as(TurnFailure::Rejected)];
 		for event in failed {
 			announce_in_turn(&self.app, Some(scope.clone()), Some(self.event_turn()), event);
 		}
@@ -1307,10 +1307,19 @@ fn hand_over(
 }
 
 pub(crate) fn ended_as(outcome: TurnOutcome) -> AgentEvent {
+	ended_with(outcome, None)
+}
+
+pub(crate) fn failed_as(failure: TurnFailure) -> AgentEvent {
+	ended_with(TurnOutcome::Failed, Some(failure))
+}
+
+fn ended_with(outcome: TurnOutcome, failure: Option<TurnFailure>) -> AgentEvent {
 	AgentEvent::TurnEnded {
 		ended: TurnEnded {
 			session_id: None,
 			outcome,
+			failure,
 			structured_output: None,
 			total_cost_usd: None,
 			model_usage: None,
@@ -2341,7 +2350,7 @@ mod tests {
 			let heard = told_in_turn(&told, &ada);
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert!(failure_detail(&heard[0]).contains("the relay closed"), "{heard:?}");
-			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+			assert_eq!(heard[1], failed_as(TurnFailure::Rejected));
 			assert_eq!(open_runs(app.handle()).await, 0, "the queued run was not abandoned");
 			assert!(
 				shut_down_scopes(&agent_events(&told)).is_empty(),
@@ -2418,7 +2427,7 @@ mod tests {
 			let heard = told_in_turn(&told, &ada);
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
-			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+			assert_eq!(heard[1], failed_as(TurnFailure::Rejected));
 			assert_eq!(open_runs(app.handle()).await, 0, "the awaited run was not abandoned");
 			assert!(
 				shut_down_scopes(&agent_events(&told)).is_empty(),
@@ -2713,7 +2722,7 @@ done
 			let heard = told_in_turn(&told, &ada);
 			assert_eq!(heard.len(), 2, "the member heard {heard:?}");
 			assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
-			assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+			assert_eq!(heard[1], failed_as(TurnFailure::Rejected));
 			assert_eq!(open_runs(app.handle()).await, 0, "the claimed run was left open");
 			assert_eq!(summons_steps(&room, &ada.bot_id), vec!["dropped lostQueue"]);
 			let lost = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };

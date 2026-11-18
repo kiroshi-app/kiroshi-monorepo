@@ -10378,6 +10378,16 @@
     },
     "TurnEnded_Serialize": {
       "properties": {
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnFailure"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "modelUsage": {
           "anyOf": [
             {
@@ -10427,6 +10437,16 @@
         "outcome"
       ],
       "type": "object"
+    },
+    "TurnFailure": {
+      "enum": [
+        "noConnection",
+        "providerError",
+        "runLapsed",
+        "stopFailed",
+        "agentLost",
+        "rejected"
+      ]
     },
     "TurnHold": {
       "properties": {

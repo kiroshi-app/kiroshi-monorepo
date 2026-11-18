@@ -2982,6 +2982,7 @@ mod tests {
 				ended: TurnEnded {
 					session_id: None,
 					outcome: TurnOutcome::Completed,
+					failure: None,
 					structured_output: None,
 					total_cost_usd: None,
 					model_usage: None,

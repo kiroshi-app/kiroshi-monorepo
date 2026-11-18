@@ -4,18 +4,24 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 
+use super::contract::TurnFailure;
+
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 pub const RUN_SILENCE_BOUND: Duration = Duration::from_secs(60);
 pub const INTERRUPT_ANSWER_BOUND: Duration = Duration::from_secs(15);
 pub const TASKS_PENDING_BOUND: Duration = Duration::from_secs(10 * 60);
+pub const PROVIDER_UNREACHABLE_BOUND: Duration = Duration::from_secs(10);
+const NO_CONNECTION_ENDS_WITHIN: Duration = Duration::from_secs(15);
 
 const _: () = assert!(RUN_SILENCE_BOUND.as_secs() >= 3 * HEARTBEAT_INTERVAL.as_secs());
+const _: () = assert!(PROVIDER_UNREACHABLE_BOUND.as_secs() < NO_CONNECTION_ENDS_WITHIN.as_secs());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunLease {
 	pub silence: Duration,
 	pub interrupt_answer: Duration,
 	pub tasks_pending: Duration,
+	pub provider_unreachable: Duration,
 }
 
 impl Default for RunLease {
@@ -24,6 +30,7 @@ impl Default for RunLease {
 			silence: RUN_SILENCE_BOUND,
 			interrupt_answer: INTERRUPT_ANSWER_BOUND,
 			tasks_pending: TASKS_PENDING_BOUND,
+			provider_unreachable: PROVIDER_UNREACHABLE_BOUND,
 		}
 	}
 }
@@ -34,6 +41,32 @@ impl RunLease {
 			Lapse::Silent => self.silence,
 			Lapse::InterruptUnanswered => self.interrupt_answer,
 			Lapse::TasksPending => self.tasks_pending,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Expiry {
+	Lapsed(Lapse),
+	ProviderUnreachable,
+}
+
+impl Expiry {
+	pub(crate) fn failure(self) -> TurnFailure {
+		match self {
+			Expiry::Lapsed(_) => TurnFailure::RunLapsed,
+			Expiry::ProviderUnreachable => TurnFailure::NoConnection,
+		}
+	}
+}
+
+impl fmt::Display for Expiry {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Expiry::Lapsed(lapse) => lapse.fmt(f),
+			Expiry::ProviderUnreachable => {
+				write!(f, "the model provider stayed unreachable past the connection bound")
+			}
 		}
 	}
 }
@@ -67,11 +100,17 @@ pub(crate) struct Liveness {
 	heard_at: Instant,
 	interrupted_at: Option<Instant>,
 	result_held_since: Option<Instant>,
+	unreachable_since: Option<Instant>,
 }
 
 impl Liveness {
 	pub(crate) fn since(now: Instant) -> Self {
-		Self { heard_at: now, interrupted_at: None, result_held_since: None }
+		Self {
+			heard_at: now,
+			interrupted_at: None,
+			result_held_since: None,
+			unreachable_since: None,
+		}
 	}
 
 	pub(crate) fn heard(&mut self, now: Instant) {
@@ -86,19 +125,36 @@ impl Liveness {
 		self.result_held_since.get_or_insert(now);
 	}
 
+	pub(crate) fn provider_unreachable(&mut self, now: Instant) {
+		self.unreachable_since.get_or_insert(now);
+	}
+
+	pub(crate) fn provider_reached(&mut self) {
+		self.unreachable_since = None;
+	}
+
 	pub(crate) fn deadline(
 		&self,
 		lease: RunLease,
 		waiting_on_person: bool,
-	) -> Option<(Instant, Lapse)> {
+	) -> Option<(Instant, Expiry)> {
 		let unanswered = self.interrupted_at.map(|interrupted_at| {
-			(interrupted_at + lease.interrupt_answer, Lapse::InterruptUnanswered)
+			(interrupted_at + lease.interrupt_answer, Expiry::Lapsed(Lapse::InterruptUnanswered))
 		});
-		let silent = (!waiting_on_person).then(|| (self.heard_at + lease.silence, Lapse::Silent));
-		let outlasted = self
-			.result_held_since
-			.map(|held_since| (held_since + lease.tasks_pending, Lapse::TasksPending));
-		unanswered.into_iter().chain(silent).chain(outlasted).min_by_key(|(at, _)| *at)
+		let silent = (!waiting_on_person)
+			.then(|| (self.heard_at + lease.silence, Expiry::Lapsed(Lapse::Silent)));
+		let outlasted = self.result_held_since.map(|held_since| {
+			(held_since + lease.tasks_pending, Expiry::Lapsed(Lapse::TasksPending))
+		});
+		let unreachable = self.unreachable_since.map(|unreachable_since| {
+			(unreachable_since + lease.provider_unreachable, Expiry::ProviderUnreachable)
+		});
+		unanswered
+			.into_iter()
+			.chain(silent)
+			.chain(outlasted)
+			.chain(unreachable)
+			.min_by_key(|(at, _)| *at)
 	}
 }
 
@@ -110,6 +166,7 @@ mod tests {
 		silence: Duration::from_secs(60),
 		interrupt_answer: Duration::from_secs(15),
 		tasks_pending: Duration::from_secs(600),
+		provider_unreachable: Duration::from_secs(10),
 	};
 
 	fn after(start: Instant, seconds: u64) -> Instant {
@@ -123,7 +180,10 @@ mod tests {
 
 		liveness.heard(after(start, 50));
 
-		assert_eq!(liveness.deadline(LEASE, false), Some((after(start, 110), Lapse::Silent)));
+		assert_eq!(
+			liveness.deadline(LEASE, false),
+			Some((after(start, 110), Expiry::Lapsed(Lapse::Silent)))
+		);
 	}
 
 	#[test]
@@ -136,7 +196,7 @@ mod tests {
 
 		assert_eq!(
 			liveness.deadline(LEASE, false),
-			Some((after(start, 20), Lapse::InterruptUnanswered))
+			Some((after(start, 20), Expiry::Lapsed(Lapse::InterruptUnanswered)))
 		);
 	}
 
@@ -150,7 +210,7 @@ mod tests {
 		liveness.interrupted(after(start, 600));
 		assert_eq!(
 			liveness.deadline(LEASE, true),
-			Some((after(start, 615), Lapse::InterruptUnanswered))
+			Some((after(start, 615), Expiry::Lapsed(Lapse::InterruptUnanswered)))
 		);
 	}
 
@@ -164,7 +224,7 @@ mod tests {
 
 		assert_eq!(
 			liveness.deadline(LEASE, false),
-			Some((after(start, 15), Lapse::InterruptUnanswered))
+			Some((after(start, 15), Expiry::Lapsed(Lapse::InterruptUnanswered)))
 		);
 	}
 
@@ -177,7 +237,10 @@ mod tests {
 		liveness.result_held(after(start, 200));
 		liveness.heard(after(start, 610));
 
-		assert_eq!(liveness.deadline(LEASE, false), Some((after(start, 630), Lapse::TasksPending)));
+		assert_eq!(
+			liveness.deadline(LEASE, false),
+			Some((after(start, 630), Expiry::Lapsed(Lapse::TasksPending)))
+		);
 	}
 
 	#[test]
@@ -187,7 +250,10 @@ mod tests {
 
 		liveness.result_held(after(start, 20));
 
-		assert_eq!(liveness.deadline(LEASE, true), Some((after(start, 620), Lapse::TasksPending)));
+		assert_eq!(
+			liveness.deadline(LEASE, true),
+			Some((after(start, 620), Expiry::Lapsed(Lapse::TasksPending)))
+		);
 	}
 
 	#[test]
@@ -195,5 +261,43 @@ mod tests {
 		assert_eq!(LEASE.bound_of(Lapse::Silent), Duration::from_secs(60));
 		assert_eq!(LEASE.bound_of(Lapse::InterruptUnanswered), Duration::from_secs(15));
 		assert_eq!(LEASE.bound_of(Lapse::TasksPending), Duration::from_secs(600));
+	}
+
+	#[test]
+	fn an_unreachable_provider_lapses_at_its_bound_counted_from_the_first_failure_while_frames_keep_coming(
+	) {
+		let start = Instant::now();
+		let mut liveness = Liveness::since(start);
+
+		liveness.provider_unreachable(after(start, 3));
+		liveness.provider_unreachable(after(start, 9));
+		liveness.heard(after(start, 12));
+
+		assert_eq!(
+			liveness.deadline(LEASE, false),
+			Some((after(start, 13), Expiry::ProviderUnreachable))
+		);
+	}
+
+	#[test]
+	fn a_provider_reached_again_drops_the_unreachable_bound() {
+		let start = Instant::now();
+		let mut liveness = Liveness::since(start);
+
+		liveness.provider_unreachable(after(start, 3));
+		liveness.provider_reached();
+
+		assert_eq!(
+			liveness.deadline(LEASE, false),
+			Some((after(start, 60), Expiry::Lapsed(Lapse::Silent)))
+		);
+	}
+
+	#[test]
+	fn only_an_unreachable_provider_fails_the_turn_for_no_connection() {
+		assert_eq!(Expiry::ProviderUnreachable.failure(), TurnFailure::NoConnection);
+		for lapse in [Lapse::Silent, Lapse::InterruptUnanswered, Lapse::TasksPending] {
+			assert_eq!(Expiry::Lapsed(lapse).failure(), TurnFailure::RunLapsed);
+		}
 	}
 }

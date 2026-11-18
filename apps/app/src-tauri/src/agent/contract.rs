@@ -172,6 +172,8 @@ pub enum EvolvedBundle {
 pub struct TurnEnded {
 	pub session_id: Option<String>,
 	pub outcome: TurnOutcome,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub failure: Option<TurnFailure>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	#[specta(type = Option<crate::json::JsonValue>)]
 	pub structured_output: Option<Value>,
@@ -203,6 +205,17 @@ pub enum TurnOutcome {
 	Completed,
 	Cancelled,
 	Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TurnFailure {
+	NoConnection,
+	ProviderError,
+	RunLapsed,
+	StopFailed,
+	AgentLost,
+	Rejected,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

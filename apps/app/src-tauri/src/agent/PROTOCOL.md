@@ -513,6 +513,7 @@ The frame is an `SDKMessage` verbatim, plus the ones the sidecar adds itself.
 | `turn_settled` | the sidecar, once the turn is settled (see below): every field of the last `result`, its `type` renamed; or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
 | `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
+| `provider_unreachable` | the sidecar, after each `system` / `api_retry` whose `error_status` is `null`: a request to the model provider got no answer at all | nothing at once: it starts the connection bound of the running run, which a later `stream_event`, `assistant` or `control_request` lifts |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
 | `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
 | `settings_rejected` | the sidecar, when the bot's `settings.json` is refused in part or in whole | `failed` — `settingsRejected`, the frame's `detail` as its reason |
@@ -870,6 +871,14 @@ its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
   turn, no count change and no follow-up turn resets it, and only the end of the turn
   lifts it.
 - The silence bound sleeps while a permission or a question waits on the person.
+- A run whose model provider stays unreachable for `PROVIDER_UNREACHABLE_BOUND` (10 s)
+  from its first `provider_unreachable`, frames still arriving or not, lapses the same way,
+  with no `failed` after it: the `turnEnded` alone tells the cause, as `failure`
+  `noConnection`.
+- Every `turnEnded` with `failed` carries a `failure`: `noConnection`, `providerError` (an
+  erring `turn_settled`), `runLapsed`, `stopFailed` (a refused `interrupt` while stopping),
+  `agentLost` (the sidecar or its session gone) or `rejected` (a hosted queued turn
+  refused). The `the turn ended` log line names it as `reason`.
 - A lapse closes the sidecar session of the lapsed query and opens a new one under a new
   key, resuming the same SDK session id. The host detaches the lapsed key first, so
   every later frame of that query, its late `result` included, reaches no session, and
@@ -961,6 +970,7 @@ Sidecar → host, inside the envelope of a session:
 {"type":"host_request",…}
 {"type":"control_response",…}
 {"type":"heartbeat"}
+{"type":"provider_unreachable"}
 {"type":"result",…}
 {"type":"tasks_pending","count":…}
 {"type":"turn_settled",…}
