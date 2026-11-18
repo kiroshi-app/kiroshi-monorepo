@@ -4,12 +4,12 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
-use super::contract::LiveHtmlError;
 #[cfg(target_os = "macos")]
 use super::contract::{LiveHtmlAppearance, LiveHtmlCorners, LiveHtmlRectangle, LiveHtmlTheme};
+use super::contract::{LiveHtmlError, LOADED_EVENT};
 #[cfg(target_os = "macos")]
 use super::server::tests::fetched;
-use super::server::ContentServer;
+use super::server::{ContentServer, Page};
 use super::watch::LoggedWatch;
 use super::LiveViews;
 
@@ -20,10 +20,24 @@ const SQUARE: LiveHtmlCorners =
 #[cfg(target_os = "macos")]
 const DARK: LiveHtmlTheme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
 
+fn served(id: &str) -> ContentServer {
+	ContentServer::open(id, Page::Written(String::new()), None, Arc::new(LoggedWatch))
+		.expect("the content server opens")
+}
+
 async fn show(views: &LiveViews, id: &str) {
-	let server = ContentServer::open(id, String::new(), None, Arc::new(LoggedWatch))
-		.expect("the content server opens");
-	views.servers.lock().await.insert(id.to_owned(), server);
+	views.servers.lock().await.insert(id.to_owned(), served(id));
+}
+
+fn hearing_loads<R: tauri::Runtime>(
+	app: &tauri::App<R>,
+) -> std::sync::mpsc::Receiver<serde_json::Value> {
+	let (told, hearing) = std::sync::mpsc::channel();
+	tauri::Listener::listen_any(app, LOADED_EVENT, move |event| {
+		let payload = serde_json::from_str(event.payload()).expect("a json payload");
+		told.send(payload).expect("the test listens");
+	});
+	hearing
 }
 
 async fn held_answer(released: oneshot::Receiver<String>) -> Result<String, LiveHtmlError> {
@@ -131,4 +145,70 @@ async fn a_live_html_theme_for_a_view_with_no_native_webview_yet_succeeds_and_is
 	let served = fetched(&url).await.expect("the content answers");
 	assert!(served.contains("--kiroshi-appearance: dark; --kiroshi-background: #000000;"));
 	assert!(!served.contains("prefers-color-scheme"), "{served}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_live_html_page_finishing_its_load_mid_mount_is_reported_only_once_the_mount_resolves() {
+	let app = tauri::test::mock_app();
+	let hearing = hearing_loads(&app);
+	let views = LiveViews::default();
+	let mounting = views.servers.lock().await;
+
+	let reported = views.page_loaded(app.handle(), "a".to_owned());
+	let mounted = async move {
+		let mut mounting = mounting;
+		tokio::time::sleep(LOCK_WAIT).await;
+		let heard_mid_mount = hearing.try_recv().ok();
+		mounting.insert("a".to_owned(), served("a"));
+		drop(mounting);
+		(heard_mid_mount, hearing)
+	};
+	let ((), (heard_mid_mount, hearing)) = tokio::join!(reported, mounted);
+
+	assert_eq!(heard_mid_mount, None);
+	assert_eq!(
+		hearing.try_recv().expect("the load is reported once the mount resolves"),
+		serde_json::json!({ "id": "a", "failure": null })
+	);
+	assert!(hearing.try_recv().is_err(), "the load was reported twice");
+}
+
+#[tokio::test]
+async fn a_live_html_page_load_of_a_view_whose_mount_failed_is_not_reported() {
+	let app = tauri::test::mock_app();
+	let hearing = hearing_loads(&app);
+	let views = LiveViews::default();
+
+	views.page_loaded(app.handle(), "never-mounted".to_owned()).await;
+
+	assert!(hearing.try_recv().is_err());
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_attached_page_missing_at_its_content_request_is_reported_as_a_typed_failure() {
+	let app = tauri::test::mock_app();
+	let hearing = hearing_loads(&app);
+	let views = LiveViews::default();
+	let attachments = crate::removed_on_drop::RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-live-html-{}", uuid::Uuid::new_v4())),
+	);
+	std::fs::create_dir_all(&*attachments).expect("the attachments folder");
+	let path = attachments.join("page.html");
+	std::fs::write(&path, "<p>gone soon</p>").expect("a written page");
+	let page = super::attachment::AttachedPage::checked(attachments.to_path_buf(), path.clone())
+		.expect("the page checks at mount");
+	let server = ContentServer::open("a", Page::Attached(page), None, Arc::new(LoggedWatch))
+		.expect("the content server opens");
+	let url = server.content_url();
+	views.servers.lock().await.insert("a".to_owned(), server);
+	std::fs::remove_file(&path).expect("the page is removed");
+
+	let answer = fetched(&url).await.expect("the server answers");
+	views.page_loaded(app.handle(), "a".to_owned()).await;
+
+	assert!(answer.starts_with("HTTP/1.1 500"), "{answer}");
+	let loaded = hearing.try_recv().expect("the load is reported");
+	assert_eq!(loaded["id"], "a");
+	assert_eq!(loaded["failure"]["kind"], "unreadable");
 }

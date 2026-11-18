@@ -410,6 +410,8 @@ export const LIBRARY_SCREENSHOT_ROUTE = "/screenshot.html" as const;
 
 export const LIBRARY_SCREENSHOT_WINDOW_PREFIX = "screenshot-" as const;
 
+export const LIVE_HTML_LOADED_EVENT = "live-html://loaded" as const;
+
 export const LIVE_HTML_MEASURED_EVENT = "live-html://measured" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
@@ -1494,7 +1496,12 @@ export type LiveHtmlCorners = {
 	bottomLeft: number | null,
 };
 
-export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "invalidRadius" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string } | { kind: "outsideAttachments" } | { kind: "notHtml" } | { kind: "tooLarge"; bytes: number; limit: number } | { kind: "unreadable"; detail: string };
+export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "invalidRadius" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string } | { kind: "outsideAttachments" } | { kind: "notHtml" } | { kind: "unreadable"; detail: string };
+
+export type LiveHtmlLoaded = {
+	id: string,
+	failure: LiveHtmlError | null,
+};
 
 export type LiveHtmlMeasured = {
 	id: string,

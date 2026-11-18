@@ -27,10 +27,11 @@ use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow, Window, WindowEvent};
 use tokio::sync::Mutex;
 
+use crate::events;
 use crate::window_controls::MAIN_WINDOW;
-use contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlRectangle, LiveHtmlTheme};
+use contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlLoaded, LiveHtmlRectangle, LiveHtmlTheme};
 use placement::Placement;
-use server::ContentServer;
+use server::{ContentServer, Page};
 use watch::{LoggedWatch, ViewWatch};
 
 pub struct LiveViews {
@@ -66,7 +67,7 @@ impl LiveViews {
 		&self,
 		app: &AppHandle<R>,
 		id: String,
-		html: String,
+		page: Page,
 		rectangle: LiveHtmlRectangle,
 		theme: Option<LiveHtmlTheme>,
 	) -> Result<(), LiveHtmlError> {
@@ -79,7 +80,7 @@ impl LiveViews {
 		let main_window = main_window_of(app)?;
 		let placement =
 			Placement { rectangle, clip: None, top_inset: native::top_inset(&main_window).await? };
-		let server = ContentServer::open(&id, html, theme, Arc::clone(&self.watch))
+		let server = ContentServer::open(&id, page, theme, Arc::clone(&self.watch))
 			.map_err(|failure| LiveHtmlError::Unserved { detail: failure.to_string() })?;
 		let view = ViewToMount {
 			#[cfg(target_os = "macos")]
@@ -96,6 +97,17 @@ impl LiveViews {
 		native::mount(main_window, view, placement).await?;
 		servers.insert(id, server);
 		Ok(())
+	}
+
+	async fn page_loaded<R: Runtime>(&self, app: &AppHandle<R>, id: String) {
+		let servers = self.servers.lock().await;
+		let Some(server) = servers.get(&id) else {
+			return;
+		};
+		let loaded = LiveHtmlLoaded { failure: server.content_failure(), id };
+		if let Err(failure) = events::emit(app, events::LIVE_HTML_LOADED, loaded) {
+			log::error!("a live view's page load reached no window: {failure}");
+		}
 	}
 
 	pub async fn place<R: Runtime>(
@@ -226,6 +238,16 @@ pub fn remove_on_main_page_load<R: Runtime>(webview: &Webview<R>, payload: &Page
 	tauri::async_runtime::spawn(async move {
 		if let Some(views) = app.try_state::<LiveViews>() {
 			views.remove_all(&app).await;
+		}
+	});
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn report_page_loaded<R: Runtime>(app: &AppHandle<R>, id: String) {
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move {
+		if let Some(views) = app.try_state::<LiveViews>() {
+			views.page_loaded(&app, id).await;
 		}
 	});
 }

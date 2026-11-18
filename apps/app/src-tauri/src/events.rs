@@ -118,6 +118,7 @@ declared! {
 	LIBRARY_DOCUMENT_UPDATED: library::contract::LibraryDocumentUpdated =
 		library::contract::DOCUMENT_UPDATED_EVENT,
 	LIVE_HTML_MEASURED: live_html::contract::LiveHtmlMeasured = live_html::contract::MEASURED_EVENT,
+	LIVE_HTML_LOADED: live_html::contract::LiveHtmlLoaded = live_html::contract::LOADED_EVENT,
 	LIBRARY_DOCUMENT_RENAMED: library::contract::LibraryDocumentRenamed =
 		library::contract::DOCUMENT_RENAMED_EVENT,
 	LIBRARY_BOARD_FILE_REPLACED: library::contract::LibraryBoardFileReplaced =

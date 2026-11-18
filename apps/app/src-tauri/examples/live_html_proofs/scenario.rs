@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use kiroshi_app::live_html::contract::LiveHtmlRectangle;
-use kiroshi_app::live_html::server::{CONTENT_DOCUMENT, WRAPPER_DOCUMENT};
+use kiroshi_app::live_html::server::{Page, CONTENT_DOCUMENT, WRAPPER_DOCUMENT};
 use kiroshi_app::live_html::watch::ViewWatch;
 use kiroshi_app::live_html::LiveViews;
 use serde_json::json;
@@ -497,7 +497,7 @@ impl Run {
 		let targets = serde_json::to_string(&self.sensors.targets(role))
 			.map_err(|cause| cause.to_string())?;
 		let html = HOSTILE_HTML.replace(TARGETS_PLACEHOLDER, &targets);
-		block_on(self.views.mount(&self.app, label.to_owned(), html, SLOT, None))
+		block_on(self.views.mount(&self.app, label.to_owned(), Page::Written(html), SLOT, None))
 			.map_err(|failure| format!("{failure:?}"))?;
 		let mount_returned = Instant::now();
 		let wrapper_url = block_on(self.views.url(&self.app, label.to_owned()))
