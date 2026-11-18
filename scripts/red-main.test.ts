@@ -93,8 +93,8 @@ const fakeGitHub = (
 		},
 		readPullRequests: async (sha) =>
 			sha === CANCELLED_SHA ? [mergedBefore] : [mergedBy],
-		readLastGreenSha: async (createdBefore) => {
-			asked.push(`last green before ${createdBefore}`)
+		readLastGreenSha: async (branch, createdBefore) => {
+			asked.push(`last green on ${branch} before ${createdBefore}`)
 			return greenShas[0]
 		},
 		readCommits: async (base, head) => {
@@ -126,9 +126,9 @@ describe("the red main filter", () => {
 		)
 	})
 
-	it("rejects a tag run", () => {
-		expect(skipReason({ ...redRun, headBranch: "v1.2.0" })).toBe(
-			"run 101 ran on v1.2.0, not main",
+	it("rejects a push run on a branch other than main or a release/** branch", () => {
+		expect(skipReason({ ...redRun, headBranch: "feature/home" })).toBe(
+			"run 101 ran on feature/home, not main, a release/** branch or a v* tag",
 		)
 	})
 
@@ -150,10 +150,12 @@ describe("the red main filter", () => {
 
 	it.each([
 		["pull_request", "ope-1103-branch", false],
-		["push", "v1.2.0", false],
+		["push", "feature/home", false],
+		["push", "v1.2.0", true],
+		["push", "release/0.27", true],
 		["push", "main", true],
 	])(
-		"reports a red %s run on %s only when it is a push to main: %p",
+		"reports a red %s run on %s only when it is a push to main, a release/** branch or a v* tag: %p",
 		(event, headBranch, isReported) => {
 			expect(skipReason({ ...redRun, event, headBranch }) === undefined).toBe(
 				isReported,
@@ -255,6 +257,23 @@ describe("the red main issue", () => {
 		})
 
 		expect(issue.title).toBe("Red main: lint, rust at 8a7919a")
+	})
+
+	it.each([
+		["release/0.27", "Red release/0.27: rust at 8a7919a"],
+		["v0.27.0", "Red v0.27.0: rust at 8a7919a"],
+	])("names %s in place of main in the title", (headBranch, title) => {
+		const issue = redMainIssue({
+			run: { ...redRun, headBranch },
+			jobs: [job("rust", "failure"), job("verify", "failure")],
+			pullRequests: [mergedBy],
+			sinceGreen: { kind: "none" },
+		})
+
+		expect(issue.title).toBe(title)
+		expect(issue.description.split("\n\n")).toContain(
+			`Last green: none, no CI push run on ${headBranch} concluded success before this run`,
+		)
 	})
 
 	it("titles the post-merge rust and storybook jobs that failed", () => {
@@ -613,12 +632,34 @@ describe("reporting a run", () => {
 			title: "Red main: rust at 8a7919a",
 		})
 		expect(asked).toEqual([
-			`last green before ${redRun.createdAt}`,
+			`last green on main before ${redRun.createdAt}`,
 			`commits ${GREEN_SHA}...${redRun.headSha}`,
 		])
 		expect(descriptionSent(requests[1])).toContain(
 			"- 5d7f9b1 #11 fix(app): keep the draft on reload (#11)",
 		)
+	})
+
+	it("opens the issue of a red release branch from the last green push run of that branch", async () => {
+		const { linear, requests } = linearAnswering(noIssueYet, {
+			data: {
+				issueCreate: {
+					success: true,
+					issue: { identifier: "KIR-10", url: "https://linear.app/i/KIR-10" },
+				},
+			},
+		})
+		const releaseRun = { ...redRun, headBranch: "release/0.27" }
+		const { github, asked } = fakeGitHub(releaseRun)
+
+		await reportRedMain("101", { github, linear })
+
+		expect(asked[0]).toBe(
+			`last green on release/0.27 before ${releaseRun.createdAt}`,
+		)
+		expect(requests[1]?.variables.input).toMatchObject({
+			title: "Red release/0.27: rust at 8a7919a",
+		})
 	})
 
 	it("reads no commit range when no green run precedes the red one", async () => {
@@ -634,7 +675,7 @@ describe("reporting a run", () => {
 
 		await reportRedMain("101", { github, linear })
 
-		expect(asked).toEqual([`last green before ${redRun.createdAt}`])
+		expect(asked).toEqual([`last green on main before ${redRun.createdAt}`])
 		expect(descriptionSent(requests[1])).toContain("Last green: none")
 	})
 
