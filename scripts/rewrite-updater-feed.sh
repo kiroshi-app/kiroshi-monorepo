@@ -31,10 +31,10 @@ api="https://api.github.com/repos/$repository/releases/assets/"
 download="https://github.com/$repository/releases/download/$tag/"
 
 absent=$(jq -r --argjson assets "$assets" --arg api "$api" --arg download "$download" "$ASSET_NAME"'
-	.platforms | to_entries[] | select(asset_name(.value.url) == null) | "platform \(.key) names asset \(.value.url)"
+	[.platforms | to_entries[] | select(asset_name(.value.url) == null) | "platform \(.key) names asset \(.value.url)"] | join("; ")
 ' "$feed")
 if [ -n "$absent" ]; then
-	fail "release $tag has no asset for: $(paste -sd ';' - <<<"$absent" | sed 's/;/; /g')"
+	fail "release $tag has no asset for: $absent"
 fi
 
 jq -j --argjson assets "$assets" --arg api "$api" --arg download "$download" "$ASSET_NAME"'
