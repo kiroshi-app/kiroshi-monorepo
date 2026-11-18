@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
 	createLiveHtmlView,
+	mountingAttachment,
 	mountingHtml,
 } from "@/lib/live-html/live-html-view"
 
@@ -23,8 +24,27 @@ const OUT_OF_SIGHT = {
 	rect: { ...RECT, y: -400 },
 	clip: { ...CLIP, height: 0 },
 }
+const ROUNDED_BELOW = {
+	topLeft: 0,
+	topRight: 0,
+	bottomRight: 12,
+	bottomLeft: 12,
+}
+const ROUNDED_ABOVE = {
+	topLeft: 12,
+	topRight: 12,
+	bottomRight: 0,
+	bottomLeft: 0,
+}
+const SQUARE = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 }
+const ROUNDED = { rect: RECT, clip: CLIP, radius: ROUNDED_BELOW }
 
 const callsOf = () => host.answer.mock.calls.map(([command]) => command)
+
+const roundsOf = () =>
+	host.answer.mock.calls
+		.filter(([command]) => command === "live_html_round")
+		.map(([, { radius }]) => radius)
 
 const viewOf = (
 	overrides: Partial<Parameters<typeof createLiveHtmlView>[0]> = {},
@@ -222,5 +242,134 @@ describe("a live html view", () => {
 			"live_html_place",
 			"live_html_remove",
 		])
+	})
+
+	it("rounds a mounted view once, to its largest corner radius", async () => {
+		host.answer.mockResolvedValue(null)
+
+		viewOf().follow(ROUNDED)
+		await flush()
+
+		expect(callsOf()).toEqual([
+			"live_html_mount",
+			"live_html_place",
+			"live_html_round",
+		])
+		expect(host.answer).toHaveBeenLastCalledWith("live_html_round", {
+			id: "view-1",
+			radius: 12,
+		})
+	})
+
+	it("rounds the view again when its largest corner radius changes, down to square", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.follow({ ...ROUNDED, radius: { ...ROUNDED_BELOW, bottomLeft: 20 } })
+		await flush()
+		view.follow({ ...ROUNDED, radius: SQUARE })
+		await flush()
+
+		expect(roundsOf()).toEqual([12, 20, 0])
+	})
+
+	it("rounds once while the largest corner radius stays the same", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.follow({ ...MOVED, radius: ROUNDED_ABOVE })
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_round", "live_html_place"])
+	})
+
+	it("rounds the view mounted again after its slot was gone", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.follow(null)
+		await flush()
+		view.follow(ROUNDED)
+		await flush()
+
+		expect(roundsOf()).toEqual([12, 12])
+	})
+
+	it("leaves a view mounted square as it is", async () => {
+		host.answer.mockResolvedValue(null)
+
+		viewOf().follow({ ...ROUNDED, radius: SQUARE })
+		await flush()
+
+		expect(roundsOf()).toEqual([])
+	})
+
+	it("rounds nothing for a placement that carries no radius", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.follow(MOVED)
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_round", "live_html_place"])
+	})
+
+	it("rounds an attached html file like an html block", async () => {
+		host.answer.mockResolvedValue(null)
+
+		viewOf({ mountAt: mountingAttachment("/replies/page.html") }).follow(
+			ROUNDED,
+		)
+		await flush()
+
+		expect(callsOf()).toEqual([
+			"live_html_mount_attachment",
+			"live_html_place",
+			"live_html_round",
+		])
+	})
+
+	it("removes a mounted view whose rounding failed", async () => {
+		const onFailure = vi.fn()
+		host.answer.mockImplementation(async (command: string) => {
+			if (command === "live_html_round") throw { kind: "unknownView" }
+			return null
+		})
+		const view = viewOf({ onFailure })
+
+		view.follow(ROUNDED)
+		await flush()
+		view.follow(MOVED)
+		await flush()
+
+		expect(onFailure).toHaveBeenCalledTimes(1)
+		expect(onFailure).toHaveBeenCalledWith({ kind: "unknownView" })
+		expect(callsOf()).toEqual([
+			"live_html_mount",
+			"live_html_place",
+			"live_html_round",
+			"live_html_remove",
+		])
+	})
+
+	it("hides a rounded view under an app surface without asking for a still", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.cover(true)
+		await flush()
+
+		expect(callsOf().slice(3)).toEqual(["live_html_hide"])
+		expect(callsOf()).not.toContain("live_html_still")
 	})
 })

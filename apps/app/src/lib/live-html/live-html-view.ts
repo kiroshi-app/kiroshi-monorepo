@@ -24,6 +24,7 @@ type LiveHtmlViewOptions = {
 type DrawnView = {
 	isMounted: boolean
 	placement: LiveHtmlPlacement | null
+	radius: number
 	isHidden: boolean
 }
 
@@ -32,6 +33,7 @@ type Step = () => Promise<void>
 const UNMOUNTED: DrawnView = {
 	isMounted: false,
 	placement: null,
+	radius: 0,
 	isHidden: false,
 }
 
@@ -43,6 +45,15 @@ const isSamePlacement = (a: LiveHtmlPlacement | null, b: LiveHtmlPlacement) =>
 
 const isInSight = ({ clip }: LiveHtmlPlacement) =>
 	clip.width > 0 && clip.height > 0
+
+const largestRadiusOf = ({ radius }: LiveHtmlPlacement) =>
+	radius &&
+	Math.max(
+		radius.topLeft,
+		radius.topRight,
+		radius.bottomRight,
+		radius.bottomLeft,
+	)
 
 const answered = async (answer: CommandAnswer) => {
 	const result = await answer
@@ -95,7 +106,7 @@ export const createLiveHtmlView = ({
 		(placement: LiveHtmlPlacement): Step =>
 		() =>
 			attempt(mountAt(id, placement.rect), () => {
-				drawn = { isMounted: true, placement: null, isHidden: false }
+				drawn = { ...UNMOUNTED, isMounted: true }
 				onLive()
 			})
 
@@ -109,6 +120,13 @@ export const createLiveHtmlView = ({
 				},
 			)
 
+	const round =
+		(radius: number): Step =>
+		() =>
+			attempt(commands.liveHtmlRound(id, radius), () => {
+				drawn = { ...drawn, radius }
+			})
+
 	const hide: Step = () =>
 		attempt(commands.liveHtmlHide(id), () => {
 			drawn = { ...drawn, isHidden: true }
@@ -119,14 +137,22 @@ export const createLiveHtmlView = ({
 			drawn = { ...drawn, isHidden: false }
 		})
 
+	const drawTowards = (placement: LiveHtmlPlacement): Step | null => {
+		if (isInSight(placement) && !isSamePlacement(drawn.placement, placement)) {
+			return place(placement)
+		}
+		const radius = largestRadiusOf(placement)
+		if (radius !== undefined && radius !== drawn.radius) return round(radius)
+		return null
+	}
+
 	const stepTowards = (placement: LiveHtmlPlacement): Step | null => {
 		const isSeen = isInSight(placement)
 		const shouldHide = isCovered || !isSeen
 		if (!drawn.isMounted) return isSeen ? mount(placement) : null
 		if (shouldHide && !drawn.isHidden) return hide
-		if (isSeen && !isSamePlacement(drawn.placement, placement)) {
-			return place(placement)
-		}
+		const drawing = drawTowards(placement)
+		if (drawing) return drawing
 		return !shouldHide && drawn.isHidden ? show : null
 	}
 
