@@ -50,6 +50,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"window_declare_maximize_button",
 	"window_open",
 	"window_identity",
+	"window_recovery_read",
 	"window_report_space",
 	"window_report_strip",
 	"window_strip_at",
