@@ -2,6 +2,27 @@ const common = {
 	boot: {
 		status: "Starting Kiroshi",
 	},
+	windowRecovery: {
+		brand: "Kiroshi",
+		outOfMemory: {
+			title: "Kiroshi reloaded its window",
+			description:
+				"Your computer ran out of memory, so the window had to reload. Kiroshi didn’t quit, and your agents kept working.",
+			action: "Continue",
+		},
+		crash: {
+			title: "Kiroshi reloaded its window",
+			description:
+				"The window stopped unexpectedly and had to reload. Kiroshi didn’t quit, and your agents kept working.",
+			action: "Continue",
+		},
+		gaveUp: {
+			title: "Couldn’t reload the window",
+			description:
+				"The window stopped 3 times in a minute. Kiroshi is still running, and your agents are still working.",
+			action: "Reload the window",
+		},
+	},
 	spaces: {
 		unavailable: {
 			title: "Couldn’t load your spaces",

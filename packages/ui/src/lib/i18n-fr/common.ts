@@ -2,6 +2,27 @@ const common = {
 	boot: {
 		status: "Démarrage de Kiroshi",
 	},
+	windowRecovery: {
+		brand: "Kiroshi",
+		outOfMemory: {
+			title: "Kiroshi a rechargé sa fenêtre",
+			description:
+				"Votre ordinateur a manqué de mémoire, la fenêtre a donc dû se recharger. Kiroshi ne s’est pas fermé, et vos agents ont continué de travailler.",
+			action: "Continuer",
+		},
+		crash: {
+			title: "Kiroshi a rechargé sa fenêtre",
+			description:
+				"La fenêtre s’est arrêtée de façon inattendue et a dû se recharger. Kiroshi ne s’est pas fermé, et vos agents ont continué de travailler.",
+			action: "Continuer",
+		},
+		gaveUp: {
+			title: "Impossible de recharger la fenêtre",
+			description:
+				"La fenêtre s’est arrêtée 3 fois en une minute. Kiroshi fonctionne toujours, et vos agents travaillent toujours.",
+			action: "Recharger la fenêtre",
+		},
+	},
 	spaces: {
 		unavailable: {
 			title: "Impossible de charger vos espaces",
