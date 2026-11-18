@@ -211,6 +211,7 @@
 
 			const BARE_PAGE = `<div style="height:120px"></div>`
 			const OWN_PAGE = `<!doctype html><html><head><style>body { background: #ff00ff }</style></head><body><div style="height:120px"></div></body></html>`
+			const HTML_ONLY_PAGE = `<!doctype html><html><head><style>html { background: #ff00ff }</style></head><body><div style="height:120px"></div></body></html>`
 			const DARK = { appearance: "dark", hue: null }
 			const LIGHT = { appearance: "light", hue: 257 }
 			const DARK_BACKGROUND = [0, 0, 0]
@@ -221,6 +222,16 @@
 				await pause(600)
 				const [color] = await invoke("probe_colors", { step, probes: [[SHOWN.x + SHOWN.width / 2, SHOWN.y + 60]] })
 				expect(isShade(color, expected), `${step}: the page background is ${JSON.stringify(color)}, expected ${JSON.stringify(expected)}`)
+			}
+
+			const expectOwnBackground = async (id, html, view) => {
+				await invoke("live_html_mount", { id, html, rectangle: SHOWN, theme: DARK })
+				await expectSizes(id, [[SHOWN.width, 120]])
+				const { magenta_drawn_in_window_points: own } = await capture(`${id}-background`, view, null)
+				const isAcrossTheView =
+					own && near(own.x, view.x) && near(own.y, view.y) && near(own.width, view.width) && near(own.height, view.height)
+				expect(isAcrossTheView, `${id} drew its own background on ${JSON.stringify(own)}, not across ${JSON.stringify(view)}`)
+				await invoke("live_html_remove", { id })
 			}
 
 			const theme = async () => {
@@ -237,12 +248,9 @@
 				expect(unknown.kind === "unknownView", `theming an unknown view answered ${JSON.stringify(unknown)}`)
 				await invoke("live_html_remove", { id: "themed" })
 
-				await invoke("live_html_mount", { id: "own", html: OWN_PAGE, rectangle: SHOWN, theme: DARK })
-				await expectSizes("own", [[SHOWN.width, 120]])
-				const { magenta_drawn_in_window_points: own } = await capture("own-background", SHOWN, null)
-				const drawn = JSON.stringify(own)
-				expect(own && near(own.width, SHOWN.width) && near(own.height, SHOWN.height), `the page drew its own background on ${drawn}`)
-				await invoke("live_html_remove", { id: "own" })
+				followed.add("own")
+				await expectOwnBackground("own", OWN_PAGE, { ...SHOWN, height: 120 })
+				await expectOwnBackground("html-only", HTML_ONLY_PAGE, SHOWN)
 			}
 
 			const SLOT_PAGE = PAGE(`<div style="height:160px;background:#ff00ff"></div>`)

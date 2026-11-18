@@ -18,13 +18,14 @@ const RULES: &str = r#":root {
 	--kiroshi-space-4: 1rem;
 	--kiroshi-space-6: 1.5rem;
 	--kiroshi-space-8: 2rem;
+	background: var(--kiroshi-background);
 	color: var(--kiroshi-foreground);
 	font-family: var(--kiroshi-font);
 	line-height: 1.5;
 	-webkit-text-size-adjust: 100%;
 }
 *, ::before, ::after { box-sizing: border-box; }
-body { margin: 0; background: var(--kiroshi-background); font-size: var(--kiroshi-text-base); }"#;
+body { margin: 0; font-size: var(--kiroshi-text-base); }"#;
 
 #[cfg(target_os = "macos")]
 pub(crate) const RETHEMED_SCRIPT: &str = r#"(() => {
@@ -128,7 +129,7 @@ mod tests {
 		for held in [
 			r#"<meta name="viewport" content="width=device-width, initial-scale=1">"#,
 			"box-sizing: border-box",
-			"body { margin: 0; background: var(--kiroshi-background);",
+			"body { margin: 0;",
 			"color: var(--kiroshi-foreground)",
 			"--kiroshi-font: system-ui,",
 			"font-family: var(--kiroshi-font)",
@@ -137,6 +138,15 @@ mod tests {
 		] {
 			assert!(document.contains(held), "the base holds no {held}");
 		}
+	}
+
+	#[test]
+	fn the_base_paints_its_background_on_the_root_and_none_on_the_body() {
+		let (root, others) = RULES.split_once('}').expect("a root rule");
+
+		assert!(root.starts_with(":root {"), "{root}");
+		assert!(root.contains("\tbackground: var(--kiroshi-background);"), "{root}");
+		assert!(others.contains("body {") && !others.contains("background"), "{others}");
 	}
 
 	#[test]
