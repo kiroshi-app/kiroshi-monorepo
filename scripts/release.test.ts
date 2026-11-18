@@ -61,12 +61,12 @@ describe("release", () => {
 	})
 
 	it("moves main nowhere after a beta or a patch", () => {
-		expect(nextMainVersion("0.27.0-beta.5")).toBeUndefined()
+		expect(nextMainVersion("0.27.0-beta.3")).toBeUndefined()
 		expect(nextMainVersion("0.27.1")).toBeUndefined()
 	})
 
 	it("opens the main bump when origin/main reads a lower version", () => {
-		expect(planMainBump("0.28.0-beta.0", "0.27.0-beta.5")).toEqual({
+		expect(planMainBump("0.28.0-beta.0", "0.27.0-beta.3")).toEqual({
 			kind: "open",
 			version: "0.28.0-beta.0",
 			branch: "chore/bump-main-0.28.0-beta.0",
