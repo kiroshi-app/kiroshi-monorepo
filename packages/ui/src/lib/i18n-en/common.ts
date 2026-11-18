@@ -21,6 +21,10 @@ const common = {
 			description:
 				"The window stopped 3 times in a minute. Kiroshi is still running, and your agents are still working.",
 			action: "Reload the window",
+			reloadFailed: {
+				title: "The window didn’t reload",
+				description: "Press Reload the window to try again.",
+			},
 		},
 	},
 	spaces: {
