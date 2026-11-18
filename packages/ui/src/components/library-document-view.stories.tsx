@@ -11,6 +11,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
+	expectContentAtBarInset,
 	expectHeaderTitleStep,
 	expectLibrarySkeletonBar,
 	expectSkeletonFilledTo,
@@ -21,6 +22,7 @@ import {
 	realPointer,
 	slotIn,
 	slotsIn,
+	tokenLengthOf,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -144,7 +146,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Duplicate, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 24 below the bar and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
+					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Duplicate, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 12 below the bar, as far as the bar title from the edge, and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
 			},
 		},
 	},
@@ -198,7 +200,7 @@ export const Default = meta.story({
 	},
 })
 
-const TITLE_BELOW_BAR = 24
+const TITLE_BELOW_BAR = 12
 
 const PRESENCE_AVATAR_SIZE = 22
 
@@ -328,7 +330,7 @@ export const Light = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Duplicate drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 24 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
+					"The document at rest in the light theme, as artboard I6a draws it. Check that one bar sits in the flow above the column, 56 tall on the white card with a 1 px rule in the foreground at 8 percent, that its 12/16 top line reads the muted Library path link, a separator and the details, MD · 4 KB · 12 min ago, over the 14/18 semibold document name, that the right group sets 8 apart the two 22 px collaborators 2 apart, the capsule padded by 2 around Download, Duplicate drawn as two rounded squares, and More, each 28, then the 32 px round Close on the capsule fill with no rule before it, that no control fades its colour in, that the heading starts 12 below the bar with no details line under it and the first block one column gap below the heading, and that the column, fitting its card, is neither a Tab stop nor a region.",
 			},
 		},
 	},
@@ -368,6 +370,11 @@ const expectLoading = async (canvasElement: HTMLElement) => {
 		lines.top - bar.getBoundingClientRect().bottom,
 		region.getBoundingClientRect().bottom - lines.bottom,
 	]).toEqual([DOCUMENT_COLUMN_WIDTH, TITLE_BELOW_BAR, COLUMN_BLOCK_END])
+	await expect(
+		getComputedStyle(
+			slotIn(region, "list-skeleton").parentElement?.parentElement as Element,
+		).paddingInlineStart,
+	).toBe(tokenLengthOf("--screen-inset"))
 	await expectSkeletonFilledTo(region, "bottom")
 
 	const [title, firstBlock] = slotsIn(region, "list-skeleton-row")
@@ -396,7 +403,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 24 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
+					"The document before its text lands, in the light theme, next to `Light`, the screen it turns into. Check that the one bar of the loaded document sits in the flow above the column, 56 tall with its rule, hidden from a screen reader, that it draws a path bar in the 16 tall top line over a title bar in the 18 tall line under it, starting 12 from the edge, and on the right a 92 by 32 capsule placeholder then, 8 further, a 32 round close placeholder 12 from the edge, that the title bar starts 12 below the bar in the 794 wide column with no details line under it, the first block one column gap of 14 below it, that the lines reach the bottom of that column, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the document. Pick `LoadingDark` for the dark theme.",
 			},
 		},
 	},
@@ -514,7 +521,7 @@ export const NarrowLongTitle = meta.story({
 		docs: {
 			description: {
 				story:
-					"A long document name in a 480 wide document, as artboard I6d draws it. Check that the name ends with an ellipsis on its one 18 px line, that the top line still reads Library, the separator and the whole details, and that the two collaborators, the three 28 px capsule buttons and the 32 px Close all stay, 12 from the end of the bar.",
+					"A long document name in a 480 wide document, as artboard I6d draws it. Check that the name ends with an ellipsis on its one 18 px line, that the top line still reads Library, the separator and the whole details, that the two collaborators, the three 28 px capsule buttons and the 32 px Close all stay, 12 from the end of the bar, and that the document name in the column starts as far from the edge and under the bar as the bar title sits from the edge.",
 			},
 		},
 	},
@@ -549,6 +556,13 @@ export const NarrowLongTitle = meta.story({
 			bar.getBoundingClientRect().right -
 				actionsIn(canvasElement).getBoundingClientRect().right,
 		).toBe(12)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "library-document-view"),
+			within(slotIn(canvasElement, "library-document-column")).getByRole(
+				"heading",
+				{ level: 1 },
+			),
+		)
 	},
 })
 

@@ -223,21 +223,24 @@ const skeletonRowAt = (index: number) => (
 	</div>
 )
 
+type AgentsPageBodyProps = AgentsPageProps & { columnClassName: string }
+
 const AgentsPageBody = ({
+	columnClassName,
 	agents,
 	spaceName,
 	status = "loaded",
 	onCreate,
 	onRetry,
 	...actions
-}: AgentsPageProps) => {
+}: AgentsPageBodyProps) => {
 	const { t } = useTranslation("settings")
 
 	if (status === "loading") {
 		return (
 			<div className="min-h-0 flex-1" data-slot="agents-page-skeleton">
 				<ListSkeleton
-					className="@container gap-4 px-6 pt-6"
+					className={cn(columnClassName, "@container gap-4")}
 					row={skeletonRowAt}
 				/>
 			</div>
@@ -246,7 +249,10 @@ const AgentsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3" data-slot="agents-page-failure">
+			<div
+				className={cn(columnClassName, "min-h-0 flex-1")}
+				data-slot="agents-page-failure"
+			>
 				<Notice
 					description={t("space.agents.failure.description")}
 					retry={onRetry && { onRetry }}
@@ -258,7 +264,7 @@ const AgentsPageBody = ({
 
 	if (agents.length === 0) {
 		return (
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+			<div className={cn(columnClassName, "min-h-0 flex-1 overflow-y-auto")}>
 				<EmptyStateShell
 					action={<CreateAgentButton onCreate={onCreate} />}
 					className="my-auto"
@@ -278,7 +284,10 @@ const AgentsPageBody = ({
 
 	return (
 		<div
-			className="@container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
+			className={cn(
+				columnClassName,
+				"@container min-h-0 flex-1 gap-4 overflow-y-auto",
+			)}
 			data-slot="agents-page-body"
 		>
 			<p className="wrap-break-word text-compact text-muted-foreground leading-4.5">
@@ -342,7 +351,9 @@ const AgentsPage = (props: AgentsPageProps) => {
 						}
 					/>
 				}
-				scroller={() => <AgentsPageBody {...props} />}
+				scroller={(columnClassName) => (
+					<AgentsPageBody {...props} columnClassName={columnClassName} />
+				)}
 			/>
 		</section>
 	)

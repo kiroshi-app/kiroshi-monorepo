@@ -910,7 +910,7 @@ export const BarAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule, that its top line reads the Library path link, a separator and the details over the document name, that Download, Duplicate, More then Close follow, Copy living in More, that the title field starts 24 below the bar with no details line under it, and that the Library path link calls `onBack`.",
+					"The bar of a document opened to edit, at rest. It is the bar of artboard I6a, with the name read from the title field: check that it sits in the flow above the column, 56 tall with its rule, that its top line reads the Library path link, a separator and the details over the document name, that Download, Duplicate, More then Close follow, Copy living in More, that the title field starts 12 below the bar, the bar title's distance from the edge, with no details line under it, and that the Library path link calls `onBack`.",
 			},
 		},
 	},
@@ -937,7 +937,7 @@ export const BarAtRest = meta.story({
 		await expect(
 			canvas.getByRole("textbox", { name: "Title" }).getBoundingClientRect()
 				.top - bar.getBoundingClientRect().bottom,
-		).toBe(24)
+		).toBe(12)
 		await expect(within(column).queryByText(BAR_DETAILS)).toBe(null)
 
 		await userEvent.click(within(bar).getByRole("button", { name: "Library" }))

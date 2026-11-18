@@ -39,6 +39,7 @@ import { STEVE } from "@workspace/ui/components/library-comments.fixtures"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
 import type { LibraryDocumentCommentTarget } from "@workspace/ui/components/library-document-comments"
 import {
+	BLOCK_HANDLE_ROOM,
 	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	LibraryDocumentBar,
@@ -289,8 +290,9 @@ const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 						onBack={fn()}
 					/>
 				}
-				scroller={() => (
+				scroller={(columnClassName) => (
 					<LibraryDocumentColumn
+						columnClassName={cn(columnClassName, BLOCK_HANDLE_ROOM)}
 						heading={
 							<h1 className={DOCUMENT_TITLE}>{LIBRARY_AGENT_DOCUMENT.name}</h1>
 						}

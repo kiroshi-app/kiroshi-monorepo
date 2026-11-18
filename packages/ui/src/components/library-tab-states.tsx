@@ -115,7 +115,7 @@ const LibraryDocumentSkeleton = () => {
 			data-slot="library-document-skeleton"
 		>
 			<SkeletonHeader />
-			<div className="flex min-h-0 flex-1 flex-col px-10 pt-6 pb-10">
+			<div className="flex min-h-0 flex-1 flex-col px-(--screen-inset) pt-(--screen-inset) pb-10">
 				<div
 					className={cn(
 						"mx-auto flex min-h-0 w-full flex-1 flex-col",
@@ -145,7 +145,10 @@ const LibraryImageSkeleton = () => {
 			<SkeletonHeader className="bg-lightbox-bar" />
 			<div
 				aria-hidden="true"
-				className={cn("relative flex min-h-0 flex-1 px-4 pb-4", PULSE)}
+				className={cn(
+					"relative flex min-h-0 flex-1 px-(--screen-inset) pb-(--screen-inset)",
+					PULSE,
+				)}
 			>
 				<Skeleton
 					className="min-w-0 flex-1 animate-none rounded-none rounded-b-md bg-border/60"

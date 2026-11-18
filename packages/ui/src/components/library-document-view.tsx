@@ -211,6 +211,8 @@ const LibraryDocumentBar = <Item extends LibraryMenuSubject>({
 
 const DOCUMENT_PAGE = "size-full min-h-0"
 
+const BLOCK_HANDLE_ROOM = "px-10"
+
 const DOCUMENT_COLUMN_MEASURE =
 	"[--document-column-width:794px] max-w-(--document-column-width)"
 
@@ -237,9 +239,11 @@ type LibraryDocumentColumnProps = {
 	children: ReactNode
 	readOnlyHeadingId?: string
 	onColumnMouseDown?: (event: MouseEvent<HTMLDivElement>) => void
+	columnClassName: string
 }
 
 const LibraryDocumentColumn = ({
+	columnClassName,
 	heading,
 	children,
 	readOnlyHeadingId,
@@ -255,7 +259,8 @@ const LibraryDocumentColumn = ({
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer press only moves focus into a field the keyboard already reaches with Tab */}
 			<div
 				className={cn(
-					"@container min-h-0 flex-1 overflow-y-auto px-10 pt-6 pb-10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					columnClassName,
+					"@container min-h-0 flex-1 overflow-y-auto pb-10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
 					onColumnMouseDown && "cursor-text",
 				)}
 				data-slot="library-document-column"
@@ -373,8 +378,9 @@ const LibraryDocumentView = ({
 					}
 				/>
 			}
-			scroller={() => (
+			scroller={(columnClassName) => (
 				<LibraryDocumentColumn
+					columnClassName={columnClassName}
 					heading={
 						<h1 className={DOCUMENT_TITLE} id={headingId}>
 							{libraryDisplayName(document.name, t)}
@@ -396,6 +402,7 @@ const LibraryDocumentView = ({
 }
 
 export {
+	BLOCK_HANDLE_ROOM,
 	DOCUMENT_COLUMN_MEASURE,
 	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,

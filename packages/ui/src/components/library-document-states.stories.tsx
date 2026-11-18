@@ -84,8 +84,9 @@ const DocumentPage = ({
 						onRename={fn()}
 					/>
 				}
-				scroller={() => (
+				scroller={(columnClassName) => (
 					<LibraryDocumentColumn
+						columnClassName={columnClassName}
 						heading={heading ?? <h1 className={DOCUMENT_TITLE}>{item.name}</h1>}
 					>
 						{children}

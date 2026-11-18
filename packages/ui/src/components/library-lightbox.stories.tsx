@@ -259,7 +259,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 16 on its four sides under the bar, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Duplicate are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy, picked from More, reports the image and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
+					"One image of the Library, over the content card, opened from a grid item. Its header is the static bar of the open document on the lightbox surface at full opacity: on its top line the Library path link, a separator and the image details, over the image name; on the right, 8 apart, the capsule of the actions then the round Close. It traps focus, closes on Escape, on Close and on a click on the backdrop around the image, and hands focus back to the item that opened it. Left and Right arrows, like Previous and Next, ask the caller for the neighbouring image, and the two buttons disable at either end. Previous and Next float over the stage 16 from either side at mid-height, and the zoom pill floats over its bottom edge, so the fitted image keeps 12 on its four sides under the bar, as far as the bar title from the edge, and a zoomed image is cut at the rule of the bar. The Library path link closes the lightbox like Close. Download and Duplicate are drawn only when their callback is given and `isActionShown` keeps them for the image, and More opens the item action menu, drawn only when at least one item action is shown. Copy, picked from More, reports the image and announces Copied once `onCopy` settles, until the shared copy reset delay runs out. The zoom pill steps the image out and in, and its middle button, Fit, shows the zoom percentage until it is pressed to fit the stage again. Render it as the `overlay` of `LibraryPanel` so it covers the card.",
 			},
 		},
 	},
@@ -353,7 +353,9 @@ export const Default = meta.story({
 	},
 })
 
-const STAGE_INSET = 16
+const STAGE_INSET = 12
+
+const STEP_INSET = 16
 
 const ARTBOARD_IMAGE: LibraryLightboxImage = {
 	...(LIBRARY_LIGHTBOX_IMAGES[1] as LibraryLightboxImage),
@@ -366,7 +368,7 @@ export const OverlayFitted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #080809 at 93 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 16 on its four sides, and that Previous and Next float over that stage 16 from either side at its mid-height.",
+					"The image fitted to the stage under the bar, as artboard I7a draws it. Check that the overlay is #080809 at 93 percent, that the bar sits in the flow at its top, 56 tall on #0B0B0C at full opacity with a 1 px rule in white at 8 percent, that its 12/16 top line reads Library and the details, PNG · 412 KB · 3 h ago, in #A3A3A3 around a #6B6B6B separator, over the 14/18 semibold name in #F5F5F5, that the capsule and Close wear white at 8 percent, 8 apart, under #E5E5E5 icons, that no bar control and neither Previous nor Next casts a shadow, that no bar control fades its colour in, that the image, its corners rounded by 4, is centred in a stage that starts at the rule and keeps 12 on its four sides, the bar title's distance from the edge, and that Previous and Next float over that stage 16 from either side at its mid-height.",
 			},
 		},
 	},
@@ -427,6 +429,14 @@ export const OverlayFitted = meta.story({
 		await expect(stage.left - overlay.left).toBe(STAGE_INSET)
 		await expect(overlay.right - stage.right).toBe(STAGE_INSET)
 		await expect(overlay.bottom - stage.bottom).toBe(STAGE_INSET)
+		const zoom = slotIn(popup, "library-lightbox-zoom")
+		const titleEdge =
+			slotIn(bar, "app-header-leading").getBoundingClientRect().left -
+			overlay.left
+		await expect([
+			stage.left - overlay.left,
+			getComputedStyle(zoom).paddingTop,
+		]).toEqual([titleEdge, `${titleEdge}px`])
 		await expect(drawn.left).toBeGreaterThanOrEqual(stage.left)
 		await expect(drawn.right).toBeLessThanOrEqual(stage.right)
 		await expect(drawn.bottom).toBeLessThanOrEqual(stage.bottom)
@@ -453,10 +463,10 @@ export const OverlayFitted = meta.story({
 			await expect(box.top + box.height / 2).toBeCloseTo(stageMiddle, 0)
 		}
 		await expect(previous.getBoundingClientRect().left - overlay.left).toBe(
-			STAGE_INSET,
+			STEP_INSET,
 		)
 		await expect(overlay.right - next.getBoundingClientRect().right).toBe(
-			STAGE_INSET,
+			STEP_INSET,
 		)
 	},
 })
@@ -478,7 +488,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #080809 at 93 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage and keeps 16 on its three other sides, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
+					"The image before its file lands, next to `OverlayFitted`, the screen it turns into. Check that the surface is #080809 at 93 percent, that the one bar of the loaded lightbox sits in the flow at its top, 56 tall on #0B0B0C at full opacity with its rule, hidden from a screen reader, that it draws a path bar over a title bar and, on the right, a 92 by 32 capsule placeholder then a 32 round close placeholder, that the stage placeholder starts at the rule like the loaded stage, and keeps 12 on its three other sides, as far as the bar title from the edge, that the only other placeholders are the ones the loaded lightbox draws, Previous and Next 16 from either side at mid-height and the zoom pill, each on the input fill so it reads over the fainter stage, that nothing pulses under reduced motion, and that the whole is one busy region named Loading the image. Pick `LoadingLight` for the light theme.",
 			},
 		},
 	},
@@ -525,10 +535,10 @@ export const Loading = meta.story({
 			await expect(box.top + box.height / 2).toBe(stageMiddle)
 		}
 		await expect(previous.getBoundingClientRect().left - surface.left).toBe(
-			STAGE_INSET,
+			STEP_INSET,
 		)
 		await expect(surface.right - next.getBoundingClientRect().right).toBe(
-			STAGE_INSET,
+			STEP_INSET,
 		)
 	},
 })

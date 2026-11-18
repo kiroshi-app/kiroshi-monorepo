@@ -16,6 +16,7 @@ import {
 	A11Y_SUBMENU_PORTAL_GUARD,
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
+	expectContentAtBarInset,
 	expectHeaderTitleStep,
 	expectSkeletonFilledTo,
 	expectStaticHeaderBar,
@@ -201,6 +202,10 @@ export const Default = meta.story({
 		const [firstRow] = rows
 		if (!firstRow) throw new Error("No row is drawn")
 		await expect(anatomyOf(firstRow)).toEqual(ROW_ANATOMY)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(headers[0] as Element, "missions-page-glyph"),
+		)
 		const rowWithoutPullRequest = canvas.getByRole("button", {
 			name: /OPE-2130/,
 		})
@@ -330,6 +335,10 @@ export const Empty = meta.story({
 		await expect(
 			slotsIn(canvasElement, "missions-page-group-header"),
 		).toHaveLength(0)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(canvasElement, "missions-panel-empty"),
+		)
 	},
 })
 
@@ -367,6 +376,11 @@ export const Loading = meta.story({
 		)) {
 			await expect(header.getBoundingClientRect().height).toBe(headerHeight)
 		}
+		await expectContentAtBarInset(
+			page,
+			slotIn(canvasElement, "missions-page-skeleton-group-header")
+				.firstElementChild as Element,
+		)
 	},
 })
 
@@ -379,9 +393,14 @@ export const Failed = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expect(canvas.getByRole("alert")).toHaveTextContent(
 			"Couldn’t load missions",
+		)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(canvasElement, "missions-page-failure")
+				.firstElementChild as Element,
 		)
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalledOnce()

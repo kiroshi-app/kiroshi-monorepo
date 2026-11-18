@@ -759,16 +759,26 @@ export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
 	return bar
 }
 
-const SETTINGS_FIRST_ROW_TOP: Record<ScreenLayoutWidth, number> = {
-	column: 80,
-	full: 88,
-}
-
-const SETTINGS_FIRST_ROW_INLINE = 24
-
 export const COLUMN_WIDTH = 640
 
-const COLUMN_GUTTER = 24
+export const expectContentAtBarInset = async (
+	surface: Element,
+	content: Element,
+	inlineStart: Element = slotIn(surface, "app-header"),
+) => {
+	const bar = slotIn(surface, "app-header").getBoundingClientRect()
+	const title = slotIn(surface, "app-header-leading").getBoundingClientRect()
+	const box = content.getBoundingClientRect()
+	const scrolled =
+		content.closest('[data-slot="screen-layout-scroller"]')?.scrollTop ?? 0
+	const inset = Math.round(title.left - bar.left)
+
+	await expect(`${inset}px`).toBe(tokenLengthOf("--screen-inset"))
+	await expect([
+		Math.round(box.left - inlineStart.getBoundingClientRect().left),
+		Math.round(box.top + scrolled - bar.bottom),
+	]).toEqual([inset, inset])
+}
 
 export const columnContentOf = (column: Element) => {
 	const box = column.getBoundingClientRect()
@@ -784,7 +794,8 @@ export const expectCentredColumn = async (layout: Element) => {
 		layout.closest("[data-content-card]") ?? layout
 	).getBoundingClientRect()
 	const room = slotIn(layout, "screen-layout-scroller").clientWidth
-	const width = Math.min(COLUMN_WIDTH, room - 2 * COLUMN_GUTTER)
+	const gutter = Number.parseFloat(tokenLengthOf("--screen-inset"))
+	const width = Math.min(COLUMN_WIDTH, room - 2 * gutter)
 	const column = columnContentOf(slotIn(layout, "screen-layout-column"))
 
 	await expect(Math.round(column.width)).toBe(width)
@@ -806,20 +817,13 @@ export const expectSettingsPage = async (
 	const column = slotIn(page, "screen-layout-column")
 	const firstRow = column.firstElementChild
 	if (!firstRow) throw new globalThis.Error("The settings page is empty")
-	const pageBox = page.getBoundingClientRect()
 	const columnBox = column.getBoundingClientRect()
-	const firstRowBox = firstRow.getBoundingClientRect()
 
 	await expect(
 		within(header).getByRole("heading", { level: 2, name: label }),
 	).toBeVisible()
 	await expect(hasOverlayScrollbars(scroller)).toBe(true)
-	await expect(
-		Math.round(firstRowBox.top - pageBox.top + scroller.scrollTop),
-	).toBe(SETTINGS_FIRST_ROW_TOP[width])
-	await expect(Math.round(firstRowBox.left - columnBox.left)).toBe(
-		SETTINGS_FIRST_ROW_INLINE,
-	)
+	await expectContentAtBarInset(page, firstRow, column)
 	if (width === "column") {
 		await expectCentredColumn(page)
 		return
