@@ -93,12 +93,12 @@ const answered = async <Data>(answer: CommandAnswer<Data>) => {
 export const mountingHtml =
 	(html: string): MountLiveHtml =>
 	(id, rectangle) =>
-		commands.liveHtmlMount(id, html, rectangle)
+		commands.liveHtmlMount(id, html, rectangle, null)
 
 export const mountingAttachment =
 	(path: string): MountLiveHtml =>
 	(id, rectangle) =>
-		commands.liveHtmlMountAttachment(id, path, rectangle)
+		commands.liveHtmlMountAttachment(id, path, rectangle, null)
 
 export const createLiveHtmlView = ({
 	id,

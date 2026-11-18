@@ -169,20 +169,19 @@
 				expect(sizesOf("removed") === JSON.stringify([[SHOWN.width, 100]]), `removed measured ${sizesOf("removed")}`)
 
 				await invoke("live_html_mount", { id: "wide", html: WIDE_PAGE, rectangle: SHOWN })
-				await expectSizes("wide", [[SHOWN.width, 120]])
-				const fitted = { ...SHOWN, height: 120 }
-				await invoke("live_html_place", { id: "wide", rectangle: fitted, clip: null })
+				await expectSizes("wide", [[SHOWN.width, 360]])
+				const unfitted = { ...SHOWN, height: 360 }
+				await invoke("live_html_place", { id: "wide", rectangle: unfitted, clip: null })
 				const { magenta_drawn_in_window_points: left, cyan_drawn_in_window_points: right } = await capture(
-					"wide-fitted",
-					fitted,
+					"wide-clipped",
+					unfitted,
 					null,
 				)
-				expect(left && right, "the wide page drew no left or no right half")
 				const halves = JSON.stringify({ left, right })
-				expect(near(left.width, SHOWN.width / 2) && near(right.width, SHOWN.width / 2), `the wide halves are ${halves}`)
-				expect(near(left.height, 120) && near(right.height, 120), `the wide halves are ${halves}`)
-				expect(near(right.x - left.x, SHOWN.width / 2) && near(right.y, left.y), `the wide halves are ${halves}`)
-				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 120]]), `wide measured ${sizesOf("wide")}`)
+				expect(left && !right, `the wide page drew ${halves}`)
+				expect(near(left.x, SHOWN.x) && near(left.width, SHOWN.width), `the wide left half is ${halves}`)
+				expect(near(left.height, 360), `the wide left half is ${halves}`)
+				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 360]]), `wide measured ${sizesOf("wide")}`)
 				await invoke("live_html_remove", { id: "wide" })
 
 				await invoke("live_html_mount", { id: "flood", html: FLOOD_PAGE, rectangle: SHOWN })
@@ -208,6 +207,50 @@
 
 				await expectUnscrolled("scrolled", SCROLLED_PAGE)
 				await expectUnscrolled("scrolling-body", SCROLLING_BODY_PAGE)
+			}
+
+			const BARE_PAGE = `<div style="height:120px"></div>`
+			const OWN_PAGE = `<!doctype html><html><head><style>body { background: #ff00ff }</style></head><body><div style="height:120px"></div></body></html>`
+			const HTML_ONLY_PAGE = `<!doctype html><html><head><style>html { background: #ff00ff }</style></head><body><div style="height:120px"></div></body></html>`
+			const DARK = { appearance: "dark", hue: null }
+			const LIGHT = { appearance: "light", hue: 257 }
+			const DARK_BACKGROUND = [0, 0, 0]
+			const LIGHT_BACKGROUND = [245, 245, 245]
+			const SHADE_TOLERANCE = 8
+			const isShade = (color, expected) => expected.every((channel, index) => Math.abs(color[index] - channel) <= SHADE_TOLERANCE)
+			const expectBackground = async (step, expected) => {
+				await pause(600)
+				const [color] = await invoke("probe_colors", { step, probes: [[SHOWN.x + SHOWN.width / 2, SHOWN.y + 60]] })
+				expect(isShade(color, expected), `${step}: the page background is ${JSON.stringify(color)}, expected ${JSON.stringify(expected)}`)
+			}
+
+			const expectOwnBackground = async (id, html, view) => {
+				await invoke("live_html_mount", { id, html, rectangle: SHOWN, theme: DARK })
+				await expectSizes(id, [[SHOWN.width, 120]])
+				const { magenta_drawn_in_window_points: own } = await capture(`${id}-background`, view, null)
+				const isAcrossTheView =
+					own && near(own.x, view.x) && near(own.y, view.y) && near(own.width, view.width) && near(own.height, view.height)
+				expect(isAcrossTheView, `${id} drew its own background on ${JSON.stringify(own)}, not across ${JSON.stringify(view)}`)
+				await invoke("live_html_remove", { id })
+			}
+
+			const theme = async () => {
+				paint(NOWHERE)
+				await invoke("live_html_mount", { id: "themed", html: BARE_PAGE, rectangle: SHOWN, theme: DARK })
+				await expectSizes("themed", [[SHOWN.width, 120]])
+				await expectBackground("themed-dark", DARK_BACKGROUND)
+				const { content_loads: loadsBefore } = await capture("themed-before", SHOWN, null)
+				await invoke("live_html_theme", { id: "themed", theme: LIGHT })
+				await expectBackground("themed-light", LIGHT_BACKGROUND)
+				const { content_loads: loadsAfter } = await capture("themed-after", SHOWN, null)
+				expect(loadsAfter === loadsBefore, `the page loaded ${loadsAfter - loadsBefore} more times to change its theme`)
+				const unknown = await answer(invoke("live_html_theme", { id: "missing", theme: LIGHT }))
+				expect(unknown.kind === "unknownView", `theming an unknown view answered ${JSON.stringify(unknown)}`)
+				await invoke("live_html_remove", { id: "themed" })
+
+				followed.add("own")
+				await expectOwnBackground("own", OWN_PAGE, { ...SHOWN, height: 120 })
+				await expectOwnBackground("html-only", HTML_ONLY_PAGE, SHOWN)
 			}
 
 			const SLOT_PAGE = PAGE(`<div style="height:160px;background:#ff00ff"></div>`)
@@ -371,6 +414,7 @@
 				await pause(1000)
 				await capture("after-reload", SHOWN, null)
 				await measure()
+				await theme()
 				await compose()
 				await invoke("finish_run")
 			}

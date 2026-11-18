@@ -58,6 +58,14 @@ pub async fn url<R: Runtime>(_app: &AppHandle<R>, _id: String) -> Result<String,
 	Err(LiveHtmlError::NotAvailableHere)
 }
 
+pub async fn retheme<R: Runtime>(
+	_app: &AppHandle<R>,
+	_id: String,
+	_script: String,
+) -> Result<(), LiveHtmlError> {
+	Err(LiveHtmlError::NotAvailableHere)
+}
+
 pub async fn evaluate<R: Runtime>(
 	_app: &AppHandle<R>,
 	_id: String,

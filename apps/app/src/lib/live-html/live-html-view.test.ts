@@ -83,7 +83,10 @@ describe("a live html view", () => {
 		await flush()
 
 		expect(host.answer.mock.calls).toEqual([
-			["live_html_mount", { id: "view-1", html: "<p>Hi</p>", rectangle: RECT }],
+			[
+				"live_html_mount",
+				{ id: "view-1", html: "<p>Hi</p>", rectangle: RECT, theme: null },
+			],
 			["live_html_place", { id: "view-1", rectangle: RECT, clip: CLIP }],
 		])
 		expect(onLive).toHaveBeenCalledTimes(1)

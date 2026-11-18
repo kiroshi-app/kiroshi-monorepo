@@ -1,4 +1,5 @@
 mod attachment;
+mod base;
 pub mod commands;
 pub mod contract;
 #[cfg(not(target_os = "macos"))]
@@ -27,7 +28,7 @@ use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow, Window, WindowE
 use tokio::sync::Mutex;
 
 use crate::window_controls::MAIN_WINDOW;
-use contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlRectangle};
+use contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlRectangle, LiveHtmlTheme};
 use placement::Placement;
 use server::ContentServer;
 use watch::{LoggedWatch, ViewWatch};
@@ -67,6 +68,7 @@ impl LiveViews {
 		id: String,
 		html: String,
 		rectangle: LiveHtmlRectangle,
+		theme: Option<LiveHtmlTheme>,
 	) -> Result<(), LiveHtmlError> {
 		native::ensure_available()?;
 		valid(rectangle)?;
@@ -77,7 +79,7 @@ impl LiveViews {
 		let main_window = main_window_of(app)?;
 		let placement =
 			Placement { rectangle, clip: None, top_inset: native::top_inset(&main_window).await? };
-		let server = ContentServer::open(&id, html, Arc::clone(&self.watch))
+		let server = ContentServer::open(&id, html, theme, Arc::clone(&self.watch))
 			.map_err(|failure| LiveHtmlError::Unserved { detail: failure.to_string() })?;
 		let view = ViewToMount {
 			#[cfg(target_os = "macos")]
@@ -112,6 +114,20 @@ impl LiveViews {
 		let id = known(&servers, id)?;
 		let top_inset = native::top_inset(&main_window_of(app)?).await?;
 		native::place(app, id, Placement { rectangle, clip, top_inset }).await
+	}
+
+	pub async fn theme<R: Runtime>(
+		&self,
+		app: &AppHandle<R>,
+		id: String,
+		theme: LiveHtmlTheme,
+	) -> Result<(), LiveHtmlError> {
+		native::ensure_available()?;
+		let servers = self.servers.lock().await;
+		let server =
+			servers.get(&id).ok_or_else(|| LiveHtmlError::UnknownView { id: id.clone() })?;
+		server.retheme(theme);
+		native::retheme(app, id, base::retheming(theme)).await
 	}
 
 	pub async fn round<R: Runtime>(

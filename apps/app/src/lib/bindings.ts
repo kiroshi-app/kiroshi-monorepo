@@ -40,14 +40,21 @@ export const commands = {
 	librarySave: (spaceId: string, name: string) => typedError<string | null, LibraryError>(__TAURI_INVOKE("library_save", { spaceId, name })),
 	libraryCopy: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_copy", { spaceId, name })),
 	libraryReveal: (spaceId: string, name: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_reveal", { spaceId, name })),
-	liveHtmlMount: (id: string, html: string, rectangle: LiveHtmlRectangle) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount", { id, html, rectangle })),
-	liveHtmlMountAttachment: (id: string, path: string, rectangle: LiveHtmlRectangle) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount_attachment", { id, path, rectangle })),
+	liveHtmlMount: (id: string, html: string, rectangle: LiveHtmlRectangle, theme: {
+	appearance: LiveHtmlAppearance,
+	hue: Hue | null,
+} | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount", { id, html, rectangle, theme })),
+	liveHtmlMountAttachment: (id: string, path: string, rectangle: LiveHtmlRectangle, theme: {
+	appearance: LiveHtmlAppearance,
+	hue: Hue | null,
+} | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_mount_attachment", { id, path, rectangle, theme })),
 	liveHtmlPlace: (id: string, rectangle: LiveHtmlRectangle, clip: {
 	x: number | null,
 	y: number | null,
 	width: number | null,
 	height: number | null,
 } | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_place", { id, rectangle, clip })),
+	liveHtmlTheme: (id: string, theme: LiveHtmlTheme) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_theme", { id, theme })),
 	liveHtmlRound: (id: string, corners: LiveHtmlCorners) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_round", { id, corners })),
 	liveHtmlStill: (id: string) => typedError<string, LiveHtmlError>(__TAURI_INVOKE("live_html_still", { id })),
 	liveHtmlHide: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_hide", { id })),
@@ -1478,6 +1485,8 @@ export type LibraryWriter = {
 
 export type LibraryWriterKind = "agent" | "person" | "member";
 
+export type LiveHtmlAppearance = "light" | "dark";
+
 export type LiveHtmlCorners = {
 	topLeft: number | null,
 	topRight: number | null,
@@ -1498,6 +1507,11 @@ export type LiveHtmlRectangle = {
 	y: number | null,
 	width: number | null,
 	height: number | null,
+};
+
+export type LiveHtmlTheme = {
+	appearance: LiveHtmlAppearance,
+	hue: Hue | null,
 };
 
 export type LiveSession = {

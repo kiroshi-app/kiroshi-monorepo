@@ -9,6 +9,8 @@ use axum::Router;
 use tokio::net::TcpListener;
 use tokio::sync::watch as signal;
 
+use super::base;
+use super::contract::LiveHtmlTheme;
 use super::watch::{ReceivedRequest, ViewWatch};
 
 pub const ALLOWED_HOSTS: [&str; 1] = ["cdn.jsdelivr.net"];
@@ -34,6 +36,7 @@ const WRAPPER_HTML: &str = r#"<!doctype html>
 pub struct ContentServer {
 	address: SocketAddr,
 	token: String,
+	theme: signal::Sender<Option<LiveHtmlTheme>>,
 	stop: signal::Sender<bool>,
 }
 
@@ -41,26 +44,38 @@ struct Served {
 	view: String,
 	token: String,
 	html: String,
+	theme: signal::Receiver<Option<LiveHtmlTheme>>,
 	csp: String,
 	watch: Arc<dyn ViewWatch>,
 }
 
 impl ContentServer {
-	pub fn open(view: &str, html: String, watch: Arc<dyn ViewWatch>) -> std::io::Result<Self> {
+	pub fn open(
+		view: &str,
+		html: String,
+		theme: Option<LiveHtmlTheme>,
+		watch: Arc<dyn ViewWatch>,
+	) -> std::io::Result<Self> {
 		let listener = StandardListener::bind((Ipv4Addr::LOCALHOST, 0))?;
 		listener.set_nonblocking(true)?;
 		let address = listener.local_addr()?;
 		let token = uuid::Uuid::new_v4().simple().to_string();
 		let (stop, halted) = signal::channel(false);
+		let (theme, shown_theme) = signal::channel(theme);
 		let served = Served {
 			view: view.to_owned(),
 			csp: content_csp(&token),
 			token: token.clone(),
 			html,
+			theme: shown_theme,
 			watch,
 		};
 		tauri::async_runtime::spawn(answering(Arc::new(served), listener, halted));
-		Ok(Self { address, token, stop })
+		Ok(Self { address, token, theme, stop })
+	}
+
+	pub fn retheme(&self, theme: LiveHtmlTheme) {
+		self.theme.send_replace(Some(theme));
 	}
 
 	pub fn wrapper_url(&self) -> String {
@@ -137,7 +152,9 @@ async fn answer(State(served): State<Arc<Served>>, request: Request) -> Response
 			WRAPPER_HTML.to_owned(),
 			format!("{WRAPPER_CSP}; report-uri /{}/{REPORT_ROUTE}", served.token),
 		),
-		(Method::GET, Some(CONTENT_DOCUMENT)) => document(served.html.clone(), served.csp.clone()),
+		(Method::GET, Some(CONTENT_DOCUMENT)) => {
+			document(base::laid_under(&served.html, *served.theme.borrow()), served.csp.clone())
+		}
 		(Method::POST, Some(REPORT_ROUTE)) => StatusCode::NO_CONTENT.into_response(),
 		_ => StatusCode::NOT_FOUND.into_response(),
 	}
@@ -168,4 +185,4 @@ pub(crate) fn reported_directive(request: &ReceivedRequest<'_>) -> Option<String
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

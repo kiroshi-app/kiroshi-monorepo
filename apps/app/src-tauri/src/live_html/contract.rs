@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversations::contract::Hue;
+
 pub const MEASURED_EVENT: &str = "live-html://measured";
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
@@ -34,6 +36,20 @@ impl LiveHtmlCorners {
 			.iter()
 			.all(|radius| radius.is_finite() && *radius >= 0.0)
 	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LiveHtmlAppearance {
+	Light,
+	Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveHtmlTheme {
+	pub appearance: LiveHtmlAppearance,
+	pub hue: Option<Hue>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]

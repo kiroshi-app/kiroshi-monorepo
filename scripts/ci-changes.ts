@@ -42,6 +42,7 @@ export const PATHS_RUST_READS_OUTSIDE_SRC_TAURI = [
 	"packages/shared/conversation-icons.json",
 	"packages/shared/permission-modes.json",
 	"packages/ui/src/components/markdown",
+	"packages/ui/src/styles/tokens.css",
 ]
 
 const EVERY_JOB: FilteredJobs = {

@@ -4,9 +4,11 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
-#[cfg(target_os = "macos")]
-use super::contract::LiveHtmlCorners;
 use super::contract::LiveHtmlError;
+#[cfg(target_os = "macos")]
+use super::contract::{LiveHtmlAppearance, LiveHtmlCorners, LiveHtmlRectangle, LiveHtmlTheme};
+#[cfg(target_os = "macos")]
+use super::server::tests::fetched;
 use super::server::ContentServer;
 use super::watch::LoggedWatch;
 use super::LiveViews;
@@ -15,9 +17,11 @@ const LOCK_WAIT: Duration = Duration::from_secs(1);
 #[cfg(target_os = "macos")]
 const SQUARE: LiveHtmlCorners =
 	LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 };
+#[cfg(target_os = "macos")]
+const DARK: LiveHtmlTheme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
 
 async fn show(views: &LiveViews, id: &str) {
-	let server = ContentServer::open(id, String::new(), Arc::new(LoggedWatch))
+	let server = ContentServer::open(id, String::new(), None, Arc::new(LoggedWatch))
 		.expect("the content server opens");
 	views.servers.lock().await.insert(id.to_owned(), server);
 }
@@ -96,4 +100,35 @@ async fn a_live_html_corner_radius_that_is_negative_or_not_finite_is_refused() {
 			assert_eq!(rounded, Err(LiveHtmlError::InvalidRadius), "{corners:?} was taken");
 		}
 	}
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_theme_naming_an_unknown_view_is_refused_like_its_placement() {
+	let app = tauri::test::mock_app();
+	let views = LiveViews::default();
+	show(&views, "a").await;
+	let rectangle = LiveHtmlRectangle { x: 0.0, y: 0.0, width: 480.0, height: 300.0 };
+
+	let themed = views.theme(app.handle(), "missing".to_owned(), DARK).await;
+	let placed = views.place(app.handle(), "missing".to_owned(), rectangle, None).await;
+
+	assert_eq!(themed, Err(LiveHtmlError::UnknownView { id: "missing".to_owned() }));
+	assert_eq!(themed, placed);
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_theme_for_a_view_with_no_native_webview_yet_succeeds_and_is_served_next() {
+	let app = tauri::test::mock_app();
+	let views = LiveViews::default();
+	show(&views, "a").await;
+
+	let themed = views.theme(app.handle(), "a".to_owned(), DARK).await;
+
+	assert_eq!(themed, Ok(()));
+	let url = views.servers.lock().await.get("a").expect("the shown view").content_url();
+	let served = fetched(&url).await.expect("the content answers");
+	assert!(served.contains("--kiroshi-appearance: dark; --kiroshi-background: #000000;"));
+	assert!(!served.contains("prefers-color-scheme"), "{served}");
 }
