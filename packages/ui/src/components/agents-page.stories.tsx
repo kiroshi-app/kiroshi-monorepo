@@ -384,9 +384,10 @@ export const Empty = meta.story({
 			body.left + body.width / 2,
 			0,
 		)
+		const inset = tokenLengthOf("--screen-inset")
 		await expect([padding.paddingInlineStart, padding.paddingTop]).toEqual([
-			tokenLengthOf("--screen-inset"),
-			tokenLengthOf("--screen-inset"),
+			inset,
+			inset,
 		])
 
 		const creates = canvas.getAllByRole("button", { name: "Create an agent" })
