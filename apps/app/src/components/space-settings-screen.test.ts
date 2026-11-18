@@ -951,7 +951,11 @@ describe("SpaceSettingsScreen hosting on the desktop", () => {
 
 		expect(commands.hostingStop).toHaveBeenCalledWith(gear.home.id)
 		expect(screen.queryByRole("alertdialog")).toBeNull()
-		expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("false")
+		await waitFor(() =>
+			expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe(
+				"false",
+			),
+		)
 	})
 
 	it("mounts no Hosting entry", async () => {
