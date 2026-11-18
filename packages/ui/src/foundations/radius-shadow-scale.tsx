@@ -49,6 +49,11 @@ const RADII = [
 		className: "rounded-control",
 		computed: "calc(var(--radius-root) * 1.2)",
 	},
+	{
+		token: "--radius-button",
+		className: "rounded-button",
+		computed: "var(--radius-lg)",
+	},
 ]
 
 const SHADOWS = [

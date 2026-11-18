@@ -342,7 +342,7 @@ const BoardZoomButton = ({
 }: BoardZoomButtonProps) => (
 	<Button
 		aria-label={label}
-		className="rounded-[7px] text-board-control-foreground transition-none hover:bg-muted hover:text-board-control-foreground active:bg-input data-disabled:pointer-events-none data-disabled:text-disabled-foreground dark:hover:bg-muted"
+		className="text-board-control-foreground transition-none hover:bg-muted hover:text-board-control-foreground active:bg-input data-disabled:pointer-events-none data-disabled:text-disabled-foreground dark:hover:bg-muted"
 		disabled={isDisabled}
 		focusableWhenDisabled
 		onClick={onClick}

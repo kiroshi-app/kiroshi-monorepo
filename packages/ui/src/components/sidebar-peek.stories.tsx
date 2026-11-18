@@ -12,6 +12,7 @@ import {
 	settled,
 	slotIn,
 	slotsIn,
+	tokenLengthOf,
 	transitionsIn,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
@@ -297,7 +298,9 @@ export const PeekFromTheCollapseIcon = meta.story({
 		await expectArtboardPanel(canvas, panel)
 
 		await expect(boxOf(toggle)).toMatchObject({ width: 28, height: 28 })
-		await expect(getComputedStyle(toggle).borderRadius).toBe("6px")
+		await expect(getComputedStyle(toggle).borderRadius).toBe(
+			tokenLengthOf("--radius-button"),
+		)
 
 		await userEvent.hover(slotIn(panel, "space-switcher"))
 		await expectPeekKeptWhileInside(panel)

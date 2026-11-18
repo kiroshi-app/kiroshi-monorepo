@@ -26,7 +26,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const ZERO_WIDTH_SPACE = "​"
 
 const COMMENT_ICON_BUTTON =
-	"size-7 rounded-full transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8"
+	"size-7 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8"
 
 type LibraryCommentDraftOptions = {
 	value: string
@@ -191,7 +191,7 @@ const LibraryCommentSendButton = ({
 	return (
 		<TooltipButton
 			aria-label={t("library.comments.composer.send")}
-			className="size-7 rounded-full transition-none disabled:bg-muted disabled:text-disabled-foreground disabled:opacity-100 dark:disabled:bg-foreground/8"
+			className="size-7 transition-none disabled:bg-muted disabled:text-disabled-foreground disabled:opacity-100 dark:disabled:bg-foreground/8"
 			disabled={!draft.canSend}
 			size="icon-sm"
 			tooltip={t("library.comments.composer.send")}

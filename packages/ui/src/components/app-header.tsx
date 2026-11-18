@@ -17,7 +17,7 @@ const APP_HEADER_TITLE =
 const APP_HEADER_CAPSULE_FILL = "bg-foreground/5 dark:bg-white/6"
 
 const APP_HEADER_CONTROL =
-	"relative flex shrink-0 items-center justify-center rounded-full text-soft-foreground outline-ring transition-none hover:bg-foreground/6 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background active:bg-foreground/12 active:text-foreground aria-expanded:bg-foreground/6 aria-expanded:text-foreground in-data-content-card:focus-visible:ring-card dark:active:bg-white/16 dark:aria-expanded:bg-white/10 dark:hover:bg-white/10 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+	"relative flex shrink-0 items-center justify-center rounded-button text-soft-foreground outline-ring transition-none hover:bg-foreground/6 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background active:bg-foreground/12 active:text-foreground aria-expanded:bg-foreground/6 aria-expanded:text-foreground in-data-content-card:focus-visible:ring-card dark:active:bg-white/16 dark:aria-expanded:bg-white/10 dark:hover:bg-white/10 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 
 const APP_HEADER_BUTTON_KIND = {
 	capsule: "h-7 min-w-7 [&_svg]:size-4",

@@ -268,11 +268,13 @@ export const GridAll = meta.story({
 		await expect(all.getBoundingClientRect().height).toBe(26)
 		await expect(getComputedStyle(all).transitionProperty).toBe("none")
 
-		const accent = getComputedStyle(slotIn(canvasElement, "library-panel"))
-			.getPropertyValue("--primary")
-			.trim()
+		const primaryFill = tokenStyleIn(
+			all,
+			PRIMARY_AT_REST[themeAround(all)].fill,
+			"backgroundColor",
+		)
 		await expect(getComputedStyle(pressedFillOf(all)).backgroundColor).toBe(
-			rgbOf(accent),
+			primaryFill,
 		)
 		if (isInBrowserRunner()) {
 			const pointer = await realPointer()
@@ -281,7 +283,7 @@ export const GridAll = meta.story({
 				await waitFor(() => expect(all.matches(":hover")).toBe(true))
 				await expect(all).toHaveAttribute("aria-pressed", "true")
 				await expect(getComputedStyle(pressedFillOf(all)).backgroundColor).toBe(
-					rgbOf(accent),
+					primaryFill,
 				)
 				await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
 			} finally {
@@ -1243,7 +1245,7 @@ export const LongNames = meta.story({
 				getComputedStyle(
 					pressedFillOf(canvas.getByRole("button", { name: /^All/ })),
 				).backgroundColor,
-			).toBe(rgbOf(hueTone(HUE_PRESETS.pink, "dark", "accent").hex)),
+			).toBe(rgbOf(hueTone(HUE_PRESETS.pink, "dark", "bubble").hex)),
 		)
 		await expect(
 			getComputedStyle(slotIn(canvasElement, "library-thumbnail"))
@@ -1542,7 +1544,7 @@ const isDarkAround = (element: Element) => element.closest(".dark") !== null
 
 const SELECTED_COUNT_INK = {
 	light: "text-primary-foreground",
-	dark: "text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]",
+	dark: "text-[var(--hue-dark-bubble-foreground,var(--foreground))]",
 }
 
 const SECONDARY_HOVER_FILL = "bg-foreground/5"
@@ -1645,15 +1647,19 @@ const expectNoHorizontalOverflow = async (canvasElement: HTMLElement) => {
 	)
 }
 
+const expectSecondarySurface = async (control: HTMLElement) => {
+	await expectFill(control, SECONDARY_REST_FILL[themeAround(control)])
+	await expect(getComputedStyle(control).borderTopWidth).toBe("1px")
+	await expect(getComputedStyle(control).borderTopColor).toBe(
+		tokenStyleIn(control, "border border-foreground/12", "borderTopColor"),
+	)
+	await expect(getComputedStyle(control).color).toBe(
+		tokenStyleIn(control, "text-foreground", "color"),
+	)
+}
+
 const expectSecondaryAtRest = async (action: HTMLElement) => {
-	await expectFill(action, SECONDARY_REST_FILL[themeAround(action)])
-	await expect(getComputedStyle(action).borderTopWidth).toBe("1px")
-	await expect(getComputedStyle(action).borderTopColor).toBe(
-		tokenStyleIn(action, "border border-foreground/12", "borderTopColor"),
-	)
-	await expect(getComputedStyle(action).color).toBe(
-		tokenStyleIn(action, "text-foreground", "color"),
-	)
+	await expectSecondarySurface(action)
 	await expect(getComputedStyle(glyphOf(action)).color).toBe(
 		tokenStyleIn(action, "text-soft-foreground", "color"),
 	)
@@ -1734,7 +1740,7 @@ const expectBarAsDrawn = async (
 		]).toEqual([
 			32,
 			12,
-			tokenStyleIn(action, "rounded-full", "borderTopLeftRadius"),
+			tokenStyleIn(action, "rounded-button", "borderTopLeftRadius"),
 			"12px",
 			"6px",
 			"13px",
@@ -1774,7 +1780,7 @@ const expectBarAsDrawn = async (
 		boxOf(filters).top,
 		boxOf(filters).height,
 	]).toEqual([boxOf(controls).left, boxOf(controls).top, 32])
-	await expectFill(filters, "bg-muted")
+	await expectSecondarySurface(filters)
 	await expect(segments.map((segment) => segment.textContent)).toEqual([
 		`All${items.length}`,
 		`Images${countOf(items, "image")}`,
@@ -1788,9 +1794,13 @@ const expectBarAsDrawn = async (
 		getComputedStyle(all).lineHeight,
 		getComputedStyle(all).fontWeight,
 	]).toEqual([26, "12px", "16px", "500"])
-	await expectFill(pressedFillOf(all), "bg-primary", all)
+	await expectFill(
+		pressedFillOf(all),
+		PRIMARY_AT_REST[themeAround(all)].fill,
+		all,
+	)
 	await expect(getComputedStyle(all).color).toBe(
-		tokenStyleIn(all, "text-primary-foreground", "color"),
+		tokenStyleIn(all, PRIMARY_AT_REST[themeAround(all)].ink, "color"),
 	)
 	await expect(getComputedStyle(slotIn(all, "sliding-tab-count")).color).toBe(
 		tokenStyleIn(all, SELECTED_COUNT_INK[isDark ? "dark" : "light"], "color"),
@@ -2062,7 +2072,12 @@ const BAR_STATE_ROWS = [
 
 type BarStateRow = (typeof BAR_STATE_ROWS)[number]["row"]
 
-type ControlState = "filter-hover" | "filter-focus" | "search-focus-typing"
+type ControlState =
+	| "filter-hover"
+	| "filter-pressed"
+	| "filter-focus"
+	| "filters-beside-bar"
+	| "search-focus-typing"
 
 const stateRowId = (row: BarStateRow | ControlState) => `library-${row}`
 
@@ -2231,7 +2246,7 @@ export const FilterHover = meta.story({
 		docs: {
 			description: {
 				story:
-					"The filters keep their look in the content row: the pointer rests on Images, a filter that is not the selected one. Check that Images takes the pressed control fill, one step darker than the muted track, that All keeps the Space colour under the pointer, and that the fill lands with no colour transition.",
+					"The filters keep their look in the content row: the pointer rests on Images, a filter that is not the selected one. Check that Images takes the 5 percent foreground fill of a hovered secondary bar button, that All keeps the primary bar button fill under the pointer, and that the fill lands with no colour transition.",
 			},
 		},
 	},
@@ -2241,22 +2256,99 @@ export const FilterHover = meta.story({
 		const pointer = await realPointer()
 
 		await pointer.hover(images)
-		await expectFill(
-			images,
-			isDarkAround(images) ? "bg-control-hover" : "bg-control-pressed",
-		)
-		await expect(getComputedStyle(images).backgroundColor).not.toBe(
-			tokenStyleIn(images, "bg-muted", "backgroundColor"),
-		)
+		await expectFill(images, SECONDARY_HOVER_FILL)
 		await expect(getComputedStyle(images).transitionProperty).toBe("none")
 		await pointer.hover(all)
-		await expectFill(pressedFillOf(all), "bg-primary", all)
+		await expectFill(
+			pressedFillOf(all),
+			PRIMARY_AT_REST[themeAround(all)].fill,
+			all,
+		)
 		await expect(getComputedStyle(all).backgroundColor).toBe(TRANSPARENT)
 		await pointer.unhover(all)
 	},
 })
 
 export const FilterHoverDark = FilterHover.extend({
+	globals: { theme: "dark" },
+})
+
+export const FilterPressed = meta.story({
+	...controlStateStory("filter-pressed"),
+	parameters: {
+		pseudo: {
+			hover: [inRow("filter-pressed", IMAGES_SEGMENT)],
+			active: [inRow("filter-pressed", IMAGES_SEGMENT)],
+		},
+		docs: {
+			description: {
+				story:
+					"Images held down, a filter that is not the selected one. Check that it takes the 10 percent foreground fill of a pressed secondary bar button, with no colour transition.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		if (!isInBrowserRunner()) return
+		const { images } = controlsIn(canvasElement)
+
+		await expect(images).toHaveAttribute("aria-pressed", "false")
+		await expectFill(images, SECONDARY_PRESSED_FILL)
+		await expect(getComputedStyle(images).transitionProperty).toBe("none")
+	},
+})
+
+export const FilterPressedDark = FilterPressed.extend({
+	globals: { theme: "dark" },
+})
+
+export const FiltersBesideBarButtons = meta.story({
+	...controlStateStory("filters-beside-bar"),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The filters under the bar buttons they copy, in a blue Space. Check that the track wears the fill, hairline border and ink of New board, that the pill wears the fill of New document and the selected label its ink, and that every segment, the pill and both bar buttons share the Button radius, the track that radius plus its 3 px inset.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [newBoard, newDocument] = barIn(canvasElement).actions
+		if (!(newBoard && newDocument)) throw new Error("The bar lost an action")
+		const { filters, segments, all } = controlsIn(canvasElement)
+		const pill = pressedFillOf(all)
+		const styleOf = (element: HTMLElement) => getComputedStyle(element)
+		const buttonRadius = tokenStyleIn(
+			all,
+			"rounded-button",
+			"borderTopLeftRadius",
+		)
+
+		await expect([
+			styleOf(filters).backgroundColor,
+			styleOf(filters).borderTopWidth,
+			styleOf(filters).borderTopColor,
+			styleOf(filters).color,
+		]).toEqual([
+			styleOf(newBoard).backgroundColor,
+			styleOf(newBoard).borderTopWidth,
+			styleOf(newBoard).borderTopColor,
+			styleOf(newBoard).color,
+		])
+		await expect(styleOf(pill).backgroundColor).toBe(
+			styleOf(newDocument).backgroundColor,
+		)
+		await expect(styleOf(all).color).toBe(styleOf(newDocument).color)
+		for (const control of [...segments, pill, newBoard, newDocument])
+			await expect(styleOf(control).borderTopLeftRadius).toBe(buttonRadius)
+		await expect(Number.parseFloat(styleOf(filters).borderTopLeftRadius)).toBe(
+			Number.parseFloat(buttonRadius) +
+				Number.parseFloat(styleOf(filters).paddingTop) +
+				Number.parseFloat(styleOf(filters).borderTopWidth),
+		)
+	},
+})
+
+export const FiltersBesideBarButtonsDark = FiltersBesideBarButtons.extend({
 	globals: { theme: "dark" },
 })
 

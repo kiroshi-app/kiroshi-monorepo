@@ -38,12 +38,9 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const LINE = "text-compact leading-4"
 
-const CREATE_BUTTON = cn(
-	"rounded-md border-input text-foreground transition-none",
-	LINE,
-)
+const CREATE_BUTTON = cn("border-input text-foreground transition-none", LINE)
 
-const ACTIONS_BUTTON = "rounded-sm text-muted-foreground transition-none"
+const ACTIONS_BUTTON = "text-muted-foreground transition-none"
 
 const GRID = "grid @4xl:grid-cols-3 @xl:grid-cols-2 grid-cols-1 gap-4"
 

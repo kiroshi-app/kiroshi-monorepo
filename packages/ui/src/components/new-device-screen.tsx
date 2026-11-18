@@ -38,7 +38,7 @@ const CODE_SLOTS = Array.from({ length: CODE_LENGTH }, (_, slot) => slot)
 const CODE_SLOT_CLASS =
 	"h-14 w-12 rounded-control border border-shell-divider bg-muted/40 font-medium text-2xl text-foreground tabular-nums leading-7 first:rounded-control first:border-l last:rounded-control data-[active=true]:border-ring data-[active=true]:ring-0 data-[active=true]:inset-ring-[0.5px] data-[active=true]:inset-ring-ring [&>div>div]:h-6 [&>div>div]:w-[1.5px] [&>div>div]:motion-reduce:animate-none"
 
-const PRIMARY_CLASS = "rounded-full px-5 leading-4.5"
+const PRIMARY_CLASS = "px-5 leading-4.5"
 
 const LINK_CLASS =
 	"relative rounded-xs font-medium text-compact text-foreground leading-4.5 underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"

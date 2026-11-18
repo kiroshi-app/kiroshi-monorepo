@@ -218,16 +218,68 @@ const expectFillOnPill = async (tab: HTMLElement, fill: string) => {
 const radiusOf = (element: HTMLElement) =>
 	Number.parseFloat(getComputedStyle(element).borderTopLeftRadius)
 
-const expectConcentricPill = async (tab: HTMLElement) => {
+const insetOf = (track: HTMLElement) => {
+	const { paddingTop, borderTopWidth } = getComputedStyle(track)
+	return Number.parseFloat(paddingTop) + Number.parseFloat(borderTopWidth)
+}
+
+const expectConcentricPill = async (
+	tab: HTMLElement,
+	trackRadius = "rounded-lg",
+) => {
 	const track = tab.parentElement as HTMLElement
 	const pill = pillBeside(tab)
-	const trackPadding = Number.parseFloat(getComputedStyle(track).paddingTop)
 	await expect(getComputedStyle(track).borderTopLeftRadius).toBe(
-		tokenStyleIn(track, "rounded-lg", "borderTopLeftRadius"),
+		tokenStyleIn(track, trackRadius, "borderTopLeftRadius"),
 	)
 	await expect(radiusOf(pill)).toBeGreaterThan(0)
-	await expect(radiusOf(pill)).toBe(radiusOf(track) - trackPadding)
+	await expect(radiusOf(pill)).toBe(radiusOf(track) - insetOf(track))
 	await expect(radiusOf(tab)).toBe(radiusOf(pill))
+}
+
+const FILTER_TRACK_RADIUS =
+	"rounded-[calc(var(--radius-button)+--spacing(0.75))]"
+
+const FILTER_TRACK_FILL = { light: "bg-background", dark: "bg-foreground/4" }
+
+const FILTER_PILL = {
+	light: { fill: "bg-primary", ink: "text-primary-foreground" },
+	dark: {
+		fill: "bg-[var(--hue-dark-bubble,var(--hue-blue-bubble))]",
+		ink: "text-[var(--hue-dark-bubble-foreground,var(--foreground))]",
+	},
+}
+
+const themeOf = (element: Element) =>
+	isInDarkTheme(element) ? "dark" : "light"
+
+const expectFiltersInBarColours = async (pressed: HTMLElement) => {
+	const track = pressed.parentElement as HTMLElement
+	const theme = themeOf(pressed)
+	await expect([
+		getComputedStyle(track).backgroundColor,
+		getComputedStyle(track).borderTopWidth,
+		getComputedStyle(track).borderTopColor,
+		getComputedStyle(track).color,
+	]).toEqual([
+		tokenStyleIn(track, FILTER_TRACK_FILL[theme], "backgroundColor"),
+		"1px",
+		tokenStyleIn(track, "border border-foreground/12", "borderTopColor"),
+		tokenStyleIn(track, "text-foreground", "color"),
+	])
+	await expectFillOnPill(pressed, FILTER_PILL[theme].fill)
+	await expect(getComputedStyle(pressed).color).toBe(
+		tokenStyleIn(pressed, FILTER_PILL[theme].ink, "color"),
+	)
+	for (const resting of track.querySelectorAll<HTMLElement>(
+		'[aria-pressed="false"]',
+	))
+		await expect(getComputedStyle(resting).color).toBe(
+			tokenStyleIn(resting, "text-foreground", "color"),
+		)
+	await expect(getComputedStyle(pressed).borderTopLeftRadius).toBe(
+		tokenStyleIn(pressed, "rounded-button", "borderTopLeftRadius"),
+	)
 }
 
 const expectFocusRing = async (tab: HTMLElement) => {
@@ -349,7 +401,7 @@ export const LibraryFilters = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library filter row, which the app sets in the content above the grid: four pressed-or-not segments with their counts, All pressed. Check that the track wears the normal radius with the snippet's 3px padding, that the pill and each segment take the track radius minus that padding, that the pill wears the Space colour, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
+					"The Library filter row, which the app sets in the content above the grid: four pressed-or-not segments with their counts, All pressed. Check that the track wears the hairline border, surface fill and ink of the secondary Library bar button, that each segment and the pill wear the Button radius and the track that radius plus its 3px inset, that the pill wears the fill and ink of the primary Library bar button, that pressing Documents glides it there and fits it to the wider pressed label, and that the label and the count change colour in the same frame. The app assembles it through `LibraryPanel`.",
 			},
 		},
 	},
@@ -360,11 +412,8 @@ export const LibraryFilters = meta.story({
 		await pressAndFollow(documents, () => userEvent.click(documents))
 		await expect(args.onValueChange).toHaveBeenLastCalledWith("Documents")
 		await expect(documents).toHaveAttribute("aria-pressed", "true")
-		await expectFillOnPill(documents, "bg-primary")
-		await expectConcentricPill(documents)
-		await expect(getComputedStyle(documents).color).toBe(
-			tokenStyleIn(documents, "text-primary-foreground", "color"),
-		)
+		await expectFiltersInBarColours(documents)
+		await expectConcentricPill(documents, FILTER_TRACK_RADIUS)
 	},
 })
 

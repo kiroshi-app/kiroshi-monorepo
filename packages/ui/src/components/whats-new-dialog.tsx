@@ -127,7 +127,7 @@ const WhatsNewDialog = ({
 						render={
 							<Button
 								className={cn(
-									"absolute end-3 top-3 rounded-md",
+									"absolute end-3 top-3",
 									visual && "bg-popover/70 dark:bg-popover/60",
 								)}
 								size="icon-sm"
@@ -168,14 +168,14 @@ const WhatsNewDialog = ({
 						)}
 						<div className="flex items-center justify-between pt-1">
 							<Button
-								className="-ms-3 gap-1 rounded-lg ps-3 pe-2 text-muted-foreground"
+								className="-ms-3 gap-1 ps-3 pe-2 text-muted-foreground"
 								onClick={() => onOpenReleaseNotes(releaseNotesUrl)}
 								variant="ghost"
 							>
 								{t("whatsNew.releaseNotes")}
 								<Icons.ExternalLink aria-hidden="true" className="size-4" />
 							</Button>
-							<DialogClose render={<Button className="rounded-lg px-3.5" />}>
+							<DialogClose render={<Button className="px-3.5" />}>
 								{t(`whatsNew.${copy}.dismiss`)}
 							</DialogClose>
 						</div>

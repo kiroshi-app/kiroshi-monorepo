@@ -19,7 +19,8 @@ const trackVariants = cva("relative", {
 			tabs: "scrollbar-hide max-w-full overflow-x-auto bg-transparent p-0",
 			segments:
 				"scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-lg bg-border p-0.75 group-data-horizontal/tabs:h-fit",
-			filters: "gap-0.75 rounded-lg bg-muted p-0.75",
+			filters:
+				"gap-0.75 rounded-[calc(var(--radius-button)+--spacing(0.75))] border border-foreground/12 bg-background p-0.5 text-foreground in-data-content-card:bg-card dark:bg-foreground/4",
 		},
 	},
 })
@@ -31,7 +32,7 @@ const tabVariants = cva("relative transition-none", {
 			segments:
 				"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-compact-segment px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 hover:text-foreground data-active:bg-transparent data-active:text-foreground dark:data-active:bg-transparent",
 			filters:
-				"h-6.5 gap-1.5 rounded-compact-segment border border-transparent px-1.25 font-normal text-xs leading-4 hover:bg-control-pressed focus-visible:ring-4 dark:not-aria-pressed:hover:bg-control-hover aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-primary-foreground",
+				"h-6.5 gap-1.5 rounded-button border border-transparent px-1.25 font-normal text-xs leading-4 hover:bg-foreground/5 focus-visible:ring-4 active:bg-foreground/10 aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-primary-foreground dark:aria-pressed:text-[var(--hue-dark-bubble-foreground,var(--foreground))]",
 		},
 	},
 })
@@ -39,7 +40,8 @@ const tabVariants = cva("relative transition-none", {
 const PILL_CLASS = {
 	tabs: "rounded-lg bg-background dark:bg-input/30",
 	segments: "rounded-compact-segment bg-card shadow-[0_1px_2px_rgb(0_0_0/10%)]",
-	filters: "rounded-compact-segment bg-primary",
+	filters:
+		"rounded-button bg-primary dark:bg-[var(--hue-dark-bubble,var(--hue-blue-bubble))]",
 } as const satisfies Record<SlidingTabsKind, string>
 
 const ACTIVE_TAB =
@@ -202,7 +204,7 @@ type SlidingTabCountProps = {
 
 export const SlidingTabCount = ({ children }: SlidingTabCountProps) => (
 	<span
-		className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground dark:group-aria-pressed/toggle:text-[color-mix(in_oklab,var(--primary-foreground)_70%,var(--primary))]"
+		className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground dark:group-aria-pressed/toggle:text-[var(--hue-dark-bubble-foreground,var(--foreground))]"
 		data-slot="sliding-tab-count"
 	>
 		{children}

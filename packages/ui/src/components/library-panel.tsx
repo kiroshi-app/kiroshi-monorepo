@@ -65,7 +65,7 @@ const FiltersSkeleton = () => (
 	>
 		{SKELETON_FILTER_WIDTHS.map((width) => (
 			<Skeleton
-				className={cn("h-6.5 animate-none rounded-sm bg-border", width)}
+				className={cn("h-6.5 animate-none rounded-button bg-border", width)}
 				key={width}
 			/>
 		))}
@@ -168,7 +168,7 @@ const LABELS_MIN_WIDTH = {
 }
 
 const BAR_ACTION =
-	"flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 font-medium text-compact leading-4 outline-ring transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background in-data-content-card:focus-visible:ring-card [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
+	"flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-button px-3 font-medium text-compact leading-4 outline-ring transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background in-data-content-card:focus-visible:ring-card [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
 
 const BAR_ACTION_KIND = {
 	secondary:

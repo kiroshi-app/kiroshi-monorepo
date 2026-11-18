@@ -2402,7 +2402,11 @@ navigation-librarypanel--filter-focus
 navigation-librarypanel--filter-focus-dark
 navigation-librarypanel--filter-hover
 navigation-librarypanel--filter-hover-dark
+navigation-librarypanel--filter-pressed
+navigation-librarypanel--filter-pressed-dark
 navigation-librarypanel--filter-with-no-match
+navigation-librarypanel--filters-beside-bar-buttons
+navigation-librarypanel--filters-beside-bar-buttons-dark
 navigation-librarypanel--grid-actions-per-item
 navigation-librarypanel--grid-all
 navigation-librarypanel--grid-board-context-menu
@@ -2855,6 +2859,7 @@ primitives-badge--default
 primitives-badge--long-content
 primitives-badge--variants
 primitives-button--class-name-overrides-project-tokens
+primitives-button--every-size-wears-the-button-radius
 primitives-button--playground
 primitives-button--sizes
 primitives-button--states

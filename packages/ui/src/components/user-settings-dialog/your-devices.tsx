@@ -41,7 +41,7 @@ const LIST_CLASS =
 const GROUP_LABEL_CLASS = "font-medium text-foreground text-xs"
 
 const CONFIRM_BUTTON_CLASS =
-	"h-7.5 rounded-full px-3.5 text-compact leading-4 data-disabled:pointer-events-none"
+	"h-7.5 px-3.5 text-compact leading-4 data-disabled:pointer-events-none"
 
 const SKELETON_ROWS = [
 	{ id: "first", name: "w-24", activity: "w-30" },

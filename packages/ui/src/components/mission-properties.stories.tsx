@@ -328,9 +328,9 @@ export const WithTicketAction = meta.story({
 
 		await expect(Array.from(row.querySelectorAll("button"))).toEqual([button])
 		await expect([boxOf(button).width, boxOf(button).height]).toEqual([24, 24])
-		await expect(
-			Number.parseFloat(style.borderTopLeftRadius),
-		).toBeGreaterThanOrEqual(12)
+		await expect(style.borderTopLeftRadius).toBe(
+			tokenStyleIn(button, "rounded-button", "borderTopLeftRadius"),
+		)
 		await expect([boxOf(icon).width, boxOf(icon).height]).toEqual([14, 14])
 		await expect(style.color).toBe(
 			tokenStyleIn(button, "text-muted-foreground", "color"),

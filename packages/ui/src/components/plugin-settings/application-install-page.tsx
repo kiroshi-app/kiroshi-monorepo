@@ -382,7 +382,7 @@ const InstallAction = ({
 		<Button
 			aria-busy={isInstalling}
 			aria-disabled={isUnavailable}
-			className="rounded-full pr-3.5 has-data-[icon=inline-start]:pl-3 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+			className="pr-3.5 has-data-[icon=inline-start]:pl-3 aria-disabled:pointer-events-none aria-disabled:opacity-50"
 			onClick={() => {
 				if (!isUnavailable) onInstall()
 			}}

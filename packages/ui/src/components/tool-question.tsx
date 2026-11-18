@@ -388,7 +388,7 @@ const ToolQuestion = ({
 				{onMinimise ? (
 					<Button
 						aria-label={t("toolQuestion.minimise")}
-						className="size-7 shrink-0 rounded-md text-muted-foreground"
+						className="size-7 shrink-0 text-muted-foreground"
 						onClick={onMinimise}
 						size="icon-sm"
 						type="button"

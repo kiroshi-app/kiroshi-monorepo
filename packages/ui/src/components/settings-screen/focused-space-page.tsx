@@ -74,7 +74,7 @@ const NotSharedCard = ({ name, onShare }: NotSharedCardProps) => {
 			</div>
 			<Button
 				aria-describedby={descriptionId}
-				className="h-7.5 self-start rounded-md px-2.5 text-compact leading-4 transition-none dark:border-white/12"
+				className="h-7.5 self-start px-2.5 text-compact leading-4 transition-none dark:border-white/12"
 				onClick={onShare}
 				variant="outline"
 			>
