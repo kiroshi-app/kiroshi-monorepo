@@ -38,7 +38,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; Every column starts its content one screen inset, 12px, from the card edge and under the bar, the distance of the bar title from the edge. `column` lays the content in a 640px column centred in the card, and shrinks it to the card less that inset on each side in a card narrower than 664px.",
+					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; Every column starts its content one screen inset, 12px, from the card edge and under the bar, the distance of the bar title from the edge. `column` lays the content in a 640px column centred in the card, 24px over its bottom, and shrinks it to the card less that inset on each side in a card narrower than 664px.",
 			},
 		},
 	},
@@ -145,12 +145,16 @@ export const ColumnWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, and that the frame wears the card surface.",
+					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, that 24px stay under the last content, and that the frame wears the card surface.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectCentredColumn(layoutIn(canvasElement))
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "screen-layout-column"))
+				.paddingBottom,
+		).toBe("24px")
 		await expect(
 			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
 		).toBe(probedStyleOf("bg-card", "backgroundColor"))

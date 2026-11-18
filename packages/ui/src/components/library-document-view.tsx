@@ -260,6 +260,7 @@ const LibraryDocumentColumn = ({
 			<div
 				className={cn(
 					columnClassName,
+					BLOCK_HANDLE_ROOM,
 					"@container min-h-0 flex-1 overflow-y-auto pb-10 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
 					onColumnMouseDown && "cursor-text",
 				)}

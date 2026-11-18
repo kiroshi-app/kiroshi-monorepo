@@ -11,7 +11,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
-	expectContentAtBarInset,
+	expectDocumentTextStart,
 	expectHeaderTitleStep,
 	expectLibrarySkeletonBar,
 	expectSkeletonFilledTo,
@@ -22,7 +22,6 @@ import {
 	realPointer,
 	slotIn,
 	slotsIn,
-	tokenLengthOf,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
@@ -146,7 +145,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Duplicate, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 12 below the bar, as far as the bar title from the edge, and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
+					"One document of the Library, read-only, in place of the grid. One static bar sits above it, 56 tall on the card surface with a 1 px rule under it: on its top line the Library path link, which calls `onBack`, a separator and the document details, over the document name; on the right, 8 apart, the people who have the document open, when `people` names any, the capsule of the image viewer's actions, Download and Duplicate, each drawn only when its callback is given, and More, drawn only when an item action is left that the capsule does not already show as a button, then the round Close, which calls `onBack` like the path link. The body is the document's markdown, rendered by the repo renderer in a 794 wide column that starts 12 below the bar, as far as the bar title from the edge, keeps 40 on either side for the block handles of the editor, so the text holds one left edge between reading, editing and loading, and scrolls under its rule. Once the column is taller than its card it becomes a Tab stop, wears a focus ring and scrolls from the arrow, Page and Space keys.",
 			},
 		},
 	},
@@ -309,6 +308,7 @@ const expectBarAtRest = async (canvasElement: HTMLElement, surface: string) => {
 		heading.getBoundingClientRect().top - bar.getBoundingClientRect().bottom,
 	).toBe(TITLE_BELOW_BAR)
 	const column = slotIn(canvasElement, "library-document-column")
+	await expectDocumentTextStart(column, heading)
 	await expect(within(column).queryByText(SPRING_BRIEF.detail)).toBe(null)
 	await expect(
 		slotIn(column, "markdown").getBoundingClientRect().top -
@@ -370,16 +370,15 @@ const expectLoading = async (canvasElement: HTMLElement) => {
 		lines.top - bar.getBoundingClientRect().bottom,
 		region.getBoundingClientRect().bottom - lines.bottom,
 	]).toEqual([DOCUMENT_COLUMN_WIDTH, TITLE_BELOW_BAR, COLUMN_BLOCK_END])
-	await expect(
-		getComputedStyle(
-			slotIn(region, "list-skeleton").parentElement?.parentElement as Element,
-		).paddingInlineStart,
-	).toBe(tokenLengthOf("--screen-inset"))
 	await expectSkeletonFilledTo(region, "bottom")
 
 	const [title, firstBlock] = slotsIn(region, "list-skeleton-row")
 	if (!title || !firstBlock)
 		throw new Error("The skeleton does not draw its title and a first block")
+	await expectDocumentTextStart(
+		slotIn(region, "list-skeleton").parentElement?.parentElement as Element,
+		title,
+	)
 	await expect(slotsIn(title, "skeleton")).toHaveLength(1)
 	await expect(
 		firstBlock.getBoundingClientRect().top -
@@ -521,7 +520,7 @@ export const NarrowLongTitle = meta.story({
 		docs: {
 			description: {
 				story:
-					"A long document name in a 480 wide document, as artboard I6d draws it. Check that the name ends with an ellipsis on its one 18 px line, that the top line still reads Library, the separator and the whole details, that the two collaborators, the three 28 px capsule buttons and the 32 px Close all stay, 12 from the end of the bar, and that the document name in the column starts as far from the edge and under the bar as the bar title sits from the edge.",
+					"A long document name in a 480 wide document, as artboard I6d draws it. Check that the name ends with an ellipsis on its one 18 px line, that the top line still reads Library, the separator and the whole details, that the two collaborators, the three 28 px capsule buttons and the 32 px Close all stay, 12 from the end of the bar, and that the document name in the column starts 12 under the bar and 40 from the edge, the room the editor keeps for its block handles.",
 			},
 		},
 	},
@@ -556,13 +555,12 @@ export const NarrowLongTitle = meta.story({
 			bar.getBoundingClientRect().right -
 				actionsIn(canvasElement).getBoundingClientRect().right,
 		).toBe(12)
-		await expectContentAtBarInset(
-			slotIn(canvasElement, "library-document-view"),
-			within(slotIn(canvasElement, "library-document-column")).getByRole(
-				"heading",
-				{ level: 1 },
-			),
-		)
+		const column = slotIn(canvasElement, "library-document-column")
+		const heading = within(column).getByRole("heading", { level: 1 })
+		await expect(
+			heading.getBoundingClientRect().top - bar.getBoundingClientRect().bottom,
+		).toBe(TITLE_BELOW_BAR)
+		await expectDocumentTextStart(column, heading)
 	},
 })
 

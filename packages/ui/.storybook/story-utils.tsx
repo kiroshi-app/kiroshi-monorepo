@@ -780,6 +780,26 @@ export const expectContentAtBarInset = async (
 	]).toEqual([inset, inset])
 }
 
+const DOCUMENT_MEASURE = 794
+
+const BLOCK_HANDLE_ROOM = 40
+
+export const expectDocumentTextStart = async (
+	column: Element,
+	text: Element,
+) => {
+	const centring = Math.max(
+		0,
+		(column.clientWidth - 2 * BLOCK_HANDLE_ROOM - DOCUMENT_MEASURE) / 2,
+	)
+
+	await expect(
+		Math.round(
+			text.getBoundingClientRect().left - column.getBoundingClientRect().left,
+		),
+	).toBe(Math.round(BLOCK_HANDLE_ROOM + centring))
+}
+
 export const columnContentOf = (column: Element) => {
 	const box = column.getBoundingClientRect()
 	const style = getComputedStyle(column)

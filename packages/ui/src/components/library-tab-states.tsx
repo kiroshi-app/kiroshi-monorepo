@@ -10,7 +10,10 @@ import {
 	FAILURE_LINE,
 	FAILURE_PRIMARY_PILL,
 } from "@workspace/ui/components/library-document-states"
-import { DOCUMENT_COLUMN_MEASURE } from "@workspace/ui/components/library-document-view"
+import {
+	BLOCK_HANDLE_ROOM,
+	DOCUMENT_COLUMN_MEASURE,
+} from "@workspace/ui/components/library-document-view"
 import { LIGHTBOX_SURFACE } from "@workspace/ui/components/library-lightbox"
 import {
 	ListSkeleton,
@@ -115,7 +118,12 @@ const LibraryDocumentSkeleton = () => {
 			data-slot="library-document-skeleton"
 		>
 			<SkeletonHeader />
-			<div className="flex min-h-0 flex-1 flex-col px-(--screen-inset) pt-(--screen-inset) pb-10">
+			<div
+				className={cn(
+					"flex min-h-0 flex-1 flex-col pt-(--screen-inset) pb-10",
+					BLOCK_HANDLE_ROOM,
+				)}
+			>
 				<div
 					className={cn(
 						"mx-auto flex min-h-0 w-full flex-1 flex-col",

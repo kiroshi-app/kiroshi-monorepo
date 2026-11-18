@@ -42,7 +42,6 @@ import {
 	LibraryDocumentThreadCard,
 } from "@workspace/ui/components/library-document-comments"
 import {
-	BLOCK_HANDLE_ROOM,
 	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	GrowingField,
@@ -427,7 +426,7 @@ const LibraryDocumentEditor = ({
 				<>
 					<div className="relative flex min-h-0 flex-1 flex-col">
 						<LibraryDocumentColumn
-							columnClassName={cn(columnClassName, BLOCK_HANDLE_ROOM)}
+							columnClassName={columnClassName}
 							onColumnMouseDown={writeFromColumn}
 							heading={
 								<GrowingField
