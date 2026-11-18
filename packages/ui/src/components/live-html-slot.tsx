@@ -98,8 +98,7 @@ const visibleRectOf = (
 		: { x: left, y: top, width: 0, height: 0 }
 }
 
-const radiusOf = (element: Element, card: Element): LiveHtmlRadius => {
-	const view = element.getBoundingClientRect()
+const radiusOf = (view: Edges, card: Element): LiveHtmlRadius => {
 	const inside = paddingBoxOf(card)
 	const reachesTop = view.top <= inside.top
 	const reachesBottom = view.bottom >= inside.bottom
@@ -127,11 +126,12 @@ const placementOf = (
 	card: Element,
 	clippingAncestors: Element[],
 ): LiveHtmlPlacement => {
-	const { x, y, width, height } = element.getBoundingClientRect()
+	const box = element.getBoundingClientRect()
+	const { x, y, width, height } = box
 	return {
 		rect: { x, y, width, height },
 		clip: visibleRectOf(element, clippingAncestors),
-		radius: radiusOf(element, card),
+		radius: radiusOf(box, card),
 	}
 }
 
