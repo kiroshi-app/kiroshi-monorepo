@@ -3,7 +3,11 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { LIVE_HTML_MEASURED_EVENT, type LiveHtmlMeasured } from "@/lib/bindings"
+import {
+	LIVE_HTML_MEASURED_EVENT,
+	type LiveHtmlMeasured,
+	type LiveHtmlTheme,
+} from "@/lib/bindings"
 import { useLiveHtmlView } from "@/lib/live-html/use-live-html-view"
 
 type MeasuredHandler = (event: { payload: LiveHtmlMeasured }) => void
@@ -18,7 +22,7 @@ const host = vi.hoisted(() => ({
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@tauri-apps/api/core")>()),
-	invoke: async (command: string) => host.answer(command),
+	invoke: async (command: string, args: unknown) => host.answer(command, args),
 }))
 
 vi.mock("@/lib/host/window-listen", () => ({
@@ -59,11 +63,20 @@ const measure = (id: string, height: number | null) =>
 		}
 	})
 
-const renderView = (id: string, onUnavailable?: () => void) => {
+const LIGHT: LiveHtmlTheme = { appearance: "light", hue: null }
+
+const renderView = (
+	id: string,
+	onUnavailable?: () => void,
+	theme: LiveHtmlTheme = LIGHT,
+) => {
 	vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
 		id as ReturnType<typeof crypto.randomUUID>,
 	)
-	return renderHook(() => useLiveHtmlView(mountAt, onUnavailable))
+	return renderHook(
+		(worn: LiveHtmlTheme) => useLiveHtmlView(mountAt, worn, onUnavailable),
+		{ initialProps: theme },
+	)
 }
 
 const subscribed = () =>
@@ -130,8 +143,8 @@ describe("the height of a live html view", () => {
 		const { rerender } = renderView("view-1")
 		await subscribed()
 
-		rerender()
-		rerender()
+		rerender(LIGHT)
+		rerender(LIGHT)
 		await subscribed()
 
 		expect(host.listen).toHaveBeenCalledTimes(1)
@@ -227,7 +240,7 @@ describe("the still of a live html view", () => {
 
 		surface.remove()
 		await waitFor(() => expect(result.current.still).toBeUndefined())
-		rerender()
+		rerender(LIGHT)
 
 		expect(callsOf().slice(3)).toEqual(["live_html_show"])
 		expect(result.current.still).toBeUndefined()
@@ -323,5 +336,64 @@ describe("the still of a live html view", () => {
 
 		expect(callsOf()).toEqual(["live_html_place"])
 		expect(result.current.still).toBeUndefined()
+	})
+})
+
+describe("the theme of a live html view", () => {
+	const DARK: LiveHtmlTheme = { appearance: "dark", hue: null }
+	const DARK_RED: LiveHtmlTheme = { appearance: "dark", hue: 1 }
+
+	const themesSent = () =>
+		host.answer.mock.calls
+			.filter(([command]) => command === "live_html_theme")
+			.map(([, args]) => args)
+
+	beforeEach(() => {
+		mountAt.mockResolvedValue({ status: "ok", data: null })
+		host.answer.mockResolvedValue(null)
+	})
+
+	it("mounts in its theme, then rethemes in place on each change", async () => {
+		const { result, rerender } = await renderLiveView()
+		expect(mountAt).toHaveBeenCalledWith("view-1", BOX, LIGHT)
+
+		rerender(DARK)
+		await waitFor(() =>
+			expect(themesSent()).toEqual([{ id: "view-1", theme: DARK }]),
+		)
+
+		rerender(DARK_RED)
+		await waitFor(() =>
+			expect(themesSent()).toEqual([
+				{ id: "view-1", theme: DARK },
+				{ id: "view-1", theme: DARK_RED },
+			]),
+		)
+		expect(mountAt).toHaveBeenCalledTimes(1)
+		expect(callsOf()).not.toContain("live_html_remove")
+		expect(result.current.status).toBe("live")
+	})
+
+	it("sends no theme while the theme stays the same across renders", async () => {
+		const { rerender } = await renderLiveView()
+
+		rerender({ ...LIGHT })
+		rerender({ ...LIGHT })
+		await subscribed()
+
+		expect(themesSent()).toEqual([])
+	})
+
+	it("turns unavailable when the theme is refused", async () => {
+		host.answer.mockImplementation(async (command: string) => {
+			if (command === "live_html_theme") throw { kind: "unknownView" }
+			return null
+		})
+		const { result, rerender } = await renderLiveView()
+
+		rerender(DARK)
+
+		await waitFor(() => expect(result.current.status).toBe("unavailable"))
+		expect(host.reportFailure).toHaveBeenCalledTimes(1)
 	})
 })

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import type { LiveHtmlStatus } from "@workspace/ui/components/live-html-slot"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { LiveHtmlTheme } from "@/lib/bindings"
 import { failureReporterIn } from "@/lib/failure-report"
 import {
 	createLiveHtmlView,
@@ -40,6 +41,7 @@ const usePageHeight = ({ id, fail }: LiveHtmlView) => {
 
 export const useLiveHtmlView = (
 	mountAt: MountLiveHtml,
+	theme: LiveHtmlTheme,
 	onUnavailable?: () => void,
 ) => {
 	const [status, setStatus] = useState<LiveHtmlStatus>("loading")
@@ -48,6 +50,7 @@ export const useLiveHtmlView = (
 		createLiveHtmlView({
 			id: crypto.randomUUID(),
 			mountAt,
+			theme,
 			onLive: () => setStatus("live"),
 			onFailure: (reason) => {
 				setStatus("unavailable")
@@ -67,7 +70,10 @@ export const useLiveHtmlView = (
 	const isSurfaceOpen = useIsAppSurfaceOpen(view.isUnder)
 	const height = usePageHeight(view)
 
+	const { appearance, hue } = theme
+
 	useEffect(() => view.cover(isSurfaceOpen), [view, isSurfaceOpen])
+	useEffect(() => view.wear({ appearance, hue }), [view, appearance, hue])
 
 	return { status, height, still, onPlacementChange: view.follow }
 }

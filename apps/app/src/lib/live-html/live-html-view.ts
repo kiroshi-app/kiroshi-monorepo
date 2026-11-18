@@ -7,6 +7,7 @@ import {
 	commands,
 	type LiveHtmlCorners,
 	type LiveHtmlError,
+	type LiveHtmlTheme,
 } from "@/lib/bindings"
 
 type CommandAnswer<Data = null> = Promise<
@@ -16,11 +17,13 @@ type CommandAnswer<Data = null> = Promise<
 export type MountLiveHtml = (
 	id: string,
 	rectangle: LiveHtmlRect,
+	theme: LiveHtmlTheme,
 ) => CommandAnswer
 
 type LiveHtmlViewOptions = {
 	id: string
 	mountAt: MountLiveHtml
+	theme: LiveHtmlTheme
 	onLive: () => void
 	onFailure: (reason: unknown) => void
 	drawStill: (still: string) => Promise<void>
@@ -32,6 +35,7 @@ type DrawnView = {
 	placement: LiveHtmlPlacement | null
 	corners: LiveHtmlCorners
 	isHidden: boolean
+	theme: LiveHtmlTheme | null
 }
 
 type Step = () => Promise<void>
@@ -48,6 +52,7 @@ const UNMOUNTED: DrawnView = {
 	placement: null,
 	corners: SQUARE,
 	isHidden: false,
+	theme: null,
 }
 
 const isSameRect = (a: LiveHtmlRect, b: LiveHtmlRect) =>
@@ -71,6 +76,9 @@ const isSameCorners = (a: LiveHtmlCorners, b: LiveHtmlCorners) =>
 	a.bottomRight === b.bottomRight &&
 	a.bottomLeft === b.bottomLeft
 
+const isSameTheme = (a: LiveHtmlTheme | null, b: LiveHtmlTheme) =>
+	a !== null && a.appearance === b.appearance && a.hue === b.hue
+
 const STILL_BOUND_MS = 500
 
 const drawnBy = (deadline: number, drawing: Promise<void>) => {
@@ -92,23 +100,25 @@ const answered = async <Data>(answer: CommandAnswer<Data>) => {
 
 export const mountingHtml =
 	(html: string): MountLiveHtml =>
-	(id, rectangle) =>
-		commands.liveHtmlMount(id, html, rectangle, null)
+	(id, rectangle, theme) =>
+		commands.liveHtmlMount(id, html, rectangle, theme)
 
 export const mountingAttachment =
 	(path: string): MountLiveHtml =>
-	(id, rectangle) =>
-		commands.liveHtmlMountAttachment(id, path, rectangle, null)
+	(id, rectangle, theme) =>
+		commands.liveHtmlMountAttachment(id, path, rectangle, theme)
 
 export const createLiveHtmlView = ({
 	id,
 	mountAt,
+	theme,
 	onLive,
 	onFailure,
 	drawStill,
 	dropStill,
 }: LiveHtmlViewOptions) => {
 	let wantedPlacement: LiveHtmlPlacement | null = null
+	let wantedTheme = theme
 	let isCovered = false
 	let stillDueBy: number | null = null
 	let awaitedStill = 0
@@ -138,10 +148,10 @@ export const createLiveHtmlView = ({
 	}
 
 	const mount =
-		(placement: LiveHtmlPlacement): Step =>
+		(placement: LiveHtmlPlacement, mountedTheme: LiveHtmlTheme): Step =>
 		() =>
-			attempt(mountAt(id, placement.rect), () => {
-				drawn = { ...UNMOUNTED, isMounted: true }
+			attempt(mountAt(id, placement.rect, mountedTheme), () => {
+				drawn = { ...UNMOUNTED, isMounted: true, theme: mountedTheme }
 				stillDueBy = null
 				onLive()
 			})
@@ -161,6 +171,13 @@ export const createLiveHtmlView = ({
 		() =>
 			attempt(commands.liveHtmlRound(id, corners), () => {
 				drawn = { ...drawn, corners }
+			})
+
+	const retheme =
+		(next: LiveHtmlTheme): Step =>
+		() =>
+			attempt(commands.liveHtmlTheme(id, next), () => {
+				drawn = { ...drawn, theme: next }
 			})
 
 	const hide: Step = () =>
@@ -219,8 +236,9 @@ export const createLiveHtmlView = ({
 
 	const stepTowards = (placement: LiveHtmlPlacement): Step | null => {
 		const isSeen = isInSight(placement)
-		if (!drawn.isMounted) return isSeen ? mount(placement) : null
+		if (!drawn.isMounted) return isSeen ? mount(placement, wantedTheme) : null
 		if ((isCovered || !isSeen) && !drawn.isHidden) return hidingStep(placement)
+		if (!isSameTheme(drawn.theme, wantedTheme)) return retheme(wantedTheme)
 		return drawTowards(placement) ?? uncoveringStep(placement)
 	}
 
@@ -251,8 +269,13 @@ export const createLiveHtmlView = ({
 		void settle()
 	}
 
+	const wear = (next: LiveHtmlTheme) => {
+		wantedTheme = next
+		void settle()
+	}
+
 	const isUnder = (surface: LiveHtmlRect) =>
 		wantedPlacement !== null && overlaps(wantedPlacement.clip, surface)
 
-	return { id, follow, cover, fail, isUnder }
+	return { id, follow, cover, wear, fail, isUnder }
 }

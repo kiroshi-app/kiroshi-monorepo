@@ -38,6 +38,8 @@ const ROUNDED_ABOVE = {
 	bottomRight: 0,
 	bottomLeft: 0,
 }
+const LIGHT = { appearance: "light", hue: null } as const
+const DARK_RED = { appearance: "dark", hue: 1 } as const
 const SQUARE = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 }
 const ROUNDED = { rect: RECT, clip: CLIP, radius: ROUNDED_BELOW }
 const STILL = "data:image/png;base64,c3RpbGw="
@@ -65,6 +67,7 @@ const viewOf = (
 	createLiveHtmlView({
 		id: "view-1",
 		mountAt: mountingHtml("<p>Hi</p>"),
+		theme: LIGHT,
 		onLive: vi.fn(),
 		onFailure: vi.fn(),
 		drawStill: vi.fn().mockResolvedValue(undefined),
@@ -85,7 +88,7 @@ describe("a live html view", () => {
 		expect(host.answer.mock.calls).toEqual([
 			[
 				"live_html_mount",
-				{ id: "view-1", html: "<p>Hi</p>", rectangle: RECT, theme: null },
+				{ id: "view-1", html: "<p>Hi</p>", rectangle: RECT, theme: LIGHT },
 			],
 			["live_html_place", { id: "view-1", rectangle: RECT, clip: CLIP }],
 		])
@@ -414,6 +417,111 @@ describe("a live html view", () => {
 			"live_html_round",
 			"live_html_remove",
 		])
+	})
+})
+
+describe("the theme of a live html view", () => {
+	const themesOf = () =>
+		host.answer.mock.calls
+			.filter(([command]) => command === "live_html_theme")
+			.map(([, args]) => args)
+
+	it("mounts an attached html file in its theme", async () => {
+		host.answer.mockResolvedValue(null)
+
+		viewOf({
+			mountAt: mountingAttachment("/replies/page.html"),
+			theme: DARK_RED,
+		}).follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		expect(host.answer).toHaveBeenCalledWith("live_html_mount_attachment", {
+			id: "view-1",
+			path: "/replies/page.html",
+			rectangle: RECT,
+			theme: DARK_RED,
+		})
+	})
+
+	it("rethemes a mounted view in place, without a remount", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.wear(DARK_RED)
+		await flush()
+
+		expect(themesOf()).toEqual([{ id: "view-1", theme: DARK_RED }])
+		expect(callsOf()).toEqual([
+			"live_html_mount",
+			"live_html_place",
+			"live_html_theme",
+		])
+	})
+
+	it("sends nothing for the theme it already wears", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.wear({ ...LIGHT })
+		await flush()
+
+		expect(themesOf()).toEqual([])
+	})
+
+	it("hands the latest theme to a view once its mount answers", async () => {
+		const mounting = Promise.withResolvers<null>()
+		host.answer.mockImplementation((command: string) =>
+			command === "live_html_mount" ? mounting.promise : Promise.resolve(null),
+		)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.wear({ appearance: "dark", hue: null })
+		view.wear(DARK_RED)
+		mounting.resolve(null)
+		await flush()
+
+		expect(themesOf()).toEqual([{ id: "view-1", theme: DARK_RED }])
+		expect(
+			callsOf().filter((command) => command === "live_html_mount"),
+		).toEqual(["live_html_mount"])
+	})
+
+	it("mounts in the latest theme when it changed before the view came into sight", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+
+		view.wear(DARK_RED)
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		expect(host.answer.mock.calls[0]).toEqual([
+			"live_html_mount",
+			{ id: "view-1", html: "<p>Hi</p>", rectangle: RECT, theme: DARK_RED },
+		])
+		expect(themesOf()).toEqual([])
+	})
+
+	it("reports a refused theme and removes the view", async () => {
+		const onFailure = vi.fn()
+		host.answer.mockImplementation(async (command: string) => {
+			if (command === "live_html_theme") throw { kind: "unknownView" }
+			return null
+		})
+		const view = viewOf({ onFailure })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.wear(DARK_RED)
+		await flush()
+
+		expect(onFailure).toHaveBeenCalledWith({ kind: "unknownView" })
+		expect(callsOf().slice(2)).toEqual(["live_html_theme", "live_html_remove"])
 	})
 })
 
