@@ -62,7 +62,7 @@ type PullRequestState = {
 	autoMergeRequest: { enabledAt: string } | null
 }
 
-const ARMED: PullRequest = { number: 42, id: NODE_ID }
+const PULL_REQUEST: PullRequest = { number: 42, id: NODE_ID }
 
 const AUTO_MERGE_REQUEST = { enabledAt: "2026-10-26T00:00:00Z" }
 
@@ -186,7 +186,7 @@ afterEach(() => {
 describe("scripts/pr-dequeue.sh", () => {
 	it("disarms auto-merge on the PR of the branch, reads it back and prints it", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_OFF_ARMED, QUEUE_OFF_UNARMED],
 		})
 
@@ -197,7 +197,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("disarms nothing and exits 0 when the PR has no auto-merge armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_OFF_UNARMED],
 		})
 
@@ -210,7 +210,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("takes a queued PR out of the merge queue without closing it, reads it back and prints it", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_QUEUED, QUEUE_ON_IDLE],
 		})
 
@@ -223,7 +223,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("disarms auto-merge too when the PR is still armed once out of the merge queue", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_QUEUED_AND_ARMED, QUEUE_ON_ARMED, QUEUE_ON_IDLE],
 		})
 
@@ -243,7 +243,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("disarms auto-merge and leaves the merge queue alone when the queue of main is on and the PR is armed but not queued", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_ARMED, QUEUE_ON_IDLE],
 		})
 
@@ -256,7 +256,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("acts on nothing and exits 0 when the queue of main is on and the PR is neither queued nor armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_IDLE],
 		})
 
@@ -269,7 +269,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("fails naming the PR when the read-back still shows it in the merge queue", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_QUEUED, QUEUE_ON_QUEUED],
 		})
 
@@ -285,7 +285,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("fails naming the PR when the queue of main is on and the read-back still shows auto-merge armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_ON_ARMED, QUEUE_ON_ARMED],
 		})
 
@@ -311,7 +311,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("fails and disarms nothing when the branch has several open PRs", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED, { number: 43, id: "PR_kwDOother" }],
+			pullRequests: [PULL_REQUEST, { number: 43, id: "PR_kwDOother" }],
 		})
 
 		expect(result.exitCode).not.toBe(0)
@@ -324,7 +324,7 @@ describe("scripts/pr-dequeue.sh", () => {
 	it("refuses to run on main and calls gh not at all", async () => {
 		const result = await runPrDequeue({
 			branch: "main",
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_OFF_ARMED, QUEUE_OFF_UNARMED],
 		})
 
@@ -335,7 +335,7 @@ describe("scripts/pr-dequeue.sh", () => {
 
 	it("fails naming the PR when the read-back still shows auto-merge armed", async () => {
 		const result = await runPrDequeue({
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_OFF_ARMED, QUEUE_OFF_ARMED],
 		})
 
@@ -350,7 +350,7 @@ describe("scripts/pr-dequeue.sh", () => {
 	it("refuses a PR number argument and calls gh not at all", async () => {
 		const result = await runPrDequeue({
 			arguments: ["42"],
-			pullRequests: [ARMED],
+			pullRequests: [PULL_REQUEST],
 			states: [QUEUE_OFF_ARMED, QUEUE_OFF_UNARMED],
 		})
 
