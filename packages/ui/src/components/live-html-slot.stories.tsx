@@ -230,15 +230,14 @@ const StatusChangesAfterMount = (props: LiveHtmlSlotProps) => {
 	)
 }
 
-const UNAVAILABLE_WITHOUT_CODE =
-	"Couldn’t show the live view. Ask for the page again to retry."
-
 const expectSentenceInCard = async (canvasElement: HTMLElement) => {
 	const canvas = within(canvasElement)
 	const slot = canvas.getByRole("group", { name: "Live view" })
 	await expect(slot).toHaveAttribute("aria-busy", "false")
 	await expectAnswerCardFrame(slot)
-	const sentence = within(slot).getByText(UNAVAILABLE_WITHOUT_CODE)
+	const sentence = within(slot).getByText(
+		"Couldn’t show the live view. Ask for the page again to retry.",
+	)
 	const header = partOf(
 		canvasElement,
 		"markdown-answer-card-header",
