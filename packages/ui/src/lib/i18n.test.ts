@@ -110,6 +110,26 @@ describe("the runtime", () => {
 		)
 	})
 
+	it("says a press on Reload the window did not reload it, in both languages", () => {
+		expect(i18n.t("common:windowRecovery.gaveUp.reloadFailed.title")).toBe(
+			"The window didn’t reload",
+		)
+		expect(
+			i18n.t("common:windowRecovery.gaveUp.reloadFailed.description"),
+		).toBe("Press Reload the window to try again.")
+
+		activateLanguage("fr")
+
+		expect(i18n.t("common:windowRecovery.gaveUp.reloadFailed.title")).toBe(
+			"La fenêtre ne s’est pas rechargée",
+		)
+		const french = i18n.t(
+			"common:windowRecovery.gaveUp.reloadFailed.description",
+		)
+		expect(french).toBe("Appuyez sur Recharger la fenêtre pour réessayer.")
+		expect(french).toContain(i18n.t("common:windowRecovery.gaveUp.action"))
+	})
+
 	it.each(NAMED_AGENT_KEYS)(
 		"names the agent in %s, in both languages",
 		(key) => {

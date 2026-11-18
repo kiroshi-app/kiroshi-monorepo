@@ -21,6 +21,10 @@ const common = {
 			description:
 				"La fenêtre s’est arrêtée 3 fois en une minute. Kiroshi fonctionne toujours, et vos agents travaillent toujours.",
 			action: "Recharger la fenêtre",
+			reloadFailed: {
+				title: "La fenêtre ne s’est pas rechargée",
+				description: "Appuyez sur Recharger la fenêtre pour réessayer.",
+			},
 		},
 	},
 	spaces: {
