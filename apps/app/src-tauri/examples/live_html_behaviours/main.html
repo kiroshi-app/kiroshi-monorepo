@@ -169,20 +169,19 @@
 				expect(sizesOf("removed") === JSON.stringify([[SHOWN.width, 100]]), `removed measured ${sizesOf("removed")}`)
 
 				await invoke("live_html_mount", { id: "wide", html: WIDE_PAGE, rectangle: SHOWN })
-				await expectSizes("wide", [[SHOWN.width, 120]])
-				const fitted = { ...SHOWN, height: 120 }
-				await invoke("live_html_place", { id: "wide", rectangle: fitted, clip: null })
+				await expectSizes("wide", [[SHOWN.width, 360]])
+				const unfitted = { ...SHOWN, height: 360 }
+				await invoke("live_html_place", { id: "wide", rectangle: unfitted, clip: null })
 				const { magenta_drawn_in_window_points: left, cyan_drawn_in_window_points: right } = await capture(
-					"wide-fitted",
-					fitted,
+					"wide-clipped",
+					unfitted,
 					null,
 				)
-				expect(left && right, "the wide page drew no left or no right half")
 				const halves = JSON.stringify({ left, right })
-				expect(near(left.width, SHOWN.width / 2) && near(right.width, SHOWN.width / 2), `the wide halves are ${halves}`)
-				expect(near(left.height, 120) && near(right.height, 120), `the wide halves are ${halves}`)
-				expect(near(right.x - left.x, SHOWN.width / 2) && near(right.y, left.y), `the wide halves are ${halves}`)
-				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 120]]), `wide measured ${sizesOf("wide")}`)
+				expect(left && !right, `the wide page drew ${halves}`)
+				expect(near(left.x, SHOWN.x) && near(left.width, SHOWN.width), `the wide left half is ${halves}`)
+				expect(near(left.height, 360), `the wide left half is ${halves}`)
+				expect(sizesOf("wide") === JSON.stringify([[SHOWN.width, 360]]), `wide measured ${sizesOf("wide")}`)
 				await invoke("live_html_remove", { id: "wide" })
 
 				await invoke("live_html_mount", { id: "flood", html: FLOOD_PAGE, rectangle: SHOWN })

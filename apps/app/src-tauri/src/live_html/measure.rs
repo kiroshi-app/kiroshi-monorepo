@@ -44,18 +44,10 @@ pub(crate) const SCRIPT: &str = r#"(() => {
 		Math.abs(size.height - reported.height - (size.viewport - reported.viewport)) < 1;
 	const measure = () => {
 		const scroller = document.scrollingElement || root;
-		root.style.removeProperty("transform");
-		root.style.removeProperty("height");
 		const width = scroller.clientWidth;
 		const height =
 			scroller.scrollHeight > scroller.clientHeight ? scroller.scrollHeight : root.getBoundingClientRect().height;
-		const scale = scroller.scrollWidth > width ? width / scroller.scrollWidth : 1;
-		if (scale < 1) {
-			root.style.setProperty("transform-origin", "0 0", "important");
-			root.style.setProperty("transform", `scale(${scale})`, "important");
-			root.style.setProperty("height", `${height * scale}px`, "important");
-		}
-		const size = { width, height: height * scale, viewport: innerHeight };
+		const size = { width, height, viewport: innerHeight };
 		if (followsTheView(size)) return;
 		reported = size;
 		channel.postMessage(JSON.stringify([size.width, size.height]));
