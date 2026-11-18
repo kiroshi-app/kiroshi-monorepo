@@ -1,10 +1,12 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use tauri::webview::PageLoadEvent;
-use tauri::{Manager, Runtime, State, Webview, Window, WindowEvent};
+use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
+
+use crate::agent::AgentState;
+use crate::routines::runner::database;
 
 #[derive(Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -18,7 +20,7 @@ pub enum MissionRunClaim {
 
 struct Claim {
 	token: String,
-	window: String,
+	window: Option<String>,
 }
 
 #[derive(Default)]
@@ -31,12 +33,16 @@ impl MissionRunClaims {
 
 	fn claim(&self, mission_id: String, window: &str) -> MissionRunClaim {
 		let mut held = self.held();
-		let Entry::Vacant(free) = held.entry(mission_id) else {
+		if held.get(&mission_id).is_some_and(|claim| claim.window.is_some()) {
 			return MissionRunClaim::AlreadyRunning;
-		};
+		}
 		let token = uuid::Uuid::new_v4().to_string();
-		free.insert(Claim { token: token.clone(), window: window.to_owned() });
+		held.insert(mission_id, Claim { token: token.clone(), window: Some(window.to_owned()) });
 		MissionRunClaim::Claimed { token }
+	}
+
+	fn is_left_by_its_page(&self, mission_id: &str) -> bool {
+		self.held().get(mission_id).is_some_and(|claim| claim.window.is_none())
 	}
 
 	fn release(&self, token: &str) {
@@ -44,18 +50,47 @@ impl MissionRunClaims {
 	}
 
 	fn forget_window(&self, window: &str) {
-		self.held().retain(|_, claim| claim.window != window);
+		for claim in self.held().values_mut() {
+			if claim.window.as_deref() == Some(window) {
+				claim.window = None;
+			}
+		}
 	}
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn mission_run_claim<R: Runtime>(
+pub async fn mission_run_claim<R: Runtime>(
+	app: AppHandle<R>,
 	webview: Webview<R>,
-	claims: State<'_, MissionRunClaims>,
 	mission_id: String,
 ) -> MissionRunClaim {
+	let claims = app.state::<MissionRunClaims>();
+	if claims.is_left_by_its_page(&mission_id) && is_still_running(&app, &mission_id).await {
+		return MissionRunClaim::AlreadyRunning;
+	}
 	claims.claim(mission_id, webview.window().label())
+}
+
+async fn is_still_running<R: Runtime>(app: &AppHandle<R>, mission_id: &str) -> bool {
+	let Some(agent) = app.try_state::<AgentState>() else {
+		return false;
+	};
+	let database = match database(app) {
+		Ok(database) => database,
+		Err(failure) => {
+			log::warn!("mission {mission_id} keeps the claim its page left, the database is unready: {failure:?}");
+			return true;
+		}
+	};
+	match database.missions().held(mission_id.to_owned()).await {
+		Ok(Some(mission)) => agent.thread_signs(&mission.thread_conversation_id).is_turn_running,
+		Ok(None) => false,
+		Err(failure) => {
+			log::warn!("mission {mission_id} keeps the claim its page left, it could not be read: {failure:?}");
+			true
+		}
+	}
 }
 
 #[tauri::command]
@@ -94,6 +129,10 @@ mod tests {
 	use tauri::{WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 	use super::*;
+	use crate::agent::commands::a_run_held_by_the_app;
+	use crate::agent::contract::{AgentEvent, RuntimeScope, TurnState};
+	use crate::agent::reply_writer::TurnSink;
+	use crate::db;
 	use crate::test_app::an_app_of_its_own;
 
 	fn token_of(claim: MissionRunClaim) -> String {
@@ -220,5 +259,60 @@ mod tests {
 			"a focus change freed the claim"
 		);
 		assert_eq!(reclaimed["kind"], "claimed", "the destroyed window kept its claim");
+	}
+
+	const A_MISSION_IN_ITS_THREAD: &str = "
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+		INSERT INTO conversations (id, kind, title, created_at, updated_at)
+			VALUES ('c1', 'topic', 'Origin', 1, 1), ('c2', 'mission', 'Thread', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'lead', 1, 0);
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+			objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+			tools, opened_at)
+			VALUES ('m1', 'c1', 'b1', 'c2', 'Fix it', 'github', '42',
+				'https://kiroshi.test/tickets/42', 'Crash', '[]', 1);
+	";
+
+	fn the_turn_moves(run: &impl TurnSink, state: TurnState) {
+		run.emit(AgentEvent::TurnChanged { state }, None);
+	}
+
+	#[test]
+	fn a_reloaded_page_cannot_claim_again_a_mission_its_window_still_runs() {
+		let app = an_app_of_its_own(
+			"mission-run-claims-reload",
+			mock_builder().invoke_handler(crate::commands::invoke_handler()),
+		);
+		app.manage(MissionRunClaims::default());
+		app.manage(db::bootstrap(app.handle()));
+		tauri::async_runtime::block_on(async {
+			database(app.handle())
+				.expect("the database opens")
+				.call_mut(|connection| Ok(connection.execute_batch(A_MISSION_IN_ITS_THREAD)?))
+				.await
+				.expect("the mission is planted");
+		});
+		let thread = RuntimeScope {
+			conversation_id: "c2".to_owned(),
+			bot_id: "b1".to_owned(),
+			runtime_session_id: "rs1".to_owned(),
+			epoch: 1,
+		};
+		let run = a_run_held_by_the_app(app.handle(), thread);
+		let main = WebviewWindowBuilder::new(app.handle(), "main", WebviewUrl::default())
+			.build()
+			.expect("the window opens");
+
+		let claimed = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
+		the_turn_moves(&run, TurnState::Running);
+		crate::forget_a_loading_page(&main.as_ref().window(), PageLoadEvent::Started);
+		let while_running = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
+		the_turn_moves(&run, TurnState::Idle);
+		let once_settled = invoked(&main, "mission_run_claim", json!({ "missionId": "m1" }));
+
+		assert_eq!(claimed["kind"], "claimed", "the first claim answered {claimed}");
+		assert_eq!(while_running, json!({ "kind": "alreadyRunning" }), "a second run was claimed");
+		assert_eq!(once_settled["kind"], "claimed", "the settled mission stayed claimed");
 	}
 }
