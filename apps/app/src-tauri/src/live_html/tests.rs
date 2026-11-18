@@ -17,6 +17,8 @@ const LOCK_WAIT: Duration = Duration::from_secs(1);
 #[cfg(target_os = "macos")]
 const SQUARE: LiveHtmlCorners =
 	LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 };
+#[cfg(target_os = "macos")]
+const DARK: LiveHtmlTheme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
 
 async fn show(views: &LiveViews, id: &str) {
 	let server = ContentServer::open(id, String::new(), None, Arc::new(LoggedWatch))
@@ -107,9 +109,8 @@ async fn a_live_html_theme_naming_an_unknown_view_is_refused_like_its_placement(
 	let views = LiveViews::default();
 	show(&views, "a").await;
 	let rectangle = LiveHtmlRectangle { x: 0.0, y: 0.0, width: 480.0, height: 300.0 };
-	let theme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
 
-	let themed = views.theme(app.handle(), "missing".to_owned(), theme).await;
+	let themed = views.theme(app.handle(), "missing".to_owned(), DARK).await;
 	let placed = views.place(app.handle(), "missing".to_owned(), rectangle, None).await;
 
 	assert_eq!(themed, Err(LiveHtmlError::UnknownView { id: "missing".to_owned() }));
@@ -122,9 +123,8 @@ async fn a_live_html_theme_for_a_view_with_no_native_webview_yet_succeeds_and_is
 	let app = tauri::test::mock_app();
 	let views = LiveViews::default();
 	show(&views, "a").await;
-	let theme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
 
-	let themed = views.theme(app.handle(), "a".to_owned(), theme).await;
+	let themed = views.theme(app.handle(), "a".to_owned(), DARK).await;
 
 	assert_eq!(themed, Ok(()));
 	let url = views.servers.lock().await.get("a").expect("the shown view").content_url();
