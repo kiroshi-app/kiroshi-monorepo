@@ -68,7 +68,7 @@ pub struct ScrollStep {
 pub struct Gesture {
 	pub device: ScrollDevice,
 	pub delta: i32,
-	pub moves: usize,
+	pub moves: i32,
 }
 
 impl Gesture {
@@ -80,15 +80,14 @@ impl Gesture {
 			momentum_phase,
 		};
 		if self.device == ScrollDevice::MouseWheel {
-			return vec![step(self.delta, NO_PHASE, NO_PHASE); self.moves];
+			return (0..self.moves).map(|_| step(self.delta, NO_PHASE, NO_PHASE)).collect();
 		}
-		let fading = (1..=self.moves).rev().map(|left| {
-			let delta = self.delta * i32::try_from(left).unwrap_or(i32::MAX)
-				/ i32::try_from(self.moves).unwrap_or(i32::MAX);
-			step(delta, NO_PHASE, CHANGED)
-		});
+		let moving = (0..self.moves).map(|_| step(self.delta, CHANGED, NO_PHASE));
+		let fading = (1..=self.moves)
+			.rev()
+			.map(|left| step(self.delta * left / self.moves, NO_PHASE, CHANGED));
 		std::iter::once(step(self.delta, BEGAN, NO_PHASE))
-			.chain(std::iter::repeat_n(step(self.delta, CHANGED, NO_PHASE), self.moves))
+			.chain(moving)
 			.chain([step(0, SCROLL_ENDED, NO_PHASE), step(self.delta, NO_PHASE, BEGAN)])
 			.chain(fading)
 			.chain([step(0, NO_PHASE, MOMENTUM_ENDED)])

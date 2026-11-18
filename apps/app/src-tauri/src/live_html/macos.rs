@@ -196,7 +196,6 @@ pub async fn round<R: Runtime>(
 ) -> Result<(), LiveHtmlError> {
 	on_main_thread(app, move || {
 		let view = mounted_view(&id)?;
-		view.setWantsLayer(true);
 		let layer: *mut AnyObject = unsafe { msg_send![&*view, layer] };
 		if layer.is_null() {
 			return Err("the webview has no layer to round".to_owned());
