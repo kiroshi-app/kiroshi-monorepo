@@ -333,6 +333,11 @@ mod macos {
 	}
 
 	#[tauri::command]
+	async fn standing_aside(webview: Webview) -> Result<Vec<bool>, String> {
+		on_main_window(&webview.window(), holders_standing_aside)
+	}
+
+	#[tauri::command]
 	async fn swipe_while_capturing(webview: Webview, swipe: Swipe) -> Result<Value, String> {
 		let window = webview.window();
 		let pointer = NSPoint::new(swipe.pointer[0], swipe.pointer[1]);
@@ -391,6 +396,7 @@ mod macos {
 		let handled: fn(Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
 			capture_step,
 			probe_colors,
+			standing_aside,
 			swipe_while_capturing,
 			resize_window,
 			finish_run
@@ -436,6 +442,7 @@ mod macos {
 			.invoke_handler(move |invoke| match invoke.message.command() {
 				"capture_step"
 				| "probe_colors"
+				| "standing_aside"
 				| "swipe_while_capturing"
 				| "resize_window"
 				| "finish_run" => own_commands(invoke),

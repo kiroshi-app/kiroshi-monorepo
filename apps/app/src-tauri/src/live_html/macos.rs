@@ -160,20 +160,17 @@ pub async fn still<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<String,
 	let answer = Arc::new(Mutex::new(Some(answer)));
 	on_main_thread(app, move || {
 		let view = mounted_view(&id)?;
-		let handed = RcBlock::new(move |image: *mut AnyObject, _failure: *mut AnyObject| {
+		let handed = RcBlock::new(move |image: *mut AnyObject, failure: *mut AnyObject| {
 			let still = unsafe { image.as_ref() }
-				.ok_or_else(|| "the view drew no still".to_owned())
+				.ok_or_else(|| snapshot_failure(failure))
 				.and_then(png_data_url);
-			if still.is_ok() {
+			let sender = answer.lock().unwrap_or_else(PoisonError::into_inner).take();
+			if is_still_delivered(sender, still) {
 				MOUNTED.with_borrow_mut(|mounted| {
 					if let Some(shown) = mounted.get_mut(&id) {
 						shown.has_a_still = true;
 					}
 				});
-			}
-			let sender = answer.lock().unwrap_or_else(PoisonError::into_inner).take();
-			if sender.is_some_and(|sender| sender.send(still).is_err()) {
-				log::warn!("a live view handed its still after its deadline");
 			}
 		});
 		unsafe {
@@ -222,7 +219,7 @@ pub async fn place<R: Runtime>(
 			place_native(&native_view_of(&shown.webview), placement, marker)?;
 			Ok(std::mem::replace(&mut shown.placement, placement) != placement)
 		})?;
-		if has_moved && MOTION.with(|motion| motion.is_moving.get()) {
+		if has_moved {
 			stand_aside_until_the_thread_rests(&on_main);
 		}
 		Ok(())
@@ -462,6 +459,30 @@ fn set_moving(is_moving: bool) {
 	});
 }
 
+fn is_still_delivered(
+	sender: Option<oneshot::Sender<Result<String, String>>>,
+	still: Result<String, String>,
+) -> bool {
+	let is_a_still = still.is_ok();
+	let is_delivered = sender.is_some_and(|sender| sender.send(still).is_ok());
+	if !is_delivered {
+		log::warn!("a live view handed its still after its deadline");
+	}
+	is_delivered && is_a_still
+}
+
+fn snapshot_failure(failure: *mut AnyObject) -> String {
+	let Some(failure) = (unsafe { failure.as_ref() }) else {
+		return "the view drew no still and gave no error".to_owned();
+	};
+	let description: Option<Retained<NSString>> =
+		unsafe { msg_send![failure, localizedDescription] };
+	match description {
+		Some(description) => format!("the view drew no still: {description}"),
+		None => "the view drew no still and its error has no description".to_owned(),
+	}
+}
+
 fn png_data_url(image: &AnyObject) -> Result<String, String> {
 	let tiff: Option<Retained<AnyObject>> = unsafe { msg_send![image, TIFFRepresentation] };
 	let tiff = tiff.ok_or("the still has no bitmap")?;
@@ -612,7 +633,7 @@ mod tests {
 
 	use tokio::sync::oneshot;
 
-	use super::{script_answered, LiveHtmlError};
+	use super::{is_still_delivered, script_answered, LiveHtmlError};
 
 	const HOSTILE_PAGE_BUSY_LOOP: Duration = Duration::from_secs(10);
 
@@ -641,5 +662,40 @@ mod tests {
 				detail: "the view did not answer the script in time".to_owned()
 			})
 		);
+	}
+
+	#[test]
+	fn a_live_html_still_counts_as_handed_once_its_caller_receives_it() {
+		let (answer, mut answered) = oneshot::channel();
+
+		let is_delivered =
+			is_still_delivered(Some(answer), Ok("data:image/png;base64,".to_owned()));
+
+		assert!(is_delivered);
+		assert_eq!(answered.try_recv(), Ok(Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_handed_after_its_caller_stopped_waiting_is_not_counted() {
+		let (answer, answered) = oneshot::channel();
+		drop(answered);
+
+		assert!(!is_still_delivered(Some(answer), Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_handed_a_second_time_is_not_counted() {
+		assert!(!is_still_delivered(None, Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_that_failed_is_delivered_but_not_counted() {
+		let (answer, mut answered) = oneshot::channel();
+
+		let is_delivered =
+			is_still_delivered(Some(answer), Err("the view drew no still".to_owned()));
+
+		assert!(!is_delivered);
+		assert_eq!(answered.try_recv(), Ok(Err("the view drew no still".to_owned())));
 	}
 }

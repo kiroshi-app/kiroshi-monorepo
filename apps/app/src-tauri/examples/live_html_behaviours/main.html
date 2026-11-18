@@ -299,6 +299,21 @@
 				const holder = holderOf(settled)
 				expect(!holder.hidden && holder.alpha === 1, `the live view did not come back after the swipes ${JSON.stringify(holder)}`)
 
+				const readings = []
+				for (let frame = 0; frame < 20; frame++) {
+					thread.scrollTop += 6
+					await pause(16)
+					readings.push((await invoke("standing_aside")).every(Boolean))
+				}
+				const firstAside = readings.indexOf(true)
+				expect(
+					firstAside >= 0 && readings.slice(firstAside).every(Boolean),
+					`a scroll with no wheel left the live view drawn: ${JSON.stringify(readings)}`,
+				)
+				await pause(600)
+				const rested = await invoke("standing_aside")
+				expect(rested.every((isAside) => !isAside), `the live view did not come back after a scroll with no wheel ${JSON.stringify(rested)}`)
+
 				overlay.hidden = false
 				overlay.style.top = `${rectOf(slot).y - 40}px`
 				await invoke("live_html_hide", { id: COMPOSED })
