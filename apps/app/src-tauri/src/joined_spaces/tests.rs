@@ -74,7 +74,10 @@ const HOST_ABSENT: u16 = 4002;
 const MEMBERSHIP_ENDED: u16 = 4003;
 const SPACE_DELETED: u16 = 4007;
 const LONG_PAUSE: Duration = Duration::from_secs(3600);
-const ENDING_PAUSE: Duration = Duration::from_secs(90);
+// Ten times the longest gesture seen, 1.906 s. The three tests that end on their gesture
+// mid-pause ran 0.79 to 0.89 s in three PR rust jobs on main, then 1.83 to 1.91 s on main
+// and 0.18 s on OPE-2514 in two local runs of the library tests.
+const ENDING_PAUSE: Duration = Duration::from_millis(19_060);
 const STORE_ATTACHMENTS: &str = "chat_store_attachments";
 const RELAY_FRAME_CEILING_BYTES: usize = 64 * 1024 * 1024;
 const SLOW_UPLINK_PIECE_BYTES: usize = 64 * 1024;
@@ -1337,10 +1340,12 @@ fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_end
 			),
 		)
 		.await;
+		let joined_at = Instant::now();
 		paused.reconciliation.await.expect("the reconciliation ends");
 		let evicted_at = Instant::now();
 
 		assert!(other.expect("the other join is not held by the pause").is_ok());
+		assert!(joined_at < paused.pause_ends);
 		assert!(evicted_at >= paused.pause_ends);
 		assert_eq!(
 			*removed.lock().expect("the events"),
@@ -1366,12 +1371,14 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 			relay::joined(member.app.handle(), INSTANCE.to_owned(), None, None, Default::default()),
 		)
 		.await;
+		let joined_at = Instant::now();
 		paused.reconciliation.await.expect("the reconciliation ends");
 
 		assert_eq!(
 			again.expect("the join is not held by the pause").expect("joined").id,
 			paused.joined.id
 		);
+		assert!(joined_at < paused.pause_ends);
 		assert!(removed.lock().expect("the events").is_empty());
 		assert_eq!(member.listed().await.len(), 1);
 		assert!(member.app.state::<RelayGuests>().is_running(&paused.joined.id));
@@ -1385,8 +1392,10 @@ fn an_unlisted_space_kept_on_a_sign_out_during_the_429_pause_starts_no_guest() {
 		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		member.signed_out_of_the_store();
+		let signed_out_at = Instant::now();
 		paused.reconciliation.await.expect("the reconciliation ends");
 
+		assert!(signed_out_at < paused.pause_ends);
 		assert!(!member.app.state::<RelayGuests>().is_running(&paused.joined.id));
 	});
 }
@@ -1399,8 +1408,10 @@ fn an_unlisted_space_is_kept_when_the_account_signs_out_during_the_429_pause() {
 		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		member.signed_out_of_the_store();
+		let signed_out_at = Instant::now();
 		paused.reconciliation.await.expect("the reconciliation ends");
 
+		assert!(signed_out_at < paused.pause_ends);
 		assert!(removed.lock().expect("the events").is_empty());
 		assert_eq!(member.listed().await.len(), 1);
 	});
@@ -1412,6 +1423,7 @@ fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_ag
 		let member = Member::new("guest-runs-again").await;
 		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 		member.signed_out_of_the_store();
+		let signed_out_at = Instant::now();
 		paused.reconciliation.await.expect("the reconciliation ends");
 		member.signed_in_again();
 		member.relay.greets_after_the_next_members_read(vec![paused.host.hello()]);
@@ -1424,6 +1436,7 @@ fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_ag
 		})
 		.await;
 
+		assert!(signed_out_at < paused.pause_ends);
 		assert_eq!(connection.map(|connection| connection.id), Ok(paused.joined.id.clone()));
 		assert!(guests.is_running(&paused.joined.id));
 	});
