@@ -250,6 +250,10 @@ pub struct ResultFrame {
 	pub model_usage: Option<Value>,
 	#[serde(default)]
 	pub user_message_uuid: Option<String>,
+	#[serde(default)]
+	pub result: Option<Value>,
+	#[serde(default)]
+	pub errors: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -58,8 +58,12 @@ use removed_on_drop::RemovedOnDrop;
 use runtime_pick::{picked, record_named, OpenedRuntimes, HELD_FOR};
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
-use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
-use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::ipc::CallbackFn;
+use tauri::test::{
+	get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY,
+};
+use tauri::webview::{InvokeRequest, PageLoadEvent};
+use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -318,7 +322,7 @@ fn decoded(envelope: &Value, key: &str) -> Vec<u8> {
 
 struct Host {
 	app: App<MockRuntime>,
-	_window: WebviewWindow<MockRuntime>,
+	window: WebviewWindow<MockRuntime>,
 	member: WebSocket,
 	guest: GuestDevice,
 	frames: Vec<Value>,
@@ -383,7 +387,7 @@ impl Host {
 		let guest = guest_rostered(&app).await;
 		let mut hosted = Self {
 			app,
-			_window: window,
+			window,
 			member,
 			guest,
 			frames: Vec::new(),
@@ -601,6 +605,41 @@ impl Host {
 	}
 
 	async fn host_says(&self, scope: &RuntimeScope, id: &str, turn_id: &str, content: &str) {
+		self.stored(scope, id, turn_id, content).await;
+		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
+		submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
+			.await
+			.expect("the host prompt is submitted");
+	}
+
+	async fn window_says(&self, scope: &RuntimeScope, id: &str, turn_id: &str, content: &str) {
+		self.stored(scope, id, turn_id, content).await;
+		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
+		self.invoked_by_the_window(
+			"agent_submit_prompt",
+			json!({ "scope": scope, "text": content, "turn": turn }),
+		);
+	}
+
+	fn invoked_by_the_window(&self, command: &str, body: Value) -> Value {
+		get_ipc_response(
+			&self.window,
+			InvokeRequest {
+				cmd: command.into(),
+				callback: CallbackFn(0),
+				error: CallbackFn(1),
+				url: "tauri://localhost".parse().expect("a url"),
+				body: body.into(),
+				headers: Default::default(),
+				invoke_key: INVOKE_KEY.to_string(),
+			},
+		)
+		.unwrap_or_else(|error| panic!("{command} was refused: {error:?}"))
+		.deserialize::<Value>()
+		.expect("a json answer")
+	}
+
+	async fn stored(&self, scope: &RuntimeScope, id: &str, turn_id: &str, content: &str) {
 		let message = NewUserMessage {
 			id: id.to_owned(),
 			conversation_id: scope.conversation_id.clone(),
@@ -623,10 +662,6 @@ impl Host {
 		)
 		.await
 		.expect("the host message is stored");
-		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
-		submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
-			.await
-			.expect("the host prompt is submitted");
 	}
 
 	async fn allow_write(&mut self, bot_id: &str, nth: usize) {
@@ -1547,6 +1582,49 @@ fn an_agent_mentioned_back_by_the_agent_it_summoned_with_no_window_runs_again_in
 		assert_eq!(ada, vec!["<@b-grace> over to you", "noted"], "the room holds {transcript:#?}");
 		assert_eq!(replies_of(&transcript, GRACE).len(), 1, "the room holds {transcript:#?}");
 		assert!(drops_of(&host.frames, ADA).is_empty(), "{:#?}", host.frames);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_turn_sent_from_a_window_outlives_a_reload_of_its_page_and_ends_on_its_own_outcome() {
+	page_dropped_mid_turn("page-reload", |window| {
+		kiroshi_app::forget_a_loading_page(window, PageLoadEvent::Started)
+	});
+}
+
+#[test]
+fn a_turn_sent_from_a_window_outlives_the_destruction_of_its_window_and_ends_on_its_own_outcome() {
+	page_dropped_mid_turn("window-destroyed", |window| {
+		kiroshi_app::forget_a_destroyed_window(window, &WindowEvent::Destroyed)
+	});
+}
+
+fn page_dropped_mid_turn(name: &str, drop_the_page: impl FnOnce(&Window<MockRuntime>)) {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting(name, "held_echo").await;
+		let scope = host.host_run(ROOM, ADA).await;
+		host.window_says(&scope, "p1", "t1", "write the plan down").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+
+		drop_the_page(&host.window.as_ref().window());
+		let served = host.invoked_by_the_window("conversation_serve_awaited_runs", json!({}));
+		let live_after_the_drop = host.live_runs_of(ADA).await;
+		let closed_after_the_drop = host.completed_at("t1").await;
+		host.allow_write(ADA, 1).await;
+		host.turn_ended_for(ADA).await;
+		host.answered("t1").await;
+
+		assert_eq!(served, Value::Null);
+		assert_eq!(live_after_the_drop.len(), 1, "the run died with the page");
+		assert_eq!(closed_after_the_drop, None, "the turn closed with the page");
+		let endings: Vec<&Value> = agent_events_in(&host.frames, ADA)
+			.filter(|event| event["type"] == "turnEnded")
+			.map(|event| &event["ended"]["outcome"])
+			.collect();
+		assert_eq!(endings, vec![&json!("completed")], "{:#?}", host.frames);
+		assert_eq!(failures_in_turn(&host.frames, ADA, "t1").count(), 0, "{:#?}", host.frames);
 		host.quit().await;
 	});
 }

@@ -14,8 +14,8 @@ use super::contract::{
 };
 use super::lease::{Lapse, Liveness, RunLease};
 use super::protocol::{
-	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember, StreamEvent,
-	StreamEventFrame,
+	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, ResultFrame, SpaceMember,
+	StreamEvent, StreamEventFrame,
 };
 use super::sidecar::Sidecar;
 use super::translate::Translator;
@@ -430,8 +430,10 @@ impl Shared {
 			"the turn lost its lease session={session} turn={:?} reason={lapse}",
 			self.running.as_ref().and_then(|running| running.id.as_deref())
 		);
-		let mut events: Vec<AgentEvent> =
-			self.turn_ended(&session, TurnOutcome::Failed).into_iter().collect();
+		let mut events: Vec<AgentEvent> = self
+			.turn_ended(&session, TurnOutcome::Failed, Some(FailureCause::LeaseLapse(lapse)))
+			.into_iter()
+			.collect();
 		events.extend(self.translator.abandon_turn());
 		events.extend(self.set_turn(TurnState::Failed));
 		let bound_ms = self.lease.bound_of(lapse).as_millis() as u64;
@@ -456,11 +458,17 @@ impl Shared {
 	}
 
 	#[must_use]
-	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) -> Option<AgentEvent> {
+	fn turn_ended(
+		&mut self,
+		session: &str,
+		outcome: TurnOutcome,
+		cause: Option<FailureCause>,
+	) -> Option<AgentEvent> {
 		self.streams_a_follow_up = false;
 		let running = self.running.take()?;
+		let cause = cause.map(|cause| format!(" cause={cause}")).unwrap_or_default();
 		log::info!(
-			"the turn ended session={session} turn={:?} outcome={outcome:?} took_ms={}",
+			"the turn ended session={session} turn={:?} outcome={outcome:?} took_ms={}{cause}",
 			running.id,
 			running.started_at.elapsed().as_millis()
 		);
@@ -472,7 +480,7 @@ impl Shared {
 			return Vec::new();
 		}
 		log::info!("the session shut down while its turn ran session={session}");
-		let released = self.turn_ended(session, TurnOutcome::Cancelled);
+		let released = self.turn_ended(session, TurnOutcome::Cancelled, None);
 		released.into_iter().chain([self.ended_as(TurnOutcome::Cancelled)]).collect()
 	}
 
@@ -496,6 +504,68 @@ impl Shared {
 		}
 		Abandoned { turns, ended: self.ended_as(outcome) }
 	}
+}
+
+const CAUSE_TEXT_BOUND: usize = 300;
+
+#[derive(Debug, Clone, PartialEq)]
+enum FailureCause {
+	ErrorResult { subtype: Option<String>, text: Option<String> },
+	SessionClosed { reason: String },
+	LeaseLapse(Lapse),
+	PromptUnwritten { reason: String },
+	InterruptRefused { reason: Option<String> },
+}
+
+impl FailureCause {
+	fn told_by(frame: &Frame) -> Option<Self> {
+		match frame {
+			Frame::Result(result) | Frame::TurnSettled(result) => {
+				Some(Self::ErrorResult { subtype: result.subtype.clone(), text: text_of(result) })
+			}
+			Frame::InterruptFailed(refused) => {
+				Some(Self::InterruptRefused { reason: refused.detail.clone() })
+			}
+			_ => None,
+		}
+	}
+
+	fn closed_by(reason: Option<&TransportError>) -> Self {
+		let reason = match reason {
+			Some(TransportError::Crashed { detail: Some(detail), .. }) => detail.clone(),
+			Some(error) => error.to_string(),
+			None => "the sidecar stopped routing frames to the session".to_owned(),
+		};
+		Self::SessionClosed { reason }
+	}
+}
+
+impl std::fmt::Display for FailureCause {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::ErrorResult { subtype, text } => {
+				write!(f, "error result subtype={subtype:?} text={text:?}")
+			}
+			Self::SessionClosed { reason } => write!(f, "session closed reason={reason:?}"),
+			Self::LeaseLapse(lapse) => write!(f, "lease lapse reason={lapse:?}"),
+			Self::PromptUnwritten { reason } => write!(f, "prompt unwritten reason={reason:?}"),
+			Self::InterruptRefused { reason } => write!(f, "interrupt refused reason={reason:?}"),
+		}
+	}
+}
+
+fn text_of(result: &ResultFrame) -> Option<String> {
+	let told = result.errors.as_ref().or(result.result.as_ref())?;
+	let text = match told {
+		Value::String(text) => text.clone(),
+		Value::Array(items) => items.iter().map(spoken).collect::<Vec<_>>().join("; "),
+		other => other.to_string(),
+	};
+	Some(text.chars().take(CAUSE_TEXT_BOUND).collect())
+}
+
+fn spoken(item: &Value) -> String {
+	item.as_str().map_or_else(|| item.to_string(), str::to_owned)
 }
 
 struct Abandoned {
@@ -542,8 +612,9 @@ impl Line<'_> {
 			self.sink.emit(entering);
 		}
 		let written = self.sidecar.send(protocol::prompt_command(&key, text, &prompt_uuid));
-		if written.is_err() {
-			if let Some(released) = shared.turn_ended(&key, TurnOutcome::Failed) {
+		if let Err(error) = &written {
+			let cause = FailureCause::PromptUnwritten { reason: error.to_string() };
+			if let Some(released) = shared.turn_ended(&key, TurnOutcome::Failed, Some(cause)) {
 				self.sink.emit(released);
 			}
 		}
@@ -835,7 +906,7 @@ impl Session {
 		let answered_prompt = match shared.running.as_ref() {
 			Some(running) => {
 				let prompt_uuid = running.prompt_uuid.clone();
-				let released = shared.turn_ended(&key, TurnOutcome::Completed);
+				let released = shared.turn_ended(&key, TurnOutcome::Completed, None);
 				let ended = shared.ended_as(TurnOutcome::Completed);
 				for event in released.into_iter().chain([ended]) {
 					self.sink.emit(event);
@@ -1091,9 +1162,11 @@ async fn read_loop(
 			if holds_a_result {
 				guard.result_held();
 			}
+			let cause = FailureCause::told_by(&frame);
 			let events = guard.translator.ingest(frame);
 			let outcome = turn_outcome(&events);
-			let released = outcome.and_then(|outcome| guard.turn_ended(&desk.key, outcome));
+			let cause = cause.filter(|_| matches!(outcome, Some(TurnOutcome::Failed)));
+			let released = outcome.and_then(|outcome| guard.turn_ended(&desk.key, outcome, cause));
 			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
 			if holds_a_result {
 				rearmed.notify_one();
@@ -1173,7 +1246,11 @@ async fn on_exit(
 			return;
 		}
 		(
-			guard.turn_ended(session, TurnOutcome::Failed),
+			guard.turn_ended(
+				session,
+				TurnOutcome::Failed,
+				Some(FailureCause::closed_by(reason.as_ref())),
+			),
 			guard.set_turn(TurnState::Failed),
 			guard.abandon_queued(TurnOutcome::Failed),
 		)
@@ -1587,11 +1664,59 @@ mod tests {
 	fn a_turn_ending_while_held_releases_its_hold_and_an_unheld_one_releases_nothing() {
 		let mut held_turn = a_running_turn();
 		held_turn.tasks_pending(1);
-		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed), Some(RELEASED));
+		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed, None), Some(RELEASED));
 
 		let mut unheld_turn = a_running_turn();
 		assert!(holds_in(unheld_turn.tasks_pending(0)).is_empty());
-		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed), None);
+		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed, None), None);
+	}
+
+	#[tokio::test]
+	async fn a_turn_failed_by_an_error_result_logs_the_subtype_and_text_it_carries() {
+		crate::test_log::capturing();
+		let frame: Frame = serde_json::from_value(serde_json::json!({
+			"type": "result",
+			"subtype": "error_during_execution",
+			"is_error": true,
+			"errors": ["the build ran out of memory", "the shell was killed"]
+		}))
+		.expect("a result frame");
+
+		let released = a_running_turn().turn_ended(
+			"s-error-result",
+			TurnOutcome::Failed,
+			FailureCause::told_by(&frame),
+		);
+
+		let logged = crate::test_log::infos_naming("session=s-error-result").await;
+		assert_eq!(released, None, "an unheld turn released a hold");
+		assert!(
+			logged[0].ends_with(
+				r#"cause=error result subtype=Some("error_during_execution") text=Some("the build ran out of memory; the shell was killed")"#
+			),
+			"{logged:?}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_turn_failed_by_a_session_the_sidecar_closed_logs_the_reason_it_reports() {
+		crate::test_log::capturing();
+		let (sink, _heard) = mpsc::unbounded_channel::<AgentEvent>();
+		let closed = TransportError::Crashed {
+			code: None,
+			detail: Some("Claude Code process exited with code 137".to_owned()),
+		};
+
+		on_exit(Arc::new(Mutex::new(a_running_turn())), Arc::new(sink), "s-closed", Some(closed))
+			.await;
+
+		let logged = crate::test_log::infos_naming("session=s-closed").await;
+		assert!(
+			logged[0].ends_with(
+				r#"cause=session closed reason="Claude Code process exited with code 137""#
+			),
+			"{logged:?}"
+		);
 	}
 
 	#[test]

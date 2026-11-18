@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
-use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
+use tauri::webview::PageLoadEvent;
+use tauri::{AppHandle, Manager, Runtime, State, Window, WindowEvent};
 use tokio::time::Instant;
 use yrs::updates::decoder::Decode;
 use yrs::StickyIndex;
@@ -325,9 +325,9 @@ pub fn forget_on_destroyed<R: Runtime>(window: &Window<R>, event: &WindowEvent) 
 	}
 }
 
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
+pub fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+	if event == PageLoadEvent::Started {
+		forget(window);
 	}
 }
 
