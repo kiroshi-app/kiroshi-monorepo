@@ -1,6 +1,6 @@
 import type { TurnEnded } from "./contract"
 
-type TurnEnding = "completed" | "cancelled" | "failed" | "connectionLost"
+export type TurnEnding = "completed" | "cancelled" | "failed" | "connectionLost"
 
 export type TurnPlace = {
 	heardIn: string
@@ -47,7 +47,7 @@ export const createTurnEndHearing = (showConnectionLost: () => void) => {
 }
 
 const showConnectionLostNotice = () => {
-	// TODO: raise the transient notice here once packages/ui carries its string (OPE-2486)
+	// TODO: the transient notice comes from a packages/ui string that does not exist yet
 }
 
 export const hearTurnEnd = createTurnEndHearing(showConnectionLostNotice)

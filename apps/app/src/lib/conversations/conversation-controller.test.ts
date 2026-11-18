@@ -40,6 +40,7 @@ import type {
 	QuestionRequest,
 	ScopedEvent,
 	TransportError,
+	TurnEnded,
 	TurnOutcome,
 } from "../agent/contract"
 import {
@@ -2633,19 +2634,43 @@ describe("a speaker's turn that failed for no connection", () => {
 		vi.restoreAllMocks()
 	})
 
-	it("keeps the speaker's failed entry and raises no failure report", async () => {
+	const failedAfter = async (ended: Partial<TurnEnded>) => {
 		const harness = await createHarness(["Ada", "Nyx"])
 		const ada = idOf(harness.conversation, "Ada")
 		await harness.controller.send("@Ada @Nyx hold the walls")
 		await harness.settled()
 
-		harness.driver.pushTo(ada, [CONNECTION_LOST])
+		harness.driver.pushTo(ada, [
+			{
+				type: "turnEnded",
+				ended: { sessionId: null, outcome: "failed", ...ended },
+			},
+		])
 		await harness.settled()
-
-		expect(harness.controller.getState().failedBotIds).toEqual([ada])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
 		harness.detach()
+
+		return { harness, ada }
+	}
+
+	it("offers no retry of the speaker and raises no failure report", async () => {
+		const { harness, ada } = await failedAfter({ failure: "noConnection" })
+
+		expect(harness.controller.getState().failedBotIds).toEqual([])
+		expect(runningIn(harness.controller)).not.toContain(ada)
+		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
+
+	it.each([
+		["another failure", { failure: "providerError" }],
+		["no failure field", {}],
+	] as const)(
+		"still offers the retry of a speaker whose turn failed with %s",
+		async (_name, ended) => {
+			const { harness, ada } = await failedAfter(ended)
+
+			expect(harness.controller.getState().failedBotIds).toEqual([ada])
+		},
+	)
 
 	it("logs the end when the Space of the conversation is not on screen", async () => {
 		const logged = vi.spyOn(console, "info").mockImplementation(() => undefined)
@@ -3817,6 +3842,39 @@ describe("the mentions a finished turn carries", () => {
 		await settled()
 
 		expect(room.driver.shutdowns).toEqual([room.ada])
+		room.detach()
+	})
+
+	it("ends the replay of a turn lost to the connection with no retry, no speaker left at work and no failure report", async () => {
+		const room = await roomSeating()
+		await room.sent("@Ada take the walls")
+		const lost = room.driver.submissions.find(
+			({ scope }) => scope.botId === room.ada,
+		)
+		room.driver.pushTo(room.ada, [
+			{
+				type: "turnEnded",
+				ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
+			},
+		])
+		await settled()
+
+		for (const event of spoke(room.ada, "walls up")) {
+			room.hear({
+				scope: lost?.scope ?? null,
+				turn: {
+					turnId: lost?.turn?.turnId ?? "",
+					conversationId: room.conversation.id,
+				},
+				event,
+			})
+		}
+		await settled()
+
+		const state = room.controller.getState()
+		expect(state.speakers).toEqual([])
+		expect(state.failedBotIds).toEqual([])
+		expect(room.reportFailure).not.toHaveBeenCalled()
 		room.detach()
 	})
 

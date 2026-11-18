@@ -89,10 +89,11 @@ import type {
 	RuntimeScope,
 	ScopedEvent,
 	TransportError,
+	TurnEnded,
 	TurnHold,
 } from "../agent/contract"
 import { describeTransportError } from "../agent/messages"
-import { hearTurnEnd } from "../agent/turn-end"
+import { hearTurnEnd, type TurnEnding } from "../agent/turn-end"
 import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
@@ -109,11 +110,7 @@ import {
 	questionMessageIdOf,
 	questionMessageText,
 } from "../chat/question-message"
-import {
-	ENDING_FOR,
-	ENDING_FOR_OUTCOME,
-	isWorthKeeping,
-} from "../chat/reply-endings"
+import { ENDING_FOR, isWorthKeeping } from "../chat/reply-endings"
 import { needsFreshSession, shownTextOf } from "../chat/screen-model"
 import { waitingQuestionIdsIn } from "../chat/waiting-questions"
 import {
@@ -305,6 +302,13 @@ type Speaker = {
 const NO_MESSAGES: TranscriptMessage[] = []
 
 const NO_CONVERSATION = "none"
+
+const COMPLETION_FOR_ENDING: Record<TurnEnding, TerminalCompletion> = {
+	completed: "complete",
+	cancelled: "cancelled",
+	failed: "failed",
+	connectionLost: "failed",
+}
 
 const NO_ARRIVALS: CompanionArrival[] = []
 
@@ -962,15 +966,15 @@ export const createConversationController = (
 		drive()
 	}
 
-	const closeSpeaker = (held: Speaker, completion: TerminalCompletion) => {
+	const closeSpeaker = (held: Speaker, ending: TurnEnding) => {
 		if (speakers.get(held.botId) !== held) {
 			return
 		}
 		speakers.delete(held.botId)
-		if (completion === "failed") {
+		if (ending === "failed") {
 			noteFailedTurn(held)
 		}
-		settleOpenReplies(held, completion)
+		settleOpenReplies(held, COMPLETION_FOR_ENDING[ending])
 		if (!held.scope || !keptRuns.isKeeping(held.scope)) {
 			void shutdownSpeaker(held)
 		}
@@ -1001,9 +1005,18 @@ export const createConversationController = (
 		)
 	}
 
-	const endTurn = (held: Speaker, completion: TerminalCompletion) => {
+	const hearEnd = (ended: TurnEnded) => {
+		const spaceId = conversation?.spaceId ?? null
+		return hearTurnEnd(ended, {
+			heardIn: "conversation-controller",
+			conversationId: conversation?.id ?? NO_CONVERSATION,
+			isOnScreen: spaceId !== null && isSpaceOnScreen(spaceId),
+		})
+	}
+
+	const endTurn = (held: Speaker, ended: TurnEnded) => {
 		keepRun(held)
-		closeSpeaker(held, completion)
+		closeSpeaker(held, hearEnd(ended))
 	}
 
 	const failSpeaker = (held: Speaker, error: TransportError) => {
@@ -1108,7 +1121,7 @@ export const createConversationController = (
 			case "turnHeld":
 				return noteHold(held, event.hold)
 			case "turnEnded":
-				return endTurn(held, ENDING_FOR_OUTCOME[event.ended.outcome])
+				return endTurn(held, event.ended)
 			case "failed":
 				return failSpeaker(held, event.error)
 			default:
@@ -1124,22 +1137,9 @@ export const createConversationController = (
 	const isOpenConversation = (conversationId: string) =>
 		conversationId === conversation?.id
 
-	const hearEnd = (event: AgentEvent) => {
-		if (event.type !== "turnEnded" || !conversation) {
-			return
-		}
-		const { id, spaceId } = conversation
-		hearTurnEnd(event.ended, {
-			heardIn: "conversation-controller",
-			conversationId: id,
-			isOnScreen: spaceId !== null && isSpaceOnScreen(spaceId),
-		})
-	}
-
 	const route = ({ scope, turn, event }: ScopedEvent) => {
 		const held = speakerAt(scope)
 		if (held) {
-			hearEnd(event)
 			apply(held, event)
 			return
 		}
@@ -1147,7 +1147,9 @@ export const createConversationController = (
 			keptRuns.hear(scope, event)
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
-			hearEnd(event)
+			if (event.type === "turnEnded") {
+				hearEnd(event.ended)
+			}
 			foreignTurns.render(scope, turn, event)
 			sync()
 		}
