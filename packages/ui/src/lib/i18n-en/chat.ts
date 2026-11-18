@@ -355,6 +355,10 @@ const chat = {
 	liveHtml: {
 		label: "Live view",
 		failed: "Couldn’t show the live view. Here’s the code instead.",
+		unavailableWithCode:
+			"Couldn’t show the live view. Copy its code from the reply instead.",
+		unavailableWithoutCode:
+			"Couldn’t show the live view. Ask for the page again to retry.",
 	},
 	table: {
 		label: "Table",

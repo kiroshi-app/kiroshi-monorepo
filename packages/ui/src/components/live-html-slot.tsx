@@ -35,7 +35,7 @@ type LiveHtmlPlacement = {
 
 type LiveHtmlSlotProps = {
 	status: LiveHtmlStatus
-	html: string
+	html?: string
 	height?: number
 	still?: string
 	onPlacementChange: (placement: LiveHtmlPlacement | null) => void
@@ -201,8 +201,9 @@ const LiveHtmlSlot = ({
 
 	useEffect(() => () => report(null), [])
 
-	if (status === "unavailable")
-		return <AnswerFence code={html} language="html" />
+	const isUnavailable = status === "unavailable"
+
+	if (isUnavailable && html) return <AnswerFence code={html} language="html" />
 
 	const isLoading = status === "loading"
 
@@ -216,25 +217,34 @@ const LiveHtmlSlot = ({
 			aria-busy={isLoading}
 		>
 			<AnswerCardHeader label={t("liveHtml.label")} />
-			<div
-				ref={setReserved}
-				data-slot="live-html-slot-view"
-				className={cn(height === undefined && "h-80")}
-				style={{ height }}
-			>
-				{isLoading ? (
-					<Skeleton aria-hidden className="size-full rounded-none" />
-				) : null}
-				{still && !isLoading ? (
-					<img
-						data-slot="live-html-slot-still"
-						src={still}
-						alt=""
-						aria-hidden
-						className="pointer-events-none size-full object-cover object-top-left"
-					/>
-				) : null}
-			</div>
+			{isUnavailable ? (
+				<p
+					data-slot="live-html-slot-unavailable"
+					className="p-3.5 text-compact text-muted-foreground leading-5"
+				>
+					{t("liveHtml.unavailableWithoutCode")}
+				</p>
+			) : (
+				<div
+					ref={setReserved}
+					data-slot="live-html-slot-view"
+					className={cn(height === undefined && "h-80")}
+					style={{ height }}
+				>
+					{isLoading ? (
+						<Skeleton aria-hidden className="size-full rounded-none" />
+					) : null}
+					{still && !isLoading ? (
+						<img
+							data-slot="live-html-slot-still"
+							src={still}
+							alt=""
+							aria-hidden
+							className="pointer-events-none size-full object-cover object-top-left"
+						/>
+					) : null}
+				</div>
+			)}
 		</AnswerCard>
 	)
 }

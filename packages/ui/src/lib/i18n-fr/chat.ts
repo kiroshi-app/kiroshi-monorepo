@@ -385,6 +385,10 @@ const chat = {
 	liveHtml: {
 		label: "Vue en direct",
 		failed: "Impossible d’afficher la vue en direct. Voici le code à la place.",
+		unavailableWithCode:
+			"Impossible d’afficher la vue en direct. Copiez son code depuis la réponse à la place.",
+		unavailableWithoutCode:
+			"Impossible d’afficher la vue en direct. Redemandez la page pour réessayer.",
 	},
 	table: {
 		label: "Tableau",
