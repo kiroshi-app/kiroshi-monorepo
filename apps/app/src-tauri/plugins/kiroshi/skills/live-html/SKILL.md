@@ -29,13 +29,12 @@ and dark colours that follow the app, and the colour of the current Space.
 
 ## External resources
 
-The live view refuses every request to a host it does not allow. A page loads external resources
-only from:
+A page loads external resources only from:
 
 - `cdn.jsdelivr.net`
 
-A script, a style sheet, a font, an image or a fetch on any other host never loads. A library
-comes from its npm package on that host, Motion included:
+The live view refuses a script, a style sheet, a font, an image or a fetch on any other host. A
+library comes from its npm package on that host, Motion included:
 
 ```html
 <script type="module">
@@ -48,5 +47,4 @@ Never inline an image or a library as base64 when a CDN URL serves it: write the
 ## Motion and design
 
 Read `references/apple-design.md` in this skill's directory before you design a page that moves,
-answers a gesture, layers translucent surfaces or sets its own typography. It is the reference
-for how the page responds, animates and reads.
+answers a gesture, layers translucent surfaces or sets its own typography.
