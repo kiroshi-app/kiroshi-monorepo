@@ -30,12 +30,10 @@ export const dismissWindowRecovery = (recovery: WindowRecovery) => {
 	localStorage.setItem(DISMISSED_RECOVERY_KEY, String(recovery.occurredAtMs))
 }
 
-const undismissed = (recovery: WindowRecovery | null) =>
-	recovery && !isDismissed(recovery) ? recovery : null
-
 export const readWindowRecoveryToShow = async () => {
 	try {
-		return undismissed(await commands.windowRecoveryRead())
+		const recovery = await commands.windowRecoveryRead()
+		return recovery && !isDismissed(recovery) ? recovery : null
 	} catch (reason) {
 		console.error("window recovery read at start failed", reason)
 		return null

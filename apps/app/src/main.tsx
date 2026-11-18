@@ -54,7 +54,7 @@ invalidateOnHostReconnect(queryClient)
 
 const renderApp = (
 	windowIdentity?: WindowIdentity,
-	windowRecovery: WindowRecovery | null = null,
+	windowRecovery?: WindowRecovery | null,
 ) => {
 	createRoot(document.getElementById("root")!).render(
 		<StrictMode>
