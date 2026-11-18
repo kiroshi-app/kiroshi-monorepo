@@ -7,13 +7,11 @@ import {
 import { HexagonRing } from "@workspace/ui/components/hexagon-ring"
 import { Button } from "@workspace/ui/components/ui/button"
 
-type WindowRecoveryReason = "out-of-memory" | "crash" | "gave-up"
+type WindowRecoveryScreenProps =
+	| { reason: "out-of-memory" | "crash"; onContinue: () => void }
+	| { reason: "gave-up"; onReload: () => void }
 
-type WindowRecoveryScreenProps = {
-	reason: WindowRecoveryReason
-	onContinue: () => void
-	onReload: () => void
-}
+type WindowRecoveryReason = WindowRecoveryScreenProps["reason"]
 
 const COPY_KEY = {
 	"out-of-memory": "outOfMemory",
@@ -21,14 +19,10 @@ const COPY_KEY = {
 	"gave-up": "gaveUp",
 } as const satisfies Record<WindowRecoveryReason, string>
 
-const WindowRecoveryScreen = ({
-	reason,
-	onContinue,
-	onReload,
-}: WindowRecoveryScreenProps) => {
+const WindowRecoveryScreen = (props: WindowRecoveryScreenProps) => {
 	const { t } = useTranslation("common")
-	const copy = COPY_KEY[reason]
-	const hasGivenUp = reason === "gave-up"
+	const copy = COPY_KEY[props.reason]
+	const hasGivenUp = props.reason === "gave-up"
 
 	return (
 		<FullWindowLayout
@@ -50,8 +44,9 @@ const WindowRecoveryScreen = ({
 				</div>
 				<Button
 					size="lg"
+					autoFocus
 					data-tauri-drag-region="false"
-					onClick={hasGivenUp ? onReload : onContinue}
+					onClick={hasGivenUp ? props.onReload : props.onContinue}
 				>
 					{t(`windowRecovery.${copy}.action`)}
 				</Button>
