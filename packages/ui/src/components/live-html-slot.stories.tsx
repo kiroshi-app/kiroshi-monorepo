@@ -597,8 +597,8 @@ export const LoadingDark = meta.story({
 
 export const LoadingWithStill = meta.story({
 	tags: ["test-only"],
-	args: { status: "loading", still: PAGE_STILL },
-	render: (args) => <ScrollingReply {...args} />,
+	args: { ...Loading.input.args, still: PAGE_STILL },
+	render: Loading.input.render,
 	parameters: {
 		docs: {
 			description: {
@@ -607,12 +607,9 @@ export const LoadingWithStill = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
-		const view = viewOf(canvasElement)
-		const skeleton = view.querySelector("[data-slot='skeleton']")
-		if (!skeleton) throw new Error("The skeleton did not render.")
-		await expect(rectOf(skeleton)).toEqual(rectOf(view))
-		await expect(stillIn(view)).toBeNull()
+	play: async (context) => {
+		await Loading.input.play?.(context)
+		await expect(stillIn(context.canvasElement)).toBeNull()
 	},
 })
 
@@ -655,8 +652,8 @@ export const UnavailableDark = meta.story({
 
 export const UnavailableWithStill = meta.story({
 	tags: ["test-only"],
-	args: { status: "unavailable", still: PAGE_STILL },
-	render: (args) => <ScrollingReply {...args} />,
+	args: { ...Unavailable.input.args, still: PAGE_STILL },
+	render: Unavailable.input.render,
 	parameters: {
 		docs: {
 			description: {
@@ -665,11 +662,8 @@ export const UnavailableWithStill = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas, canvasElement }) => {
-		await expect(
-			canvas.getByRole("group", { name: "Code snippet, html" }),
-		).toBeInTheDocument()
-		await expect(stillIn(canvasElement)).toBeNull()
-		await expect(args.onPlacementChange).not.toHaveBeenCalled()
+	play: async (context) => {
+		await Unavailable.input.play?.(context)
+		await expect(stillIn(context.canvasElement)).toBeNull()
 	},
 })
