@@ -6,7 +6,7 @@ type ReleaseTag = {
 	beta: number | null
 }
 
-export type NotesRange = {
+type NotesRange = {
 	prerelease: boolean
 	range: string
 }
