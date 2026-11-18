@@ -229,7 +229,7 @@ Force push, hard reset, `git clean -fd`, branch delete (`-D`), `rm -rf` on a dir
 
 Never push to `main`. Always work on feature branches.
 
-Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
+Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`. When main has a merge queue, the armed PR enters the queue on that green gate instead, and merges once the `merge_group` run on the combined result of its group is green: `changes`, `lint` checking the types of every TypeScript workspace, and `verify`.
 
 Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
