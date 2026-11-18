@@ -32,7 +32,7 @@ pub fn window_recovery_read(recoveries: State<'_, WindowRecoveries>) -> Option<W
 }
 
 #[cfg(target_os = "macos")]
-pub fn on_web_content_process_terminate<R: Runtime>(webview: &tauri::Webview<R>) {
+fn on_web_content_process_terminate<R: Runtime>(webview: &tauri::Webview<R>) {
 	if webview.label() != MAIN_WINDOW {
 		if let Err(failure) = webview.reload() {
 			log::error!(
