@@ -241,6 +241,7 @@ const createHarness = async ({
 		chat,
 		missions,
 		reportFailure,
+		isSpaceOnScreen: () => false,
 		now: () => 7,
 	})
 	await settled()
@@ -1242,6 +1243,24 @@ describe("startMissionRunDriver", () => {
 
 		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 		expect(spoken(harness.originTail())).toEqual([])
+	})
+
+	it("raises a failure notice when the run's turn fails for a reason other than the connection", async () => {
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn({ outcome: "failed", failure: "providerError" })
+
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
+	})
+
+	it("raises no failure notice and logs when the run's turn fails for no connection in a Space off screen", async () => {
+		const logged = vi.spyOn(console, "info").mockImplementation(() => undefined)
+		await harness.enter("done", closedBy("poller"))
+		await harness.endTurn({ outcome: "failed", failure: "noConnection" })
+
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(logged).toHaveBeenCalledWith(
+			`mission run driver: a turn of conversation ${harness.origin.id} ended for no connection in a Space that is not on screen`,
+		)
 	})
 
 	it("summons in the thread of an open mission that waits on the companion at start", async () => {

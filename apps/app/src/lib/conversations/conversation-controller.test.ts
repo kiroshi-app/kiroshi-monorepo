@@ -2623,6 +2623,59 @@ describe("retrying the turn of a speaker that failed", () => {
 	})
 })
 
+describe("a speaker's turn that failed for no connection", () => {
+	const CONNECTION_LOST: AgentEvent = {
+		type: "turnEnded",
+		ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
+	}
+
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	it("keeps the speaker's failed entry and raises no failure report", async () => {
+		const harness = await createHarness(["Ada", "Nyx"])
+		const ada = idOf(harness.conversation, "Ada")
+		await harness.controller.send("@Ada @Nyx hold the walls")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, [CONNECTION_LOST])
+		await harness.settled()
+
+		expect(harness.controller.getState().failedBotIds).toEqual([ada])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
+		harness.detach()
+	})
+
+	it("logs the end when the Space of the conversation is not on screen", async () => {
+		const logged = vi.spyOn(console, "info").mockImplementation(() => undefined)
+		const driver = createScriptedDriver()
+		const store = createFakeTranscriptStore()
+		const [ada] = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [ada.id],
+		})
+		const controller = createConversationController(driver, store, {
+			isSpaceOnScreen: () => false,
+		})
+		const detach = controller.attach()
+		await controller.open(conversation)
+		await controller.send("@Ada hold the walls")
+		await settled()
+
+		driver.pushTo(ada.id, [CONNECTION_LOST])
+		await settled()
+
+		expect(logged).toHaveBeenCalledWith(
+			`conversation-controller: a turn of conversation ${conversation.id} ended for no connection in a Space that is not on screen`,
+		)
+		detach()
+	})
+})
+
 describe("a failure reaching a speaker", () => {
 	const CRASHED: TransportError = {
 		kind: "crashed",

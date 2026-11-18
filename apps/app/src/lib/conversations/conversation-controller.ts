@@ -92,6 +92,7 @@ import type {
 	TurnHold,
 } from "../agent/contract"
 import { describeTransportError } from "../agent/messages"
+import { hearTurnEnd } from "../agent/turn-end"
 import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
@@ -237,6 +238,7 @@ export type ConversationControllerOptions = {
 		facts?: ReporterFacts,
 	) => unknown
 	raiseTransientNotice?: typeof raiseTransientNotice
+	isSpaceOnScreen?: (spaceId: string) => boolean
 }
 
 type Seating = "held" | "unknown" | "unreadable"
@@ -436,6 +438,7 @@ export const createConversationController = (
 	const reportFailure =
 		options.reportFailure ?? failureReporterIn("conversation-controller")
 	const raiseNotice = options.raiseTransientNotice ?? raiseTransientNotice
+	const isSpaceOnScreen = options.isSpaceOnScreen ?? (() => true)
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		sync()
@@ -1121,9 +1124,22 @@ export const createConversationController = (
 	const isOpenConversation = (conversationId: string) =>
 		conversationId === conversation?.id
 
+	const hearEnd = (event: AgentEvent) => {
+		if (event.type !== "turnEnded" || !conversation) {
+			return
+		}
+		const { id, spaceId } = conversation
+		hearTurnEnd(event.ended, {
+			heardIn: "conversation-controller",
+			conversationId: id,
+			isOnScreen: spaceId !== null && isSpaceOnScreen(spaceId),
+		})
+	}
+
 	const route = ({ scope, turn, event }: ScopedEvent) => {
 		const held = speakerAt(scope)
 		if (held) {
+			hearEnd(event)
 			apply(held, event)
 			return
 		}
@@ -1131,6 +1147,7 @@ export const createConversationController = (
 			keptRuns.hear(scope, event)
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
+			hearEnd(event)
 			foreignTurns.render(scope, turn, event)
 			sync()
 		}

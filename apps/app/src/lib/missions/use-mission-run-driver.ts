@@ -14,6 +14,7 @@ export type MissionRunDriverMount = {
 	store: TranscriptStore
 	runtimes: ConversationRuntimes
 	chat: ChatController
+	isSpaceOnScreen: (spaceId: string) => boolean
 	isDriverWindow: boolean
 }
 
@@ -22,6 +23,7 @@ export const useMissionRunDriver = ({
 	store,
 	runtimes,
 	chat,
+	isSpaceOnScreen,
 	isDriverWindow,
 }: MissionRunDriverMount) => {
 	useEffect(() => {
@@ -39,6 +41,7 @@ export const useMissionRunDriver = ({
 			chat,
 			missions: missionRunTransport,
 			reportFailure: failureReporterIn("mission-run-driver"),
+			isSpaceOnScreen,
 		})
-	}, [driver, store, runtimes, chat, isDriverWindow])
+	}, [driver, store, runtimes, chat, isSpaceOnScreen, isDriverWindow])
 }

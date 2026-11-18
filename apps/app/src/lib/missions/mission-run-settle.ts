@@ -9,6 +9,7 @@ import { failureOf } from "./mission-run-failure"
 import type { createMissionReportWriter } from "./mission-run-report"
 
 import type { TurnEnded } from "../agent/contract"
+import { hearTurnEnd } from "../agent/turn-end"
 import { readRunReport } from "../routines/run-output"
 
 type MissionRunSettleOptions = Pick<MissionRunDriverOptions, "missions"> & {
@@ -122,8 +123,17 @@ export const createMissionRunSettle = ({
 	const settleTurn = async (held: LiveMissionRun, ended: TurnEnded) => {
 		const missionId = held.call.mission.id
 		const settled = await endOn(held)
+		const ending = hearTurnEnd(ended, {
+			heardIn: "mission run driver",
+			conversationId: held.scope.conversationId,
+			isOnScreen: book.isOnScreen(missionId),
+		})
 
-		if (ended.outcome !== "completed") {
+		if (ending === "connectionLost") {
+			return
+		}
+
+		if (ending !== "completed") {
 			return book.raiseFailure({
 				reason: `the mission run's turn was ${ended.outcome}`,
 				missionId,

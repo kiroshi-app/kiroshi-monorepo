@@ -147,6 +147,31 @@ describe("createChatController", () => {
 		])
 	})
 
+	it("logs a turn of its run that failed for no connection when the open Space does not list the agent", async () => {
+		const logged = vi.spyOn(console, "info").mockImplementation(() => undefined)
+		const { driver, controller } = await bootedHarness({
+			isListedInOpenSpace: () => false,
+		})
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+		await controller.send("hello")
+		const live = controller.getState().runtime
+
+		driver.pushEvent(
+			{
+				type: "turnEnded",
+				ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
+			},
+			live,
+		)
+		await vi.runAllTimersAsync()
+
+		expect(controller.getState().turn).toBe("failed")
+		expect(logged).toHaveBeenCalledWith(
+			`chat-controller: a turn of conversation ${live?.conversationId} ended for no connection in a Space that is not on screen`,
+		)
+		logged.mockRestore()
+	})
+
 	it("waits for the subscription before starting, so startup events are not lost", async () => {
 		let listener: ((event: ScopedEvent) => void) | null = null
 		const { controller } = createHarness({

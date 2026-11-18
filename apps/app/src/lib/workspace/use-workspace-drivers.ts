@@ -28,6 +28,7 @@ export const useWorkspaceDrivers = (
 		conversationOpening,
 		conversationRuntimes,
 		driver,
+		isSpaceOnScreen,
 		joinedSpaces,
 		openedMission,
 		roster,
@@ -69,6 +70,7 @@ export const useWorkspaceDrivers = (
 		store,
 		runtimes: conversationRuntimes,
 		chat: chat.controller,
+		isSpaceOnScreen,
 		isDriverWindow,
 	})
 

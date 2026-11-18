@@ -12,7 +12,8 @@ import type { OpenThread } from "./open-thread"
 import { isSameRuntimeScope } from "../chat-state"
 import { isPostedRequest } from "../posted-question"
 import { waitingQuestionIdsIn } from "../waiting-questions"
-import type { ScopedEvent } from "../../agent/contract"
+import type { AgentEvent, ScopedEvent } from "../../agent/contract"
+import { hearTurnEnd } from "../../agent/turn-end"
 
 type EventRoutingParts = {
 	persist: EventPersistence["persist"]
@@ -57,8 +58,24 @@ export const createEventRouting = (
 			(bot) => bot.state.conversationId === conversationId,
 		)
 
+	const hearEnd = (
+		event: AgentEvent,
+		conversationId: string,
+		hearers: BotChat[],
+	) => {
+		if (event.type !== "turnEnded") {
+			return
+		}
+		hearTurnEnd(event.ended, {
+			heardIn: "chat-controller",
+			conversationId,
+			isOnScreen: hearers.some((bot) => isListedInOpenSpace(bot.id)),
+		})
+	}
+
 	const renderForeign = ({ scope, turn, event }: ScopedEvent) => {
 		if (scope && turn && isShowing(turn.conversationId)) {
+			hearEnd(event, turn.conversationId, botsShowing(turn.conversationId))
 			foreignTurns.render(scope, turn, event)
 			botsShowing(turn.conversationId).forEach(showForeignTurn)
 		}
@@ -72,6 +89,9 @@ export const createEventRouting = (
 		if (owners.length === 0) {
 			renderForeign(scoped)
 			return
+		}
+		if (scope) {
+			hearEnd(event, scope.conversationId, owners)
 		}
 		for (const bot of owners) {
 			if (!isMutedFailure(bot, event)) {
