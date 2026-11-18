@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest"
 import {
 	readWindowRecoveryToShow,
 	recoveryScreenReasonOf,
+	reloadRecoveredWindow,
 } from "./window-recovery"
 
 import {
@@ -23,10 +24,6 @@ const SCREEN_REASON_BY_DEATH = {
 
 const DEATH_REASONS = Object.keys(SCREEN_REASON_BY_DEATH) as WindowDeathReason[]
 
-const EVERY_DEATH = DEATH_REASONS.flatMap((reason) =>
-	[false, true].map((exhausted) => ({ reason, exhausted })),
-)
-
 const recoveryOf = (fact: Partial<WindowRecovery> = {}): WindowRecovery => ({
 	reason: "crashed",
 	deaths: 1,
@@ -43,12 +40,21 @@ afterEach(() => {
 	localStorage.clear()
 })
 
-it.each(EVERY_DEATH)(
-	"maps a $reason death, exhausted $exhausted, to the screen reason of its death and never to gave-up",
-	({ reason, exhausted }) => {
-		expect(recoveryScreenReasonOf(recoveryOf({ reason, exhausted }))).toBe(
+it.each(DEATH_REASONS)(
+	"maps a %s death the host still reloads to the screen reason of its death",
+	(reason) => {
+		expect(recoveryScreenReasonOf(recoveryOf({ reason }))).toBe(
 			SCREEN_REASON_BY_DEATH[reason],
 		)
+	},
+)
+
+it.each(DEATH_REASONS)(
+	"maps a %s death with the retries exhausted to gave-up",
+	(reason) => {
+		expect(
+			recoveryScreenReasonOf(recoveryOf({ reason, exhausted: true })),
+		).toBe("gave-up")
 	},
 )
 
@@ -97,4 +103,35 @@ it("answers a later death after an earlier one was shown", async () => {
 	hostAnswers(later)
 
 	expect(await readWindowRecoveryToShow()).toEqual(later)
+})
+
+it("answers nothing to show on the page a reload boots, the fact reset under the same death", async () => {
+	const givenUp = recoveryOf({ deaths: 3, exhausted: true })
+	hostAnswers(givenUp)
+	await readWindowRecoveryToShow()
+
+	hostAnswers({ ...givenUp, deaths: 0, exhausted: false })
+
+	expect(await readWindowRecoveryToShow()).toBeNull()
+})
+
+it("asks the host once to reload the window", async () => {
+	const reload = vi
+		.spyOn(commands, "windowRecoveryReload")
+		.mockResolvedValue({ status: "ok", data: null })
+
+	await reloadRecoveredWindow()
+
+	expect(reload).toHaveBeenCalledTimes(1)
+})
+
+it("throws the error the host answers a reload with", async () => {
+	vi.spyOn(commands, "windowRecoveryReload").mockResolvedValue({
+		status: "error",
+		error: { kind: "reloadFailed" },
+	})
+
+	await expect(reloadRecoveredWindow()).rejects.toEqual({
+		kind: "reloadFailed",
+	})
 })
