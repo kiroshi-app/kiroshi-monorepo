@@ -151,6 +151,7 @@ export const GATE = {
 	lint: [
 		{ name: "Biome format", command: "bun run format" },
 		{ name: "Baseline unit tests", command: "bun run test:baseline" },
+		{ name: "Release script unit tests", command: "bun run test:release" },
 		{
 			name: "CI change detection unit tests",
 			command: "bun run test:ci-changes",
