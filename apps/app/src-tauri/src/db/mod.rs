@@ -17,7 +17,8 @@ use repositories::{
 	LibraryRepository, MemberCallAnswersRepository, MessagesRepository, MissionsRepository,
 	RelayDevicesRepository, RoutinesRepository, RuntimeContextRepository, SearchRepository,
 	SectionsRepository, SpaceChildrenRepository, SpaceHostingRepository, SpaceRelayRepository,
-	SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository, UserRepository,
+	SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository, TurnReplaysRepository,
+	UserRepository,
 };
 
 #[derive(Clone)]
@@ -90,6 +91,7 @@ pub struct Database {
 	space_rows: SpaceRowsRepository,
 	space_settings: SpaceSettingsRepository,
 	spaces: SpacesRepository,
+	turn_replays: TurnReplaysRepository,
 	user: UserRepository,
 }
 
@@ -121,6 +123,7 @@ impl Database {
 			space_rows: SpaceRowsRepository::new(access.clone()),
 			space_settings: SpaceSettingsRepository::new(access.clone()),
 			spaces: SpacesRepository::new(access.clone()),
+			turn_replays: TurnReplaysRepository::new(access.clone()),
 			user: UserRepository::new(access.clone()),
 			access,
 		})
@@ -224,6 +227,10 @@ impl Database {
 
 	pub fn spaces(&self) -> &SpacesRepository {
 		&self.spaces
+	}
+
+	pub fn turn_replays(&self) -> &TurnReplaysRepository {
+		&self.turn_replays
 	}
 
 	pub fn user(&self) -> &UserRepository {

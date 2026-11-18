@@ -23,6 +23,7 @@ pub mod space_relay;
 pub mod space_rows;
 pub mod space_settings;
 pub mod spaces;
+pub mod turn_replays;
 pub mod user;
 
 pub use application_installs::ApplicationInstallsRepository;
@@ -46,4 +47,5 @@ pub use space_relay::SpaceRelayRepository;
 pub use space_rows::SpaceRowsRepository;
 pub use space_settings::SpaceSettingsRepository;
 pub use spaces::SpacesRepository;
+pub use turn_replays::TurnReplaysRepository;
 pub use user::UserRepository;

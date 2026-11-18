@@ -5265,6 +5265,7 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 			ended: agent::TurnEnded {
 				session_id: None,
 				outcome: agent::TurnOutcome::Cancelled,
+				failure: None,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
@@ -6528,6 +6529,7 @@ fn a_completed_turn_end() -> agent::AgentEvent {
 		ended: agent::TurnEnded {
 			session_id: None,
 			outcome: agent::TurnOutcome::Completed,
+			failure: None,
 			structured_output: None,
 			total_cost_usd: None,
 			model_usage: None,

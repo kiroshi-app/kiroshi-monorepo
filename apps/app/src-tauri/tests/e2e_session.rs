@@ -14,7 +14,7 @@ use kiroshi_app::agent::contract::{
 	AgentEvent, CheckReport, ConnectionState, EventTurn, PermissionDecision, PermissionRequest,
 	RuntimeScope, ScopedEvent, TransportError, TurnOutcome,
 };
-use kiroshi_app::agent::lease::{Lapse, RunLease};
+use kiroshi_app::agent::lease::{Lapse, RunLease, PROVIDER_UNREACHABLE_BOUND};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
@@ -606,12 +606,14 @@ const SHORT_LEASE: RunLease = RunLease {
 	silence: Duration::from_millis(800),
 	interrupt_answer: Duration::from_millis(200),
 	tasks_pending: Duration::from_secs(600),
+	provider_unreachable: PROVIDER_UNREACHABLE_BOUND,
 };
 
 const SHORT_TASK_BOUND: RunLease = RunLease {
 	silence: Duration::from_secs(30),
 	interrupt_answer: Duration::from_millis(200),
 	tasks_pending: Duration::from_millis(400),
+	provider_unreachable: PROVIDER_UNREACHABLE_BOUND,
 };
 
 const FOLLOW_UP: &str = "the background shell finished";

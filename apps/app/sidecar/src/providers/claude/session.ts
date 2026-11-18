@@ -222,6 +222,11 @@ type StopPhase = "none" | "requested" | "settled"
 const isSystem = (message: SessionFrame, subtype: string): boolean =>
 	message.type === "system" && message.subtype === subtype
 
+const PROVIDER_UNREACHABLE: SessionFrame = { type: "provider_unreachable" }
+
+export const losesTheProvider = (message: SessionFrame): boolean =>
+	isSystem(message, "api_retry") && message.error_status === null
+
 const answersAPrompt = (result: SessionFrame): boolean =>
 	typeof result.user_message_uuid === "string"
 
@@ -545,7 +550,11 @@ export const openClaudeSession = async (
 		try {
 			for await (const message of run) {
 				reminder.observe(message)
-				settler.relay(message as unknown as SessionFrame)
+				const frame = message as unknown as SessionFrame
+				settler.relay(frame)
+				if (losesTheProvider(frame)) {
+					emit(PROVIDER_UNREACHABLE)
+				}
 			}
 			return ENDED
 		} catch (error) {

@@ -1775,6 +1775,7 @@ mod tests {
 			ended: super::super::contract::TurnEnded {
 				session_id: None,
 				outcome: TurnOutcome::Completed,
+				failure: None,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
@@ -2128,6 +2129,7 @@ mod tests {
 			ended: super::super::contract::TurnEnded {
 				session_id: None,
 				outcome: TurnOutcome::Cancelled,
+				failure: None,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
@@ -2289,6 +2291,7 @@ mod tests {
 			ended: super::super::contract::TurnEnded {
 				session_id: None,
 				outcome: TurnOutcome::Cancelled,
+				failure: None,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,

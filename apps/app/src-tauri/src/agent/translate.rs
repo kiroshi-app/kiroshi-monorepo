@@ -7,7 +7,7 @@ use serde_json::Value;
 use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, AskedQuestion, ChatMessage,
 	MessageCompletion, MessageRole, PermissionRequest, QuestionOption, QuestionRequest,
-	QuestionSubject, TransportError, TurnEnded, TurnOutcome,
+	QuestionSubject, TransportError, TurnEnded, TurnFailure, TurnOutcome,
 };
 use super::protocol::{
 	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, RejectionFrame,
@@ -197,6 +197,7 @@ impl Translator {
 			| Frame::HostRequest(_)
 			| Frame::TasksPending(_)
 			| Frame::Heartbeat
+			| Frame::ProviderUnreachable
 			| Frame::Ignored => Vec::new(),
 		}
 	}
@@ -347,20 +348,20 @@ impl Translator {
 	}
 
 	fn on_result(&mut self, frame: ResultFrame) -> Vec<AgentEvent> {
-		let outcome = if self.cancelling {
-			TurnOutcome::Cancelled
+		let (outcome, failure) = if self.cancelling {
+			(TurnOutcome::Cancelled, None)
 		} else if frame.is_error
 			|| frame.subtype.as_deref().is_some_and(|subtype| subtype != "success")
 		{
-			TurnOutcome::Failed
+			(TurnOutcome::Failed, Some(TurnFailure::ProviderError))
 		} else {
-			TurnOutcome::Completed
+			(TurnOutcome::Completed, None)
 		};
-		self.end_turn(outcome, frame)
+		self.end_turn(outcome, failure, frame)
 	}
 
-	pub fn abandon_turn(&mut self) -> Vec<AgentEvent> {
-		self.end_turn(TurnOutcome::Failed, ResultFrame::default())
+	pub fn abandon_turn(&mut self, failure: TurnFailure) -> Vec<AgentEvent> {
+		self.end_turn(TurnOutcome::Failed, Some(failure), ResultFrame::default())
 	}
 
 	fn on_interrupt_failed(&mut self, frame: RejectionFrame) -> Vec<AgentEvent> {
@@ -373,11 +374,16 @@ impl Translator {
 			return vec![failed];
 		}
 		let mut events = vec![failed];
-		events.extend(self.abandon_turn());
+		events.extend(self.abandon_turn(TurnFailure::StopFailed));
 		events
 	}
 
-	fn end_turn(&mut self, outcome: TurnOutcome, frame: ResultFrame) -> Vec<AgentEvent> {
+	fn end_turn(
+		&mut self,
+		outcome: TurnOutcome,
+		failure: Option<TurnFailure>,
+		frame: ResultFrame,
+	) -> Vec<AgentEvent> {
 		let mut events = Vec::new();
 		if let Some(message) = self.streaming_message.take() {
 			if let Some(completion) = ending_for(outcome, message.spoke) {
@@ -403,6 +409,7 @@ impl Translator {
 			ended: TurnEnded {
 				session_id: self.session_id.clone(),
 				outcome,
+				failure,
 				structured_output: frame.structured_output,
 				total_cost_usd: frame.total_cost_usd,
 				model_usage: frame.model_usage,
@@ -787,7 +794,35 @@ mod tests {
 
 		assert_eq!(while_stopping.first(), Some(&failed));
 		assert_eq!(outcome(&while_stopping), Some(TurnOutcome::Failed));
+		assert_eq!(
+			turn_ended(&while_stopping).and_then(|ended| ended.failure),
+			Some(TurnFailure::StopFailed)
+		);
 		assert_eq!(while_idle, vec![failed]);
+	}
+
+	#[test]
+	fn only_a_failed_turn_carries_a_reason_and_a_provider_error_is_not_a_lost_connection() {
+		let failure_of = |frame: Value| {
+			let mut translator = Translator::new(false);
+			let events = ingest(&mut translator, vec![frame]);
+			turn_ended(&events).map(|ended| (ended.outcome, ended.failure))
+		};
+
+		assert_eq!(
+			failure_of(settled("error_during_execution", true)),
+			Some((TurnOutcome::Failed, Some(TurnFailure::ProviderError)))
+		);
+		assert_eq!(failure_of(settled("success", false)), Some((TurnOutcome::Completed, None)));
+	}
+
+	#[test]
+	fn an_unreachable_provider_frame_ends_no_turn_on_its_own() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(&mut translator, vec![json!({ "type": "provider_unreachable" })]);
+
+		assert!(events.is_empty(), "{events:?}");
 	}
 
 	#[test]

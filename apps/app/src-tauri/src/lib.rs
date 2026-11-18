@@ -129,6 +129,7 @@ pub fn run() {
 			}
 			joined_spaces::deep_link::install(app.handle());
 			app.manage(routines::sentinel::spawn(app.handle().clone()));
+			app.manage(agent::replay::spawn(app.handle().clone()));
 			app.manage(routines::webhook::start(app.handle().clone()));
 			app.manage(missions::github::spawn(app.handle().clone()));
 			app.manage(applications::directory::spawn(app.handle().clone()));

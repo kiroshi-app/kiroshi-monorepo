@@ -82,6 +82,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 73, statements: COMMENT_AGENT_TURNS },
 	Migration { version: 74, statements: LIBRARY_COMMENT_RESOLVER_AND_BOARD_POINT },
 	Migration { version: 75, statements: MEMBER_CALL_ANSWERS },
+	Migration { version: 76, statements: TURN_REPLAYS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1575,6 +1576,30 @@ BEGIN
 	DELETE FROM member_call_answers
 	WHERE space_id = OLD.space_id AND device_id = OLD.relay_device_id;
 END;
+";
+
+const TURN_REPLAYS: &str = "
+CREATE TABLE turn_replays (
+	turn_id TEXT NOT NULL,
+	bot_id TEXT NOT NULL,
+	conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+	runtime_session_id TEXT NOT NULL,
+	epoch INTEGER NOT NULL,
+	prompt_id TEXT,
+	sdk_session_id TEXT,
+	prompt TEXT NOT NULL,
+	cwd TEXT,
+	output_schema TEXT CHECK (output_schema IS NULL OR json_valid(output_schema)),
+	denied_tools TEXT NOT NULL CHECK (json_valid(denied_tools)),
+	permission_mode TEXT,
+	base_url TEXT NOT NULL,
+	prompted_at INTEGER NOT NULL,
+	stranded_at INTEGER NOT NULL,
+	replayed_at INTEGER,
+	PRIMARY KEY (turn_id, bot_id)
+);
+
+CREATE INDEX turn_replays_pending ON turn_replays (base_url) WHERE replayed_at IS NULL;
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

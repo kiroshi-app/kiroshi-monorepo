@@ -9,7 +9,7 @@ use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
-use kiroshi_app::agent::lease::RunLease;
+use kiroshi_app::agent::lease::{RunLease, PROVIDER_UNREACHABLE_BOUND};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles::{self, EffortLevel};
@@ -577,6 +577,7 @@ fn a_background_task_past_its_bound_closes_the_run_naming_the_tasks_pending_laps
 		silence: Duration::from_secs(30),
 		interrupt_answer: Duration::from_secs(15),
 		tasks_pending: Duration::from_millis(1_500),
+		provider_unreachable: PROVIDER_UNREACHABLE_BOUND,
 	};
 	let host = launch_leased("tasks-bound", "endless_task", lease);
 	let timing = RunTiming { lease: Duration::from_millis(100), deadline: Duration::from_secs(1) };

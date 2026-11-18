@@ -2352,6 +2352,7 @@ export type TurnEnded = TurnEnded_Serialize | TurnEnded_Deserialize;
 export type TurnEnded_Deserialize = {
 	sessionId: string | null,
 	outcome: TurnOutcome,
+	failure?: TurnFailure | null,
 	structuredOutput: Json | null,
 	totalCostUsd: number | null,
 	modelUsage: Json | null,
@@ -2360,10 +2361,13 @@ export type TurnEnded_Deserialize = {
 export type TurnEnded_Serialize = {
 	sessionId: string | null,
 	outcome: TurnOutcome,
+	failure?: TurnFailure | null,
 	structuredOutput?: Json | null,
 	totalCostUsd?: number | null,
 	modelUsage?: Json | null,
 };
+
+export type TurnFailure = "noConnection" | "providerError" | "runLapsed" | "stopFailed" | "agentLost" | "rejected";
 
 export type TurnHold = {
 	reason: TurnHoldReason,

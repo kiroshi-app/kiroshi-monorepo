@@ -23,6 +23,7 @@ import {
 	createTurnSettler,
 	declaredServers,
 	dialledServers,
+	losesTheProvider,
 	reportConnections,
 	stopTurn,
 } from "./session"
@@ -1799,6 +1800,34 @@ const assistantOf = (text: string): SessionFrame => ({
 
 const outlastTheGrace = () =>
 	new Promise((resolve) => setTimeout(resolve, GRACE_MS * 3))
+
+const retriedOn = (errorStatus: number | null): SessionFrame => ({
+	type: "system",
+	subtype: "api_retry",
+	attempt: 1,
+	max_retries: 10,
+	retry_delay_ms: 500,
+	error_status: errorStatus,
+	error: "unknown",
+})
+
+describe("losesTheProvider", () => {
+	it("reads a retry that got no answer from the provider as an unreachable host", () => {
+		expect(losesTheProvider(retriedOn(null))).toBe(true)
+	})
+
+	it("reads a retry the provider answered with a status as a reachable host", () => {
+		expect(losesTheProvider(retriedOn(529))).toBe(false)
+		expect(losesTheProvider(retriedOn(500))).toBe(false)
+	})
+
+	it("reads no other frame as an unreachable host", () => {
+		expect(losesTheProvider(assistantOf("still here"))).toBe(false)
+		expect(
+			losesTheProvider({ type: "system", subtype: "init", error_status: null }),
+		).toBe(false)
+	})
+})
 
 describe("createTurnSettler", () => {
 	it("settles a result with no task on the idle that follows it, with no added delay", () => {

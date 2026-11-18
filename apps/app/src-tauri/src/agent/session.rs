@@ -10,15 +10,15 @@ use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 
 use super::contract::{
 	AgentEvent, ConnectionState, PermissionDecision, SubmittedTurn, TransportError, TurnEnded,
-	TurnHold, TurnHoldReason, TurnOutcome, TurnState,
+	TurnFailure, TurnHold, TurnHoldReason, TurnOutcome, TurnState,
 };
-use super::lease::{Lapse, Liveness, RunLease};
+use super::lease::{Expiry, Lapse, Liveness, RunLease};
 use super::protocol::{
 	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, ResultFrame, SpaceMember,
 	StreamEvent, StreamEventFrame,
 };
 use super::sidecar::Sidecar;
-use super::translate::Translator;
+use super::translate::{now_ms, Translator};
 use crate::environment::contract::{ResolvedEnv, Values};
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,6 +59,21 @@ pub trait HostRequests: std::fmt::Debug + Send + Sync + 'static {
 	fn subtype(&self) -> &'static str;
 
 	fn serve(&self, request: Value) -> Answering;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrandedTurn {
+	pub turn_id: String,
+	pub handed: Option<SubmittedTurn>,
+	pub prompt: String,
+	pub sdk_session_id: Option<String>,
+	pub prompted_at: i64,
+}
+
+pub type Keeping = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+pub trait StrandedTurns: std::fmt::Debug + Send + Sync + 'static {
+	fn keep(&self, stranded: StrandedTurn) -> Keeping;
 }
 
 impl EventSink for mpsc::UnboundedSender<AgentEvent> {
@@ -154,6 +169,7 @@ pub struct SessionOptions {
 	pub members: Vec<SpaceMember>,
 	pub hosts: Vec<Arc<dyn HostRequests>>,
 	pub lease: RunLease,
+	pub strands: Option<Arc<dyn StrandedTurns>>,
 }
 
 impl SessionOptions {
@@ -175,6 +191,7 @@ impl SessionOptions {
 			members: Vec::new(),
 			hosts: Vec::new(),
 			lease: RunLease::default(),
+			strands: None,
 		}
 	}
 
@@ -248,6 +265,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn stranding(mut self, strands: Arc<dyn StrandedTurns>) -> Self {
+		self.strands = Some(strands);
+		self
+	}
+
 	pub fn open_request(&self, partial_messages: bool) -> OpenRequest {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
@@ -311,6 +333,13 @@ struct RunningTurn {
 	started_at: Instant,
 	liveness: Liveness,
 	pending_tasks: u32,
+	origin: TurnOrigin,
+}
+
+enum TurnOrigin {
+	Prompted { text: String, handed: Option<SubmittedTurn> },
+	Answered,
+	Replay { of: String },
 }
 
 impl RunningTurn {
@@ -342,7 +371,13 @@ impl Shared {
 		Some(AgentEvent::TurnChanged { state: next })
 	}
 
-	fn turn_started(&mut self, session: &str, id: Option<String>, prompt_uuid: String) {
+	fn turn_started(
+		&mut self,
+		session: &str,
+		id: Option<String>,
+		prompt_uuid: String,
+		origin: TurnOrigin,
+	) {
 		log::info!("the turn started session={session} turn={id:?}");
 		self.running = Some(RunningTurn {
 			id,
@@ -350,7 +385,24 @@ impl Shared {
 			started_at: Instant::now(),
 			liveness: Liveness::since(tokio::time::Instant::now()),
 			pending_tasks: 0,
+			origin,
 		});
+	}
+
+	fn stranded_by(&self, expiry: Expiry) -> Option<StrandedTurn> {
+		let running = self.running.as_ref().filter(|_| expiry == Expiry::ProviderUnreachable)?;
+		let TurnOrigin::Prompted { text, handed } = &running.origin else {
+			return None;
+		};
+		Some(StrandedTurn {
+			turn_id: handed
+				.as_ref()
+				.map_or_else(|| running.prompt_uuid.clone(), |handed| handed.turn_id.clone()),
+			handed: handed.clone(),
+			prompt: text.clone(),
+			sdk_session_id: self.translator.session_id().map(str::to_owned),
+			prompted_at: now_ms() - running.started_at.elapsed().as_millis() as i64,
+		})
 	}
 
 	fn answers_the_running_prompt(&self, frame: &Frame) -> bool {
@@ -396,6 +448,18 @@ impl Shared {
 		}
 	}
 
+	fn provider_unreachable(&mut self) {
+		if let Some(liveness) = self.liveness() {
+			liveness.provider_unreachable(tokio::time::Instant::now());
+		}
+	}
+
+	fn provider_reached(&mut self) {
+		if let Some(liveness) = self.liveness() {
+			liveness.provider_reached();
+		}
+	}
+
 	fn result_held(&mut self) {
 		if let Some(liveness) = self.liveness() {
 			liveness.result_held(tokio::time::Instant::now());
@@ -419,25 +483,33 @@ impl Shared {
 		entering.into_iter().chain([AgentEvent::TasksPending { count }]).chain(held).collect()
 	}
 
-	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Lapse)> {
+	fn lease_deadline(&self) -> Option<(tokio::time::Instant, Expiry)> {
 		let running = self.running.as_ref()?;
 		running.liveness.deadline(self.lease, self.translator.is_waiting_on_person())
 	}
 
-	fn end_lapsed(&mut self, lapse: Lapse) -> Vec<AgentEvent> {
+	fn end_lapsed(&mut self, expiry: Expiry) -> Vec<AgentEvent> {
 		let session = self.key.clone();
 		log::warn!(
-			"the turn lost its lease session={session} turn={:?} reason={lapse}",
+			"the turn lost its lease session={session} turn={:?} reason={expiry}",
 			self.running.as_ref().and_then(|running| running.id.as_deref())
 		);
+		let failure = expiry.failure();
+		let cause = match expiry {
+			Expiry::Lapsed(lapse) => FailureCause::LeaseLapse(lapse),
+			Expiry::ProviderUnreachable => FailureCause::ProviderUnreachable,
+		};
 		let mut events: Vec<AgentEvent> = self
-			.turn_ended(&session, TurnOutcome::Failed, Some(FailureCause::LeaseLapse(lapse)))
+			.turn_ended(&session, TurnOutcome::Failed, Some(failure), Some(cause))
 			.into_iter()
 			.collect();
-		events.extend(self.translator.abandon_turn());
+		events.extend(self.translator.abandon_turn(failure));
 		events.extend(self.set_turn(TurnState::Failed));
-		let bound_ms = self.lease.bound_of(lapse).as_millis() as u64;
-		events.push(AgentEvent::Failed { error: TransportError::RunLapsed { lapse, bound_ms } });
+		if let Expiry::Lapsed(lapse) = expiry {
+			let bound_ms = self.lease.bound_of(lapse).as_millis() as u64;
+			events
+				.push(AgentEvent::Failed { error: TransportError::RunLapsed { lapse, bound_ms } });
+		}
 		events
 	}
 
@@ -462,13 +534,19 @@ impl Shared {
 		&mut self,
 		session: &str,
 		outcome: TurnOutcome,
+		failure: Option<TurnFailure>,
 		cause: Option<FailureCause>,
 	) -> Option<AgentEvent> {
 		self.streams_a_follow_up = false;
 		let running = self.running.take()?;
+		let reason = failure.map_or(String::new(), |failure| format!(" reason={failure:?}"));
 		let cause = cause.map(|cause| format!(" cause={cause}")).unwrap_or_default();
+		let replay = match &running.origin {
+			TurnOrigin::Replay { of } => format!(" replay=true original={of}"),
+			TurnOrigin::Prompted { .. } | TurnOrigin::Answered => String::new(),
+		};
 		log::info!(
-			"the turn ended session={session} turn={:?} outcome={outcome:?} took_ms={}{cause}",
+			"the turn ended session={session} turn={:?} outcome={outcome:?}{reason}{replay} took_ms={}{cause}",
 			running.id,
 			running.started_at.elapsed().as_millis()
 		);
@@ -480,15 +558,16 @@ impl Shared {
 			return Vec::new();
 		}
 		log::info!("the session shut down while its turn ran session={session}");
-		let released = self.turn_ended(session, TurnOutcome::Cancelled, None);
-		released.into_iter().chain([self.ended_as(TurnOutcome::Cancelled)]).collect()
+		let released = self.turn_ended(session, TurnOutcome::Cancelled, None, None);
+		released.into_iter().chain([self.ended_as(TurnOutcome::Cancelled, None)]).collect()
 	}
 
-	fn ended_as(&self, outcome: TurnOutcome) -> AgentEvent {
+	fn ended_as(&self, outcome: TurnOutcome, failure: Option<TurnFailure>) -> AgentEvent {
 		AgentEvent::TurnEnded {
 			ended: TurnEnded {
 				session_id: self.translator.session_id().map(str::to_owned),
 				outcome,
+				failure,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
@@ -497,12 +576,12 @@ impl Shared {
 		}
 	}
 
-	fn abandon_queued(&mut self, outcome: TurnOutcome) -> Abandoned {
+	fn abandon_queued(&mut self, outcome: TurnOutcome, failure: Option<TurnFailure>) -> Abandoned {
 		let turns: Vec<SubmittedTurn> = self.queued.drain(..).map(|queued| queued.turn).collect();
 		for turn in &turns {
 			log::info!("a queued prompt was dropped session={} turn={}", self.key, turn.turn_id);
 		}
-		Abandoned { turns, ended: self.ended_as(outcome) }
+		Abandoned { turns, ended: self.ended_as(outcome, failure) }
 	}
 }
 
@@ -513,6 +592,7 @@ enum FailureCause {
 	ErrorResult { subtype: Option<String>, text: Option<String> },
 	SessionClosed { reason: String },
 	LeaseLapse(Lapse),
+	ProviderUnreachable,
 	PromptUnwritten { reason: String },
 	InterruptRefused { reason: Option<String> },
 }
@@ -548,6 +628,7 @@ impl std::fmt::Display for FailureCause {
 			}
 			Self::SessionClosed { reason } => write!(f, "session closed reason={reason:?}"),
 			Self::LeaseLapse(lapse) => write!(f, "lease lapse reason={lapse:?}"),
+			Self::ProviderUnreachable => write!(f, "provider unreachable past its bound"),
 			Self::PromptUnwritten { reason } => write!(f, "prompt unwritten reason={reason:?}"),
 			Self::InterruptRefused { reason } => write!(f, "interrupt refused reason={reason:?}"),
 		}
@@ -601,6 +682,7 @@ impl Line<'_> {
 			&key,
 			turn.as_ref().map(|turn| turn.turn_id.clone()),
 			prompt_uuid.clone(),
+			TurnOrigin::Prompted { text: text.to_owned(), handed: turn.clone() },
 		);
 		let entering = shared.set_turn(TurnState::Submitting);
 		self.rearmed.notify_one();
@@ -614,7 +696,10 @@ impl Line<'_> {
 		let written = self.sidecar.send(protocol::prompt_command(&key, text, &prompt_uuid));
 		if let Err(error) = &written {
 			let cause = FailureCause::PromptUnwritten { reason: error.to_string() };
-			if let Some(released) = shared.turn_ended(&key, TurnOutcome::Failed, Some(cause)) {
+			let failure = Some(TurnFailure::AgentLost);
+			if let Some(released) =
+				shared.turn_ended(&key, TurnOutcome::Failed, failure, Some(cause))
+			{
 				self.sink.emit(released);
 			}
 		}
@@ -675,6 +760,7 @@ impl Session {
 			sidecar: sidecar.clone(),
 			key: key.clone(),
 			hosts: options.hosts.clone(),
+			strands: options.strands.clone(),
 			sink: sink.clone(),
 		};
 		tokio::spawn(read_loop(
@@ -781,6 +867,21 @@ impl Session {
 		}
 		self.line().deliver(&mut shared, text, Some(turn))?;
 		Ok(Handed::Delivered)
+	}
+
+	pub async fn replay(&self, stranded: StrandedTurn) -> Result<(), TransportError> {
+		let mut shared = self.shared.lock().await;
+		if shared.is_mid_turn()
+			|| shared.streams_a_follow_up
+			|| shared.translator.is_waiting_on_person()
+		{
+			return Err(TransportError::TurnAlreadyRunning);
+		}
+		self.line().deliver(&mut shared, &stranded.prompt, stranded.handed)?;
+		if let Some(running) = shared.running.as_mut() {
+			running.origin = TurnOrigin::Replay { of: stranded.turn_id };
+		}
+		Ok(())
 	}
 
 	pub async fn withdraw(&self, turn_id: &str) -> bool {
@@ -906,8 +1007,8 @@ impl Session {
 		let answered_prompt = match shared.running.as_ref() {
 			Some(running) => {
 				let prompt_uuid = running.prompt_uuid.clone();
-				let released = shared.turn_ended(&key, TurnOutcome::Completed, None);
-				let ended = shared.ended_as(TurnOutcome::Completed);
+				let released = shared.turn_ended(&key, TurnOutcome::Completed, None, None);
+				let ended = shared.ended_as(TurnOutcome::Completed, None);
 				for event in released.into_iter().chain([ended]) {
 					self.sink.emit(event);
 				}
@@ -916,7 +1017,12 @@ impl Session {
 			None => uuid::Uuid::new_v4().to_string(),
 		};
 		let folds_a_follow_up = std::mem::take(&mut shared.streams_a_follow_up);
-		shared.turn_started(&key, Some(turn.turn_id.clone()), answered_prompt);
+		shared.turn_started(
+			&key,
+			Some(turn.turn_id.clone()),
+			answered_prompt,
+			TurnOrigin::Answered,
+		);
 		self.sink.submitted(turn);
 		if folds_a_follow_up {
 			self.sink.follow_up(FollowUp::FoldedIn);
@@ -945,7 +1051,7 @@ impl Session {
 			for ended in shared.ended_by_shutdown(&key) {
 				self.sink.emit(ended);
 			}
-			shared.abandon_queued(TurnOutcome::Cancelled).tell(self.sink.as_ref());
+			shared.abandon_queued(TurnOutcome::Cancelled, None).tell(self.sink.as_ref());
 			key
 		};
 		self.sink.drained().await;
@@ -990,9 +1096,9 @@ impl From<TurnOutcome> for TurnState {
 	}
 }
 
-fn turn_outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
+fn turn_ending(events: &[AgentEvent]) -> Option<(TurnOutcome, Option<TurnFailure>)> {
 	events.iter().find_map(|event| match event {
-		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
+		AgentEvent::TurnEnded { ended } => Some((ended.outcome, ended.failure)),
 		_ => None,
 	})
 }
@@ -1020,6 +1126,7 @@ struct HostDesk {
 	sidecar: Arc<Sidecar>,
 	key: String,
 	hosts: Vec<Arc<dyn HostRequests>>,
+	strands: Option<Arc<dyn StrandedTurns>>,
 	sink: Arc<dyn EventSink>,
 }
 
@@ -1120,6 +1227,12 @@ async fn read_loop(
 			continue;
 		}
 
+		if let Frame::ProviderUnreachable = frame {
+			shared.lock().await.provider_unreachable();
+			rearmed.notify_one();
+			continue;
+		}
+
 		if let Frame::TasksPending(pending) = frame {
 			let held = {
 				let mut guard = shared.lock().await;
@@ -1152,6 +1265,9 @@ async fn read_loop(
 			{
 				sink.follow_up(FollowUp::FoldedIn);
 			}
+			if is_turn_activity(&frame) {
+				guard.provider_reached();
+			}
 			let entering = match guard.turn {
 				TurnState::Submitting if is_turn_activity(&frame) && !guard.streams_a_follow_up => {
 					guard.set_turn(TurnState::Running)
@@ -1164,10 +1280,12 @@ async fn read_loop(
 			}
 			let cause = FailureCause::told_by(&frame);
 			let events = guard.translator.ingest(frame);
-			let outcome = turn_outcome(&events);
-			let cause = cause.filter(|_| matches!(outcome, Some(TurnOutcome::Failed)));
-			let released = outcome.and_then(|outcome| guard.turn_ended(&desk.key, outcome, cause));
-			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
+			let outcome = turn_ending(&events);
+			let cause = cause.filter(|_| matches!(outcome, Some((TurnOutcome::Failed, _))));
+			let released = outcome.and_then(|(outcome, failure)| {
+				guard.turn_ended(&desk.key, outcome, failure, cause)
+			});
+			let ending = outcome.and_then(|(outcome, _)| guard.set_turn(outcome.into()));
 			if holds_a_result {
 				rearmed.notify_one();
 			}
@@ -1215,11 +1333,12 @@ async fn end_lapsed_turn(
 	rearmed: &Notify,
 ) -> Option<mpsc::UnboundedReceiver<Value>> {
 	let mut guard = shared.lock().await;
-	let (deadline, lapse) = guard.lease_deadline()?;
+	let (deadline, expiry) = guard.lease_deadline()?;
 	if guard.shutting_down || deadline > tokio::time::Instant::now() {
 		return None;
 	}
-	for event in guard.end_lapsed(lapse) {
+	let stranded = guard.stranded_by(expiry);
+	for event in guard.end_lapsed(expiry) {
 		sink.emit(event);
 	}
 	let (frames, reopened) = guard.reopen(&desk.sidecar);
@@ -1228,8 +1347,12 @@ async fn end_lapsed_turn(
 		Ok(()) => Line { sidecar: &desk.sidecar, sink, rearmed }.deliver_next(&mut guard),
 		Err(error) => {
 			sink.emit(AgentEvent::Failed { error });
-			guard.abandon_queued(TurnOutcome::Failed).tell(sink);
+			guard.abandon_queued(TurnOutcome::Failed, Some(TurnFailure::AgentLost)).tell(sink);
 		}
+	}
+	drop(guard);
+	if let (Some(strands), Some(stranded)) = (&desk.strands, stranded) {
+		strands.keep(stranded).await;
 	}
 	Some(frames)
 }
@@ -1249,10 +1372,11 @@ async fn on_exit(
 			guard.turn_ended(
 				session,
 				TurnOutcome::Failed,
+				Some(TurnFailure::AgentLost),
 				Some(FailureCause::closed_by(reason.as_ref())),
 			),
 			guard.set_turn(TurnState::Failed),
-			guard.abandon_queued(TurnOutcome::Failed),
+			guard.abandon_queued(TurnOutcome::Failed, Some(TurnFailure::AgentLost)),
 		)
 	};
 
@@ -1274,6 +1398,7 @@ async fn on_exit(
 
 #[cfg(test)]
 mod tests {
+	use super::super::sidecar::SidecarOptions;
 	use super::*;
 
 	#[derive(Debug)]
@@ -1622,7 +1747,7 @@ mod tests {
 			lease: RunLease::default(),
 			streams_a_follow_up: false,
 		};
-		shared.turn_started("s1", Some("t1".to_owned()), "p1".to_owned());
+		shared.turn_started("s1", Some("t1".to_owned()), "p1".to_owned(), TurnOrigin::Answered);
 		shared
 	}
 
@@ -1664,11 +1789,11 @@ mod tests {
 	fn a_turn_ending_while_held_releases_its_hold_and_an_unheld_one_releases_nothing() {
 		let mut held_turn = a_running_turn();
 		held_turn.tasks_pending(1);
-		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed, None), Some(RELEASED));
+		assert_eq!(held_turn.turn_ended("s1", TurnOutcome::Completed, None, None), Some(RELEASED));
 
 		let mut unheld_turn = a_running_turn();
 		assert!(holds_in(unheld_turn.tasks_pending(0)).is_empty());
-		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed, None), None);
+		assert_eq!(unheld_turn.turn_ended("s1", TurnOutcome::Completed, None, None), None);
 	}
 
 	#[tokio::test]
@@ -1685,11 +1810,13 @@ mod tests {
 		let released = a_running_turn().turn_ended(
 			"s-error-result",
 			TurnOutcome::Failed,
+			Some(TurnFailure::ProviderError),
 			FailureCause::told_by(&frame),
 		);
 
 		let logged = crate::test_log::infos_naming("session=s-error-result").await;
 		assert_eq!(released, None, "an unheld turn released a hold");
+		assert!(logged[0].contains("outcome=Failed reason=ProviderError took_ms="), "{logged:?}");
 		assert!(
 			logged[0].ends_with(
 				r#"cause=error result subtype=Some("error_during_execution") text=Some("the build ran out of memory; the shell was killed")"#
@@ -1724,10 +1851,264 @@ mod tests {
 		let mut shared = a_running_turn();
 		shared.tasks_pending(1);
 
-		let events = shared.end_lapsed(Lapse::TasksPending);
+		let events = shared.end_lapsed(Expiry::Lapsed(Lapse::TasksPending));
 
 		assert_eq!(events.first(), Some(&RELEASED));
 		assert!(matches!(events.last(), Some(AgentEvent::Failed { .. })));
+	}
+
+	#[test]
+	fn a_lapsed_turn_fails_for_its_lapse_and_names_the_lapse_in_a_failure() {
+		let mut shared = a_running_turn();
+
+		let events = shared.end_lapsed(Expiry::Lapsed(Lapse::Silent));
+
+		assert_eq!(turn_ending(&events), Some((TurnOutcome::Failed, Some(TurnFailure::RunLapsed))));
+		assert!(events.iter().any(|event| matches!(
+			event,
+			AgentEvent::Failed { error: TransportError::RunLapsed { lapse: Lapse::Silent, .. } }
+		)));
+	}
+
+	#[test]
+	fn a_turn_whose_provider_stays_unreachable_fails_for_no_connection_alone() {
+		let mut shared = a_running_turn();
+
+		let events = shared.end_lapsed(Expiry::ProviderUnreachable);
+
+		assert_eq!(
+			turn_ending(&events),
+			Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection)))
+		);
+		assert!(
+			!events.iter().any(|event| matches!(event, AgentEvent::Failed { .. })),
+			"a lost connection is told by the turn's reason, not a transport failure: {events:?}"
+		);
+	}
+
+	const UNREACHABLE_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	*'"type":"prompt"'*)
+		(
+			i=0
+			while [ $i -lt 40 ]; do
+				printf '{"session":"%s","frame":{"type":"provider_unreachable"}}\n' "$key"
+				i=$((i + 1))
+				sleep 0.05
+			done
+		) &
+		;;
+	esac
+done
+"#;
+
+	const ERRING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	*'"type":"prompt"'*)
+		printf '{"session":"%s","frame":{"type":"turn_settled","subtype":"error_during_execution","is_error":true}}\n' "$key"
+		;;
+	esac
+done
+"#;
+
+	const CONNECTION_BOUND: Duration = Duration::from_millis(300);
+
+	#[derive(Default)]
+	struct Heard(std::sync::Mutex<Vec<AgentEvent>>);
+
+	impl Heard {
+		fn ending(&self) -> Option<(TurnOutcome, Option<TurnFailure>)> {
+			turn_ending(&self.0.lock().expect("the heard events lock"))
+		}
+	}
+
+	impl EventSink for Heard {
+		fn emit(&self, event: AgentEvent) {
+			self.0.lock().expect("the heard events lock").push(event);
+		}
+	}
+
+	#[derive(Debug, Default)]
+	struct Kept(std::sync::Mutex<Vec<StrandedTurn>>);
+
+	impl Kept {
+		fn turns(&self) -> Vec<StrandedTurn> {
+			self.0.lock().expect("the kept turns lock").clone()
+		}
+	}
+
+	impl StrandedTurns for Kept {
+		fn keep(&self, stranded: StrandedTurn) -> Keeping {
+			self.0.lock().expect("the kept turns lock").push(stranded);
+			Box::pin(std::future::ready(()))
+		}
+	}
+
+	struct Stubbed {
+		session: Session,
+		heard: Arc<Heard>,
+		kept: Arc<Kept>,
+		_script: crate::removed_on_drop::RemovedOnDrop,
+	}
+
+	impl Stubbed {
+		async fn ended(&self) -> Option<(TurnOutcome, Option<TurnFailure>)> {
+			tokio::time::timeout(Duration::from_secs(5), async {
+				while self.heard.ending().is_none() {
+					tokio::time::sleep(Duration::from_millis(20)).await;
+				}
+			})
+			.await
+			.expect("the turn ended");
+			tokio::time::sleep(Duration::from_millis(50)).await;
+			self.heard.ending()
+		}
+	}
+
+	async fn a_session_on(sidecar_script: &str) -> Stubbed {
+		let script = crate::removed_on_drop::RemovedOnDrop(std::env::temp_dir().join(format!(
+			"kiroshi-stranding-sidecar-{}-{}.sh",
+			std::process::id(),
+			uuid::Uuid::new_v4()
+		)));
+		crate::executable_script::an_executable_script(&script, sidecar_script);
+		let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
+			.await
+			.expect("the sidecar is ready");
+		let lease = RunLease { provider_unreachable: CONNECTION_BOUND, ..RunLease::default() };
+		let heard = Arc::new(Heard::default());
+		let kept = Arc::new(Kept::default());
+		let options =
+			SessionOptions::new(std::env::temp_dir()).leased(lease).stranding(kept.clone());
+		let session =
+			Session::start(sidecar, options, heard.clone()).await.expect("the session opens");
+		Stubbed { session, heard, kept, _script: script }
+	}
+
+	fn handed(turn_id: &str) -> SubmittedTurn {
+		SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: format!("prompt-of-{turn_id}") }
+	}
+
+	#[tokio::test]
+	async fn a_turn_whose_provider_stays_unreachable_ends_at_the_connection_bound_and_is_kept_for_a_replay(
+	) {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+		let prompted_at = Instant::now();
+
+		let delivered_after = now_ms();
+		stubbed
+			.session
+			.submit("are you there", Some(handed("t1")))
+			.await
+			.expect("the prompt is written");
+		let ended = stubbed.ended().await;
+
+		assert_eq!(ended, Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection))));
+		assert!(
+			prompted_at.elapsed() < CONNECTION_BOUND + Duration::from_secs(1),
+			"the turn outlived its connection bound: {:?}",
+			prompted_at.elapsed()
+		);
+		let kept = stubbed.kept.turns();
+		let prompted_at = kept.first().map_or(0, |stranded| stranded.prompted_at);
+		assert_eq!(
+			kept,
+			vec![StrandedTurn {
+				turn_id: "t1".to_owned(),
+				handed: Some(handed("t1")),
+				prompt: "are you there".to_owned(),
+				sdk_session_id: None,
+				prompted_at,
+			}]
+		);
+		assert!(
+			(delivered_after..delivered_after + 500).contains(&prompted_at),
+			"the turn was kept as prompted at {prompted_at}, delivered after {delivered_after}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_turn_handed_no_turn_id_is_kept_under_the_id_of_its_prompt() {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+
+		stubbed.session.submit_prompt("are you there").await.expect("the prompt is written");
+		stubbed.ended().await;
+
+		let kept = stubbed.kept.turns();
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(kept[0].handed.is_none());
+		assert!(uuid::Uuid::parse_str(&kept[0].turn_id).is_ok(), "{kept:?}");
+	}
+
+	#[tokio::test]
+	async fn a_turn_failing_for_a_provider_error_is_not_kept_for_a_replay() {
+		let stubbed = a_session_on(ERRING_SIDECAR).await;
+
+		stubbed.session.submit("are you there", Some(handed("t1"))).await.expect("written");
+
+		assert_eq!(
+			stubbed.ended().await,
+			Some((TurnOutcome::Failed, Some(TurnFailure::ProviderError)))
+		);
+		assert_eq!(stubbed.kept.turns(), Vec::new());
+	}
+
+	#[tokio::test]
+	async fn a_replayed_turn_that_loses_the_provider_again_is_not_kept_again() {
+		crate::test_log::capturing();
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+		let stranded = StrandedTurn {
+			turn_id: "t-replayed-again".to_owned(),
+			handed: Some(handed("t-replayed-again")),
+			prompt: "are you there".to_owned(),
+			sdk_session_id: Some("sdk-1".to_owned()),
+			prompted_at: 0,
+		};
+
+		stubbed.session.replay(stranded).await.expect("the replay is written");
+
+		assert_eq!(
+			stubbed.ended().await,
+			Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection)))
+		);
+		assert_eq!(stubbed.kept.turns(), Vec::new());
+		let logged = crate::test_log::infos_naming("original=t-replayed-again").await;
+		assert_eq!(logged.len(), 1, "{logged:?}");
+		assert!(
+			logged[0].contains(
+				"outcome=Failed reason=NoConnection replay=true original=t-replayed-again"
+			),
+			"{logged:?}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_replay_refuses_a_session_whose_turn_still_runs() {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+		stubbed.session.submit("first", Some(handed("t0"))).await.expect("written");
+		let stranded = StrandedTurn {
+			turn_id: "t1".to_owned(),
+			handed: Some(handed("t1")),
+			prompt: "are you there".to_owned(),
+			sdk_session_id: None,
+			prompted_at: 0,
+		};
+
+		let replayed = stubbed.session.replay(stranded).await;
+
+		assert_eq!(replayed, Err(TransportError::TurnAlreadyRunning));
 	}
 
 	#[test]
