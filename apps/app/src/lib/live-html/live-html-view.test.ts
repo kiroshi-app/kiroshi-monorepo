@@ -52,7 +52,7 @@ const callsOf = () => host.answer.mock.calls.map(([command]) => command)
 const roundsOf = () =>
 	host.answer.mock.calls
 		.filter(([command]) => command === "live_html_round")
-		.map(([, { radius }]) => radius)
+		.map(([, { corners }]) => corners)
 
 const hostAnswers = (answers: Record<string, () => unknown>) =>
 	host.answer.mockImplementation(
@@ -263,7 +263,7 @@ describe("a live html view", () => {
 		])
 	})
 
-	it("rounds a mounted view once, to its largest corner radius", async () => {
+	it("rounds a mounted view once, to its four corner radii", async () => {
 		host.answer.mockResolvedValue(null)
 
 		viewOf().follow(ROUNDED)
@@ -276,11 +276,11 @@ describe("a live html view", () => {
 		])
 		expect(host.answer).toHaveBeenLastCalledWith("live_html_round", {
 			id: "view-1",
-			radius: 12,
+			corners: ROUNDED_BELOW,
 		})
 	})
 
-	it("rounds the view again when its largest corner radius changes, down to square", async () => {
+	it("rounds the view again when a corner radius changes, down to square", async () => {
 		host.answer.mockResolvedValue(null)
 		const view = viewOf()
 		view.follow(ROUNDED)
@@ -291,16 +291,50 @@ describe("a live html view", () => {
 		view.follow({ ...ROUNDED, radius: SQUARE })
 		await flush()
 
-		expect(roundsOf()).toEqual([12, 20, 0])
+		expect(roundsOf()).toEqual([
+			ROUNDED_BELOW,
+			{ ...ROUNDED_BELOW, bottomLeft: 20 },
+			SQUARE,
+		])
 	})
 
-	it("rounds once while the largest corner radius stays the same", async () => {
+	it.each(["topLeft", "topRight", "bottomRight", "bottomLeft"] as const)(
+		"rounds the view once more when its %s radius alone changes",
+		async (corner) => {
+			host.answer.mockResolvedValue(null)
+			const view = viewOf()
+			view.follow(ROUNDED)
+			await flush()
+
+			view.follow({ ...ROUNDED, radius: { ...ROUNDED_BELOW, [corner]: 20 } })
+			await flush()
+
+			expect(roundsOf()).toEqual([
+				ROUNDED_BELOW,
+				{ ...ROUNDED_BELOW, [corner]: 20 },
+			])
+		},
+	)
+
+	it("rounds the view again when its corners swap under the same largest radius", async () => {
 		host.answer.mockResolvedValue(null)
 		const view = viewOf()
 		view.follow(ROUNDED)
 		await flush()
 
-		view.follow({ ...MOVED, radius: ROUNDED_ABOVE })
+		view.follow({ ...ROUNDED, radius: ROUNDED_ABOVE })
+		await flush()
+
+		expect(roundsOf()).toEqual([ROUNDED_BELOW, ROUNDED_ABOVE])
+	})
+
+	it("rounds once while the four corner radii stay the same", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow(ROUNDED)
+		await flush()
+
+		view.follow({ ...MOVED, radius: { ...ROUNDED_BELOW } })
 		await flush()
 
 		expect(callsOf().slice(2)).toEqual(["live_html_round", "live_html_place"])
@@ -317,7 +351,7 @@ describe("a live html view", () => {
 		view.follow(ROUNDED)
 		await flush()
 
-		expect(roundsOf()).toEqual([12, 12])
+		expect(roundsOf()).toEqual([ROUNDED_BELOW, ROUNDED_BELOW])
 	})
 
 	it("leaves a view mounted square as it is", async () => {
