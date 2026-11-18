@@ -24,13 +24,17 @@ const INSTALLS: &str = "skills/applications/SKILL.md";
 
 const RICH_ANSWERS: &str = "skills/rich-answers/SKILL.md";
 
+const LIVE_HTML: &str = "skills/live-html/SKILL.md";
+
+const APPLE_DESIGN: &str = "skills/live-html/references/apple-design.md";
+
 const VISUAL_FIRST: &str = "output-styles/visual-first.md";
 
 pub const VISUAL_FIRST_STYLE: &str = "kiroshi:visual-first";
 
 const TRIGGERS: &str = ".triggers.json";
 
-const FILES: [(&str, &[u8]); 12] = [
+const FILES: [(&str, &[u8]); 14] = [
 	(MANIFEST, include_bytes!("../../plugins/kiroshi/.claude-plugin/plugin.json")),
 	(TRIGGERS, include_bytes!("../../plugins/kiroshi/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/kiroshi/skills/learn/SKILL.md")),
@@ -39,6 +43,11 @@ const FILES: [(&str, &[u8]); 12] = [
 	(MISSIONS, include_bytes!("../../plugins/kiroshi/skills/missions/SKILL.md")),
 	(CONVERSATIONS, include_bytes!("../../plugins/kiroshi/skills/conversations/SKILL.md")),
 	(RICH_ANSWERS, include_bytes!("../../plugins/kiroshi/skills/rich-answers/SKILL.md")),
+	(LIVE_HTML, include_bytes!("../../plugins/kiroshi/skills/live-html/SKILL.md")),
+	(
+		APPLE_DESIGN,
+		include_bytes!("../../plugins/kiroshi/skills/live-html/references/apple-design.md"),
+	),
 	(VISUAL_FIRST, include_bytes!("../../plugins/kiroshi/output-styles/visual-first.md")),
 	(
 		"skills/learn/references/skills.md",
@@ -93,6 +102,7 @@ mod tests {
 	use super::super::{MEMORY_CLOSE, MEMORY_OPEN, SKILL_NAME};
 	use super::*;
 	use crate::db::connection::fixture_root;
+	use crate::live_html::server::ALLOWED_HOSTS;
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_path(name: &str) -> RemovedOnDrop {
@@ -628,6 +638,60 @@ mod tests {
 			"When you know the preview image of the page you opened, write both `image` and `alt`.";
 
 		assert!(said_in_one_breath.contains(said), "{said} is missing");
+	}
+
+	#[test]
+	fn the_rich_answers_skill_sends_a_live_page_to_the_live_html_skill() {
+		let text = String::from_utf8_lossy(embedded(RICH_ANSWERS));
+		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+		for said in [
+			"an answer in Markdown uses no HTML tag.",
+			"load the `live-html` skill before you write it.",
+		] {
+			assert!(said_in_one_breath.contains(said), "{said} is missing");
+		}
+	}
+
+	#[test]
+	fn the_live_html_skill_is_embedded_not_preloaded_and_carries_the_licence_above_the_copy() {
+		let text = String::from_utf8_lossy(embedded(LIVE_HTML));
+		let reference = String::from_utf8_lossy(embedded(APPLE_DESIGN));
+		let (front, body) = text
+			.strip_prefix("---\n")
+			.and_then(|rest| rest.split_once("\n---\n"))
+			.expect("the skill opens on its front");
+		let (licence, copied) =
+			reference.split_once("SOFTWARE.\n\n").expect("the licence closes above the copy");
+
+		assert!(front.contains("name: \"live-html\""), "got {front}");
+		assert!(
+			front.contains("`html` block or an `.html` file meant to be shown live"),
+			"got {front}"
+		);
+		assert!(!front.contains("preload"), "got {front}");
+		assert!(!front.contains("disable-model-invocation"), "got {front}");
+		assert!(body.contains("`references/apple-design.md`"), "got {body}");
+		assert!(
+			licence.starts_with("MIT License\n\nCopyright (c) 2026 Emil Kowalski\n"),
+			"got {licence}"
+		);
+		assert!(licence.contains("Permission is hereby granted, free of charge"), "got {licence}");
+		assert!(copied.starts_with("---\nname: apple-design\n"), "got {copied}");
+		assert!(!copied.contains("## Initial Response"), "got {copied}");
+	}
+
+	#[test]
+	fn the_live_html_skill_loads_from_the_hosts_the_live_view_allows_and_no_other() {
+		let text = String::from_utf8_lossy(embedded(LIVE_HTML));
+
+		for host in ALLOWED_HOSTS {
+			assert!(text.contains(&format!("- `{host}`")), "{host} is missing");
+		}
+		for address in text.split("https://").skip(1) {
+			let host = address.split('/').next().expect("an address names its host");
+			assert!(ALLOWED_HOSTS.contains(&host), "{host} is not allowed");
+		}
 	}
 
 	#[test]

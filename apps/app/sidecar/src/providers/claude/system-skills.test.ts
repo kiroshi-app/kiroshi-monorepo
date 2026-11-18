@@ -14,6 +14,11 @@ const dropSkill = (plugin: string, id: string, contents: string) => {
 const marked = (name: string, body: string) =>
 	`---\nname: ${JSON.stringify(name)}\ndescription: "How you remember."\nmetadata:\n  kiroshi:\n    preload: true\n---\n\n${body}\n`
 
+const systemPlugin = new URL(
+	"../../../../src-tauri/plugins/kiroshi",
+	import.meta.url,
+).pathname
+
 describe("preloadedSkills", () => {
 	let plugin: string
 
@@ -72,6 +77,13 @@ describe("preloadedSkills", () => {
 		)
 
 		expect(preloadedSkills(plugin)).toEqual([])
+	})
+
+	it("leaves the live-html skill of the system plugin for the model to load", () => {
+		const names = preloadedSkills(systemPlugin).map(({ name }) => name)
+
+		expect(names).toContain("rich-answers")
+		expect(names).not.toContain("live-html")
 	})
 
 	it("carries nothing for a plugin with no skills, no directory, or a broken file", () => {

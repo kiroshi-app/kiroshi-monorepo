@@ -8,6 +8,11 @@ fails when a form named here is missing from it.
 
 There is no video block and no map block.
 
+A live HTML page, an `html` fenced block or an attached `.html` file the app shows in a live view,
+is none of these blocks. An answer in Markdown uses no HTML tag outside it, and the system skill
+`skills/live-html/SKILL.md` of the same plugin, loaded by the agent when it is about to write one,
+says how the page is written.
+
 ## Two kinds of block
 
 A block GFM already expresses is written in plain GFM: the checklist, the quoted selection, the
