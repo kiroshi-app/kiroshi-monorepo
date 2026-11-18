@@ -465,9 +465,14 @@ const refusedMount = (error: unknown) =>
 
 const rejectedMount = (reason: unknown) => mountAt.mockRejectedValue(reason)
 
-const placeInSight = async (rendered: ReturnType<typeof renderView>) => {
+const placeEarly = async (rendered: ReturnType<typeof renderView>) => {
 	await subscribed()
 	act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
+	await subscribed()
+}
+
+const placeInSight = async (rendered: ReturnType<typeof renderView>) => {
+	await placeEarly(rendered)
 	await waitFor(() => expect(mountAt).toHaveBeenCalledTimes(1))
 }
 
@@ -497,12 +502,6 @@ const listenToLoadWith = (registering: Promise<() => void>) =>
 					})
 				: listenFor(event, handler),
 	)
-
-const placeEarly = async (rendered: ReturnType<typeof renderView>) => {
-	await subscribed()
-	act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
-	await subscribed()
-}
 
 describe("the load of a live html view", () => {
 	beforeEach(() => {
