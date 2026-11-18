@@ -20,9 +20,17 @@ type LiveHtmlRect = {
 	height: number
 }
 
+type LiveHtmlRadius = {
+	topLeft: number
+	topRight: number
+	bottomRight: number
+	bottomLeft: number
+}
+
 type LiveHtmlPlacement = {
 	rect: LiveHtmlRect
 	clip: LiveHtmlRect
+	radius?: LiveHtmlRadius
 }
 
 type LiveHtmlSlotProps = {
@@ -90,19 +98,51 @@ const visibleRectOf = (
 		: { x: left, y: top, width: 0, height: 0 }
 }
 
+const radiusOf = (element: Element, card: Element): LiveHtmlRadius => {
+	const view = element.getBoundingClientRect()
+	const inside = paddingBoxOf(card)
+	const reachesTop = view.top <= inside.top
+	const reachesBottom = view.bottom >= inside.bottom
+	const reachesLeft = view.left <= inside.left
+	const reachesRight = view.right >= inside.right
+	const style = getComputedStyle(card)
+	const cornerOf = (isReached: boolean, radius: string) =>
+		isReached ? Number.parseFloat(radius) : 0
+	return {
+		topLeft: cornerOf(reachesTop && reachesLeft, style.borderTopLeftRadius),
+		topRight: cornerOf(reachesTop && reachesRight, style.borderTopRightRadius),
+		bottomRight: cornerOf(
+			reachesBottom && reachesRight,
+			style.borderBottomRightRadius,
+		),
+		bottomLeft: cornerOf(
+			reachesBottom && reachesLeft,
+			style.borderBottomLeftRadius,
+		),
+	}
+}
+
 const placementOf = (
 	element: Element,
+	card: Element,
 	clippingAncestors: Element[],
 ): LiveHtmlPlacement => {
 	const { x, y, width, height } = element.getBoundingClientRect()
 	return {
 		rect: { x, y, width, height },
 		clip: visibleRectOf(element, clippingAncestors),
+		radius: radiusOf(element, card),
 	}
 }
 
 const isSameRect = (a: LiveHtmlRect, b: LiveHtmlRect) =>
 	a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+
+const isSameRadius = (a?: LiveHtmlRadius, b?: LiveHtmlRadius) =>
+	a?.topLeft === b?.topLeft &&
+	a?.topRight === b?.topRight &&
+	a?.bottomRight === b?.bottomRight &&
+	a?.bottomLeft === b?.bottomLeft
 
 const isSamePlacement = (
 	a: LiveHtmlPlacement | null,
@@ -112,7 +152,8 @@ const isSamePlacement = (
 	(a !== null &&
 		b !== null &&
 		isSameRect(a.rect, b.rect) &&
-		isSameRect(a.clip, b.clip))
+		isSameRect(a.clip, b.clip) &&
+		isSameRadius(a.radius, b.radius))
 
 const LiveHtmlSlot = ({
 	status,
@@ -121,6 +162,7 @@ const LiveHtmlSlot = ({
 	onPlacementChange,
 }: LiveHtmlSlotProps) => {
 	const { t } = useTranslation("chat")
+	const [card, setCard] = useState<HTMLDivElement | null>(null)
 	const [reserved, setReserved] = useState<HTMLDivElement | null>(null)
 	const lastReported = useRef<LiveHtmlPlacement | null>(null)
 
@@ -131,13 +173,13 @@ const LiveHtmlSlot = ({
 	})
 
 	useEffect(() => {
-		if (!reserved) {
+		if (!card || !reserved) {
 			report(null)
 			return
 		}
 		const ancestors = ancestorsOf(reserved)
 		const clippingAncestors = ancestors.filter(isClipping)
-		const update = () => report(placementOf(reserved, clippingAncestors))
+		const update = () => report(placementOf(reserved, card, clippingAncestors))
 		const resizes = new ResizeObserver(update)
 		for (const element of [reserved, ...ancestors]) resizes.observe(element)
 		document.addEventListener("scroll", update, {
@@ -151,7 +193,7 @@ const LiveHtmlSlot = ({
 			document.removeEventListener("scroll", update, { capture: true })
 			window.removeEventListener("resize", update)
 		}
-	}, [reserved])
+	}, [card, reserved])
 
 	useEffect(() => () => report(null), [])
 
@@ -162,8 +204,8 @@ const LiveHtmlSlot = ({
 
 	return (
 		<AnswerCard
+			ref={setCard}
 			slot="live-html-slot"
-			isOutlined={false}
 			data-status={status}
 			role="group"
 			aria-label={t("liveHtml.label")}
@@ -186,6 +228,7 @@ const LiveHtmlSlot = ({
 
 export type {
 	LiveHtmlPlacement,
+	LiveHtmlRadius,
 	LiveHtmlRect,
 	LiveHtmlSlotProps,
 	LiveHtmlStatus,
