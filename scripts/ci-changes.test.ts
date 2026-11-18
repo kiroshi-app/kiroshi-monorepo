@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url"
 
 import {
 	decideJobs,
+	PATHS_IOS_READS_OUTSIDE_APPS_IOS,
 	PATHS_RUST_READS_OUTSIDE_SRC_TAURI,
 	touchedJobs,
 } from "./ci-changes"
@@ -24,14 +25,15 @@ const none = {
 	storybook: false,
 	ios: false,
 }
-const every = {
+const everyDesktopJob = {
 	rust: true,
 	vitest: true,
 	website: true,
 	storybook: true,
-	ios: true,
+	ios: false,
 }
-const CI_EVENTS = ["pull_request", "push"] as const
+const every = { ...everyDesktopJob, ios: true }
+const CI_EVENTS = ["pull_request", "push", "schedule"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
@@ -45,6 +47,8 @@ const PATH_MIXES = [
 	["apps/app/src/main.tsx"],
 	["apps/app/src-tauri/src/lib.rs"],
 	["apps/ios/Kiroshi/App.swift"],
+	[".xcode-version"],
+	["package.json"],
 	SHARED_ONLY_PATHS,
 ]
 
@@ -94,6 +98,29 @@ const pathsRustReachesOutsideSrcTauri = () =>
 	git(SRC_TAURI, "ls-files", "*.rs")
 		.split("\n")
 		.flatMap(pathsReachedOutsideSrcTauriBy)
+
+const APPS_IOS = join(REPO, "apps/ios")
+
+const isRepositoryPathOutsideAppsIos = (path: string) =>
+	path.startsWith(REPO) &&
+	relative(APPS_IOS, path).startsWith("..") &&
+	existsSync(path)
+
+const pathsReachedOutsideAppsIosBy = (source: string) => {
+	const file = join(APPS_IOS, source)
+	return [...readFileSync(file, "utf8").matchAll(PARENT_PATH_LITERAL)]
+		.map(([, literal = ""]) => join(dirname(file), literal))
+		.filter(isRepositoryPathOutsideAppsIos)
+		.map((reached) => ({
+			source: relative(REPO, file),
+			reached: relative(REPO, reached),
+		}))
+}
+
+const pathsSwiftReachesOutsideAppsIos = () =>
+	git(APPS_IOS, "ls-files", "*.swift")
+		.split("\n")
+		.flatMap(pathsReachedOutsideAppsIosBy)
 
 const firstTrackedFileAt = (path: string) =>
 	git(REPO, "ls-files", "--", path).split("\n")[0] ?? ""
@@ -191,41 +218,100 @@ const shallowCheckoutPastGreen = (name: string) => {
 const ABSENT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 describe("ci jobs per event", () => {
-	it.each(PATH_MIXES)(
-		"selects only vitest and rust on a pull_request, on the paths they watch, on %p",
-		(...paths) => {
-			expect(decideJobs({ event: "pull_request", paths })).toEqual({
+	describe("on a pull_request", () => {
+		const event = "pull_request"
+
+		it.each(PATH_MIXES)(
+			"selects only vitest, rust and ios, on the paths they watch, on %p",
+			(...paths) => {
+				expect(decideJobs({ event, paths })).toEqual({
+					...none,
+					vitest: touchedJobs(paths).vitest,
+					rust: touchedJobs(paths).rust,
+					ios: touchedJobs(paths).ios,
+				})
+			},
+		)
+
+		it("skips storybook, website and ios when the diff touches every desktop path and no iOS input", () => {
+			expect(decideJobs({ event, paths: ["bun.lock"] })).toEqual({
 				...none,
-				vitest: touchedJobs(paths).vitest,
-				rust: touchedJobs(paths).rust,
+				vitest: true,
+				rust: true,
+			})
+		})
+
+		it("selects ios alone when the diff touches only a file under apps/ios", () => {
+			expect(
+				decideJobs({ event, paths: ["apps/ios/Kiroshi/App.swift"] }),
+			).toEqual({ ...none, ios: true })
+		})
+
+		it.each(PATHS_IOS_READS_OUTSIDE_APPS_IOS)(
+			"selects ios when the diff touches only %s, since the iOS build or its tests read it",
+			(path) => {
+				expect(firstTrackedFileAt(path)).toBe(path)
+				expect(decideJobs({ event, paths: [path] }).ios).toBe(true)
+			},
+		)
+
+		it("leaves ios unselected when the diff touches no iOS input", () => {
+			expect(
+				decideJobs({
+					event,
+					paths: [
+						"bun.lock",
+						"biome.json",
+						".github/workflows/release.yml",
+						"packages/ui/src/components/button.tsx",
+						"packages/shared/permission-modes.json",
+						"apps/app/src-tauri/src/lib.rs",
+						"apps/app/src-tauri/tests/vectors/other.json",
+						"scripts/ios-stalls.ts",
+						"docs/relay/member-socket.schema.json",
+					],
+				}).ios,
+			).toBe(false)
+		})
+	})
+
+	it.each(PATH_MIXES)(
+		"selects rust, vitest, website and storybook on the paths they watch on a push to main, and never ios, on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "push", paths })).toEqual({
+				...touchedJobs(paths),
+				ios: false,
 			})
 		},
 	)
 
-	it("skips storybook, website and ios on a pull_request touching every path", () => {
-		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
-
-		expect(jobs).toEqual({ ...none, vitest: true, rust: true })
+	it("selects every desktop job and no ios on a push to main touching a shared path", () => {
+		expect(decideJobs({ event: "push", paths: ["bun.lock"] })).toEqual(
+			everyDesktopJob,
+		)
 	})
 
 	it.each(PATH_MIXES)(
-		"selects rust, vitest, website and storybook on the paths they watch on a push to main, and ios always, on %p",
+		"selects ios alone on a schedule, whatever the paths, on %p",
 		(...paths) => {
-			expect(decideJobs({ event: "push", paths })).toEqual({
-				...touchedJobs(paths),
+			expect(decideJobs({ event: "schedule", paths })).toEqual({
+				...none,
 				ios: true,
 			})
 		},
 	)
 
-	it("selects every job on a push to main touching a shared path", () => {
-		expect(decideJobs({ event: "push", paths: ["bun.lock"] })).toEqual(every)
-	})
-
 	it.each(CI_EVENTS)("selects rust-check on no %s", (event) => {
 		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
 			"rust-check",
 		)
+	})
+
+	it("decides a schedule without a BASE to diff against", () => {
+		const detection = runChangeDetector("schedule")
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual({ ...none, ios: true })
 	})
 
 	it("refuses a pull_request without a BASE to diff against", () => {
@@ -238,29 +324,29 @@ describe("ci jobs per event", () => {
 	it("names the release branch pushed when no CI push run on it concluded success", () => {
 		const detection = runChangeDetectorOn("release/0.27", REPO, "push")
 
-		expect(outputOf(detection)).toEqual(every)
+		expect(outputOf(detection)).toEqual(everyDesktopJob)
 		expect(detection.stderr.toString()).toContain(
-			"no CI push run on release/0.27 concluded success: every job runs",
+			"no CI push run on release/0.27 concluded success: every desktop job runs",
 		)
 	})
 
-	it("selects every job on a push to main when no CI push run on main concluded success", () => {
+	it("selects every desktop job and no ios on a push to main when no CI push run on main concluded success", () => {
 		const detection = runChangeDetector("push")
 
 		expect(detection.exitCode).toBe(0)
-		expect(outputOf(detection)).toEqual(every)
+		expect(outputOf(detection)).toEqual(everyDesktopJob)
 		expect(detection.stderr.toString()).toContain(
-			"no CI push run on main concluded success: every job runs",
+			"no CI push run on main concluded success: every desktop job runs",
 		)
 	})
 
-	it("selects every job on a push to main when the last green sha is absent from origin", () => {
+	it("selects every desktop job and no ios on a push to main when the last green sha is absent from origin", () => {
 		const { checkout } = shallowCheckoutPastGreen("absent")
 
 		const detection = runChangeDetectorIn(checkout, "push", ABSENT_SHA)
 
 		expect(detection.exitCode).toBe(0)
-		expect(outputOf(detection)).toEqual(every)
+		expect(outputOf(detection)).toEqual(everyDesktopJob)
 		expect(detection.stderr.toString()).toContain(
 			`fetching the last green sha ${ABSENT_SHA} failed`,
 		)
@@ -276,7 +362,6 @@ describe("ci jobs per event", () => {
 			...none,
 			website: true,
 			rust: true,
-			ios: true,
 		})
 	})
 
@@ -284,7 +369,7 @@ describe("ci jobs per event", () => {
 		["bumps a workspace version only", "0.27.1", false],
 		["changes a package too", "0.27.1", true],
 	])(
-		"runs on a push whose bun.lock %s the jobs the rest of the release commit changes, every job otherwise",
+		"runs on a push whose bun.lock %s the jobs the rest of the release commit changes, every desktop job otherwise",
 		(_, nextVersion, isPackageChanged) => {
 			const origin = repositoryOnMain(`lockfile-${isPackageChanged}-origin`)
 			const green = commitFiles(origin, lockfileAt("0.27.0", "react@19.0.0"))
@@ -311,8 +396,8 @@ describe("ci jobs per event", () => {
 			expect(detection.exitCode).toBe(0)
 			expect(outputOf(detection)).toEqual(
 				isPackageChanged
-					? every
-					: { ...none, vitest: true, rust: true, ios: true },
+					? everyDesktopJob
+					: { ...none, vitest: true, rust: true },
 			)
 		},
 	)
@@ -328,7 +413,7 @@ describe("ci jobs per event", () => {
 		const detection = runChangeDetectorIn(checkout, "push", green)
 
 		expect(detection.exitCode).toBe(0)
-		expect(outputOf(detection)).toEqual(every)
+		expect(outputOf(detection)).toEqual(everyDesktopJob)
 	})
 
 	it("diffs a pull_request into a feature branch against that branch, leaving out what the branch holds over main", () => {
@@ -354,20 +439,22 @@ describe("ci jobs per event", () => {
 	})
 
 	it("refuses an event it does not know", () => {
-		const detection = runChangeDetector("schedule")
+		const detection = runChangeDetector("workflow_dispatch")
 
 		expect(detection.exitCode).toBe(1)
 		expect(detection.stderr.toString()).toContain(
-			'unsupported event "schedule"',
+			'unsupported event "workflow_dispatch"',
 		)
 	})
 })
 
 describe("the paths each job watches", () => {
-	it("runs every job when a shared root path changed", () => {
-		expect(touching("bun.lock")).toEqual(every)
-		expect(touching("patches/a.patch")).toEqual(every)
-		expect(touching(".github/workflows/release.yml")).toEqual(every)
+	it("runs every desktop job when a shared root path changed, and ios only when the iOS build or its tests read it", () => {
+		expect(touching("bun.lock")).toEqual(everyDesktopJob)
+		expect(touching("patches/a.patch")).toEqual(everyDesktopJob)
+		expect(touching(".github/workflows/release.yml")).toEqual(everyDesktopJob)
+		expect(touching(".github/workflows/ci.yml")).toEqual(every)
+		expect(touching("package.json")).toEqual(every)
 	})
 
 	it("runs vitest, website and storybook on a story under packages/ui, since tsc -b checks it", () => {
@@ -563,6 +650,21 @@ describe("the paths each job watches", () => {
 		})
 		expect(touching(".xcode-version")).toEqual({ ...none, ios: true })
 		expect(touching(".swift-format")).toEqual({ ...none, ios: true })
+	})
+
+	it("lists every repository path a Swift source of apps/ios reaches outside apps/ios", () => {
+		const reached = pathsSwiftReachesOutsideAppsIos()
+		const unlisted = reached.filter(
+			(read) => !PATHS_IOS_READS_OUTSIDE_APPS_IOS.includes(read.reached),
+		)
+
+		expect(reached).toContainEqual({
+			source: "apps/ios/KiroshiTests/HueToneTests.swift",
+			reached: "packages/ui/tokens.json",
+		})
+		expect(
+			unlisted.map(({ source, reached }) => `${reached}, read by ${source}`),
+		).toEqual([])
 	})
 
 	it("runs nothing filtered on a path no job watches", () => {

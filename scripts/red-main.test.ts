@@ -31,6 +31,8 @@ const redRun: Run = {
 	attempt: 1,
 }
 
+const redNight: Run = { ...redRun, event: "schedule" }
+
 const step = (name: string, conclusion: string | null): JobStep => ({
 	name,
 	conclusion,
@@ -93,8 +95,8 @@ const fakeGitHub = (
 		},
 		readPullRequests: async (sha) =>
 			sha === CANCELLED_SHA ? [mergedBefore] : [mergedBy],
-		readLastGreenSha: async (branch, createdBefore) => {
-			asked.push(`last green on ${branch} before ${createdBefore}`)
+		readLastGreenSha: async ({ event, headBranch, createdAt }) => {
+			asked.push(`last green ${event} on ${headBranch} before ${createdAt}`)
 			return greenShas[0]
 		},
 		readCommits: async (base, head) => {
@@ -154,14 +156,19 @@ describe("the red main filter", () => {
 		expect(skipReason(redRun)).toBeUndefined()
 	})
 
+	it("accepts a scheduled run on main concluded failure", () => {
+		expect(skipReason(redNight)).toBeUndefined()
+	})
+
 	it.each([
 		["pull_request", "ope-1103-branch", false],
 		["push", "feature/home", false],
 		["push", "v1.2.0", false],
 		["push", "release/0.27", true],
 		["push", "main", true],
+		["schedule", "main", true],
 	])(
-		"reports a red %s run on %s only when it is a push to main or a release/** branch: %p",
+		"reports a red %s run on %s only when it is a push to main or a release/** branch, or a scheduled run on main: %p",
 		(event, headBranch, isReported) => {
 			expect(skipReason({ ...redRun, event, headBranch }) === undefined).toBe(
 				isReported,
@@ -298,22 +305,37 @@ describe("the red main issue", () => {
 		expect(issue.title).toBe("Red main: rust, storybook at 8a7919a")
 	})
 
-	it("titles ios, the one gated job a push to main runs", () => {
+	it("titles a scheduled run Red night, never Red main, with the ios jobs a night runs", () => {
 		const issue = redMainIssue({
-			run: redRun,
+			run: redNight,
 			jobs: [
 				job("changes", "success"),
-				job("lint", "skipped"),
+				job("lint", "success"),
 				job("rust", "skipped"),
 				job("storybook", "skipped"),
-				job("ios", "failure"),
+				job("ios-build", "success"),
+				job("ios (2)", "failure"),
 				job("verify", "failure"),
 			],
 			pullRequests: [mergedBy],
 			sinceGreen,
 		})
 
-		expect(issue.title).toBe("Red main: ios at 8a7919a")
+		expect(issue.title).toBe("Red night: ios (2) at 8a7919a")
+		expect(issue.title).not.toContain("Red main")
+	})
+
+	it("writes that no green scheduled run precedes a red night in place of the range", () => {
+		const issue = redMainIssue({
+			run: redNight,
+			jobs: [],
+			pullRequests: [mergedBy],
+			sinceGreen: { kind: "none" },
+		})
+
+		expect(issue.description.split("\n\n")).toContain(
+			"Last green: none, no CI schedule run on main concluded success before this run",
+		)
 	})
 
 	it("titles only the jobs where a test failed, and lists the runner failures on their own line", () => {
@@ -638,7 +660,7 @@ describe("reporting a run", () => {
 			title: "Red main: rust at 8a7919a",
 		})
 		expect(asked).toEqual([
-			`last green on main before ${redRun.createdAt}`,
+			`last green push on main before ${redRun.createdAt}`,
 			`commits ${GREEN_SHA}...${redRun.headSha}`,
 		])
 		expect(descriptionSent(requests[1])).toContain(
@@ -661,11 +683,38 @@ describe("reporting a run", () => {
 		await reportRedMain("101", { github, linear })
 
 		expect(asked[0]).toBe(
-			`last green on release/0.27 before ${releaseRun.createdAt}`,
+			`last green push on release/0.27 before ${releaseRun.createdAt}`,
 		)
 		expect(requests[1]?.variables.input).toMatchObject({
 			title: "Red release/0.27: rust at 8a7919a",
 		})
+	})
+
+	it("creates one Red night issue for a red scheduled run, its range read since the last green scheduled run", async () => {
+		const { linear, requests } = linearAnswering(noIssueYet, {
+			data: {
+				issueCreate: {
+					success: true,
+					issue: { identifier: "KIR-10", url: "https://linear.app/i/KIR-10" },
+				},
+			},
+		})
+		const { github, asked } = fakeGitHub(
+			redNight,
+			[GREEN_SHA],
+			[failedOnATest("ios (2)"), job("verify", "failure")],
+		)
+
+		const outcome = await reportRedMain("101", { github, linear })
+
+		expect(outcome).toBe("created KIR-10 https://linear.app/i/KIR-10")
+		expect(requests[1]?.variables.input).toMatchObject({
+			title: "Red night: ios (2) at 8a7919a",
+		})
+		expect(asked).toEqual([
+			`last green schedule on main before ${redNight.createdAt}`,
+			`commits ${GREEN_SHA}...${redNight.headSha}`,
+		])
 	})
 
 	it("reads no commit range when no green run precedes the red one", async () => {
@@ -681,7 +730,9 @@ describe("reporting a run", () => {
 
 		await reportRedMain("101", { github, linear })
 
-		expect(asked).toEqual([`last green on main before ${redRun.createdAt}`])
+		expect(asked).toEqual([
+			`last green push on main before ${redRun.createdAt}`,
+		])
 		expect(descriptionSent(requests[1])).toContain("Last green: none")
 	})
 
