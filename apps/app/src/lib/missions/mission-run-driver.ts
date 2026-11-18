@@ -52,6 +52,7 @@ export type MissionRunDriverOptions = {
 	chat: Pick<ChatController, "reportRun">
 	missions: MissionRunPort
 	reportFailure: ReportMissionRunFailure
+	isSpaceOnScreen: (spaceId: string) => boolean
 	now?: () => number
 }
 
@@ -79,12 +80,14 @@ export const startMissionRunDriver = ({
 	chat,
 	missions,
 	reportFailure,
+	isSpaceOnScreen,
 	now = () => Date.now(),
 }: MissionRunDriverOptions): (() => void) => {
 	const book = createMissionRunBook({
 		driver,
 		missions,
 		reportFailure,
+		isSpaceOnScreen,
 		retake: (changed) => void consider(changed),
 	})
 	const { live, rememberSpace, rememberThread, end } = book
