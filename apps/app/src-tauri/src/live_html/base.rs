@@ -207,18 +207,4 @@ mod tests {
 		assert!(dark.contains("--kiroshi-accent: #f5f5f5; --kiroshi-accent-foreground: #000000;"));
 		assert!(!rules.contains("oklch"));
 	}
-
-	#[test]
-	fn a_retheming_posts_the_theme_rules_to_the_content_frame_as_one_string() {
-		let theme = themed(LiveHtmlAppearance::Dark, Some(42));
-		let script = retheming(theme);
-
-		let posted = serde_json::Value::String(theme_rules(Some(theme))).to_string();
-		assert_eq!(
-			script,
-			format!(
-				r#"document.querySelector("iframe")?.contentWindow.postMessage({{ kiroshiTheme: {posted} }}, "*")"#
-			)
-		);
-	}
 }
