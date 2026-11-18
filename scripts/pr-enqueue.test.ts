@@ -41,7 +41,11 @@ case "$1 $2" in
 	exit 0
 	;;
 "pr list") response=$(cat "$GH_STUB/pull-requests.json") ;;
-*) response="{\\"data\\":{\\"node\\":$(cat "$GH_STUB/armed-state.json")}}" ;;
+*)
+	reads=$(($(cat "$GH_STUB/reads" 2>/dev/null || echo 0) + 1))
+	echo "$reads" >"$GH_STUB/reads"
+	response="{\\"data\\":{\\"node\\":$(sed -n "\${reads}p" "$GH_STUB/states")}}"
+	;;
 esac
 if [ -n "$filter" ]; then jq -r "$filter" <<<"$response"; else echo "$response"; fi
 `
@@ -54,18 +58,45 @@ type Scenario = {
 	branch?: string
 	pullRequestNumbers?: number[]
 	isMergeRefused?: boolean
-	armedState?: ArmedState
+	states?: PullRequestState[]
 }
 
-type ArmedState = { autoMergeRequest: { enabledAt: string } | null }
-
-const ARMED: ArmedState = {
-	autoMergeRequest: { enabledAt: "2026-10-26T00:00:00Z" },
+type PullRequestState = {
+	isMergeQueueEnabled: boolean
+	isInMergeQueue: boolean
+	autoMergeRequest: { enabledAt: string } | null
 }
 
-const UNARMED: ArmedState = { autoMergeRequest: null }
+const AUTO_MERGE_REQUEST = { enabledAt: "2026-10-26T00:00:00Z" }
 
-const READ_FIELDS = /\bautoMergeRequest\b/g
+const QUEUE_OFF_UNARMED: PullRequestState = {
+	isMergeQueueEnabled: false,
+	isInMergeQueue: false,
+	autoMergeRequest: null,
+}
+
+const QUEUE_OFF_ARMED: PullRequestState = {
+	...QUEUE_OFF_UNARMED,
+	autoMergeRequest: AUTO_MERGE_REQUEST,
+}
+
+const QUEUE_ON_IDLE: PullRequestState = {
+	isMergeQueueEnabled: true,
+	isInMergeQueue: false,
+	autoMergeRequest: null,
+}
+
+const QUEUE_ON_QUEUED: PullRequestState = {
+	...QUEUE_ON_IDLE,
+	isInMergeQueue: true,
+}
+
+const QUEUE_ON_ARMED: PullRequestState = {
+	...QUEUE_ON_IDLE,
+	autoMergeRequest: AUTO_MERGE_REQUEST,
+}
+
+const READ_FIELDS = /\b(isMergeQueueEnabled|isInMergeQueue|autoMergeRequest)\b/g
 
 const describeCall = (call: string[]) => {
 	if (call[0] === "api") {
@@ -88,7 +119,8 @@ const ghCalls = () => {
 
 const LIST = `pr list --repo ${REPOSITORY} --head ${BRANCH} --state open`
 const ARM = `pr merge --auto --squash 42 --repo ${REPOSITORY}`
-const READ_ARMED_STATE = `api graphql autoMergeRequest id=${NODE_ID}`
+const ENQUEUE = `pr merge --auto 42 --repo ${REPOSITORY}`
+const READ_STATE = `api graphql isMergeQueueEnabled isInMergeQueue autoMergeRequest id=${NODE_ID}`
 
 const withoutGitContext = () => {
 	const {
@@ -105,7 +137,7 @@ const runPrEnqueue = async ({
 	branch = BRANCH,
 	pullRequestNumbers = [],
 	isMergeRefused = false,
-	armedState = ARMED,
+	states = [QUEUE_OFF_UNARMED, QUEUE_OFF_ARMED],
 }: Scenario) => {
 	const initialised = Bun.spawnSync({
 		cmd: ["git", "init", "--quiet", "--initial-branch", branch, repository],
@@ -120,7 +152,10 @@ const runPrEnqueue = async ({
 			pullRequestNumbers.map((number) => ({ number, id: `PR_kwDO${number}` })),
 		),
 	)
-	writeFileSync(join(stub, "armed-state.json"), JSON.stringify(armedState))
+	writeFileSync(
+		join(stub, "states"),
+		`${states.map((state) => JSON.stringify(state)).join("\n")}\n`,
+	)
 	if (isMergeRefused) writeFileSync(join(stub, "merge-refused"), "")
 	const running = Bun.spawn({
 		cmd: [PR_ENQUEUE, ...prEnqueueArguments],
@@ -159,13 +194,13 @@ describe("scripts/pr-enqueue.sh", () => {
 
 		expect(result.exitCode).toBe(0)
 		expect(result.stdout).toBe("pr-enqueue.sh: PR #42 autoMergeArmed=true\n")
-		expect(ghCalls()).toEqual([LIST, ARM, READ_ARMED_STATE])
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ARM, READ_STATE])
 	})
 
 	it("fails naming the PR when the read-back shows no auto-merge armed", async () => {
 		const result = await runPrEnqueue({
 			pullRequestNumbers: [42],
-			armedState: UNARMED,
+			states: [QUEUE_OFF_UNARMED, QUEUE_OFF_UNARMED],
 		})
 
 		expect(result.exitCode).not.toBe(0)
@@ -173,7 +208,49 @@ describe("scripts/pr-enqueue.sh", () => {
 		expect(result.stderr).toBe(
 			"pr-enqueue.sh: PR #42 has no auto-merge armed after gh pr merge --auto --squash\n",
 		)
-		expect(ghCalls()).toEqual([LIST, ARM, READ_ARMED_STATE])
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ARM, READ_STATE])
+	})
+
+	it("adds the PR to the merge queue without a merge method and prints it queued when the queue of main is on and the gate is green", async () => {
+		const result = await runPrEnqueue({
+			pullRequestNumbers: [42],
+			states: [QUEUE_ON_IDLE, QUEUE_ON_QUEUED],
+		})
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(
+			"pr-enqueue.sh: PR #42 inQueue=true autoMergeArmed=false\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ENQUEUE, READ_STATE])
+	})
+
+	it("prints the PR armed and not queued when the queue of main is on and the PR waits on its gate", async () => {
+		const result = await runPrEnqueue({
+			pullRequestNumbers: [42],
+			states: [QUEUE_ON_IDLE, QUEUE_ON_ARMED],
+		})
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(
+			"pr-enqueue.sh: PR #42 inQueue=false autoMergeArmed=true\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ENQUEUE, READ_STATE])
+	})
+
+	it("fails naming the PR when the queue of main is on and the read-back shows it neither queued nor armed", async () => {
+		const result = await runPrEnqueue({
+			pullRequestNumbers: [42],
+			states: [QUEUE_ON_IDLE, QUEUE_ON_IDLE],
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stdout).toBe(
+			"pr-enqueue.sh: PR #42 inQueue=false autoMergeArmed=false\n",
+		)
+		expect(result.stderr).toBe(
+			"pr-enqueue.sh: PR #42 is neither in the merge queue nor armed for auto-merge after gh pr merge --auto\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ENQUEUE, READ_STATE])
 	})
 
 	it("fails with the refusal of gh and reads nothing back when gh refuses to arm auto-merge", async () => {
@@ -184,7 +261,7 @@ describe("scripts/pr-enqueue.sh", () => {
 
 		expect(result.exitCode).not.toBe(0)
 		expect(result.stderr).toBe("GraphQL: auto-merge refused\n")
-		expect(ghCalls()).toEqual([LIST, ARM])
+		expect(ghCalls()).toEqual([LIST, READ_STATE, ARM])
 	})
 
 	it("fails naming the branch and arms nothing when the branch has no open PR", async () => {
