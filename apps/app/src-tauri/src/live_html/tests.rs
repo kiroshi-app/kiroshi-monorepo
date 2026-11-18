@@ -4,12 +4,17 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
+#[cfg(target_os = "macos")]
+use super::contract::LiveHtmlCorners;
 use super::contract::LiveHtmlError;
 use super::server::ContentServer;
 use super::watch::LoggedWatch;
 use super::LiveViews;
 
 const LOCK_WAIT: Duration = Duration::from_secs(1);
+#[cfg(target_os = "macos")]
+const SQUARE: LiveHtmlCorners =
+	LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 };
 
 async fn show(views: &LiveViews, id: &str) {
 	let server = ContentServer::open(id, String::new(), Arc::new(LoggedWatch))
@@ -80,8 +85,15 @@ async fn a_live_html_corner_radius_that_is_negative_or_not_finite_is_refused() {
 	show(&views, "a").await;
 
 	for radius in [-1.0, f64::NAN, f64::INFINITY] {
-		let rounded = views.round(app.handle(), "a".to_owned(), radius).await;
+		for corners in [
+			LiveHtmlCorners { top_left: radius, ..SQUARE },
+			LiveHtmlCorners { top_right: radius, ..SQUARE },
+			LiveHtmlCorners { bottom_right: radius, ..SQUARE },
+			LiveHtmlCorners { bottom_left: radius, ..SQUARE },
+		] {
+			let rounded = views.round(app.handle(), "a".to_owned(), corners).await;
 
-		assert_eq!(rounded, Err(LiveHtmlError::InvalidRadius), "a radius of {radius} was taken");
+			assert_eq!(rounded, Err(LiveHtmlError::InvalidRadius), "{corners:?} was taken");
+		}
 	}
 }

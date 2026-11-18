@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use super::contract::LiveHtmlCorners;
 use super::contract::LiveHtmlRectangle;
 
 #[cfg(target_os = "macos")]
@@ -71,6 +73,29 @@ impl Frame {
 			y: top,
 			width: snapped(self.x + self.width) - left,
 			height: snapped(self.y + self.height) - top,
+		}
+	}
+}
+
+#[cfg(target_os = "macos")]
+impl LiveHtmlCorners {
+	pub fn fitted_to(self, width: f64, height: f64) -> Self {
+		let Self { top_left, top_right, bottom_right, bottom_left } = self;
+		let fit = [
+			(width, top_left + top_right),
+			(height, top_right + bottom_right),
+			(width, bottom_right + bottom_left),
+			(height, bottom_left + top_left),
+		]
+		.into_iter()
+		.filter(|(side, radii)| radii > side)
+		.map(|(side, radii)| side / radii)
+		.fold(1.0, f64::min);
+		Self {
+			top_left: top_left * fit,
+			top_right: top_right * fit,
+			bottom_right: bottom_right * fit,
+			bottom_left: bottom_left * fit,
 		}
 	}
 }
@@ -211,5 +236,33 @@ mod tests {
 			backing_scale: 1.0,
 			..CONTENT
 		});
+	}
+
+	const UNDER_A_CARD_HEADER: LiveHtmlCorners =
+		LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 24.0, bottom_left: 12.0 };
+
+	#[test]
+	fn corners_that_fit_their_view_keep_their_radii() {
+		assert_eq!(UNDER_A_CARD_HEADER.fitted_to(36.0, 24.0), UNDER_A_CARD_HEADER);
+	}
+
+	#[test]
+	fn corners_too_large_for_their_view_shrink_together_until_they_meet() {
+		let fitted = UNDER_A_CARD_HEADER.fitted_to(480.0, 12.0);
+
+		assert_eq!(
+			fitted,
+			LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 12.0, bottom_left: 6.0 }
+		);
+	}
+
+	#[test]
+	fn corners_of_a_view_with_no_size_are_square() {
+		let fitted = UNDER_A_CARD_HEADER.fitted_to(0.0, 0.0);
+
+		assert_eq!(
+			fitted,
+			LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 }
+		);
 	}
 }

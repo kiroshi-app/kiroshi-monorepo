@@ -56,6 +56,7 @@ mod macos {
 	const NATIVE_DEPTH: usize = 3;
 	const WINDOW_OCCLUSION_VISIBLE: usize = 1 << 1;
 	const HOLDER_CLASS: &str = "KiroshiLiveHtmlHolder";
+	const CORNER_INSET: f64 = 2.0;
 
 	#[derive(Default)]
 	struct ContentLoads(AtomicUsize);
@@ -100,6 +101,7 @@ mod macos {
 		cyan: Option<Rectangle>,
 		blue: Option<Rectangle>,
 		probed: Vec<[u8; 4]>,
+		magenta_corners: Option<Vec<[u8; 4]>>,
 	}
 
 	fn window_number(window: &Window) -> Result<isize, String> {
@@ -131,22 +133,42 @@ mod macos {
 	fn painted(path: &PathBuf, window_width: f64, probes: &[[f64; 2]]) -> Result<Painted, String> {
 		let image = image::open(path).map_err(|cause| cause.to_string())?.to_rgba8();
 		let scale = f64::from(image.width()) / window_width;
-		let probed = probes
-			.iter()
-			.map(|[x, y]| {
-				let pixel = |point: f64| (point * scale).round() as u32;
-				image
-					.get_pixel_checked(pixel(*x), pixel(*y))
-					.map(|pixel| pixel.0)
-					.ok_or_else(|| format!("the probe {x},{y} falls outside the capture"))
-			})
-			.collect::<Result<_, _>>()?;
+		let colors_at = |probes: &[[f64; 2]]| -> Result<Vec<[u8; 4]>, String> {
+			probes
+				.iter()
+				.map(|[x, y]| {
+					let pixel = |point: f64| (point * scale).round() as u32;
+					image
+						.get_pixel_checked(pixel(*x), pixel(*y))
+						.map(|pixel| pixel.0)
+						.ok_or_else(|| format!("the probe {x},{y} falls outside the capture"))
+				})
+				.collect()
+		};
+		let magenta = bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230);
 		Ok(Painted {
-			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230),
+			magenta_corners: magenta
+				.as_ref()
+				.and_then(inside_corners)
+				.map(|corners| colors_at(&corners))
+				.transpose()?,
+			magenta,
 			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 140 && g > 230 && b > 230),
 			blue: bounding_box(&image, scale, |[r, g, b, _]| r < 70 && g < 70 && b > 200),
-			probed,
+			probed: colors_at(probes)?,
 		})
+	}
+
+	fn inside_corners(drawn: &Rectangle) -> Option<[[f64; 2]; 4]> {
+		let (left, top) = (drawn.x + CORNER_INSET, drawn.y + CORNER_INSET);
+		let (right, bottom) =
+			(drawn.x + drawn.width - CORNER_INSET, drawn.y + drawn.height - CORNER_INSET);
+		(left <= right && top <= bottom).then_some([
+			[left, top],
+			[right, top],
+			[right, bottom],
+			[left, bottom],
+		])
 	}
 
 	fn native_tree(view: &NSView, depth: usize) -> Value {
@@ -357,6 +379,7 @@ mod macos {
 								"holders_standing_aside": standing_aside,
 								"magenta": painted.magenta,
 								"cyan": painted.cyan,
+								"magenta_corners": painted.magenta_corners,
 							})
 						})
 					}));

@@ -48,7 +48,7 @@ export const commands = {
 	width: number | null,
 	height: number | null,
 } | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_place", { id, rectangle, clip })),
-	liveHtmlRound: (id: string, radius: number | null) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_round", { id, radius })),
+	liveHtmlRound: (id: string, corners: LiveHtmlCorners) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_round", { id, corners })),
 	liveHtmlStill: (id: string) => typedError<string, LiveHtmlError>(__TAURI_INVOKE("live_html_still", { id })),
 	liveHtmlHide: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_hide", { id })),
 	liveHtmlShow: (id: string) => typedError<null, LiveHtmlError>(__TAURI_INVOKE("live_html_show", { id })),
@@ -1477,6 +1477,13 @@ export type LibraryWriter = {
 };
 
 export type LibraryWriterKind = "agent" | "person" | "member";
+
+export type LiveHtmlCorners = {
+	topLeft: number | null,
+	topRight: number | null,
+	bottomRight: number | null,
+	bottomLeft: number | null,
+};
 
 export type LiveHtmlError = { kind: "notAvailableHere" } | { kind: "unknownView"; id: string } | { kind: "alreadyShown"; id: string } | { kind: "invalidRectangle" } | { kind: "invalidRadius" } | { kind: "mainWindowMissing" } | { kind: "unserved"; detail: string } | { kind: "unplaced"; detail: string } | { kind: "outsideAttachments" } | { kind: "notHtml" } | { kind: "tooLarge"; bytes: number; limit: number } | { kind: "unreadable"; detail: string };
 

@@ -19,6 +19,23 @@ impl LiveHtmlRectangle {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveHtmlCorners {
+	pub top_left: f64,
+	pub top_right: f64,
+	pub bottom_right: f64,
+	pub bottom_left: f64,
+}
+
+impl LiveHtmlCorners {
+	pub(crate) fn is_valid(self) -> bool {
+		[self.top_left, self.top_right, self.bottom_right, self.bottom_left]
+			.iter()
+			.all(|radius| radius.is_finite() && *radius >= 0.0)
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveHtmlMeasured {

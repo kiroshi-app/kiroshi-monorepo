@@ -27,7 +27,7 @@ use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow, Window, WindowE
 use tokio::sync::Mutex;
 
 use crate::window_controls::MAIN_WINDOW;
-use contract::{LiveHtmlError, LiveHtmlRectangle};
+use contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlRectangle};
 use placement::Placement;
 use server::ContentServer;
 use watch::{LoggedWatch, ViewWatch};
@@ -118,14 +118,14 @@ impl LiveViews {
 		&self,
 		app: &AppHandle<R>,
 		id: String,
-		radius: f64,
+		corners: LiveHtmlCorners,
 	) -> Result<(), LiveHtmlError> {
 		native::ensure_available()?;
-		if !(radius.is_finite() && radius >= 0.0) {
+		if !corners.is_valid() {
 			return Err(LiveHtmlError::InvalidRadius);
 		}
 		let servers = self.servers.lock().await;
-		native::round(app, known(&servers, id)?, radius).await
+		native::round(app, known(&servers, id)?, corners).await
 	}
 
 	pub async fn still<R: Runtime>(
