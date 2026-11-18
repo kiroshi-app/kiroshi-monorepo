@@ -50,11 +50,18 @@ pub mod updates;
 pub mod user;
 mod window_controls;
 
+use tauri::webview::PageLoadEvent;
 use tauri::{Manager, RunEvent, Runtime, Window, WindowEvent};
 
 use agent::commands::terminate_session;
 use agent::AgentState;
 use commands::builder;
+
+pub fn forget_a_loading_page<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+	missions::run_claims::forget_on_page_event(window, event);
+	conversations::awaited_runs::forget_on_page_event(window, event);
+	library::presence::forget_on_page_event(window, event);
+}
 
 pub fn forget_a_destroyed_window<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
 	missions::run_claims::forget_on_destroyed(window, event);
@@ -100,11 +107,7 @@ pub fn run() {
 		.manage(missions::commands::AnnouncedLiveness::default())
 		.manage(missions::run_claims::MissionRunClaims::default())
 		.manage(conversations::awaited_runs::TurnWindows::default())
-		.on_page_load(|webview, payload| {
-			missions::run_claims::forget_on_page_load(webview, payload);
-			conversations::awaited_runs::forget_on_page_load(webview, payload);
-			library::presence::forget_on_page_load(webview, payload);
-		})
+		.on_page_load(|webview, payload| forget_a_loading_page(&webview.window(), payload.event()))
 		.on_window_event(forget_a_destroyed_window)
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())

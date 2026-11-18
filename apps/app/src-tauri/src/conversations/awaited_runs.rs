@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, Runtime, State, Webview, Window, WindowEvent};
 
 use super::contract::{SummonsDropped, TranscriptStoreError};
@@ -207,11 +207,7 @@ async fn claimed_runs_of(
 	Ok(claimed)
 }
 
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	forget_on_page_event(&webview.window(), payload.event());
-}
-
-pub(super) fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+pub fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
 	if event == PageLoadEvent::Started {
 		forget(window);
 	}

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::webview::{PageLoadEvent, PageLoadPayload};
+use tauri::webview::PageLoadEvent;
 use tauri::{Manager, Runtime, State, Webview, Window, WindowEvent};
 
 #[derive(Debug, PartialEq, Serialize, specta::Type)]
@@ -64,9 +64,9 @@ pub fn mission_run_release(claims: State<'_, MissionRunClaims>, token: String) {
 	claims.release(&token);
 }
 
-pub fn forget_on_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {
-	if payload.event() == PageLoadEvent::Started {
-		forget(&webview.window());
+pub fn forget_on_page_event<R: Runtime>(window: &Window<R>, event: PageLoadEvent) {
+	if event == PageLoadEvent::Started {
+		forget(window);
 	}
 }
 

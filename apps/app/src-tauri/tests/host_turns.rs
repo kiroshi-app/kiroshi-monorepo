@@ -62,8 +62,8 @@ use tauri::ipc::CallbackFn;
 use tauri::test::{
 	get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY,
 };
-use tauri::webview::InvokeRequest;
-use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::webview::{InvokeRequest, PageLoadEvent};
+use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -1587,28 +1587,38 @@ fn an_agent_mentioned_back_by_the_agent_it_summoned_with_no_window_runs_again_in
 }
 
 #[test]
-fn a_turn_sent_from_a_window_outlives_the_death_of_its_page_and_ends_on_its_own_outcome() {
+fn a_turn_sent_from_a_window_outlives_a_reload_of_its_page_and_ends_on_its_own_outcome() {
+	page_dropped_mid_turn("page-reload", |window| {
+		kiroshi_app::forget_a_loading_page(window, PageLoadEvent::Started)
+	});
+}
+
+#[test]
+fn a_turn_sent_from_a_window_outlives_the_destruction_of_its_window_and_ends_on_its_own_outcome() {
+	page_dropped_mid_turn("window-destroyed", |window| {
+		kiroshi_app::forget_a_destroyed_window(window, &WindowEvent::Destroyed)
+	});
+}
+
+fn page_dropped_mid_turn(name: &str, drop_the_page: impl FnOnce(&Window<MockRuntime>)) {
 	let _serial = serial();
 	block_on(async {
-		let mut host = Host::hosting("page-death", "held_echo").await;
+		let mut host = Host::hosting(name, "held_echo").await;
 		let scope = host.host_run(ROOM, ADA).await;
 		host.window_says(&scope, "p1", "t1", "write the plan down").await;
 		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
 
-		kiroshi_app::forget_a_destroyed_window(
-			&host.window.as_ref().window(),
-			&WindowEvent::Destroyed,
-		);
+		drop_the_page(&host.window.as_ref().window());
 		let served = host.invoked_by_the_window("conversation_serve_awaited_runs", json!({}));
-		let live_after_the_reload = host.live_runs_of(ADA).await;
-		let closed_after_the_reload = host.completed_at("t1").await;
+		let live_after_the_drop = host.live_runs_of(ADA).await;
+		let closed_after_the_drop = host.completed_at("t1").await;
 		host.allow_write(ADA, 1).await;
 		host.turn_ended_for(ADA).await;
 		host.answered("t1").await;
 
 		assert_eq!(served, Value::Null);
-		assert_eq!(live_after_the_reload.len(), 1, "the run died with the page");
-		assert_eq!(closed_after_the_reload, None, "the turn closed with the page");
+		assert_eq!(live_after_the_drop.len(), 1, "the run died with the page");
+		assert_eq!(closed_after_the_drop, None, "the turn closed with the page");
 		let endings: Vec<&Value> = agent_events_in(&host.frames, ADA)
 			.filter(|event| event["type"] == "turnEnded")
 			.map(|event| &event["ended"]["outcome"])
