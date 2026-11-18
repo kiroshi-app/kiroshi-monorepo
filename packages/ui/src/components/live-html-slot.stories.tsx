@@ -426,9 +426,7 @@ export const FractionalCardSize = meta.story({
 		const card = cardOf(view)
 		const scroller = canvas.getByTestId("reply-scroller")
 		scroller.style.width = "400.5px"
-		await waitFor(() =>
-			expect(card.getBoundingClientRect().width % 1).not.toBe(0),
-		)
+		await expect(card.getBoundingClientRect().width % 1).not.toBe(0)
 		await expect(card.getBoundingClientRect().height % 1).not.toBe(0)
 
 		const rounded = bottomRadiusIn(view)
