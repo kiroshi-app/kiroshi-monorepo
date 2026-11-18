@@ -71,3 +71,17 @@ async fn a_live_html_script_answer_landing_after_its_view_is_removed_reports_an_
 	);
 	assert_eq!(answer, Err(LiveHtmlError::UnknownView { id: "a".to_owned() }));
 }
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_corner_radius_that_is_negative_or_not_finite_is_refused() {
+	let app = tauri::test::mock_app();
+	let views = LiveViews::default();
+	show(&views, "a").await;
+
+	for radius in [-1.0, f64::NAN, f64::INFINITY] {
+		let rounded = views.round(app.handle(), "a".to_owned(), radius).await;
+
+		assert_eq!(rounded, Err(LiveHtmlError::InvalidRadius), "a radius of {radius} was taken");
+	}
+}
