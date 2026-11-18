@@ -1,3 +1,6 @@
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { TurnEnded } from "./contract"
 
 export type TurnEnding = "completed" | "cancelled" | "failed" | "connectionLost"
@@ -47,7 +50,11 @@ export const createTurnEndHearing = (showConnectionLost: () => void) => {
 }
 
 const showConnectionLostNotice = () => {
-	// TODO: the transient notice comes from a packages/ui string that does not exist yet
+	raiseTransientNotice({
+		type: "warning",
+		title: i18n.t("chat:screen.notice.noConnection.title"),
+		description: i18n.t("chat:screen.notice.noConnection.description"),
+	})
 }
 
 export const hearTurnEnd = createTurnEndHearing(showConnectionLostNotice)
