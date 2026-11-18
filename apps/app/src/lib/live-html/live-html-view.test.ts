@@ -14,6 +14,7 @@ vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
 }))
 
 afterEach(() => {
+	vi.restoreAllMocks()
 	host.answer.mockReset()
 })
 
@@ -38,6 +39,12 @@ const ROUNDED_ABOVE = {
 }
 const SQUARE = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 }
 const ROUNDED = { rect: RECT, clip: CLIP, radius: ROUNDED_BELOW }
+const STILL = "data:image/png;base64,c3RpbGw="
+const OTHER_STILL = "data:image/png;base64,b3RoZXI="
+const STILL_MISSED = {
+	kind: "unplaced",
+	detail: "the view did not hand its still in time",
+}
 
 const callsOf = () => host.answer.mock.calls.map(([command]) => command)
 
@@ -45,6 +52,11 @@ const roundsOf = () =>
 	host.answer.mock.calls
 		.filter(([command]) => command === "live_html_round")
 		.map(([, { radius }]) => radius)
+
+const hostAnswers = (answers: Record<string, () => unknown>) =>
+	host.answer.mockImplementation(
+		async (command: string) => answers[command]?.() ?? null,
+	)
 
 const viewOf = (
 	overrides: Partial<Parameters<typeof createLiveHtmlView>[0]> = {},
@@ -54,6 +66,8 @@ const viewOf = (
 		mountAt: mountingHtml("<p>Hi</p>"),
 		onLive: vi.fn(),
 		onFailure: vi.fn(),
+		drawStill: vi.fn().mockResolvedValue(undefined),
+		dropStill: vi.fn(),
 		...overrides,
 	})
 
@@ -163,8 +177,8 @@ describe("a live html view", () => {
 		expect(host.answer).not.toHaveBeenCalled()
 	})
 
-	it("hides while an app surface covers it, and shows once it closes", async () => {
-		host.answer.mockResolvedValue(null)
+	it("hides behind a still while an app surface covers it, and shows once it closes", async () => {
+		hostAnswers({ live_html_still: () => STILL })
 		const view = viewOf()
 		view.follow({ rect: RECT, clip: CLIP })
 		await flush()
@@ -174,7 +188,11 @@ describe("a live html view", () => {
 		view.cover(false)
 		await flush()
 
-		expect(callsOf().slice(2)).toEqual(["live_html_hide", "live_html_show"])
+		expect(callsOf().slice(2)).toEqual([
+			"live_html_still",
+			"live_html_hide",
+			"live_html_show",
+		])
 	})
 
 	it("hides a view mounted under an open surface before placing it", async () => {
@@ -360,8 +378,8 @@ describe("a live html view", () => {
 		])
 	})
 
-	it("hides a rounded view under an app surface without asking for a still", async () => {
-		host.answer.mockResolvedValue(null)
+	it("takes a still of a rounded view before hiding it under an app surface", async () => {
+		hostAnswers({ live_html_still: () => STILL })
 		const view = viewOf()
 		view.follow(ROUNDED)
 		await flush()
@@ -369,7 +387,219 @@ describe("a live html view", () => {
 		view.cover(true)
 		await flush()
 
-		expect(callsOf().slice(3)).toEqual(["live_html_hide"])
+		expect(callsOf().slice(3)).toEqual(["live_html_still", "live_html_hide"])
+	})
+})
+
+describe("the still of a live html view", () => {
+	it("hands the still to the slot and hides the view only once it has decoded", async () => {
+		hostAnswers({ live_html_still: () => STILL })
+		const decoding = Promise.withResolvers<void>()
+		const drawStill = vi.fn(() => decoding.promise)
+		const view = viewOf({ drawStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.cover(true)
+		await flush()
+		expect(drawStill).toHaveBeenCalledWith(STILL)
+		expect(callsOf().slice(2)).toEqual(["live_html_still"])
+
+		decoding.resolve()
+		await flush()
+		expect(callsOf().slice(2)).toEqual(["live_html_still", "live_html_hide"])
+	})
+
+	it("drops the still only once the view is shown again", async () => {
+		const showing = Promise.withResolvers<null>()
+		hostAnswers({
+			live_html_still: () => STILL,
+			live_html_show: () => showing.promise,
+		})
+		const dropStill = vi.fn()
+		const view = viewOf({ dropStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.cover(true)
+		await flush()
+
+		view.cover(false)
+		await flush()
+		expect(callsOf().at(-1)).toBe("live_html_show")
+		expect(dropStill).not.toHaveBeenCalled()
+
+		showing.resolve(null)
+		await flush()
+		expect(dropStill).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides without a still, logs the error and stays live when the still is refused or late", async () => {
+		const logged = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined)
+		hostAnswers({ live_html_still: () => Promise.reject(STILL_MISSED) })
+		const onLive = vi.fn()
+		const onFailure = vi.fn()
+		const drawStill = vi.fn()
+		const view = viewOf({ onLive, onFailure, drawStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.cover(true)
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_still", "live_html_hide"])
+		expect(logged).toHaveBeenCalledWith(
+			expect.stringContaining("view-1"),
+			STILL_MISSED,
+		)
+		expect(drawStill).not.toHaveBeenCalled()
+		expect(onFailure).not.toHaveBeenCalled()
+		expect(onLive).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps the view shown and discards a still answered after the surface closed", async () => {
+		const taking = Promise.withResolvers<string>()
+		hostAnswers({ live_html_still: () => taking.promise })
+		const drawStill = vi.fn()
+		const view = viewOf({ drawStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.cover(true)
+		await flush()
+
+		view.cover(false)
+		taking.resolve(STILL)
+		await flush()
+
+		expect(drawStill).not.toHaveBeenCalled()
+		expect(callsOf().slice(2)).toEqual(["live_html_still"])
+	})
+
+	it("takes a fresh still each time a surface opens", async () => {
+		const stills = [STILL, OTHER_STILL]
+		hostAnswers({ live_html_still: () => stills.shift() })
+		const drawStill = vi.fn().mockResolvedValue(undefined)
+		const view = viewOf({ drawStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.cover(true)
+		await flush()
+		view.cover(false)
+		await flush()
+		view.cover(true)
+		await flush()
+
+		expect(drawStill.mock.calls).toEqual([[STILL], [OTHER_STILL]])
+	})
+
+	it("discards the still of a surface that closed and takes another for the one opened since", async () => {
+		const taking = Promise.withResolvers<string>()
+		const stills = [taking.promise, OTHER_STILL]
+		hostAnswers({ live_html_still: () => stills.shift() })
+		const drawStill = vi.fn().mockResolvedValue(undefined)
+		const view = viewOf({ drawStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.cover(true)
+		await flush()
+
+		view.cover(false)
+		view.cover(true)
+		taking.resolve(STILL)
+		await flush()
+
+		expect(drawStill.mock.calls).toEqual([[OTHER_STILL]])
+		expect(callsOf().slice(2)).toEqual([
+			"live_html_still",
+			"live_html_still",
+			"live_html_hide",
+		])
+	})
+
+	it("drops the still of a view that left the thread before the surface closed", async () => {
+		hostAnswers({ live_html_still: () => STILL })
+		const dropStill = vi.fn()
+		const view = viewOf({ dropStill })
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.cover(true)
+		await flush()
+		view.follow(OUT_OF_SIGHT)
+		await flush()
+
+		view.cover(false)
+		await flush()
+
+		expect(callsOf()).not.toContain("live_html_show")
+		expect(dropStill).toHaveBeenCalledTimes(1)
+	})
+
+	it("asks for no still before the view is mounted", async () => {
+		viewOf().cover(true)
+		await flush()
+
+		expect(host.answer).not.toHaveBeenCalled()
+	})
+
+	it("asks for no still while the slot is out of sight", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+		view.follow(OUT_OF_SIGHT)
+		await flush()
+
+		view.cover(true)
+		await flush()
+
+		expect(callsOf().slice(2)).toEqual(["live_html_hide"])
+	})
+
+	it("asks for no still once the view failed", async () => {
+		hostAnswers({
+			live_html_place: () => Promise.reject({ kind: "invalidRectangle" }),
+		})
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.cover(true)
+		await flush()
+
 		expect(callsOf()).not.toContain("live_html_still")
+	})
+
+	it("takes a still of an attached html file like an html block", async () => {
+		hostAnswers({ live_html_still: () => STILL })
+		const drawStill = vi.fn().mockResolvedValue(undefined)
+		const view = viewOf({
+			mountAt: mountingAttachment("/replies/page.html"),
+			drawStill,
+		})
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		view.cover(true)
+		await flush()
+
+		expect(drawStill).toHaveBeenCalledWith(STILL)
+		expect(callsOf().slice(2)).toEqual(["live_html_still", "live_html_hide"])
+	})
+
+	it("is under a rectangle that overlaps its visible part, and under no other", async () => {
+		host.answer.mockResolvedValue(null)
+		const view = viewOf()
+		const overTheVisiblePart = { x: 200, y: 260, width: 200, height: 40 }
+		const overTheCutPart = { x: 200, y: -30, width: 200, height: 20 }
+
+		expect(view.isUnder(overTheVisiblePart)).toBe(false)
+
+		view.follow({ rect: RECT, clip: CLIP })
+		await flush()
+
+		expect(view.isUnder(overTheVisiblePart)).toBe(true)
+		expect(view.isUnder(overTheCutPart)).toBe(false)
 	})
 })

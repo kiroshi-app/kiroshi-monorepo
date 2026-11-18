@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { LIVE_HTML_MEASURED_EVENT, type LiveHtmlMeasured } from "@/lib/bindings"
@@ -9,10 +9,16 @@ import { useLiveHtmlView } from "@/lib/live-html/use-live-html-view"
 type MeasuredHandler = (event: { payload: LiveHtmlMeasured }) => void
 
 const host = vi.hoisted(() => ({
+	answer: vi.fn(),
 	listen: vi.fn(),
 	stopListening: vi.fn(),
 	reportFailure: vi.fn(),
 	handlers: [] as MeasuredHandler[],
+}))
+
+vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tauri-apps/api/core")>()),
+	invoke: async (command: string) => host.answer(command),
 }))
 
 vi.mock("@/lib/host/window-listen", () => ({
@@ -34,7 +40,10 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
+	document.body.replaceChildren()
 	vi.restoreAllMocks()
+	host.answer.mockReset()
+	mountAt.mockReset()
 	host.listen.mockReset()
 	host.stopListening.mockReset()
 	host.reportFailure.mockReset()
@@ -160,5 +169,147 @@ describe("the height of a live html view", () => {
 		expect(result.current.status).toBe("unavailable")
 		expect(onUnavailable).toHaveBeenCalledTimes(1)
 		expect(host.reportFailure).toHaveBeenCalledTimes(1)
+	})
+})
+
+const STILL = "data:image/png;base64,c3RpbGw="
+const BOX = { x: 10, y: 40, width: 300, height: 320 }
+const IN_SIGHT = { rect: BOX, clip: BOX }
+const OVER_THE_VIEW = new DOMRect(200, 300, 160, 28)
+const BESIDE_THE_VIEW = new DOMRect(400, 300, 160, 28)
+const DIALOG = '<div role="dialog" data-open></div>'
+const TOOLTIP =
+	'<div role="presentation" data-open><div data-slot="tooltip-content" data-open></div></div>'
+
+const callsOf = () => host.answer.mock.calls.map(([command]) => command)
+
+const nextFrame = () =>
+	act(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+
+const renderLiveView = async () => {
+	const rendered = renderView("view-1")
+	await subscribed()
+	act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
+	await waitFor(() => expect(callsOf()).toEqual(["live_html_place"]))
+	return rendered
+}
+
+const open = (markup: string) => {
+	const layer = document.createElement("div")
+	layer.innerHTML = markup
+	document.body.append(layer)
+	return layer
+}
+
+const openTooltipAt = (readRectangle: () => DOMRect) => {
+	const [positioner] = open(TOOLTIP).children
+	vi.spyOn(positioner, "getBoundingClientRect").mockImplementation(
+		readRectangle,
+	)
+}
+
+describe("the still of a live html view", () => {
+	beforeEach(() => {
+		mountAt.mockResolvedValue({ status: "ok", data: null })
+		host.answer.mockImplementation(async (command: string) =>
+			command === "live_html_still" ? STILL : null,
+		)
+	})
+
+	it("stands in while a surface is open, and leaves once it closes", async () => {
+		const { result, rerender } = await renderLiveView()
+
+		const surface = open(DIALOG)
+		await waitFor(() =>
+			expect(callsOf().slice(1)).toEqual(["live_html_still", "live_html_hide"]),
+		)
+		expect(result.current.still).toBe(STILL)
+
+		surface.remove()
+		await waitFor(() => expect(result.current.still).toBeUndefined())
+		rerender()
+
+		expect(callsOf().slice(3)).toEqual(["live_html_show"])
+		expect(result.current.still).toBeUndefined()
+		expect(result.current.status).toBe("live")
+	})
+
+	it("reaches the slot before the view hides, which waits for the image to decode", async () => {
+		const decoding = Promise.withResolvers<void>()
+		vi.spyOn(HTMLImageElement.prototype, "decode").mockReturnValue(
+			decoding.promise,
+		)
+		const { result } = await renderLiveView()
+
+		open(DIALOG)
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+		await nextFrame()
+		expect(callsOf()).not.toContain("live_html_hide")
+
+		decoding.resolve()
+		await waitFor(() => expect(callsOf().at(-1)).toBe("live_html_hide"))
+	})
+
+	it("is taken again for each surface that opens", async () => {
+		const { result } = await renderLiveView()
+		open(DIALOG).remove()
+		await nextFrame()
+
+		const surface = open(DIALOG)
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+		surface.remove()
+		await waitFor(() => expect(result.current.still).toBeUndefined())
+		open(DIALOG)
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+
+		expect(
+			callsOf().filter((command) => command === "live_html_still"),
+		).toHaveLength(2)
+	})
+
+	it.each([
+		["a context menu", '<div role="menu" data-open></div>'],
+		["a popover, a sheet or a dialog", DIALOG],
+		[
+			"the mention menu",
+			'<div data-slot="prompt-mention-menu"><div><div role="listbox"></div></div></div>',
+		],
+	])("is taken under %s", async (_surface, markup) => {
+		const { result } = await renderLiveView()
+
+		open(markup)
+
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+	})
+
+	it("is taken under a tooltip whose rectangle intersects the view", async () => {
+		const { result } = await renderLiveView()
+
+		openTooltipAt(() => OVER_THE_VIEW)
+
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+	})
+
+	it("is taken under a tooltip positioned over the view after it opened", async () => {
+		const { result } = await renderLiveView()
+		let rectangle = new DOMRect()
+
+		openTooltipAt(() => rectangle)
+		queueMicrotask(() => {
+			rectangle = OVER_THE_VIEW
+		})
+
+		await waitFor(() => expect(result.current.still).toBe(STILL))
+	})
+
+	it("is not asked for under a tooltip beside the view", async () => {
+		const { result } = await renderLiveView()
+
+		openTooltipAt(() => BESIDE_THE_VIEW)
+		await nextFrame()
+		await nextFrame()
+
+		expect(callsOf()).toEqual(["live_html_place"])
+		expect(result.current.still).toBeUndefined()
 	})
 })
