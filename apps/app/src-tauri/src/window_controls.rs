@@ -257,6 +257,8 @@ fn main_config<R: Runtime>(app: &AppHandle<R>) -> Option<WindowConfig> {
 
 fn built<R: Runtime>(app: &AppHandle<R>, config: &WindowConfig) -> tauri::Result<WebviewWindow<R>> {
 	let window = WebviewWindowBuilder::from_config(app, config)?.build()?;
+	#[cfg(any(windows, target_os = "linux"))]
+	crate::window_recovery::watch(&window);
 	closed_per_platform(&window);
 	secondary::followed(&window);
 	#[cfg(target_os = "windows")]

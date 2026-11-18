@@ -171,11 +171,17 @@ windows = { version = "0.62", features = [
 	"Win32_UI_Input_KeyboardAndMouse",
 	"Win32_UI_WindowsAndMessaging",
 ] }
+# Already in the tree under `wry`; named here so the main window hears its WebView2 process fail
+# and reads why.
+webview2-com = "0.39"
 
 # Already in the tree under `tao` and `tauri`; named here so the end of a native window move is
 # read from the X11 pointer, which the window manager holds for the whole move.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# Already in the tree under `wry`; named here so the main window hears its web process end
+# and reads why.
+webkit2gtk = { version = "2.0", features = ["v2_20"] }
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

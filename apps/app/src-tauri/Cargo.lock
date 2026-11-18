@@ -2741,6 +2741,8 @@ dependencies = [
  "tokio-tungstenite",
  "unicode-normalization",
  "uuid",
+ "webkit2gtk",
+ "webview2-com",
  "windows",
  "x25519-dalek",
  "yrs",

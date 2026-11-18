@@ -216,6 +216,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("window_declare_maximize_button", Reach::HostOnly),
 	("window_open", Reach::HostOnly),
 	("window_identity", Reach::HostOnly),
+	("window_recovery_read", Reach::HostOnly),
 	("window_report_space", Reach::HostOnly),
 	("window_report_strip", Reach::HostOnly),
 	("window_strip_at", Reach::HostOnly),
