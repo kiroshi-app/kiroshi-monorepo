@@ -68,35 +68,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
       - name: Resolve the channel and the notes range of the tag
         id: channel
         shell: bash
-        run: |
-          stable='^v[0-9]+[.][0-9]+[.][0-9]+$'
-          beta='^v[0-9]+[.][0-9]+[.][0-9]+-beta[.][0-9]+$'
-          if [[ "$GITHUB_REF_NAME" =~ $stable ]]; then
-            prerelease=false
-            previous_pattern=$stable
-          elif [[ "$GITHUB_REF_NAME" =~ $beta ]]; then
-            prerelease=true
-            previous_pattern="$stable|$beta"
-          else
-            echo "::error::Tag $GITHUB_REF_NAME is neither a stable vX.Y.Z nor a beta vX.Y.Z-beta.N tag, nothing built"
-            exit 1
-          fi
-          previous=$(git log --topo-order --decorate-refs='refs/tags/v*' --format='%D' "$GITHUB_REF_NAME" \
-            | tr ',' '\n' | sed -n 's/^ *tag: //p' \
-            | awk -v tag="$GITHUB_REF_NAME" -v pattern="$previous_pattern" \
-              '!found && $0 != tag && $0 ~ pattern { print; found = 1 }')
-          if [ -z "$previous" ]; then
-            echo "::error::No v* tag reachable from $GITHUB_REF_NAME to start its release notes from"
-            exit 1
-          fi
-          echo "Release notes of $GITHUB_REF_NAME cover $previous..$GITHUB_REF_NAME"
-          {
-            echo "prerelease=$prerelease"
-            echo "range=$previous..$GITHUB_REF_NAME"
-          } >> "$GITHUB_OUTPUT"
+        run: bun scripts/release-notes-range.ts "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
       # The pipeline attaches no visual to a release.
       # A whats-new.png asset is added by hand to the release when one exists.
