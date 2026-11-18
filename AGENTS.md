@@ -242,3 +242,13 @@ A PR whose base is a `feature/*` integration branch is merged by running `script
 Every push to main runs the full verify: lint, then vitest, website, rust and storybook on the paths it changed, then ios. A red run opens the Red main ticket. A fix PR merges on its own fast gate whatever the state of main.
 
 A push to main retries a failing vitest or Rust test once and names every test that passed only on its retry in the job summary; a pull_request, `bun run ci` and `ci:fast` retry nothing.
+
+### Release flow
+
+main takes merges continuously and builds nothing. Each version is cut once from main into its own branch, `release/X.Y`; a feature merged on main after the cut ships in the next version.
+
+After the cut only fixes enter `release/X.Y`, and a fix merges on main first. `scripts/backport.sh <PR number> release/X.Y` then cherry-picks its squash commit onto `backport/X.Y/pr-<N>` and opens a PR into `release/X.Y` under the same title; it changes nothing and exits non-zero when the PR is not merged into main, when `release/X.Y` is missing on origin, or on a conflict, whose files it prints. A fix goes straight to `release/X.Y` only when main has diverged too far for it to apply.
+
+Every release is a tag on `release/X.Y`, made by `bun run release <version>` run on a checkout of that branch, which commits the version bump onto it and pushes the branch and the tag: the betas `vX.Y.0-beta.N`, the stable `vX.Y.0`, then the patches `vX.Y.1`, `vX.Y.2`. Its release notes start at the previous tag of its channel reachable from it.
+
+A PR into `release/X.Y` runs the gate of a PR into main. A push to it runs the full verify of main without ios, and a red one opens a `Red release/X.Y` ticket, a red tag a `Red vX.Y.Z` one.
