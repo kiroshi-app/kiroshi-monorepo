@@ -95,7 +95,7 @@ const liveOnceLoaded = (status: LiveHtmlStatus): LiveHtmlStatus =>
 	status === "loading" ? "live" : status
 
 const usePageLoad = (
-	{ id, fail }: LiveHtmlView,
+	{ id, fail, hearLoad }: LiveHtmlView,
 	setStatus: Dispatch<SetStateAction<LiveHtmlStatus>>,
 ) => {
 	useEffect(() => {
@@ -104,12 +104,16 @@ const usePageLoad = (
 			if (!isListening) return
 			if (failure) fail(failure)
 			else setStatus(liveOnceLoaded)
-		}).catch(fail)
+		}).then((stopListening) => {
+			if (isListening) hearLoad(true)
+			return stopListening
+		}, fail)
 		return () => {
 			isListening = false
+			hearLoad(false)
 			void listening.then((stopListening) => stopListening?.())
 		}
-	}, [id, fail, setStatus])
+	}, [id, fail, hearLoad, setStatus])
 }
 
 export const useLiveHtmlView = (
@@ -125,6 +129,7 @@ export const useLiveHtmlView = (
 			id: crypto.randomUUID(),
 			mountAt,
 			theme,
+			onLoading: () => setStatus("loading"),
 			onFailure: (reason) => {
 				setStatus("unavailable")
 				if (isExpectedRefusal(reason)) {

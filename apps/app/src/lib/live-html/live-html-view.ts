@@ -24,6 +24,7 @@ type LiveHtmlViewOptions = {
 	id: string
 	mountAt: MountLiveHtml
 	theme: LiveHtmlTheme
+	onLoading: () => void
 	onFailure: (reason: unknown) => void
 	drawStill: (still: string) => Promise<void>
 	dropStill: () => void
@@ -111,6 +112,7 @@ export const createLiveHtmlView = ({
 	id,
 	mountAt,
 	theme,
+	onLoading,
 	onFailure,
 	drawStill,
 	dropStill,
@@ -124,6 +126,7 @@ export const createLiveHtmlView = ({
 	let drawn = UNMOUNTED
 	let hasFailed = false
 	let isSettling = false
+	let isLoadHeard = false
 
 	const fail = (reason: unknown) => {
 		if (!hasFailed) onFailure(reason)
@@ -147,11 +150,13 @@ export const createLiveHtmlView = ({
 
 	const mount =
 		(placement: LiveHtmlPlacement, mountedTheme: LiveHtmlTheme): Step =>
-		() =>
-			attempt(mountAt(id, placement.rect, mountedTheme), () => {
+		() => {
+			onLoading()
+			return attempt(mountAt(id, placement.rect, mountedTheme), () => {
 				drawn = { ...UNMOUNTED, isMounted: true, theme: mountedTheme }
 				stillDueBy = null
 			})
+		}
 
 	const place =
 		(placement: LiveHtmlPlacement): Step =>
@@ -233,7 +238,9 @@ export const createLiveHtmlView = ({
 
 	const stepTowards = (placement: LiveHtmlPlacement): Step | null => {
 		const isSeen = isInSight(placement)
-		if (!drawn.isMounted) return isSeen ? mount(placement, wantedTheme) : null
+		if (!drawn.isMounted) {
+			return isSeen && isLoadHeard ? mount(placement, wantedTheme) : null
+		}
 		if ((isCovered || !isSeen) && !drawn.isHidden) return hidingStep(placement)
 		if (!isSameTheme(drawn.theme, wantedTheme)) return retheme(wantedTheme)
 		return drawTowards(placement) ?? uncoveringStep(placement)
@@ -266,6 +273,11 @@ export const createLiveHtmlView = ({
 		void settle()
 	}
 
+	const hearLoad = (isHeard: boolean) => {
+		isLoadHeard = isHeard
+		void settle()
+	}
+
 	const wear = (next: LiveHtmlTheme) => {
 		wantedTheme = next
 		void settle()
@@ -274,5 +286,5 @@ export const createLiveHtmlView = ({
 	const isUnder = (surface: LiveHtmlRect) =>
 		wantedPlacement !== null && overlaps(wantedPlacement.clip, surface)
 
-	return { id, follow, cover, wear, fail, isUnder }
+	return { id, follow, cover, wear, hearLoad, fail, isUnder }
 }

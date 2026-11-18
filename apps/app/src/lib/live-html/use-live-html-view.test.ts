@@ -487,6 +487,23 @@ const workspaceOnSpace = (initialSpaceRowId: string) => {
 	}
 }
 
+const listenToLoadWith = (registering: Promise<() => void>) =>
+	host.listen.mockImplementation(
+		(event: string, handler: MeasuredHandler & LoadedHandler) =>
+			event === LIVE_HTML_LOADED_EVENT
+				? registering.then((stopListening) => {
+						host.loadedHandlers.push(handler)
+						return stopListening
+					})
+				: listenFor(event, handler),
+	)
+
+const placeEarly = async (rendered: ReturnType<typeof renderView>) => {
+	await subscribed()
+	act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
+	await subscribed()
+}
+
 describe("the load of a live html view", () => {
 	beforeEach(() => {
 		mountAt.mockResolvedValue({ status: "ok", data: null })
@@ -505,6 +522,67 @@ describe("the load of a live html view", () => {
 
 		load("view-1")
 		expect(rendered.result.current.status).toBe("live")
+	})
+
+	it("mounts only once its loaded listener is registered, however late", async () => {
+		const registering = Promise.withResolvers<() => void>()
+		listenToLoadWith(registering.promise)
+		const rendered = renderView("view-1")
+		await placeEarly(rendered)
+
+		expect(mountAt).not.toHaveBeenCalled()
+
+		registering.resolve(() => host.stopListening(LIVE_HTML_LOADED_EVENT))
+
+		await waitFor(() => expect(mountAt).toHaveBeenCalledTimes(1))
+		load("view-1")
+		expect(rendered.result.current.status).toBe("live")
+	})
+
+	it("fails the view, without mounting it, when its loaded listener cannot register", async () => {
+		const onFailed = vi.fn()
+		listenToLoadWith(Promise.reject(new Error("no event channel")))
+		const rendered = renderView("view-1", onFailed)
+		await placeEarly(rendered)
+
+		await waitFor(() =>
+			expect(rendered.result.current.status).toBe("unavailable"),
+		)
+		expect(mountAt).not.toHaveBeenCalled()
+		expect(host.reportFailure).toHaveBeenCalledTimes(1)
+		expect(onFailed).toHaveBeenCalledTimes(1)
+	})
+
+	it("loads again on each new mount after a remove", async () => {
+		const rendered = renderView("view-1")
+		await placeInSight(rendered)
+		load("view-1")
+		expect(rendered.result.current.status).toBe("live")
+
+		act(() => rendered.result.current.onPlacementChange(null))
+		await waitFor(() => expect(callsOf()).toContain("live_html_remove"))
+		act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
+
+		await waitFor(() => expect(mountAt).toHaveBeenCalledTimes(2))
+		expect(rendered.result.current.status).toBe("loading")
+
+		load("view-1")
+		expect(rendered.result.current.status).toBe("live")
+	})
+
+	it("mounts nothing and leaves no listener when it unmounts before its listener registers", async () => {
+		const registering = Promise.withResolvers<() => void>()
+		listenToLoadWith(registering.promise)
+		const rendered = renderView("view-1")
+		await placeEarly(rendered)
+
+		rendered.unmount()
+		registering.resolve(() => host.stopListening(LIVE_HTML_LOADED_EVENT))
+		await subscribed()
+		await subscribed()
+
+		expect(mountAt).not.toHaveBeenCalled()
+		expect(host.stopListening).toHaveBeenCalledWith(LIVE_HTML_LOADED_EVENT)
 	})
 
 	it("stops listening to the load on unmount and ignores a load arriving after it", async () => {

@@ -63,16 +63,20 @@ const hostAnswers = (answers: Record<string, () => unknown>) =>
 
 const viewOf = (
 	overrides: Partial<Parameters<typeof createLiveHtmlView>[0]> = {},
-) =>
-	createLiveHtmlView({
+) => {
+	const view = createLiveHtmlView({
 		id: "view-1",
 		mountAt: mountingHtml("<p>Hi</p>"),
 		theme: LIGHT,
+		onLoading: vi.fn(),
 		onFailure: vi.fn(),
 		drawStill: vi.fn().mockResolvedValue(undefined),
 		dropStill: vi.fn(),
 		...overrides,
 	})
+	view.hearLoad(true)
+	return view
+}
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
