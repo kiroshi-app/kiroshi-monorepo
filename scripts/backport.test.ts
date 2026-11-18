@@ -133,6 +133,26 @@ const originBranches = () =>
 		.split("\n")
 		.sort()
 
+const spawnBackport = async (scriptArguments: string[]) => {
+	const running = Bun.spawn({
+		cmd: [BACKPORT, ...scriptArguments],
+		cwd: repository,
+		env: {
+			...withoutGitContext(),
+			...COMMITTER,
+			GH_STUB: stub,
+			PATH: `${join(stub, "bin")}:${process.env.PATH}`,
+		},
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	return {
+		exitCode: await running.exited,
+		stdout: await new Response(running.stdout).text(),
+		stderr: await new Response(running.stderr).text(),
+	}
+}
+
 const runBackport = async ({
 	arguments: scriptArguments = ["42", RELEASE],
 	state = "MERGED",
@@ -150,24 +170,7 @@ const runBackport = async ({
 			title: TITLE,
 		}),
 	)
-	const running = Bun.spawn({
-		cmd: [BACKPORT, ...scriptArguments],
-		cwd: repository,
-		env: {
-			...withoutGitContext(),
-			...COMMITTER,
-			GH_STUB: stub,
-			PATH: `${join(stub, "bin")}:${process.env.PATH}`,
-		},
-		stdout: "pipe",
-		stderr: "pipe",
-	})
-	return {
-		squash,
-		exitCode: await running.exited,
-		stdout: await new Response(running.stdout).text(),
-		stderr: await new Response(running.stderr).text(),
-	}
+	return { squash, ...(await spawnBackport(scriptArguments)) }
 }
 
 const expectNothingChanged = () => {
@@ -275,18 +278,10 @@ describe("scripts/backport.sh", () => {
 
 	it("refuses a second backport of the same PR to the same release branch", async () => {
 		await runBackport({})
-		const second = Bun.spawnSync({
-			cmd: [BACKPORT, "42", RELEASE],
-			cwd: repository,
-			env: {
-				...withoutGitContext(),
-				GH_STUB: stub,
-				PATH: `${join(stub, "bin")}:${process.env.PATH}`,
-			},
-		})
+		const second = await spawnBackport(["42", RELEASE])
 
 		expect(second.exitCode).toBe(1)
-		expect(second.stderr.toString()).toBe(
+		expect(second.stderr).toBe(
 			`backport.sh: branch ${BACKPORT_BRANCH} already exists, PR #42 may already be backported to ${RELEASE}\n`,
 		)
 		expect(pullRequestsCreated()).toHaveLength(1)
