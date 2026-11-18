@@ -55,6 +55,8 @@ const SUB_PIXEL_STEP = 0.3
 
 const SUB_PIXEL_FRAMES = 100
 
+const MOST_OF_A_SMOOTH_MOVE_IN_ONE_FRAME = 1 / 3
+
 const GROWING_BLOCK = "h-40 rounded-xl border border-border bg-muted"
 
 type ThreadProps = {
@@ -188,6 +190,19 @@ const growEachFrame = async (
 		await new Promise(requestAnimationFrame)
 		block.style.height = `${block.getBoundingClientRect().height + step}px`
 	}
+}
+
+const recordScrollSteps = (viewport: HTMLElement) => {
+	const list: number[] = []
+	let formerTop = viewport.scrollTop
+	let frame = 0
+	const record = () => {
+		list.push(Math.abs(viewport.scrollTop - formerTop))
+		formerTop = viewport.scrollTop
+		frame = requestAnimationFrame(record)
+	}
+	frame = requestAnimationFrame(record)
+	return { list, stop: () => cancelAnimationFrame(frame) }
 }
 
 const itemAfter = (block: HTMLElement) => {
@@ -560,5 +575,52 @@ export const ReachesTheEndWhileABlockGrows = meta.story({
 				viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight,
 			).toBeLessThanOrEqual(line)
 		}, FRAME_POLL)
+	},
+})
+
+export const ScrollsToTheEndInOneSmoothMoveWhileAReplyGrows = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader is scrolled back and presses the jump button, which scrolls smoothly, while the reply at the end of the thread grows on every frame. Check that the thread reaches the end in one smooth move: no frame carries more than a third of the move.",
+			},
+		},
+	},
+	render: () => (
+		<Thread
+			behavior="smooth"
+			growingRank={SCROLLED_THREAD.length - 1}
+			lines={SCROLLED_THREAD}
+		/>
+	),
+	play: async ({ canvasElement, userEvent }) => {
+		const viewport = viewportIn(canvasElement)
+		const button = buttonIn(canvasElement)
+		const line = lineHeightIn(canvasElement)
+
+		await releaseFollow(viewport)
+		viewport.scrollTop = 0
+		await waitFor(async () => {
+			await expect(button.dataset.active).toBe("true")
+		}, FRAME_POLL)
+
+		const steps = recordScrollSteps(viewport)
+		try {
+			await userEvent.click(button)
+			await growEachFrame(growingBlockIn(canvasElement))
+			await waitFor(async () => {
+				await expect(
+					viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight,
+				).toBeLessThanOrEqual(line)
+			}, FRAME_POLL)
+		} finally {
+			steps.stop()
+		}
+		const move = steps.list.reduce((sum, step) => sum + step, 0)
+		await expect(Math.max(...steps.list)).toBeLessThanOrEqual(
+			move * MOST_OF_A_SMOOTH_MOVE_IN_ONE_FRAME,
+		)
 	},
 })

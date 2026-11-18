@@ -76,6 +76,7 @@
 		"katex": "^0.19.0"
 	},
 	"patchedDependencies": {
-		"@storybook/addon-vitest@10.6.5": "patches/@storybook%2Faddon-vitest@10.6.5.patch"
+		"@storybook/addon-vitest@10.6.5": "patches/@storybook%2Faddon-vitest@10.6.5.patch",
+		"@shadcn/react@0.3.1": "patches/@shadcn%2Freact@0.3.1.patch"
 	}
 }
