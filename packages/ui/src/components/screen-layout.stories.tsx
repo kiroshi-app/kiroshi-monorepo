@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	COLUMN_WIDTH,
 	expectCentredColumn,
+	expectContentAtBarInset,
 	expectStaticHeaderBar,
 	probedStyleOf,
 	slotIn,
@@ -37,7 +38,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; `column` lays the content in a 640px column centred in the card, 24px from the bar and from both card edges, and shrinks it to the card less those 24px in a card narrower than 688px.",
+					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; Every column starts its content one screen inset, 12px, from the card edge and under the bar, the distance of the bar title from the edge. `column` lays the content in a 640px column centred in the card, 24px over its bottom, and shrinks it to the card less that inset on each side in a card narrower than 664px.",
 			},
 		},
 	},
@@ -74,7 +75,7 @@ export const HeaderAndContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a screen whose content runs the full width of the card. Check that the column carries the transcript padding and spans the whole scroller.",
+					"Reach for this for a screen whose content runs the full width of the card. Check that the content starts as far from the card edge and under the bar as the bar title sits from the edge, 12px, and that the column spans the whole scroller.",
 			},
 		},
 	},
@@ -82,11 +83,12 @@ export const HeaderAndContent = meta.story({
 		const column = slotIn(canvasElement, "screen-layout-column")
 		const scroller = slotIn(canvasElement, "screen-layout-scroller")
 		const spacing = getComputedStyle(column)
+		const inset = tokenLengthOf("--screen-inset")
+		const content = canvas.getByText(/Every screen of the app/)
 
-		await expect(canvas.getByText(/Every screen of the app/)).toBeVisible()
-		await expect(spacing.paddingInlineStart).toBe("24px")
-		await expect(spacing.paddingInlineEnd).toBe("24px")
-		await expect(spacing.paddingTop).toBe("32px")
+		await expect(content).toBeVisible()
+		await expectContentAtBarInset(layoutIn(canvasElement), content)
+		await expect(spacing.paddingInlineEnd).toBe(inset)
 		await expect(spacing.paddingBottom).toBe("16px")
 		await expect(Math.round(column.getBoundingClientRect().width)).toBe(
 			scroller.clientWidth,
@@ -143,12 +145,16 @@ export const ColumnWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, and that the frame wears the card surface.",
+					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, that 24px stay under the last content, and that the frame wears the card surface.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await expectCentredColumn(layoutIn(canvasElement))
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "screen-layout-column"))
+				.paddingBottom,
+		).toBe("24px")
 		await expect(
 			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
 		).toBe(probedStyleOf("bg-card", "backgroundColor"))
@@ -202,7 +208,7 @@ export const HeaderBarAboveAScrolledColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a screen whose column runs longer than the card. Check that the bar stays in the flow above the scroller, full width, with its rule, and the column starts under it at its usual 32px; once scrolled the notes leave at the edge of the bar, which keeps its place with no fade and no shadow.",
+					"Reach for this for a screen whose column runs longer than the card. Check that the bar stays in the flow above the scroller, full width, with its rule, and the column starts under it at the screen inset; once scrolled the notes leave at the edge of the bar, which keeps its place with no fade and no shadow.",
 			},
 		},
 	},
@@ -215,10 +221,7 @@ export const HeaderBarAboveAScrolledColumn = meta.story({
 		await expect(scroller.getBoundingClientRect().top).toBe(
 			bar.getBoundingClientRect().bottom,
 		)
-		await expect(
-			firstLine.getBoundingClientRect().top -
-				bar.getBoundingClientRect().bottom,
-		).toBe(32)
+		await expectContentAtBarInset(layout, firstLine)
 
 		scroller.scrollTo({ top: SCROLLED_AWAY })
 		await waitFor(() => expect(scroller.scrollTop).toBe(SCROLLED_AWAY))

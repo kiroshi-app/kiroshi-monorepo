@@ -62,9 +62,9 @@ const MISSIONS_PAGE_GROUPS: MissionsPageGroupShape[] = [
 const EMPHASISED_GROUP: MissionsPageGroupKey = "blockedOnYou"
 
 const MISSIONS_PAGE_FRAMES = {
-	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b p-3",
+	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b px-(--screen-inset) py-3",
 	groupHeader:
-		"flex w-full min-w-0 items-center gap-2 bg-mission-list-group p-3",
+		"flex w-full min-w-0 items-center gap-2 bg-mission-list-group px-(--screen-inset) py-3",
 	chip: "inline-flex h-5.5 shrink-0 items-center",
 	glyph: "flex size-4 shrink-0 items-center justify-center",
 }
@@ -314,7 +314,7 @@ const MissionsPageAgentHeading = ({
 	missions,
 }: MissionsPageAgentGroup) => (
 	<h3
-		className="flex items-center gap-2 px-3 pt-2 pb-1"
+		className="flex items-center gap-2 px-(--screen-inset) pt-2 pb-1"
 		data-slot="missions-page-agent"
 	>
 		<BotIdentityAvatar
@@ -482,6 +482,8 @@ const MissionsEmpty = () => {
 	)
 }
 
+type MissionsPageBodyProps = MissionsPageProps & { columnClassName: string }
+
 const MissionsPageBody = ({
 	missions,
 	now,
@@ -490,7 +492,8 @@ const MissionsPageBody = ({
 	status = "loaded",
 	defaultFoldedGroups = [],
 	wrap,
-}: MissionsPageProps) => {
+	columnClassName,
+}: MissionsPageBodyProps) => {
 	const { t } = useTranslation("chat")
 	const [foldedGroups, setFoldedGroups] = useState(
 		() => new Set(defaultFoldedGroups),
@@ -506,7 +509,10 @@ const MissionsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3" data-slot="missions-page-failure">
+			<div
+				className={cn(columnClassName, "min-h-0 flex-1")}
+				data-slot="missions-page-failure"
+			>
 				<Notice
 					description={t("activity.failure.missions.description")}
 					retry={{ onRetry }}
@@ -516,7 +522,12 @@ const MissionsPageBody = ({
 		)
 	}
 
-	if (missions.length === 0) return <MissionsEmpty />
+	if (missions.length === 0)
+		return (
+			<div className={cn(columnClassName, "min-h-0 flex-1")}>
+				<MissionsEmpty />
+			</div>
+		)
 
 	const toggle = (key: MissionsPageGroupKey) =>
 		setFoldedGroups((folded) => {
@@ -576,7 +587,9 @@ const MissionsPage = ({ dragRegion, ...body }: MissionsPageProps) => {
 						}
 					/>
 				}
-				scroller={() => <MissionsPageBody {...body} />}
+				scroller={(columnClassName) => (
+					<MissionsPageBody {...body} columnClassName={columnClassName} />
+				)}
 			/>
 		</section>
 	)

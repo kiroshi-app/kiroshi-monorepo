@@ -289,8 +289,9 @@ const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 						onBack={fn()}
 					/>
 				}
-				scroller={() => (
+				scroller={(columnClassName) => (
 					<LibraryDocumentColumn
+						columnClassName={columnClassName}
 						heading={
 							<h1 className={DOCUMENT_TITLE}>{LIBRARY_AGENT_DOCUMENT.name}</h1>
 						}

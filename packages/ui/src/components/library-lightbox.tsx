@@ -159,7 +159,7 @@ const ZoomStage = ({
 		<>
 			<div
 				className={cn(
-					"flex min-h-0 flex-1 overflow-auto rounded-b-md pt-4 [container-type:size] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					"flex min-h-0 flex-1 overflow-auto rounded-b-md pt-(--screen-inset) [container-type:size] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
 					zoom !== null && ZOOMED_CLEAR_OF_CONTROLS,
 				)}
 				data-lightbox-backdrop
@@ -400,7 +400,7 @@ const LibraryLightbox = ({
 							}
 						/>
 						<div
-							className="relative flex min-h-0 flex-1 px-4 pb-4"
+							className="relative flex min-h-0 flex-1 px-(--screen-inset) pb-(--screen-inset)"
 							data-lightbox-backdrop
 						>
 							<span className={cn(STEP_OVER_STAGE, "start-4")}>

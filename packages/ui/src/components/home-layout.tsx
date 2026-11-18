@@ -16,7 +16,7 @@ const RESTING_CARD_BASIS = "basis-31.5"
 const HomeLayout = ({ stage, children, above, below }: HomeLayoutProps) => (
 	<div
 		className={cn(
-			"flex size-full flex-1 flex-col items-center px-4",
+			"flex size-full flex-1 flex-col items-center px-4 pt-5",
 			EVENS_SCREEN_COLUMN_PADDING,
 		)}
 		data-slot="home-layout"

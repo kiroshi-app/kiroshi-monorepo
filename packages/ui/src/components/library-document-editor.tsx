@@ -422,10 +422,11 @@ const LibraryDocumentEditor = ({
 					}
 				/>
 			}
-			scroller={() => (
+			scroller={(columnClassName) => (
 				<>
 					<div className="relative flex min-h-0 flex-1 flex-col">
 						<LibraryDocumentColumn
+							columnClassName={columnClassName}
 							onColumnMouseDown={writeFromColumn}
 							heading={
 								<GrowingField

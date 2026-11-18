@@ -15,6 +15,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
+	expectContentAtBarInset,
 	hueScopeOf,
 	isInBrowserRunner,
 	middleClick,
@@ -255,7 +256,7 @@ export const GridAll = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library as artboard 1 draws it at a 1280 by 832 window: four columns of 279, All checked. Check that All wears the Space colour and carries the total count, that a keyboard reader reaches an item with Tab and sees its ring, and that pressing it hands the item to `onOpenItem`.",
+					"The Library as artboard 1 draws it at a 1280 by 832 window: four columns of 285, All checked. Check that All wears the Space colour and carries the total count, that a keyboard reader reaches an item with Tab and sees its ring, and that pressing it hands the item to `onOpenItem`.",
 			},
 		},
 	},
@@ -267,6 +268,10 @@ export const GridAll = meta.story({
 		await expect(all).toHaveAttribute("aria-pressed", "true")
 		await expect(all.getBoundingClientRect().height).toBe(26)
 		await expect(getComputedStyle(all).transitionProperty).toBe("none")
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "library-panel"),
+			slotIn(canvasElement, "library-controls"),
+		)
 
 		const primaryFill = tokenStyleIn(
 			all,
@@ -299,7 +304,7 @@ export const GridAll = meta.story({
 			slotIn(canvasElement, "library-grid"),
 		).gridTemplateColumns.split(" ")
 		await expect(columns).toHaveLength(4)
-		await expect(Number.parseFloat(columns[0] ?? "")).toBeCloseTo(279, 0)
+		await expect(Number.parseFloat(columns[0] ?? "")).toBeCloseTo(285, 0)
 
 		for (let press = 0; press < 8 && document.activeElement !== all; press++)
 			await userEvent.tab()
@@ -1087,6 +1092,11 @@ export const EmptyWithEveryCallback = meta.story({
 		await expect(
 			barActionsIn(canvasElement).map((button) => button.textContent),
 		).toEqual(["Import", "New board", "New document"])
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "library-panel"),
+			slotIn(canvasElement, "screen-layout-column")
+				.firstElementChild as Element,
+		)
 
 		const cards = slotsIn(canvasElement, "library-template")
 		await expect(cards.slice(0, 2).map((card) => card.textContent)).toEqual([
@@ -1147,6 +1157,10 @@ export const Loading = meta.story({
 		)
 		await expect(canvas.getByRole("searchbox")).toBeVisible()
 		await expect(canvas.queryByRole("group", { name: "Show" })).toBe(null)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "library-panel"),
+			slotIn(canvasElement, "library-controls"),
+		)
 		await expect(
 			slotIn(canvasElement, "library-grid-skeleton").getBoundingClientRect()
 				.top,
@@ -1774,7 +1788,7 @@ const expectBarAsDrawn = async (
 		boxOf(controls).left - frame.left,
 		frame.right - boxOf(controls).right,
 		boxOf(controls).height,
-	]).toEqual([24, 24, 24, 32])
+	]).toEqual([12, 12, 12, 32])
 	await expect([
 		boxOf(filters).left,
 		boxOf(filters).top,
@@ -1857,7 +1871,7 @@ const expectBarAsDrawn = async (
 		boxOf(grid).left - frame.left,
 		boxOf(grid).top - boxOf(controls).bottom,
 		getComputedStyle(grid).columnGap,
-	]).toEqual([24, 16, "16px"])
+	]).toEqual([12, 16, "16px"])
 }
 
 const ARTBOARD_ARGS = {
@@ -1877,7 +1891,7 @@ export const Bar = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Library as the app draws it today, artboard I5a without its Import button, 960 wide, light theme. Check that the bar is 56 px high across the panel, that the muted line sits over the Library title, that New board with its hairline border then New document on the Space colour end 12 px from the edge and 8 px apart, and that the filters on the left and the 240 px search on the right open the content 24 px under the bar, 16 px over the grid.",
+					"The Library as the app draws it today, artboard I5a without its Import button, 960 wide, light theme. Check that the bar is 56 px high across the panel, that the muted line sits over the Library title, that New board with its hairline border then New document on the Space colour end 12 px from the edge and 8 px apart, and that the filters on the left and the 240 px search on the right open the content 12 px under the bar and 12 px from the edge, as far as the bar title, 16 px over the grid.",
 			},
 		},
 	},

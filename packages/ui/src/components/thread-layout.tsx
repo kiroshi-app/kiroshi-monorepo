@@ -34,7 +34,7 @@ const MISSION_SKELETON_THREAD_WIDTH =
 	"has-data-[slot=mission-detail-skeleton]:[--thread-width:calc(var(--spacing)*174)]"
 
 const THREAD_COLUMN =
-	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
+	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))] pt-8"
 
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
