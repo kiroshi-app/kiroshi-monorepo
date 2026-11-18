@@ -10,10 +10,15 @@ import { App } from "./App"
 
 import { forgetOwnAccountIds } from "@/lib/account/forget-own-account-ids"
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
-import { commands, type WindowIdentity } from "@/lib/bindings"
+import {
+	commands,
+	type WindowIdentity,
+	type WindowRecovery,
+} from "@/lib/bindings"
 import { isDesktopHost } from "@/lib/host"
 import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
 import { armLaunchRevealSafetyNet } from "@/lib/host/launch-reveal"
+import { readWindowRecoveryToShow } from "@/lib/host/window-recovery"
 import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
@@ -47,13 +52,19 @@ const AnnotationToolbar = import.meta.env.DEV
 const queryClient = createQueryClient()
 invalidateOnHostReconnect(queryClient)
 
-const renderApp = (windowIdentity?: WindowIdentity) => {
+const renderApp = (
+	windowIdentity?: WindowIdentity,
+	windowRecovery: WindowRecovery | null = null,
+) => {
 	createRoot(document.getElementById("root")!).render(
 		<StrictMode>
 			<QueryClientProvider client={queryClient}>
 				<I18nProvider>
 					<TooltipHintProvider>
-						<App windowIdentity={windowIdentity} />
+						<App
+							windowIdentity={windowIdentity}
+							windowRecovery={windowRecovery}
+						/>
 					</TooltipHintProvider>
 				</I18nProvider>
 				{import.meta.env.DEV && <ReactQueryDevtools />}
@@ -71,12 +82,15 @@ const reportWindowStartFailure = (reason: unknown) => {
 	console.error("window start failed", reason)
 }
 
-const startWindow = (windowIdentity: WindowIdentity) => {
-	renderApp(windowIdentity)
-	const starting =
-		windowIdentity.label === MAIN_WINDOW_LABEL
-			? reopenSecondaryWindows()
-			: forgetWindowWhenClosed(windowIdentity.label)
+const startWindow = async (windowIdentity: WindowIdentity) => {
+	const isMainWindow = windowIdentity.label === MAIN_WINDOW_LABEL
+	renderApp(
+		windowIdentity,
+		isMainWindow ? await readWindowRecoveryToShow() : null,
+	)
+	const starting = isMainWindow
+		? reopenSecondaryWindows()
+		: forgetWindowWhenClosed(windowIdentity.label)
 	starting.catch(reportWindowStartFailure)
 	forgetWindowsGoneWhileRunning().catch(reportWindowStartFailure)
 }
