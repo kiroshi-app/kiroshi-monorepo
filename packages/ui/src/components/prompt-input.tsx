@@ -31,6 +31,8 @@ import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const OFFLINE_CONTROLS = "[&_svg]:invisible"
 
+const ROUND_BUTTONS = "[--radius-button:calc(infinity*1px)]"
+
 const IDLE_SEND =
 	"bg-foreground/8 text-disabled-foreground hover:bg-foreground/8"
 
@@ -222,6 +224,7 @@ export function PromptInput({
 				<div
 					className={cn(
 						"flex flex-col gap-3 rounded-[20px] p-3",
+						ROUND_BUTTONS,
 						!isDropTarget && "bg-prompt-surface",
 						band && "border-foreground/8 border-b",
 					)}
@@ -248,6 +251,7 @@ export function PromptInput({
 			data-expanded={isExpanded}
 			className={cn(
 				"flex w-full flex-wrap items-center gap-1 rounded-[25px] border border-foreground/10 bg-prompt-surface p-2 focus-within:border-foreground/20",
+				ROUND_BUTTONS,
 				hasPayload && "border-foreground/20",
 				isExpanded && "rounded-3xl",
 				(hasAttachments || hasReplies || quote) && "rounded-[20px]",
