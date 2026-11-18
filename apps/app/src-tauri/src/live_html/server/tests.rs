@@ -27,7 +27,7 @@ impl ViewWatch for SeenTargets {
 	}
 }
 
-async fn fetched(url: &str) -> std::io::Result<String> {
+pub(crate) async fn fetched(url: &str) -> std::io::Result<String> {
 	let url = Url::parse(url).expect("a server url");
 	let address = format!("{}:{}", url.host_str().expect("a host"), url.port().expect("a port"));
 	let mut stream = TcpStream::connect(address).await?;

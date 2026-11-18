@@ -185,4 +185,4 @@ pub(crate) fn reported_directive(request: &ReceivedRequest<'_>) -> Option<String
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

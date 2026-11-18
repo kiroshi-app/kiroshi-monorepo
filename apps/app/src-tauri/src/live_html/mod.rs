@@ -123,14 +123,11 @@ impl LiveViews {
 		theme: LiveHtmlTheme,
 	) -> Result<(), LiveHtmlError> {
 		native::ensure_available()?;
-		match self.servers.lock().await.get(&id) {
-			Some(server) => server.retheme(theme),
-			None => return Err(LiveHtmlError::UnknownView { id }),
-		}
-		let script = base::retheming(theme);
-		self.answered_outside_the_lock(id, |id| native::evaluate(app, id, script))
-			.await
-			.map(|_answer| ())
+		let servers = self.servers.lock().await;
+		let server =
+			servers.get(&id).ok_or_else(|| LiveHtmlError::UnknownView { id: id.clone() })?;
+		server.retheme(theme);
+		native::retheme(app, id, base::retheming(theme)).await
 	}
 
 	pub async fn round<R: Runtime>(

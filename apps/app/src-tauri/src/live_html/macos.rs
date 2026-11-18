@@ -364,6 +364,22 @@ pub async fn url<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<String, L
 	.await
 }
 
+pub async fn retheme<R: Runtime>(
+	app: &AppHandle<R>,
+	id: String,
+	script: String,
+) -> Result<(), LiveHtmlError> {
+	on_main_thread(app, move || {
+		MOUNTED.with_borrow(|mounted| match mounted.get(&id) {
+			Some(shown) => {
+				shown.webview.evaluate_script(&script).map_err(|failure| failure.to_string())
+			}
+			None => Ok(()),
+		})
+	})
+	.await
+}
+
 pub async fn evaluate<R: Runtime>(
 	app: &AppHandle<R>,
 	id: String,

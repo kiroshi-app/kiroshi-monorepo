@@ -7,6 +7,8 @@ use tokio::time::timeout;
 use super::contract::LiveHtmlError;
 #[cfg(target_os = "macos")]
 use super::contract::{LiveHtmlAppearance, LiveHtmlCorners, LiveHtmlRectangle, LiveHtmlTheme};
+#[cfg(target_os = "macos")]
+use super::server::tests::fetched;
 use super::server::ContentServer;
 use super::watch::LoggedWatch;
 use super::LiveViews;
@@ -112,4 +114,21 @@ async fn a_live_html_theme_naming_an_unknown_view_is_refused_like_its_placement(
 
 	assert_eq!(themed, Err(LiveHtmlError::UnknownView { id: "missing".to_owned() }));
 	assert_eq!(themed, placed);
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_theme_for_a_view_with_no_native_webview_yet_succeeds_and_is_served_next() {
+	let app = tauri::test::mock_app();
+	let views = LiveViews::default();
+	show(&views, "a").await;
+	let theme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
+
+	let themed = views.theme(app.handle(), "a".to_owned(), theme).await;
+
+	assert_eq!(themed, Ok(()));
+	let url = views.servers.lock().await.get("a").expect("the shown view").content_url();
+	let served = fetched(&url).await.expect("the content answers");
+	assert!(served.contains("--kiroshi-appearance: dark; --kiroshi-background: #000000;"));
+	assert!(!served.contains("prefers-color-scheme"), "{served}");
 }
