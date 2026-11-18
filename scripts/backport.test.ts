@@ -22,6 +22,10 @@ const BACKPORT_BRANCH = "backport/0.27/pr-42"
 
 const TITLE = "fix(app): keep the draft on reload (OPE-1)"
 
+const EARLIER_TITLE = "fix(app): list the drafts after the cut (OPE-2)"
+
+const BATCH_BRANCH = "backport/0.27/pr-41-42"
+
 const PULL_REQUEST_URL =
 	"https://github.com/kiroshi-app/kiroshi-monorepo/pull/43"
 
@@ -47,7 +51,11 @@ for argument in "$@"; do
 	previous=$argument
 done
 case "$1 $2" in
-"pr view") response=$(cat "$GH_STUB/pull-request.json") ;;
+"pr view")
+	file="$GH_STUB/pull-request-$3.json"
+	if [ ! -f "$file" ]; then file="$GH_STUB/pull-request.json"; fi
+	response=$(cat "$file")
+	;;
 "pr create")
 	if [ -f "$GH_STUB/create-refused" ]; then
 		echo "GraphQL: was submitted too quickly" >&2
@@ -70,6 +78,7 @@ type Scenario = {
 	state?: string
 	base?: string
 	isConflicting?: boolean
+	earlierState?: string
 }
 
 const withoutGitContext = () => {
@@ -112,10 +121,14 @@ const seedOrigin = (isConflicting: boolean) => {
 		"release only",
 	)
 	git(seed, "checkout", "--quiet", "main")
-	commitFile("feature.ts", "after the cut\n", "feat: after the cut (#41)")
+	const earlierSquash = commitFile(
+		"drafts.ts",
+		"list = true\n",
+		`${EARLIER_TITLE} (#41)`,
+	)
 	const squash = commitFile("draft.ts", "keep = true\n", `${TITLE} (#42)`)
 	git(seed, "push", "--quiet", origin, "main", RELEASE)
-	return squash
+	return { earlierSquash, squash }
 }
 
 const ghCalls = () => {
@@ -164,8 +177,9 @@ const runBackport = async ({
 	state = "MERGED",
 	base = "main",
 	isConflicting = false,
+	earlierState = "MERGED",
 }: Scenario) => {
-	const squash = seedOrigin(isConflicting)
+	const { earlierSquash, squash } = seedOrigin(isConflicting)
 	git(tmpdir(), "clone", "--quiet", origin, repository)
 	writeFileSync(
 		join(stub, "pull-request.json"),
@@ -173,15 +187,26 @@ const runBackport = async ({
 			state,
 			baseRefName: base,
 			mergeCommit: state === "MERGED" ? { oid: squash } : null,
+			mergedAt: state === "MERGED" ? "2026-11-18T17:32:40Z" : null,
 			title: TITLE,
 		}),
 	)
-	return { squash, ...(await spawnBackport(scriptArguments)) }
+	writeFileSync(
+		join(stub, "pull-request-41.json"),
+		JSON.stringify({
+			state: earlierState,
+			baseRefName: "main",
+			mergeCommit: earlierState === "MERGED" ? { oid: earlierSquash } : null,
+			mergedAt: earlierState === "MERGED" ? "2026-11-18T17:20:10Z" : null,
+			title: EARLIER_TITLE,
+		}),
+	)
+	return { earlierSquash, squash, ...(await spawnBackport(scriptArguments)) }
 }
 
 const expectNothingChanged = () => {
 	expect(originBranches()).toEqual(["main", RELEASE])
-	expect(git(repository, "branch", "--list", BACKPORT_BRANCH)).toBe("")
+	expect(git(repository, "branch", "--list", "backport/*")).toBe("")
 	expect(git(repository, "worktree", "list").split("\n")).toHaveLength(1)
 	expect(pullRequestsCreated()).toEqual([])
 }
@@ -239,6 +264,81 @@ describe("scripts/backport.sh", () => {
 		])
 		expect(git(repository, "worktree", "list").split("\n")).toHaveLength(1)
 		expect(git(repository, "symbolic-ref", "--short", "HEAD")).toBe("main")
+	})
+
+	it("cherry-picks several PRs in the order they merged on main onto one branch and opens one PR naming each of them", async () => {
+		const result = await runBackport({ arguments: ["42", "41", RELEASE] })
+		const references = "#41, #42"
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(`${PULL_REQUEST_URL}\n`)
+		expect(originBranches()).toEqual([BATCH_BRANCH, "main", RELEASE])
+		expect(
+			git(
+				origin,
+				"log",
+				"--reverse",
+				"--format=%s",
+				`${RELEASE}..${BATCH_BRANCH}`,
+			),
+		).toBe(`${EARLIER_TITLE} (#41)\n${TITLE} (#42)`)
+		expect(
+			git(origin, "log", "--format=%B", `${RELEASE}..${BATCH_BRANCH}`),
+		).toContain(`(cherry picked from commit ${result.earlierSquash})`)
+		expect(pullRequestsCreated()).toEqual([
+			[
+				"pr",
+				"create",
+				"--repo",
+				REPOSITORY,
+				"--base",
+				RELEASE,
+				"--head",
+				BATCH_BRANCH,
+				"--title",
+				`chore(release): backport ${references} to ${RELEASE}`,
+				"--body",
+				`Backport of ${references} to ${RELEASE}, cherry-picked in the order they merged on main:\n- #41 ${EARLIER_TITLE}\n- #42 ${TITLE}`,
+			],
+		])
+		expect(git(repository, "worktree", "list").split("\n")).toHaveLength(1)
+	})
+
+	it("refuses several PRs when one of them is not merged, naming it and changing nothing", async () => {
+		const result = await runBackport({
+			arguments: ["41", "42", RELEASE],
+			earlierState: "OPEN",
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toBe(
+			"backport.sh: PR #41 is not merged, it is OPEN\n",
+		)
+		expectNothingChanged()
+	})
+
+	it("pushes nothing for several PRs when one conflicts, naming it with its conflicting files", async () => {
+		const result = await runBackport({
+			arguments: ["41", "42", RELEASE],
+			isConflicting: true,
+		})
+
+		expect(result.exitCode).toBe(1)
+		expect(result.stderr).toEndWith(
+			`backport.sh: PR #42 conflicts with ${RELEASE}, nothing pushed, conflicting files:\ndraft.ts\n`,
+		)
+		expectNothingChanged()
+	})
+
+	it("refuses a second backport of the same PRs to the same release branch", async () => {
+		await runBackport({ arguments: ["41", "42", RELEASE] })
+		const second = await spawnBackport(["42", "41", RELEASE])
+
+		expect(second.exitCode).toBe(1)
+		expect(second.stderr).toBe(
+			`backport.sh: branch ${BATCH_BRANCH} already exists, PRs #41, #42 may already be backported to ${RELEASE}\n`,
+		)
+		expect(pullRequestsCreated()).toHaveLength(1)
 	})
 
 	it.each([
@@ -319,13 +419,14 @@ describe("scripts/backport.sh", () => {
 		[["42"]],
 		[["42", RELEASE, "extra"]],
 		[["#42", RELEASE]],
+		[["41", "#42", RELEASE]],
 		[["42", "main"]],
 	])("exits 64 with the usage on the arguments %p", async (scriptArguments) => {
 		const result = await runBackport({ arguments: scriptArguments })
 
 		expect(result.exitCode).toBe(64)
 		expect(result.stderr).toBe(
-			"backport.sh: usage: scripts/backport.sh <merged PR number of main> <release/X.Y>\n",
+			"backport.sh: usage: scripts/backport.sh <merged PR number of main>... <release/X.Y>\n",
 		)
 		expectNothingChanged()
 		expect(ghCalls()).toEqual([])
