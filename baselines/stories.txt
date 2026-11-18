@@ -160,6 +160,8 @@ branding-ditheredfieldavatar--one-drawing-at-every-size
 branding-ditheredfieldavatar--one-glyph-in-every-colour
 branding-ditheredfieldavatar--one-screen-for-every-agent
 branding-ditheredfieldavatar--without-ground
+branding-hexagonring--dark
+branding-hexagonring--default
 branding-outlinedhexagon--filled-with-the-glaze-border
 branding-outlinedhexagon--filled-with-the-glaze-border-dark
 branding-spaceavatar--free-hue
@@ -1193,6 +1195,12 @@ feedback-updatebadge--error
 feedback-updatebadge--loading
 feedback-updatebadge--ready
 feedback-updatebadge--ready-with-agents-running
+feedback-windowrecoveryscreen--crash
+feedback-windowrecoveryscreen--crash-dark
+feedback-windowrecoveryscreen--gave-up
+feedback-windowrecoveryscreen--gave-up-dark
+feedback-windowrecoveryscreen--out-of-memory
+feedback-windowrecoveryscreen--out-of-memory-dark
 forms-checkbox--default
 forms-checkbox--on-dark-surface
 forms-checkbox--states
