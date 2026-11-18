@@ -237,6 +237,19 @@ describe("scripts/pr-enqueue.sh", () => {
 		expect(ghCalls()).toEqual([LIST, READ_STATE, ENQUEUE, READ_STATE])
 	})
 
+	it("prints the PR queued and calls gh pr merge not at all when the queue of main is on and the PR is already in the merge queue", async () => {
+		const result = await runPrEnqueue({
+			pullRequestNumbers: [42],
+			states: [QUEUE_ON_QUEUED],
+		})
+
+		expect(result.exitCode).toBe(0)
+		expect(result.stdout).toBe(
+			"pr-enqueue.sh: PR #42 inQueue=true autoMergeArmed=false\n",
+		)
+		expect(ghCalls()).toEqual([LIST, READ_STATE])
+	})
+
 	it("fails naming the PR when the queue of main is on and the read-back shows it neither queued nor armed", async () => {
 		const result = await runPrEnqueue({
 			pullRequestNumbers: [42],
