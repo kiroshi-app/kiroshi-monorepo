@@ -3,7 +3,7 @@ use std::path::Path;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::attachment::read_page;
-use super::contract::{LiveHtmlError, LiveHtmlRectangle};
+use super::contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlRectangle};
 use super::LiveViews;
 use crate::attachments::Attachments;
 use crate::file_store::FileStore;
@@ -51,9 +51,9 @@ pub async fn live_html_place<R: Runtime>(
 pub async fn live_html_round<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
-	radius: f64,
+	corners: LiveHtmlCorners,
 ) -> Result<(), LiveHtmlError> {
-	app.state::<LiveViews>().round(&app, id, radius).await
+	app.state::<LiveViews>().round(&app, id, corners).await
 }
 
 #[tauri::command]

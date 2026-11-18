@@ -213,6 +213,8 @@
 			const SLOT_PAGE = PAGE(`<div style="height:160px;background:#ff00ff"></div>`)
 			const COMPOSED = "composed"
 			const RADIUS = 24
+			const CORNERS = { topLeft: 0, topRight: 0, bottomRight: RADIUS, bottomLeft: RADIUS }
+			const INSIDE = 2
 			const rectOf = (element) => {
 				const { x, y, width, height } = element.getBoundingClientRect()
 				return { x, y, width, height }
@@ -263,6 +265,24 @@
 				}
 				return captures
 			}
+			const insideCornersOf = ({ x, y, width, height }) => [
+				[x + INSIDE, y + INSIDE],
+				[x + width - INSIDE, y + INSIDE],
+				[x + width - INSIDE, y + height - INSIDE],
+				[x + INSIDE, y + height - INSIDE],
+			]
+			const expectCut = (colors, what) => {
+				const [topLeft, topRight, bottomRight, bottomLeft] = colors ?? []
+				const isCut = colors && isMagenta(topLeft) && isMagenta(topRight) && !isMagenta(bottomRight) && !isMagenta(bottomLeft)
+				expect(isCut, `${what}: the corners were not cut to ${JSON.stringify(CORNERS)}: ${JSON.stringify(colors)}`)
+			}
+			const expectCutAt = async (step, rectangle, what) => {
+				await pause(600)
+				const bottomEdge = [rectangle.x + rectangle.width / 2, rectangle.y + rectangle.height - INSIDE]
+				const [edge, ...corners] = await invoke("probe_colors", { step, probes: [bottomEdge, ...insideCornersOf(rectangle)] })
+				expectCut(corners, what)
+				expect(isMagenta(edge), `${what}: the bottom edge between its cut corners was not drawn: ${JSON.stringify(edge)}`)
+			}
 			const holderOf = (reading) =>
 				reading.measured.content_view.children.find(({ class: name }) => name === "KiroshiLiveHtmlHolder")
 
@@ -277,18 +297,29 @@
 				const stopPlacing = placeOnSlot(COMPOSED, slot)
 				await pause(1500)
 
-				await invoke("live_html_round", { id: COMPOSED, radius: RADIUS })
+				await invoke("live_html_round", { id: COMPOSED, corners: CORNERS })
 				const at = rectOf(slot)
-				const corners = [[at.x + 2, at.y + 2], [at.x + at.width / 2, at.y + 2]]
-				await pause(600)
-				const [corner, edge] = await invoke("probe_colors", { step: "rounded", probes: corners })
-				expect(!isMagenta(corner) && isMagenta(edge), `the view corner was not cut to ${RADIUS}: ${JSON.stringify({ corner, edge })}`)
-				const invalidRadius = await answer(invoke("live_html_round", { id: COMPOSED, radius: -1 }))
+				await expectCutAt("rounded", at, "the live view")
+				const invalidRadius = await answer(invoke("live_html_round", { id: COMPOSED, corners: { ...CORNERS, topLeft: -1 } }))
 				expect(invalidRadius.kind === "invalidRadius", `a negative radius answered ${JSON.stringify(invalidRadius)}`)
+				await expectCutAt("rounded-after-refusal", at, "the live view after a refused radius")
+
+				slot.style.height = `${at.height - 40}px`
+				await invoke("live_html_place", { id: COMPOSED, rectangle: rectOf(slot), clip: null })
+				await expectCutAt("rounded-shorter", rectOf(slot), "the live view made shorter")
+				slot.style.height = `${at.height}px`
+				await invoke("live_html_place", { id: COMPOSED, rectangle: at, clip: null })
+				await expectCutAt("rounded-restored", at, "the live view back at its height")
 
 				const still = await invoke("live_html_still", { id: COMPOSED })
 				expect(still.startsWith("data:image/png;base64,"), `the still reads ${still.slice(0, 40)}`)
-				Object.assign(slot.style, { background: `url(${still}) 0 0 / 100% 100%`, borderRadius: `${RADIUS}px` })
+				Object.assign(slot.style, {
+					background: `url(${still}) 0 0 / 100% 100%`,
+					borderRadius: `${CORNERS.topLeft}px ${CORNERS.topRight}px ${CORNERS.bottomRight}px ${CORNERS.bottomLeft}px`,
+				})
+				await invoke("live_html_hide", { id: COMPOSED })
+				await expectCutAt("rounded-still", at, "the still")
+				await invoke("live_html_show", { id: COMPOSED })
 
 				const beside = [at.x + at.width + 100, at.y + 50]
 				const swiped = [
@@ -296,10 +327,12 @@
 					...(await swipe("wheel", { device: "mouseWheel", delta: 1, moves: 4 }, [1, 2], beside)),
 				]
 				for (const shot of swiped) expectOnItsSlot(shot, at, `swipe event ${shot.event}`)
+				expectCut(swiped[0].magenta_corners, `the still mid swipe, event ${swiped[0].event}`)
 				const settled = await capture("after-swipes", rectOf(slot), null)
 				expectOnItsSlot({ magenta: settled.magenta_drawn_in_window_points, cyan: settled.cyan_drawn_in_window_points }, at, "after the swipes")
 				const holder = holderOf(settled)
 				expect(!holder.hidden && holder.alpha === 1, `the live view did not come back after the swipes ${JSON.stringify(holder)}`)
+				await expectCutAt("rounded-after-swipes", rectOf(slot), "the live view back from behind its still")
 
 				const readings = []
 				for (let frame = 0; frame < 20; frame++) {

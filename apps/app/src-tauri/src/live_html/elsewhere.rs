@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
-use super::contract::LiveHtmlError;
+use super::contract::{LiveHtmlCorners, LiveHtmlError};
 use super::placement::Placement;
 use super::ViewToMount;
 
@@ -37,7 +37,7 @@ pub async fn still<R: Runtime>(_app: &AppHandle<R>, _id: String) -> Result<Strin
 pub async fn round<R: Runtime>(
 	_app: &AppHandle<R>,
 	_id: String,
-	_radius: f64,
+	_corners: LiveHtmlCorners,
 ) -> Result<(), LiveHtmlError> {
 	Err(LiveHtmlError::NotAvailableHere)
 }

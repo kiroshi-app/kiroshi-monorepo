@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use block2::RcBlock;
+use objc2::encode::{Encoding, RefEncode};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{class, define_class, msg_send, sel, ClassType, MainThreadMarker, MainThreadOnly};
@@ -18,7 +19,7 @@ use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
 
-use super::contract::{LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
+use super::contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
 use super::measure::{self, PageSize, SizeReport};
 use super::placement::{ContentView, Frame, Placement};
 use super::watch::Guard;
@@ -83,16 +84,93 @@ struct Deadline {
 	missed: &'static str,
 }
 
+#[repr(C)]
+struct CGPath {
+	_opaque: [u8; 0],
+}
+
+unsafe impl RefEncode for CGPath {
+	const ENCODING_REF: Encoding = Encoding::Pointer(&Encoding::Struct("CGPath", &[]));
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+	fn CGPathCreateMutable() -> *mut CGPath;
+	fn CGPathMoveToPoint(path: *mut CGPath, transform: *const c_void, x: f64, y: f64);
+	fn CGPathAddArcToPoint(
+		path: *mut CGPath,
+		transform: *const c_void,
+		corner_x: f64,
+		corner_y: f64,
+		toward_x: f64,
+		toward_y: f64,
+		radius: f64,
+	);
+	fn CGPathCloseSubpath(path: *mut CGPath);
+	fn CGPathRelease(path: *mut CGPath);
+}
+
+struct Outline(NonNull<CGPath>);
+
+impl Outline {
+	fn around(bounds: NSRect, is_flipped: bool, corners: LiveHtmlCorners) -> Result<Self, String> {
+		let NSRect { origin, size } = bounds;
+		let LiveHtmlCorners { top_left, top_right, bottom_right, bottom_left } =
+			corners.fitted_to(size.width, size.height);
+		let (left, right) = (origin.x, origin.x + size.width);
+		let (top, bottom) = if is_flipped {
+			(origin.y, origin.y + size.height)
+		} else {
+			(origin.y + size.height, origin.y)
+		};
+		let path = NonNull::new(unsafe { CGPathCreateMutable() })
+			.ok_or("CoreGraphics gave no path to round the webview with")?;
+		let (outline, untransformed) = (path.as_ptr(), std::ptr::null());
+		unsafe {
+			CGPathMoveToPoint(outline, untransformed, left + top_left, top);
+			CGPathAddArcToPoint(outline, untransformed, right, top, right, bottom, top_right);
+			CGPathAddArcToPoint(outline, untransformed, right, bottom, left, bottom, bottom_right);
+			CGPathAddArcToPoint(outline, untransformed, left, bottom, left, top, bottom_left);
+			CGPathAddArcToPoint(outline, untransformed, left, top, right, top, top_left);
+			CGPathCloseSubpath(outline);
+		}
+		Ok(Self(path))
+	}
+}
+
+impl Drop for Outline {
+	fn drop(&mut self) {
+		unsafe { CGPathRelease(self.0.as_ptr()) }
+	}
+}
+
 struct Shown {
 	webview: WebView,
 	placement: Placement,
+	corners: Option<LiveHtmlCorners>,
 	is_drawn: bool,
 	has_a_still: bool,
 }
 
 impl Shown {
 	fn new(webview: WebView, placement: Placement) -> Self {
-		Self { webview, placement, is_drawn: true, has_a_still: false }
+		Self { webview, placement, corners: None, is_drawn: true, has_a_still: false }
+	}
+
+	fn place(&self, placement: Placement, marker: MainThreadMarker) -> Result<(), String> {
+		let view = native_view_of(&self.webview);
+		let size_before = view.bounds().size;
+		place_native(&view, placement, marker)?;
+		match self.corners {
+			Some(corners) if view.bounds().size != size_before => cut_corners(&view, corners),
+			_ => Ok(()),
+		}
+	}
+
+	fn place_on_the_new_pixel_grid(&self, marker: MainThreadMarker) -> Result<(), String> {
+		let view = native_view_of(&self.webview);
+		place_native(&view, self.placement, marker)?;
+		self.corners.map_or(Ok(()), |corners| cut_corners(&view, corners))
 	}
 
 	fn draw(&self) -> Result<(), String> {
@@ -189,19 +267,15 @@ pub async fn still<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<String,
 pub async fn round<R: Runtime>(
 	app: &AppHandle<R>,
 	id: String,
-	radius: f64,
+	corners: LiveHtmlCorners,
 ) -> Result<(), LiveHtmlError> {
 	on_main_thread(app, move || {
-		let view = mounted_view(&id)?;
-		let layer: *mut AnyObject = unsafe { msg_send![&*view, layer] };
-		if layer.is_null() {
-			return Err("the webview has no layer to round".to_owned());
-		}
-		unsafe {
-			let _: () = msg_send![layer, setCornerRadius: radius];
-			let _: () = msg_send![layer, setMasksToBounds: true];
-		}
-		Ok(())
+		MOUNTED.with_borrow_mut(|mounted| {
+			let shown = mounted.get_mut(&id).ok_or("the view holds no native webview")?;
+			cut_corners(&native_view_of(&shown.webview), corners)?;
+			shown.corners = Some(corners);
+			Ok(())
+		})
 	})
 	.await
 }
@@ -216,7 +290,7 @@ pub async fn place<R: Runtime>(
 		let marker = MainThreadMarker::new().ok_or("the native step ran off the main thread")?;
 		let has_moved = MOUNTED.with_borrow_mut(|mounted| -> Result<bool, String> {
 			let shown = mounted.get_mut(&id).ok_or("the view holds no native webview")?;
-			place_native(&native_view_of(&shown.webview), placement, marker)?;
+			shown.place(placement, marker)?;
 			Ok(std::mem::replace(&mut shown.placement, placement) != placement)
 		})?;
 		if has_moved {
@@ -235,9 +309,7 @@ pub fn replace_all<R: Runtime>(app: &AppHandle<R>) {
 		};
 		MOUNTED.with_borrow(|mounted| {
 			for (id, shown) in mounted {
-				if let Err(failure) =
-					place_native(&native_view_of(&shown.webview), shown.placement, marker)
-				{
+				if let Err(failure) = shown.place_on_the_new_pixel_grid(marker) {
 					log::error!(
 						"live view {id} was not re-placed on the new pixel grid: {failure}"
 					);
@@ -581,6 +653,22 @@ fn place_native(
 	Ok(())
 }
 
+fn cut_corners(view: &NSView, corners: LiveHtmlCorners) -> Result<(), String> {
+	let layer: *mut AnyObject = unsafe { msg_send![view, layer] };
+	if layer.is_null() {
+		return Err("the webview has no layer to round".to_owned());
+	}
+	let window = view.window().ok_or("the webview to round is in no window")?;
+	let outline = Outline::around(view.bounds(), view.isFlipped(), corners)?;
+	let mask: Retained<AnyObject> = unsafe { msg_send![class!(CAShapeLayer), layer] };
+	unsafe {
+		let _: () = msg_send![&*mask, setContentsScale: window.backingScaleFactor()];
+		let _: () = msg_send![&*mask, setPath: outline.0.as_ptr()];
+		let _: () = msg_send![layer, setMask: &*mask];
+	}
+	Ok(())
+}
+
 fn is_holder(view: &NSView) -> bool {
 	let identifier: Option<Retained<NSString>> = unsafe { msg_send![view, identifier] };
 	identifier.is_some_and(|identifier| identifier.to_string() == HOLDER_IDENTIFIER)
@@ -629,13 +717,65 @@ fn native_rectangle(frame: Frame) -> NSRect {
 
 #[cfg(test)]
 mod tests {
+	use std::ffi::c_void;
 	use std::time::Duration;
 
+	use objc2_foundation::{NSPoint, NSRect, NSSize};
 	use tokio::sync::oneshot;
 
-	use super::{is_still_delivered, script_answered, LiveHtmlError};
+	use super::{
+		is_still_delivered, script_answered, CGPath, LiveHtmlCorners, LiveHtmlError, Outline,
+	};
 
 	const HOSTILE_PAGE_BUSY_LOOP: Duration = Duration::from_secs(10);
+	const WIDTH: f64 = 480.0;
+	const HEIGHT: f64 = 160.0;
+	const EACH_ITS_OWN: LiveHtmlCorners =
+		LiveHtmlCorners { top_left: 0.0, top_right: 8.0, bottom_right: 24.0, bottom_left: 16.0 };
+
+	#[link(name = "CoreGraphics", kind = "framework")]
+	extern "C" {
+		fn CGPathContainsPoint(
+			path: *const CGPath,
+			transform: *const c_void,
+			point: NSPoint,
+			is_even_odd: bool,
+		) -> bool;
+	}
+
+	fn assert_each_corner_is_cut_to_its_own_radius(is_flipped: bool) {
+		let bounds = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(WIDTH, HEIGHT));
+		let outline = Outline::around(bounds, is_flipped, EACH_ITS_OWN).expect("a path is built");
+		let is_kept = |from_the_left: f64, from_the_top: f64| {
+			let y = if is_flipped { from_the_top } else { HEIGHT - from_the_top };
+			let point = NSPoint::new(from_the_left, y);
+			unsafe { CGPathContainsPoint(outline.0.as_ptr(), std::ptr::null(), point, false) }
+		};
+
+		assert!(is_kept(1.0, 1.0), "the top left corner of radius 0 was cut");
+		assert!(
+			!is_kept(WIDTH - 2.0, 2.0) && is_kept(WIDTH - 3.0, 3.0),
+			"the top right corner was not cut to 8"
+		);
+		assert!(
+			!is_kept(WIDTH - 6.0, HEIGHT - 6.0) && is_kept(WIDTH - 8.0, HEIGHT - 8.0),
+			"the bottom right corner was not cut to 24"
+		);
+		assert!(
+			!is_kept(4.0, HEIGHT - 4.0) && is_kept(5.0, HEIGHT - 5.0),
+			"the bottom left corner was not cut to 16"
+		);
+	}
+
+	#[test]
+	fn a_flipped_view_is_cut_at_each_corner_to_its_own_radius() {
+		assert_each_corner_is_cut_to_its_own_radius(true);
+	}
+
+	#[test]
+	fn an_unflipped_view_is_cut_at_each_corner_to_its_own_radius() {
+		assert_each_corner_is_cut_to_its_own_radius(false);
+	}
 
 	#[tokio::test(start_paused = true)]
 	async fn a_live_html_script_is_answered_after_a_page_busy_loop_longer_than_a_native_step() {

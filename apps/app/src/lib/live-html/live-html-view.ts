@@ -3,7 +3,11 @@ import type {
 	LiveHtmlRect,
 } from "@workspace/ui/components/live-html-slot"
 
-import { commands, type LiveHtmlError } from "@/lib/bindings"
+import {
+	commands,
+	type LiveHtmlCorners,
+	type LiveHtmlError,
+} from "@/lib/bindings"
 
 type CommandAnswer<Data = null> = Promise<
 	{ status: "ok"; data: Data } | { status: "error"; error: LiveHtmlError }
@@ -26,16 +30,23 @@ type LiveHtmlViewOptions = {
 type DrawnView = {
 	isMounted: boolean
 	placement: LiveHtmlPlacement | null
-	radius: number
+	corners: LiveHtmlCorners
 	isHidden: boolean
 }
 
 type Step = () => Promise<void>
 
+const SQUARE: LiveHtmlCorners = {
+	topLeft: 0,
+	topRight: 0,
+	bottomRight: 0,
+	bottomLeft: 0,
+}
+
 const UNMOUNTED: DrawnView = {
 	isMounted: false,
 	placement: null,
-	radius: 0,
+	corners: SQUARE,
 	isHidden: false,
 }
 
@@ -54,14 +65,11 @@ const overlaps = (a: LiveHtmlRect, b: LiveHtmlRect) =>
 	a.y < b.y + b.height &&
 	b.y < a.y + a.height
 
-const largestRadiusOf = ({ radius }: LiveHtmlPlacement) =>
-	radius &&
-	Math.max(
-		radius.topLeft,
-		radius.topRight,
-		radius.bottomRight,
-		radius.bottomLeft,
-	)
+const isSameCorners = (a: LiveHtmlCorners, b: LiveHtmlCorners) =>
+	a.topLeft === b.topLeft &&
+	a.topRight === b.topRight &&
+	a.bottomRight === b.bottomRight &&
+	a.bottomLeft === b.bottomLeft
 
 const STILL_BOUND_MS = 500
 
@@ -149,10 +157,10 @@ export const createLiveHtmlView = ({
 			)
 
 	const round =
-		(radius: number): Step =>
+		(corners: LiveHtmlCorners): Step =>
 		() =>
-			attempt(commands.liveHtmlRound(id, radius), () => {
-				drawn = { ...drawn, radius }
+			attempt(commands.liveHtmlRound(id, corners), () => {
+				drawn = { ...drawn, corners }
 			})
 
 	const hide: Step = () =>
@@ -195,8 +203,8 @@ export const createLiveHtmlView = ({
 		if (isInSight(placement) && !isSamePlacement(drawn.placement, placement)) {
 			return place(placement)
 		}
-		const radius = largestRadiusOf(placement)
-		if (radius !== undefined && radius !== drawn.radius) return round(radius)
+		const { radius } = placement
+		if (radius && !isSameCorners(radius, drawn.corners)) return round(radius)
 		return null
 	}
 
