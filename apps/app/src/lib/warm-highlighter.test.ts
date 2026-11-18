@@ -29,6 +29,10 @@ const paintFrame = () => {
 	vi.runOnlyPendingTimers()
 }
 
+const paintOneFramePerLanguage = () => {
+	for (const _language of CODE_LANGUAGES) paintFrame()
+}
+
 beforeEach(() => {
 	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 	vi.stubGlobal("requestIdleCallback", undefined)
@@ -67,13 +71,11 @@ it("warms one code language between two animation frames, every language in orde
 it("warms no further code language once stopped while waiting for a frame", () => {
 	const stopWarming = warmCodeHighlighter()
 	paintFrame()
-	const warmedBeforeStop = [...highlighter.warmed]
 
 	stopWarming()
-	for (const _language of CODE_LANGUAGES) paintFrame()
+	paintOneFramePerLanguage()
 
-	expect(warmedBeforeStop).toEqual(CODE_LANGUAGES.slice(0, 1))
-	expect(highlighter.warmed).toEqual(warmedBeforeStop)
+	expect(highlighter.warmed).toEqual(CODE_LANGUAGES.slice(0, 1))
 })
 
 it("warms no further code language once stopped between a frame and its warm-up", () => {
@@ -81,7 +83,7 @@ it("warms no further code language once stopped between a frame and its warm-up"
 	runDueFrames()
 
 	stopWarming()
-	for (const _language of CODE_LANGUAGES) paintFrame()
+	paintOneFramePerLanguage()
 
 	expect(highlighter.warmed).toEqual([])
 })
