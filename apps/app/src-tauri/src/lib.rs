@@ -50,11 +50,17 @@ pub mod updates;
 pub mod user;
 mod window_controls;
 
-use tauri::{Manager, RunEvent};
+use tauri::{Manager, RunEvent, Runtime, Window, WindowEvent};
 
 use agent::commands::terminate_session;
 use agent::AgentState;
 use commands::builder;
+
+pub fn forget_a_destroyed_window<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+	missions::run_claims::forget_on_destroyed(window, event);
+	conversations::awaited_runs::forget_on_destroyed(window, event);
+	library::presence::forget_on_destroyed(window, event);
+}
 
 pub fn run() {
 	descriptors::raise_open_file_limit();
@@ -99,11 +105,7 @@ pub fn run() {
 			conversations::awaited_runs::forget_on_page_load(webview, payload);
 			library::presence::forget_on_page_load(webview, payload);
 		})
-		.on_window_event(|window, event| {
-			missions::run_claims::forget_on_destroyed(window, event);
-			conversations::awaited_runs::forget_on_destroyed(window, event);
-			library::presence::forget_on_destroyed(window, event);
-		})
+		.on_window_event(forget_a_destroyed_window)
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())
 		.manage(badge::Badge::default())
