@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect } from "react"
+import { useCallback, useLayoutEffect, useSyncExternalStore } from "react"
 
 import type { ColorScheme } from "@/lib/user/preferences-contract"
 
@@ -15,6 +15,17 @@ const systemScheme = (): ResolvedScheme =>
 
 const resolvedSchemeOf = (colorScheme: ColorScheme): ResolvedScheme =>
 	colorScheme === "system" ? systemScheme() : colorScheme
+
+const subscribeToSystemScheme = (onChange: () => void) => {
+	const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
+	mediaQuery.addEventListener("change", onChange)
+	return () => mediaQuery.removeEventListener("change", onChange)
+}
+
+export const useResolvedScheme = (colorScheme: ColorScheme): ResolvedScheme => {
+	const system = useSyncExternalStore(subscribeToSystemScheme, systemScheme)
+	return colorScheme === "system" ? system : colorScheme
+}
 
 const disableTransitionsTemporarily = () => {
 	const style = document.createElement("style")

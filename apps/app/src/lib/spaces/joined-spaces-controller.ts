@@ -289,6 +289,20 @@ export const openSpaceColourOf = (
 		: openLocalSpaceOf(spaces, openRowId)?.colour
 }
 
+export const spaceColourOf = (
+	spaceId: string | null,
+	spacesState: Pick<SpacesState, "spaces" | "selectedSpaceId">,
+	joined: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
+) => {
+	if (spaceId === spacesState.selectedSpaceId) {
+		return openSpaceColourOf(spacesState, joined)
+	}
+	const space =
+		spacesState.spaces.find(({ id }) => id === spaceId) ??
+		joined.joinedSpaces.find((other) => hostSpaceIdOf(other) === spaceId)
+	return space?.colour
+}
+
 export const rosterSpacesOf = (
 	spaces: Space[],
 	joinedSpaces: JoinedSpace[],

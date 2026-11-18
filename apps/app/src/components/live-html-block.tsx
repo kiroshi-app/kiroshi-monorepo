@@ -1,6 +1,7 @@
 import { LiveHtmlSlot } from "@workspace/ui/components/live-html-slot"
 
 import { mountingHtml } from "@/lib/live-html/live-html-view"
+import { useLiveHtmlTheme } from "@/lib/live-html/use-live-html-theme"
 import { useLiveHtmlView } from "@/lib/live-html/use-live-html-view"
 
 type LiveHtmlBlockProps = {
@@ -10,6 +11,7 @@ type LiveHtmlBlockProps = {
 export const LiveHtmlBlock = ({ html }: LiveHtmlBlockProps) => {
 	const { status, height, still, onPlacementChange } = useLiveHtmlView(
 		mountingHtml(html),
+		useLiveHtmlTheme(),
 	)
 
 	return (

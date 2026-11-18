@@ -210,6 +210,7 @@ import {
 } from "@/lib/conversations/use-conversation-seating"
 import type { FailureCorrelation } from "@/lib/failure-report"
 import { useComposerLibrary } from "@/lib/library/use-composer-library"
+import { LiveHtmlSpaceContext } from "@/lib/live-html/use-live-html-theme"
 import type {
 	OpenMission,
 	OpenMissionInNewTab,
@@ -433,6 +434,16 @@ const failureContextOf = (
 
 const shownConversationIdOf = (thread: LoadedThread): string | null =>
 	thread.kind === "bot" ? thread.state.conversationId : thread.conversation.id
+
+const threadSpaceIdOf = (
+	thread: LoadedThread,
+	openSpaceId: string | null,
+): string | null =>
+	thread.kind === "bot"
+		? openSpaceId
+		: (thread.conversation.spaceId ??
+			thread.mission?.mission.spaceId ??
+			openSpaceId)
 
 const turnRunningAgentIdsOf = ({
 	bot,
@@ -2127,18 +2138,20 @@ function ThreadView(props: ThreadViewProps) {
 	)
 
 	const content = (
-		<AnswerActionsContext value={answerActions}>
-			<ThreadDocumentsContext value={documents}>
-				<ThreadBoardDrawers
-					bots={known}
-					conversationId={conversationId}
-					spaceId={documents?.spaceId}
-					workingAgentIds={workingAgentIds}
-				>
-					{layout}
-				</ThreadBoardDrawers>
-			</ThreadDocumentsContext>
-		</AnswerActionsContext>
+		<LiveHtmlSpaceContext value={threadSpaceIdOf(thread, props.spaceId)}>
+			<AnswerActionsContext value={answerActions}>
+				<ThreadDocumentsContext value={documents}>
+					<ThreadBoardDrawers
+						bots={known}
+						conversationId={conversationId}
+						spaceId={documents?.spaceId}
+						workingAgentIds={workingAgentIds}
+					>
+						{layout}
+					</ThreadBoardDrawers>
+				</ThreadDocumentsContext>
+			</AnswerActionsContext>
+		</LiveHtmlSpaceContext>
 	)
 
 	return (

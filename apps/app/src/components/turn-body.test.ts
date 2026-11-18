@@ -655,7 +655,7 @@ describe("an html block of an agent reply", () => {
 				id: expect.any(String),
 				html: PAGE,
 				rectangle: SLOT_VIEW_BOX,
-				theme: null,
+				theme: { appearance: "light", hue: null },
 			},
 		])
 		expect(htmlCodeBlock()).toBeNull()
@@ -811,7 +811,7 @@ describe("an html file an agent attaches to its reply", () => {
 					id: expect.any(String),
 					path: STORED_PAGE,
 					rectangle: SLOT_VIEW_BOX,
-					theme: null,
+					theme: { appearance: "light", hue: null },
 				},
 			])
 			expect(screen.getByRole("button", { name: open })).toBeTruthy()

@@ -1,6 +1,7 @@
 import { LiveHtmlSlot } from "@workspace/ui/components/live-html-slot"
 
 import { mountingAttachment } from "@/lib/live-html/live-html-view"
+import { useLiveHtmlTheme } from "@/lib/live-html/use-live-html-theme"
 import { useLiveHtmlView } from "@/lib/live-html/use-live-html-view"
 
 type LiveHtmlAttachmentProps = {
@@ -14,6 +15,7 @@ export const LiveHtmlAttachment = ({
 }: LiveHtmlAttachmentProps) => {
 	const { status, height, still, onPlacementChange } = useLiveHtmlView(
 		mountingAttachment(path),
+		useLiveHtmlTheme(),
 		onUnavailable,
 	)
 
