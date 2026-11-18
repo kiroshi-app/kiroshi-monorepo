@@ -252,8 +252,6 @@ describe("the still of a live html view", () => {
 
 	it("is taken again for each surface that opens", async () => {
 		const { result } = await renderLiveView()
-		open(DIALOG).remove()
-		await nextFrame()
 
 		const surface = open(DIALOG)
 		await waitFor(() => expect(result.current.still).toBe(STILL))

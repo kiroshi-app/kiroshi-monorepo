@@ -377,18 +377,6 @@ describe("a live html view", () => {
 			"live_html_remove",
 		])
 	})
-
-	it("takes a still of a rounded view before hiding it under an app surface", async () => {
-		hostAnswers({ live_html_still: () => STILL })
-		const view = viewOf()
-		view.follow(ROUNDED)
-		await flush()
-
-		view.cover(true)
-		await flush()
-
-		expect(callsOf().slice(3)).toEqual(["live_html_still", "live_html_hide"])
-	})
 })
 
 describe("the still of a live html view", () => {

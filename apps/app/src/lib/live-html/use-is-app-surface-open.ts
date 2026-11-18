@@ -4,6 +4,8 @@ import type { LiveHtmlRect } from "@workspace/ui/components/live-html-slot"
 
 import { subscribeToOpenPopups } from "@/lib/annotation/use-topmost-open-popup"
 
+type IsUnder = (surface: LiveHtmlRect) => boolean
+
 const TOOLTIP_CONTENT = '[data-slot="tooltip-content"]'
 
 const OPEN_APP_SURFACE = `[data-open]:is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="presentation"]:not(:has(${TOOLTIP_CONTENT}))), [data-slot$="mention-menu"] [role="listbox"]`
@@ -13,9 +15,9 @@ const OPEN_TOOLTIP = `[data-open][role="presentation"]:has(${TOOLTIP_CONTENT})`
 const hasOpenAppSurface = () =>
 	document.querySelector(OPEN_APP_SURFACE) !== null
 
-const openTooltipRects = () =>
-	Array.from(document.querySelectorAll(OPEN_TOOLTIP), (tooltip) =>
-		tooltip.getBoundingClientRect(),
+const hasOpenTooltipOver = (isUnder: IsUnder) =>
+	Array.from(document.querySelectorAll(OPEN_TOOLTIP)).some((tooltip) =>
+		isUnder(tooltip.getBoundingClientRect()),
 	)
 
 const subscribeToAppSurfaces = (onChange: () => void) => {
@@ -31,12 +33,8 @@ const subscribeToAppSurfaces = (onChange: () => void) => {
 	}
 }
 
-export const useIsAppSurfaceOpen = (
-	isUnder: (surface: LiveHtmlRect) => boolean,
-) =>
+export const useIsAppSurfaceOpen = (isUnder: IsUnder) =>
 	useSyncExternalStore(
 		subscribeToAppSurfaces,
-		() =>
-			hasOpenAppSurface() ||
-			openTooltipRects().some((tooltip) => isUnder(tooltip)),
+		() => hasOpenAppSurface() || hasOpenTooltipOver(isUnder),
 	)
