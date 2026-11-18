@@ -1,4 +1,4 @@
-const CI_EVENTS = ["pull_request", "merge_group", "push"] as const
+const CI_EVENTS = ["pull_request", "push"] as const
 
 type CiEvent = (typeof CI_EVENTS)[number]
 
@@ -105,7 +105,6 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 }
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
-	if (event === "merge_group") return NO_JOB
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
 		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
@@ -188,7 +187,6 @@ const jobsOfPush = (greenBase: string | undefined) => {
 }
 
 const jobsOf = (event: CiEvent, base: string | undefined) => {
-	if (event === "merge_group") return decideJobs({ event, paths: [] })
 	if (event === "pull_request")
 		return decideJobs({ event, paths: changedPaths(base) })
 	return jobsOfPush(base)
