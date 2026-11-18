@@ -211,12 +211,9 @@ it("raises the failure notice in fr when the reload fails while the language is 
 
 	await pressReload()
 
+	const notice = noticeRegion()
+	expect(notice.getByText("La fenêtre ne s’est pas rechargée")).toBeTruthy()
 	expect(
-		noticeRegion().getByText("La fenêtre ne s’est pas rechargée"),
-	).toBeTruthy()
-	expect(
-		noticeRegion().getByText(
-			"Appuyez sur Recharger la fenêtre pour réessayer.",
-		),
+		notice.getByText("Appuyez sur Recharger la fenêtre pour réessayer."),
 	).toBeTruthy()
 })
