@@ -1315,12 +1315,10 @@ const expectNoConnection = async (
 ) => {
 	await userEvent.click(canvas.getByRole("button", { name: "Send a message" }))
 
-	const title = await within(viewport()).findByText("Connection lost")
-	const notice = title.closest<HTMLElement>("[data-slot=toast]")
-	if (!notice) throw new window.Error("The notice is not on the surface")
+	const notice = await waitFor(() => cardCarrying("Connection lost"))
 	await opaque(notice)
 	await expect(notice).toHaveAttribute("data-type", "warning")
-	await expect(title).toBeVisible()
+	await expect(within(notice).getByText("Connection lost")).toBeVisible()
 	await expect(
 		within(notice).getByText("This turn runs again once you’re back online."),
 	).toBeVisible()
