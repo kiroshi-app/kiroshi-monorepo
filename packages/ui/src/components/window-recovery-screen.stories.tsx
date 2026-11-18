@@ -11,13 +11,6 @@ import {
 	WindowRecoveryScreen,
 } from "@workspace/ui/components/window-recovery-screen"
 
-type SchemeContext = { globals: { theme?: string } }
-
-const schemeBeforeMount = ({ globals }: SchemeContext) => {
-	document.documentElement.classList.toggle("dark", globals.theme === "dark")
-	return () => document.documentElement.classList.remove("dark")
-}
-
 const NARROWEST_WINDOW = 320
 const LIGHT_INK = "rgb(0, 0, 0)"
 const DARK_INK = "rgb(255, 255, 255)"
@@ -66,7 +59,6 @@ const meta = preview.meta({
 			},
 		},
 	},
-	beforeEach: schemeBeforeMount,
 	args: { onContinue: fn(), onReload: fn() },
 	argTypes: {
 		reason: {
