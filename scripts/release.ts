@@ -20,7 +20,6 @@ const versionFiles = (root: string) => ({
 
 const SEMVER = /^\d+\.\d+\.\d+(-beta\.\d+)?$/
 const BETA_SUFFIX = /-beta\.\d+$/
-const VERSION_PARTS = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$/
 const STABLE_MINOR = /^(\d+)\.(\d+)\.0$/
 const BUMP_TYPES = ["patch", "minor", "major"] as const
 
@@ -68,26 +67,6 @@ export const computeNext = (current: string, input: string) => {
 	return `${major}.${minor}.${patch + 1}`
 }
 
-const versionRank = (version: string) => {
-	const match = version.match(VERSION_PARTS)
-	if (!match)
-		throw new Error(`${version} is not an X.Y.Z or X.Y.Z-beta.N version`)
-	const [, major, minor, patch, beta] = match
-	return [
-		Number(major),
-		Number(minor),
-		Number(patch),
-		beta === undefined ? Number.POSITIVE_INFINITY : Number(beta),
-	]
-}
-
-export const compareVersions = (left: string, right: string) => {
-	const leftRank = versionRank(left)
-	const rightRank = versionRank(right)
-	const index = leftRank.findIndex((part, at) => part !== rightRank[at])
-	return index === -1 ? 0 : Math.sign(leftRank[index] - rightRank[index])
-}
-
 export const nextMainVersion = (release: string) => {
 	const match = release.match(STABLE_MINOR)
 	if (!match) return undefined
@@ -98,7 +77,7 @@ export const planMainBump = (
 	version: string,
 	mainVersion: string,
 ): MainBump => {
-	if (compareVersions(mainVersion, version) >= 0)
+	if (Bun.semver.order(mainVersion, version) >= 0)
 		return {
 			kind: "skip",
 			reason: `origin/main already reads ${mainVersion}, at or above ${version}`,

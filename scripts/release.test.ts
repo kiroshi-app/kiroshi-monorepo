@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
 import {
-	compareVersions,
 	computeNext,
 	describeMainBump,
 	nextMainVersion,
@@ -66,14 +65,6 @@ describe("release", () => {
 		expect(nextMainVersion("0.27.1")).toBeUndefined()
 	})
 
-	it("orders a beta below its stable and betas by number", () => {
-		expect(compareVersions("0.28.0-beta.0", "0.28.0-beta.1")).toBe(-1)
-		expect(compareVersions("0.28.0-beta.1", "0.28.0")).toBe(-1)
-		expect(compareVersions("0.27.1", "0.28.0-beta.0")).toBe(-1)
-		expect(compareVersions("0.28.0-beta.0", "0.28.0-beta.0")).toBe(0)
-		expect(compareVersions("0.28.0", "0.27.9")).toBe(1)
-	})
-
 	it("opens the main bump when origin/main reads a lower version", () => {
 		expect(planMainBump("0.28.0-beta.0", "0.27.0-beta.5")).toEqual({
 			kind: "open",
@@ -84,7 +75,7 @@ describe("release", () => {
 	})
 
 	it("skips the main bump when origin/main reads it or above", () => {
-		for (const mainVersion of ["0.28.0-beta.0", "0.28.0-beta.2", "0.29.0"]) {
+		for (const mainVersion of ["0.28.0-beta.0", "0.28.0-beta.10", "0.29.0"]) {
 			const bump = planMainBump("0.28.0-beta.0", mainVersion)
 			expect(bump.kind).toBe("skip")
 			expect(describeMainBump(bump)).toBe(
