@@ -41,20 +41,20 @@ const SCROLL_TO_THE_TOP_SCRIPT: &str = "scrollTo(0, 0)";
 const SCROLL_STEP_INTERVAL: Duration = Duration::from_millis(16);
 const SCROLL_SETTLE: Duration = Duration::from_millis(800);
 const SCROLL_READING_TIMEOUT: Duration = Duration::from_secs(2);
-const WHEEL_NOTCHES: [ScrollStep; 3] = [ScrollStep { delta: -3, phase: 0, momentum_phase: 0 }; 3];
+const WHEEL_NOTCHES: [ScrollStep; 3] = [ScrollStep::notch(-3); 3];
 const TRACKPAD_SWIPE: [ScrollStep; 12] = [
-	ScrollStep { delta: -8, phase: 1, momentum_phase: 0 },
-	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
-	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
-	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
-	ScrollStep { delta: -16, phase: 2, momentum_phase: 0 },
-	ScrollStep { delta: 0, phase: 4, momentum_phase: 0 },
-	ScrollStep { delta: -12, phase: 0, momentum_phase: 1 },
-	ScrollStep { delta: -8, phase: 0, momentum_phase: 2 },
-	ScrollStep { delta: -6, phase: 0, momentum_phase: 2 },
-	ScrollStep { delta: -4, phase: 0, momentum_phase: 2 },
-	ScrollStep { delta: -2, phase: 0, momentum_phase: 2 },
-	ScrollStep { delta: 0, phase: 0, momentum_phase: 3 },
+	ScrollStep::began(-8),
+	ScrollStep::changed(-16),
+	ScrollStep::changed(-16),
+	ScrollStep::changed(-16),
+	ScrollStep::changed(-16),
+	ScrollStep::ended(),
+	ScrollStep::momentum_began(-12),
+	ScrollStep::momentum(-8),
+	ScrollStep::momentum(-6),
+	ScrollStep::momentum(-4),
+	ScrollStep::momentum(-2),
+	ScrollStep::momentum_ended(),
 ];
 const RUN_SIGNAL: &str = "run";
 const BEAT_SCRIPT: &str = "window.__spikeBeat?.()";

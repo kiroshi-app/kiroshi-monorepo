@@ -408,6 +408,13 @@ const PIXEL_UNITS: u32 = 0;
 const IS_CONTINUOUS: u32 = 88;
 const SCROLL_PHASE: u32 = 99;
 const MOMENTUM_PHASE: u32 = 123;
+const NO_PHASE: i64 = 0;
+const SCROLL_BEGAN: i64 = 1;
+const SCROLL_CHANGED: i64 = 2;
+const SCROLL_ENDED: i64 = 4;
+const MOMENTUM_BEGAN: i64 = 1;
+const MOMENTUM_CONTINUED: i64 = 2;
+const MOMENTUM_ENDED: i64 = 3;
 const POINTER_BESIDE_THE_VIEW: f64 = 120.0;
 
 #[derive(Clone, Copy, PartialEq, Serialize)]
@@ -437,6 +444,36 @@ pub struct ScrollStep {
 	pub delta: i32,
 	pub phase: i64,
 	pub momentum_phase: i64,
+}
+
+impl ScrollStep {
+	pub const fn notch(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn began(delta: i32) -> Self {
+		Self { delta, phase: SCROLL_BEGAN, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn changed(delta: i32) -> Self {
+		Self { delta, phase: SCROLL_CHANGED, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn ended() -> Self {
+		Self { delta: 0, phase: SCROLL_ENDED, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn momentum_began(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: MOMENTUM_BEGAN }
+	}
+
+	pub const fn momentum(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: MOMENTUM_CONTINUED }
+	}
+
+	pub const fn momentum_ended() -> Self {
+		Self { delta: 0, phase: NO_PHASE, momentum_phase: MOMENTUM_ENDED }
+	}
 }
 
 pub fn send_scroll(
