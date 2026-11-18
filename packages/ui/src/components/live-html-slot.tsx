@@ -37,6 +37,7 @@ type LiveHtmlSlotProps = {
 	status: LiveHtmlStatus
 	html: string
 	height?: number
+	still?: string
 	onPlacementChange: (placement: LiveHtmlPlacement | null) => void
 }
 
@@ -161,6 +162,7 @@ const LiveHtmlSlot = ({
 	status,
 	html,
 	height,
+	still,
 	onPlacementChange,
 }: LiveHtmlSlotProps) => {
 	const { t } = useTranslation("chat")
@@ -222,6 +224,15 @@ const LiveHtmlSlot = ({
 			>
 				{isLoading ? (
 					<Skeleton aria-hidden className="size-full rounded-none" />
+				) : null}
+				{still && !isLoading ? (
+					<img
+						data-slot="live-html-slot-still"
+						src={still}
+						alt=""
+						aria-hidden
+						className="pointer-events-none size-full object-cover object-top-left"
+					/>
 				) : null}
 			</div>
 		</AnswerCard>

@@ -24,6 +24,11 @@ const TALL_PAGE_HEIGHT = 2400
 const GROWN_PAGE_HEIGHT = 640
 const FRACTIONAL_PAGE_HEIGHT = 240.5
 
+const PAGE_STILL =
+	"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAFACAMAAAAbEz04AAAADFBMVEX///8fKTc7gvbR1dtnm1WqAAAC50lEQVR42u3SiQkAIAwEwaj992wN4kOCMwUcYjYCAAAAAAAAAAAAAAAAAAAoqyXnQgIUIAJEgAJEgAhQgAgQAQoQASJAASJABChABIgABYgAEaAAESACFCACRIACBAAAAAAAAIAfjMv8MAJEgCBABAgCRIAgQAAAAAAAAAAAAAAAAAAAAAAAAAAAWNU3+UEEiABBgAgQBIgAQYAIEASIAEGACBAEiABBgAgQAQoQASJAASJABChABIgABYgAEaAAESACFCACRIACRIAIUIAO6P0CFCAOKEABChAHFKAABYgDClCAAsQBBShAAeKAAhSgAHFAAQpQgDigAAUoQBzQ+wXo/QJ0QO8XoPcL0AG9X4DeL0AH9H4Ber8AHdD7Bej9AnRA7xeg9wvQAb1fgN4vQAf0fgF6vwBffED1fQEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQIAIUoH0BCkSAArQvQIEIUID2BSgQAQrQvgAFIkABClCAAhGgAAUoQIEIUIACFKBABChAAQpQIAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABWhfgPYFaF+AArQvQPsCFKB9AdoXoADtC9C+AAVoX4D2BeiD7QvQvgB9sH0B2hegD7YvQPsC9MH2BWhfgD7YvgDtC9AH2xegfQH6YPsCtC9AB7QvQPsCdED7ArQvQAe0L0D7AnRA+wK0L0AHFKAA7QvQvgAFaF+A9gUoQPsCtC9AAdoXoH0B+mD7ArQvQB9sX4D2BeiD7QvQvgB9sH0B2hegD7YvQPsC9MH2BWhfgD7YvgDtC9AH2xegfQE6oH0B2hegA9oXoH0BOqB9AdoXoAPaF6B9AdoXoADtC9C+AAVoX4D2BShA+1kDHHCQAKkVIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHDcBGgafcDkB5S4AAAAASUVORK5CYII="
+const OTHER_PAGE_STILL =
+	"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR42mOQ1zQHIgADUAD/sT/BWQAAAABJRU5ErkJggg=="
+
 const partOf = (canvasElement: HTMLElement, slot: string, name: string) => {
 	const part = canvasElement.querySelector<HTMLElement>(`[data-slot='${slot}']`)
 	if (!part) throw new Error(`The ${name} did not render.`)
@@ -182,6 +187,36 @@ const PageMeasuredAgain = (props: LiveHtmlSlotProps) => {
 	)
 }
 
+const stillIn = (element: HTMLElement) =>
+	element.querySelector<HTMLImageElement>("[data-slot='live-html-slot-still']")
+
+const expectStillFillsView = async (canvasElement: HTMLElement) => {
+	const view = viewOf(canvasElement)
+	const still = stillIn(view)
+	if (!still) throw new Error("The still did not render.")
+	await waitFor(() => expect(still.naturalWidth).toBeGreaterThan(0))
+	await expect(rectOf(still)).toEqual(rectOf(view))
+	const style = getComputedStyle(still)
+	await expect(style.objectFit).toBe("cover")
+	await expect(style.objectPosition).toBe("0% 0%")
+	await expect(style.pointerEvents).toBe("none")
+	await expect(still).toHaveAttribute("aria-hidden", "true")
+	await expect(within(canvasElement).queryByRole("img")).not.toBeInTheDocument()
+}
+
+const StillTakenAgain = (props: LiveHtmlSlotProps) => {
+	const [still, setStill] = useState(props.still)
+	return (
+		<>
+			<Button onClick={() => setStill(OTHER_PAGE_STILL)}>
+				Take another still
+			</Button>
+			<Button onClick={() => setStill(undefined)}>Drop the still</Button>
+			<ScrollingReply {...props} still={still} />
+		</>
+	)
+}
+
 const meta = preview.meta({
 	title: "Conversation/Markdown/LiveHtmlSlot",
 	component: LiveHtmlSlot,
@@ -283,6 +318,82 @@ export const LiveDark = meta.story({
 		)
 		await expect(mounted.clip).toEqual(mounted.rect)
 		await expectViewInCard(canvasElement)
+	},
+})
+
+export const LiveWithStill = meta.story({
+	args: { still: PAGE_STILL },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A live slot given a still of its page: the image fills the reserved area edge to edge, flush against the ring and under the header divider, its bottom corners cut by the card radius, kept at its aspect ratio from the top left corner. It stays out of the accessibility tree and of pointer events, and the reported rect, clip and radius are those of the slot without a still.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const mounted = await reportFollows(args.onPlacementChange, () =>
+			placementIn(view, scroller),
+		)
+		await expect(mounted.clip).toEqual(mounted.rect)
+		await expectViewInCard(canvasElement)
+		await expectStillFillsView(canvasElement)
+	},
+})
+
+export const LiveWithStillDark = meta.story({
+	args: LiveWithStill.input.args,
+	globals: { theme: "dark" },
+	render: LiveWithStill.input.render,
+	play: LiveWithStill.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same slot as `LiveWithStill` on the dark thread: the still keeps the page's own colours and fills the reserved area of the outlined card, its bottom corners cut by the card radius.",
+			},
+		},
+	},
+})
+
+export const StillChangesAfterMount = meta.story({
+	tags: ["test-only"],
+	args: { still: PAGE_STILL },
+	render: (args) => <StillTakenAgain {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Another still is taken, then the still is dropped, after the slot mounted: the reserved area stays the same element, draws the new image, then goes back to empty, and no new placement is reported.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		const mounted = await reportFollows(args.onPlacementChange, () =>
+			placementIn(view, scroller),
+		)
+		const reportCount = (args.onPlacementChange as ReturnType<typeof fn>).mock
+			.calls.length
+		await expect(stillIn(view)).toHaveAttribute("src", PAGE_STILL)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Take another still" }),
+		)
+		await expect(stillIn(view)).toHaveAttribute("src", OTHER_PAGE_STILL)
+		await expectStillFillsView(canvasElement)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Drop the still" }),
+		)
+		await expect(viewOf(canvasElement)).toBe(view)
+		await expect(view.childElementCount).toBe(0)
+		await expect(lastPlacementOf(args.onPlacementChange)).toEqual(mounted)
+		await expect(args.onPlacementChange).toHaveBeenCalledTimes(reportCount)
 	},
 })
 
@@ -484,6 +595,27 @@ export const LoadingDark = meta.story({
 	},
 })
 
+export const LoadingWithStill = meta.story({
+	tags: ["test-only"],
+	args: { status: "loading", still: PAGE_STILL },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A still given while the live view is on its way: the skeleton fills the reserved area and the still is not drawn.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const skeleton = view.querySelector("[data-slot='skeleton']")
+		if (!skeleton) throw new Error("The skeleton did not render.")
+		await expect(rectOf(skeleton)).toEqual(rectOf(view))
+		await expect(stillIn(view)).toBeNull()
+	},
+})
+
 export const Unavailable = meta.story({
 	args: { status: "unavailable" },
 	render: (args) => <ScrollingReply {...args} />,
@@ -518,5 +650,26 @@ export const UnavailableDark = meta.story({
 					"The same fallback as `Unavailable` on the dark thread: the `html` fence in the outlined, rounded answer card.",
 			},
 		},
+	},
+})
+
+export const UnavailableWithStill = meta.story({
+	tags: ["test-only"],
+	args: { status: "unavailable", still: PAGE_STILL },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A still given on a platform with no live view: the HTML still reads as the `html` fence and the still is not drawn.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("group", { name: "Code snippet, html" }),
+		).toBeInTheDocument()
+		await expect(stillIn(canvasElement)).toBeNull()
+		await expect(args.onPlacementChange).not.toHaveBeenCalled()
 	},
 })
