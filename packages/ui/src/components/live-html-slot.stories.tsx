@@ -22,13 +22,21 @@ const HTML_SOURCE = `<!doctype html>
 const SHORT_PAGE_HEIGHT = 160
 const TALL_PAGE_HEIGHT = 2400
 const GROWN_PAGE_HEIGHT = 640
+const FRACTIONAL_PAGE_HEIGHT = 240.5
 
-const viewOf = (canvasElement: HTMLElement) => {
-	const view = canvasElement.querySelector<HTMLElement>(
-		"[data-slot='live-html-slot-view']",
-	)
-	if (!view) throw new Error("The reserved area did not render.")
-	return view
+const partOf = (canvasElement: HTMLElement, slot: string, name: string) => {
+	const part = canvasElement.querySelector<HTMLElement>(`[data-slot='${slot}']`)
+	if (!part) throw new Error(`The ${name} did not render.`)
+	return part
+}
+
+const viewOf = (canvasElement: HTMLElement) =>
+	partOf(canvasElement, "live-html-slot-view", "reserved area")
+
+const cardOf = (view: HTMLElement) => {
+	const card = view.closest<HTMLElement>("[data-slot='live-html-slot']")
+	if (!card) throw new Error("The reserved area is not in its card.")
+	return card
 }
 
 const rectOf = (element: Element) => {
@@ -66,9 +74,20 @@ const visiblePartOf = (view: Element, scroller: Element) => {
 	}
 }
 
-const placementIn = (view: Element, scroller: Element) => ({
+const bottomRadiusIn = (view: HTMLElement) => {
+	const style = getComputedStyle(cardOf(view))
+	return {
+		topLeft: 0,
+		topRight: 0,
+		bottomRight: Number.parseFloat(style.borderBottomRightRadius),
+		bottomLeft: Number.parseFloat(style.borderBottomLeftRadius),
+	}
+}
+
+const placementIn = (view: HTMLElement, scroller: Element) => ({
 	rect: rectOf(view),
 	clip: visiblePartOf(view, scroller),
+	radius: bottomRadiusIn(view),
 })
 
 const scrollPast = (scroller: Element, view: HTMLElement, share: number) => {
@@ -95,17 +114,44 @@ const expectSizedToPage = async (
 		await expect(element.scrollHeight).toBe(element.clientHeight)
 }
 
-const expectFlushView = async (canvasElement: HTMLElement) => {
-	const slot = within(canvasElement).getByRole("group", { name: "Live view" })
-	const style = getComputedStyle(slot)
-	await expect(style.boxShadow).toBe("none")
-	await expect(style.outlineStyle).toBe("none")
+const expectAnswerCardFrame = async (card: HTMLElement) => {
+	const style = getComputedStyle(card)
+	await expect(style.boxShadow).toContain("0px 0px 0px 1px")
 	await expect(style.borderWidth).toBe("0px")
+	await expect(style.overflow).toBe("hidden")
+	await expect(Number.parseFloat(style.borderTopLeftRadius)).toBeGreaterThan(0)
+	for (const corner of [
+		style.borderTopRightRadius,
+		style.borderBottomRightRadius,
+		style.borderBottomLeftRadius,
+	])
+		await expect(corner).toBe(style.borderTopLeftRadius)
+	for (const side of [
+		style.paddingTop,
+		style.paddingRight,
+		style.paddingBottom,
+		style.paddingLeft,
+	])
+		await expect(side).toBe("0px")
+}
+
+const expectViewInCard = async (canvasElement: HTMLElement) => {
+	const slot = within(canvasElement).getByRole("group", { name: "Live view" })
+	await expectAnswerCardFrame(slot)
 	const slotBox = slot.getBoundingClientRect()
-	const viewBox = viewOf(canvasElement).getBoundingClientRect()
+	const view = viewOf(canvasElement)
+	const viewBox = view.getBoundingClientRect()
+	const headerBox = partOf(
+		canvasElement,
+		"markdown-answer-card-header",
+		"card header",
+	).getBoundingClientRect()
 	await expect(viewBox.left).toBe(slotBox.left)
 	await expect(viewBox.right).toBe(slotBox.right)
 	await expect(viewBox.bottom).toBe(slotBox.bottom)
+	await expect(viewBox.top).toBe(headerBox.bottom)
+	await expect(slotBox.height).toBe(headerBox.height + viewBox.height)
+	await expect(bottomRadiusIn(view).bottomLeft).toBeGreaterThan(0)
 }
 
 const ScrollingReply = (props: LiveHtmlSlotProps) => (
@@ -143,7 +189,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, so nothing interactive lives inside the reserved area, and the header bar above it carries only its label. Without a live view, the HTML reads as the fence an `html` block renders.",
+					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, with its corners cut by `radius`, so nothing interactive lives inside the reserved area, and the header bar above it carries only its label. Without a live view, the HTML reads as the fence an `html` block renders.",
 			},
 		},
 	},
@@ -160,7 +206,7 @@ export const Live = meta.story({
 		docs: {
 			description: {
 				story:
-					"A live view whose page height is not known yet, in a reply that scrolls: the reserved area holds a 20rem placeholder, edge to edge under the header, with no outline around the slot. The header holds no button and Escape changes nothing. The reported rect and clip follow the reserved area through a scroll and a resize of the reply column.",
+					"A live view whose page height is not known yet, in a reply that scrolls: the slot wears the outlined, rounded answer card and the reserved area holds a 20rem placeholder, flush against the ring and under the header divider. The header holds no button and Escape changes nothing. The reported rect, clip and radius follow the reserved area through a scroll and a resize of the reply column, and a new card radius alone reports a new placement, square on top under the header and rounded at the bottom.",
 			},
 		},
 	},
@@ -171,7 +217,7 @@ export const Live = meta.story({
 
 		const mounted = await reportFollows(args.onPlacementChange, placed)
 		await expect(mounted.clip).toEqual(mounted.rect)
-		await expectFlushView(canvasElement)
+		await expectViewInCard(canvasElement)
 		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
 
 		const reportCount = (args.onPlacementChange as ReturnType<typeof fn>).mock
@@ -200,7 +246,21 @@ export const Live = meta.story({
 
 		const above = canvas.getByTestId("paragraph-above")
 		above.textContent = `${above.textContent} `.repeat(12)
-		await reportFollows(args.onPlacementChange, placed, resized)
+		const reflowed = await reportFollows(
+			args.onPlacementChange,
+			placed,
+			resized,
+		)
+
+		cardOf(view).style.borderRadius = "8px"
+		window.dispatchEvent(new Event("resize"))
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)).toEqual({
+				rect: reflowed.rect,
+				clip: reflowed.clip,
+				radius: { topLeft: 0, topRight: 0, bottomRight: 8, bottomLeft: 8 },
+			}),
+		)
 	},
 })
 
@@ -211,7 +271,7 @@ export const LiveDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same live slot as `Live` on the dark thread: the reserved area runs edge to edge under the header, with no outline around the slot, and the reported rect and clip match it.",
+					"The same live slot as `Live` on the dark thread: the outlined, rounded card holds the reserved area flush against its ring and under the header divider, and the reported rect, clip and radius match it.",
 			},
 		},
 	},
@@ -222,7 +282,7 @@ export const LiveDark = meta.story({
 			placementIn(view, scroller),
 		)
 		await expect(mounted.clip).toEqual(mounted.rect)
-		await expectFlushView(canvasElement)
+		await expectViewInCard(canvasElement)
 	},
 })
 
@@ -349,6 +409,42 @@ export const HeightChangesAfterMount = meta.story({
 	},
 })
 
+export const FractionalCardSize = meta.story({
+	tags: ["test-only"],
+	args: { height: FRACTIONAL_PAGE_HEIGHT },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reply column is a fractional pixel wide and the page a fractional pixel tall: the reported bottom corners still carry the card radius. Once the reserved area stops two pixels short of the right edge, the bottom right corner reports 0 and the bottom left keeps the radius.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const card = cardOf(view)
+		const scroller = canvas.getByTestId("reply-scroller")
+		scroller.style.width = "400.5px"
+		await expect(card.getBoundingClientRect().width % 1).not.toBe(0)
+		await expect(card.getBoundingClientRect().height % 1).not.toBe(0)
+
+		const rounded = bottomRadiusIn(view)
+		await expect(rounded.bottomLeft).toBeGreaterThan(0)
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)?.radius).toEqual(rounded),
+		)
+
+		view.style.marginInlineEnd = "2px"
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)?.radius).toEqual({
+				...rounded,
+				bottomRight: 0,
+			}),
+		)
+	},
+})
+
 export const Loading = meta.story({
 	args: { status: "loading" },
 	render: (args) => <ScrollingReply {...args} />,
@@ -356,7 +452,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The live view is on its way: a skeleton fills the reserved area edge to edge, with no outline around the slot, the slot reads busy and the header holds no button.",
+					"The live view is on its way: a skeleton fills the reserved area of the same outlined card at the same size as the live slot, its bottom corners cut by the card radius, the slot reads busy and the header holds no button.",
 			},
 		},
 	},
@@ -364,10 +460,11 @@ export const Loading = meta.story({
 		await expect(
 			canvas.getByRole("group", { name: "Live view" }),
 		).toHaveAttribute("aria-busy", "true")
-		await expect(
-			viewOf(canvasElement).querySelector("[data-slot='skeleton']"),
-		).toBeInTheDocument()
-		await expectFlushView(canvasElement)
+		const view = viewOf(canvasElement)
+		const skeleton = view.querySelector("[data-slot='skeleton']")
+		if (!skeleton) throw new Error("The skeleton did not render.")
+		await expect(rectOf(skeleton)).toEqual(rectOf(view))
+		await expectViewInCard(canvasElement)
 		await expect(canvas.queryByRole("button")).not.toBeInTheDocument()
 	},
 })
@@ -381,7 +478,7 @@ export const LoadingDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same loading slot as `Loading` on the dark thread: the skeleton fills the reserved area edge to edge, with no outline around the slot.",
+					"The same loading slot as `Loading` on the dark thread: the skeleton fills the reserved area of the outlined card, its bottom corners cut by the card radius.",
 			},
 		},
 	},
@@ -394,7 +491,7 @@ export const Unavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"No live view on this platform: the HTML reads as the code block an `html` fence renders, with no reserved area.",
+					"No live view on this platform: the HTML reads as the code block an `html` fence renders, in the same outlined, rounded card as the live slot, with no reserved area.",
 			},
 		},
 	},
@@ -402,9 +499,24 @@ export const Unavailable = meta.story({
 		await expect(
 			canvas.getByRole("group", { name: "Code snippet, html" }),
 		).toBeInTheDocument()
-		const fence = canvasElement.querySelector("[data-slot='markdown-fence']")
-		if (!fence) throw new Error("The html fence did not render.")
-		await expect(getComputedStyle(fence).boxShadow).not.toBe("none")
+		await expectAnswerCardFrame(
+			partOf(canvasElement, "markdown-fence", "html fence"),
+		)
 		await expect(args.onPlacementChange).not.toHaveBeenCalled()
+	},
+})
+
+export const UnavailableDark = meta.story({
+	args: Unavailable.input.args,
+	globals: { theme: "dark" },
+	render: Unavailable.input.render,
+	play: Unavailable.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same fallback as `Unavailable` on the dark thread: the `html` fence in the outlined, rounded answer card.",
+			},
+		},
 	},
 })

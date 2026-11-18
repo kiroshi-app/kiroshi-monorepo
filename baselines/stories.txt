@@ -285,6 +285,7 @@ conversation-markdown-interactiveview--mode-pick
 conversation-markdown-interactiveview--narrow-long-content
 conversation-markdown-interactiveview--send-values
 conversation-markdown-interactiveview--thumb-focus-ring
+conversation-markdown-livehtmlslot--fractional-card-size
 conversation-markdown-livehtmlslot--height-changes-after-mount
 conversation-markdown-livehtmlslot--live
 conversation-markdown-livehtmlslot--live-dark
@@ -294,6 +295,7 @@ conversation-markdown-livehtmlslot--scrolled-out-of-view
 conversation-markdown-livehtmlslot--short-page
 conversation-markdown-livehtmlslot--tall-page
 conversation-markdown-livehtmlslot--unavailable
+conversation-markdown-livehtmlslot--unavailable-dark
 conversation-markdown-mapcard--in-narrow-column
 conversation-markdown-mapcard--one-place-without-link
 conversation-markdown-mapcard--with-route
