@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { $ } from "bun"
 
 import {
 	computeNext,
@@ -204,10 +205,12 @@ console.log(describeMainBumpFailure(failure, "v99.0.0"))`,
 			clone,
 		)
 		const lines = result.stdout.toString().trim().split("\n")
-		const worktree = lines.at(-1)?.match(/--force "(.+)"$/)?.[1]
+		const worktree = lines.at(-1)?.match(/--force "?([^"]+)"?$/)?.[1] ?? ""
 		if (worktree) temporaryRoots.push(worktree)
+		const shellWorktree = $.escape(worktree)
 
 		expect(result.exitCode).toBe(0)
+		expect(worktree).toContain("kiroshi-main-bump-")
 		expect(lines[0]).toStartWith(
 			'Main bump failed at "create chore/bump-main-99.1.0-beta.0 from origin/main": ',
 		)
@@ -215,12 +218,12 @@ console.log(describeMainBumpFailure(failure, "v99.0.0"))`,
 			"v99.0.0 stays pushed. Finish the bump by hand from the repository root:",
 		)
 		expect(lines.slice(2)).toEqual([
-			`  git worktree add --quiet -b "chore/bump-main-99.1.0-beta.0" "${worktree}" origin/main`,
+			`  git worktree add --quiet -b "chore/bump-main-99.1.0-beta.0" ${shellWorktree} origin/main`,
 			`  bun -e "import { writeVersion } from \\"./scripts/release.ts\\"; await writeVersion(\\"${worktree}\\", \\"99.1.0-beta.0\\")"`,
-			`  git -C "${worktree}" commit --quiet --all -m "chore(app): move main to 99.1.0-beta.0"`,
-			`  git -C "${worktree}" push --quiet -u origin "chore/bump-main-99.1.0-beta.0"`,
+			`  git -C ${shellWorktree} commit --quiet --all -m "chore(app): move main to 99.1.0-beta.0"`,
+			`  git -C ${shellWorktree} push --quiet -u origin "chore/bump-main-99.1.0-beta.0"`,
 			'  gh pr create --repo owner/repository --base main --head "chore/bump-main-99.1.0-beta.0" --title "chore(app): move main to 99.1.0-beta.0" --body "Moves main to 99.1.0-beta.0 after the stable v99.0.0, so a build of main is offered every later beta and stable."',
-			`  git worktree remove --force "${worktree}"`,
+			`  git worktree remove --force ${shellWorktree}`,
 		])
 	})
 })
