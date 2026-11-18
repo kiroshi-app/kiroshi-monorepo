@@ -6,11 +6,10 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { commands, type WindowRecovery } from "@/lib/bindings"
+import type { WindowRecovery } from "@/lib/bindings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { readWindowRecoveryToShow } from "@/lib/host/window-recovery"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const harness = vi.hoisted((): { store: TranscriptStore | null } => ({
@@ -45,7 +44,6 @@ const OUT_OF_MEMORY_DEATH: WindowRecovery = {
 afterEach(() => {
 	cleanup()
 	localStorage.clear()
-	vi.restoreAllMocks()
 	vi.useRealTimers()
 })
 
@@ -88,17 +86,13 @@ it("shows the recovery screen in place of the app for a death the host reports",
 	expect(isShowingApp()).toBe(false)
 })
 
-it("leaves the recovery screen for the app on Continue, and no longer shows that death on the next page load", async () => {
+it("leaves the recovery screen for the app on Continue", async () => {
 	await mountApp(OUT_OF_MEMORY_DEATH)
 
 	await pressContinue()
 
 	expect(isShowingRecoveryScreen()).toBe(false)
 	expect(isShowingApp()).toBe(true)
-	vi.spyOn(commands, "windowRecoveryRead").mockResolvedValue(
-		OUT_OF_MEMORY_DEATH,
-	)
-	expect(await readWindowRecoveryToShow()).toBeNull()
 })
 
 it("shows the app and no recovery screen when the host reports no death", async () => {

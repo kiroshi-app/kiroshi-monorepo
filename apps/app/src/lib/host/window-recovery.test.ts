@@ -3,7 +3,6 @@
 import { afterEach, expect, it, vi } from "vitest"
 
 import {
-	dismissWindowRecovery,
 	readWindowRecoveryToShow,
 	recoveryScreenReasonOf,
 } from "./window-recovery"
@@ -57,7 +56,7 @@ it("maps no fact to no screen reason", () => {
 	expect(recoveryScreenReasonOf(null)).toBeNull()
 })
 
-it("answers the fact the host holds when it was never dismissed", async () => {
+it("answers the fact the host holds on the first page load after the death", async () => {
 	const recovery = recoveryOf()
 	hostAnswers(recovery)
 
@@ -82,14 +81,20 @@ it("logs a read the host rejects and answers nothing to show", async () => {
 	)
 })
 
-it("answers nothing to show for a dismissed fact read again, and shows the death that follows it", async () => {
-	const dismissed = recoveryOf({ occurredAtMs: 1_000 })
-	const next = recoveryOf({ occurredAtMs: 2_000 })
-	dismissWindowRecovery(dismissed)
+it("answers nothing to show on a second page load for the same death, Continue never pressed", async () => {
+	const death = recoveryOf({ occurredAtMs: 1_000 })
+	hostAnswers(death)
 
-	hostAnswers(dismissed)
+	expect(await readWindowRecoveryToShow()).toEqual(death)
 	expect(await readWindowRecoveryToShow()).toBeNull()
+})
 
-	hostAnswers(next)
-	expect(await readWindowRecoveryToShow()).toEqual(next)
+it("answers a later death after an earlier one was shown", async () => {
+	const later = recoveryOf({ occurredAtMs: 2_000 })
+	hostAnswers(recoveryOf({ occurredAtMs: 1_000 }))
+	await readWindowRecoveryToShow()
+
+	hostAnswers(later)
+
+	expect(await readWindowRecoveryToShow()).toEqual(later)
 })

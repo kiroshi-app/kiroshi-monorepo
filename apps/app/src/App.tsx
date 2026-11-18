@@ -3,10 +3,7 @@ import { useState } from "react"
 
 import { RecoveredWindowScreen } from "@/components/recovered-window-screen"
 import type { WindowIdentity, WindowRecovery } from "@/lib/bindings"
-import {
-	dismissWindowRecovery,
-	recoveryScreenReasonOf,
-} from "@/lib/host/window-recovery"
+import { recoveryScreenReasonOf } from "@/lib/host/window-recovery"
 import { launchPageOf } from "@/lib/tabs/tab-pages"
 import { createWorkspaceTabs } from "@/lib/tabs/workspace-tabs"
 import { readMirror } from "@/lib/user/preferences-mirror"
@@ -32,7 +29,6 @@ export function App({ windowIdentity, windowRecovery = null }: AppProps) {
 
 	if (windowRecovery && recoveryReason && !isRecoveryDismissed) {
 		const continueToApp = () => {
-			dismissWindowRecovery(windowRecovery)
 			setIsRecoveryDismissed(true)
 		}
 		return (
