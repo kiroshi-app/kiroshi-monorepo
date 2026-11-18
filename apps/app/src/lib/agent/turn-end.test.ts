@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { TurnEnded } from "./contract"
-import { createTurnEndHearing, type TurnPlace } from "./turn-end"
+import { createTurnEndHearing, hearTurnEnd, type TurnPlace } from "./turn-end"
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/components/notice-surface")
+	>()),
+	raiseTransientNotice: vi.fn(() => "notice"),
+}))
 
 const ON_SCREEN: TurnPlace = {
 	heardIn: "a-path",
@@ -91,5 +101,24 @@ describe("createTurnEndHearing", () => {
 			hear({ sessionId: null, outcome: "failed", ...failure }, ON_SCREEN),
 		).toBe("failed")
 		expect(showConnectionLost).not.toHaveBeenCalled()
+	})
+})
+
+describe("hearTurnEnd", () => {
+	it("raises the Connection lost notice once per outage, and nothing when the replay completes", () => {
+		hearTurnEnd(CONNECTION_LOST, ON_SCREEN)
+		hearTurnEnd(CONNECTION_LOST, { ...ON_SCREEN, heardIn: "another-path" })
+		hearTurnEnd(COMPLETED, ON_SCREEN)
+
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+		expect(raiseTransientNotice).toHaveBeenCalledWith({
+			type: "warning",
+			title: i18n.t("chat:screen.notice.noConnection.title"),
+			description: i18n.t("chat:screen.notice.noConnection.description"),
+		})
+
+		hearTurnEnd(CONNECTION_LOST, ON_SCREEN)
+
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(2)
 	})
 })
