@@ -5,8 +5,8 @@ import type {
 
 import { commands, type LiveHtmlError } from "@/lib/bindings"
 
-type CommandAnswer = Promise<
-	{ status: "ok"; data: null } | { status: "error"; error: LiveHtmlError }
+type CommandAnswer<Data = null> = Promise<
+	{ status: "ok"; data: Data } | { status: "error"; error: LiveHtmlError }
 >
 
 export type MountLiveHtml = (
@@ -19,6 +19,8 @@ type LiveHtmlViewOptions = {
 	mountAt: MountLiveHtml
 	onLive: () => void
 	onFailure: (reason: unknown) => void
+	drawStill: (still: string) => Promise<void>
+	dropStill: () => void
 }
 
 type DrawnView = {
@@ -46,6 +48,12 @@ const isSamePlacement = (a: LiveHtmlPlacement | null, b: LiveHtmlPlacement) =>
 const isInSight = ({ clip }: LiveHtmlPlacement) =>
 	clip.width > 0 && clip.height > 0
 
+const overlaps = (a: LiveHtmlRect, b: LiveHtmlRect) =>
+	a.x < b.x + b.width &&
+	b.x < a.x + a.width &&
+	a.y < b.y + b.height &&
+	b.y < a.y + a.height
+
 const largestRadiusOf = ({ radius }: LiveHtmlPlacement) =>
 	radius &&
 	Math.max(
@@ -55,9 +63,23 @@ const largestRadiusOf = ({ radius }: LiveHtmlPlacement) =>
 		radius.bottomLeft,
 	)
 
-const answered = async (answer: CommandAnswer) => {
+const STILL_BOUND_MS = 500
+
+const drawnBy = (deadline: number, drawing: Promise<void>) => {
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	const late = new Promise<never>((_, reject) => {
+		timeout = setTimeout(
+			() => reject(new Error(`no still drawn within ${STILL_BOUND_MS} ms`)),
+			deadline - Date.now(),
+		)
+	})
+	return Promise.race([drawing, late]).finally(() => clearTimeout(timeout))
+}
+
+const answered = async <Data>(answer: CommandAnswer<Data>) => {
 	const result = await answer
 	if (result.status === "error") throw result.error
+	return result.data
 }
 
 export const mountingHtml =
@@ -75,9 +97,14 @@ export const createLiveHtmlView = ({
 	mountAt,
 	onLive,
 	onFailure,
+	drawStill,
+	dropStill,
 }: LiveHtmlViewOptions) => {
 	let wantedPlacement: LiveHtmlPlacement | null = null
 	let isCovered = false
+	let stillDueBy: number | null = null
+	let awaitedStill = 0
+	let isStillDrawn = false
 	let drawn = UNMOUNTED
 	let hasFailed = false
 	let isSettling = false
@@ -107,6 +134,7 @@ export const createLiveHtmlView = ({
 		() =>
 			attempt(mountAt(id, placement.rect), () => {
 				drawn = { ...UNMOUNTED, isMounted: true }
+				stillDueBy = null
 				onLive()
 			})
 
@@ -137,6 +165,32 @@ export const createLiveHtmlView = ({
 			drawn = { ...drawn, isHidden: false }
 		})
 
+	const eraseStill: Step = async () => {
+		isStillDrawn = false
+		dropStill()
+	}
+
+	const drawAwaitedStill = async (asked: number) => {
+		const still = await answered(commands.liveHtmlStill(id))
+		if (asked !== awaitedStill) return
+		isStillDrawn = true
+		await drawStill(still)
+	}
+
+	const takeStill =
+		(deadline: number): Step =>
+		async () => {
+			stillDueBy = null
+			awaitedStill += 1
+			try {
+				await drawnBy(deadline, drawAwaitedStill(awaitedStill))
+			} catch (reason) {
+				awaitedStill += 1
+				if (isStillDrawn) await eraseStill()
+				console.error(`live html: the view ${id} hides without a still`, reason)
+			}
+		}
+
 	const drawTowards = (placement: LiveHtmlPlacement): Step | null => {
 		if (isInSight(placement) && !isSamePlacement(drawn.placement, placement)) {
 			return place(placement)
@@ -146,14 +200,20 @@ export const createLiveHtmlView = ({
 		return null
 	}
 
+	const hidingStep = (placement: LiveHtmlPlacement): Step =>
+		stillDueBy !== null && isInSight(placement) ? takeStill(stillDueBy) : hide
+
+	const uncoveringStep = (placement: LiveHtmlPlacement): Step | null => {
+		if (isCovered) return null
+		if (isInSight(placement) && drawn.isHidden) return show
+		return isStillDrawn ? eraseStill : null
+	}
+
 	const stepTowards = (placement: LiveHtmlPlacement): Step | null => {
 		const isSeen = isInSight(placement)
-		const shouldHide = isCovered || !isSeen
 		if (!drawn.isMounted) return isSeen ? mount(placement) : null
-		if (shouldHide && !drawn.isHidden) return hide
-		const drawing = drawTowards(placement)
-		if (drawing) return drawing
-		return !shouldHide && drawn.isHidden ? show : null
+		if ((isCovered || !isSeen) && !drawn.isHidden) return hidingStep(placement)
+		return drawTowards(placement) ?? uncoveringStep(placement)
 	}
 
 	const nextStep = (): Step | null => {
@@ -176,9 +236,15 @@ export const createLiveHtmlView = ({
 	}
 
 	const cover = (covered: boolean) => {
+		if (covered === isCovered) return
 		isCovered = covered
+		stillDueBy = covered ? Date.now() + STILL_BOUND_MS : null
+		awaitedStill += 1
 		void settle()
 	}
 
-	return { id, follow, cover, fail }
+	const isUnder = (surface: LiveHtmlRect) =>
+		wantedPlacement !== null && overlaps(wantedPlacement.clip, surface)
+
+	return { id, follow, cover, fail, isUnder }
 }

@@ -15,6 +15,12 @@ const reportFailure = failureReporterIn("use-live-html-view")
 
 type LiveHtmlView = ReturnType<typeof createLiveHtmlView>
 
+const decoded = (still: string) => {
+	const image = new Image()
+	image.src = still
+	return image.decode()
+}
+
 const usePageHeight = ({ id, fail }: LiveHtmlView) => {
 	const [height, setHeight] = useState<number>()
 
@@ -37,6 +43,7 @@ export const useLiveHtmlView = (
 	onUnavailable?: () => void,
 ) => {
 	const [status, setStatus] = useState<LiveHtmlStatus>("loading")
+	const [still, setStill] = useState<string>()
 	const [view] = useState(() =>
 		createLiveHtmlView({
 			id: crypto.randomUUID(),
@@ -50,12 +57,17 @@ export const useLiveHtmlView = (
 					{ reason },
 				)
 			},
+			drawStill: (taken) => {
+				setStill(taken)
+				return decoded(taken)
+			},
+			dropStill: () => setStill(undefined),
 		}),
 	)
-	const isSurfaceOpen = useIsAppSurfaceOpen()
+	const isSurfaceOpen = useIsAppSurfaceOpen(view.isUnder)
 	const height = usePageHeight(view)
 
 	useEffect(() => view.cover(isSurfaceOpen), [view, isSurfaceOpen])
 
-	return { status, height, onPlacementChange: view.follow }
+	return { status, height, still, onPlacementChange: view.follow }
 }

@@ -8,7 +8,7 @@ type LiveHtmlBlockProps = {
 }
 
 export const LiveHtmlBlock = ({ html }: LiveHtmlBlockProps) => {
-	const { status, height, onPlacementChange } = useLiveHtmlView(
+	const { status, height, still, onPlacementChange } = useLiveHtmlView(
 		mountingHtml(html),
 	)
 
@@ -18,6 +18,7 @@ export const LiveHtmlBlock = ({ html }: LiveHtmlBlockProps) => {
 			html={html}
 			onPlacementChange={onPlacementChange}
 			status={status}
+			still={still}
 		/>
 	)
 }
