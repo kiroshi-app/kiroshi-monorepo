@@ -1,3 +1,4 @@
+// TODO: OPE-2522 throwaway proof that the release/0.27 gate runs, never merged
 const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
 
 type CiEvent = (typeof CI_EVENTS)[number]
