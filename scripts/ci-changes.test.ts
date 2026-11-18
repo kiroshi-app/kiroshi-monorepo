@@ -78,16 +78,16 @@ const pathsNamedIn = (rust: string) =>
 		]),
 	].filter((named) => basename(normalize(named)) !== "..")
 
-const isRepositoryPathOutsideSrcTauri = (path: string) =>
+const isRepositoryPathOutside = (root: string) => (path: string) =>
 	path.startsWith(REPO) &&
-	relative(SRC_TAURI, path).startsWith("..") &&
+	relative(root, path).startsWith("..") &&
 	existsSync(path)
 
 const pathsReachedOutsideSrcTauriBy = (source: string) => {
 	const file = join(SRC_TAURI, source)
 	return pathsNamedIn(readFileSync(file, "utf8"))
 		.flatMap((named) => [join(dirname(file), named), join(SRC_TAURI, named)])
-		.filter(isRepositoryPathOutsideSrcTauri)
+		.filter(isRepositoryPathOutside(SRC_TAURI))
 		.map((reached) => ({
 			source: relative(REPO, file),
 			reached: relative(REPO, reached),
@@ -101,16 +101,11 @@ const pathsRustReachesOutsideSrcTauri = () =>
 
 const APPS_IOS = join(REPO, "apps/ios")
 
-const isRepositoryPathOutsideAppsIos = (path: string) =>
-	path.startsWith(REPO) &&
-	relative(APPS_IOS, path).startsWith("..") &&
-	existsSync(path)
-
 const pathsReachedOutsideAppsIosBy = (source: string) => {
 	const file = join(APPS_IOS, source)
 	return [...readFileSync(file, "utf8").matchAll(PARENT_PATH_LITERAL)]
 		.map(([, literal = ""]) => join(dirname(file), literal))
-		.filter(isRepositoryPathOutsideAppsIos)
+		.filter(isRepositoryPathOutside(APPS_IOS))
 		.map((reached) => ({
 			source: relative(REPO, file),
 			reached: relative(REPO, reached),
