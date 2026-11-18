@@ -32,7 +32,7 @@ pub fn window_recovery_read(recoveries: State<'_, WindowRecoveries>) -> Option<W
 	recoveries.deaths.lock().unwrap_or_else(PoisonError::into_inner).last().cloned()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum WindowReloadError {
 	MainWindowMissing,
