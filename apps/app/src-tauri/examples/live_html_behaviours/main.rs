@@ -148,7 +148,6 @@ mod macos {
 		let magenta = bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230);
 		Ok(Painted {
 			magenta_corners: magenta
-				.as_ref()
 				.and_then(inside_corners)
 				.map(|corners| colors_at(&corners))
 				.transpose()?,
@@ -159,7 +158,7 @@ mod macos {
 		})
 	}
 
-	fn inside_corners(drawn: &Rectangle) -> Option<[[f64; 2]; 4]> {
+	fn inside_corners(drawn: Rectangle) -> Option<[[f64; 2]; 4]> {
 		let (left, top) = (drawn.x + CORNER_INSET, drawn.y + CORNER_INSET);
 		let (right, bottom) =
 			(drawn.x + drawn.width - CORNER_INSET, drawn.y + drawn.height - CORNER_INSET);
