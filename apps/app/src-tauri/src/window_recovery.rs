@@ -31,16 +31,10 @@ pub fn window_recovery_read(recoveries: State<'_, WindowRecoveries>) -> Option<W
 	recoveries.deaths.lock().unwrap_or_else(PoisonError::into_inner).last().cloned()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 fn on_web_content_process_terminate<R: Runtime>(webview: &tauri::Webview<R>) {
 	if webview.label() != MAIN_WINDOW {
-		if let Err(failure) = webview.reload() {
-			log::error!(
-				"the webview {} did not reload after its page died: {failure}",
-				webview.label()
-			);
-		}
-		return;
+		return log::warn!("the webview {} lost its page and is not reloaded", webview.label());
 	}
 	let death =
 		Death { process: decision::DeadProcess::Render, reason: WindowDeathReason::Unknown };
@@ -166,5 +160,22 @@ mod tests {
 		assert_eq!(logged_naming("the main window page died").len(), 3);
 		assert_eq!(logged_naming("the main window is reloaded").len(), 2);
 		assert_eq!(logged_naming("the main window is no longer reloaded after 3 deaths").len(), 1);
+	}
+
+	#[test]
+	fn a_page_death_outside_the_main_window_is_logged_and_leaves_no_fact() {
+		capturing();
+		let app = an_app_of_its_own("window-recovery-other", installed_on(mock_builder()));
+		let other = WebviewWindowBuilder::new(&*app, "screenshot-1", WebviewUrl::default())
+			.build()
+			.expect("the other window builds");
+
+		on_web_content_process_terminate(other.as_ref());
+
+		assert_eq!(read(&app), None);
+		assert_eq!(
+			logged_naming("the webview screenshot-1 lost its page and is not reloaded").len(),
+			1
+		);
 	}
 }
