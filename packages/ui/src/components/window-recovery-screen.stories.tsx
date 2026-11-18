@@ -55,11 +55,10 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole window a desktop window shows after its page died and the host reloaded it: the Kiroshi ring, what happened, and one way back. `reason` says why: `out-of-memory` and `crash` tell the reader the window came back and hand them `onContinue`; `gave-up` says the window stopped too often to reload on its own and hands them `onReload`. Every reason says Kiroshi and the agents kept running, because that is the reader's real worry. The whole window drags it, the button excepted. Reach for it only after a page loss the host recovered from, never for a launch failure: that one belongs to AppBootNotice.",
+					"The whole window a desktop window shows after its page died and the host reloaded it: the Kiroshi ring, what happened, and one way back. `reason` says why: `out-of-memory` and `crash` tell the reader the window came back and take `onContinue` and no `onReload`; `gave-up` says the window stopped too often to reload on its own and takes `onReload` and no `onContinue`. The one button holds the keyboard focus as soon as the screen opens, so Enter or Space answers it with no Tab. Every reason says Kiroshi and the agents kept running, because that is the reader's real worry. The whole window drags it, the button excepted. Reach for it only after a page loss the host recovered from, never for a launch failure: that one belongs to AppBootNotice.",
 			},
 		},
 	},
-	args: { onContinue: fn(), onReload: fn() },
 	argTypes: {
 		reason: {
 			control: "inline-radio",
@@ -69,7 +68,7 @@ const meta = preview.meta({
 })
 
 type PlayContext = {
-	args: { reason: WindowRecoveryReason } & Record<Handler, () => void>
+	args: { reason: WindowRecoveryReason } & Partial<Record<Handler, () => void>>
 	canvasElement: HTMLElement
 }
 
@@ -96,7 +95,6 @@ const provesRecovery =
 			await expect(canvas.queryByRole("img")).toBeNull()
 		}
 
-		await userEvent.tab()
 		const action = canvas.getByRole("button", { name: expected.action })
 		await expect(action).toHaveFocus()
 		await expect(action.matches(":focus-visible")).toBe(true)
@@ -105,7 +103,7 @@ const provesRecovery =
 		await userEvent.keyboard("{Enter}")
 		const other = expected.handler === "onContinue" ? "onReload" : "onContinue"
 		await expect(args[expected.handler]).toHaveBeenCalledOnce()
-		await expect(args[other]).not.toHaveBeenCalled()
+		await expect(args).not.toHaveProperty(other)
 
 		await expectNoHorizontalScrollAt(
 			canvasElement,
@@ -114,8 +112,11 @@ const provesRecovery =
 		)
 	}
 
+// @ts-expect-error a gave-up screen takes onReload
+;<WindowRecoveryScreen reason="gave-up" />
+
 export const OutOfMemory = meta.story({
-	args: { reason: "out-of-memory" },
+	args: { reason: "out-of-memory", onContinue: fn() },
 	parameters: describedAs(
 		"The window ran out of memory and the host reloaded it. Check the title names Kiroshi, so the ring stays decorative, and that Continue hands the window back through `onContinue`. Pick `Crash` for a reload with no memory cause.",
 	),
@@ -123,7 +124,7 @@ export const OutOfMemory = meta.story({
 })
 
 export const Crash = meta.story({
-	args: { reason: "crash" },
+	args: { reason: "crash", onContinue: fn() },
 	parameters: describedAs(
 		"The page stopped for any other reason and the host reloaded it. Same title and Continue as `OutOfMemory`, only the cause in the body changes.",
 	),
@@ -131,7 +132,7 @@ export const Crash = meta.story({
 })
 
 export const GaveUp = meta.story({
-	args: { reason: "gave-up" },
+	args: { reason: "gave-up", onReload: fn() },
 	parameters: describedAs(
 		"The page stopped too many times in a minute and the host stopped reloading it. The title no longer names Kiroshi, so the ring speaks as the image named Kiroshi, and the one way out is Reload the window through `onReload`.",
 	),
