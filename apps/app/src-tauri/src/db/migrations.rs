@@ -1592,12 +1592,14 @@ CREATE TABLE turn_replays (
 	output_schema TEXT CHECK (output_schema IS NULL OR json_valid(output_schema)),
 	denied_tools TEXT NOT NULL CHECK (json_valid(denied_tools)),
 	permission_mode TEXT,
+	base_url TEXT NOT NULL,
+	prompted_at INTEGER NOT NULL,
 	stranded_at INTEGER NOT NULL,
 	replayed_at INTEGER,
 	PRIMARY KEY (turn_id, bot_id)
 );
 
-CREATE INDEX turn_replays_pending ON turn_replays (stranded_at) WHERE replayed_at IS NULL;
+CREATE INDEX turn_replays_pending ON turn_replays (base_url) WHERE replayed_at IS NULL;
 ";
 
 const FRESH_INSTALL_UNTINTED_PERSONAL_SPACE: &str =

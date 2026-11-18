@@ -18,7 +18,7 @@ use super::protocol::{
 	StreamEvent, StreamEventFrame,
 };
 use super::sidecar::Sidecar;
-use super::translate::Translator;
+use super::translate::{now_ms, Translator};
 use crate::environment::contract::{ResolvedEnv, Values};
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -67,6 +67,7 @@ pub struct StrandedTurn {
 	pub handed: Option<SubmittedTurn>,
 	pub prompt: String,
 	pub sdk_session_id: Option<String>,
+	pub prompted_at: i64,
 }
 
 pub type Keeping = Pin<Box<dyn Future<Output = ()> + Send>>;
@@ -400,6 +401,7 @@ impl Shared {
 			handed: handed.clone(),
 			prompt: text.clone(),
 			sdk_session_id: self.translator.session_id().map(str::to_owned),
+			prompted_at: now_ms() - running.started_at.elapsed().as_millis() as i64,
 		})
 	}
 
@@ -2005,6 +2007,7 @@ done
 		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
 		let prompted_at = Instant::now();
 
+		let delivered_after = now_ms();
 		stubbed
 			.session
 			.submit("are you there", Some(handed("t1")))
@@ -2018,14 +2021,21 @@ done
 			"the turn outlived its connection bound: {:?}",
 			prompted_at.elapsed()
 		);
+		let kept = stubbed.kept.turns();
+		let prompted_at = kept.first().map_or(0, |stranded| stranded.prompted_at);
 		assert_eq!(
-			stubbed.kept.turns(),
+			kept,
 			vec![StrandedTurn {
 				turn_id: "t1".to_owned(),
 				handed: Some(handed("t1")),
 				prompt: "are you there".to_owned(),
 				sdk_session_id: None,
+				prompted_at,
 			}]
+		);
+		assert!(
+			(delivered_after..delivered_after + 500).contains(&prompted_at),
+			"the turn was kept as prompted at {prompted_at}, delivered after {delivered_after}"
 		);
 	}
 
@@ -2064,6 +2074,7 @@ done
 			handed: Some(handed("t-replayed-again")),
 			prompt: "are you there".to_owned(),
 			sdk_session_id: Some("sdk-1".to_owned()),
+			prompted_at: 0,
 		};
 
 		stubbed.session.replay(stranded).await.expect("the replay is written");
@@ -2092,6 +2103,7 @@ done
 			handed: Some(handed("t1")),
 			prompt: "are you there".to_owned(),
 			sdk_session_id: None,
+			prompted_at: 0,
 		};
 
 		let replayed = stubbed.session.replay(stranded).await;

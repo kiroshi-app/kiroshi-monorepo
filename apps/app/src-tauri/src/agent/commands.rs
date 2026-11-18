@@ -1384,6 +1384,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
 	let members = members_reading(&app, database, &identity.space_id).await;
+	let env_owner = EnvOwner::Bot { id: scope.bot_id.clone(), space_id: identity.space_id.clone() };
 	let options = SessionOptions::new(running_in)
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
@@ -1425,7 +1426,12 @@ pub(crate) async fn start_run<R: Runtime>(
 		.on_mission_thread(mission_thread)
 		.read_by(members)
 		.leased(state.lease)
-		.stranding(Arc::new(KeptForReplay::new(app.clone(), scope.clone(), replayed_run)));
+		.stranding(Arc::new(KeptForReplay::new(
+			app.clone(),
+			scope.clone(),
+			replayed_run,
+			env_owner,
+		)));
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
@@ -1638,7 +1644,7 @@ pub(crate) async fn replay_kept<R: Runtime>(
 ) -> Result<(), TransportError> {
 	let state = app.state::<AgentState>();
 	let database = app.state::<db::DatabaseState>();
-	let KeptTurn { scope, run, stranded } = kept;
+	let KeptTurn { scope, run, stranded, .. } = kept;
 	if !state.live.holds_any_run_under(&scope) {
 		let start = RunStart {
 			scope: scope.clone(),
