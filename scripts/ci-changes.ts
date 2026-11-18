@@ -151,13 +151,14 @@ const changedLinesOf = (base: string, path: string) => {
 		.map((line) => line.slice(1).trim())
 }
 
-const changesOnlyWorkspaceVersions = (base: string, path: string) =>
-	changedLinesOf(base, path).every((line) => WORKSPACE_VERSION_LINE.test(line))
-
 const pathsChangedSince = (greenBase: string) => {
 	const paths = changedPaths(greenBase)
-	if (!paths.includes(LOCKFILE)) return paths
-	if (!changesOnlyWorkspaceVersions(greenBase, LOCKFILE)) return paths
+	const isLockfileBumpingWorkspaceVersionsOnly =
+		paths.includes(LOCKFILE) &&
+		changedLinesOf(greenBase, LOCKFILE).every((line) =>
+			WORKSPACE_VERSION_LINE.test(line),
+		)
+	if (!isLockfileBumpingWorkspaceVersionsOnly) return paths
 	return paths.filter((path) => path !== LOCKFILE)
 }
 
