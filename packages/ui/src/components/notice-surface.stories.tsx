@@ -1292,6 +1292,69 @@ export const HostOutdated = meta.story({
 	},
 })
 
+const NoConnectionNotice = () => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<NoticeDemo
+			label="Send a message"
+			raise={() =>
+				raiseTransientNotice({
+					type: "warning",
+					title: t("screen.notice.noConnection.title"),
+					description: t("screen.notice.noConnection.description"),
+				})
+			}
+		/>
+	)
+}
+
+const expectNoConnection = async (
+	canvas: ReturnType<typeof within>,
+	userEvent: UserEventObject,
+) => {
+	await userEvent.click(canvas.getByRole("button", { name: "Send a message" }))
+
+	const notice = await waitFor(() => cardCarrying("Connection lost"))
+	await opaque(notice)
+	await expect(notice).toHaveAttribute("data-type", "warning")
+	await expect(within(notice).getByText("Connection lost")).toBeVisible()
+	await expect(
+		within(notice).getByText("This turn runs again once you’re back online."),
+	).toBeVisible()
+}
+
+export const NoConnection = meta.story({
+	render: () => <NoConnectionNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"This computer lost its network in the middle of a turn, and the turn runs again by itself once the connection is back. Check that the title says the connection is lost and that the body says the turn runs again, both on the `warning` mark of a transient notice that leaves on its own: the replay needs nothing from the reader, so it is neither a success nor a failure that waits for them. Pick `DescribeRefused` for the host of a shared Space being offline, `NoConnectionDark` for the dark theme. The app raises it on a turn cut off by the network, with the keys `chat:screen.notice.noConnection.title` and `chat:screen.notice.noConnection.description`.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectNoConnection(canvas, userEvent)
+	},
+})
+
+export const NoConnectionDark = meta.story({
+	globals: { theme: "dark" },
+	render: () => <NoConnectionNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`NoConnection` in the dark theme, the notice the app raises on a turn cut off by the network. Check that the title and the description read on the dark notice surface, on the `warning` mark.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await expectNoConnection(canvas, userEvent)
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		docs: {

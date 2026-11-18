@@ -2774,6 +2774,8 @@ overlays-noticesurface--marks
 overlays-noticesurface--move-to-new-window-failed
 overlays-noticesurface--move-to-new-window-failed-dark
 overlays-noticesurface--narrow-window
+overlays-noticesurface--no-connection
+overlays-noticesurface--no-connection-dark
 overlays-noticesurface--question-run-failed
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark

@@ -503,6 +503,11 @@ const chat = {
 				description:
 					"Son ordinateur est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
 			},
+			noConnection: {
+				title: "Connexion perdue",
+				description:
+					"Ce tour sera relancé une fois que vous serez de nouveau en ligne.",
+			},
 			describeRefused: {
 				title: "Impossible d’enregistrer le nom et la couleur",
 				description:
