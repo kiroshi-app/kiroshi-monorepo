@@ -275,12 +275,16 @@ jobs:
       - name: Point the draft latest.json at the release download addresses
         shell: bash
         run: |
-          asset=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
-            --jq '.[] | select(.name == "latest.json") | .url')
-          gh api -H "Accept: application/octet-stream" "$asset" > "$RUNNER_TEMP/latest.api.json"
+          asset_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            --jq '.[] | select(.name == "latest.json") | .id')
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/latest.api.json"
           scripts/rewrite-updater-feed.sh "$GITHUB_REPOSITORY" "$RELEASE_ID" "$RUNNER_TEMP/latest.api.json" > "$RUNNER_TEMP/latest.json"
-          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/latest.json" --clobber --repo "$GITHUB_REPOSITORY"
-          echo "latest.json of $GITHUB_REF_NAME points at the release download addresses"
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=latest.json" \
+            -H "Content-Type: application/json" \
+            --input "$RUNNER_TEMP/latest.json" \
+            --jq '"Uploaded \(.name), \(.size) bytes"'
+          echo "latest.json of draft release $RELEASE_ID points at the release download addresses"
 
       - name: Publish the draft release
         run: |

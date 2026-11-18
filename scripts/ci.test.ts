@@ -2094,6 +2094,11 @@ describe("the jobs of ci.yml", () => {
 		)
 
 		expect(steps[rewrite]?.run).toContain("scripts/rewrite-updater-feed.sh")
+		expect(steps[rewrite]?.run).toContain(
+			"releases/$RELEASE_ID/assets?name=latest.json",
+		)
+		expect(steps[rewrite]?.run).not.toContain("gh release upload")
+		expect(steps[rewrite]?.run).not.toContain("GITHUB_REF_NAME")
 		expect(rewrite).toBeGreaterThan(
 			names.indexOf("Check the updater platforms of the draft latest.json"),
 		)
