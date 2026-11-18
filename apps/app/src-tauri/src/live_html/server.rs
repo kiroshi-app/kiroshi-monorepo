@@ -9,8 +9,9 @@ use axum::Router;
 use tokio::net::TcpListener;
 use tokio::sync::watch as signal;
 
+use super::attachment::AttachedPage;
 use super::base;
-use super::contract::LiveHtmlTheme;
+use super::contract::{LiveHtmlError, LiveHtmlTheme};
 use super::watch::{ReceivedRequest, ViewWatch};
 
 pub const ALLOWED_HOSTS: [&str; 1] = ["cdn.jsdelivr.net"];
@@ -33,18 +34,25 @@ const WRAPPER_HTML: &str = r#"<!doctype html>
 </html>
 "#;
 
+pub enum Page {
+	Written(String),
+	Attached(AttachedPage),
+}
+
 pub struct ContentServer {
 	address: SocketAddr,
 	token: String,
 	theme: signal::Sender<Option<LiveHtmlTheme>>,
+	content_failure: signal::Receiver<Option<LiveHtmlError>>,
 	stop: signal::Sender<bool>,
 }
 
 struct Served {
 	view: String,
 	token: String,
-	html: String,
+	page: Page,
 	theme: signal::Receiver<Option<LiveHtmlTheme>>,
+	content_failure: signal::Sender<Option<LiveHtmlError>>,
 	csp: String,
 	watch: Arc<dyn ViewWatch>,
 }
@@ -52,7 +60,7 @@ struct Served {
 impl ContentServer {
 	pub fn open(
 		view: &str,
-		html: String,
+		page: Page,
 		theme: Option<LiveHtmlTheme>,
 		watch: Arc<dyn ViewWatch>,
 	) -> std::io::Result<Self> {
@@ -62,16 +70,22 @@ impl ContentServer {
 		let token = uuid::Uuid::new_v4().simple().to_string();
 		let (stop, halted) = signal::channel(false);
 		let (theme, shown_theme) = signal::channel(theme);
+		let (failed_content, content_failure) = signal::channel(None);
 		let served = Served {
 			view: view.to_owned(),
 			csp: content_csp(&token),
 			token: token.clone(),
-			html,
+			page,
 			theme: shown_theme,
+			content_failure: failed_content,
 			watch,
 		};
 		tauri::async_runtime::spawn(answering(Arc::new(served), listener, halted));
-		Ok(Self { address, token, theme, stop })
+		Ok(Self { address, token, theme, content_failure, stop })
+	}
+
+	pub fn content_failure(&self) -> Option<LiveHtmlError> {
+		self.content_failure.borrow().clone()
 	}
 
 	pub fn retheme(&self, theme: LiveHtmlTheme) {
@@ -152,11 +166,30 @@ async fn answer(State(served): State<Arc<Served>>, request: Request) -> Response
 			WRAPPER_HTML.to_owned(),
 			format!("{WRAPPER_CSP}; report-uri /{}/{REPORT_ROUTE}", served.token),
 		),
-		(Method::GET, Some(CONTENT_DOCUMENT)) => {
-			document(base::laid_under(&served.html, *served.theme.borrow()), served.csp.clone())
-		}
+		(Method::GET, Some(CONTENT_DOCUMENT)) => content(served).await,
 		(Method::POST, Some(REPORT_ROUTE)) => StatusCode::NO_CONTENT.into_response(),
 		_ => StatusCode::NOT_FOUND.into_response(),
+	}
+}
+
+async fn content(served: Arc<Served>) -> Response {
+	let reading = Arc::clone(&served);
+	let laid = tokio::task::spawn_blocking(move || {
+		let theme = *reading.theme.borrow();
+		match &reading.page {
+			Page::Written(html) => Ok(base::laid_under(html, theme)),
+			Page::Attached(page) => page.read().map(|html| base::laid_under(&html, theme)),
+		}
+	})
+	.await
+	.unwrap_or_else(|failure| Err(LiveHtmlError::Unreadable { detail: failure.to_string() }));
+	served.content_failure.send_replace(laid.as_ref().err().cloned());
+	match laid {
+		Ok(html) => document(html, served.csp.clone()),
+		Err(failure) => {
+			log::warn!("live view {}: its page was not served: {failure:?}", served.view);
+			StatusCode::INTERNAL_SERVER_ERROR.into_response()
+		}
 	}
 }
 

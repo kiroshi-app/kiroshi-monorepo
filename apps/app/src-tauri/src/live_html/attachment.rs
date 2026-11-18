@@ -1,12 +1,32 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::contract::LiveHtmlError;
 
-const MAX_PAGE_BYTES: u64 = 2 * 1024 * 1024;
+pub struct AttachedPage {
+	attachments: PathBuf,
+	path: PathBuf,
+}
+
+impl AttachedPage {
+	pub(crate) fn checked(attachments: PathBuf, path: PathBuf) -> Result<Self, LiveHtmlError> {
+		opened_page(&attachments, &path)?;
+		Ok(Self { attachments, path })
+	}
+
+	pub(crate) fn read(&self) -> Result<String, LiveHtmlError> {
+		read_page(&self.attachments, &self.path)
+	}
+}
 
 pub(crate) fn read_page(attachments: &Path, path: &Path) -> Result<String, LiveHtmlError> {
+	let mut html = String::new();
+	opened_page(attachments, path)?.read_to_string(&mut html).map_err(unreadable)?;
+	Ok(html)
+}
+
+fn opened_page(attachments: &Path, path: &Path) -> Result<File, LiveHtmlError> {
 	let folder = attachments.canonicalize().map_err(unreadable)?;
 	let resolved = path.canonicalize().map_err(unreadable)?;
 	if !resolved.starts_with(&folder) {
@@ -16,24 +36,10 @@ pub(crate) fn read_page(attachments: &Path, path: &Path) -> Result<String, LiveH
 		return Err(LiveHtmlError::NotHtml);
 	}
 	let file = File::open(&resolved).map_err(unreadable)?;
-	let metadata = file.metadata().map_err(unreadable)?;
-	if !metadata.is_file() {
+	if !file.metadata().map_err(unreadable)?.is_file() {
 		return Err(LiveHtmlError::Unreadable { detail: "not a regular file".to_owned() });
 	}
-	if metadata.len() > MAX_PAGE_BYTES {
-		return Err(LiveHtmlError::TooLarge { bytes: metadata.len(), limit: MAX_PAGE_BYTES });
-	}
-	bounded_page(file)
-}
-
-fn bounded_page(reader: impl Read) -> Result<String, LiveHtmlError> {
-	let mut bytes = Vec::new();
-	reader.take(MAX_PAGE_BYTES + 1).read_to_end(&mut bytes).map_err(unreadable)?;
-	let read = bytes.len() as u64;
-	if read > MAX_PAGE_BYTES {
-		return Err(LiveHtmlError::TooLarge { bytes: read, limit: MAX_PAGE_BYTES });
-	}
-	String::from_utf8(bytes).map_err(unreadable)
+	Ok(file)
 }
 
 fn is_html(path: &Path) -> bool {
@@ -95,14 +101,12 @@ mod tests {
 	}
 
 	#[test]
-	fn a_page_at_the_limit_reads() {
+	fn a_page_far_above_the_former_two_mebibyte_limit_reads_whole() {
 		let store = a_store();
-		let page = written(store.stored("page.html"), &vec![b'a'; MAX_PAGE_BYTES as usize]);
+		let bytes = 20 * 1024 * 1024;
+		let page = written(store.stored("page.html"), &vec![b'a'; bytes]);
 
-		assert_eq!(
-			read_page(&store.attachments, &page).map(|html| html.len() as u64),
-			Ok(MAX_PAGE_BYTES)
-		);
+		assert_eq!(read_page(&store.attachments, &page).map(|html| html.len()), Ok(bytes));
 	}
 
 	#[test]
@@ -137,28 +141,6 @@ mod tests {
 	}
 
 	#[test]
-	fn a_page_above_the_limit_is_refused_with_its_size() {
-		let store = a_store();
-		let bytes = MAX_PAGE_BYTES + 1;
-		let page = written(store.stored("page.html"), &vec![b'a'; bytes as usize]);
-
-		assert_eq!(
-			read_page(&store.attachments, &page),
-			Err(LiveHtmlError::TooLarge { bytes, limit: MAX_PAGE_BYTES })
-		);
-	}
-
-	#[test]
-	fn a_page_grown_past_the_limit_after_its_size_was_read_is_refused() {
-		let grown = vec![b'a'; MAX_PAGE_BYTES as usize + 10];
-
-		assert_eq!(
-			bounded_page(grown.as_slice()),
-			Err(LiveHtmlError::TooLarge { bytes: MAX_PAGE_BYTES + 1, limit: MAX_PAGE_BYTES })
-		);
-	}
-
-	#[test]
 	fn a_missing_page_is_unreadable() {
 		let store = a_store();
 		let missing = store.stored("missing.html");
@@ -167,6 +149,27 @@ mod tests {
 			read_page(&store.attachments, &missing),
 			Err(LiveHtmlError::Unreadable { .. })
 		));
+	}
+
+	#[test]
+	fn a_missing_page_is_refused_at_mount_as_unreadable() {
+		let store = a_store();
+
+		assert!(matches!(
+			AttachedPage::checked(store.attachments.clone(), store.stored("missing.html")),
+			Err(LiveHtmlError::Unreadable { .. })
+		));
+	}
+
+	#[test]
+	fn a_page_removed_after_its_mount_reads_as_unreadable() {
+		let store = a_store();
+		let path = written(store.stored("page.html"), PAGE.as_bytes());
+		let attached = AttachedPage::checked(store.attachments.clone(), path.clone())
+			.expect("the page is checked");
+		fs::remove_file(&path).expect("the page is removed");
+
+		assert!(matches!(attached.read(), Err(LiveHtmlError::Unreadable { .. })));
 	}
 
 	#[test]

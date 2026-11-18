@@ -17,7 +17,7 @@ use tauri::{AppHandle, Runtime, WebviewWindow};
 use tokio::sync::oneshot;
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
-use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
+use wry::{NewWindowResponse, PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
 
 use super::base;
 use super::contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
@@ -414,7 +414,9 @@ async fn script_answered(
 fn guarded<R: Runtime>(app: AppHandle<R>, view: ViewToMount) -> WebViewBuilder<'static> {
 	let ViewToMount { id, url, allowed, scripts, watch } = view;
 	let (navigation, new_window, download) = (Arc::clone(&watch), Arc::clone(&watch), watch);
-	let (measuring, navigating, opening, downloading) = (id.clone(), id.clone(), id.clone(), id);
+	let (measuring, navigating, opening, downloading, loading) =
+		(id.clone(), id.clone(), id.clone(), id.clone(), id);
+	let loaded = app.clone();
 	let builder = scripts.into_iter().fold(
 		WebViewBuilder::new()
 			.with_url(url)
@@ -425,6 +427,11 @@ fn guarded<R: Runtime>(app: AppHandle<R>, view: ViewToMount) -> WebViewBuilder<'
 	);
 	builder
 		.with_ipc_handler(reporting_size(app, measuring))
+		.with_on_page_load_handler(move |event, _url| {
+			if matches!(event, PageLoadEvent::Finished) {
+				super::report_page_loaded(&loaded, loading.clone());
+			}
+		})
 		.with_navigation_handler(move |url| {
 			let is_allowed = url.starts_with("about:") || allowed.contains(&url);
 			navigation.guard_answered(&navigating, Guard::Navigation, &url, is_allowed);

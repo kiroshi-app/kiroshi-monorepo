@@ -4,10 +4,10 @@ use tauri::Url;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use super::super::attachment::read_page;
-use super::super::contract::{LiveHtmlAppearance, LiveHtmlTheme};
+use super::super::attachment::AttachedPage;
+use super::super::contract::{LiveHtmlAppearance, LiveHtmlError, LiveHtmlTheme};
 use super::super::watch::{Guard, ReceivedRequest, ViewWatch};
-use super::{ContentServer, ALLOWED_HOSTS};
+use super::{ContentServer, Page, ALLOWED_HOSTS};
 use crate::removed_on_drop::RemovedOnDrop;
 
 const CONTENT: &str = "<!doctype html><p>live</p>";
@@ -46,12 +46,37 @@ fn header<'a>(answer: &'a str, name: &str) -> Option<&'a str> {
 }
 
 fn opened(watch: Arc<SeenTargets>) -> ContentServer {
-	ContentServer::open("chart", CONTENT.to_owned(), None, watch).expect("the server opens")
+	ContentServer::open("chart", Page::Written(CONTENT.to_owned()), None, watch)
+		.expect("the server opens")
+}
+
+struct StoredPage {
+	_attachments: RemovedOnDrop,
+	server: ContentServer,
+	path: std::path::PathBuf,
+}
+
+fn stored_and_opened() -> StoredPage {
+	let attachments = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-live-html-{}", uuid::Uuid::new_v4())),
+	);
+	std::fs::create_dir_all(&*attachments).expect("the attachments folder");
+	let path = attachments.join("page.html");
+	std::fs::write(&path, CONTENT).expect("a written page");
+	let page =
+		AttachedPage::checked(attachments.to_path_buf(), path.clone()).expect("the page checks");
+	let server =
+		ContentServer::open("chart", Page::Attached(page), None, Arc::<SeenTargets>::default())
+			.expect("the server opens");
+	StoredPage { _attachments: attachments, server, path }
+}
+
+fn body_of(answer: &str) -> &str {
+	answer.split_once("\r\n\r\n").expect("an answer with a body").1
 }
 
 fn base_of(answer: &str) -> &str {
-	let document = answer.split_once("\r\n\r\n").expect("an answer with a body").1;
-	document.strip_suffix(CONTENT).expect("a document ending on the untouched page")
+	body_of(answer).strip_suffix(CONTENT).expect("a document ending on the untouched page")
 }
 
 fn assert_the_base_is_layered_before_the_page(answer: &str) {
@@ -127,19 +152,46 @@ async fn an_html_block_is_served_after_the_base_in_its_layer() {
 
 #[tokio::test]
 async fn an_attached_page_is_served_after_the_base_in_its_layer() {
-	let attachments = RemovedOnDrop(
-		std::env::temp_dir().join(format!("kiroshi-live-html-{}", uuid::Uuid::new_v4())),
-	);
-	std::fs::create_dir_all(&*attachments).expect("the attachments folder");
-	let stored = attachments.join("page.html");
-	std::fs::write(&stored, CONTENT).expect("a written page");
-	let page = read_page(&attachments, &stored).expect("the attached page reads");
-	let server = ContentServer::open("chart", page, None, Arc::<SeenTargets>::default())
-		.expect("the server opens");
+	let stored = stored_and_opened();
 
-	let answer = fetched(&server.content_url()).await.expect("the content answers");
+	let answer = fetched(&stored.server.content_url()).await.expect("the content answers");
 
 	assert_the_base_is_layered_before_the_page(&answer);
+}
+
+#[tokio::test]
+async fn an_attached_page_is_served_from_disk_under_the_same_base_as_its_html_block() {
+	let stored = stored_and_opened();
+	let written = opened(Arc::default());
+
+	let attached = fetched(&stored.server.content_url()).await.expect("the content answers");
+	let block = fetched(&written.content_url()).await.expect("the content answers");
+
+	assert_eq!(body_of(&attached), body_of(&block));
+	assert_eq!(stored.server.content_failure(), None);
+}
+
+#[tokio::test]
+async fn an_attached_page_rewritten_on_disk_is_served_as_it_now_reads() {
+	let stored = stored_and_opened();
+	let rewritten = "<!doctype html><p>rewritten</p>";
+	std::fs::write(&stored.path, rewritten).expect("a rewritten page");
+
+	let answer = fetched(&stored.server.content_url()).await.expect("the content answers");
+
+	assert!(answer.ends_with(rewritten), "{answer}");
+}
+
+#[tokio::test]
+async fn an_attached_page_removed_after_its_mount_is_refused_with_a_typed_failure() {
+	let stored = stored_and_opened();
+	std::fs::remove_file(&stored.path).expect("the page is removed");
+
+	let answer = fetched(&stored.server.content_url()).await.expect("the server answers");
+
+	assert!(answer.starts_with("HTTP/1.1 500"), "{answer}");
+	assert!(!answer.contains("<!doctype html>"), "{answer}");
+	assert!(matches!(stored.server.content_failure(), Some(LiveHtmlError::Unreadable { .. })));
 }
 
 #[tokio::test]

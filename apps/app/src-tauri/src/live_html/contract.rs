@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::conversations::contract::Hue;
 
 pub const MEASURED_EVENT: &str = "live-html://measured";
+pub const LOADED_EVENT: &str = "live-html://loaded";
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +61,13 @@ pub struct LiveHtmlMeasured {
 	pub height: f64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveHtmlLoaded {
+	pub id: String,
+	pub failure: Option<LiveHtmlError>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LiveHtmlError {
@@ -85,11 +93,6 @@ pub enum LiveHtmlError {
 	},
 	OutsideAttachments,
 	NotHtml,
-	#[serde(rename_all = "camelCase")]
-	TooLarge {
-		bytes: u64,
-		limit: u64,
-	},
 	#[serde(rename_all = "camelCase")]
 	Unreadable {
 		detail: String,
