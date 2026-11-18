@@ -49,6 +49,12 @@ const GROWTH_FRAMES = 12
 
 const GROWTH_STEP = 20
 
+const READER_SCROLL = 40
+
+const SUB_PIXEL_STEP = 0.3
+
+const SUB_PIXEL_STEPS = 100
+
 const GROWING_BLOCK = "h-40 rounded-xl border border-border bg-muted"
 
 type ThreadProps = {
@@ -426,6 +432,62 @@ export const HoldsTheContentAboveWhenABlockInViewGrows = meta.story({
 		await resize(block, BLOCK_CHANGE)
 
 		await expectInPlace(canvasElement, above, aboveTop)
+	},
+})
+
+export const FollowsTheReaderWhenABlockGrowsAsTheyScroll = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader scrolls back a little in the same frame as a block cut by the top edge gets taller. Check that the message under it moves by the distance scrolled and nothing more: the scroll is followed, the growth goes into the part already scrolled past.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(viewport, block, -block.offsetHeight / 2)
+		const reader = itemAfter(block)
+		const readerTop = topOf(reader)
+
+		block.style.height = `${block.offsetHeight + BLOCK_CHANGE}px`
+		viewport.scrollTop -= READER_SCROLL
+		await nextFrames()
+
+		await expectInPlace(canvasElement, reader, readerTop + READER_SCROLL)
+	},
+})
+
+export const HoldsTheReaderWhileABlockGrowsBySubPixels = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A block cut by the top edge gets taller by a fraction of a pixel on every frame, the way a live HTML view reporting its page height or a reply settling does on a Retina screen, where the browser keeps a whole pixel of every scroll position written back. Check that the message under it stays where the reader sees it instead of creeping by the fraction dropped on each frame.",
+			},
+		},
+	},
+	render: () => <Thread growingRank={GROWING_RANK} lines={SCROLLED_THREAD} />,
+	play: async ({ canvasElement }) => {
+		const viewport = viewportIn(canvasElement)
+		const block = growingBlockIn(canvasElement)
+
+		await placeBlockAt(viewport, block, -block.offsetHeight / 2)
+		const reader = itemAfter(block)
+		const readerTop = topOf(reader)
+
+		for (let step = 0; step < SUB_PIXEL_STEPS; step += 1) {
+			await new Promise(requestAnimationFrame)
+			block.style.height = `${block.getBoundingClientRect().height + SUB_PIXEL_STEP}px`
+		}
+		await nextFrames()
+
+		await expectInPlace(canvasElement, reader, readerTop)
 	},
 })
 
