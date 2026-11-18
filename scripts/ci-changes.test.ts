@@ -98,15 +98,18 @@ const pathsRustReachesOutsideSrcTauri = () =>
 const firstTrackedFileAt = (path: string) =>
 	git(REPO, "ls-files", "--", path).split("\n")[0] ?? ""
 
-const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
+const runChangeDetectorOn = (branch: string, cwd: string, ...args: string[]) =>
 	Bun.spawnSync(
 		[
 			process.execPath,
 			new URL("./ci-changes.ts", import.meta.url).pathname,
 			...args,
 		],
-		{ cwd },
+		{ cwd, env: { ...process.env, GITHUB_REF_NAME: branch } },
 	)
+
+const runChangeDetectorIn = (cwd: string, ...args: string[]) =>
+	runChangeDetectorOn("main", cwd, ...args)
 
 const runChangeDetector = (...args: string[]) =>
 	runChangeDetectorIn(REPO, ...args)
@@ -242,6 +245,15 @@ describe("ci jobs per event", () => {
 
 		expect(detection.exitCode).toBe(1)
 		expect(detection.stderr.toString()).toContain("BASE is required")
+	})
+
+	it("names the release branch pushed when no CI push run on it concluded success", () => {
+		const detection = runChangeDetectorOn("release/0.27", REPO, "push")
+
+		expect(outputOf(detection)).toEqual(every)
+		expect(detection.stderr.toString()).toContain(
+			"no CI push run on release/0.27 concluded success: every job runs",
+		)
 	})
 
 	it("selects every job on a push to main when no CI push run on main concluded success", () => {

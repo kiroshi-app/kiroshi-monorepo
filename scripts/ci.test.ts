@@ -1145,8 +1145,19 @@ describe("the push to main retry", () => {
 		)
 	})
 
+	it.each(SCOPES)(
+		"retries the same steps on a push to a release/** branch as on a push to main, under %s",
+		(_, scope) => {
+			expect(retried({ ref: "refs/heads/release/0.27", scope })).toEqual(
+				retried({ ref: "refs/heads/main", scope }),
+			)
+		},
+	)
+
 	it.each([
 		["a pull_request", "refs/pull/7/merge"],
+		["a branch named like a release branch", "refs/heads/feature/release/0.27"],
+		["a bare release/ ref", "refs/heads/release/"],
 		["a v* tag", "refs/tags/v1.2.0"],
 		["another branch", "refs/heads/feature/ope-1-fix"],
 		["no ref", undefined],

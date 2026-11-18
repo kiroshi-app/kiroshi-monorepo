@@ -39,7 +39,7 @@ const APP = "apps/app"
 
 const SRC_TAURI = join(APP, "src-tauri")
 
-const RETRYING_REF = "refs/heads/main"
+const RETRYING_BRANCHES = /^refs\/heads\/(main|release\/.+)$/
 
 const UI_TESTS = join(REPO, "apps/ios/KiroshiUITests")
 
@@ -629,7 +629,7 @@ const runStep = ({ label, step }: Labelled) => {
 }
 
 export const retryOf = (step: Step, ref: string | undefined) =>
-	ref === RETRYING_REF ? step.retry : undefined
+	ref !== undefined && RETRYING_BRANCHES.test(ref) ? step.retry : undefined
 
 const shellQuoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`
 
