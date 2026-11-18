@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	createLiveHtmlView,
@@ -600,11 +600,14 @@ describe("the bound on the still of a live html view", () => {
 	const orderOf = (command: string) =>
 		host.answer.mock.invocationCallOrder[callsOf().indexOf(command)]
 
+	beforeEach(() => {
+		vi.useFakeTimers()
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+	})
+
 	const coveredViewOf = async (
 		overrides: Parameters<typeof viewOf>[0] = {},
 	) => {
-		vi.useFakeTimers()
-		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		const view = viewOf(overrides)
 		view.follow({ rect: RECT, clip: CLIP })
 		await pass(0)
@@ -693,8 +696,6 @@ describe("the bound on the still of a live html view", () => {
 			live_html_place: () => places.shift(),
 			live_html_still: () => new Promise(() => undefined),
 		})
-		vi.useFakeTimers()
-		vi.spyOn(console, "error").mockImplementation(() => undefined)
 		const view = viewOf()
 		view.follow({ rect: RECT, clip: CLIP })
 		await pass(0)
