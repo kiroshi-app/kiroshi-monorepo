@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager, Runtime, State};
 
-use decision::{Death, Deaths, Recovery, WindowDeathReason, WindowRecovery};
+use decision::{Death, Deaths, Recovery, WindowRecovery};
 
 use crate::window_controls::{open_main, MAIN_WINDOW};
 
@@ -36,8 +36,10 @@ fn on_web_content_process_terminate<R: Runtime>(webview: &tauri::Webview<R>) {
 	if webview.label() != MAIN_WINDOW {
 		return log::warn!("the webview {} lost its page and is not reloaded", webview.label());
 	}
-	let death =
-		Death { process: decision::DeadProcess::Render, reason: WindowDeathReason::Unknown };
+	let death = Death {
+		process: decision::DeadProcess::Render,
+		reason: decision::WindowDeathReason::Unknown,
+	};
 	recover(webview.app_handle(), death);
 }
 
@@ -124,6 +126,7 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, WebviewUrl, WebviewWindowBuilder};
 
+	use super::decision::WindowDeathReason;
 	use super::*;
 	use crate::test_app::an_app_of_its_own;
 	use crate::test_log::{capturing, logged_naming};
