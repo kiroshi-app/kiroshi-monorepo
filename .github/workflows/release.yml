@@ -16,14 +16,19 @@ jobs:
     permissions:
       actions: read
     steps:
-      - name: Wait for the CI push run of the tagged commit to pass
+      - name: Wait for the CI push run of the tagged commit on its release branch to pass
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+[.][0-9]+)[.][0-9]+(-beta[.][0-9]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is neither a stable vX.Y.Z nor a beta vX.Y.Z-beta.N tag, no release branch to read its CI from"
+            exit 1
+          fi
+          branch="release/${BASH_REMATCH[1]}"
           started=$SECONDS
           while :; do
             elapsed=$((SECONDS - started))
-            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --limit 1 \
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch "$branch" --commit "$GITHUB_SHA" --limit 1 \
               --json status,url,conclusion --jq '.[] | [.status, .url, .conclusion] | @tsv')
             if [ -n "$run" ]; then
               IFS=$'\t' read -r status url conclusion <<< "$run"
@@ -37,7 +42,7 @@ jobs:
               fi
               echo "CI on $GITHUB_SHA is $status: $url"
             elif [ "$elapsed" -ge 600 ]; then
-              echo "::error::No CI push run found for $GITHUB_SHA 10 minutes after ci-green started"
+              echo "::error::No CI push run on $branch found for $GITHUB_SHA 10 minutes after ci-green started, push the tag only on a commit pushed as the head of $branch"
               exit 1
             fi
             if [ "$elapsed" -ge 5400 ]; then

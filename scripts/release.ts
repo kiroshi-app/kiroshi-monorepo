@@ -116,6 +116,9 @@ export const describeMainBump = (bump: MainBump) =>
 		? `Main bump skipped: ${bump.reason}.`
 		: `Main bump: ${bump.branch} moves main to ${bump.version}, pull request "${bump.title}".`
 
+export const releaseBranchOf = (version: string) =>
+	`release/${version.split(".").slice(0, 2).join(".")}`
+
 const bumpJsonVersion = (text: string, next: string) =>
 	text.replace(/("version":\s*)"[^"]+"/, `$1"${next}"`)
 
@@ -307,8 +310,11 @@ const run = async () => {
 	}
 
 	const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
-	if (branch === "main")
-		throw new Error("Refusing to release from main. Run from a release branch.")
+	const releaseBranch = releaseBranchOf(next)
+	if (branch !== releaseBranch)
+		throw new Error(
+			`Refusing to release ${tag} from ${branch}. Run from ${releaseBranch}, the branch whose CI push run the Release workflow waits on.`,
+		)
 
 	const status = (await $`git status --porcelain`.text()).trim()
 	if (status)

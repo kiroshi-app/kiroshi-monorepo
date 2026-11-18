@@ -9,6 +9,7 @@ import {
 	describeMainBump,
 	nextMainVersion,
 	planMainBump,
+	releaseBranchOf,
 } from "./release"
 
 const SCRIPT = new URL("./release.ts", import.meta.url).pathname
@@ -84,6 +85,15 @@ describe("release", () => {
 		expect(computeNext("0.24.1", "patch")).toBe("0.24.2")
 		expect(computeNext("0.24.1", "minor")).toBe("0.25.0")
 		expect(computeNext("0.24.1", "major")).toBe("1.0.0")
+	})
+
+	it.each([
+		["0.27.0", "release/0.27"],
+		["0.27.2", "release/0.27"],
+		["0.28.0-beta.3", "release/0.28"],
+		["10.2.11", "release/10.2"],
+	])("releases %s from %s only", (version, branch) => {
+		expect(releaseBranchOf(version)).toBe(branch)
 	})
 
 	it("refuses to bump a beta current and asks for an explicit version", () => {
