@@ -98,6 +98,11 @@ const TURN_ENDED: AgentEvent = {
 	ended: { sessionId: null, outcome: "completed" },
 }
 
+const CONNECTION_LOST: AgentEvent = {
+	type: "turnEnded",
+	ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
+}
+
 const endedAs = (events: AgentEvent[], outcome: TurnOutcome): AgentEvent[] =>
 	events.map((event) =>
 		event.type === "turnEnded"
@@ -2625,11 +2630,6 @@ describe("retrying the turn of a speaker that failed", () => {
 })
 
 describe("a speaker's turn that failed for no connection", () => {
-	const CONNECTION_LOST: AgentEvent = {
-		type: "turnEnded",
-		ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
-	}
-
 	afterEach(() => {
 		vi.restoreAllMocks()
 	})
@@ -3851,12 +3851,7 @@ describe("the mentions a finished turn carries", () => {
 		const lost = room.driver.submissions.find(
 			({ scope }) => scope.botId === room.ada,
 		)
-		room.driver.pushTo(room.ada, [
-			{
-				type: "turnEnded",
-				ended: { sessionId: null, outcome: "failed", failure: "noConnection" },
-			},
-		])
+		room.driver.pushTo(room.ada, [CONNECTION_LOST])
 		await settled()
 
 		for (const event of spoke(room.ada, "walls up")) {
