@@ -47,11 +47,32 @@ const readCurrentVersion = async () =>
 		"tauri.conf.json",
 	)
 
-const readMainVersion = async () =>
-	readVersion(
-		await $`git show ${`origin/main:${TAURI_CONF}`}`.quiet().text(),
-		`origin/main:${TAURI_CONF}`,
+const failureOf = (error: unknown) => {
+	if (error instanceof $.ShellError) {
+		const stderr = error.stderr.toString().trim()
+		return stderr || error.message
+	}
+	return error instanceof Error ? error.message : String(error)
+}
+
+const attempt = async <T>(step: string, action: () => Promise<T>) => {
+	try {
+		return await action()
+	} catch (error) {
+		throw new Error(`${step}: ${failureOf(error)}`, { cause: error })
+	}
+}
+
+const readMainVersion = async () => {
+	await attempt("git fetch origin main", () =>
+		$`git fetch --quiet origin main`.quiet(),
 	)
+	const source = `origin/main:${TAURI_CONF}`
+	const tauriConf = await attempt(`git show ${source}`, () =>
+		$`git show ${source}`.text(),
+	)
+	return readVersion(tauriConf, source)
+}
 
 export const computeNext = (current: string, input: string) => {
 	if (SEMVER.test(input)) return input
@@ -109,7 +130,7 @@ const writeFile = async (path: string, transform: (text: string) => string) => {
 	await Bun.write(path, transform(text))
 }
 
-const writeVersion = async (root: string, next: string) => {
+export const writeVersion = async (root: string, next: string) => {
 	const files = versionFiles(root)
 	await writeFile(files.tauriConf, (text) => bumpJsonVersion(text, next))
 	await writeFile(files.appPkg, (text) => bumpJsonVersion(text, next))
@@ -126,56 +147,128 @@ const readRepository = async () =>
 		.replace(/\.git$/, "")
 		.replace(/^(git@github\.com:|https:\/\/github\.com\/)/, "")
 
-const messageOf = (error: unknown) =>
-	error instanceof Error ? error.message : String(error)
-
-const runStep = async (step: string, action: () => Promise<unknown>) => {
-	try {
-		await action()
-	} catch (error) {
-		throw new Error(`Main bump failed at "${step}": ${messageOf(error)}`, {
-			cause: error,
-		})
-	}
-}
-
 type OpenMainBump = Extract<MainBump, { kind: "open" }>
 
-const openMainBump = async (
+type MainBumpStep = {
+	name: string
+	command: string[]
+	run: () => Promise<unknown>
+}
+
+export type MainBumpFailure = {
+	step: string
+	cause: string
+	remaining: string[]
+}
+
+const shellStep = (name: string, command: string[]): MainBumpStep => ({
+	name,
+	command,
+	run: () => $`${command}`,
+})
+
+const mainBumpSteps = (
 	bump: OpenMainBump,
 	tag: string,
 	repository: string,
-) => {
+	worktree: string,
+): MainBumpStep[] => [
+	shellStep(`create ${bump.branch} from origin/main`, [
+		"git",
+		"worktree",
+		"add",
+		"--quiet",
+		"-b",
+		bump.branch,
+		worktree,
+		"origin/main",
+	]),
+	{
+		name: `write ${bump.version}`,
+		command: [
+			"bun",
+			"-e",
+			`import { writeVersion } from "./scripts/release.ts"; await writeVersion(${JSON.stringify(worktree)}, ${JSON.stringify(bump.version)})`,
+		],
+		run: () => writeVersion(worktree, bump.version),
+	},
+	shellStep("commit", [
+		"git",
+		"-C",
+		worktree,
+		"commit",
+		"--quiet",
+		"--all",
+		"-m",
+		bump.title,
+	]),
+	shellStep(`push ${bump.branch}`, [
+		"git",
+		"-C",
+		worktree,
+		"push",
+		"--quiet",
+		"-u",
+		"origin",
+		bump.branch,
+	]),
+	shellStep("open the pull request into main", [
+		"gh",
+		"pr",
+		"create",
+		"--repo",
+		repository,
+		"--base",
+		"main",
+		"--head",
+		bump.branch,
+		"--title",
+		bump.title,
+		"--body",
+		`Moves main to ${bump.version} after the stable ${tag}, so a build of main is offered every later beta and stable.`,
+	]),
+	shellStep("remove the worktree", [
+		"git",
+		"worktree",
+		"remove",
+		"--force",
+		worktree,
+	]),
+]
+
+const shellLine = (command: string[]) =>
+	command.map((arg) => $.escape(arg)).join(" ")
+
+export const openMainBump = async (
+	bump: OpenMainBump,
+	tag: string,
+	repository: string,
+): Promise<MainBumpFailure | undefined> => {
 	const worktree = mkdtempSync(join(tmpdir(), "kiroshi-main-bump-"))
-	await runStep(
-		`create ${bump.branch} from origin/main`,
-		() => $`git worktree add --quiet -b ${bump.branch} ${worktree} origin/main`,
-	)
-	try {
-		await runStep(`write ${bump.version}`, async () => {
-			const files = await writeVersion(worktree, bump.version)
-			await $`git -C ${worktree} add ${files}`
-		})
-		await runStep(
-			"commit",
-			() => $`git -C ${worktree} commit --quiet -m ${bump.title}`,
-		)
-		await runStep(
-			`push ${bump.branch}`,
-			() => $`git -C ${worktree} push --quiet -u origin ${bump.branch}`,
-		)
-	} finally {
-		await runStep(
-			`remove the worktree ${worktree}`,
-			() => $`git worktree remove --force ${worktree}`,
-		)
+	const steps = mainBumpSteps(bump, tag, repository, worktree)
+	for (const [index, step] of steps.entries()) {
+		try {
+			await step.run()
+		} catch (error) {
+			return {
+				step: step.name,
+				cause: failureOf(error),
+				remaining: steps.slice(index).map((left) => shellLine(left.command)),
+			}
+		}
 	}
-	await runStep(
-		"open the pull request into main",
-		() =>
-			$`gh pr create --repo ${repository} --base main --head ${bump.branch} --title ${bump.title} --body ${`Moves main to ${bump.version} after the stable ${tag}, so a build of main is offered every later beta and stable.`}`,
-	)
+	return undefined
 }
+
+export const describeMainBumpFailure = (
+	failure: MainBumpFailure,
+	tag: string,
+) =>
+	[
+		`Main bump failed at "${failure.step}": ${failure.cause}`,
+		`${tag} stays pushed. Finish the bump by hand from the repository root:`,
+		...failure.remaining.map((command) => `  ${command}`),
+	].join("\n")
 
 const run = async () => {
 	const args = Bun.argv.slice(2)
@@ -197,11 +290,16 @@ const run = async () => {
 	console.log(`Release: ${current} -> ${next} (${tag})`)
 
 	const mainVersion = nextMainVersion(next)
-	if (mainVersion && !dryRun) await $`git fetch --quiet origin main`
-	const mainBump = mainVersion
-		? planMainBump(mainVersion, await readMainVersion())
-		: undefined
-	if (mainBump) console.log(describeMainBump(mainBump))
+	let mainBump: MainBump | undefined
+	if (mainVersion) {
+		try {
+			mainBump = planMainBump(mainVersion, await readMainVersion())
+			console.log(describeMainBump(mainBump))
+		} catch (error) {
+			if (!dryRun) throw error
+			console.log(`Main bump unknown: ${failureOf(error)}`)
+		}
+	}
 
 	if (dryRun) {
 		console.log("Dry run: nothing written, committed or pushed.")
@@ -228,10 +326,9 @@ const run = async () => {
 	console.log(`Pushed ${tag}. CI: https://github.com/${repository}/actions`)
 
 	if (mainBump?.kind !== "open") return
-	try {
-		await openMainBump(mainBump, tag, repository)
-	} catch (error) {
-		console.error(`${messageOf(error)}\n${tag} stays pushed.`)
+	const failure = await openMainBump(mainBump, tag, repository)
+	if (failure) {
+		console.error(describeMainBumpFailure(failure, tag))
 		process.exit(1)
 	}
 	console.log(`Opened the pull request moving main to ${mainBump.version}.`)
