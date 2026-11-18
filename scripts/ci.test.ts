@@ -2086,6 +2086,23 @@ describe("the jobs of ci.yml", () => {
 		expect(publishing).toEqual(["publish/Publish the draft release"])
 	})
 
+	it("has the publish job of release.yml rewrite latest.json while a draft, before publishing and mirroring it", () => {
+		const steps = releaseWorkflow.jobs.publish?.steps ?? []
+		const names = steps.map((step) => step.name)
+		const rewrite = names.indexOf(
+			"Point the draft latest.json at the release download addresses",
+		)
+
+		expect(steps[rewrite]?.run).toContain("scripts/rewrite-updater-feed.sh")
+		expect(rewrite).toBeGreaterThan(
+			names.indexOf("Check the updater platforms of the draft latest.json"),
+		)
+		expect(rewrite).toBeLessThan(names.indexOf("Publish the draft release"))
+		expect(rewrite).toBeLessThan(
+			names.indexOf("Mirror latest.json on the beta release"),
+		)
+	})
+
 	it("boots the simulator bun run ci looks up", () => {
 		expect(
 			stepNamed("ios", "Boot the simulator while the build products download")

@@ -169,6 +169,10 @@ export const GATE = {
 			command: "bun test scripts/backport.test.ts",
 		},
 		{
+			name: "Updater feed rewrite script unit tests",
+			command: "bun test scripts/rewrite-updater-feed.test.ts",
+		},
+		{
 			name: "CODEOWNERS matcher unit tests",
 			command: "bun run test:code-owners",
 		},
