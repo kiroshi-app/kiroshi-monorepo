@@ -70,7 +70,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Take a PR holding owned files out of the merge queue and disable its auto-merge
+      - name: Disable the auto-merge of a PR holding owned files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,12 +78,11 @@ jobs:
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
           FIND_RESULT: ${{ needs.find.result }}
           OWNED_FILES: ${{ needs.find.outputs.files }}
-          STATE_QUERY: 'query($id: ID!) { node(id: $id) { ... on PullRequest { isInMergeQueue autoMergeRequest { enabledAt } } } }'
-          DEQUEUE_MUTATION: 'mutation($id: ID!) { dequeuePullRequest(input: { id: $id }) { clientMutationId } }'
+          STATE_QUERY: 'query($id: ID!) { node(id: $id) { ... on PullRequest { autoMergeRequest { enabledAt } } } }'
           DISARM_MUTATION: 'mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }'
         run: |
           read_state() {
-            gh api graphql -f query="$STATE_QUERY" -f id="$PR_NODE_ID" --jq '.data.node | "\(.autoMergeRequest != null) \(.isInMergeQueue)"'
+            gh api graphql -f query="$STATE_QUERY" -f id="$PR_NODE_ID" --jq '.data.node.autoMergeRequest != null'
           }
 
           if [ -n "$OWNED_FILES" ]; then
@@ -93,24 +92,18 @@ jobs:
           fi
 
           has_failed=false
-          state=$(read_state)
-          read -r is_armed is_queued <<<"$state"
-          if [ "$is_queued" = "true" ]; then
-            gh api graphql -f query="$DEQUEUE_MUTATION" -f id="$PR_NODE_ID" >/dev/null ||
-              { echo "::error::dequeuePullRequest failed on PR #$PR_NUMBER"; has_failed=true; }
-          fi
+          is_armed=$(read_state)
           if [ "$is_armed" = "true" ]; then
             gh api graphql -f query="$DISARM_MUTATION" -f id="$PR_NODE_ID" >/dev/null ||
               { echo "::error::disablePullRequestAutoMerge failed on PR #$PR_NUMBER"; has_failed=true; }
           fi
 
-          state=$(read_state)
-          read -r is_armed is_queued <<<"$state"
-          if [ "$is_armed" != "false" ] || [ "$is_queued" != "false" ]; then
-            echo "::error::PR #$PR_NUMBER still has autoMergeArmed=$is_armed inMergeQueue=$is_queued after disarm"
+          is_armed=$(read_state)
+          if [ "$is_armed" != "false" ]; then
+            echo "::error::PR #$PR_NUMBER still has autoMergeArmed=$is_armed after disarm"
             exit 1
           fi
           if [ "$has_failed" = "true" ]; then
             exit 1
           fi
-          echo "PR #$PR_NUMBER: auto-merge off and out of the merge queue: green, waiting for Steve"
+          echo "PR #$PR_NUMBER: auto-merge off: green, waiting for Steve"

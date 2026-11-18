@@ -280,14 +280,6 @@ const pullRequest = (number: number, runId: number): GitHubContext => ({
 
 const A_PULL_REQUEST = pullRequest(7, 11)
 
-const mergeGroup = (number: number, runId: number): GitHubContext => ({
-	event_name: "merge_group",
-	ref: `refs/heads/gh-readonly-queue/main/pr-${number}-group-head`,
-	run_id: String(runId),
-})
-
-const A_MERGE_GROUP = mergeGroup(7, 15)
-
 const A_PULL_REQUEST_INTO_A_FEATURE_BRANCH: GitHubContext = {
 	...pullRequest(9, 13),
 	base_ref: "feature/conversation-feed",
@@ -319,7 +311,7 @@ const storybookEnvOn = (github: GitHubContext) =>
 
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
-const MERGE_GROUP_JOB_SET = ["changes", "lint", "verify"]
+const REQUIRED_CHECKS_OF_MAIN = ["verify", "changes", "lint", "vitest", "rust"]
 
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
@@ -1579,28 +1571,20 @@ describe("the jobs of ci.yml", () => {
 
 	it.each([
 		[A_PULL_REQUEST, "pull_request"],
-		[A_MERGE_GROUP, "merge_group"],
 		[A_PUSH_TO_MAIN, "push"],
 	])("hands changes the event of %p as %s", (github, event) => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push to main or a release/** branch, never a v* tag, a pull_request into main, a feature/** or a release/** branch and a merge_group requesting its checks only", () => {
+	it("triggers on a push to main or a release/** branch, never a v* tag, and a pull_request into main, a feature/** or a release/** branch, whatever its paths", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main", "release/**"] },
 			pull_request: { branches: ["main", "feature/**", "release/**"] },
-			merge_group: { types: ["checks_requested"] },
 		})
 	})
 
-	it("runs only changes, lint and verify on a merge_group, whatever the paths of the group", () => {
-		expect(jobsRunningOn(A_MERGE_GROUP)).toEqual(MERGE_GROUP_JOB_SET)
-		expect(
-			failingVerifySteps(A_MERGE_GROUP, resultsByRule(A_MERGE_GROUP)),
-		).toEqual([])
-	})
-
-	it("checks the types of every workspace in the lint job a merge_group runs", () => {
+	it("checks the types of every workspace in the lint job a push to main runs", () => {
+		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toContain("lint")
 		expect(runStepsOf("lint").map((step) => step.run)).toContain(
 			"bun scripts/ci.ts lint",
 		)
@@ -1610,16 +1594,52 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it.each(
-		MERGE_GROUP_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
-			[job, "failure"],
-			[job, "skipped"],
-		]),
-	)("has verify fail on a merge_group when %s ended %s", (job, result) => {
-		const results = { ...resultsByRule(A_MERGE_GROUP), [job]: result }
+	it.each([
+		["a shared path", ["bun.lock"], "success"],
+		["no path of vitest nor rust", ["docs/relay/README.md"], "skipped"],
+	])(
+		"reports every required check of main on a pull_request into main touching %s, vitest and rust ending %s",
+		(_, paths, filteredResult) => {
+			const changes = {
+				result: "success",
+				outputs: outputsOn(A_PULL_REQUEST, paths),
+			}
+			const scopeWith = (results: JobResults) => ({
+				github: A_PULL_REQUEST,
+				needs: {
+					...Object.fromEntries(
+						Object.entries(results).map(([job, result]) => [job, { result }]),
+					),
+					changes,
+				},
+			})
+			const results: JobResults = Object.fromEntries(
+				Object.keys(workflow.jobs).map((job) => [
+					job,
+					evaluate(workflow.jobs[job]?.if ?? "true", scopeWith({}))
+						? "success"
+						: "skipped",
+				]),
+			)
 
-		expect(failingVerifySteps(A_MERGE_GROUP, results)).not.toEqual([])
-	})
+			expect(
+				Object.fromEntries(
+					REQUIRED_CHECKS_OF_MAIN.map((job) => [job, results[job]]),
+				),
+			).toEqual({
+				verify: "success",
+				changes: "success",
+				lint: "success",
+				vitest: filteredResult,
+				rust: filteredResult,
+			})
+			expect(
+				(workflow.jobs.verify?.steps ?? []).filter((step) =>
+					evaluate(step.if ?? "true", scopeWith(results)),
+				),
+			).toEqual([])
+		},
+	)
 
 	it("runs on a pull_request into a feature/** branch the jobs of one into main, on the same path filter, reading no base branch name", () => {
 		const github = A_PULL_REQUEST_INTO_A_FEATURE_BRANCH
@@ -1888,16 +1908,13 @@ describe("the jobs of ci.yml", () => {
 		)
 	})
 
-	it.each([A_PULL_REQUEST, A_MERGE_GROUP])(
-		"looks up no green push run on %p",
-		(github) => {
-			const green = (workflow.jobs.changes?.steps ?? []).find(
-				(step) => step.id === "green",
-			)
+	it("looks up no green push run on a pull_request", () => {
+		const green = (workflow.jobs.changes?.steps ?? []).find(
+			(step) => step.id === "green",
+		)
 
-			expect(evaluate(green?.if ?? "true", scopeOf(github))).toBe(false)
-		},
-	)
+		expect(evaluate(green?.if ?? "true", scopeOf(A_PULL_REQUEST))).toBe(false)
+	})
 
 	it("fetches the base of a pull_request only, a push to main fetching its green base in scripts/ci-changes.ts", () => {
 		const fetch = (workflow.jobs.changes?.steps ?? []).find(
@@ -1908,7 +1925,6 @@ describe("the jobs of ci.yml", () => {
 
 		expect(fetchesOn(A_PULL_REQUEST)).toBe(true)
 		expect(fetchesOn(A_PUSH_TO_MAIN)).toBe(false)
-		expect(fetchesOn(A_MERGE_GROUP)).toBe(false)
 	})
 
 	const concurrencyOf = (github: GitHubContext) => {
@@ -1926,7 +1942,6 @@ describe("the jobs of ci.yml", () => {
 		[pushToMain(7), "CI-refs/heads/main", "false"],
 		[pushToReleaseBranch(8), "CI-refs/heads/release/0.27", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
-		[mergeGroup(7, 15), "CI-15", "false"],
 		[
 			{ event_name: "workflow_dispatch", ref: "refs/heads/main", run_id: "12" },
 			"CI-refs/heads/main",
@@ -1951,15 +1966,6 @@ describe("the jobs of ci.yml", () => {
 		expect(concurrencyOf(pullRequest(8, 12)).group).not.toBe(
 			concurrencyOf(pullRequest(7, 11)).group,
 		)
-	})
-
-	it("keeps a merge_group run out of the group of its pull_request, of a push to main and of any other merge_group", () => {
-		const group = concurrencyOf(mergeGroup(7, 15))
-
-		expect(group.cancelsInProgress).toBe("false")
-		expect(group.group).not.toBe(concurrencyOf(pullRequest(7, 11)).group)
-		expect(group.group).not.toBe(concurrencyOf(pushToMain(15)).group)
-		expect(group.group).not.toBe(concurrencyOf(mergeGroup(7, 16)).group)
 	})
 
 	it("has verify wait on every job", () => {

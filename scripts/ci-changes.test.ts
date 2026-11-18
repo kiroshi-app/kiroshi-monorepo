@@ -31,7 +31,7 @@ const every = {
 	storybook: true,
 	ios: true,
 }
-const CI_EVENTS = ["pull_request", "merge_group", "push"] as const
+const CI_EVENTS = ["pull_request", "push"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
@@ -222,30 +222,10 @@ describe("ci jobs per event", () => {
 		expect(decideJobs({ event: "push", paths: ["bun.lock"] })).toEqual(every)
 	})
 
-	it.each(PATH_MIXES)(
-		"selects none of vitest, website, rust, storybook and ios on a merge_group, on %p",
-		(...paths) => {
-			expect(decideJobs({ event: "merge_group", paths })).toEqual(none)
-		},
-	)
-
-	it("selects no job on a merge_group touching a shared path", () => {
-		expect(decideJobs({ event: "merge_group", paths: ["bun.lock"] })).toEqual(
-			none,
-		)
-	})
-
 	it.each(CI_EVENTS)("selects rust-check on no %s", (event) => {
 		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
 			"rust-check",
 		)
-	})
-
-	it("decides a merge_group without a BASE to diff against", () => {
-		const detection = runChangeDetector("merge_group")
-
-		expect(detection.exitCode).toBe(0)
-		expect(outputOf(detection)).toEqual(none)
 	})
 
 	it("refuses a pull_request without a BASE to diff against", () => {
