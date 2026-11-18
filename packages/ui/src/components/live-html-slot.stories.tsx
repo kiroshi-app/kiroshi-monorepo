@@ -217,6 +217,44 @@ const StillTakenAgain = (props: LiveHtmlSlotProps) => {
 	)
 }
 
+const StatusChangesAfterMount = (props: LiveHtmlSlotProps) => {
+	const [status, setStatus] = useState(props.status)
+	return (
+		<>
+			<Button onClick={() => setStatus("live")}>Show the live view</Button>
+			<Button onClick={() => setStatus("unavailable")}>
+				Fail the live view
+			</Button>
+			<ScrollingReply {...props} status={status} />
+		</>
+	)
+}
+
+const expectSentenceInCard = async (canvasElement: HTMLElement) => {
+	const canvas = within(canvasElement)
+	const slot = canvas.getByRole("group", { name: "Live view" })
+	await expect(slot).toHaveAttribute("aria-busy", "false")
+	await expectAnswerCardFrame(slot)
+	const sentence = within(slot).getByText(
+		"Couldn’t show the live view. Ask for the page again to retry.",
+	)
+	const header = partOf(
+		canvasElement,
+		"markdown-answer-card-header",
+		"card header",
+	)
+	await expect(rectOf(slot).height).toBe(
+		rectOf(header).height + rectOf(sentence).height,
+	)
+	await expect(
+		canvas.queryByRole("group", { name: /^Code snippet/ }),
+	).not.toBeInTheDocument()
+	await expect(
+		canvasElement.querySelector("[data-slot='live-html-slot-view']"),
+	).toBeNull()
+	await expect(within(slot).queryByRole("button")).not.toBeInTheDocument()
+}
+
 const meta = preview.meta({
 	title: "Conversation/Markdown/LiveHtmlSlot",
 	component: LiveHtmlSlot,
@@ -224,7 +262,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, with its corners cut by `radius`, so nothing interactive lives inside the reserved area, and the header bar above it carries only its label. Without a live view, the HTML reads as the fence an `html` block renders.",
+					"The place a live HTML view takes inside an agent reply. The app lays a native view over the `rect` `onPlacementChange` reports and shows only its `clip`, the part the reply's scroll containers leave visible, with its corners cut by `radius`, so nothing interactive lives inside the reserved area, and the header bar above it carries only its label. Without a live view, the HTML reads as the fence an `html` block renders, and a page with no code to show reads as one sentence in the same card.",
 			},
 		},
 	},
@@ -613,6 +651,67 @@ export const LoadingWithStill = meta.story({
 	},
 })
 
+export const LoadingTallPage = meta.story({
+	args: { ...Loading.input.args, height: TALL_PAGE_HEIGHT },
+	render: Loading.input.render,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The live view of a page several screens tall is on its way: the skeleton fills the whole reserved area at the page height under the card header, the frame the live view takes, however long the wait.",
+			},
+		},
+	},
+	play: async (context) => {
+		await Loading.input.play?.(context)
+		await expectSizedToPage(context.canvasElement, TALL_PAGE_HEIGHT)
+		await expect(context.canvas.queryByRole("alert")).not.toBeInTheDocument()
+	},
+})
+
+export const LoadingTallPageDark = meta.story({
+	args: LoadingTallPage.input.args,
+	globals: { theme: "dark" },
+	render: LoadingTallPage.input.render,
+	play: LoadingTallPage.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same tall loading slot as `LoadingTallPage` on the dark thread: the skeleton fills the whole reserved area at the page height.",
+			},
+		},
+	},
+})
+
+export const LoadingTurnsLive = meta.story({
+	tags: ["test-only"],
+	args: LoadingTallPage.input.args,
+	render: (args) => <StatusChangesAfterMount {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The live view arrives at the height the skeleton held: the skeleton leaves, the reserved area stays the same element and the card keeps its size and its place.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const view = viewOf(canvasElement)
+		const card = cardOf(view)
+		await expect(card).toHaveAttribute("aria-busy", "true")
+		const loading = rectOf(card)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Show the live view" }),
+		)
+		await waitFor(() => expect(card).toHaveAttribute("aria-busy", "false"))
+		await expect(view.querySelector("[data-slot='skeleton']")).toBeNull()
+		await expect(viewOf(canvasElement)).toBe(view)
+		await expect(rectOf(card)).toEqual(loading)
+	},
+})
+
 export const Unavailable = meta.story({
 	args: { status: "unavailable" },
 	render: (args) => <ScrollingReply {...args} />,
@@ -665,5 +764,81 @@ export const UnavailableWithStill = meta.story({
 	play: async (context) => {
 		await Unavailable.input.play?.(context)
 		await expect(stillIn(context.canvasElement)).toBeNull()
+	},
+})
+
+export const UnavailableWithoutCode = meta.story({
+	args: { status: "unavailable", html: undefined },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"No live view and no code to show: the outlined Live view card keeps its header and reads one sentence, with no code block, no reserved area and no placement reported.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		await expectSentenceInCard(canvasElement)
+		await expect(args.onPlacementChange).not.toHaveBeenCalled()
+	},
+})
+
+export const UnavailableWithoutCodeDark = meta.story({
+	args: UnavailableWithoutCode.input.args,
+	globals: { theme: "dark" },
+	render: UnavailableWithoutCode.input.render,
+	play: UnavailableWithoutCode.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same card as `UnavailableWithoutCode` on the dark thread: the header and one sentence, with no code block.",
+			},
+		},
+	},
+})
+
+export const UnavailableWithEmptyCode = meta.story({
+	tags: ["test-only"],
+	args: { ...UnavailableWithoutCode.input.args, html: "" },
+	render: UnavailableWithoutCode.input.render,
+	play: UnavailableWithoutCode.input.play,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An empty string given as the code: the slot reads as `UnavailableWithoutCode`, never as an empty code block.",
+			},
+		},
+	},
+})
+
+export const LiveTurnsUnavailable = meta.story({
+	tags: ["test-only"],
+	args: { html: undefined },
+	render: (args) => <StatusChangesAfterMount {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A live view with no code to show fails after it was placed: the reserved area leaves, the slot reports no placement and the card reads its one sentence.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const view = viewOf(canvasElement)
+		const scroller = canvas.getByTestId("reply-scroller")
+		await reportFollows(args.onPlacementChange, () =>
+			placementIn(view, scroller),
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Fail the live view" }),
+		)
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)).toBeNull(),
+		)
+		await expectSentenceInCard(canvasElement)
 	},
 })
