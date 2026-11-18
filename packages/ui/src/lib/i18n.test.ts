@@ -123,14 +123,11 @@ describe("the runtime", () => {
 		expect(i18n.t("common:windowRecovery.gaveUp.reloadFailed.title")).toBe(
 			"La fenêtre ne s’est pas rechargée",
 		)
-		expect(
-			i18n.t("common:windowRecovery.gaveUp.reloadFailed.description"),
-		).toBe(
-			`Appuyez sur ${i18n.t("common:windowRecovery.gaveUp.action")} pour réessayer.`,
+		const french = i18n.t(
+			"common:windowRecovery.gaveUp.reloadFailed.description",
 		)
-		expect(
-			i18n.t("common:windowRecovery.gaveUp.reloadFailed.description"),
-		).toBe("Appuyez sur Recharger la fenêtre pour réessayer.")
+		expect(french).toBe("Appuyez sur Recharger la fenêtre pour réessayer.")
+		expect(french).toContain(i18n.t("common:windowRecovery.gaveUp.action"))
 	})
 
 	it.each(NAMED_AGENT_KEYS)(
