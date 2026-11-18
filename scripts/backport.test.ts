@@ -191,7 +191,7 @@ beforeEach(() => {
 	seed = mkdtempSync(join(tmpdir(), "kiroshi-backport-seed-"))
 	origin = mkdtempSync(join(tmpdir(), "kiroshi-backport-origin-"))
 	repository = join(mkdtempSync(join(tmpdir(), "kiroshi-backport-")), "clone")
-	git(origin, "init", "--quiet", "--bare")
+	git(origin, "init", "--quiet", "--bare", "--initial-branch", "main")
 	mkdirSync(join(stub, "bin"))
 	writeFileSync(join(stub, "bin", "gh"), STUB_GH)
 	chmodSync(join(stub, "bin", "gh"), 0o755)
