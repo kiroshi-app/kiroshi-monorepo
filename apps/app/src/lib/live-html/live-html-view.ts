@@ -63,6 +63,19 @@ const largestRadiusOf = ({ radius }: LiveHtmlPlacement) =>
 		radius.bottomLeft,
 	)
 
+const STILL_BOUND_MS = 500
+
+const drawnBy = (deadline: number, drawing: Promise<void>) => {
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	const late = new Promise<never>((_, reject) => {
+		timeout = setTimeout(
+			() => reject(new Error(`no still drawn within ${STILL_BOUND_MS} ms`)),
+			deadline - Date.now(),
+		)
+	})
+	return Promise.race([drawing, late]).finally(() => clearTimeout(timeout))
+}
+
 const answered = async <Data>(answer: CommandAnswer<Data>) => {
 	const result = await answer
 	if (result.status === "error") throw result.error
@@ -89,8 +102,8 @@ export const createLiveHtmlView = ({
 }: LiveHtmlViewOptions) => {
 	let wantedPlacement: LiveHtmlPlacement | null = null
 	let isCovered = false
-	let coverChanges = 0
-	let isStillDue = false
+	let stillDueBy: number | null = null
+	let awaitedStill = 0
 	let isStillDrawn = false
 	let drawn = UNMOUNTED
 	let hasFailed = false
@@ -121,7 +134,7 @@ export const createLiveHtmlView = ({
 		() =>
 			attempt(mountAt(id, placement.rect), () => {
 				drawn = { ...UNMOUNTED, isMounted: true }
-				isStillDue = false
+				stillDueBy = null
 				onLive()
 			})
 
@@ -152,23 +165,31 @@ export const createLiveHtmlView = ({
 			drawn = { ...drawn, isHidden: false }
 		})
 
-	const takeStill: Step = async () => {
-		isStillDue = false
-		const coverChangesWhenAsked = coverChanges
-		try {
-			const still = await answered(commands.liveHtmlStill(id))
-			if (coverChangesWhenAsked !== coverChanges) return
-			isStillDrawn = true
-			await drawStill(still)
-		} catch (reason) {
-			console.error(`live html: the view ${id} hides without a still`, reason)
-		}
-	}
-
 	const eraseStill: Step = async () => {
 		isStillDrawn = false
 		dropStill()
 	}
+
+	const drawAwaitedStill = async (asked: number) => {
+		const still = await answered(commands.liveHtmlStill(id))
+		if (asked !== awaitedStill) return
+		isStillDrawn = true
+		await drawStill(still)
+	}
+
+	const takeStill =
+		(deadline: number): Step =>
+		async () => {
+			stillDueBy = null
+			awaitedStill += 1
+			try {
+				await drawnBy(deadline, drawAwaitedStill(awaitedStill))
+			} catch (reason) {
+				awaitedStill += 1
+				if (isStillDrawn) await eraseStill()
+				console.error(`live html: the view ${id} hides without a still`, reason)
+			}
+		}
 
 	const drawTowards = (placement: LiveHtmlPlacement): Step | null => {
 		if (isInSight(placement) && !isSamePlacement(drawn.placement, placement)) {
@@ -180,7 +201,7 @@ export const createLiveHtmlView = ({
 	}
 
 	const hidingStep = (placement: LiveHtmlPlacement): Step =>
-		isStillDue && isInSight(placement) ? takeStill : hide
+		stillDueBy !== null && isInSight(placement) ? takeStill(stillDueBy) : hide
 
 	const uncoveringStep = (placement: LiveHtmlPlacement): Step | null => {
 		if (isCovered) return null
@@ -217,8 +238,8 @@ export const createLiveHtmlView = ({
 	const cover = (covered: boolean) => {
 		if (covered === isCovered) return
 		isCovered = covered
-		isStillDue = covered
-		coverChanges += 1
+		stillDueBy = covered ? Date.now() + STILL_BOUND_MS : null
+		awaitedStill += 1
 		void settle()
 	}
 

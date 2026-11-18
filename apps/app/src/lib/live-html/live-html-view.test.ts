@@ -14,6 +14,7 @@ vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
 }))
 
 afterEach(() => {
+	vi.useRealTimers()
 	vi.restoreAllMocks()
 	host.answer.mockReset()
 })
@@ -589,5 +590,143 @@ describe("the still of a live html view", () => {
 
 		expect(view.isUnder(overTheVisiblePart)).toBe(true)
 		expect(view.isUnder(overTheCutPart)).toBe(false)
+	})
+})
+
+describe("the bound on the still of a live html view", () => {
+	const pass = (milliseconds: number) =>
+		vi.advanceTimersByTimeAsync(milliseconds)
+
+	const orderOf = (command: string) =>
+		host.answer.mock.invocationCallOrder[callsOf().indexOf(command)]
+
+	const coveredViewOf = async (
+		overrides: Parameters<typeof viewOf>[0] = {},
+	) => {
+		vi.useFakeTimers()
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const view = viewOf(overrides)
+		view.follow({ rect: RECT, clip: CLIP })
+		await pass(0)
+		view.cover(true)
+		return view
+	}
+
+	it("hides without a still and logs once the still has not answered within 500 ms", async () => {
+		const taking = Promise.withResolvers<string>()
+		hostAnswers({ live_html_still: () => taking.promise })
+		const drawStill = vi.fn()
+		await coveredViewOf({ drawStill })
+
+		await pass(499)
+		expect(callsOf().slice(2)).toEqual(["live_html_still"])
+
+		await pass(1)
+		expect(callsOf().slice(2)).toEqual(["live_html_still", "live_html_hide"])
+		expect(console.error).toHaveBeenCalledTimes(1)
+
+		taking.resolve(STILL)
+		await pass(0)
+		expect(drawStill).not.toHaveBeenCalled()
+	})
+
+	it("drops a still not decoded within 500 ms before hiding, and ignores its late decode", async () => {
+		hostAnswers({ live_html_still: () => STILL })
+		const decoding = Promise.withResolvers<void>()
+		const drawStill = vi.fn(() => decoding.promise)
+		const dropStill = vi.fn()
+		await coveredViewOf({ drawStill, dropStill })
+
+		await pass(500)
+		expect(dropStill).toHaveBeenCalledTimes(1)
+		expect(dropStill.mock.invocationCallOrder[0]).toBeLessThan(
+			orderOf("live_html_hide"),
+		)
+		expect(console.error).toHaveBeenCalledTimes(1)
+
+		decoding.resolve()
+		await pass(0)
+		expect(drawStill).toHaveBeenCalledTimes(1)
+		expect(dropStill).toHaveBeenCalledTimes(1)
+		expect(callsOf().at(-1)).toBe("live_html_hide")
+	})
+
+	it("drops a still whose decode rejects before the view hides", async () => {
+		hostAnswers({ live_html_still: () => STILL })
+		const undecodable = new Error("the image cannot be decoded")
+		const drawStill = vi.fn().mockRejectedValue(undecodable)
+		const dropStill = vi.fn()
+		await coveredViewOf({ drawStill, dropStill })
+
+		await pass(0)
+
+		expect(dropStill).toHaveBeenCalledTimes(1)
+		expect(dropStill.mock.invocationCallOrder[0]).toBeLessThan(
+			orderOf("live_html_hide"),
+		)
+		expect(console.error).toHaveBeenCalledWith(
+			expect.stringContaining("view-1"),
+			undecodable,
+		)
+	})
+
+	it("counts one 500 ms across the still and its decode", async () => {
+		hostAnswers({
+			live_html_still: () =>
+				new Promise((resolve) => setTimeout(() => resolve(STILL), 300)),
+		})
+		const drawStill = vi.fn(() => new Promise<void>(() => undefined))
+		await coveredViewOf({ drawStill })
+
+		await pass(499)
+		expect(drawStill).toHaveBeenCalledWith(STILL)
+		expect(callsOf()).not.toContain("live_html_hide")
+
+		await pass(1)
+		expect(callsOf().at(-1)).toBe("live_html_hide")
+	})
+
+	it("counts the 500 ms from the opening of the surface, not from the asking", async () => {
+		const placing = Promise.withResolvers<null>()
+		const places = [null, placing.promise]
+		hostAnswers({
+			live_html_place: () => places.shift(),
+			live_html_still: () => new Promise(() => undefined),
+		})
+		vi.useFakeTimers()
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const view = viewOf()
+		view.follow({ rect: RECT, clip: CLIP })
+		await pass(0)
+		view.follow(MOVED)
+		view.cover(true)
+
+		await pass(200)
+		placing.resolve(null)
+		await pass(299)
+		expect(callsOf().at(-1)).toBe("live_html_still")
+
+		await pass(1)
+		expect(callsOf().at(-1)).toBe("live_html_hide")
+	})
+
+	it("shows the view and sets no still when the surface closes past the bound, the still pending", async () => {
+		const taking = Promise.withResolvers<string>()
+		hostAnswers({ live_html_still: () => taking.promise })
+		const drawStill = vi.fn()
+		const view = await coveredViewOf({ drawStill })
+		await pass(500)
+
+		view.cover(false)
+		await pass(0)
+		taking.resolve(STILL)
+		await pass(0)
+
+		expect(callsOf().slice(2)).toEqual([
+			"live_html_still",
+			"live_html_hide",
+			"live_html_show",
+		])
+		expect(drawStill).not.toHaveBeenCalled()
 	})
 })

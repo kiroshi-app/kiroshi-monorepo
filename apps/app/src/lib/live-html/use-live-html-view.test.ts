@@ -250,6 +250,20 @@ describe("the still of a live html view", () => {
 		await waitFor(() => expect(callsOf().at(-1)).toBe("live_html_hide"))
 	})
 
+	it("leaves the slot when its image cannot be decoded, and the view hides", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		vi.spyOn(HTMLImageElement.prototype, "decode").mockRejectedValue(
+			new Error("the image cannot be decoded"),
+		)
+		const { result } = await renderLiveView()
+
+		open(DIALOG)
+		await waitFor(() => expect(callsOf().at(-1)).toBe("live_html_hide"))
+
+		expect(result.current.still).toBeUndefined()
+		expect(console.error).toHaveBeenCalledTimes(1)
+	})
+
 	it("is taken again for each surface that opens", async () => {
 		const { result } = await renderLiveView()
 
