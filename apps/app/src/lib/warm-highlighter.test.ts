@@ -15,27 +15,36 @@ vi.mock("@workspace/ui/lib/code-highlight", async (importOriginal) => ({
 	},
 }))
 
-let pendingFrames: FrameRequestCallback[] = []
+const pendingFrames = new Map<number, FrameRequestCallback>()
+let requestedFrames = 0
+
+const runDueFrames = () => {
+	const dueFrames = [...pendingFrames.values()]
+	pendingFrames.clear()
+	for (const frame of dueFrames) frame(performance.now())
+}
 
 const paintFrame = () => {
-	const dueFrames = pendingFrames
-	pendingFrames = []
-	for (const frame of dueFrames) frame(performance.now())
+	runDueFrames()
 	vi.runOnlyPendingTimers()
 }
 
 beforeEach(() => {
-	vi.useFakeTimers({ toFake: ["setTimeout"] })
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 	vi.stubGlobal("requestIdleCallback", undefined)
 	vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => {
-		pendingFrames.push(frame)
-		return pendingFrames.length
+		requestedFrames += 1
+		pendingFrames.set(requestedFrames, frame)
+		return requestedFrames
+	})
+	vi.stubGlobal("cancelAnimationFrame", (frame: number) => {
+		pendingFrames.delete(frame)
 	})
 })
 
 afterEach(() => {
 	highlighter.warmed = []
-	pendingFrames = []
+	pendingFrames.clear()
 	vi.unstubAllGlobals()
 	vi.useRealTimers()
 })
@@ -53,4 +62,26 @@ it("warms one code language between two animation frames, every language in orde
 	expect(highlighter.warmed).toEqual(CODE_LANGUAGES)
 	paintFrame()
 	expect(highlighter.warmed).toEqual(CODE_LANGUAGES)
+})
+
+it("warms no further code language once stopped while waiting for a frame", () => {
+	const stopWarming = warmCodeHighlighter()
+	paintFrame()
+	const warmedBeforeStop = [...highlighter.warmed]
+
+	stopWarming()
+	for (const _language of CODE_LANGUAGES) paintFrame()
+
+	expect(warmedBeforeStop).toEqual(CODE_LANGUAGES.slice(0, 1))
+	expect(highlighter.warmed).toEqual(warmedBeforeStop)
+})
+
+it("warms no further code language once stopped between a frame and its warm-up", () => {
+	const stopWarming = warmCodeHighlighter()
+	runDueFrames()
+
+	stopWarming()
+	for (const _language of CODE_LANGUAGES) paintFrame()
+
+	expect(highlighter.warmed).toEqual([])
 })

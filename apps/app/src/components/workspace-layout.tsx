@@ -52,7 +52,8 @@ export const WorkspaceLayout = () => {
 
 	useInvokePhaseEnd("boot", hasLeftLaunchLoader ? "startup screen gone" : null)
 	useEffect(() => {
-		if (hasLeftLaunchLoader) warmCodeHighlighter()
+		if (!hasLeftLaunchLoader) return
+		return warmCodeHighlighter()
 	}, [hasLeftLaunchLoader])
 	useInvokePhaseEnd(
 		"space switch",
