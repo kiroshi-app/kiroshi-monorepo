@@ -29,6 +29,7 @@
 	{ "command": "window_open" },
 	{ "command": "window_identity" },
 	{ "command": "window_recovery_read" },
+	{ "command": "window_recovery_reload" },
 	{ "command": "window_report_space" },
 	{ "command": "window_report_strip" },
 	{ "command": "window_strip_at" },

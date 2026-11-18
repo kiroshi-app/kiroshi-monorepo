@@ -213,6 +213,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		window_controls::drag_ghost::drag_ghost_move::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_hide::<tauri::Wry>,
 		window_recovery::window_recovery_read,
+		window_recovery::window_recovery_reload::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,
 		conversations::commands::conversation_delete_bot::<tauri::Wry>,

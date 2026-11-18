@@ -165,6 +165,7 @@ export const commands = {
 	exhausted: boolean,
 	occurredAtMs: number,
 } | null>("window_recovery_read"),
+	windowRecoveryReload: () => typedError<null, WindowReloadError>(__TAURI_INVOKE("window_recovery_reload")),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
 	conversationDeleteBot: (id: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete_bot", { id })),
@@ -2438,6 +2439,8 @@ export type WindowRecovery = {
 	exhausted: boolean,
 	occurredAtMs: number,
 };
+
+export type WindowReloadError = { kind: "mainWindowMissing" } | { kind: "reloadFailed" };
 
 export type WindowSize = {
 	width: number,

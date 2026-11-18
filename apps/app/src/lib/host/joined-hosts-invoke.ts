@@ -51,6 +51,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"window_open",
 	"window_identity",
 	"window_recovery_read",
+	"window_recovery_reload",
 	"window_report_space",
 	"window_report_strip",
 	"window_strip_at",

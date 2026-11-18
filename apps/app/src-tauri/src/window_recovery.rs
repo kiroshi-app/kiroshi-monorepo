@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use decision::{Death, Deaths, Recovery, WindowRecovery};
@@ -29,6 +30,33 @@ pub struct WindowRecoveries {
 #[specta::specta]
 pub fn window_recovery_read(recoveries: State<'_, WindowRecoveries>) -> Option<WindowRecovery> {
 	recoveries.deaths.lock().unwrap_or_else(PoisonError::into_inner).last().cloned()
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum WindowReloadError {
+	MainWindowMissing,
+	ReloadFailed,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_recovery_reload<R: Runtime>(
+	app: AppHandle<R>,
+	recoveries: State<'_, WindowRecoveries>,
+) -> Result<(), WindowReloadError> {
+	let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+		log::error!("the front asked for a reload of the main window: the window is not open");
+		return Err(WindowReloadError::MainWindowMissing);
+	};
+	if let Err(failure) = window.reload() {
+		log::error!("the front asked for a reload of the main window: {failure}");
+		return Err(WindowReloadError::ReloadFailed);
+	}
+	let mut history = recoveries.deaths.lock().unwrap_or_else(PoisonError::into_inner);
+	*history = history.with_a_fresh_budget();
+	log::info!("the front asked for a reload of the main window: its retry budget is fresh");
+	Ok(())
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -61,10 +89,19 @@ fn recover<R: Runtime>(app: &AppHandle<R>, death: Death) {
 	match recovery {
 		Recovery::Reload => reload(app, &recoveries),
 		Recovery::Rebuild => rebuild(app, &recoveries),
-		Recovery::GiveUp => log::error!(
-			"the main window is no longer reloaded after {deaths} deaths within {} s",
-			decision::RUN_MS / 1000
-		),
+		Recovery::GiveUp => {
+			log::error!(
+				"the main window is brought back once on its give-up page after {deaths} deaths within {} s",
+				decision::RUN_MS / 1000
+			);
+			match death.process {
+				decision::DeadProcess::Render => reload(app, &recoveries),
+				decision::DeadProcess::Browser => rebuild(app, &recoveries),
+			}
+		}
+		Recovery::LeaveDead => {
+			log::error!("the main window is no longer reloaded until the front asks for it");
+		}
 	}
 }
 
@@ -134,12 +171,19 @@ mod tests {
 	const RENDER_CRASH: Death =
 		Death { process: decision::DeadProcess::Render, reason: WindowDeathReason::Crashed };
 
+	const RENDER_KILL: Death =
+		Death { process: decision::DeadProcess::Render, reason: WindowDeathReason::Killed };
+
+	fn reload_asked_by_the_front(app: &App<MockRuntime>) -> Result<(), WindowReloadError> {
+		window_recovery_reload(app.handle().clone(), app.state::<WindowRecoveries>())
+	}
+
 	fn read(app: &App<MockRuntime>) -> Option<WindowRecovery> {
 		window_recovery_read(app.state::<WindowRecoveries>())
 	}
 
 	#[test]
-	fn deaths_of_the_main_window_page_reload_it_then_give_up_and_answer_the_fact() {
+	fn deaths_of_the_main_window_page_reload_it_then_give_up_until_the_front_asks_for_a_reload() {
 		capturing();
 		let app = an_app_of_its_own("window-recovery", installed_on(mock_builder()));
 		WebviewWindowBuilder::new(&*app, MAIN_WINDOW, WebviewUrl::default())
@@ -161,8 +205,40 @@ mod tests {
 		assert!(app.get_webview_window(MAIN_WINDOW).is_some());
 
 		assert_eq!(logged_naming("the main window page died").len(), 3);
-		assert_eq!(logged_naming("the main window is reloaded").len(), 2);
-		assert_eq!(logged_naming("the main window is no longer reloaded after 3 deaths").len(), 1);
+		assert_eq!(logged_naming("the main window is reloaded").len(), 3);
+		assert_eq!(logged_naming("once on its give-up page after 3 deaths").len(), 1);
+
+		recover(app.handle(), RENDER_KILL);
+		let left_dead = read(&app).expect("a fact after a death");
+		assert_eq!((left_dead.reason, left_dead.exhausted), (WindowDeathReason::Killed, true));
+		assert_eq!(logged_naming("the main window page died").len(), 4);
+		assert_eq!(logged_naming("the main window is reloaded").len(), 3);
+		assert_eq!(logged_naming("the main window is rebuilt").len(), 0);
+		assert_eq!(logged_naming("the main window is no longer reloaded").len(), 1);
+
+		assert_eq!(reload_asked_by_the_front(&app), Ok(()));
+		let renewed = read(&app).expect("the fact of the last death");
+		assert_eq!(
+			(renewed.reason, renewed.deaths, renewed.exhausted),
+			(WindowDeathReason::Killed, 0, false)
+		);
+		assert_eq!(logged_naming("its retry budget is fresh").len(), 1);
+
+		recover(app.handle(), RENDER_CRASH);
+		let reloaded_again = read(&app).expect("a fact after a death");
+		assert_eq!((reloaded_again.deaths, reloaded_again.exhausted), (1, false));
+		assert_eq!(logged_naming("the main window is reloaded").len(), 4);
+	}
+
+	#[test]
+	fn a_reload_asked_with_no_main_window_open_answers_that_it_is_missing() {
+		capturing();
+		let app = an_app_of_its_own("window-recovery-missing", installed_on(mock_builder()));
+
+		assert_eq!(reload_asked_by_the_front(&app), Err(WindowReloadError::MainWindowMissing));
+
+		assert_eq!(read(&app), None);
+		assert_eq!(logged_naming("the main window: the window is not open").len(), 1);
 	}
 
 	#[test]
