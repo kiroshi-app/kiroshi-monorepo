@@ -45,6 +45,14 @@ pub struct MainDocument {
 	pub first_snapshot: String,
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub struct MainScroll {
+	pub reading: u64,
+	pub x: f64,
+	pub y: f64,
+	pub wheels: u64,
+}
+
 #[derive(Clone, Copy)]
 pub struct Gap {
 	pub started: Instant,
@@ -75,6 +83,7 @@ pub struct HostState {
 	heartbeat: Mutex<Heartbeat>,
 	handler_events: Mutex<Vec<HandlerEvent>>,
 	view_requests: Mutex<HashMap<String, Vec<SeenRequest>>>,
+	main_scrolls: Mutex<Vec<MainScroll>>,
 }
 
 impl HostState {
@@ -117,6 +126,14 @@ impl HostState {
 			}
 			Some(_) => {}
 		}
+	}
+
+	pub fn record_main_scroll(&self, scroll: MainScroll) {
+		locked(&self.main_scrolls).push(scroll);
+	}
+
+	pub fn main_scroll(&self, reading: u64) -> Option<MainScroll> {
+		locked(&self.main_scrolls).iter().find(|scroll| scroll.reading == reading).copied()
 	}
 
 	pub fn heartbeat(&self) -> Heartbeat {

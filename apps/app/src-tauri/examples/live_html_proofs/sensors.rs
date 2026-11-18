@@ -1,14 +1,16 @@
+use std::ffi::c_void;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use objc2::encode::{Encoding, RefEncode};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{msg_send, sel};
-use objc2_app_kit::{NSView, NSWindow};
-use objc2_foundation::{NSRect, NSString};
+use objc2::{msg_send, sel, ClassType, MainThreadMarker};
+use objc2_app_kit::{NSApplication, NSEvent, NSView, NSWindow};
+use objc2_foundation::{NSPoint, NSRect, NSString};
 use serde::Serialize;
 use tauri::WebviewWindow;
 
@@ -281,12 +283,23 @@ fn on_the_ns_window<T: Send + 'static>(
 	step: &'static str,
 	act: impl FnOnce(&NSWindow) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
+	on_the_main_webview(main_window, step, move |window, _| act(window))
+}
+
+fn on_the_main_webview<T: Send + 'static>(
+	main_window: &WebviewWindow,
+	step: &'static str,
+	act: impl FnOnce(&NSWindow, &NSView) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
 	let (answer, answered) = mpsc::channel();
 	main_window
 		.with_webview(move |platform| {
 			let window = unsafe { Retained::retain(platform.ns_window().cast::<NSWindow>()) };
-			let reading = window.ok_or_else(|| "the main window has no native window".to_owned());
-			if answer.send(reading.and_then(|window| act(&window))).is_err() {
+			let webview = unsafe { Retained::retain(platform.inner().cast::<NSView>()) };
+			let reading = window
+				.zip(webview)
+				.ok_or_else(|| "the main window has no native window or webview".to_owned());
+			if answer.send(reading.and_then(|(window, webview)| act(&window, &webview))).is_err() {
 				eprintln!("{step} after its deadline");
 			}
 		})
@@ -341,14 +354,15 @@ fn holders_in(view: &NSView) -> Vec<Retained<NSView>> {
 	view.subviews()
 		.iter()
 		.flat_map(|subview| {
-			let identifier: Option<Retained<NSString>> =
-				unsafe { msg_send![&*subview, identifier] };
-			let is_holder =
-				identifier.is_some_and(|identifier| identifier.to_string() == HOLDER_IDENTIFIER);
 			let nested = holders_in(&subview);
-			is_holder.then_some(subview).into_iter().chain(nested)
+			is_holder(&subview).then_some(subview).into_iter().chain(nested)
 		})
 		.collect()
+}
+
+fn is_holder(view: &NSView) -> bool {
+	let identifier: Option<Retained<NSString>> = unsafe { msg_send![view, identifier] };
+	identifier.is_some_and(|identifier| identifier.to_string() == HOLDER_IDENTIFIER)
 }
 
 fn contents_scale(view: &NSView) -> Result<f64, String> {
@@ -357,4 +371,213 @@ fn contents_scale(view: &NSView) -> Result<f64, String> {
 		return Err("a drawn view has no layer".to_owned());
 	}
 	Ok(unsafe { msg_send![layer, contentsScale] })
+}
+
+#[repr(C)]
+struct CGEvent {
+	_opaque: [u8; 0],
+}
+
+unsafe impl RefEncode for CGEvent {
+	const ENCODING_REF: Encoding = Encoding::Pointer(&Encoding::Struct("__CGEvent", &[]));
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+	fn CGEventCreateScrollWheelEvent2(
+		source: *const c_void,
+		units: u32,
+		wheel_count: u32,
+		wheel1: i32,
+		wheel2: i32,
+		wheel3: i32,
+	) -> *mut CGEvent;
+	fn CGEventSetLocation(event: *mut CGEvent, location: NSPoint);
+	fn CGEventSetIntegerValueField(event: *mut CGEvent, field: u32, value: i64);
+	fn CGMainDisplayID() -> u32;
+	fn CGDisplayBounds(display: u32) -> NSRect;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+	fn CFRelease(object: *const c_void);
+}
+
+const LINE_UNITS: u32 = 1;
+const PIXEL_UNITS: u32 = 0;
+const IS_CONTINUOUS: u32 = 88;
+const SCROLL_PHASE: u32 = 99;
+const MOMENTUM_PHASE: u32 = 123;
+const NO_PHASE: i64 = 0;
+const SCROLL_BEGAN: i64 = 1;
+const SCROLL_CHANGED: i64 = 2;
+const SCROLL_ENDED: i64 = 4;
+const MOMENTUM_BEGAN: i64 = 1;
+const MOMENTUM_CONTINUED: i64 = 2;
+const MOMENTUM_ENDED: i64 = 3;
+const POINTER_BESIDE_THE_VIEW: f64 = 120.0;
+
+#[derive(Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScrollDevice {
+	MouseWheel,
+	Trackpad,
+}
+
+#[derive(Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pointer {
+	OverTheView,
+	BesideTheView,
+}
+
+#[derive(Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScrollTarget {
+	MainWebview,
+	LiveView,
+	Elsewhere,
+}
+
+#[derive(Clone, Copy, Serialize)]
+pub struct ScrollStep {
+	pub delta: i32,
+	pub phase: i64,
+	pub momentum_phase: i64,
+}
+
+impl ScrollStep {
+	pub const fn notch(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn began(delta: i32) -> Self {
+		Self { delta, phase: SCROLL_BEGAN, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn changed(delta: i32) -> Self {
+		Self { delta, phase: SCROLL_CHANGED, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn ended() -> Self {
+		Self { delta: 0, phase: SCROLL_ENDED, momentum_phase: NO_PHASE }
+	}
+
+	pub const fn momentum_began(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: MOMENTUM_BEGAN }
+	}
+
+	pub const fn momentum(delta: i32) -> Self {
+		Self { delta, phase: NO_PHASE, momentum_phase: MOMENTUM_CONTINUED }
+	}
+
+	pub const fn momentum_ended() -> Self {
+		Self { delta: 0, phase: NO_PHASE, momentum_phase: MOMENTUM_ENDED }
+	}
+}
+
+pub fn send_scroll(
+	main_window: &WebviewWindow,
+	device: ScrollDevice,
+	step: ScrollStep,
+	pointer: Pointer,
+) -> Result<ScrollTarget, String> {
+	on_the_main_webview(main_window, "a scroll event was sent", move |window, main_webview| {
+		let marker = MainThreadMarker::new().ok_or("the scroll was sent off the main thread")?;
+		let content = window.contentView().ok_or("the main window has no content view")?;
+		let event = scroll_event(window, device, step, pointer_location(window, pointer)?)?;
+		let app = NSApplication::sharedApplication(marker);
+		make_current_through_private_appkit(&app, &event)?;
+		let target = target_of(content.hitTest(event.locationInWindow()), main_webview);
+		app.sendEvent(&event);
+		Ok(target)
+	})
+}
+
+fn make_current_through_private_appkit(app: &NSApplication, event: &NSEvent) -> Result<(), String> {
+	let make_current = sel!(_setCurrentEvent:);
+	let responds: bool = unsafe { msg_send![app, respondsToSelector: make_current] };
+	if !responds {
+		return Err("this macOS offers no private call to make an event the current one".to_owned());
+	}
+	unsafe {
+		let _: () = msg_send![app, _setCurrentEvent: event];
+	}
+	Ok(())
+}
+
+fn target_of(hit: Option<Retained<NSView>>, main_webview: &NSView) -> ScrollTarget {
+	let mut view = hit;
+	while let Some(current) = view {
+		if std::ptr::eq(&*current, main_webview) {
+			return ScrollTarget::MainWebview;
+		}
+		if is_holder(&current) {
+			return ScrollTarget::LiveView;
+		}
+		view = unsafe { current.superview() };
+	}
+	ScrollTarget::Elsewhere
+}
+
+fn pointer_location(window: &NSWindow, pointer: Pointer) -> Result<NSPoint, String> {
+	let content = window.contentView().ok_or("the main window has no content view")?;
+	let [holder] = holders_in(&content).try_into().map_err(|holders: Vec<_>| {
+		format!("{} holders in the main window, where one view is mounted", holders.len())
+	})?;
+	let NSRect { origin, size } =
+		window.convertRectToScreen(holder.convertRect_toView(holder.bounds(), None));
+	let x = match pointer {
+		Pointer::OverTheView => origin.x + size.width / 2.0,
+		Pointer::BesideTheView => origin.x + size.width + POINTER_BESIDE_THE_VIEW,
+	};
+	let main_display_height = unsafe { CGDisplayBounds(CGMainDisplayID()) }.size.height;
+	Ok(NSPoint::new(x, main_display_height - (origin.y + size.height / 2.0)))
+}
+
+fn scroll_event(
+	window: &NSWindow,
+	device: ScrollDevice,
+	step: ScrollStep,
+	location: NSPoint,
+) -> Result<Retained<NSEvent>, String> {
+	let units = match device {
+		ScrollDevice::MouseWheel => LINE_UNITS,
+		ScrollDevice::Trackpad => PIXEL_UNITS,
+	};
+	let event =
+		unsafe { CGEventCreateScrollWheelEvent2(std::ptr::null(), units, 1, step.delta, 0, 0) };
+	if event.is_null() {
+		return Err("CoreGraphics created no scroll event".to_owned());
+	}
+	let fields = [
+		(IS_CONTINUOUS, matches!(device, ScrollDevice::Trackpad).into()),
+		(SCROLL_PHASE, step.phase),
+		(MOMENTUM_PHASE, step.momentum_phase),
+	];
+	let converted: Option<Retained<NSEvent>> = unsafe {
+		CGEventSetLocation(event, location);
+		for (field, value) in fields {
+			CGEventSetIntegerValueField(event, field, value);
+		}
+		let converted = msg_send![NSEvent::class(), eventWithCGEvent: event];
+		CFRelease(event.cast());
+		converted
+	};
+	let converted = converted.ok_or("AppKit made no event of the scroll event")?;
+	in_the_window_through_private_appkit(&converted, window)
+}
+
+fn in_the_window_through_private_appkit(
+	event: &NSEvent,
+	window: &NSWindow,
+) -> Result<Retained<NSEvent>, String> {
+	let relative = sel!(_eventRelativeToWindow:);
+	let responds: bool = unsafe { msg_send![event, respondsToSelector: relative] };
+	if !responds {
+		return Err("this macOS offers no private call to aim an event at a window".to_owned());
+	}
+	let aimed: Option<Retained<NSEvent>> =
+		unsafe { msg_send![event, _eventRelativeToWindow: window] };
+	aimed.ok_or_else(|| "AppKit aimed the scroll event at no window".to_owned())
 }

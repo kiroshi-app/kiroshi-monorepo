@@ -16,7 +16,7 @@ use elsewhere as native;
 #[cfg(target_os = "macos")]
 use macos as native;
 #[cfg(target_os = "macos")]
-pub use macos::HOLDER_IDENTIFIER;
+pub use macos::{EVENTS_FOR_THE_MAIN_WEBVIEW, HOLDER_IDENTIFIER};
 
 use std::collections::HashMap;
 use std::sync::Arc;

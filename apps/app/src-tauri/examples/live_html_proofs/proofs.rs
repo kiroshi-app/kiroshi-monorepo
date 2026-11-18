@@ -4,13 +4,18 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::host::{Gap, HandlerEvent, Heartbeat, SecretCall};
+use crate::host::{Gap, HandlerEvent, Heartbeat, MainScroll, SecretCall};
 use crate::probe::{self, HostReading, HostTrace, ViewReading};
 use kiroshi_app::live_html::server::ALLOWED_HOSTS as ALLOWLIST_HOSTS;
 
 use crate::scenario::FIRST_VIEW_LABEL;
-use crate::sensors::{Connection, CspReport, DrawnFrames, TripwireReading, ViewRecord};
+use crate::sensors::{
+	Connection, CspReport, DrawnFrames, Pointer, ScrollDevice, ScrollStep, ScrollTarget,
+	TripwireReading, ViewRecord,
+};
 use kiroshi_app::live_html::contract::LiveHtmlRectangle;
+use kiroshi_app::live_html::EVENTS_FOR_THE_MAIN_WEBVIEW;
+use objc2_app_kit::NSEventType;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 pub const SCALES_FORCED_IN_TURN: [f64; 3] = [1.0, 2.0, 1.0];
@@ -161,6 +166,43 @@ impl RescaledFrames {
 	}
 }
 
+pub struct ScrolledGesture {
+	pub device: ScrollDevice,
+	pub pointer: Pointer,
+	pub sent: Vec<(ScrollStep, ScrollTarget)>,
+	pub before: MainScroll,
+	pub after: MainScroll,
+}
+
+impl ScrolledGesture {
+	fn moved(&self) -> f64 {
+		self.after.y - self.before.y
+	}
+
+	fn wheels(&self) -> u64 {
+		self.after.wheels.saturating_sub(self.before.wheels)
+	}
+
+	fn is_sent_to_the_main_webview(&self) -> bool {
+		self.sent.iter().all(|(_, target)| *target == ScrollTarget::MainWebview)
+	}
+}
+
+fn event_type_name(event_type: NSEventType) -> String {
+	let named = [
+		(NSEventType::ScrollWheel, "scroll_wheel"),
+		(NSEventType::Magnify, "magnify"),
+		(NSEventType::SmartMagnify, "smart_magnify"),
+		(NSEventType::Rotate, "rotate"),
+		(NSEventType::BeginGesture, "begin_gesture"),
+		(NSEventType::EndGesture, "end_gesture"),
+	];
+	named
+		.iter()
+		.find(|(named_type, _)| *named_type == event_type)
+		.map_or_else(|| format!("{event_type:?}"), |(_, name)| (*name).to_owned())
+}
+
 pub struct AttemptAlone {
 	pub attempt: &'static str,
 	pub window: String,
@@ -256,6 +298,7 @@ pub struct Observations {
 	pub host_readings: Option<HostReadings>,
 	pub attempts_alone: Vec<AttemptAlone>,
 	pub grid: GridObservation,
+	pub scrolled: Result<Vec<ScrolledGesture>, String>,
 }
 
 fn loopback_attempts() -> Vec<&'static str> {
@@ -282,6 +325,7 @@ impl Observations {
 			self.storage_not_shared_between_views(),
 			self.drawn_on_the_device_pixel_grid(),
 			self.replaced_on_a_backing_scale_change(),
+			self.scroll_reaches_the_main_webview(),
 		];
 		if self.host_readings.is_some() {
 			let (by_the_handlers, by_browser_csp_reports) = self.first_view_navigations_seen();
@@ -946,6 +990,49 @@ impl Observations {
 					"drawn": probe::evidence(&reading.drawn),
 				})).collect::<Vec<_>>(),
 				"holder_moved_to_the_finer_grid_at_scale_2": has_moved_to_the_finer_grid,
+			}),
+		}
+	}
+
+	fn scroll_reaches_the_main_webview(&self) -> Proof {
+		let scrolled = self.scrolled.as_deref().unwrap_or_default();
+		let gesture = |device: ScrollDevice, pointer: Pointer| {
+			scrolled.iter().find(|gesture| gesture.device == device && gesture.pointer == pointer)
+		};
+		let moves_as_beside_the_view = |device: ScrollDevice| {
+			gesture(device, Pointer::BesideTheView)
+				.zip(gesture(device, Pointer::OverTheView))
+				.is_some_and(|(beside, over)| {
+					beside.moved() > 0.0
+						&& over.moved() == beside.moved()
+						&& over.is_sent_to_the_main_webview()
+				})
+		};
+		let devices = [ScrollDevice::MouseWheel, ScrollDevice::Trackpad];
+		Proof {
+			proof: 10,
+			name: "Every event of a mouse wheel and of a trackpad swipe with momentum over a mounted view reaches the main webview, which scrolls by the delta it gets beside the view",
+			result: devices.into_iter().all(moves_as_beside_the_view).into(),
+			attempts: Vec::new(),
+			evidence: json!({
+				"event_types_the_holder_hands_to_the_main_webview": EVENTS_FOR_THE_MAIN_WEBVIEW.map(event_type_name),
+				"gestures": match &self.scrolled {
+					Ok(scrolled) => scrolled.iter().map(|gesture| json!({
+						"device": gesture.device,
+						"pointer": gesture.pointer,
+						"main_offset_before": [gesture.before.x, gesture.before.y],
+						"main_offset_after": [gesture.after.x, gesture.after.y],
+						"main_offset_moved_by": gesture.moved(),
+						"wheel_events_the_main_page_saw": gesture.wheels(),
+						"events_sent": gesture.sent.iter().map(|(step, target)| json!({
+							"delta": step.delta,
+							"phase": step.phase,
+							"momentum_phase": step.momentum_phase,
+							"hit_tested_to": target,
+						})).collect::<Vec<_>>(),
+					})).collect::<Vec<_>>(),
+					Err(cause) => vec![json!({ "error": cause })],
+				},
 			}),
 		}
 	}
