@@ -1,4 +1,4 @@
-const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
+const CI_EVENTS = ["pull_request", "merge_group", "push"] as const
 
 type CiEvent = (typeof CI_EVENTS)[number]
 
@@ -106,7 +106,6 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	if (event === "merge_group") return NO_JOB
-	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
 	if (event === "pull_request")
 		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
@@ -125,6 +124,42 @@ const changedPaths = (base: string | undefined) => {
 	if (!diff.success)
 		throw new Error(`git diff against ${base} failed: ${diff.stderr}`)
 	return diff.stdout.toString().split("\n").filter(Boolean)
+}
+
+const LOCKFILE = "bun.lock"
+
+const WORKSPACE_VERSION_LINE = /^"version": "[^"]+",?$/
+
+const changedLinesOf = (base: string, path: string) => {
+	const diff = Bun.spawnSync([
+		"git",
+		"diff",
+		"--unified=0",
+		base,
+		"HEAD",
+		"--",
+		path,
+	])
+	if (!diff.success)
+		throw new Error(
+			`git diff of ${path} against ${base} failed: ${diff.stderr}`,
+		)
+	return diff.stdout
+		.toString()
+		.split("\n")
+		.filter((line) => /^[-+]/.test(line) && !/^(---|\+\+\+) /.test(line))
+		.map((line) => line.slice(1).trim())
+}
+
+const pathsChangedSince = (greenBase: string) => {
+	const paths = changedPaths(greenBase)
+	if (!paths.includes(LOCKFILE)) return paths
+	const lockfileLines = changedLinesOf(greenBase, LOCKFILE)
+	const isLockfileBumpingWorkspaceVersionsOnly =
+		lockfileLines.length > 0 &&
+		lockfileLines.every((line) => WORKSPACE_VERSION_LINE.test(line))
+	if (!isLockfileBumpingWorkspaceVersionsOnly) return paths
+	return paths.filter((path) => path !== LOCKFILE)
 }
 
 const everyJobBecause = (reason: string) => {
@@ -149,12 +184,11 @@ const jobsOfPush = (greenBase: string | undefined) => {
 		return everyJobBecause(
 			`fetching the last green sha ${greenBase} failed (${fetched.stderr.toString().trim()})`,
 		)
-	return decideJobs({ event: "push", paths: changedPaths(greenBase) })
+	return decideJobs({ event: "push", paths: pathsChangedSince(greenBase) })
 }
 
 const jobsOf = (event: CiEvent, base: string | undefined) => {
-	if (event === "tag" || event === "merge_group")
-		return decideJobs({ event, paths: [] })
+	if (event === "merge_group") return decideJobs({ event, paths: [] })
 	if (event === "pull_request")
 		return decideJobs({ event, paths: changedPaths(base) })
 	return jobsOfPush(base)

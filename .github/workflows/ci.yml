@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main, "release/**"]
-    tags: ["v*"]
   pull_request:
     branches: [main, "feature/**", "release/**"]
   merge_group:
@@ -28,7 +27,8 @@ concurrency:
 # merge_group: changes, lint on the head of the group, its Types step checking every TypeScript workspace of the combined result, verify.
 # push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over eleven jobs, verify.
 # push to a release/** branch: the jobs of a push to main on the paths changed since the last green push to that branch, ios-build and ios skipped.
-# v* tag: changes, lint, vitest, website, rust, storybook, verify.
+# push: a bun.lock whose diff only bumps a workspace version, like the release commit of bun run release, selects no job of its own, lint still installing from it.
+# v* tag: no run, release.yml waits on the push run of the tagged commit on its release/X.Y branch.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -196,7 +196,7 @@ jobs:
       actions: read
       contents: read
     env:
-      CI_EVENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'tag' || github.event_name }}
+      CI_EVENT: ${{ github.event_name }}
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       vitest: ${{ steps.filter.outputs.vitest }}

@@ -272,14 +272,6 @@ const pushToReleaseBranch = (runId: number): GitHubContext => ({
 
 const A_PUSH_TO_A_RELEASE_BRANCH = pushToReleaseBranch(8)
 
-const releaseTag = (runId: number): GitHubContext => ({
-	event_name: "push",
-	ref: "refs/tags/v1.2.0",
-	run_id: String(runId),
-})
-
-const A_RELEASE_TAG = releaseTag(9)
-
 const pullRequest = (number: number, runId: number): GitHubContext => ({
 	event_name: "pull_request",
 	ref: `refs/pull/${number}/merge`,
@@ -1331,10 +1323,8 @@ describe("the jobs of ci.yml", () => {
 	it.each([
 		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
 		["vitest", A_PUSH_TO_MAIN, "bun scripts/ci.ts vitest"],
-		["vitest", A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
 		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-pr"],
 		["rust", A_PUSH_TO_MAIN, "bun scripts/ci.ts rust"],
-		["rust", A_RELEASE_TAG, "bun scripts/ci.ts rust"],
 	] as const)(
 		"has %s run one gate through bun scripts/ci.ts on %p",
 		(job, github, command) => {
@@ -1591,14 +1581,13 @@ describe("the jobs of ci.yml", () => {
 		[A_PULL_REQUEST, "pull_request"],
 		[A_MERGE_GROUP, "merge_group"],
 		[A_PUSH_TO_MAIN, "push"],
-		[A_RELEASE_TAG, "tag"],
 	])("hands changes the event of %p as %s", (github, event) => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push to main or a release/** branch, a v* tag, a pull_request into main, a feature/** or a release/** branch and a merge_group requesting its checks only", () => {
+	it("triggers on a push to main or a release/** branch, never a v* tag, a pull_request into main, a feature/** or a release/** branch and a merge_group requesting its checks only", () => {
 		expect(workflow.on).toEqual({
-			push: { branches: ["main", "release/**"], tags: ["v*"] },
+			push: { branches: ["main", "release/**"] },
 			pull_request: { branches: ["main", "feature/**", "release/**"] },
 			merge_group: { types: ["checks_requested"] },
 		})
@@ -1696,7 +1685,7 @@ describe("the jobs of ci.yml", () => {
 		).not.toEqual([])
 	})
 
-	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
+	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_PUSH_TO_A_RELEASE_BRANCH])(
 		"has storybook run its gate with no debug output and upload nothing on %p",
 		(github) => {
 			const env = storybookEnvOn(github)
@@ -1743,24 +1732,11 @@ describe("the jobs of ci.yml", () => {
 		)
 	})
 
-	it("keeps the desktop jobs on a v* tag, never ios", () => {
-		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
-			"changes",
-			"lint",
-			"rust",
-			"storybook",
-			"verify",
-			"vitest",
-			"website",
-		])
-	})
-
 	it.each([
 		A_PULL_REQUEST,
 		A_PULL_REQUEST_INTO_A_RELEASE_BRANCH,
 		A_PUSH_TO_MAIN,
 		A_PUSH_TO_A_RELEASE_BRANCH,
-		A_RELEASE_TAG,
 	])(
 		"has verify pass on %p when every job succeeded or was skipped by rule",
 		(github) => {
@@ -1912,7 +1888,7 @@ describe("the jobs of ci.yml", () => {
 		)
 	})
 
-	it.each([A_PULL_REQUEST, A_MERGE_GROUP, A_RELEASE_TAG])(
+	it.each([A_PULL_REQUEST, A_MERGE_GROUP])(
 		"looks up no green push run on %p",
 		(github) => {
 			const green = (workflow.jobs.changes?.steps ?? []).find(
@@ -1932,7 +1908,6 @@ describe("the jobs of ci.yml", () => {
 
 		expect(fetchesOn(A_PULL_REQUEST)).toBe(true)
 		expect(fetchesOn(A_PUSH_TO_MAIN)).toBe(false)
-		expect(fetchesOn(A_RELEASE_TAG)).toBe(false)
 		expect(fetchesOn(A_MERGE_GROUP)).toBe(false)
 	})
 
@@ -1951,7 +1926,6 @@ describe("the jobs of ci.yml", () => {
 		[pushToMain(7), "CI-refs/heads/main", "false"],
 		[pushToReleaseBranch(8), "CI-refs/heads/release/0.27", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
-		[releaseTag(9), "CI-9", "false"],
 		[mergeGroup(7, 15), "CI-15", "false"],
 		[
 			{ event_name: "workflow_dispatch", ref: "refs/heads/main", run_id: "12" },
@@ -1988,14 +1962,6 @@ describe("the jobs of ci.yml", () => {
 		expect(group.group).not.toBe(concurrencyOf(mergeGroup(7, 16)).group)
 	})
 
-	it("never cancels a v* tag run, nor lets it cancel a push to main", () => {
-		const tag = concurrencyOf(releaseTag(9))
-
-		expect(tag.cancelsInProgress).toBe("false")
-		expect(concurrencyOf(releaseTag(10)).group).not.toBe(tag.group)
-		expect(tag.group).not.toBe(concurrencyOf(pushToMain(9)).group)
-	})
-
 	it("has verify wait on every job", () => {
 		expect(workflow.jobs.verify?.needs).toEqual([
 			"changes",
@@ -2028,13 +1994,73 @@ describe("the jobs of ci.yml", () => {
 		expect(ciGreen).not.toMatch(/\bios\b/)
 	})
 
-	it("has ci-green read the CI run of the tag, never another push run on its commit", () => {
-		const waitStep = releaseWorkflow.jobs["ci-green"]?.steps?.find((step) =>
-			step.run?.includes("gh run list"),
+	const runCiGreen = (tag: string) => {
+		const bin = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-ci-green-"))
+		const calls = join(bin, "calls")
+		writeFileSync(
+			join(bin, "gh"),
+			`#!/bin/sh\necho "$@" >>"${calls}"\nprintf 'completed\\thttps://ci/run\\tsuccess\\n'\n`,
+			{ mode: 0o755 },
 		)
+		writeFileSync(calls, "")
+		const step = releaseWorkflow.jobs["ci-green"]?.steps?.find((candidate) =>
+			candidate.run?.includes("gh run list"),
+		)
+		const run = Bun.spawnSync(
+			[
+				"bash",
+				"--noprofile",
+				"--norc",
+				"-eo",
+				"pipefail",
+				"-c",
+				step?.run ?? "",
+			],
+			{
+				env: {
+					PATH: `${bin}:${process.env.PATH}`,
+					GITHUB_REPOSITORY: "acme/repo",
+					GITHUB_REF_NAME: tag,
+					GITHUB_SHA: "tagged-sha",
+				},
+			},
+		)
+		const result = {
+			exitCode: run.exitCode,
+			log: run.stdout.toString(),
+			calls: readFileSync(calls, "utf8"),
+		}
+		rmSync(bin, { recursive: true, force: true })
+		return result
+	}
 
-		expect(waitStep?.run).toContain('--branch "$GITHUB_REF_NAME"')
-	})
+	it.each([
+		["v0.27.0", "release/0.27"],
+		["v0.27.2", "release/0.27"],
+		["v0.28.0-beta.3", "release/0.28"],
+	])(
+		"has ci-green of %s wait on the CI push run of the tagged commit on %s, never a run of the tag",
+		(tag, branch) => {
+			const ciGreen = runCiGreen(tag)
+
+			expect(ciGreen.exitCode).toBe(0)
+			expect(ciGreen.calls).toContain(
+				`run list --repo acme/repo --workflow ci.yml --event push --branch ${branch} --commit tagged-sha`,
+			)
+			expect(ciGreen.log).toBe("CI passed on tagged-sha: https://ci/run\n")
+		},
+	)
+
+	it.each(["v0.27", "v0.27.0-rc.1"])(
+		"has ci-green refuse the tag %s, which names no release branch, before reading any run",
+		(tag) => {
+			const ciGreen = runCiGreen(tag)
+
+			expect(ciGreen.exitCode).toBe(1)
+			expect(ciGreen.calls).toBe("")
+			expect(ciGreen.log).toContain(`::error::Tag ${tag} is neither`)
+		},
+	)
 
 	it("has release.yml publish only after the draft job and every desktop job", () => {
 		expect(releaseWorkflow.jobs.publish?.needs).toEqual(["draft", "release"])

@@ -31,7 +31,7 @@ const every = {
 	storybook: true,
 	ios: true,
 }
-const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
+const CI_EVENTS = ["pull_request", "merge_group", "push"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
@@ -144,6 +144,31 @@ const commitFile = (repo: string, path: string) => {
 	return git(repo, "rev-parse", "HEAD")
 }
 
+const commitFiles = (repo: string, files: Record<string, string>) => {
+	for (const [path, content] of Object.entries(files)) {
+		mkdirSync(dirname(join(repo, path)), { recursive: true })
+		writeFileSync(join(repo, path), content)
+		git(repo, "add", path)
+	}
+	git(repo, "commit", "--quiet", "--message", Object.keys(files).join(" "))
+	return git(repo, "rev-parse", "HEAD")
+}
+
+const lockfileAt = (appVersion: string, react: string) => ({
+	"bun.lock": `{
+  "workspaces": {
+    "apps/app": {
+      "name": "app",
+      "version": "${appVersion}",
+    },
+  },
+  "packages": {
+    "react": ["${react}", "", {}, "sha512-0"],
+  },
+}
+`,
+})
+
 const repositoryOnMain = (name: string) => {
 	const repository = join(scratch, name)
 	mkdirSync(repository)
@@ -198,16 +223,6 @@ describe("ci jobs per event", () => {
 	})
 
 	it.each(PATH_MIXES)(
-		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
-		(...paths) => {
-			expect(decideJobs({ event: "tag", paths })).toEqual({
-				...every,
-				ios: false,
-			})
-		},
-	)
-
-	it.each(PATH_MIXES)(
 		"selects none of vitest, website, rust, storybook and ios on a merge_group, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "merge_group", paths })).toEqual(none)
@@ -224,13 +239,6 @@ describe("ci jobs per event", () => {
 		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
 			"rust-check",
 		)
-	})
-
-	it("decides a tag without a BASE to diff against", () => {
-		const detection = runChangeDetector("tag")
-
-		expect(detection.exitCode).toBe(0)
-		expect(detection.stdout.toString().split("\n")).toContain("rust=true")
 	})
 
 	it("decides a merge_group without a BASE to diff against", () => {
@@ -290,6 +298,57 @@ describe("ci jobs per event", () => {
 			rust: true,
 			ios: true,
 		})
+	})
+
+	it.each([
+		["bumps a workspace version only", "0.27.1", false],
+		["changes a package too", "0.27.1", true],
+	])(
+		"runs on a push whose bun.lock %s the jobs the rest of the release commit changes, every job otherwise",
+		(_, nextVersion, isPackageChanged) => {
+			const origin = repositoryOnMain(`lockfile-${isPackageChanged}-origin`)
+			const green = commitFiles(origin, lockfileAt("0.27.0", "react@19.0.0"))
+			commitFiles(origin, {
+				...lockfileAt(
+					nextVersion,
+					isPackageChanged ? "react@19.1.0" : "react@19.0.0",
+				),
+				"apps/app/package.json": `{ "version": "${nextVersion}" }`,
+				"apps/app/src-tauri/Cargo.toml": `version = "${nextVersion}"`,
+			})
+			const checkout = join(scratch, `lockfile-${isPackageChanged}-checkout`)
+			git(
+				scratch,
+				"clone",
+				"--quiet",
+				"--depth=1",
+				`file://${origin}`,
+				checkout,
+			)
+
+			const detection = runChangeDetectorIn(checkout, "push", green)
+
+			expect(detection.exitCode).toBe(0)
+			expect(outputOf(detection)).toEqual(
+				isPackageChanged
+					? every
+					: { ...none, vitest: true, rust: true, ios: true },
+			)
+		},
+	)
+
+	it("keeps bun.lock among the paths of a push when its diff adds and removes no line", () => {
+		const origin = repositoryOnMain("lockfile-mode-origin")
+		const green = commitFiles(origin, lockfileAt("0.27.0", "react@19.0.0"))
+		git(origin, "update-index", "--chmod=+x", "bun.lock")
+		git(origin, "commit", "--quiet", "--message", "chmod bun.lock")
+		const checkout = join(scratch, "lockfile-mode-checkout")
+		git(scratch, "clone", "--quiet", "--depth=1", `file://${origin}`, checkout)
+
+		const detection = runChangeDetectorIn(checkout, "push", green)
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual(every)
 	})
 
 	it("diffs a pull_request into a feature branch against that branch, leaving out what the branch holds over main", () => {

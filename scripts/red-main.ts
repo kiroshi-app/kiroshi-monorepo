@@ -103,15 +103,13 @@ const CREATE_ISSUE = `mutation CreateRedMainIssue($input: IssueCreateInput!) {
 }`
 
 const isReportedRef = (headBranch: string) =>
-	headBranch === "main" ||
-	headBranch.startsWith("release/") ||
-	headBranch.startsWith("v")
+	headBranch === "main" || headBranch.startsWith("release/")
 
 export const skipReason = (run: Run): string | undefined => {
 	if (run.name !== "CI") return `run ${run.id} belongs to ${run.name}, not CI`
 	if (run.event !== "push") return `run ${run.id} is a ${run.event} run`
 	if (!isReportedRef(run.headBranch))
-		return `run ${run.id} ran on ${run.headBranch}, not main, a release/** branch or a v* tag`
+		return `run ${run.id} ran on ${run.headBranch}, not main or a release/** branch`
 	if (run.conclusion !== "failure")
 		return `run ${run.id} concluded ${run.conclusion}`
 	return undefined
