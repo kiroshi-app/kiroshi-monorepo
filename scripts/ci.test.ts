@@ -264,6 +264,14 @@ const pushToMain = (runId: number): GitHubContext => ({
 
 const A_PUSH_TO_MAIN = pushToMain(7)
 
+const pushToReleaseBranch = (runId: number): GitHubContext => ({
+	event_name: "push",
+	ref: "refs/heads/release/0.27",
+	run_id: String(runId),
+})
+
+const A_PUSH_TO_A_RELEASE_BRANCH = pushToReleaseBranch(8)
+
 const releaseTag = (runId: number): GitHubContext => ({
 	event_name: "push",
 	ref: "refs/tags/v1.2.0",
@@ -297,6 +305,12 @@ const A_PULL_REQUEST_INTO_A_FEATURE_BRANCH: GitHubContext = {
 const A_PULL_REQUEST_OPTED_INTO_STORYBOOK: GitHubContext = {
 	...pullRequest(8, 12),
 	event: { pull_request: { labels: [{ name: "ci:storybook" }] } },
+}
+
+const A_PULL_REQUEST_INTO_A_RELEASE_BRANCH: GitHubContext = {
+	...pullRequest(11, 16),
+	base_ref: "release/0.27",
+	event: { pull_request: { base: { sha: "release-branch-tip" } } },
 }
 
 const A_PULL_REQUEST_OPTED_INTO_IOS: GitHubContext = {
@@ -1571,10 +1585,10 @@ describe("the jobs of ci.yml", () => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push to main, a v* tag, a pull_request into main or a feature/** branch and a merge_group requesting its checks only", () => {
+	it("triggers on a push to main or a release/** branch, a v* tag, a pull_request into main, a feature/** or a release/** branch and a merge_group requesting its checks only", () => {
 		expect(workflow.on).toEqual({
-			push: { branches: ["main"], tags: ["v*"] },
-			pull_request: { branches: ["main", "feature/**"] },
+			push: { branches: ["main", "release/**"], tags: ["v*"] },
+			pull_request: { branches: ["main", "feature/**", "release/**"] },
 			merge_group: { types: ["checks_requested"] },
 		})
 	})
@@ -1706,6 +1720,18 @@ describe("the jobs of ci.yml", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
+	it("runs every desktop job and skips ios-build and ios on a push to a release/** branch", () => {
+		expect(jobsRunningOn(A_PUSH_TO_A_RELEASE_BRANCH)).toEqual(
+			PUSH_TO_MAIN_JOB_SET.filter((job) => !job.startsWith("ios")),
+		)
+	})
+
+	it("runs the pull_request jobs on a pull_request into a release/** branch", () => {
+		expect(jobsRunningOn(A_PULL_REQUEST_INTO_A_RELEASE_BRANCH)).toEqual(
+			PULL_REQUEST_JOB_SET,
+		)
+	})
+
 	it("keeps the desktop jobs on a v* tag, never ios", () => {
 		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
@@ -1718,7 +1744,13 @@ describe("the jobs of ci.yml", () => {
 		])
 	})
 
-	it.each([A_PULL_REQUEST, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
+	it.each([
+		A_PULL_REQUEST,
+		A_PULL_REQUEST_INTO_A_RELEASE_BRANCH,
+		A_PUSH_TO_MAIN,
+		A_PUSH_TO_A_RELEASE_BRANCH,
+		A_RELEASE_TAG,
+	])(
 		"has verify pass on %p when every job succeeded or was skipped by rule",
 		(github) => {
 			expect(failingVerifySteps(github, resultsByRule(github))).toEqual([])
@@ -1772,35 +1804,41 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("diffs a push to main against the head of the last green push run on main, never the commit it replaced nor a cancelled run", () => {
-		const changes = workflow.jobs.changes
-		const steps = changes?.steps ?? []
-		const greenIndex = steps.findIndex((step) => step.id === "green")
-		const decideIndex = steps.findIndex((step) => step.id === "filter")
-		const lookup = steps[greenIndex]?.run ?? ""
-		const scope = {
-			...scopeOf(A_PUSH_TO_MAIN),
-			steps: { green: { outputs: { sha: "last-green" } } },
-		}
+	it.each([A_PUSH_TO_MAIN, A_PUSH_TO_A_RELEASE_BRANCH])(
+		"diffs %p against the head of the last green push run on its own branch, never the commit it replaced nor a cancelled run",
+		(github) => {
+			const changes = workflow.jobs.changes
+			const steps = changes?.steps ?? []
+			const greenIndex = steps.findIndex((step) => step.id === "green")
+			const decideIndex = steps.findIndex((step) => step.id === "filter")
+			const lookup = steps[greenIndex]?.run ?? ""
+			const scope = {
+				...scopeOf(github),
+				steps: { green: { outputs: { sha: "last-green" } } },
+			}
 
-		expect(evaluate(steps[greenIndex]?.if ?? "false", scope)).toBe(true)
-		for (const filter of [
-			"--workflow ci.yml",
-			"--event push",
-			"--branch main",
-			"--status success",
-			"--limit 1",
-		])
-			expect(lookup).toContain(filter)
-		expect(changes?.permissions).toEqual({ actions: "read", contents: "read" })
-		expect(greenIndex).toBeLessThan(decideIndex)
-		expect(interpolate(steps[decideIndex]?.env?.BASE ?? "", scope)).toBe(
-			"last-green",
-		)
-		expect(JSON.stringify(changes)).not.toContain("event.before")
-	})
+			expect(evaluate(steps[greenIndex]?.if ?? "false", scope)).toBe(true)
+			for (const filter of [
+				"--workflow ci.yml",
+				"--event push",
+				'--branch "$GITHUB_REF_NAME"',
+				"--status success",
+				"--limit 1",
+			])
+				expect(lookup).toContain(filter)
+			expect(changes?.permissions).toEqual({
+				actions: "read",
+				contents: "read",
+			})
+			expect(greenIndex).toBeLessThan(decideIndex)
+			expect(interpolate(steps[decideIndex]?.env?.BASE ?? "", scope)).toBe(
+				"last-green",
+			)
+			expect(JSON.stringify(changes)).not.toContain("event.before")
+		},
+	)
 
-	const runGreenLookup = (fakeGh: string) => {
+	const runGreenLookup = (fakeGh: string, branch = "main") => {
 		const bin = mkdtempSync(join(tmpdir(), "kiroshi-ci-test-gh-"))
 		const output = join(bin, "github-output")
 		writeFileSync(join(bin, "gh"), `#!/bin/sh\n${fakeGh}\n`, { mode: 0o755 })
@@ -1823,6 +1861,7 @@ describe("the jobs of ci.yml", () => {
 					PATH: `${bin}:${process.env.PATH}`,
 					GITHUB_OUTPUT: output,
 					GITHUB_REPOSITORY: "acme/repo",
+					GITHUB_REF_NAME: branch,
 				},
 			},
 		)
@@ -1841,6 +1880,15 @@ describe("the jobs of ci.yml", () => {
 			log: "",
 			output: "sha=last-green-sha\n",
 		})
+	})
+
+	it("asks gh for the last green push run of the release branch pushed, never of main", () => {
+		const lookup = runGreenLookup(
+			'case "$*" in *"--branch release/0.27 "*) echo release-green-sha ;; *) echo main-green-sha ;; esac',
+			"release/0.27",
+		)
+
+		expect(lookup.output).toBe("sha=release-green-sha\n")
 	})
 
 	it("hands ci-changes an empty sha and warns, exiting 0, when gh run list fails", () => {
@@ -1890,6 +1938,7 @@ describe("the jobs of ci.yml", () => {
 
 	it.each([
 		[pushToMain(7), "CI-refs/heads/main", "false"],
+		[pushToReleaseBranch(8), "CI-refs/heads/release/0.27", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
 		[releaseTag(9), "CI-9", "false"],
 		[mergeGroup(7, 15), "CI-15", "false"],
