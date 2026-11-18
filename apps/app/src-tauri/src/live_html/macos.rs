@@ -652,9 +652,11 @@ fn cut_corners(view: &NSView, corners: LiveHtmlCorners) -> Result<(), String> {
 	if layer.is_null() {
 		return Err("the webview has no layer to round".to_owned());
 	}
+	let window = view.window().ok_or("the webview to round is in no window")?;
 	let outline = Outline::around(view.bounds(), view.isFlipped(), corners)?;
 	let mask: Retained<AnyObject> = unsafe { msg_send![class!(CAShapeLayer), layer] };
 	unsafe {
+		let _: () = msg_send![&*mask, setContentsScale: window.backingScaleFactor()];
 		let _: () = msg_send![&*mask, setPath: outline.0.as_ptr()];
 		let _: () = msg_send![layer, setMask: &*mask];
 	}
