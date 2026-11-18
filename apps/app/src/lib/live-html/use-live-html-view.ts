@@ -1,4 +1,10 @@
-import { useContext, useEffect, useState } from "react"
+import {
+	type Dispatch,
+	type SetStateAction,
+	useContext,
+	useEffect,
+	useState,
+} from "react"
 
 import type { LiveHtmlStatus } from "@workspace/ui/components/live-html-slot"
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
@@ -90,7 +96,7 @@ const liveOnceLoaded = (status: LiveHtmlStatus): LiveHtmlStatus =>
 
 const usePageLoad = (
 	{ id, fail }: LiveHtmlView,
-	setStatus: (next: (status: LiveHtmlStatus) => LiveHtmlStatus) => void,
+	setStatus: Dispatch<SetStateAction<LiveHtmlStatus>>,
 ) => {
 	useEffect(() => {
 		let isListening = true

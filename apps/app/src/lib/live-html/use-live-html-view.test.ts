@@ -465,9 +465,7 @@ const refusedMount = (error: unknown) =>
 
 const rejectedMount = (reason: unknown) => mountAt.mockRejectedValue(reason)
 
-const placeInSight = async (
-	rendered: ReturnType<typeof renderView>,
-): Promise<void> => {
+const placeInSight = async (rendered: ReturnType<typeof renderView>) => {
 	await subscribed()
 	act(() => rendered.result.current.onPlacementChange(IN_SIGHT))
 	await waitFor(() => expect(mountAt).toHaveBeenCalledTimes(1))
