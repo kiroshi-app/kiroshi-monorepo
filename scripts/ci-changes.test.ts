@@ -337,6 +337,20 @@ describe("ci jobs per event", () => {
 		},
 	)
 
+	it("keeps bun.lock among the paths of a push when its diff adds and removes no line", () => {
+		const origin = repositoryOnMain("lockfile-mode-origin")
+		const green = commitFiles(origin, lockfileAt("0.27.0", "react@19.0.0"))
+		git(origin, "update-index", "--chmod=+x", "bun.lock")
+		git(origin, "commit", "--quiet", "--message", "chmod bun.lock")
+		const checkout = join(scratch, "lockfile-mode-checkout")
+		git(scratch, "clone", "--quiet", "--depth=1", `file://${origin}`, checkout)
+
+		const detection = runChangeDetectorIn(checkout, "push", green)
+
+		expect(detection.exitCode).toBe(0)
+		expect(outputOf(detection)).toEqual(every)
+	})
+
 	it("diffs a pull_request into a feature branch against that branch, leaving out what the branch holds over main", () => {
 		const repository = repositoryOnMain("feature-base")
 		const main = commitFile(repository, "README.md")

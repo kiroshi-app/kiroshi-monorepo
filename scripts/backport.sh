@@ -20,10 +20,12 @@ if [ $# -lt 2 ] || [[ "${!#}" != release/* ]]; then
 fi
 readonly release=${!#}
 requested=("${@:1:$#-1}")
+seen=" "
 for number in "${requested[@]}"; do
-	if ! [[ "$number" =~ ^[0-9]+$ ]]; then
+	if ! [[ "$number" =~ ^[0-9]+$ ]] || [[ "$seen" == *" $number "* ]]; then
 		usage
 	fi
+	seen+="$number "
 done
 
 merge_order=""

@@ -128,7 +128,13 @@ describe("the red main filter", () => {
 
 	it("rejects a push run on a branch other than main or a release/** branch", () => {
 		expect(skipReason({ ...redRun, headBranch: "feature/home" })).toBe(
-			"run 101 ran on feature/home, not main, a release/** branch or a v* tag",
+			"run 101 ran on feature/home, not main or a release/** branch",
+		)
+	})
+
+	it("rejects a push run on a v* tag, which CI no longer runs on", () => {
+		expect(skipReason({ ...redRun, headBranch: "v0.27.0" })).toBe(
+			"run 101 ran on v0.27.0, not main or a release/** branch",
 		)
 	})
 
@@ -151,11 +157,11 @@ describe("the red main filter", () => {
 	it.each([
 		["pull_request", "ope-1103-branch", false],
 		["push", "feature/home", false],
-		["push", "v1.2.0", true],
+		["push", "v1.2.0", false],
 		["push", "release/0.27", true],
 		["push", "main", true],
 	])(
-		"reports a red %s run on %s only when it is a push to main, a release/** branch or a v* tag: %p",
+		"reports a red %s run on %s only when it is a push to main or a release/** branch: %p",
 		(event, headBranch, isReported) => {
 			expect(skipReason({ ...redRun, event, headBranch }) === undefined).toBe(
 				isReported,
@@ -259,22 +265,22 @@ describe("the red main issue", () => {
 		expect(issue.title).toBe("Red main: lint, rust at 8a7919a")
 	})
 
-	it.each([
-		["release/0.27", "Red release/0.27: rust at 8a7919a"],
-		["v0.27.0", "Red v0.27.0: rust at 8a7919a"],
-	])("names %s in place of main in the title", (headBranch, title) => {
-		const issue = redMainIssue({
-			run: { ...redRun, headBranch },
-			jobs: [job("rust", "failure"), job("verify", "failure")],
-			pullRequests: [mergedBy],
-			sinceGreen: { kind: "none" },
-		})
+	it.each([["release/0.27", "Red release/0.27: rust at 8a7919a"]])(
+		"names %s in place of main in the title",
+		(headBranch, title) => {
+			const issue = redMainIssue({
+				run: { ...redRun, headBranch },
+				jobs: [job("rust", "failure"), job("verify", "failure")],
+				pullRequests: [mergedBy],
+				sinceGreen: { kind: "none" },
+			})
 
-		expect(issue.title).toBe(title)
-		expect(issue.description.split("\n\n")).toContain(
-			`Last green: none, no CI push run on ${headBranch} concluded success before this run`,
-		)
-	})
+			expect(issue.title).toBe(title)
+			expect(issue.description.split("\n\n")).toContain(
+				`Last green: none, no CI push run on ${headBranch} concluded success before this run`,
+			)
+		},
+	)
 
 	it("titles the post-merge rust and storybook jobs that failed", () => {
 		const issue = redMainIssue({

@@ -420,6 +420,8 @@ describe("scripts/backport.sh", () => {
 		[["42", RELEASE, "extra"]],
 		[["#42", RELEASE]],
 		[["41", "#42", RELEASE]],
+		[["42", "42", RELEASE]],
+		[["41", "42", "41", RELEASE]],
 		[["42", "main"]],
 	])("exits 64 with the usage on the arguments %p", async (scriptArguments) => {
 		const result = await runBackport({ arguments: scriptArguments })
