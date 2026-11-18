@@ -27,6 +27,16 @@ const harness = vi.hoisted(() => ({
 	store: null as TranscriptStore | null,
 	revealWindow: vi.fn(async () => undefined),
 	loaderRenders: [] as LaunchLoaderProps[],
+	warmedLanguages: [] as string[],
+}))
+
+vi.mock("@workspace/ui/lib/code-highlight", async (importOriginal) => ({
+	...(await importOriginal<
+		typeof import("@workspace/ui/lib/code-highlight")
+	>()),
+	warmCodeLanguage: (language: string) => {
+		harness.warmedLanguages.push(language)
+	},
 }))
 
 vi.mock("@/lib/host", async (importOriginal) => ({
@@ -67,11 +77,13 @@ const { App } = await import("@/App")
 
 const MOUNT_MS = 200
 const LATE_REVEAL_MS = 3000
+const IDLE_WARM_UP_MS = 2000
 
 afterEach(() => {
 	cleanup()
 	harness.revealWindow.mockClear()
 	harness.loaderRenders = []
+	harness.warmedLanguages = []
 	localStorage.clear()
 	vi.useRealTimers()
 })
@@ -206,4 +218,16 @@ it("mounts the shell, its agents already in the sidebar, only once the loader re
 	for (const { name } of agents) {
 		expect(shownSidebar().getAllByText(name).length).toBeGreaterThan(0)
 	}
+})
+
+it("warms no code language once the shell that left the launch loader is unmounted", async () => {
+	await mountApp(createFakeTranscriptStore())
+	fireEvent.click(shownLaunchLoader())
+
+	cleanup()
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(IDLE_WARM_UP_MS)
+	})
+
+	expect(harness.warmedLanguages).toEqual([])
 })

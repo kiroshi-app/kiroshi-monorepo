@@ -5,26 +5,38 @@ import {
 
 const IDLE_TIMEOUT_MS = 2000
 
-const afterNextPaint = (task: () => void) => {
-	requestAnimationFrame(() => {
-		setTimeout(task)
-	})
-}
+type CancelTask = () => void
 
-const whenIdle = (task: () => void) => {
-	if (typeof requestIdleCallback === "function") {
-		requestIdleCallback(() => task(), { timeout: IDLE_TIMEOUT_MS })
-		return
+const afterNextPaint = (task: () => void): CancelTask => {
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const frame = requestAnimationFrame(() => {
+		timer = setTimeout(task)
+	})
+	return () => {
+		cancelAnimationFrame(frame)
+		clearTimeout(timer)
 	}
-	afterNextPaint(task)
 }
 
-const warmInTurn = ([language, ...nextLanguages]: readonly string[]) => {
-	if (language === undefined) return
-	whenIdle(() => {
-		warmCodeLanguage(language)
-		warmInTurn(nextLanguages)
-	})
+const whenIdle = (task: () => void): CancelTask => {
+	if (typeof requestIdleCallback === "function") {
+		const idleCallback = requestIdleCallback(() => task(), {
+			timeout: IDLE_TIMEOUT_MS,
+		})
+		return () => cancelIdleCallback(idleCallback)
+	}
+	return afterNextPaint(task)
 }
 
-export const warmCodeHighlighter = () => warmInTurn(CODE_LANGUAGES)
+export const warmCodeHighlighter = (): CancelTask => {
+	let cancelPendingWarmUp: CancelTask = () => {}
+	const warmInTurn = ([language, ...nextLanguages]: readonly string[]) => {
+		if (language === undefined) return
+		cancelPendingWarmUp = whenIdle(() => {
+			warmCodeLanguage(language)
+			warmInTurn(nextLanguages)
+		})
+	}
+	warmInTurn(CODE_LANGUAGES)
+	return () => cancelPendingWarmUp()
+}
