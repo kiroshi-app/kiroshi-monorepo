@@ -30,6 +30,7 @@ export type ConversationRuntimesOptions = Pick<
 	| "onReconnected"
 	| "rereadConversation"
 	| "senderAccountId"
+	| "isSpaceOnScreen"
 >
 
 export const createConversationRuntimes = (

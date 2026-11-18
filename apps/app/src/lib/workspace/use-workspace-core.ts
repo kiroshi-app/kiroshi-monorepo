@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router"
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 
 import {
 	companionSettingsOwnerOf,
@@ -63,6 +63,16 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 			roster.controller.getState().bots.some((bot) => bot.id === botId),
 	})
 	const conversationNamings = useMemo(createConversationNamings, [])
+	const isSpaceOnScreen = useCallback(
+		(spaceId: string) => {
+			const { spaceRowId } = roster.controller.getState()
+			return (
+				spaceRowId !== null &&
+				roster.controller.hostSpaceIdOf(spaceRowId) === spaceId
+			)
+		},
+		[roster.controller],
+	)
 	const conversationRuntimes = useMemo(
 		() =>
 			createConversationRuntimes(driver, store, {
@@ -70,8 +80,16 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 				namings: conversationNamings,
 				rereadConversation: roster.controller.rereadConversationRow,
 				senderAccountId,
+				isSpaceOnScreen,
 			}),
-		[driver, store, roster.controller, conversationNamings, senderAccountId],
+		[
+			driver,
+			store,
+			roster.controller,
+			conversationNamings,
+			senderAccountId,
+			isSpaceOnScreen,
+		],
 	)
 
 	useEffect(
@@ -190,6 +208,7 @@ export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 		homePicks,
 		homeVisits,
 		invitations,
+		isSpaceOnScreen,
 		joinedSpaces,
 		messageLandings,
 		openedMission,
