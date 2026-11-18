@@ -16,19 +16,13 @@ const SCREEN_REASON = {
 	unknown: "crash",
 } as const satisfies Record<WindowDeathReason, WindowRecoveryReason>
 
-const GAVE_UP_REASON = "gave-up" satisfies WindowRecoveryReason
-
-export type RecoveryScreenReason =
-	| (typeof SCREEN_REASON)[WindowDeathReason]
-	| typeof GAVE_UP_REASON
-
 export const recoveryScreenReasonOf = (
 	recovery: WindowRecovery | null,
-): RecoveryScreenReason | null => {
+): WindowRecoveryReason | null => {
 	if (!recovery) {
 		return null
 	}
-	return recovery.exhausted ? GAVE_UP_REASON : SCREEN_REASON[recovery.reason]
+	return recovery.exhausted ? "gave-up" : SCREEN_REASON[recovery.reason]
 }
 
 const hasBeenShown = (recovery: WindowRecovery) =>
