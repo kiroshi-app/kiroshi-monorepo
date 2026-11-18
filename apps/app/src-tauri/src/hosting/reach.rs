@@ -233,6 +233,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("live_html_mount", Reach::HostOnly),
 	("live_html_mount_attachment", Reach::HostOnly),
 	("live_html_place", Reach::HostOnly),
+	("live_html_round", Reach::HostOnly),
+	("live_html_still", Reach::HostOnly),
 	("live_html_hide", Reach::HostOnly),
 	("live_html_show", Reach::HostOnly),
 	("live_html_remove", Reach::HostOnly),

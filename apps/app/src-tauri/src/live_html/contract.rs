@@ -40,6 +40,7 @@ pub enum LiveHtmlError {
 		id: String,
 	},
 	InvalidRectangle,
+	InvalidRadius,
 	MainWindowMissing,
 	#[serde(rename_all = "camelCase")]
 	Unserved {

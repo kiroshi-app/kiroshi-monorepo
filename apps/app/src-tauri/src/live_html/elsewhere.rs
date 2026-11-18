@@ -30,6 +30,18 @@ pub async fn place<R: Runtime>(
 
 pub fn replace_all<R: Runtime>(_app: &AppHandle<R>) {}
 
+pub async fn still<R: Runtime>(_app: &AppHandle<R>, _id: String) -> Result<String, LiveHtmlError> {
+	Err(LiveHtmlError::NotAvailableHere)
+}
+
+pub async fn round<R: Runtime>(
+	_app: &AppHandle<R>,
+	_id: String,
+	_radius: f64,
+) -> Result<(), LiveHtmlError> {
+	Err(LiveHtmlError::NotAvailableHere)
+}
+
 pub async fn set_drawn<R: Runtime>(
 	_app: &AppHandle<R>,
 	_id: String,

@@ -6,10 +6,16 @@
 		<style>
 			body { margin: 0; background: #f4f4f4; }
 			#placeholder { position: absolute; background: #00ffff; }
+			#thread { position: fixed; inset: 0; overflow-y: auto; background: #f4f4f4; }
+			#thread-content { position: relative; height: 20000px; }
+			#slot { position: absolute; left: 40px; top: 440px; width: 480px; height: 160px; background: #00ffff; }
+			#overlay { position: fixed; left: 40px; top: 400px; width: 480px; height: 100px; background: #0000ff; }
 		</style>
 	</head>
 	<body>
 		<div id="placeholder"></div>
+		<div id="thread" hidden><div id="thread-content"><div id="slot"></div></div></div>
+		<div id="overlay" hidden></div>
 		<script>
 			const { invoke, transformCallback } = window.__TAURI_INTERNALS__
 			const ID = "prototype"
@@ -204,11 +210,135 @@
 				await expectUnscrolled("scrolling-body", SCROLLING_BODY_PAGE)
 			}
 
+			const SLOT_PAGE = PAGE(`<div style="height:160px;background:#ff00ff"></div>`)
+			const COMPOSED = "composed"
+			const RADIUS = 24
+			const rectOf = (element) => {
+				const { x, y, width, height } = element.getBoundingClientRect()
+				return { x, y, width, height }
+			}
+			const placeOnSlot = (id, slot) => {
+				let wanted = null
+				let isPlacing = false
+				const settle = async () => {
+					if (isPlacing) return
+					isPlacing = true
+					while (wanted) {
+						const rectangle = wanted
+						wanted = null
+						await invoke("live_html_place", { id, rectangle, clip: null })
+					}
+					isPlacing = false
+				}
+				const update = () => {
+					wanted = rectOf(slot)
+					void settle()
+				}
+				document.addEventListener("scroll", update, { capture: true, passive: true })
+				update()
+				return () => document.removeEventListener("scroll", update, { capture: true })
+			}
+			const isMagenta = ([r, g, b]) => r > 220 && g < 70 && b > 230
+			const extentOf = (...boxes) => {
+				const drawn = boxes.filter(Boolean)
+				return Math.max(...drawn.map(({ y, height }) => y + height)) - Math.min(...drawn.map(({ y }) => y))
+			}
+			const expectOnItsSlot = ({ magenta, cyan }, slot, what) => {
+				const drawn = JSON.stringify({ magenta, cyan, slot })
+				expect(magenta, `${what}: nothing of the page was drawn in its slot ${drawn}`)
+				const drift = extentOf(magenta, cyan) - slot.height
+				expect(near(drift, 0), `${what}: the view and its slot drew ${drift} points apart ${drawn}`)
+			}
+			const expectAbove = ({ blue, magenta }, overlay, what) => {
+				const drawn = JSON.stringify({ blue, magenta, overlay })
+				expect(blue && near(blue.y, overlay.y) && near(blue.height, overlay.height), `${what}: the view drew over the overlay ${drawn}`)
+				expect(magenta, `${what}: the page vanished around the overlay ${drawn}`)
+			}
+			const swipe = async (step, gesture, capturesAt, pointer) => {
+				const { captures } = await invoke("swipe_while_capturing", {
+					swipe: { step, pointer, gesture, intervalMs: 16, capturesAt },
+				})
+				for (const shot of captures) {
+					expect(shot.holders_standing_aside.every(Boolean), `${step} event ${shot.event}: the live view kept drawing itself`)
+				}
+				return captures
+			}
+			const holderOf = (reading) =>
+				reading.measured.content_view.children.find(({ class: name }) => name === "KiroshiLiveHtmlHolder")
+
+			const compose = async () => {
+				const thread = document.getElementById("thread")
+				const slot = document.getElementById("slot")
+				const overlay = document.getElementById("overlay")
+				thread.hidden = false
+				const { y: slotTop, height: slotHeight } = rectOf(slot)
+				expect(slotTop + slotHeight <= innerHeight, `the slot ends at ${slotTop + slotHeight}, below the ${innerHeight} point window`)
+				await invoke("live_html_mount", { id: COMPOSED, html: SLOT_PAGE, rectangle: rectOf(slot) })
+				const stopPlacing = placeOnSlot(COMPOSED, slot)
+				await pause(1500)
+
+				await invoke("live_html_round", { id: COMPOSED, radius: RADIUS })
+				const at = rectOf(slot)
+				const corners = [[at.x + 2, at.y + 2], [at.x + at.width / 2, at.y + 2]]
+				await pause(600)
+				const [corner, edge] = await invoke("probe_colors", { step: "rounded", probes: corners })
+				expect(!isMagenta(corner) && isMagenta(edge), `the view corner was not cut to ${RADIUS}: ${JSON.stringify({ corner, edge })}`)
+				const invalidRadius = await answer(invoke("live_html_round", { id: COMPOSED, radius: -1 }))
+				expect(invalidRadius.kind === "invalidRadius", `a negative radius answered ${JSON.stringify(invalidRadius)}`)
+
+				const still = await invoke("live_html_still", { id: COMPOSED })
+				expect(still.startsWith("data:image/png;base64,"), `the still reads ${still.slice(0, 40)}`)
+				Object.assign(slot.style, { background: `url(${still}) 0 0 / 100% 100%`, borderRadius: `${RADIUS}px` })
+
+				const beside = [at.x + at.width + 100, at.y + 50]
+				const swiped = [
+					...(await swipe("trackpad", { device: "trackpad", delta: -8, moves: 30 }, [3, 8, 13, 18], beside)),
+					...(await swipe("wheel", { device: "mouseWheel", delta: 1, moves: 4 }, [1, 2], beside)),
+				]
+				for (const shot of swiped) expectOnItsSlot(shot, at, `swipe event ${shot.event}`)
+				const settled = await capture("after-swipes", rectOf(slot), null)
+				expectOnItsSlot({ magenta: settled.magenta_drawn_in_window_points, cyan: settled.cyan_drawn_in_window_points }, at, "after the swipes")
+				const holder = holderOf(settled)
+				expect(!holder.hidden && holder.alpha === 1, `the live view did not come back after the swipes ${JSON.stringify(holder)}`)
+
+				const readings = []
+				for (let frame = 0; frame < 20; frame++) {
+					thread.scrollTop += 6
+					await pause(16)
+					readings.push((await invoke("standing_aside")).every(Boolean))
+				}
+				const firstAside = readings.indexOf(true)
+				expect(
+					firstAside >= 0 && readings.slice(firstAside).every(Boolean),
+					`a scroll with no wheel left the live view drawn: ${JSON.stringify(readings)}`,
+				)
+				await pause(600)
+				const rested = await invoke("standing_aside")
+				expect(rested.every((isAside) => !isAside), `the live view did not come back after a scroll with no wheel ${JSON.stringify(rested)}`)
+
+				overlay.hidden = false
+				overlay.style.top = `${rectOf(slot).y - 40}px`
+				await invoke("live_html_hide", { id: COMPOSED })
+				const covered = rectOf(overlay)
+				const shown = await capture("overlay", rectOf(slot), null)
+				expectAbove({ blue: shown.blue_drawn_in_window_points, magenta: shown.magenta_drawn_in_window_points }, covered, "overlay")
+				await swipe("overlay-swipe", { device: "trackpad", delta: -1, moves: 4 }, [], beside)
+				const stayed = await capture("overlay-after-swipe", rectOf(slot), null)
+				expectAbove({ blue: stayed.blue_drawn_in_window_points, magenta: stayed.magenta_drawn_in_window_points }, covered, "overlay after a swipe")
+				overlay.hidden = true
+				await invoke("live_html_show", { id: COMPOSED })
+
+				stopPlacing()
+				await invoke("live_html_remove", { id: COMPOSED })
+				thread.hidden = true
+			}
+
 			const afterReload = async () => {
 				paint(SHOWN)
 				await pause(1000)
 				await capture("after-reload", SHOWN, null)
 				await measure()
+				await compose()
 				await invoke("finish_run")
 			}
 

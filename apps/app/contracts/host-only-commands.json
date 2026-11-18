@@ -46,6 +46,8 @@
 	{ "command": "live_html_mount" },
 	{ "command": "live_html_mount_attachment" },
 	{ "command": "live_html_place" },
+	{ "command": "live_html_round" },
+	{ "command": "live_html_still" },
 	{ "command": "live_html_hide" },
 	{ "command": "live_html_show" },
 	{ "command": "live_html_remove" },

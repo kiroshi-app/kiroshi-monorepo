@@ -162,6 +162,9 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 # rather than as a Tauri child, so the main window stays a webview window. Already in the tree under
 # tauri-runtime-wry at this version; named here so no crate enters the lockfile through this line.
 wry = "=0.57.0"
+# Hands a live HTML view the completion of its still and the main window's wheel monitor. Already in
+# the tree under wry at this version; named here so no crate enters the lockfile through this line.
+block2 = "0.6"
 # Keeps the device keys of an installed build in the login Keychain. Already in the tree under
 # rustls-platform-verifier; named here so no crate enters the lockfile through this line.
 security-framework = "3"

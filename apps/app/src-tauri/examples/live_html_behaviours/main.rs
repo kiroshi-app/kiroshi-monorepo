@@ -18,6 +18,9 @@ fn main() -> ExitCode {
 }
 
 #[cfg(target_os = "macos")]
+mod scroll;
+
+#[cfg(target_os = "macos")]
 mod macos {
 	use std::error::Error;
 	use std::net::{Ipv4Addr, SocketAddr};
@@ -25,6 +28,7 @@ mod macos {
 	use std::process::Command;
 	use std::sync::atomic::{AtomicUsize, Ordering};
 	use std::sync::Arc;
+	use std::time::Duration;
 
 	use axum::response::Html;
 	use axum::routing::get;
@@ -37,11 +41,13 @@ mod macos {
 	use objc2::runtime::{AnyObject, Sel};
 	use objc2::{msg_send, sel};
 	use objc2_app_kit::{NSView, NSWindow};
-	use objc2_foundation::NSEdgeInsets;
+	use objc2_foundation::{NSEdgeInsets, NSPoint};
 	use serde::{Deserialize, Serialize};
 	use serde_json::{json, Value};
 	use tauri::ipc::Invoke;
 	use tauri::{AppHandle, Manager, Url, Webview, WebviewWindowBuilder, Window};
+
+	use super::scroll::{send_scroll, Gesture};
 
 	const MAIN_WINDOW_LABEL: &str = "main";
 	const MAIN_PAGE: &str = include_str!("main.html");
@@ -49,6 +55,7 @@ mod macos {
 	const CAPTURES_VARIABLE: &str = "LIVE_HTML_CAPTURES";
 	const NATIVE_DEPTH: usize = 3;
 	const WINDOW_OCCLUSION_VISIBLE: usize = 1 << 1;
+	const HOLDER_CLASS: &str = "KiroshiLiveHtmlHolder";
 
 	#[derive(Default)]
 	struct ContentLoads(AtomicUsize);
@@ -91,6 +98,8 @@ mod macos {
 	struct Painted {
 		magenta: Option<Rectangle>,
 		cyan: Option<Rectangle>,
+		blue: Option<Rectangle>,
+		probed: Vec<[u8; 4]>,
 	}
 
 	fn window_number(window: &Window) -> Result<isize, String> {
@@ -119,12 +128,24 @@ mod macos {
 		})
 	}
 
-	fn painted(path: &PathBuf, window_width: f64) -> Result<Painted, String> {
+	fn painted(path: &PathBuf, window_width: f64, probes: &[[f64; 2]]) -> Result<Painted, String> {
 		let image = image::open(path).map_err(|cause| cause.to_string())?.to_rgba8();
 		let scale = f64::from(image.width()) / window_width;
+		let probed = probes
+			.iter()
+			.map(|[x, y]| {
+				let pixel = |point: f64| (point * scale).round() as u32;
+				image
+					.get_pixel_checked(pixel(*x), pixel(*y))
+					.map(|pixel| pixel.0)
+					.ok_or_else(|| format!("the probe {x},{y} falls outside the capture"))
+			})
+			.collect::<Result<_, _>>()?;
 		Ok(Painted {
 			magenta: bounding_box(&image, scale, |[r, g, b, _]| r > 220 && g < 70 && b > 230),
 			cyan: bounding_box(&image, scale, |[r, g, b, _]| r < 140 && g > 230 && b > 230),
+			blue: bounding_box(&image, scale, |[r, g, b, _]| r < 70 && g < 70 && b > 200),
+			probed,
 		})
 	}
 
@@ -142,6 +163,7 @@ mod macos {
 			"class": class,
 			"frame": [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height],
 			"hidden": view.isHidden(),
+			"alpha": view.alphaValue(),
 			"wants_layer": view.wantsLayer(),
 			"has_layer": !layer.is_null(),
 			"children": children,
@@ -210,21 +232,11 @@ mod macos {
 		}))
 	}
 
-	#[tauri::command]
-	fn capture_step(
-		app: AppHandle,
-		webview: Webview,
-		loads: tauri::State<'_, Arc<ContentLoads>>,
-		step: String,
-		rectangle: Rectangle,
-		clip: Option<Rectangle>,
-		note: Option<Value>,
-	) -> Result<Value, String> {
+	fn captured(window: &Window, step: &str, probes: &[[f64; 2]]) -> Result<Painted, String> {
 		let directory = std::env::var(CAPTURES_VARIABLE)
 			.map_err(|_| format!("{CAPTURES_VARIABLE} names no directory"))?;
 		let path = PathBuf::from(directory).join(format!("{step}.png"));
-		let window = webview.window();
-		let number = window_number(&window)?;
+		let number = window_number(window)?;
 		let captured = Command::new("screencapture")
 			.args(["-x", "-o", &format!("-l{number}")])
 			.arg(&path)
@@ -235,17 +247,128 @@ mod macos {
 		}
 		let width = window.outer_size().map_err(|cause| cause.to_string())?.width;
 		let scale = window.scale_factor().map_err(|cause| cause.to_string())?;
-		let painted = painted(&path, f64::from(width) / scale)?;
+		painted(&path, f64::from(width) / scale, probes)
+	}
+
+	#[tauri::command]
+	fn capture_step(
+		app: AppHandle,
+		webview: Webview,
+		loads: tauri::State<'_, Arc<ContentLoads>>,
+		step: String,
+		rectangle: Rectangle,
+		clip: Option<Rectangle>,
+		note: Option<Value>,
+	) -> Result<Value, String> {
+		let window = webview.window();
+		let painted = captured(&window, &step, &[])?;
 		let reading = json!({
 			"step": step,
 			"asked": rectangle,
 			"clip": clip,
 			"magenta_drawn_in_window_points": painted.magenta,
 			"cyan_drawn_in_window_points": painted.cyan,
+			"blue_drawn_in_window_points": painted.blue,
 			"content_loads": loads.0.load(Ordering::SeqCst),
 			"measured": measured_window(&app, &window)?,
 			"note": note,
 		});
+		println!("{reading}");
+		Ok(reading)
+	}
+
+	#[tauri::command]
+	fn probe_colors(
+		webview: Webview,
+		step: String,
+		probes: Vec<[f64; 2]>,
+	) -> Result<Vec<[u8; 4]>, String> {
+		let probed = captured(&webview.window(), &step, &probes)?.probed;
+		println!("{}", json!({ "step": step, "probes": probes, "probed": probed }));
+		Ok(probed)
+	}
+
+	#[derive(Deserialize)]
+	#[serde(rename_all = "camelCase")]
+	struct Swipe {
+		step: String,
+		pointer: [f64; 2],
+		gesture: Gesture,
+		interval_ms: u64,
+		captures_at: Vec<usize>,
+	}
+
+	fn on_main_window<T: Send + 'static>(
+		window: &Window,
+		step: impl FnOnce(&NSWindow) -> Result<T, String> + Send + 'static,
+	) -> Result<T, String> {
+		let (sent, received) = std::sync::mpsc::channel();
+		let on_main = window.clone();
+		window
+			.run_on_main_thread(move || {
+				let answer = on_main
+					.ns_window()
+					.map_err(|cause| cause.to_string())
+					.and_then(|handle| {
+						unsafe { Retained::retain(handle.cast::<NSWindow>()) }
+							.ok_or_else(|| "no native window".to_owned())
+					})
+					.and_then(|ns_window| step(&ns_window));
+				if sent.send(answer).is_err() {
+					eprintln!("a main window step answered after the swipe stopped waiting");
+				}
+			})
+			.map_err(|cause| cause.to_string())?;
+		received.recv().map_err(|cause| cause.to_string())?
+	}
+
+	fn holders_standing_aside(window: &NSWindow) -> Result<Vec<bool>, String> {
+		let content = window.contentView().ok_or("the main window has no content view")?;
+		Ok(content
+			.subviews()
+			.iter()
+			.filter(|view| view.class().name().to_string_lossy().contains(HOLDER_CLASS))
+			.map(|holder| holder.alphaValue() == 0.0)
+			.collect())
+	}
+
+	#[tauri::command]
+	async fn standing_aside(webview: Webview) -> Result<Vec<bool>, String> {
+		on_main_window(&webview.window(), holders_standing_aside)
+	}
+
+	#[tauri::command]
+	async fn swipe_while_capturing(webview: Webview, swipe: Swipe) -> Result<Value, String> {
+		let window = webview.window();
+		let pointer = NSPoint::new(swipe.pointer[0], swipe.pointer[1]);
+		let captures = std::thread::scope(|scope| {
+			let mut shots = Vec::new();
+			for (index, step) in swipe.gesture.steps().into_iter().enumerate() {
+				let standing_aside = on_main_window(&window, move |ns_window| {
+					send_scroll(ns_window, step, pointer)?;
+					holders_standing_aside(ns_window)
+				})?;
+				if swipe.captures_at.contains(&index) {
+					let (window, name) = (&window, format!("{}-{index}", swipe.step));
+					shots.push(scope.spawn(move || {
+						captured(window, &name, &[]).map(|painted| {
+							json!({
+								"event": index,
+								"holders_standing_aside": standing_aside,
+								"magenta": painted.magenta,
+								"cyan": painted.cyan,
+							})
+						})
+					}));
+				}
+				std::thread::sleep(Duration::from_millis(swipe.interval_ms));
+			}
+			shots
+				.into_iter()
+				.map(|shot| shot.join().map_err(|_| "a capture panicked".to_owned())?)
+				.collect::<Result<Vec<_>, String>>()
+		})?;
+		let reading = json!({ "step": swipe.step, "captures": captures });
 		println!("{reading}");
 		Ok(reading)
 	}
@@ -270,8 +393,14 @@ mod macos {
 	}
 
 	fn own_commands(invoke: Invoke<tauri::Wry>) -> bool {
-		let handled: fn(Invoke<tauri::Wry>) -> bool =
-			tauri::generate_handler![capture_step, resize_window, finish_run];
+		let handled: fn(Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+			capture_step,
+			probe_colors,
+			standing_aside,
+			swipe_while_capturing,
+			resize_window,
+			finish_run
+		];
 		handled(invoke)
 	}
 
@@ -311,7 +440,12 @@ mod macos {
 			.manage(LiveViews::watched(watch))
 			.on_page_load(kiroshi_app::live_html::remove_on_main_page_load)
 			.invoke_handler(move |invoke| match invoke.message.command() {
-				"capture_step" | "resize_window" | "finish_run" => own_commands(invoke),
+				"capture_step"
+				| "probe_colors"
+				| "standing_aside"
+				| "swipe_while_capturing"
+				| "resize_window"
+				| "finish_run" => own_commands(invoke),
 				_ => product_commands(invoke),
 			})
 			.setup(|app| {

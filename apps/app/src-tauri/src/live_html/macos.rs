@@ -1,12 +1,16 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::ffi::c_void;
+use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use base64::prelude::{Engine as _, BASE64_STANDARD};
+use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSApplication, NSEventType, NSView};
+use objc2::{class, define_class, msg_send, sel, ClassType, MainThreadMarker, MainThreadOnly};
+use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventType, NSView};
 use objc2_foundation::{NSEdgeInsets, NSPoint, NSRect, NSSize, NSString};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 use tokio::sync::oneshot;
@@ -32,6 +36,13 @@ const SCRIPT_ANSWER: Deadline = Deadline {
 	dropped: "the view dropped the script before answering it",
 	missed: "the view did not answer the script in time",
 };
+const STILL_ANSWER: Deadline = Deadline {
+	limit: MAIN_THREAD_TIMEOUT,
+	dropped: "the view dropped its still before handing it",
+	missed: "the view did not hand its still in time",
+};
+const REST_AFTER_THE_LAST_MOVE: Duration = Duration::from_millis(150);
+const PNG_FILE_TYPE: usize = 4;
 pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
 pub const EVENTS_FOR_THE_MAIN_WEBVIEW: [NSEventType; 6] = [
 	NSEventType::ScrollWheel,
@@ -75,10 +86,34 @@ struct Deadline {
 struct Shown {
 	webview: WebView,
 	placement: Placement,
+	is_drawn: bool,
+	has_a_still: bool,
+}
+
+impl Shown {
+	fn new(webview: WebView, placement: Placement) -> Self {
+		Self { webview, placement, is_drawn: true, has_a_still: false }
+	}
+
+	fn draw(&self) -> Result<(), String> {
+		let holder = placed_holder(&native_view_of(&self.webview))?;
+		let stands_aside = self.has_a_still && MOTION.with(|motion| motion.is_moving.get());
+		holder.setHidden(!self.is_drawn);
+		holder.setAlphaValue(if stands_aside { 0.0 } else { 1.0 });
+		Ok(())
+	}
+}
+
+#[derive(Default)]
+struct Motion {
+	wheel_monitor: RefCell<Option<Retained<AnyObject>>>,
+	moves: Cell<u64>,
+	is_moving: Cell<bool>,
 }
 
 thread_local! {
 	static MOUNTED: RefCell<HashMap<String, Shown>> = RefCell::new(HashMap::new());
+	static MOTION: Motion = Motion::default();
 }
 
 pub fn ensure_available() -> Result<(), LiveHtmlError> {
@@ -114,7 +149,58 @@ pub async fn mount<R: Runtime>(
 			.build_as_child(&main_window)
 			.map_err(|failure| failure.to_string())?;
 		place_native(&native_view_of(&webview), placement, marker)?;
-		MOUNTED.with_borrow_mut(|mounted| mounted.insert(id, Shown { webview, placement }));
+		MOUNTED.with_borrow_mut(|mounted| mounted.insert(id, Shown::new(webview, placement)));
+		watch_the_wheel(tauri::Manager::app_handle(&main_window).clone())
+	})
+	.await
+}
+
+pub async fn still<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<String, LiveHtmlError> {
+	let (answer, answered) = oneshot::channel();
+	let answer = Arc::new(Mutex::new(Some(answer)));
+	on_main_thread(app, move || {
+		let view = mounted_view(&id)?;
+		let handed = RcBlock::new(move |image: *mut AnyObject, failure: *mut AnyObject| {
+			let still = unsafe { image.as_ref() }
+				.ok_or_else(|| snapshot_failure(failure))
+				.and_then(png_data_url);
+			let sender = answer.lock().unwrap_or_else(PoisonError::into_inner).take();
+			if is_still_delivered(sender, still) {
+				MOUNTED.with_borrow_mut(|mounted| {
+					if let Some(shown) = mounted.get_mut(&id) {
+						shown.has_a_still = true;
+					}
+				});
+			}
+		});
+		unsafe {
+			let _: () = msg_send![
+				&*view,
+				takeSnapshotWithConfiguration: std::ptr::null::<AnyObject>(),
+				completionHandler: &*handed
+			];
+		}
+		Ok(())
+	})
+	.await?;
+	answered_in_time(STILL_ANSWER, answered).await
+}
+
+pub async fn round<R: Runtime>(
+	app: &AppHandle<R>,
+	id: String,
+	radius: f64,
+) -> Result<(), LiveHtmlError> {
+	on_main_thread(app, move || {
+		let view = mounted_view(&id)?;
+		let layer: *mut AnyObject = unsafe { msg_send![&*view, layer] };
+		if layer.is_null() {
+			return Err("the webview has no layer to round".to_owned());
+		}
+		unsafe {
+			let _: () = msg_send![layer, setCornerRadius: radius];
+			let _: () = msg_send![layer, setMasksToBounds: true];
+		}
 		Ok(())
 	})
 	.await
@@ -125,14 +211,18 @@ pub async fn place<R: Runtime>(
 	id: String,
 	placement: Placement,
 ) -> Result<(), LiveHtmlError> {
+	let on_main = app.clone();
 	on_main_thread(app, move || {
 		let marker = MainThreadMarker::new().ok_or("the native step ran off the main thread")?;
-		MOUNTED.with_borrow_mut(|mounted| {
+		let has_moved = MOUNTED.with_borrow_mut(|mounted| -> Result<bool, String> {
 			let shown = mounted.get_mut(&id).ok_or("the view holds no native webview")?;
 			place_native(&native_view_of(&shown.webview), placement, marker)?;
-			shown.placement = placement;
-			Ok(())
-		})
+			Ok(std::mem::replace(&mut shown.placement, placement) != placement)
+		})?;
+		if has_moved {
+			stand_aside_until_the_thread_rests(&on_main);
+		}
+		Ok(())
 	})
 	.await
 }
@@ -166,9 +256,11 @@ pub async fn set_drawn<R: Runtime>(
 	is_drawn: bool,
 ) -> Result<(), LiveHtmlError> {
 	on_main_thread(app, move || {
-		let view = mounted_view(&id)?;
-		placed_holder(&view)?.setHidden(!is_drawn);
-		Ok(())
+		MOUNTED.with_borrow_mut(|mounted| {
+			let shown = mounted.get_mut(&id).ok_or("the view holds no native webview")?;
+			shown.is_drawn = is_drawn;
+			shown.draw()
+		})
 	})
 	.await
 }
@@ -180,6 +272,9 @@ pub async fn detach<R: Runtime>(app: &AppHandle<R>, id: String) -> Result<(), Li
 			.ok_or_else(|| "the view holds no native webview".to_owned())?;
 		let holder = placed_holder(&native_view_of(&webview));
 		drop(webview);
+		if MOUNTED.with_borrow(HashMap::is_empty) {
+			stop_watching_the_wheel();
+		}
 		holder?.removeFromSuperview();
 		Ok(())
 	})
@@ -300,6 +395,112 @@ fn emit_and_hold<R: Runtime>(
 
 fn locked(report: &Mutex<SizeReport>) -> std::sync::MutexGuard<'_, SizeReport> {
 	report.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn watch_the_wheel<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+	if MOTION.with(|motion| motion.wheel_monitor.borrow().is_some()) {
+		return Ok(());
+	}
+	let turned = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+		stand_aside_until_the_thread_rests(&app);
+		event.as_ptr()
+	});
+	let monitor: Option<Retained<AnyObject>> = unsafe {
+		msg_send![
+			NSEvent::class(),
+			addLocalMonitorForEventsMatchingMask: NSEventMask::ScrollWheel,
+			handler: &*turned
+		]
+	};
+	let monitor = monitor.ok_or("AppKit gave no monitor for the wheel")?;
+	MOTION.with(|motion| motion.wheel_monitor.replace(Some(monitor)));
+	Ok(())
+}
+
+fn stop_watching_the_wheel() {
+	let Some(monitor) = MOTION.with(|motion| motion.wheel_monitor.take()) else {
+		return;
+	};
+	unsafe { NSEvent::removeMonitor(&monitor) };
+	MOTION.with(|motion| motion.is_moving.set(false));
+}
+
+fn stand_aside_until_the_thread_rests<R: Runtime>(app: &AppHandle<R>) {
+	let last_move = MOTION.with(|motion| {
+		let last_move = motion.moves.get() + 1;
+		motion.moves.set(last_move);
+		last_move
+	});
+	set_moving(true);
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move {
+		tokio::time::sleep(REST_AFTER_THE_LAST_MOVE).await;
+		let stood_back = app.run_on_main_thread(move || {
+			if MOTION.with(|motion| motion.moves.get()) == last_move {
+				set_moving(false);
+			}
+		});
+		if let Err(failure) = stood_back {
+			log::error!("the live views stayed behind their stills: {failure}");
+		}
+	});
+}
+
+fn set_moving(is_moving: bool) {
+	if MOTION.with(|motion| motion.is_moving.replace(is_moving)) == is_moving {
+		return;
+	}
+	MOUNTED.with_borrow(|mounted| {
+		for (id, shown) in mounted {
+			if let Err(failure) = shown.draw() {
+				log::error!("live view {id} was not redrawn around its still: {failure}");
+			}
+		}
+	});
+}
+
+fn is_still_delivered(
+	sender: Option<oneshot::Sender<Result<String, String>>>,
+	still: Result<String, String>,
+) -> bool {
+	let is_a_still = still.is_ok();
+	let is_delivered = sender.is_some_and(|sender| sender.send(still).is_ok());
+	if !is_delivered {
+		log::warn!("a live view handed its still after its deadline");
+	}
+	is_delivered && is_a_still
+}
+
+fn snapshot_failure(failure: *mut AnyObject) -> String {
+	let Some(failure) = (unsafe { failure.as_ref() }) else {
+		return "the view drew no still and gave no error".to_owned();
+	};
+	let description: Option<Retained<NSString>> =
+		unsafe { msg_send![failure, localizedDescription] };
+	match description {
+		Some(description) => format!("the view drew no still: {description}"),
+		None => "the view drew no still and its error has no description".to_owned(),
+	}
+}
+
+fn png_data_url(image: &AnyObject) -> Result<String, String> {
+	let tiff: Option<Retained<AnyObject>> = unsafe { msg_send![image, TIFFRepresentation] };
+	let tiff = tiff.ok_or("the still has no bitmap")?;
+	let bitmap: Option<Retained<AnyObject>> =
+		unsafe { msg_send![class!(NSBitmapImageRep), imageRepWithData: &*tiff] };
+	let bitmap = bitmap.ok_or("the still bitmap is unreadable")?;
+	let no_properties: Retained<AnyObject> = unsafe { msg_send![class!(NSDictionary), dictionary] };
+	let png: Option<Retained<AnyObject>> = unsafe {
+		msg_send![&*bitmap, representationUsingType: PNG_FILE_TYPE, properties: &*no_properties]
+	};
+	let png = png.ok_or("the still was not encoded as PNG")?;
+	let length: usize = unsafe { msg_send![&*png, length] };
+	let bytes: *const c_void = unsafe { msg_send![&*png, bytes] };
+	if bytes.is_null() {
+		return Err("the still PNG holds no bytes".to_owned());
+	}
+	let bytes = unsafe { std::slice::from_raw_parts(bytes.cast::<u8>(), length) };
+	Ok(format!("data:image/png;base64,{}", BASE64_STANDARD.encode(bytes)))
 }
 
 fn rectangle_below_the_inset(placement: Placement) -> Rect {
@@ -432,7 +633,7 @@ mod tests {
 
 	use tokio::sync::oneshot;
 
-	use super::{script_answered, LiveHtmlError};
+	use super::{is_still_delivered, script_answered, LiveHtmlError};
 
 	const HOSTILE_PAGE_BUSY_LOOP: Duration = Duration::from_secs(10);
 
@@ -461,5 +662,40 @@ mod tests {
 				detail: "the view did not answer the script in time".to_owned()
 			})
 		);
+	}
+
+	#[test]
+	fn a_live_html_still_counts_as_handed_once_its_caller_receives_it() {
+		let (answer, mut answered) = oneshot::channel();
+
+		let is_delivered =
+			is_still_delivered(Some(answer), Ok("data:image/png;base64,".to_owned()));
+
+		assert!(is_delivered);
+		assert_eq!(answered.try_recv(), Ok(Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_handed_after_its_caller_stopped_waiting_is_not_counted() {
+		let (answer, answered) = oneshot::channel();
+		drop(answered);
+
+		assert!(!is_still_delivered(Some(answer), Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_handed_a_second_time_is_not_counted() {
+		assert!(!is_still_delivered(None, Ok("data:image/png;base64,".to_owned())));
+	}
+
+	#[test]
+	fn a_live_html_still_that_failed_is_delivered_but_not_counted() {
+		let (answer, mut answered) = oneshot::channel();
+
+		let is_delivered =
+			is_still_delivered(Some(answer), Err("the view drew no still".to_owned()));
+
+		assert!(!is_delivered);
+		assert_eq!(answered.try_recv(), Ok(Err("the view drew no still".to_owned())));
 	}
 }

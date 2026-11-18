@@ -48,6 +48,25 @@ pub async fn live_html_place<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn live_html_round<R: Runtime>(
+	app: AppHandle<R>,
+	id: String,
+	radius: f64,
+) -> Result<(), LiveHtmlError> {
+	app.state::<LiveViews>().round(&app, id, radius).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn live_html_still<R: Runtime>(
+	app: AppHandle<R>,
+	id: String,
+) -> Result<String, LiveHtmlError> {
+	app.state::<LiveViews>().still(&app, id).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn live_html_hide<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,

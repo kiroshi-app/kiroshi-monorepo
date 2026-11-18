@@ -114,6 +114,29 @@ impl LiveViews {
 		native::place(app, id, Placement { rectangle, clip, top_inset }).await
 	}
 
+	pub async fn round<R: Runtime>(
+		&self,
+		app: &AppHandle<R>,
+		id: String,
+		radius: f64,
+	) -> Result<(), LiveHtmlError> {
+		native::ensure_available()?;
+		if !(radius.is_finite() && radius >= 0.0) {
+			return Err(LiveHtmlError::InvalidRadius);
+		}
+		let servers = self.servers.lock().await;
+		native::round(app, known(&servers, id)?, radius).await
+	}
+
+	pub async fn still<R: Runtime>(
+		&self,
+		app: &AppHandle<R>,
+		id: String,
+	) -> Result<String, LiveHtmlError> {
+		native::ensure_available()?;
+		self.answered_outside_the_lock(id, |id| native::still(app, id)).await
+	}
+
 	pub async fn set_drawn<R: Runtime>(
 		&self,
 		app: &AppHandle<R>,
