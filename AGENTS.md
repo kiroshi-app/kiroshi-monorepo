@@ -229,9 +229,13 @@ Force push, hard reset, `git clean -fd`, branch delete (`-D`), `rm -rf` on a dir
 
 Never push to `main`. Always work on feature branches.
 
-Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call: it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
+Right after `gh pr create`, run `scripts/pr-enqueue.sh` alone in its own Bash call. With the merge queue of main off, it arms auto-merge with the squash method on the PR of the current branch and fails if it is not armed. The PR squash-merges as soon as its fast gate is green: lint, types, baseline, the touched tests and `verify`.
 
-Auto-merge armed and a fix must land: run `scripts/pr-dequeue.sh` to disarm it, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
+With the merge queue of main on, the same call prints `inQueue=true` when the gate is already green and the PR enters the queue at once, `autoMergeArmed=true` when the PR waits on its gate and enters the queue once it is green, and fails if the PR is neither queued nor armed. The queue sets the merge method.
+
+Queued or armed and a fix must land: run `scripts/pr-dequeue.sh` to take the PR out of the queue and disarm auto-merge, push, then run `scripts/pr-enqueue.sh` again. Never close the PR.
+
+Ejected from the merge queue, the PR stays open with nothing armed: read the failed check of its merge group, push a fix when the failure is in the PR, then run `scripts/pr-enqueue.sh` again. Never close the PR.
 
 A PR whose base is a `feature/*` integration branch is merged by running `scripts/pr-merge-integration.sh` alone in its own Bash call once its checks pass, never `pr-enqueue.sh`. A catch-up of main into a `feature/*` branch takes the same path: merge `origin/main` into the sub-PR branch as a real merge commit, open the sub-PR, then run `scripts/pr-merge-integration.sh`, which fast-forwards the base to that merge instead of squashing it. Never the merge button, never a squash or a rebase merge.
 
