@@ -14,6 +14,7 @@
 				"scripts/generate-v2-vectors.ts",
 				"scripts/ios-stalls.ts",
 				"scripts/ios-stalls.test.ts",
+				"scripts/backport.test.ts",
 				"apps/ios/scripts/space-avatar-vectors.ts"
 			]
 		},

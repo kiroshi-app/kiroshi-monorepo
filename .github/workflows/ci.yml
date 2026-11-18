@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "release/**"]
   merge_group:
     types: [checks_requested]
 
@@ -15,18 +15,19 @@ permissions:
 env:
   CARGO_BUILD_JOBS: default
 
-# A push to main lets the run in progress conclude, a newer push replacing only the run still pending, the next run diffing against the last green head.
+# A push to main or a release/** branch lets the run in progress conclude, a newer push replacing only the run still pending, the next run diffing against the last green head of that branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
-# pull_request into main or a feature/** branch: changes, lint, vitest on the test files the diff changed against that base, rust on its library tests, verify.
+# pull_request into main, a feature/** or a release/** branch: changes, lint, vitest on the test files the diff changed against that base, rust on its library tests, verify.
 # pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
 # pull_request labelled ci:ios: ios-build and ios too.
 # merge_group: changes, lint on the head of the group, its Types step checking every TypeScript workspace of the combined result, verify.
 # push to main: changes, lint, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over eleven jobs, verify.
+# push to a release/** branch: the jobs of a push to main on the paths changed since the last green push to that branch, ios-build and ios skipped.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
@@ -125,7 +126,7 @@ jobs:
         with:
           workspaces: apps/app/src-tauri
           shared-key: src-tauri
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') }}
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -201,7 +202,7 @@ jobs:
       vitest: ${{ steps.filter.outputs.vitest }}
       website: ${{ steps.filter.outputs.website }}
       storybook: ${{ steps.filter.outputs.storybook == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:storybook') }}
-      ios: ${{ steps.filter.outputs.ios == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:ios') }}
+      ios: ${{ !startsWith(github.ref, 'refs/heads/release/') && (steps.filter.outputs.ios == 'true' || contains(github.event.pull_request.labels.*.name, 'ci:ios')) }}
       rust-image: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -210,15 +211,15 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Find the head of the last green push to main
+      - name: Find the head of the last green push to this branch
         id: green
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch main --status success --limit 1 \
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch "$GITHUB_REF_NAME" --status success --limit 1 \
             --json headSha --jq '.[0].headSha // ""') || {
-            echo "::warning::gh run list exited $? reading the last green push to main: every job runs"
+            echo "::warning::gh run list exited $? reading the last green push to $GITHUB_REF_NAME: every job runs"
             sha=""
           }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"

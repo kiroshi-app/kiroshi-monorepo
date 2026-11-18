@@ -134,7 +134,10 @@ const everyJobBecause = (reason: string) => {
 
 const jobsOfPush = (greenBase: string | undefined) => {
 	if (!greenBase)
-		return everyJobBecause("no CI push run on main concluded success")
+		return everyJobBecause(
+			// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci-changes.ts runs outside turbo, its cache never reads this variable
+			`no CI push run on ${process.env.GITHUB_REF_NAME} concluded success`,
+		)
 	const fetched = Bun.spawnSync([
 		"git",
 		"fetch",
