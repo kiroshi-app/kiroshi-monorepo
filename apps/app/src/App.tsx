@@ -26,11 +26,9 @@ export function App({ windowIdentity, windowRecovery = null }: AppProps) {
 	)
 	const [isRecoveryDismissed, setIsRecoveryDismissed] = useState(false)
 	const recoveryReason = recoveryScreenReasonOf(windowRecovery)
+	const continueToApp = () => setIsRecoveryDismissed(true)
 
-	if (windowRecovery && recoveryReason && !isRecoveryDismissed) {
-		const continueToApp = () => {
-			setIsRecoveryDismissed(true)
-		}
+	if (recoveryReason && !isRecoveryDismissed) {
 		return (
 			<RecoveredWindowScreen
 				onContinue={continueToApp}
