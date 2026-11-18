@@ -223,25 +223,29 @@ const outputsOn = (github: GitHubContext, paths = ["bun.lock"]) => {
 	)
 }
 
-const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
+const scopeOf = (
+	github: GitHubContext,
+	results: JobResults = {},
+	paths?: string[],
+) => ({
 	github,
 	needs: {
 		...Object.fromEntries(
 			Object.entries(results).map(([job, result]) => [job, { result }]),
 		),
-		changes: { result: results.changes, outputs: outputsOn(github) },
+		changes: { result: results.changes, outputs: outputsOn(github, paths) },
 	},
 })
 
-const jobsRunningOn = (github: GitHubContext) =>
+const jobsRunningOn = (github: GitHubContext, paths?: string[]) =>
 	Object.keys(workflow.jobs)
 		.filter((job) =>
-			evaluate(workflow.jobs[job]?.if ?? "true", scopeOf(github)),
+			evaluate(workflow.jobs[job]?.if ?? "true", scopeOf(github, {}, paths)),
 		)
 		.sort()
 
-const resultsByRule = (github: GitHubContext): JobResults => {
-	const running = jobsRunningOn(github)
+const resultsByRule = (github: GitHubContext, paths?: string[]): JobResults => {
+	const running = jobsRunningOn(github, paths)
 	return Object.fromEntries(
 		Object.keys(workflow.jobs).map((job) => [
 			job,
@@ -250,9 +254,13 @@ const resultsByRule = (github: GitHubContext): JobResults => {
 	)
 }
 
-const failingVerifySteps = (github: GitHubContext, results: JobResults) =>
+const failingVerifySteps = (
+	github: GitHubContext,
+	results: JobResults,
+	paths?: string[],
+) =>
 	(workflow.jobs.verify?.steps ?? []).filter((step) =>
-		evaluate(step.if ?? "true", scopeOf(github, results)),
+		evaluate(step.if ?? "true", scopeOf(github, results, paths)),
 	)
 
 const pushToMain = (runId: number): GitHubContext => ({
@@ -1600,27 +1608,7 @@ describe("the jobs of ci.yml", () => {
 	])(
 		"reports every required check of main on a pull_request into main touching %s, vitest and rust ending %s",
 		(_, paths, filteredResult) => {
-			const changes = {
-				result: "success",
-				outputs: outputsOn(A_PULL_REQUEST, paths),
-			}
-			const scopeWith = (results: JobResults) => ({
-				github: A_PULL_REQUEST,
-				needs: {
-					...Object.fromEntries(
-						Object.entries(results).map(([job, result]) => [job, { result }]),
-					),
-					changes,
-				},
-			})
-			const results: JobResults = Object.fromEntries(
-				Object.keys(workflow.jobs).map((job) => [
-					job,
-					evaluate(workflow.jobs[job]?.if ?? "true", scopeWith({}))
-						? "success"
-						: "skipped",
-				]),
-			)
+			const results = resultsByRule(A_PULL_REQUEST, paths)
 
 			expect(
 				Object.fromEntries(
@@ -1633,11 +1621,7 @@ describe("the jobs of ci.yml", () => {
 				vitest: filteredResult,
 				rust: filteredResult,
 			})
-			expect(
-				(workflow.jobs.verify?.steps ?? []).filter((step) =>
-					evaluate(step.if ?? "true", scopeWith(results)),
-				),
-			).toEqual([])
+			expect(failingVerifySteps(A_PULL_REQUEST, results, paths)).toEqual([])
 		},
 	)
 
