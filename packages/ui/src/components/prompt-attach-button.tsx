@@ -15,7 +15,7 @@ export interface PromptAttachButtonProps {
 }
 
 export const LABELLED_PILL =
-	"h-8 w-auto gap-1.5 rounded-2xl ps-2.5 pe-3 font-medium text-compact leading-4 transition-none [&_svg]:size-3.5"
+	"h-8 w-auto gap-1.5 ps-2.5 pe-3 font-medium text-compact leading-4 transition-none [&_svg]:size-3.5"
 
 export function PromptAttachButton({
 	onAttach,
@@ -43,7 +43,7 @@ export function PromptAttachButton({
 				disabled={disabled}
 				onClick={() => fileRef.current?.click()}
 				className={cn(
-					"size-8 rounded-full border-foreground/12 text-soft-foreground",
+					"size-8 border-foreground/12 text-soft-foreground",
 					hasLabel && LABELLED_PILL,
 					className,
 				)}
