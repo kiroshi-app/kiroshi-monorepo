@@ -167,6 +167,12 @@ impl Shown {
 		}
 	}
 
+	fn place_on_the_new_pixel_grid(&self, marker: MainThreadMarker) -> Result<(), String> {
+		let view = native_view_of(&self.webview);
+		place_native(&view, self.placement, marker)?;
+		self.corners.map_or(Ok(()), |corners| cut_corners(&view, corners))
+	}
+
 	fn draw(&self) -> Result<(), String> {
 		let holder = placed_holder(&native_view_of(&self.webview))?;
 		let stands_aside = self.has_a_still && MOTION.with(|motion| motion.is_moving.get());
@@ -303,7 +309,7 @@ pub fn replace_all<R: Runtime>(app: &AppHandle<R>) {
 		};
 		MOUNTED.with_borrow(|mounted| {
 			for (id, shown) in mounted {
-				if let Err(failure) = shown.place(shown.placement, marker) {
+				if let Err(failure) = shown.place_on_the_new_pixel_grid(marker) {
 					log::error!(
 						"live view {id} was not re-placed on the new pixel grid: {failure}"
 					);
