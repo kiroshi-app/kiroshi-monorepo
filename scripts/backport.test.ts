@@ -49,6 +49,10 @@ done
 case "$1 $2" in
 "pr view") response=$(cat "$GH_STUB/pull-request.json") ;;
 "pr create")
+	if [ -f "$GH_STUB/create-refused" ]; then
+		echo "GraphQL: was submitted too quickly" >&2
+		exit 1
+	fi
 	echo "${PULL_REQUEST_URL}"
 	exit 0
 	;;
@@ -274,6 +278,31 @@ describe("scripts/backport.sh", () => {
 			`backport.sh: PR #42 conflicts with ${RELEASE}, nothing pushed, conflicting files:\ndraft.ts\n`,
 		)
 		expectNothingChanged()
+	})
+
+	it("keeps the pushed branch and prints the gh pr create command to rerun when the PR cannot be opened", async () => {
+		writeFileSync(join(stub, "create-refused"), "")
+
+		const result = await runBackport({})
+		const prefix = `backport.sh: pushed ${BACKPORT_BRANCH} to origin but gh pr create failed, open its PR with: `
+		const lastLine = result.stderr.trimEnd().split("\n").at(-1) ?? ""
+
+		expect(result.exitCode).toBe(1)
+		expect(lastLine).toStartWith(prefix)
+		expect(originBranches()).toEqual([BACKPORT_BRANCH, "main", RELEASE])
+		rmSync(join(stub, "create-refused"))
+		const rerun = Bun.spawnSync({
+			cmd: ["bash", "-c", lastLine.slice(prefix.length)],
+			env: {
+				...process.env,
+				GH_STUB: stub,
+				PATH: `${join(stub, "bin")}:${process.env.PATH}`,
+			},
+		})
+		expect(rerun.stdout.toString()).toBe(`${PULL_REQUEST_URL}\n`)
+		const [refused, reran] = pullRequestsCreated()
+		expect(reran).toEqual(refused)
+		expect(reran).toContain(TITLE)
 	})
 
 	it("refuses a second backport of the same PR to the same release branch", async () => {

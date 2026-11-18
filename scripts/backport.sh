@@ -67,4 +67,8 @@ fi
 
 git -C "$worktree" push --quiet -u origin "$branch"
 is_pushed=true
-gh pr create --repo "$REPOSITORY" --base "$release" --head "$branch" --title "$title" --body "Backport of #$number to $release."
+create_pull_request=(gh pr create --repo "$REPOSITORY" --base "$release" --head "$branch" --title "$title" --body "Backport of #$number to $release.")
+if ! "${create_pull_request[@]}"; then
+	rerun=$(printf ' %q' "${create_pull_request[@]}")
+	fail "pushed $branch to origin but gh pr create failed, open its PR with:${rerun}"
+fi
