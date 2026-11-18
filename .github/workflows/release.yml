@@ -79,11 +79,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME is neither a stable vX.Y.Z nor a beta vX.Y.Z-beta.N tag, nothing built"
             exit 1
           fi
-          previous=$(git tag --list 'v*' --sort=-creatordate \
+          previous=$(git log --topo-order --decorate-refs='refs/tags/v*' --format='%D' "$GITHUB_REF_NAME" \
+            | tr ',' '\n' | sed -n 's/^ *tag: //p' \
             | awk -v tag="$GITHUB_REF_NAME" -v pattern="$previous_pattern" \
-              'seen && !found && $0 ~ pattern { print; found = 1 } $0 == tag { seen = 1 }')
+              '!found && $0 != tag && $0 ~ pattern { print; found = 1 }')
           if [ -z "$previous" ]; then
-            echo "::error::No v* tag created before $GITHUB_REF_NAME to start its release notes from"
+            echo "::error::No v* tag reachable from $GITHUB_REF_NAME to start its release notes from"
             exit 1
           fi
           echo "Release notes of $GITHUB_REF_NAME cover $previous..$GITHUB_REF_NAME"
