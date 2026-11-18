@@ -53,7 +53,7 @@ const READER_SCROLL = 40
 
 const SUB_PIXEL_STEP = 0.3
 
-const SUB_PIXEL_STEPS = 100
+const SUB_PIXEL_FRAMES = 100
 
 const GROWING_BLOCK = "h-40 rounded-xl border border-border bg-muted"
 
@@ -179,10 +179,14 @@ const resize = async (block: HTMLElement, by: number) => {
 	await nextFrames()
 }
 
-const growEachFrame = async (block: HTMLElement) => {
-	for (let frame = 0; frame < GROWTH_FRAMES; frame += 1) {
+const growEachFrame = async (
+	block: HTMLElement,
+	frames = GROWTH_FRAMES,
+	step = GROWTH_STEP,
+) => {
+	for (let frame = 0; frame < frames; frame += 1) {
 		await new Promise(requestAnimationFrame)
-		block.style.height = `${block.getBoundingClientRect().height + GROWTH_STEP}px`
+		block.style.height = `${block.getBoundingClientRect().height + step}px`
 	}
 }
 
@@ -481,10 +485,7 @@ export const HoldsTheReaderWhileABlockGrowsBySubPixels = meta.story({
 		const reader = itemAfter(block)
 		const readerTop = topOf(reader)
 
-		for (let step = 0; step < SUB_PIXEL_STEPS; step += 1) {
-			await new Promise(requestAnimationFrame)
-			block.style.height = `${block.getBoundingClientRect().height + SUB_PIXEL_STEP}px`
-		}
+		await growEachFrame(block, SUB_PIXEL_FRAMES, SUB_PIXEL_STEP)
 		await nextFrames()
 
 		await expectInPlace(canvasElement, reader, readerTop)
