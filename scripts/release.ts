@@ -25,7 +25,7 @@ const BUMP_TYPES = ["patch", "minor", "major"] as const
 
 type BumpType = (typeof BUMP_TYPES)[number]
 
-export type MainBump =
+type MainBump =
 	| { kind: "open"; version: string; branch: string; title: string }
 	| { kind: "skip"; reason: string }
 
@@ -155,7 +155,7 @@ type MainBumpStep = {
 	run: () => Promise<unknown>
 }
 
-export type MainBumpFailure = {
+type MainBumpFailure = {
 	step: string
 	cause: string
 	remaining: string[]
