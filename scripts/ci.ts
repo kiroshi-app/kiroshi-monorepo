@@ -164,6 +164,10 @@ export const GATE = {
 		PR_ENQUEUE_UNIT_TESTS,
 		PR_MERGE_INTEGRATION_UNIT_TESTS,
 		{
+			name: "Backport script unit tests",
+			command: "bun test scripts/backport.test.ts",
+		},
+		{
 			name: "CODEOWNERS matcher unit tests",
 			command: "bun run test:code-owners",
 		},
