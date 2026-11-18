@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
 import { act } from "@testing-library/react"
-import { expect, it, vi } from "vitest"
+import type { Root } from "react-dom/client"
+import { afterAll, expect, it, vi } from "vitest"
 
 import { CODE_LANGUAGES } from "@workspace/ui/lib/code-highlight"
 
@@ -15,6 +16,7 @@ type LanguageWarmUp = { language: string; isLoaderShown: boolean }
 const harness = vi.hoisted(() => ({
 	store: null as TranscriptStore | null,
 	warmUps: [] as LanguageWarmUp[],
+	mountedRoots: [] as Root[],
 }))
 
 const isShowingLaunchLoader = () =>
@@ -28,6 +30,18 @@ vi.mock("@workspace/ui/lib/code-highlight", async (importOriginal) => ({
 		harness.warmUps.push({ language, isLoaderShown: isShowingLaunchLoader() })
 	},
 }))
+
+vi.mock("react-dom/client", async (importOriginal) => {
+	const client = await importOriginal<typeof import("react-dom/client")>()
+	return {
+		...client,
+		createRoot: (...mount: Parameters<typeof client.createRoot>) => {
+			const root = client.createRoot(...mount)
+			harness.mountedRoots.push(root)
+			return root
+		},
+	}
+})
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
@@ -74,6 +88,12 @@ const launch = async () => {
 }
 
 const answerFirstRosterPage = await launch()
+
+afterAll(async () => {
+	await act(async () => {
+		for (const root of harness.mountedRoots) root.unmount()
+	})
+})
 
 it("warms no code language while the launch loader plays, and every one once the shell has replaced it", async () => {
 	await passTime(IDLE_WARM_UP_MS)
