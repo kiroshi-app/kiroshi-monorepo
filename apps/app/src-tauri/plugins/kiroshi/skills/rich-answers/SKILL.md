@@ -398,8 +398,10 @@ area: Lisbon, Cais do Sodre
 
 ## What the chat does not draw
 
-- **Raw HTML**: a tag is shown as its source text, never drawn. Write the Markdown construct
-  instead.
+- **Raw HTML**: an answer in Markdown uses no HTML tag. A tag is shown as its source text, never
+  drawn: write the Markdown construct instead. A page meant to be shown live, an `html` block or
+  an attached `.html` file, is the one place for HTML: load the `live-html` skill before you write
+  it.
 - **An address that is not `https://`**: a block whose URL field is not an absolute `https://` URL
   is shown as its source text, and a large image whose image or page is not `https://` loses its
   frame and its source card. An image address on `file:` or `data:` is removed. Write every
