@@ -284,7 +284,6 @@ const mergeGroup = (number: number, runId: number): GitHubContext => ({
 	event_name: "merge_group",
 	ref: `refs/heads/gh-readonly-queue/main/pr-${number}-group-head`,
 	run_id: String(runId),
-	event: { merge_group: { base_sha: "main-tip" } },
 })
 
 const A_MERGE_GROUP = mergeGroup(7, 15)
