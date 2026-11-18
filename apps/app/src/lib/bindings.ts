@@ -159,6 +159,12 @@ export const commands = {
 } | null>("drag_ghost_tab"),
 	dragGhostMove: (at: ScreenPosition) => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_move", { at })),
 	dragGhostHide: () => typedError<DragGhostSupport, DragGhostError>(__TAURI_INVOKE("drag_ghost_hide")),
+	windowRecoveryRead: () => __TAURI_INVOKE<{
+	reason: WindowDeathReason,
+	deaths: number,
+	exhausted: boolean,
+	occurredAtMs: number,
+} | null>("window_recovery_read"),
 	conversationDuplicateBot: (botId: string, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_duplicate_bot", { botId, spaceId })),
 	conversationUpdateBot: (id: string, identity: BotIdentity) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_update_bot", { id, identity })),
 	conversationDeleteBot: (id: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete_bot", { id })),
@@ -2410,6 +2416,8 @@ export type WebSource = {
 	title: string | null,
 };
 
+export type WindowDeathReason = "outOfMemory" | "crashed" | "killed" | "unresponsive" | "unknown";
+
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
 
 export type WindowIdentity = {
@@ -2419,6 +2427,13 @@ export type WindowIdentity = {
 };
 
 export type WindowOpenError = { kind: "notAnAppPage" } | { kind: "unavailable" };
+
+export type WindowRecovery = {
+	reason: WindowDeathReason,
+	deaths: number,
+	exhausted: boolean,
+	occurredAtMs: number,
+};
 
 export type WindowSize = {
 	width: number,

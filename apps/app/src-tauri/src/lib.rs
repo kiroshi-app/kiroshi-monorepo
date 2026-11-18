@@ -49,6 +49,7 @@ mod test_log;
 pub mod updates;
 pub mod user;
 mod window_controls;
+pub mod window_recovery;
 
 use tauri::{Manager, RunEvent};
 
@@ -58,7 +59,7 @@ use commands::builder;
 
 pub fn run() {
 	descriptors::raise_open_file_limit();
-	tauri::Builder::default()
+	window_recovery::installed_on(tauri::Builder::default())
 		.enable_macos_default_menu(false)
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
 			window_controls::raise_last_focused(app);
@@ -158,6 +159,9 @@ pub fn run() {
 			RunEvent::Reopen { .. } => {
 				window_controls::raise_last_focused(app);
 				updates::check_stored_channel_on(app);
+			}
+			RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
+				window_recovery::rebuild_once_destroyed(app, &label);
 			}
 			RunEvent::Exit => {
 				library::write_pending_boards(app);

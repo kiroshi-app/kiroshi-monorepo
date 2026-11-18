@@ -5,7 +5,7 @@ use crate::{
 	account, agent, applications, attachments, badge, claude_import, companions, conversations,
 	crypto, devices, environment, hosting, invitations, joined_spaces, library, logging, mcp_oauth,
 	menu_contract, missions, notifications, plugins, remote_image, routines, search, sections,
-	spaces, updates, user, window_controls,
+	spaces, updates, user, window_controls, window_recovery,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -212,6 +212,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		window_controls::drag_ghost::drag_ghost_tab::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_move::<tauri::Wry>,
 		window_controls::drag_ghost::drag_ghost_hide::<tauri::Wry>,
+		window_recovery::window_recovery_read,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,
 		conversations::commands::conversation_delete_bot::<tauri::Wry>,
