@@ -8,19 +8,11 @@ type RecoveredWindowScreenProps = {
 	onContinue: () => void
 }
 
-const reloadIsNeverOffered = () => {}
-
 export const RecoveredWindowScreen = ({
 	reason,
 	onContinue,
 }: RecoveredWindowScreenProps) => {
 	useWindowRevealOnMount()
 
-	return (
-		<WindowRecoveryScreen
-			onContinue={onContinue}
-			onReload={reloadIsNeverOffered}
-			reason={reason}
-		/>
-	)
+	return <WindowRecoveryScreen onContinue={onContinue} reason={reason} />
 }
