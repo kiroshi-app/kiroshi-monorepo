@@ -117,6 +117,7 @@ mod tests {
 	use super::*;
 
 	const PAGE: &str = "<!doctype html><style>body { background: #ff00ff }</style><p>live</p>";
+	const TOKENS: &str = include_str!("../../../../../packages/ui/src/styles/tokens.css");
 
 	fn themed(appearance: LiveHtmlAppearance, hue: Option<i64>) -> LiveHtmlTheme {
 		LiveHtmlTheme { appearance, hue: hue.map(|hue| Hue::new(hue).expect("a hue of the turn")) }
@@ -140,6 +141,14 @@ mod tests {
 		}
 	}
 
+	fn token<'a>(tokens: &'a str, name: &str) -> &'a str {
+		let declared = format!("\t--{name}: ");
+		tokens
+			.lines()
+			.find_map(|line| line.strip_prefix(declared.as_str())?.strip_suffix(';'))
+			.unwrap_or_else(|| panic!("tokens.css declares no --{name}"))
+	}
+
 	#[test]
 	fn the_base_paints_its_background_on_the_root_and_none_on_the_body() {
 		let (root, others) = RULES.split_once('}').expect("a root rule");
@@ -147,6 +156,24 @@ mod tests {
 		assert!(root.starts_with(":root {"), "{root}");
 		assert!(root.contains("\tbackground: var(--kiroshi-background);"), "{root}");
 		assert!(others.contains("body {") && !others.contains("background"), "{others}");
+	}
+
+	#[test]
+	fn the_base_colours_are_the_light_and_dark_tokens_of_the_design_system() {
+		let (light, dark) =
+			TOKENS.split_once("\n.dark,\n").expect("the dark tokens after the light ones");
+
+		for (tones, tokens) in [(LIGHT, light), (DARK, dark)] {
+			let mirrored = [
+				("background", tones.background),
+				("foreground", tones.foreground),
+				("muted-foreground", tones.muted_foreground),
+				("border", tones.border),
+			];
+			for (name, value) in mirrored {
+				assert_eq!(value, token(tokens, name), "the {} {name}", tones.appearance);
+			}
+		}
 	}
 
 	#[test]
