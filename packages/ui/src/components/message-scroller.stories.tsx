@@ -584,7 +584,7 @@ export const ScrollsToTheEndInOneSmoothMoveWhileAReplyGrows = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader is scrolled back and presses the jump button, which scrolls smoothly, while the reply at the end of the thread grows on every frame. Check that the thread reaches the end in one smooth move: no frame of the scroll jumps further than a smooth step.",
+					"The reader is scrolled back and presses the jump button, which scrolls smoothly, while the reply at the end of the thread grows on every frame. Check that the thread reaches the end in one smooth move: no frame carries more than a third of the move.",
 			},
 		},
 	},
