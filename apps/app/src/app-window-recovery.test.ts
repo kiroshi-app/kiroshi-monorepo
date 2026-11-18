@@ -11,7 +11,7 @@ import {
 import { createElement } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 
-import { i18n } from "@workspace/ui/lib/i18n"
+import { activateLanguage, i18n } from "@workspace/ui/lib/i18n"
 
 import { commands, type WindowRecovery } from "@/lib/bindings"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -60,6 +60,7 @@ afterEach(() => {
 	vi.restoreAllMocks()
 	localStorage.clear()
 	vi.useRealTimers()
+	activateLanguage("en")
 })
 
 const settle = async () => {
@@ -102,10 +103,23 @@ const pressReload = async () => {
 	await settle()
 }
 
-const shownFailureNotice = () =>
-	within(
-		screen.getByRole("region", { name: i18n.t("common:notice.label") }),
-	).queryByText(i18n.t("common:windowRecovery.gaveUp.title"))
+const noticeRegion = () =>
+	within(screen.getByRole("region", { name: i18n.t("common:notice.label") }))
+
+const expectReloadFailedNotice = () => {
+	const notice = noticeRegion()
+	expect(
+		notice.getByText(i18n.t("common:windowRecovery.gaveUp.reloadFailed.title")),
+	).toBeTruthy()
+	expect(
+		notice.getByText(
+			i18n.t("common:windowRecovery.gaveUp.reloadFailed.description"),
+		),
+	).toBeTruthy()
+	expect(
+		notice.queryByText(i18n.t("common:windowRecovery.gaveUp.title")),
+	).toBeNull()
+}
 
 const pressContinue = async () => {
 	fireEvent.click(
@@ -181,7 +195,7 @@ it.each([
 
 		await pressReload()
 
-		expect(shownFailureNotice()).toBeTruthy()
+		expectReloadFailedNotice()
 		expect(isShowingRecoveryScreen()).toBe(true)
 
 		await pressReload()
@@ -189,3 +203,20 @@ it.each([
 		expect(reload).toHaveBeenCalledTimes(2)
 	},
 )
+
+it("raises the failure notice in fr when the reload fails while the language is fr", async () => {
+	hostAnswersReload({ status: "error", error: { kind: "reloadFailed" } })
+	activateLanguage("fr")
+	await mountApp(GAVE_UP_DEATH)
+
+	await pressReload()
+
+	expect(
+		noticeRegion().getByText("La fenêtre ne s’est pas rechargée"),
+	).toBeTruthy()
+	expect(
+		noticeRegion().getByText(
+			"Appuyez sur Recharger la fenêtre pour réessayer.",
+		),
+	).toBeTruthy()
+})

@@ -8,7 +8,12 @@ import { raiseReportedFailure } from "@/lib/failure-report"
 
 const raiseReloadFailure = (reason: unknown) =>
 	raiseReportedFailure(
-		{ title: i18n.t("common:windowRecovery.gaveUp.title") },
+		{
+			title: i18n.t("common:windowRecovery.gaveUp.reloadFailed.title"),
+			description: i18n.t(
+				"common:windowRecovery.gaveUp.reloadFailed.description",
+			),
+		},
 		{ raisedIn: "use-recovered-window-reload", reason },
 	)
 
