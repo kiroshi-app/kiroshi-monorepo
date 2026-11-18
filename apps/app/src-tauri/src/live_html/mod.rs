@@ -19,6 +19,7 @@ use macos as native;
 pub use macos::{EVENTS_FOR_THE_MAIN_WEBVIEW, HOLDER_IDENTIFIER};
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
@@ -160,8 +161,19 @@ impl LiveViews {
 		id: String,
 		script: String,
 	) -> Result<String, LiveHtmlError> {
+		self.answered_outside_the_lock(id, |id| native::evaluate(app, id, script)).await
+	}
+
+	async fn answered_outside_the_lock<Answer>(
+		&self,
+		id: String,
+		answer: impl FnOnce(String) -> Answer,
+	) -> Result<String, LiveHtmlError>
+	where
+		Answer: Future<Output = Result<String, LiveHtmlError>>,
+	{
 		let id = known(&*self.servers.lock().await, id)?;
-		let answer = native::evaluate(app, id.clone(), script).await?;
+		let answer = answer(id.clone()).await?;
 		known(&*self.servers.lock().await, id)?;
 		Ok(answer)
 	}
@@ -200,3 +212,6 @@ fn known(servers: &HashMap<String, ContentServer>, id: String) -> Result<String,
 fn main_window_of<R: Runtime>(app: &AppHandle<R>) -> Result<WebviewWindow<R>, LiveHtmlError> {
 	app.get_webview_window(MAIN_WINDOW).ok_or(LiveHtmlError::MainWindowMissing)
 }
+
+#[cfg(test)]
+mod tests;
