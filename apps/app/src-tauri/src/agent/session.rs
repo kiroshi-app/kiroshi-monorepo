@@ -61,6 +61,20 @@ pub trait HostRequests: std::fmt::Debug + Send + Sync + 'static {
 	fn serve(&self, request: Value) -> Answering;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrandedTurn {
+	pub turn_id: String,
+	pub handed: Option<SubmittedTurn>,
+	pub prompt: String,
+	pub sdk_session_id: Option<String>,
+}
+
+pub type Keeping = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+pub trait StrandedTurns: std::fmt::Debug + Send + Sync + 'static {
+	fn keep(&self, stranded: StrandedTurn) -> Keeping;
+}
+
 impl EventSink for mpsc::UnboundedSender<AgentEvent> {
 	fn emit(&self, event: AgentEvent) {
 		let _ = self.send(event);
@@ -154,6 +168,7 @@ pub struct SessionOptions {
 	pub members: Vec<SpaceMember>,
 	pub hosts: Vec<Arc<dyn HostRequests>>,
 	pub lease: RunLease,
+	pub strands: Option<Arc<dyn StrandedTurns>>,
 }
 
 impl SessionOptions {
@@ -175,6 +190,7 @@ impl SessionOptions {
 			members: Vec::new(),
 			hosts: Vec::new(),
 			lease: RunLease::default(),
+			strands: None,
 		}
 	}
 
@@ -248,6 +264,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn stranding(mut self, strands: Arc<dyn StrandedTurns>) -> Self {
+		self.strands = Some(strands);
+		self
+	}
+
 	pub fn open_request(&self, partial_messages: bool) -> OpenRequest {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
@@ -311,6 +332,13 @@ struct RunningTurn {
 	started_at: Instant,
 	liveness: Liveness,
 	pending_tasks: u32,
+	origin: TurnOrigin,
+}
+
+enum TurnOrigin {
+	Prompted { text: String, handed: Option<SubmittedTurn> },
+	Answered,
+	Replay { of: String },
 }
 
 impl RunningTurn {
@@ -342,7 +370,13 @@ impl Shared {
 		Some(AgentEvent::TurnChanged { state: next })
 	}
 
-	fn turn_started(&mut self, session: &str, id: Option<String>, prompt_uuid: String) {
+	fn turn_started(
+		&mut self,
+		session: &str,
+		id: Option<String>,
+		prompt_uuid: String,
+		origin: TurnOrigin,
+	) {
 		log::info!("the turn started session={session} turn={id:?}");
 		self.running = Some(RunningTurn {
 			id,
@@ -350,7 +384,23 @@ impl Shared {
 			started_at: Instant::now(),
 			liveness: Liveness::since(tokio::time::Instant::now()),
 			pending_tasks: 0,
+			origin,
 		});
+	}
+
+	fn stranded_by(&self, expiry: Expiry) -> Option<StrandedTurn> {
+		let running = self.running.as_ref().filter(|_| expiry == Expiry::ProviderUnreachable)?;
+		let TurnOrigin::Prompted { text, handed } = &running.origin else {
+			return None;
+		};
+		Some(StrandedTurn {
+			turn_id: handed
+				.as_ref()
+				.map_or_else(|| running.prompt_uuid.clone(), |handed| handed.turn_id.clone()),
+			handed: handed.clone(),
+			prompt: text.clone(),
+			sdk_session_id: self.translator.session_id().map(str::to_owned),
+		})
 	}
 
 	fn answers_the_running_prompt(&self, frame: &Frame) -> bool {
@@ -489,8 +539,12 @@ impl Shared {
 		let running = self.running.take()?;
 		let reason = failure.map_or(String::new(), |failure| format!(" reason={failure:?}"));
 		let cause = cause.map(|cause| format!(" cause={cause}")).unwrap_or_default();
+		let replay = match &running.origin {
+			TurnOrigin::Replay { of } => format!(" replay=true original={of}"),
+			TurnOrigin::Prompted { .. } | TurnOrigin::Answered => String::new(),
+		};
 		log::info!(
-			"the turn ended session={session} turn={:?} outcome={outcome:?}{reason} took_ms={}{cause}",
+			"the turn ended session={session} turn={:?} outcome={outcome:?}{reason}{replay} took_ms={}{cause}",
 			running.id,
 			running.started_at.elapsed().as_millis()
 		);
@@ -626,6 +680,7 @@ impl Line<'_> {
 			&key,
 			turn.as_ref().map(|turn| turn.turn_id.clone()),
 			prompt_uuid.clone(),
+			TurnOrigin::Prompted { text: text.to_owned(), handed: turn.clone() },
 		);
 		let entering = shared.set_turn(TurnState::Submitting);
 		self.rearmed.notify_one();
@@ -703,6 +758,7 @@ impl Session {
 			sidecar: sidecar.clone(),
 			key: key.clone(),
 			hosts: options.hosts.clone(),
+			strands: options.strands.clone(),
 			sink: sink.clone(),
 		};
 		tokio::spawn(read_loop(
@@ -809,6 +865,21 @@ impl Session {
 		}
 		self.line().deliver(&mut shared, text, Some(turn))?;
 		Ok(Handed::Delivered)
+	}
+
+	pub async fn replay(&self, stranded: StrandedTurn) -> Result<(), TransportError> {
+		let mut shared = self.shared.lock().await;
+		if shared.is_mid_turn()
+			|| shared.streams_a_follow_up
+			|| shared.translator.is_waiting_on_person()
+		{
+			return Err(TransportError::TurnAlreadyRunning);
+		}
+		self.line().deliver(&mut shared, &stranded.prompt, stranded.handed)?;
+		if let Some(running) = shared.running.as_mut() {
+			running.origin = TurnOrigin::Replay { of: stranded.turn_id };
+		}
+		Ok(())
 	}
 
 	pub async fn withdraw(&self, turn_id: &str) -> bool {
@@ -944,7 +1015,12 @@ impl Session {
 			None => uuid::Uuid::new_v4().to_string(),
 		};
 		let folds_a_follow_up = std::mem::take(&mut shared.streams_a_follow_up);
-		shared.turn_started(&key, Some(turn.turn_id.clone()), answered_prompt);
+		shared.turn_started(
+			&key,
+			Some(turn.turn_id.clone()),
+			answered_prompt,
+			TurnOrigin::Answered,
+		);
 		self.sink.submitted(turn);
 		if folds_a_follow_up {
 			self.sink.follow_up(FollowUp::FoldedIn);
@@ -1048,6 +1124,7 @@ struct HostDesk {
 	sidecar: Arc<Sidecar>,
 	key: String,
 	hosts: Vec<Arc<dyn HostRequests>>,
+	strands: Option<Arc<dyn StrandedTurns>>,
 	sink: Arc<dyn EventSink>,
 }
 
@@ -1258,6 +1335,7 @@ async fn end_lapsed_turn(
 	if guard.shutting_down || deadline > tokio::time::Instant::now() {
 		return None;
 	}
+	let stranded = guard.stranded_by(expiry);
 	for event in guard.end_lapsed(expiry) {
 		sink.emit(event);
 	}
@@ -1269,6 +1347,10 @@ async fn end_lapsed_turn(
 			sink.emit(AgentEvent::Failed { error });
 			guard.abandon_queued(TurnOutcome::Failed, Some(TurnFailure::AgentLost)).tell(sink);
 		}
+	}
+	drop(guard);
+	if let (Some(strands), Some(stranded)) = (&desk.strands, stranded) {
+		strands.keep(stranded).await;
 	}
 	Some(frames)
 }
@@ -1663,7 +1745,7 @@ mod tests {
 			lease: RunLease::default(),
 			streams_a_follow_up: false,
 		};
-		shared.turn_started("s1", Some("t1".to_owned()), "p1".to_owned());
+		shared.turn_started("s1", Some("t1".to_owned()), "p1".to_owned(), TurnOrigin::Answered);
 		shared
 	}
 
@@ -1824,6 +1906,23 @@ while IFS= read -r line; do
 done
 "#;
 
+	const ERRING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+	case "$line" in
+	*'"type":"open"'*)
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	*'"type":"prompt"'*)
+		printf '{"session":"%s","frame":{"type":"turn_settled","subtype":"error_during_execution","is_error":true}}\n' "$key"
+		;;
+	esac
+done
+"#;
+
+	const CONNECTION_BOUND: Duration = Duration::from_millis(300);
+
 	#[derive(Default)]
 	struct Heard(std::sync::Mutex<Vec<AgentEvent>>);
 
@@ -1839,45 +1938,165 @@ done
 		}
 	}
 
-	#[tokio::test]
-	async fn a_turn_whose_provider_stays_unreachable_ends_at_the_connection_bound_though_frames_keep_coming(
-	) {
-		const BOUND: Duration = Duration::from_millis(300);
+	#[derive(Debug, Default)]
+	struct Kept(std::sync::Mutex<Vec<StrandedTurn>>);
+
+	impl Kept {
+		fn turns(&self) -> Vec<StrandedTurn> {
+			self.0.lock().expect("the kept turns lock").clone()
+		}
+	}
+
+	impl StrandedTurns for Kept {
+		fn keep(&self, stranded: StrandedTurn) -> Keeping {
+			self.0.lock().expect("the kept turns lock").push(stranded);
+			Box::pin(std::future::ready(()))
+		}
+	}
+
+	struct Stubbed {
+		session: Session,
+		heard: Arc<Heard>,
+		kept: Arc<Kept>,
+		_script: crate::removed_on_drop::RemovedOnDrop,
+	}
+
+	impl Stubbed {
+		async fn ended(&self) -> Option<(TurnOutcome, Option<TurnFailure>)> {
+			tokio::time::timeout(Duration::from_secs(5), async {
+				while self.heard.ending().is_none() {
+					tokio::time::sleep(Duration::from_millis(20)).await;
+				}
+			})
+			.await
+			.expect("the turn ended");
+			tokio::time::sleep(Duration::from_millis(50)).await;
+			self.heard.ending()
+		}
+	}
+
+	async fn a_session_on(sidecar_script: &str) -> Stubbed {
 		let script = crate::removed_on_drop::RemovedOnDrop(std::env::temp_dir().join(format!(
-			"kiroshi-unreachable-sidecar-{}-{}.sh",
+			"kiroshi-stranding-sidecar-{}-{}.sh",
 			std::process::id(),
 			uuid::Uuid::new_v4()
 		)));
-		crate::executable_script::an_executable_script(&script, UNREACHABLE_SIDECAR);
+		crate::executable_script::an_executable_script(&script, sidecar_script);
 		let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
 			.await
 			.expect("the sidecar is ready");
-		let lease = RunLease { provider_unreachable: BOUND, ..RunLease::default() };
+		let lease = RunLease { provider_unreachable: CONNECTION_BOUND, ..RunLease::default() };
 		let heard = Arc::new(Heard::default());
-		let session = Session::start(
-			sidecar,
-			SessionOptions::new(std::env::temp_dir()).leased(lease),
-			heard.clone(),
-		)
-		.await
-		.expect("the session opens");
+		let kept = Arc::new(Kept::default());
+		let options =
+			SessionOptions::new(std::env::temp_dir()).leased(lease).stranding(kept.clone());
+		let session =
+			Session::start(sidecar, options, heard.clone()).await.expect("the session opens");
+		Stubbed { session, heard, kept, _script: script }
+	}
+
+	fn handed(turn_id: &str) -> SubmittedTurn {
+		SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: format!("prompt-of-{turn_id}") }
+	}
+
+	#[tokio::test]
+	async fn a_turn_whose_provider_stays_unreachable_ends_at_the_connection_bound_and_is_kept_for_a_replay(
+	) {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
 		let prompted_at = Instant::now();
 
-		session.submit_prompt("are you there").await.expect("the prompt is written");
-		tokio::time::timeout(Duration::from_secs(5), async {
-			while heard.ending().is_none() {
-				tokio::time::sleep(Duration::from_millis(20)).await;
-			}
-		})
-		.await
-		.expect("the turn ended");
+		stubbed
+			.session
+			.submit("are you there", Some(handed("t1")))
+			.await
+			.expect("the prompt is written");
+		let ended = stubbed.ended().await;
 
-		assert_eq!(heard.ending(), Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection))));
+		assert_eq!(ended, Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection))));
 		assert!(
-			prompted_at.elapsed() < BOUND + Duration::from_secs(1),
+			prompted_at.elapsed() < CONNECTION_BOUND + Duration::from_secs(1),
 			"the turn outlived its connection bound: {:?}",
 			prompted_at.elapsed()
 		);
+		assert_eq!(
+			stubbed.kept.turns(),
+			vec![StrandedTurn {
+				turn_id: "t1".to_owned(),
+				handed: Some(handed("t1")),
+				prompt: "are you there".to_owned(),
+				sdk_session_id: None,
+			}]
+		);
+	}
+
+	#[tokio::test]
+	async fn a_turn_handed_no_turn_id_is_kept_under_the_id_of_its_prompt() {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+
+		stubbed.session.submit_prompt("are you there").await.expect("the prompt is written");
+		stubbed.ended().await;
+
+		let kept = stubbed.kept.turns();
+		assert_eq!(kept.len(), 1, "{kept:?}");
+		assert!(kept[0].handed.is_none());
+		assert!(uuid::Uuid::parse_str(&kept[0].turn_id).is_ok(), "{kept:?}");
+	}
+
+	#[tokio::test]
+	async fn a_turn_failing_for_a_provider_error_is_not_kept_for_a_replay() {
+		let stubbed = a_session_on(ERRING_SIDECAR).await;
+
+		stubbed.session.submit("are you there", Some(handed("t1"))).await.expect("written");
+
+		assert_eq!(
+			stubbed.ended().await,
+			Some((TurnOutcome::Failed, Some(TurnFailure::ProviderError)))
+		);
+		assert_eq!(stubbed.kept.turns(), Vec::new());
+	}
+
+	#[tokio::test]
+	async fn a_replayed_turn_that_loses_the_provider_again_is_not_kept_again() {
+		crate::test_log::capturing();
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+		let stranded = StrandedTurn {
+			turn_id: "t-replayed-again".to_owned(),
+			handed: Some(handed("t-replayed-again")),
+			prompt: "are you there".to_owned(),
+			sdk_session_id: Some("sdk-1".to_owned()),
+		};
+
+		stubbed.session.replay(stranded).await.expect("the replay is written");
+
+		assert_eq!(
+			stubbed.ended().await,
+			Some((TurnOutcome::Failed, Some(TurnFailure::NoConnection)))
+		);
+		assert_eq!(stubbed.kept.turns(), Vec::new());
+		let logged = crate::test_log::infos_naming("original=t-replayed-again").await;
+		assert_eq!(logged.len(), 1, "{logged:?}");
+		assert!(
+			logged[0].contains(
+				"outcome=Failed reason=NoConnection replay=true original=t-replayed-again"
+			),
+			"{logged:?}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_replay_refuses_a_session_whose_turn_still_runs() {
+		let stubbed = a_session_on(UNREACHABLE_SIDECAR).await;
+		stubbed.session.submit("first", Some(handed("t0"))).await.expect("written");
+		let stranded = StrandedTurn {
+			turn_id: "t1".to_owned(),
+			handed: Some(handed("t1")),
+			prompt: "are you there".to_owned(),
+			sdk_session_id: None,
+		};
+
+		let replayed = stubbed.session.replay(stranded).await;
+
+		assert_eq!(replayed, Err(TransportError::TurnAlreadyRunning));
 	}
 
 	#[test]

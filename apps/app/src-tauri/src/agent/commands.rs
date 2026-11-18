@@ -16,6 +16,7 @@ use super::host::hosted;
 use super::lease::RunLease;
 use super::pending_writes::{PendingWrite, PendingWrites};
 use super::protocol::{self, Checked, SpaceMember};
+use super::replay::KeptForReplay;
 use super::reply_writer::{
 	prompts_settled_by, HostWrites, ReplyWriter, SettledPrompts, TurnAttachments, TurnSink,
 };
@@ -35,6 +36,7 @@ use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
 use crate::db::repositories::messages::{NewTurn, RunClaim};
 use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::db::repositories::turn_replays::{KeptTurn, ReplayedRun};
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
@@ -482,6 +484,10 @@ impl<S: Clone> Live<S> {
 			.expect("live runs")
 			.get(&run_key(scope))
 			.is_some_and(|run| &run.scope != scope)
+	}
+
+	fn holds_any_run_under(&self, scope: &RuntimeScope) -> bool {
+		self.runs.lock().expect("live runs").contains_key(&run_key(scope))
 	}
 
 	fn session_for(&self, scope: &RuntimeScope) -> Result<S, TransportError> {
@@ -1335,6 +1341,12 @@ pub(crate) async fn start_run<R: Runtime>(
 	let RunStart { scope, resume, cwd, output_schema, denied_tools, permission_mode, lineage } =
 		start;
 	let permission_mode = listed_mode(permission_mode)?;
+	let replayed_run = ReplayedRun {
+		cwd: cwd.clone(),
+		output_schema: output_schema.clone(),
+		denied_tools: denied_tools.clone(),
+		permission_mode: permission_mode.clone(),
+	};
 	let _claim = state.claim(&scope)?;
 
 	let before = state.thread_signs(&scope.conversation_id);
@@ -1412,7 +1424,8 @@ pub(crate) async fn start_run<R: Runtime>(
 		.under_mode(permission_mode)
 		.on_mission_thread(mission_thread)
 		.read_by(members)
-		.leased(state.lease);
+		.leased(state.lease)
+		.stranding(Arc::new(KeptForReplay::new(app.clone(), scope.clone(), replayed_run)));
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
@@ -1617,6 +1630,33 @@ pub(crate) async fn submit_in_line(
 	let handed = state.live.session_for(scope)?.submit_in_line(text, turn).await?;
 	state.host_writes.record_submitted(&turn_id);
 	Ok(handed)
+}
+
+pub(crate) async fn replay_kept<R: Runtime>(
+	app: &AppHandle<R>,
+	kept: KeptTurn,
+) -> Result<(), TransportError> {
+	let state = app.state::<AgentState>();
+	let database = app.state::<db::DatabaseState>();
+	let KeptTurn { scope, run, stranded } = kept;
+	if !state.live.holds_any_run_under(&scope) {
+		let start = RunStart {
+			scope: scope.clone(),
+			resume: stranded.sdk_session_id.clone(),
+			cwd: run.cwd,
+			output_schema: run.output_schema,
+			denied_tools: run.denied_tools,
+			permission_mode: run.permission_mode,
+			lineage: Lineage::RecordedByTheRun,
+		};
+		start_run(app.clone(), &state, &database, start).await?;
+	}
+	let handed = stranded.handed.as_ref().map(|handed| handed.turn_id.clone());
+	state.live.session_for(&scope)?.replay(stranded).await?;
+	if let Some(turn_id) = handed {
+		state.host_writes.record_submitted(&turn_id);
+	}
+	Ok(())
 }
 
 pub(crate) async fn withdraw_queued(

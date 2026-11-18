@@ -5,6 +5,7 @@ pub mod lease;
 mod pending_writes;
 pub mod protocol;
 pub mod redact;
+pub mod replay;
 pub mod reply_writer;
 pub mod session;
 pub mod sidecar;
