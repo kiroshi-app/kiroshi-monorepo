@@ -8,8 +8,8 @@
 			#placeholder { position: absolute; background: #00ffff; }
 			#thread { position: fixed; inset: 0; overflow-y: auto; background: #f4f4f4; }
 			#thread-content { position: relative; height: 20000px; }
-			#slot { position: absolute; left: 40px; top: 600px; width: 480px; height: 160px; background: #00ffff; }
-			#overlay { position: fixed; left: 40px; top: 560px; width: 480px; height: 100px; background: #0000ff; }
+			#slot { position: absolute; left: 40px; top: 440px; width: 480px; height: 160px; background: #00ffff; }
+			#overlay { position: fixed; left: 40px; top: 400px; width: 480px; height: 100px; background: #0000ff; }
 		</style>
 	</head>
 	<body>
@@ -271,6 +271,8 @@
 				const slot = document.getElementById("slot")
 				const overlay = document.getElementById("overlay")
 				thread.hidden = false
+				const { y: slotTop, height: slotHeight } = rectOf(slot)
+				expect(slotTop + slotHeight <= innerHeight, `the slot ends at ${slotTop + slotHeight}, below the ${innerHeight} point window`)
 				await invoke("live_html_mount", { id: COMPOSED, html: SLOT_PAGE, rectangle: rectOf(slot) })
 				const stopPlacing = placeOnSlot(COMPOSED, slot)
 				await pause(1500)
@@ -291,7 +293,7 @@
 				const beside = [at.x + at.width + 100, at.y + 50]
 				const swiped = [
 					...(await swipe("trackpad", { device: "trackpad", delta: -8, moves: 30 }, [3, 8, 13, 18], beside)),
-					...(await swipe("wheel", { device: "mouseWheel", delta: -1, moves: 4 }, [1, 2], beside)),
+					...(await swipe("wheel", { device: "mouseWheel", delta: 1, moves: 4 }, [1, 2], beside)),
 				]
 				for (const shot of swiped) expectOnItsSlot(shot, at, `swipe event ${shot.event}`)
 				const settled = await capture("after-swipes", rectOf(slot), null)
