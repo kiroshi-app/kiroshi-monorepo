@@ -2,7 +2,7 @@ name: Code owners
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
     types: [synchronize, reopened, ready_for_review, auto_merge_enabled]
 
 permissions:
