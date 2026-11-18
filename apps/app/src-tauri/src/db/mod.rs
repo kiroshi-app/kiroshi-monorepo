@@ -245,12 +245,37 @@ impl Database {
 }
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
-	Database::open(&connection::file(app)?)
+	let file = connection::file(app)?;
+	#[cfg(test)]
+	migrated_file_planted(&file);
+	Database::open(&file)
 }
 
 #[cfg(test)]
 pub(crate) fn open(dir: &Path) -> Database {
-	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
+	let file = dir.join(connection::FILE_NAME);
+	migrated_file_planted(&file);
+	Database::open(&file).expect("the database opens")
+}
+
+#[cfg(test)]
+static MIGRATED_FILE: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| {
+	let dir = connection::temp_dir();
+	let file = dir.join(connection::FILE_NAME);
+	drop(Database::open(&file).expect("the database opens"));
+	std::fs::read(&file).expect("the migrated file reads")
+});
+
+#[cfg(test)]
+fn migrated_file_planted(file: &Path) {
+	use std::io::Write as _;
+
+	let migrated: &[u8] = &MIGRATED_FILE;
+	match std::fs::OpenOptions::new().write(true).create_new(true).open(file) {
+		Ok(mut planted) => planted.write_all(migrated).expect("the migrated file is planted"),
+		Err(held) if held.kind() == std::io::ErrorKind::AlreadyExists => {}
+		Err(failure) => panic!("no migrated file was planted at {}: {failure}", file.display()),
+	}
 }
 
 #[cfg(test)]

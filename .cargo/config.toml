@@ -20,3 +20,10 @@
 # 6: two cold worktrees built at once in 95 s, against 102 s at default, 105 s at 4, 123 s at 2.
 jobs = 6
 rustc-wrapper = ".cargo/rustc-wrapper.sh"
+
+# The bundled SQLite counts every allocation under one mutex shared by all the connections
+# of a process, which nothing here reads. With the count on, the database tests of one
+# binary wait on that mutex instead of running side by side: 85 migration tests took
+# 6.5 s on 1 thread and 13.6 s on 12.
+[env]
+LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
