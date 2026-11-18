@@ -817,8 +817,10 @@ conversation-prompt-promptinput--send-idle
 conversation-prompt-promptinput--states
 conversation-prompt-promptinput--themes-at-rest
 conversation-prompt-promptinput--themes-disabled
+conversation-prompt-promptinput--themes-expanded
 conversation-prompt-promptinput--themes-filled
 conversation-prompt-promptinput--themes-focus-visible
+conversation-prompt-promptinput--themes-large
 conversation-prompt-promptinput--with-attachments
 conversation-prompt-promptinput--with-controls
 conversation-prompt-promptinput--with-long-quote

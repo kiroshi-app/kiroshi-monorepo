@@ -126,6 +126,18 @@ const isExpanded = (element: HTMLElement) =>
 
 const box = (element: HTMLElement) => element.getBoundingClientRect()
 
+const expectRound = async (button: HTMLElement) => {
+	const { width, height } = box(button)
+	const radius = Number.parseFloat(getComputedStyle(button).borderTopLeftRadius)
+	await expect(radius).toBeGreaterThanOrEqual(Math.min(width, height) / 2)
+}
+
+const expectRoundButtons = async (composer: HTMLElement, leading: string) => {
+	const controls = within(composer)
+	await expectRound(controls.getByRole("button", { name: leading }))
+	await expectRound(controls.getByRole("button", { name: "Send" }))
+}
+
 const isBefore = (element: HTMLElement, next: HTMLElement) =>
 	box(element).right <= box(next).left
 
@@ -475,6 +487,7 @@ export const SendFocusVisible = meta.story({
 				expect(getComputedStyle(send).borderTopColor).toBe(ring),
 			)
 			await expectSendFill(send, true)
+			await expectRound(send)
 		}
 	},
 })
@@ -966,6 +979,7 @@ const expectArtboardComposer = async (
 	)
 	await expect(style.padding).toBe("8px")
 	await expect(style.borderTopLeftRadius).toBe("25px")
+	await expectRoundButtons(composer, "Add context")
 }
 
 export const ThemesAtRest = meta.story({
@@ -1030,6 +1044,27 @@ export const ThemesDisabled = meta.story({
 			await expect(getComputedStyle(composer).opacity).toBe("0.5")
 			await expect(composer).not.toHaveAttribute("aria-label")
 			await expect(within(composer).queryByRole("status")).toBeNull()
+		}
+	},
+})
+
+export const ThemesExpanded = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { leading: leadingControls, value: WRAPPED_DRAFT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The expanded composer in light and dark: the prompt wraps, the controls drop to their own row, and the leading button and Send stay circles while the container keeps the radius it wears expanded.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const composers = composersIn(canvasElement)
+		await expect(composers.length).toBe(2)
+		for (const composer of composers) {
+			await expect(composer).toHaveAttribute("data-expanded", "true")
+			await expectRoundButtons(composer, "Add context")
 		}
 	},
 })
@@ -1146,6 +1181,24 @@ export const LargeEmpty = meta.story({
 		await expect(args.onSubmit).toHaveBeenCalledWith(DRAFT)
 		await expect(textarea).toHaveValue("")
 		await expect(send).toBeDisabled()
+	},
+})
+
+export const ThemesLarge = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { ...LARGE, value: DRAFT },
+	parameters: {
+		docs: {
+			description: {
+				story: `${LARGE_SIZE}Light and dark side by side: the attach pill and Send are fully round inside the 20px surface.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const composers = composersIn(canvasElement)
+		await expect(composers.length).toBe(2)
+		for (const composer of composers)
+			await expectRoundButtons(composer, "Add files")
 	},
 })
 
@@ -1357,6 +1410,7 @@ export const LargeSending = meta.story({
 		await expect(send).toHaveAttribute("aria-busy", "true")
 		await expect(send).toHaveAttribute("aria-disabled", "true")
 		await expect(send).not.toBeDisabled()
+		await expectRound(send)
 
 		await userEvent.click(send)
 		await expect(send).toHaveFocus()
