@@ -20,7 +20,11 @@ import {
 import "@workspace/ui/lib/i18n"
 
 import { AnswerBody, TurnBody } from "@/components/turn-body"
-import type { LiveHtmlMeasured } from "@/lib/bindings"
+import {
+	LIVE_HTML_LOADED_EVENT,
+	LIVE_HTML_MEASURED_EVENT,
+	type LiveHtmlError,
+} from "@/lib/bindings"
 import {
 	type AnswerActions,
 	AnswerActionsContext,
@@ -31,13 +35,13 @@ import {
 } from "@/lib/chat/message-attachments"
 import { openAttachment } from "@/lib/links/open-attachment"
 
-type MeasuredHandler = (event: { payload: LiveHtmlMeasured }) => void
+type HostHandler = (event: { payload: unknown }) => void
 
 const host = vi.hoisted(() => ({
 	saveCsvFile: vi.fn(),
 	liveHtml: vi.fn(),
 	isMacOs: false,
-	measuredHandlers: new Set<MeasuredHandler>(),
+	listeners: new Map<string, Set<HostHandler>>(),
 }))
 
 vi.mock("@tauri-apps/api/core", async (importOriginal) => ({
@@ -60,9 +64,10 @@ vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 vi.mock("@/lib/links/open-attachment", () => ({ openAttachment: vi.fn() }))
 
 vi.mock("@/lib/host/window-listen", () => ({
-	listenOnThisWindow: async (_event: string, handler: MeasuredHandler) => {
-		host.measuredHandlers.add(handler)
-		return () => host.measuredHandlers.delete(handler)
+	listenOnThisWindow: async (event: string, handler: HostHandler) => {
+		const handlers = host.listeners.get(event) ?? new Set()
+		host.listeners.set(event, handlers.add(handler))
+		return () => handlers.delete(handler)
 	},
 }))
 
@@ -80,7 +85,7 @@ afterEach(() => {
 	host.saveCsvFile.mockReset()
 	host.liveHtml.mockReset()
 	host.isMacOs = false
-	host.measuredHandlers.clear()
+	host.listeners.clear()
 })
 
 const fenced = (label: string, body: string) =>
@@ -556,6 +561,12 @@ const HTML_REPLY = fenced("html", PAGE)
 
 const LIVE_VIEW_FAILED = "Couldn’t show the live view. Here’s the code instead."
 
+const LIVE_VIEW_REFUSED_WITH_CODE =
+	"Couldn’t show the live view. Copy its code from the reply instead."
+
+const LIVE_VIEW_REFUSED_WITHOUT_CODE =
+	"Couldn’t show the live view. Ask for the page again to retry."
+
 const SLOT_VIEW_BOX = { x: 40, y: 120, width: 480, height: 320 }
 
 const WINDOW_BOX = { x: 0, y: 0, width: 1280, height: 800 }
@@ -607,12 +618,18 @@ const htmlCodeBlock = () =>
 
 const liveView = () => screen.queryByRole("group", { name: "Live view" })
 
-const measurePage = (id: string, height: number) =>
+const emit = (event: string, payload: unknown) =>
 	act(() => {
-		for (const handler of host.measuredHandlers) {
-			handler({ payload: { id, width: SLOT_VIEW_BOX.width, height } })
+		for (const handler of host.listeners.get(event) ?? []) {
+			handler({ payload })
 		}
 	})
+
+const measurePage = (id: string, height: number) =>
+	emit(LIVE_HTML_MEASURED_EVENT, { id, width: SLOT_VIEW_BOX.width, height })
+
+const loadPage = (id: string, failure: LiveHtmlError | null) =>
+	emit(LIVE_HTML_LOADED_EVENT, { id, failure })
 
 const mountedViewId = async (command: string) => {
 	await waitFor(() => expect(liveHtmlCallsOf(command)).toHaveLength(1))
@@ -687,6 +704,33 @@ describe("an html block of an agent reply", () => {
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({ title: LIVE_VIEW_FAILED }),
 		)
+	})
+
+	it("stays loading until its page has loaded, then goes live", async () => {
+		showOnMacOs()
+		renderReply(HTML_REPLY)
+		const id = await mountedViewId("live_html_mount")
+
+		expect(liveView()?.getAttribute("aria-busy")).toBe("true")
+
+		loadPage(id, null)
+
+		expect(liveView()?.getAttribute("aria-busy")).toBe("false")
+	})
+
+	it("shows its code and a plain notice when its page meets an expected refusal", async () => {
+		showOnMacOs()
+		renderReply(HTML_REPLY)
+		const id = await mountedViewId("live_html_mount")
+
+		loadPage(id, { kind: "notAvailableHere" })
+
+		await waitFor(() => expect(htmlCodeBlock()).toBeTruthy())
+		expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+		expect(raiseTransientNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: LIVE_VIEW_REFUSED_WITH_CODE }),
+		)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
 	it("gives two identical blocks a view each", async () => {
@@ -781,6 +825,18 @@ const renderStoredReply = (stored: string, isWriting = false) =>
 		),
 	)
 
+const expectRefusedStoredPage = async () => {
+	await waitFor(() =>
+		expect(liveView()?.getAttribute("data-status")).toBe("unavailable"),
+	)
+	expect(screen.getByText(LIVE_VIEW_REFUSED_WITHOUT_CODE)).toBeTruthy()
+	expect(raiseTransientNotice).toHaveBeenCalledTimes(1)
+	expect(raiseTransientNotice).toHaveBeenCalledWith(
+		expect.objectContaining({ title: LIVE_VIEW_REFUSED_WITHOUT_CODE }),
+	)
+	expect(raiseFailureNotice).not.toHaveBeenCalled()
+}
+
 describe("an html file an agent attaches to its reply", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
@@ -862,7 +918,7 @@ describe("an html file an agent attaches to its reply", () => {
 	})
 
 	it.each([
-		["answers a refusal", { kind: "notHtml" }],
+		["answers an unexpected failure", { kind: "unplaced", detail: "gone" }],
 		["rejects", new Error("ipc closed")],
 	])(
 		"raises one notice and shows the chip again when the host %s",
@@ -880,4 +936,23 @@ describe("an html file an agent attaches to its reply", () => {
 			)
 		},
 	)
+
+	it("keeps its unavailable slot and raises a plain notice when the mount meets an expected refusal", async () => {
+		showOnMacOs()
+		host.liveHtml.mockRejectedValue({ kind: "notHtml" })
+
+		renderStoredReply(ATTACHING_REPLY)
+
+		await expectRefusedStoredPage()
+	})
+
+	it("keeps its unavailable slot and raises a plain notice when the page meets an expected refusal", async () => {
+		showOnMacOs()
+		renderStoredReply(ATTACHING_REPLY)
+		const id = await mountedViewId("live_html_mount_attachment")
+
+		loadPage(id, { kind: "unreadable", detail: "gone" })
+
+		await expectRefusedStoredPage()
+	})
 })

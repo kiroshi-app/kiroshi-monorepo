@@ -24,7 +24,6 @@ type LiveHtmlViewOptions = {
 	id: string
 	mountAt: MountLiveHtml
 	theme: LiveHtmlTheme
-	onLive: () => void
 	onFailure: (reason: unknown) => void
 	drawStill: (still: string) => Promise<void>
 	dropStill: () => void
@@ -112,7 +111,6 @@ export const createLiveHtmlView = ({
 	id,
 	mountAt,
 	theme,
-	onLive,
 	onFailure,
 	drawStill,
 	dropStill,
@@ -153,7 +151,6 @@ export const createLiveHtmlView = ({
 			attempt(mountAt(id, placement.rect, mountedTheme), () => {
 				drawn = { ...UNMOUNTED, isMounted: true, theme: mountedTheme }
 				stillDueBy = null
-				onLive()
 			})
 
 	const place =

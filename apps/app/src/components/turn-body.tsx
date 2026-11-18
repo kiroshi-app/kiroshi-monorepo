@@ -166,7 +166,7 @@ const useLiveHtmlAttachments = (
 		HTML_FILE.test(path) && !failedPaths.has(path) ? (
 			<LiveHtmlAttachment
 				key={path}
-				onUnavailable={() => markFailed(path)}
+				onFailed={() => markFailed(path)}
 				path={path}
 			/>
 		) : null

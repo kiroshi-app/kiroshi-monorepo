@@ -68,7 +68,6 @@ const viewOf = (
 		id: "view-1",
 		mountAt: mountingHtml("<p>Hi</p>"),
 		theme: LIGHT,
-		onLive: vi.fn(),
 		onFailure: vi.fn(),
 		drawStill: vi.fn().mockResolvedValue(undefined),
 		dropStill: vi.fn(),
@@ -79,10 +78,9 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("a live html view", () => {
 	it("mounts at the full box, then cuts it to the visible part", async () => {
-		const onLive = vi.fn()
 		host.answer.mockResolvedValue(null)
 
-		viewOf({ onLive }).follow({ rect: RECT, clip: CLIP })
+		viewOf().follow({ rect: RECT, clip: CLIP })
 		await flush()
 
 		expect(host.answer.mock.calls).toEqual([
@@ -92,7 +90,6 @@ describe("a live html view", () => {
 			],
 			["live_html_place", { id: "view-1", rectangle: RECT, clip: CLIP }],
 		])
-		expect(onLive).toHaveBeenCalledTimes(1)
 	})
 
 	it("places the view again when its slot moves, the latest move last", async () => {
@@ -567,15 +564,14 @@ describe("the still of a live html view", () => {
 		expect(dropStill).toHaveBeenCalledTimes(1)
 	})
 
-	it("hides without a still, logs the error and stays live when the still is refused or late", async () => {
+	it("hides without a still, logs the error and does not fail when the still is refused or late", async () => {
 		const logged = vi
 			.spyOn(console, "error")
 			.mockImplementation(() => undefined)
 		hostAnswers({ live_html_still: () => Promise.reject(STILL_MISSED) })
-		const onLive = vi.fn()
 		const onFailure = vi.fn()
 		const drawStill = vi.fn()
-		const view = viewOf({ onLive, onFailure, drawStill })
+		const view = viewOf({ onFailure, drawStill })
 		view.follow({ rect: RECT, clip: CLIP })
 		await flush()
 
@@ -589,7 +585,6 @@ describe("the still of a live html view", () => {
 		)
 		expect(drawStill).not.toHaveBeenCalled()
 		expect(onFailure).not.toHaveBeenCalled()
-		expect(onLive).toHaveBeenCalledTimes(1)
 	})
 
 	it("keeps the view shown and discards a still answered after the surface closed", async () => {
