@@ -1916,6 +1916,50 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_mission_walks_from_working_to_ready_to_merge_to_done_asking_only_its_pull_and_checks(
+	) {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		stub.checking(a_run("in_progress", None)).await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Working, false));
+
+		stub.checking(a_run("completed", Some("success"))).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(MissionEventKind::Ready, json!({ "pullRequest": 7 }))),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.answering(a_pull("closed", "abc", true), "\"two\"").await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::Closed,
+				json!({ "outcome": "done", "summary": "pull request #7 was merged" }),
+			)),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::Done, true));
+		assert_eq!(
+			stub.asked_paths(0).await,
+			vec!["pulls", "checks", "pulls", "checks", "pull", "checks"],
+			"the walk asked beyond the pull listing, the pull and its head check runs"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
 	async fn a_mission_reopened_after_its_pull_request_merged_is_not_closed_again_by_that_merge() {
 		let (database, dir) = planted().await;
 		let mission = an_armed_mission(&database).await;
