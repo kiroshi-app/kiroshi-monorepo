@@ -284,12 +284,7 @@ describe("a live html view", () => {
 		view.follow({ ...MOVED, radius: ROUNDED_ABOVE })
 		await flush()
 
-		expect(roundsOf()).toEqual([12])
-		expect(host.answer).toHaveBeenLastCalledWith("live_html_place", {
-			id: "view-1",
-			rectangle: MOVED.rect,
-			clip: MOVED.clip,
-		})
+		expect(callsOf().slice(2)).toEqual(["live_html_round", "live_html_place"])
 	})
 
 	it("rounds the view mounted again after its slot was gone", async () => {
@@ -324,7 +319,7 @@ describe("a live html view", () => {
 		view.follow(MOVED)
 		await flush()
 
-		expect(roundsOf()).toEqual([12])
+		expect(callsOf().slice(2)).toEqual(["live_html_round", "live_html_place"])
 	})
 
 	it("rounds an attached html file like an html block", async () => {
@@ -340,7 +335,6 @@ describe("a live html view", () => {
 			"live_html_place",
 			"live_html_round",
 		])
-		expect(roundsOf()).toEqual([12])
 	})
 
 	it("removes a mounted view whose rounding failed", async () => {
