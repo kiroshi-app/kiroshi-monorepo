@@ -7,14 +7,11 @@ import {
 import { HexagonRing } from "@workspace/ui/components/hexagon-ring"
 import { Button } from "@workspace/ui/components/ui/button"
 
-type WindowRecoveryReason = "out-of-memory" | "crash" | "gave-up"
-
 type WindowRecoveryScreenProps =
-	| {
-			reason: Exclude<WindowRecoveryReason, "gave-up">
-			onContinue: () => void
-	  }
+	| { reason: "out-of-memory" | "crash"; onContinue: () => void }
 	| { reason: "gave-up"; onReload: () => void }
+
+type WindowRecoveryReason = WindowRecoveryScreenProps["reason"]
 
 const COPY_KEY = {
 	"out-of-memory": "outOfMemory",
