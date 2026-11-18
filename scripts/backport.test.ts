@@ -137,16 +137,18 @@ const originBranches = () =>
 		.split("\n")
 		.sort()
 
+const stubbedEnvironment = () => ({
+	...withoutGitContext(),
+	...COMMITTER,
+	GH_STUB: stub,
+	PATH: `${join(stub, "bin")}:${process.env.PATH}`,
+})
+
 const spawnBackport = async (scriptArguments: string[]) => {
 	const running = Bun.spawn({
 		cmd: [BACKPORT, ...scriptArguments],
 		cwd: repository,
-		env: {
-			...withoutGitContext(),
-			...COMMITTER,
-			GH_STUB: stub,
-			PATH: `${join(stub, "bin")}:${process.env.PATH}`,
-		},
+		env: stubbedEnvironment(),
 		stdout: "pipe",
 		stderr: "pipe",
 	})
@@ -293,11 +295,7 @@ describe("scripts/backport.sh", () => {
 		rmSync(join(stub, "create-refused"))
 		const rerun = Bun.spawnSync({
 			cmd: ["bash", "-c", lastLine.slice(prefix.length)],
-			env: {
-				...process.env,
-				GH_STUB: stub,
-				PATH: `${join(stub, "bin")}:${process.env.PATH}`,
-			},
+			env: stubbedEnvironment(),
 		})
 		expect(rerun.stdout.toString()).toBe(`${PULL_REQUEST_URL}\n`)
 		const [refused, reran] = pullRequestsCreated()
