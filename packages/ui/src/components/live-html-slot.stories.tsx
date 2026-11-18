@@ -22,6 +22,7 @@ const HTML_SOURCE = `<!doctype html>
 const SHORT_PAGE_HEIGHT = 160
 const TALL_PAGE_HEIGHT = 2400
 const GROWN_PAGE_HEIGHT = 640
+const FRACTIONAL_PAGE_HEIGHT = 240.5
 
 const partOf = (canvasElement: HTMLElement, slot: string, name: string) => {
 	const part = canvasElement.querySelector<HTMLElement>(`[data-slot='${slot}']`)
@@ -405,6 +406,44 @@ export const HeightChangesAfterMount = meta.story({
 		await expectSizedToPage(canvasElement, GROWN_PAGE_HEIGHT)
 		await expect(grown.rect.y).toBe(mounted.rect.y)
 		await expect(grown.clip.height).toBeLessThan(grown.rect.height)
+	},
+})
+
+export const FractionalCardSize = meta.story({
+	tags: ["test-only"],
+	args: { height: FRACTIONAL_PAGE_HEIGHT },
+	render: (args) => <ScrollingReply {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reply column is a fractional pixel wide and the page a fractional pixel tall: the reported bottom corners still carry the card radius. Once the reserved area stops two pixels short of the right edge, the bottom right corner reports 0 and the bottom left keeps the radius.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const view = viewOf(canvasElement)
+		const card = cardOf(view)
+		const scroller = canvas.getByTestId("reply-scroller")
+		scroller.style.width = "400.5px"
+		await waitFor(() =>
+			expect(card.getBoundingClientRect().width % 1).not.toBe(0),
+		)
+		await expect(card.getBoundingClientRect().height % 1).not.toBe(0)
+
+		const rounded = bottomRadiusIn(view)
+		await expect(rounded.bottomLeft).toBeGreaterThan(0)
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)?.radius).toEqual(rounded),
+		)
+
+		view.style.marginInlineEnd = "2px"
+		await waitFor(() =>
+			expect(lastPlacementOf(args.onPlacementChange)?.radius).toEqual({
+				...rounded,
+				bottomRight: 0,
+			}),
+		)
 	},
 })
 

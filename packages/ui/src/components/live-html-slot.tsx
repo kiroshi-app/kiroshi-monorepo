@@ -98,12 +98,14 @@ const visibleRectOf = (
 		: { x: left, y: top, width: 0, height: 0 }
 }
 
+const ROUNDED_CLIENT_SIZE_SLACK = 1
+
 const radiusOf = (view: Edges, card: Element): LiveHtmlRadius => {
 	const inside = paddingBoxOf(card)
-	const reachesTop = view.top <= inside.top
-	const reachesBottom = view.bottom >= inside.bottom
-	const reachesLeft = view.left <= inside.left
-	const reachesRight = view.right >= inside.right
+	const reachesTop = view.top - inside.top <= ROUNDED_CLIENT_SIZE_SLACK
+	const reachesBottom = inside.bottom - view.bottom <= ROUNDED_CLIENT_SIZE_SLACK
+	const reachesLeft = view.left - inside.left <= ROUNDED_CLIENT_SIZE_SLACK
+	const reachesRight = inside.right - view.right <= ROUNDED_CLIENT_SIZE_SLACK
 	const style = getComputedStyle(card)
 	const cornerOf = (isReached: boolean, radius: string) =>
 		isReached ? Number.parseFloat(radius) : 0
