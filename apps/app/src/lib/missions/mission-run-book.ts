@@ -17,7 +17,7 @@ export type LiveMissionRun = {
 
 type MissionRunBookOptions = Pick<
 	MissionRunDriverOptions,
-	"driver" | "missions" | "reportFailure"
+	"driver" | "missions" | "reportFailure" | "isSpaceOnScreen"
 > & {
 	retake: (changed: MissionChanged) => void
 }
@@ -39,6 +39,7 @@ export const createMissionRunBook = ({
 	driver,
 	missions,
 	reportFailure,
+	isSpaceOnScreen,
 	retake,
 }: MissionRunBookOptions) => {
 	const live = new Map<string, LiveMissionRun>()
@@ -58,6 +59,11 @@ export const createMissionRunBook = ({
 				spaceId: spaceIdOfMission.get(failure.missionId),
 			})
 		}
+	}
+
+	const isOnScreen = (missionId: string) => {
+		const spaceId = spaceIdOfMission.get(missionId)
+		return spaceId !== undefined && isSpaceOnScreen(spaceId)
 	}
 
 	const isBusy = (missionId: string) =>
@@ -170,6 +176,7 @@ export const createMissionRunBook = ({
 			failures.flushAll()
 		},
 		raiseFailure,
+		isOnScreen,
 		isBusy,
 		shutdownSession,
 		takeAgain,

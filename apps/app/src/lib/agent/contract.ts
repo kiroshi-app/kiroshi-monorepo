@@ -6,6 +6,7 @@ import type {
 	Json,
 	PermissionDecision,
 	RuntimeScope,
+	TurnFailure,
 	TurnHold,
 } from "@/lib/bindings"
 import type { HostOffline } from "@/lib/host/host-offline"
@@ -114,6 +115,7 @@ export type TurnOutcome = "completed" | "cancelled" | "failed"
 export type TurnEnded = {
 	sessionId: string | null
 	outcome: TurnOutcome
+	failure?: TurnFailure | null
 	structuredOutput?: Json
 	totalCostUsd?: number
 	modelUsage?: Json
