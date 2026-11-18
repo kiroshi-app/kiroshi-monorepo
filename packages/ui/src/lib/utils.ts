@@ -8,7 +8,11 @@ const twMerge = extendTailwindMerge({
 			"font-size": [{ text: ["compact", "reading"] }],
 			h: ["left-column-header"],
 			px: ["left-column-inset"],
-			rounded: [{ rounded: ["control"] }],
+			rounded: [
+				{
+					rounded: ["control", "compact-control", "compact-segment", "button"],
+				},
+			],
 			shadow: [{ shadow: ["popover", "comment-card"] }],
 		},
 	},

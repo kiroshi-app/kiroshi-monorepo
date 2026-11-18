@@ -3,6 +3,10 @@
 import { useTranslation } from "react-i18next"
 
 import {
+	APP_HEADER_TITLE,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
+import {
 	type ConversationNaming,
 	conversationLabelOf,
 } from "@workspace/ui/components/conversation-naming"
@@ -10,15 +14,10 @@ import {
 	ConversationSubjectIcon,
 	type ConversationSubjectIconProps,
 } from "@workspace/ui/components/conversation-subject-icon"
-import { HEADER_IDENTITY_CLASS } from "@workspace/ui/components/header-identity-button"
-import { Icons } from "@workspace/ui/components/icons"
+import { HeaderSubjectButton } from "@workspace/ui/components/header-identity-button"
 import { TextSwap } from "@workspace/ui/components/motion/text-swap"
-import { Button } from "@workspace/ui/components/ui/button"
-import { cn } from "@workspace/ui/lib/utils"
 
-const AVATAR_SIZE = 24
-
-const LABEL = "min-w-0 truncate"
+const AVATAR_SIZE = 32
 
 type HeaderConversationButtonProps = Pick<
 	ConversationSubjectIconProps,
@@ -46,31 +45,34 @@ const HeaderConversationButton = ({
 	const isNamed = naming === undefined || naming === "arrived"
 
 	return (
-		<Button
-			aria-expanded={isSettingsOpen}
+		<HeaderSubjectButton
 			aria-label={t("chat:screen.conversationIdentity", { name: label })}
-			className={cn(HEADER_IDENTITY_CLASS, className)}
+			className={className}
 			data-slot="header-conversation-button"
-			onClick={onOpenSettings}
-			variant="ghost"
+			isSettingsOpen={isSettingsOpen}
+			onOpenSettings={onOpenSettings}
 		>
 			<ConversationSubjectIcon
 				hue={isNamed ? color : null}
 				icon={isNamed ? icon : undefined}
 				isMuted={naming === "pending"}
+				isSquare
 				side={AVATAR_SIZE}
 			/>
-			{naming ? (
-				<TextSwap
-					className={LABEL}
-					isShimmering={naming === "pending"}
-					text={label}
-				/>
-			) : (
-				<span className={LABEL}>{name}</span>
-			)}
-			<Icons.Settings aria-hidden="true" className="text-muted-foreground" />
-		</Button>
+			<AppHeaderText>
+				<span className={APP_HEADER_TITLE}>
+					{naming ? (
+						<TextSwap
+							className="truncate"
+							isShimmering={naming === "pending"}
+							text={label}
+						/>
+					) : (
+						name
+					)}
+				</span>
+			</AppHeaderText>
+		</HeaderSubjectButton>
 	)
 }
 

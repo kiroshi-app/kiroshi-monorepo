@@ -36,7 +36,7 @@ const SHAPE_GLYPH: Record<BoardShapeType, typeof Icons.Ellipse> = {
 }
 
 const BAR_CONTROL =
-	"rounded-[8px] text-board-selection-bar-foreground transition-none hover:bg-board-selection-bar-foreground/10 hover:text-board-selection-bar-foreground active:bg-board-selection-bar-foreground/20 aria-expanded:bg-board-selection-bar-foreground/20 aria-expanded:text-board-selection-bar-foreground dark:hover:bg-board-selection-bar-foreground/10"
+	"text-board-selection-bar-foreground transition-none hover:bg-board-selection-bar-foreground/10 hover:text-board-selection-bar-foreground active:bg-board-selection-bar-foreground/20 aria-expanded:bg-board-selection-bar-foreground/20 aria-expanded:text-board-selection-bar-foreground dark:hover:bg-board-selection-bar-foreground/10"
 
 type BoardSelectionBarProps = {
 	shapeStyle: BoardShapeStyle

@@ -42,6 +42,7 @@ import {
 	LibraryDocumentThreadCard,
 } from "@workspace/ui/components/library-document-comments"
 import {
+	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	GrowingField,
 	LibraryDocumentBar,
@@ -53,6 +54,8 @@ import type {
 	LibraryMenuSubject,
 } from "@workspace/ui/components/library-item-menu"
 import type { LibraryDocumentTemplate } from "@workspace/ui/components/library-new-document-dialog"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import { cn } from "@workspace/ui/lib/utils"
 
 type TemplateLine = {
 	text: string
@@ -212,6 +215,7 @@ type LibraryDocumentEditorProps = WriterActions &
 		>["resolveImage"]
 		onLinkPreview?: (url: string) => Promise<LibraryLinkPreview>
 		menuFinalFocus?: () => HTMLElement | boolean
+		dragRegion?: "deep"
 		comments?: LibraryBarComments
 		ref?: Ref<LibraryDocumentEditorHandle>
 	}
@@ -243,6 +247,7 @@ const LibraryDocumentEditor = ({
 	onHeading,
 	onList,
 	menuFinalFocus,
+	dragRegion,
 	comments,
 	threads,
 	openThread,
@@ -393,96 +398,105 @@ const LibraryDocumentEditor = ({
 	}, [hasCommentLayer])
 
 	return (
-		<div
-			className="relative flex size-full min-h-0 flex-col"
+		<ScreenLayout
+			className={cn(DOCUMENT_PAGE, "relative")}
 			data-slot="library-document-editor"
 			ref={editor}
-		>
-			<LibraryDocumentBar
-				{...actions}
-				comments={comments}
-				item={barItem}
-				menuFinalFocus={menuFinalFocus}
-				onBack={onBack}
-				presence={
-					writers.length > 0 || (people?.length ?? 0) > 0 ? (
-						<LibraryDocumentPresence
-							onStopAll={onStopAll}
-							people={people}
-							writers={writers}
-						/>
-					) : null
-				}
-			/>
-			<LibraryDocumentColumn
-				detail={detail}
-				onColumnMouseDown={writeFromColumn}
-				heading={
-					<GrowingField
-						aria-label={t("library.editor.title")}
-						className={DOCUMENT_TITLE}
-						fieldRef={titleField}
-						onBlur={(event) => confirmTitle(event.currentTarget.value)}
-						onChange={(event) => changeTitle(event.target.value)}
-						onFocus={() => {
-							titleAtEditStart.current = title
-						}}
-						onKeyDown={(event) => {
-							if (event.nativeEvent.isComposing) return
-							if (event.key === "Enter") {
-								event.preventDefault()
-								confirmTitle(event.currentTarget.value)
-								blocks.current?.focusStart()
-							} else if (event.key === "Escape") {
-								event.preventDefault()
-								cancelTitleEdit(event.currentTarget)
+			header={
+				<LibraryDocumentBar
+					{...actions}
+					comments={comments}
+					dragRegion={dragRegion}
+					item={barItem}
+					menuFinalFocus={menuFinalFocus}
+					meta={detail}
+					onBack={onBack}
+					presence={
+						writers.length > 0 || (people?.length ?? 0) > 0 ? (
+							<LibraryDocumentPresence
+								onStopAll={onStopAll}
+								people={people}
+								writers={writers}
+							/>
+						) : null
+					}
+				/>
+			}
+			scroller={(columnClassName) => (
+				<>
+					<div className="relative flex min-h-0 flex-1 flex-col">
+						<LibraryDocumentColumn
+							columnClassName={columnClassName}
+							onColumnMouseDown={writeFromColumn}
+							heading={
+								<GrowingField
+									aria-label={t("library.editor.title")}
+									className={DOCUMENT_TITLE}
+									fieldRef={titleField}
+									onBlur={(event) => confirmTitle(event.currentTarget.value)}
+									onChange={(event) => changeTitle(event.target.value)}
+									onFocus={() => {
+										titleAtEditStart.current = title
+									}}
+									onKeyDown={(event) => {
+										if (event.nativeEvent.isComposing) return
+										if (event.key === "Enter") {
+											event.preventDefault()
+											confirmTitle(event.currentTarget.value)
+											blocks.current?.focusStart()
+										} else if (event.key === "Escape") {
+											event.preventDefault()
+											cancelTitleEdit(event.currentTarget)
+										}
+									}}
+									placeholder={t("library.editor.untitled")}
+									fieldClassName="placeholder:text-title-placeholder-foreground"
+									value={title}
+								/>
 							}
-						}}
-						placeholder={t("library.editor.untitled")}
-						fieldClassName="placeholder:text-title-placeholder-foreground"
-						value={title}
-					/>
-				}
-			>
-				<LibraryDocumentBlockEditor
-					body={body}
-					commentDraft={commentDraft}
-					commentParticipants={commentParticipants}
-					format={format}
-					isCommentMode={isCommentMode}
-					onAddImages={onAddImages}
-					onBodyChange={onBodyChange}
-					onCaretChange={onCaretChange}
-					onLinkPreview={onLinkPreview}
-					onOpenConversation={onOpenConversation}
-					onOpenThread={onOpenThread}
-					onStartComment={onStartComment}
-					onStop={onStop}
-					openThread={openThread}
-					people={people}
-					placeholders={placeholders}
-					ref={blocks}
-					resolveImage={resolveImage}
-					threads={threads}
-					writers={writers}
-				/>
-			</LibraryDocumentColumn>
-			{openThread && openedThread && isOpenedThreadGone ? (
-				<LibraryDocumentThreadCard
-					anchor={{ gone: "text" }}
-					className="absolute end-[12.625rem] top-12 z-10"
-					open={openThread}
-					participants={commentParticipants ?? []}
-					thread={openedThread}
-				/>
-			) : null}
-			{isCommentMode ? (
-				<LibraryCommentModeHint
-					className="pointer-events-none absolute inset-x-0 bottom-6 z-10 mx-auto"
-					surface="document"
-				/>
-			) : null}
-		</div>
+						>
+							<LibraryDocumentBlockEditor
+								body={body}
+								commentDraft={commentDraft}
+								commentParticipants={commentParticipants}
+								format={format}
+								isCommentMode={isCommentMode}
+								onAddImages={onAddImages}
+								onBodyChange={onBodyChange}
+								onCaretChange={onCaretChange}
+								onLinkPreview={onLinkPreview}
+								onOpenConversation={onOpenConversation}
+								onOpenThread={onOpenThread}
+								onStartComment={onStartComment}
+								onStop={onStop}
+								openThread={openThread}
+								people={people}
+								placeholders={placeholders}
+								ref={blocks}
+								resolveImage={resolveImage}
+								threads={threads}
+								writers={writers}
+							/>
+						</LibraryDocumentColumn>
+						{isCommentMode ? (
+							<LibraryCommentModeHint
+								className="pointer-events-none absolute inset-x-0 bottom-6 z-10 mx-auto"
+								surface="document"
+							/>
+						) : null}
+					</div>
+					{openThread && openedThread && isOpenedThreadGone ? (
+						<LibraryDocumentThreadCard
+							anchor={{ gone: "text" }}
+							className="absolute end-[12.625rem] top-12 z-10"
+							open={openThread}
+							participants={commentParticipants ?? []}
+							thread={openedThread}
+						/>
+					) : null}
+				</>
+			)}
+		/>
 	)
 }
 

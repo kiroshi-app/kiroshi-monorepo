@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 
+import { LibraryDocumentPresence } from "@workspace/ui/components/library-document-agents"
 import {
 	LibraryDocumentEditor,
 	type LibraryDocumentEditorHandle,
@@ -29,6 +30,7 @@ import type { Bot } from "@/lib/conversations/store-contract"
 import { failureReporterIn } from "@/lib/failure-report"
 import { storedImageSourceOf } from "@/lib/library/library-image-source"
 import {
+	detailOf,
 	documentFormatOf,
 	documentNamedAs,
 	matchesQuery,
@@ -51,6 +53,7 @@ import { useLibraryDocumentComments } from "@/lib/library/use-library-document-c
 import { useLibraryDocumentSession } from "@/lib/library/use-library-document-session"
 import { useLibraryDocumentWriters } from "@/lib/library/use-library-document-writers"
 import { useLibraryImageComments } from "@/lib/library/use-library-image-comments"
+import { useLibraryImagePresence } from "@/lib/library/use-library-image-presence"
 import {
 	useLibraryImageResolver,
 	useLibraryImageSources,
@@ -190,11 +193,13 @@ const openingStatusOf = (read: OpeningRead) => {
 
 type OpenedBoard = {
 	summary: LibraryBoardSummary | undefined
+	detail: string | undefined
 	hasFailedToRead: boolean
 }
 
 const NO_OPENED_BOARD: OpenedBoard = {
 	summary: undefined,
+	detail: undefined,
 	hasFailedToRead: false,
 }
 
@@ -207,6 +212,7 @@ const openedBoardOf = (
 	}
 	return {
 		summary: library.summaryOf(listed),
+		detail: detailOf(listed, library.readAt),
 		hasFailedToRead: library.hasSummaryFailed(listed),
 	}
 }
@@ -266,11 +272,15 @@ type LibraryOpeningStateProps = {
 	commentPeople: LibraryCommentPeople
 	opening: LibraryOpening
 	boardSummary: LibraryBoardSummary | undefined
+	boardDetail: string | undefined
 	isMissing: boolean
 	hasFailedToRead: boolean
 	skeleton: ReactNode
 	onCloseTab?: () => void
 	onBackToLibrary: () => void
+	onDownload: () => void
+	onCopy: () => Promise<void>
+	onDuplicate: () => void
 	onDelete: () => void
 }
 
@@ -282,7 +292,11 @@ type LibraryBoardOpeningProps = Pick<
 	| "commentPeople"
 	| "opening"
 	| "boardSummary"
+	| "boardDetail"
 	| "onBackToLibrary"
+	| "onDownload"
+	| "onCopy"
+	| "onDuplicate"
 	| "onDelete"
 >
 
@@ -293,17 +307,25 @@ const LibraryBoardOpening = ({
 	commentPeople,
 	opening: { name },
 	boardSummary,
+	boardDetail,
 	onBackToLibrary,
+	onDownload,
+	onCopy,
+	onDuplicate,
 	onDelete,
 }: LibraryBoardOpeningProps) => (
 	<LibraryBoard
 		bots={bots}
 		commentPeople={commentPeople}
+		detail={boardDetail}
 		isJoined={isJoined}
 		key={name}
 		name={name}
 		onBack={onBackToLibrary}
+		onCopy={onCopy}
 		onDelete={onDelete}
+		onDownload={onDownload}
+		onDuplicate={onDuplicate}
 		spaceId={spaceId}
 		summary={boardSummary}
 		title={titleOf({ kind: "board", name })}
@@ -396,6 +418,8 @@ export const LibraryScreen = ({
 		: ({ id }: NamedItem) => localActions.reveal(id)
 	const copy = ({ id }: NamedItem) => actions.copy(id)
 	const copyAndWait = ({ id }: NamedItem) => actions.copyAndWait(id)
+	const duplicateImage = ({ id }: NamedItem) =>
+		actions.duplicate({ kind: "image", name: id })
 	const remove = ({ id }: NamedItem) => actions.remove(id)
 	const saveImage = useLibraryImageSave()
 	const saveToLibrary = ({ id }: NamedItem) =>
@@ -408,7 +432,10 @@ export const LibraryScreen = ({
 	const editor = useRef<LibraryDocumentEditorHandle>(null)
 	const { create, isCreating } = useCreateLibraryDocument(spaceId)
 	const createBoard = useCreateLibraryBoard(spaceId)
-	const { importingItems, importDropped } = useLibraryImports(spaceId, isJoined)
+	const { importingItems, importDropped, importFromPicker } = useLibraryImports(
+		spaceId,
+		isJoined,
+	)
 	const toShown = (item: LibraryItem) =>
 		toShownItem(
 			item,
@@ -477,6 +504,11 @@ export const LibraryScreen = ({
 		spaceId,
 		name: images[imageIndex]?.id,
 		people: commentPeople,
+	})
+	const imagePeople = useLibraryImagePresence({
+		spaceId,
+		name: images[imageIndex]?.id,
+		isJoined,
 	})
 
 	const close = () => {
@@ -567,6 +599,7 @@ export const LibraryScreen = ({
 				{...documentComments}
 				body={document.markdown}
 				detail={openedDocument.detail}
+				dragRegion="deep"
 				format={documentFormatOf(openedDocument.name)}
 				isActionShown={(_subject, action) =>
 					isActionShownOn(openedDocument, action)
@@ -580,6 +613,9 @@ export const LibraryScreen = ({
 				onCopy={() => copyAndWait(openedItem)}
 				onDelete={() => deleteDocument(openedDocument)}
 				onDownload={() => save(openedItem)}
+				onDuplicate={() =>
+					actions.duplicate({ kind: "document", name: openedDocument.name })
+				}
 				onLinkPreview={readLinkPreview}
 				onOpenInNewTab={boundTo(openedItem, openInNewTab)}
 				onRename={pickRename}
@@ -599,8 +635,10 @@ export const LibraryScreen = ({
 	}
 
 	if (opening && !openingWait.isImageShown) {
+		const openingItem = { id: opening.name }
 		return (
 			<LibraryOpeningState
+				boardDetail={openedBoard.detail}
 				boardSummary={openedBoard.summary}
 				bots={bots}
 				commentPeople={commentPeople}
@@ -609,7 +647,10 @@ export const LibraryScreen = ({
 				isMissing={isMissing}
 				onBackToLibrary={close}
 				onCloseTab={onCloseTab}
-				onDelete={() => deleteAndClose({ id: opening.name })}
+				onCopy={() => copyAndWait(openingItem)}
+				onDelete={() => deleteAndClose(openingItem)}
+				onDownload={() => save(openingItem)}
+				onDuplicate={() => actions.duplicate(opening)}
 				opening={opening}
 				skeleton={openingWait.skeleton}
 				spaceId={spaceId}
@@ -619,6 +660,7 @@ export const LibraryScreen = ({
 
 	return (
 		<LibraryPanel
+			dragRegion="deep"
 			filter={filter}
 			isActionShown={isActionShownOn}
 			items={[...importingItems, ...shownItems]}
@@ -626,6 +668,7 @@ export const LibraryScreen = ({
 			onCopy={copy}
 			onDelete={remove}
 			onDownload={save}
+			onImport={importFromPicker}
 			onNewBoard={newBoard}
 			onNewDocument={() => setPickedTemplate("blank")}
 			onOpen={openItem}
@@ -640,18 +683,23 @@ export const LibraryScreen = ({
 					<LibraryLightbox
 						{...imageComments}
 						count={images.length}
+						dragRegion="deep"
 						image={images[imageIndex] ?? null}
 						onClose={close}
 						onCopy={copyAndWait}
 						onCopyImage={copyAndWait}
 						onDelete={deleteAndClose}
 						onDownload={save}
+						onDuplicate={duplicateImage}
 						onShowInFolder={reveal}
 						onNext={() => openImageAt(imageIndex + 1)}
 						onOpenInNewTab={openImageInNewTab}
 						onPrevious={() => openImageAt(imageIndex - 1)}
 						onSaveToLibrary={saveToLibrary}
 						position={imageIndex + 1}
+						presence={
+							<LibraryDocumentPresence people={imagePeople} writers={[]} />
+						}
 					/>
 					<LibraryNewDocumentDialog
 						defaultTemplate={pickedTemplate ?? undefined}

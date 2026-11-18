@@ -39,6 +39,7 @@ import { STEVE } from "@workspace/ui/components/library-comments.fixtures"
 import { LibraryDocumentBlockEditor } from "@workspace/ui/components/library-document-block-editor"
 import type { LibraryDocumentCommentTarget } from "@workspace/ui/components/library-document-comments"
 import {
+	DOCUMENT_PAGE,
 	DOCUMENT_TITLE,
 	LibraryDocumentBar,
 	LibraryDocumentColumn,
@@ -48,6 +49,7 @@ import {
 	MessageBubble,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { isMacPlatform } from "@workspace/ui/lib/platform"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -278,20 +280,26 @@ const DocumentFrame = ({ children, isNarrow = false }: DocumentFrameProps) => (
 		{...hueScopeOf("blue")}
 	>
 		<ContentCard isLandmark={false}>
-			<div className="flex size-full min-h-0 flex-col">
-				<LibraryDocumentBar
-					item={{ name: LIBRARY_AGENT_DOCUMENT.name }}
-					onBack={fn()}
-				/>
-				<LibraryDocumentColumn
-					detail={LIBRARY_AGENT_DOCUMENT.detail}
-					heading={
-						<h1 className={DOCUMENT_TITLE}>{LIBRARY_AGENT_DOCUMENT.name}</h1>
-					}
-				>
-					{children}
-				</LibraryDocumentColumn>
-			</div>
+			<ScreenLayout
+				className={DOCUMENT_PAGE}
+				header={
+					<LibraryDocumentBar
+						item={{ name: LIBRARY_AGENT_DOCUMENT.name }}
+						meta={LIBRARY_AGENT_DOCUMENT.detail}
+						onBack={fn()}
+					/>
+				}
+				scroller={(columnClassName) => (
+					<LibraryDocumentColumn
+						columnClassName={columnClassName}
+						heading={
+							<h1 className={DOCUMENT_TITLE}>{LIBRARY_AGENT_DOCUMENT.name}</h1>
+						}
+					>
+						{children}
+					</LibraryDocumentColumn>
+				)}
+			/>
 		</ContentCard>
 	</div>
 )

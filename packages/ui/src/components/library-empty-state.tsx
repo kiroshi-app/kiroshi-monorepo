@@ -18,7 +18,7 @@ const LIBRARY_TEMPLATES: LibraryTemplate[] = [
 ]
 
 const OUTLINED_PILL =
-	"h-8 rounded-full border-input bg-transparent font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 dark:bg-transparent dark:hover:bg-foreground/5"
+	"h-8 border-input bg-transparent font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 dark:bg-transparent dark:hover:bg-foreground/5"
 
 const DASHED = "border-[1.5px] border-input border-dashed"
 
@@ -107,10 +107,7 @@ const LibraryEmptyState = ({
 	if (!canStart && !onImport) return null
 
 	return (
-		<div
-			className="flex flex-col gap-8 px-10 pt-4 pb-10"
-			data-slot="library-empty-state"
-		>
+		<div className="flex flex-col gap-8" data-slot="library-empty-state">
 			{canStart ? (
 				<LibrarySection title={t("library.start")}>
 					<div className="flex flex-wrap gap-4">
@@ -199,5 +196,4 @@ export {
 	LibraryEmptyState,
 	type LibraryEmptyStateProps,
 	type LibraryTemplate,
-	OUTLINED_PILL,
 }

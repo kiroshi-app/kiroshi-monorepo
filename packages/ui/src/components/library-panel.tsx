@@ -10,11 +10,15 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryEmptyState,
 	type LibraryTemplate,
-	OUTLINED_PILL,
 } from "@workspace/ui/components/library-empty-state"
 import {
 	LibraryGrid,
@@ -23,13 +27,16 @@ import {
 	type LibraryItem,
 } from "@workspace/ui/components/library-grid"
 import type { LibraryItemActions } from "@workspace/ui/components/library-item-menu"
-import { Button } from "@workspace/ui/components/ui/button"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
+import {
+	SlidingTab,
+	SlidingTabCount,
+	SlidingTabs,
+} from "@workspace/ui/components/sliding-tabs"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Input } from "@workspace/ui/components/ui/input"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
-import {
-	ToggleGroup,
-	ToggleGroupItem,
-} from "@workspace/ui/components/ui/toggle-group"
+import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -48,49 +55,39 @@ const LibraryOverlayContainer =
 
 const useLibraryOverlayContainer = () => useContext(LibraryOverlayContainer)
 
-const SKELETON_FILTER_WIDTHS = ["w-11", "w-21", "w-27", "w-19"]
+const SKELETON_FILTER_WIDTHS = ["w-11", "w-16", "w-21", "w-15.5"]
 
 const FiltersSkeleton = () => (
 	<div
 		aria-hidden="true"
-		className="flex animate-pulse gap-1.5 motion-reduce:animate-none"
+		className="flex animate-pulse gap-0.75 p-0.75 motion-reduce:animate-none"
 		data-slot="library-filters-skeleton"
 	>
 		{SKELETON_FILTER_WIDTHS.map((width) => (
 			<Skeleton
-				className={cn("h-7 animate-none rounded-full bg-border", width)}
+				className={cn("h-6.5 animate-none rounded-button bg-border", width)}
 				key={width}
 			/>
 		))}
 	</div>
 )
 
-type FilterPillProps = {
+type FilterSegmentProps = {
 	value: LibraryFilter
 	label: string
-	count?: number
+	count: number
 }
 
-const FilterPill = ({ value, label, count }: FilterPillProps) => (
-	<ToggleGroupItem
-		className="gap-1.5 rounded-full px-3 text-compact text-foreground leading-4 transition-none hover:bg-foreground/5 aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-		data-slot="library-filter"
-		size="sm"
-		value={value}
-		variant="outline"
-	>
+const FilterSegment = ({ value, label, count }: FilterSegmentProps) => (
+	<SlidingTab value={value}>
 		{label}
-		{count === undefined ? null : (
-			<span className="font-normal text-muted-foreground tabular-nums group-aria-pressed/toggle:text-primary-foreground">
-				{count}
-			</span>
-		)}
-	</ToggleGroupItem>
+		<SlidingTabCount>{count}</SlidingTabCount>
+	</SlidingTab>
 )
 
 type LibraryFiltersProps = {
 	filter: LibraryFilter
-	counts: Record<Exclude<LibraryFilter, "all">, number>
+	counts: Record<LibraryFilter, number>
 	onFilterChange: (filter: LibraryFilter) => void
 }
 
@@ -102,33 +99,34 @@ const LibraryFilters = ({
 	const { t } = useTranslation("common")
 
 	return (
-		<ToggleGroup
+		<SlidingTabs
 			aria-label={t("library.filters.label")}
-			className="flex-wrap"
 			data-slot="library-filters"
-			onValueChange={([pressed]) =>
-				onFilterChange((pressed as LibraryFilter | undefined) ?? filter)
-			}
-			spacing={1.5}
-			value={[filter]}
+			kind="filters"
+			onValueChange={onFilterChange}
+			value={filter}
 		>
-			<FilterPill label={t("library.filters.all")} value="all" />
-			<FilterPill
+			<FilterSegment
+				count={counts.all}
+				label={t("library.filters.all")}
+				value="all"
+			/>
+			<FilterSegment
 				count={counts.images}
 				label={t("library.filters.images")}
 				value="images"
 			/>
-			<FilterPill
+			<FilterSegment
 				count={counts.documents}
 				label={t("library.filters.documents")}
 				value="documents"
 			/>
-			<FilterPill
+			<FilterSegment
 				count={counts.boards}
 				label={t("library.filters.boards")}
 				value="boards"
 			/>
-		</ToggleGroup>
+		</SlidingTabs>
 	)
 }
 
@@ -141,14 +139,17 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 	const { t } = useTranslation("common")
 
 	return (
-		<div className="relative w-55" data-slot="library-search">
+		<div
+			className="group/search relative min-w-40 max-w-60 flex-1 basis-40 @max-xl:max-w-none @max-xl:basis-full"
+			data-slot="library-search"
+		>
 			<Icons.Search
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-y-0 start-3 my-auto size-3.75 text-muted-foreground"
+				className="pointer-events-none absolute inset-y-0 start-3.25 my-auto size-3.5 text-muted-foreground group-focus-within/search:text-soft-foreground"
 			/>
 			<Input
 				aria-label={t("library.search")}
-				className="rounded-full border-input bg-foreground/3 ps-8.75 pe-3 text-compact text-foreground leading-4.5 transition-none md:text-compact"
+				className="text-ellipsis rounded-full border-foreground/12 bg-foreground/3 ps-8.5 pe-3 text-compact text-foreground leading-4 transition-none focus-visible:bg-transparent focus-visible:ring-4 md:text-compact"
 				onChange={(event) => onQueryChange(event.target.value)}
 				placeholder={t("library.search")}
 				type="search"
@@ -158,34 +159,57 @@ const LibrarySearch = ({ query, onQueryChange }: LibrarySearchProps) => {
 	)
 }
 
-type LibraryHeaderProps = {
-	actions?: ReactNode
-	filters?: ReactNode
+const FILTERS_STRIP_WITH_FOCUS_RING_ROOM =
+	"scrollbar-hide -m-0.5 max-w-[calc(100%+--spacing(1))] overflow-x-auto p-0.5"
+
+const LABELS_MIN_WIDTH = {
+	withoutImport: { secondary: 512, primary: 340 },
+	withImport: { secondary: 672, primary: 380 },
 }
 
-const LibraryHeader = ({ actions, filters }: LibraryHeaderProps) => {
-	const { t } = useTranslation("common")
+const BAR_ACTION =
+	"flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-button px-3 font-medium text-compact leading-4 outline-ring transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:ring-2 focus-visible:ring-background in-data-content-card:focus-visible:ring-card [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
 
-	return (
-		<header
-			className="flex flex-col gap-5 px-10 pt-8 pb-5"
-			data-slot="library-header"
+const BAR_ACTION_KIND = {
+	secondary:
+		"border border-foreground/12 bg-background text-foreground in-data-content-card:bg-card dark:bg-foreground/4 hover:bg-foreground/5 dark:hover:bg-foreground/5 active:bg-foreground/10 dark:active:bg-foreground/10 [&_svg]:text-soft-foreground hover:[&_svg]:text-foreground active:[&_svg]:text-foreground",
+	primary:
+		"bg-(--fill) text-primary-foreground [--fill:var(--primary)] hover:bg-[color-mix(in_oklab,var(--fill),var(--color-black)_8%)] active:bg-[color-mix(in_oklab,var(--fill),var(--color-black)_16.7%)] dark:text-[var(--hue-dark-bubble-foreground,var(--foreground))] dark:[--fill:var(--hue-dark-bubble,var(--hue-blue-bubble))]",
+}
+
+type BarActionProps = {
+	kind: keyof typeof BAR_ACTION_KIND
+	icon: ReactNode
+	label: string
+	onClick: () => void
+	isIconOnly?: boolean
+	slot?: "library-action" | "agents-page-create"
+}
+
+const BarAction = ({
+	kind,
+	icon,
+	label,
+	onClick,
+	isIconOnly = false,
+	slot = "library-action",
+}: BarActionProps) => (
+	<TooltipHint content={isIconOnly ? label : null} side="bottom">
+		<button
+			className={cn(
+				BAR_ACTION,
+				BAR_ACTION_KIND[kind],
+				isIconOnly && "w-8 px-0",
+			)}
+			data-slot={slot}
+			onClick={onClick}
+			type="button"
 		>
-			<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-				<div className="flex min-w-0 flex-col gap-1">
-					<h1 className="font-heading font-semibold text-2xl text-foreground leading-7.5 tracking-[-0.02em]">
-						{t("library.title")}
-					</h1>
-					<p className="text-compact text-muted-foreground leading-4.5">
-						{t("library.subtitle")}
-					</p>
-				</div>
-				{actions}
-			</div>
-			{filters}
-		</header>
-	)
-}
+			{icon}
+			<span className={isIconOnly ? "sr-only" : undefined}>{label}</span>
+		</button>
+	</TooltipHint>
+)
 
 type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 	LibraryImageActions & {
@@ -201,6 +225,7 @@ type LibraryPanelProps = LibraryItemActions<LibraryItem> &
 		onNewBoard?: () => void
 		onStartTemplate?: (template: LibraryTemplate) => void
 		overlay?: ReactNode
+		dragRegion?: "deep"
 	}
 
 const LibraryPanel = ({
@@ -216,6 +241,7 @@ const LibraryPanel = ({
 	onNewBoard,
 	onStartTemplate,
 	overlay,
+	dragRegion,
 	...itemActions
 }: LibraryPanelProps) => {
 	const { t } = useTranslation("common")
@@ -235,50 +261,59 @@ const LibraryPanel = ({
 			? items
 			: items.filter((item) => item.kind === KIND_OF_FILTER[filter])
 	const counts = {
+		all: items.length,
 		images: items.filter((item) => item.kind === "image").length,
 		documents: items.filter((item) => item.kind === "document").length,
 		boards: items.filter((item) => item.kind === "board").length,
 	}
 
-	const actions = (
-		<div className="flex items-center gap-2" data-slot="library-actions">
-			{onSearchQueryChange ? (
-				<LibrarySearch
-					onQueryChange={onSearchQueryChange}
-					query={searchQuery}
-				/>
-			) : null}
-			{onImport ? (
-				<Button
-					className={cn(OUTLINED_PILL, "gap-1.5 px-3")}
-					onClick={onImport}
-					variant="outline"
-				>
-					<Icons.Import aria-hidden="true" />
-					{t("library.import")}
-				</Button>
-			) : null}
-			{onNewBoard ? (
-				<Button
-					className={cn(OUTLINED_PILL, "gap-1.5 px-3")}
-					onClick={onNewBoard}
-					variant="outline"
-				>
-					<Icons.Board aria-hidden="true" />
-					{t("library.newBoard")}
-				</Button>
-			) : null}
-			{onNewDocument ? (
-				<Button
-					className="h-8 gap-1.5 rounded-full px-3 font-medium text-compact leading-4 transition-none"
-					onClick={onNewDocument}
-				>
-					<Icons.Add aria-hidden="true" />
-					{t("library.newDocument")}
-				</Button>
-			) : null}
-		</div>
+	const labelsMinWidth = onImport
+		? LABELS_MIN_WIDTH.withImport
+		: LABELS_MIN_WIDTH.withoutImport
+	const hasSecondaryIconsOnly = useIsNarrowerThan(
+		overlayElement,
+		labelsMinWidth.secondary,
 	)
+	const hasPrimaryIconOnly = useIsNarrowerThan(
+		overlayElement,
+		labelsMinWidth.primary,
+	)
+
+	const actions =
+		onImport || onNewBoard || onNewDocument ? (
+			<div
+				className="flex shrink-0 items-center gap-2"
+				data-slot="library-actions"
+			>
+				{onImport ? (
+					<BarAction
+						icon={<Icons.LibraryImport aria-hidden="true" />}
+						isIconOnly={hasSecondaryIconsOnly}
+						kind="secondary"
+						label={t("library.import")}
+						onClick={onImport}
+					/>
+				) : null}
+				{onNewBoard ? (
+					<BarAction
+						icon={<Icons.NewBoard aria-hidden="true" />}
+						isIconOnly={hasSecondaryIconsOnly}
+						kind="secondary"
+						label={t("library.newBoard")}
+						onClick={onNewBoard}
+					/>
+				) : null}
+				{onNewDocument ? (
+					<BarAction
+						icon={<Icons.Add aria-hidden="true" />}
+						isIconOnly={hasPrimaryIconOnly}
+						kind="primary"
+						label={t("library.newDocument")}
+						onClick={onNewDocument}
+					/>
+				) : null}
+			</div>
+		) : null
 
 	const filters = isSkeletonShown ? (
 		<FiltersSkeleton />
@@ -297,11 +332,42 @@ const LibraryPanel = ({
 				data-slot="library-panel"
 				ref={setOverlayElement}
 			>
-				<div
+				<ScreenLayout
 					aria-busy={isAwaiting}
-					className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+					className="@container isolate min-h-0 flex-1"
+					contentClassName={cn("gap-4", isSkeletonShown && "h-full pb-0")}
+					header={
+						<AppHeader
+							close={actions}
+							data-tauri-drag-region={dragRegion}
+							leading={
+								<AppHeaderText
+									topLine={
+										<span className="truncate">{t("library.description")}</span>
+									}
+								>
+									<h1 className={APP_HEADER_TITLE}>{t("library.title")}</h1>
+								</AppHeaderText>
+							}
+						/>
+					}
 				>
-					<LibraryHeader actions={actions} filters={filters} />
+					{filters ? (
+						<div
+							className="flex flex-wrap items-center justify-between gap-3"
+							data-slot="library-controls"
+						>
+							<div className={FILTERS_STRIP_WITH_FOCUS_RING_ROOM}>
+								{filters}
+							</div>
+							{onSearchQueryChange ? (
+								<LibrarySearch
+									onQueryChange={onSearchQueryChange}
+									query={searchQuery}
+								/>
+							) : null}
+						</div>
+					) : null}
 					{isSkeletonShown ? (
 						<LibraryGridSkeleton />
 					) : isAwaiting ? null : isEmpty ? (
@@ -313,7 +379,7 @@ const LibraryPanel = ({
 						/>
 					) : shownItems.length === 0 ? (
 						<p
-							className="break-words px-10 pt-2 pb-10 text-compact text-muted-foreground leading-4.5"
+							className="break-words text-compact text-muted-foreground leading-4.5"
 							data-slot="library-no-result"
 							role="status"
 						>
@@ -332,7 +398,7 @@ const LibraryPanel = ({
 							onOpenItem={onOpenItem}
 						/>
 					)}
-				</div>
+				</ScreenLayout>
 				{overlay}
 			</div>
 		</LibraryOverlayContainer.Provider>
@@ -340,6 +406,7 @@ const LibraryPanel = ({
 }
 
 export {
+	BarAction,
 	type LibraryFilter,
 	LibraryOverlayContainer,
 	LibraryPanel,

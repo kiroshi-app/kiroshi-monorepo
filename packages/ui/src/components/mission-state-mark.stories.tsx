@@ -15,7 +15,7 @@ const SIZES = [12, 14] as const
 const DISC_TOKENS = [
 	["waiting", "text-mission-glyph-waiting"],
 	["failed", "text-mission-glyph-failed"],
-	["ready", "text-mission-glyph-ready"],
+	["ready", "text-success"],
 ] as const
 
 const shapeOf = (mark: Element) =>

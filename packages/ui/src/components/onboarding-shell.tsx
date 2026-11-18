@@ -105,7 +105,7 @@ type OnboardingButtonProps = Omit<
 const OnboardingButton = ({ className, ...props }: OnboardingButtonProps) => (
 	<Button
 		className={cn(
-			"rounded-full bg-clip-border px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50",
+			"bg-clip-border px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50",
 			className,
 		)}
 		focusableWhenDisabled

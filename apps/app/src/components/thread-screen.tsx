@@ -27,6 +27,7 @@ import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
 import {
 	PINNED_AVATAR_SIZE,
@@ -84,7 +85,6 @@ import {
 	ThreadRoutines,
 } from "@/components/thread-routines"
 import { RefusedTurn, ThreadTurn } from "@/components/thread-turn"
-import { titleBarDragRegion } from "@/components/window-caption-controls"
 import type { ApplicationInstall } from "@/lib/applications/application-port"
 import {
 	isLeftOutOf,
@@ -229,7 +229,7 @@ import {
 	type MissionCardRead,
 	missionFaceOf,
 	toMissionCard,
-	toMissionHeaderActivity,
+	toMissionProperties,
 } from "@/lib/missions/missions-model"
 import { useLiveMissions } from "@/lib/missions/use-live-missions"
 import { useMissionSendFailure } from "@/lib/missions/use-mission-failure-notices"
@@ -450,17 +450,13 @@ const ThreadHeader = ({
 		)
 		return (
 			<MissionHeader
-				{...toMissionHeaderActivity(mission.mission)}
 				bot={toMissionFace(missionFace)}
 				isWorking={liveMissionIds.has(mission.mission.id)}
-				now={mission.now}
 				objective={mission.mission.objective}
 				onBack={mission.onLeave}
-				openedAt={mission.mission.openedAt}
+				pathLabel={mission.pathLabel}
 				state={mission.mission.state}
-				ticket={mission.mission.ticket}
-				tools={mission.mission.tools}
-				dragRegion={titleBarDragRegion()}
+				dragRegion="deep"
 			/>
 		)
 	}
@@ -1980,6 +1976,13 @@ function ThreadView(props: ThreadViewProps) {
 
 	const queue = <ThreadQueue readerName={view.reader} thread={thread} />
 
+	const opening = view.missionSeat ? (
+		<MissionProperties
+			{...toMissionProperties(view.missionSeat.mission)}
+			now={view.missionSeat.now}
+		/>
+	) : undefined
+
 	const layout = (
 		<ThreadLayout
 			{...transcript}
@@ -2015,6 +2018,7 @@ function ThreadView(props: ThreadViewProps) {
 			}
 			header={header}
 			notice={notice}
+			opening={opening}
 			overlay={overlay}
 			pending={departure ? undefined : approval}
 			queue={queue}

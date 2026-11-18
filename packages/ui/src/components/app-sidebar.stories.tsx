@@ -1350,7 +1350,7 @@ export const Identities = meta.story({
 		await expect(
 			getComputedStyle(canvas.getByRole("button", { name: CREATE }))
 				.borderStartStartRadius,
-		).toBe(tokenLengthOf("--radius-md"))
+		).toBe(tokenLengthOf("--radius-button"))
 
 		await expectAvatarDrawnAtCallSiteSize(rows[0])
 		await expectAvatarWholeInRow(rows[0])

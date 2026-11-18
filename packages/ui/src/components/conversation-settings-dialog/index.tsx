@@ -43,7 +43,7 @@ const ICON_TRIGGER_CLASS =
 const ICON_POPUP_CLASS = cn(POPUP_CLASS, "w-auto gap-0 rounded-xl p-1.5 ring-0")
 
 const ICON_OPTION_CLASS =
-	"grid size-9 cursor-pointer place-items-center rounded-lg outline-none not-data-pressed:hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-muted data-pressed:inset-ring-1 data-pressed:inset-ring-foreground/22"
+	"grid size-9 cursor-pointer place-items-center outline-none not-data-pressed:hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-muted data-pressed:inset-ring-1 data-pressed:inset-ring-foreground/22"
 
 type ConversationIconFieldProps = {
 	icon?: ConversationIconName

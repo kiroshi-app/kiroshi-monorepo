@@ -1,9 +1,12 @@
 import type { ComponentProps } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	COLUMN_WIDTH_CAP,
+	COLUMN_WIDTH,
+	expectCentredColumn,
+	expectContentAtBarInset,
+	expectStaticHeaderBar,
 	probedStyleOf,
 	slotIn,
 	tokenLengthOf,
@@ -35,7 +38,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; `column` caps it at 800px and centres it in a wider card.",
+					"The page frame every screen shares: a header slot rendered as given, a content column carrying the transcript padding, and a footer slot inset like the composer. The column is a plain scroll column by default; a screen that brings its own scroll container, as ThreadLayout does with Transcript, passes `scroller` and receives the column classes to put on its scrolled content. `width` picks the column: `full`, the default, spans the card; Every column starts its content one screen inset, 12px, from the card edge and under the bar, the distance of the bar title from the edge. `column` lays the content in a 640px column centred in the card, 24px over its bottom, and shrinks it to the card less that inset on each side in a card narrower than 664px.",
 			},
 		},
 	},
@@ -58,7 +61,7 @@ export const HeaderOnly = meta.story({
 		const header = canvas.getByRole("banner")
 
 		await expect(header.parentElement).toBe(layout)
-		await expect(header.getBoundingClientRect().height).toBe(48)
+		await expect(header.getBoundingClientRect().height).toBe(56)
 		await expect(layout.children).toHaveLength(2)
 		await expect(layout.lastElementChild).toBe(
 			slotIn(canvasElement, "screen-layout-scroller"),
@@ -72,7 +75,7 @@ export const HeaderAndContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a screen whose content runs the full width of the card. Check that the column carries the transcript padding and spans the whole scroller.",
+					"Reach for this for a screen whose content runs the full width of the card. Check that the content starts as far from the card edge and under the bar as the bar title sits from the edge, 12px, and that the column spans the whole scroller.",
 			},
 		},
 	},
@@ -80,11 +83,12 @@ export const HeaderAndContent = meta.story({
 		const column = slotIn(canvasElement, "screen-layout-column")
 		const scroller = slotIn(canvasElement, "screen-layout-scroller")
 		const spacing = getComputedStyle(column)
+		const inset = tokenLengthOf("--screen-inset")
+		const content = canvas.getByText(/Every screen of the app/)
 
-		await expect(canvas.getByText(/Every screen of the app/)).toBeVisible()
-		await expect(spacing.paddingInlineStart).toBe("24px")
-		await expect(spacing.paddingInlineEnd).toBe("24px")
-		await expect(spacing.paddingTop).toBe("32px")
+		await expect(content).toBeVisible()
+		await expectContentAtBarInset(layoutIn(canvasElement), content)
+		await expect(spacing.paddingInlineEnd).toBe(inset)
 		await expect(spacing.paddingBottom).toBe("16px")
 		await expect(Math.round(column.getBoundingClientRect().width)).toBe(
 			scroller.clientWidth,
@@ -129,19 +133,10 @@ const inWideCard = (args: ComponentProps<typeof ScreenLayout>) => (
 	</div>
 )
 
-const boxesIn = (canvasElement: HTMLElement) => {
-	const card = canvasElement.querySelector<HTMLElement>("[data-content-card]")
-	if (!card) throw new globalThis.Error("The layout sits in no card")
-
-	return {
-		card: card.getBoundingClientRect(),
-		column: slotIn(
-			canvasElement,
-			"screen-layout-column",
-		).getBoundingClientRect(),
-		scroller: slotIn(canvasElement, "screen-layout-scroller"),
-	}
-}
+const boxesIn = (canvasElement: HTMLElement) => ({
+	column: slotIn(canvasElement, "screen-layout-column").getBoundingClientRect(),
+	scroller: slotIn(canvasElement, "screen-layout-scroller"),
+})
 
 export const ColumnWidthInWideCard = meta.story({
 	args: { width: "column", children: CONTENT },
@@ -150,17 +145,16 @@ export const ColumnWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a form or reading page in a card wider than the column cap. Check that the column stops at 800px with equal room on both sides, and that the frame wears the card surface.",
+					"Reach for this for a form or reading page in a card wider than the column cap. Check that the content stops at 640px with equal room on both sides, that 24px stay under the last content, and that the frame wears the card surface.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const { card, column } = boxesIn(canvasElement)
-		const leftGap = column.left - card.left
-		const rightGap = card.right - column.right
-
-		await expect(column.width).toBe(COLUMN_WIDTH_CAP)
-		await expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(1)
+		await expectCentredColumn(layoutIn(canvasElement))
+		await expect(
+			getComputedStyle(slotIn(canvasElement, "screen-layout-column"))
+				.paddingBottom,
+		).toBe("24px")
 		await expect(
 			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
 		).toBe(probedStyleOf("bg-card", "backgroundColor"))
@@ -174,7 +168,7 @@ export const FullWidthInWideCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a list or grid page in a card wider than the column cap. Check that the column takes the whole width of the card, past the 800px cap of the column width.",
+					"Reach for this for a list or grid page in a card wider than the column cap. Check that the column takes the whole width of the card, past the 640px of the column width.",
 			},
 		},
 	},
@@ -182,6 +176,58 @@ export const FullWidthInWideCard = meta.story({
 		const { column, scroller } = boxesIn(canvasElement)
 
 		await expect(Math.round(column.width)).toBe(scroller.clientWidth)
-		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH_CAP)
+		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH)
+	},
+})
+
+const RELEASE_NOTES = Array.from(
+	{ length: 80 },
+	(_, row) =>
+		`Release note ${row + 1}: the column scrolls under the header bar.`,
+)
+
+const RELEASE_NOTES_COLUMN = (
+	<>
+		{RELEASE_NOTES.map((note) => (
+			<p key={note}>{note}</p>
+		))}
+		<Button className="self-start" onClick={fn()} variant="outline">
+			Load older notes
+		</Button>
+	</>
+)
+
+const SCROLLED_AWAY = 240
+
+export const HeaderBarAboveAScrolledColumn = meta.story({
+	args: {
+		header: <AppHeader leading="Release notes" />,
+		children: RELEASE_NOTES_COLUMN,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a screen whose column runs longer than the card. Check that the bar stays in the flow above the scroller, full width, with its rule, and the column starts under it at the screen inset; once scrolled the notes leave at the edge of the bar, which keeps its place with no fade and no shadow.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = layoutIn(canvasElement)
+		const scroller = slotIn(canvasElement, "screen-layout-scroller")
+		const bar = await expectStaticHeaderBar(layout)
+		const firstLine = within(canvasElement).getByText(RELEASE_NOTES[0])
+
+		await expect(scroller.getBoundingClientRect().top).toBe(
+			bar.getBoundingClientRect().bottom,
+		)
+		await expectContentAtBarInset(layout, firstLine)
+
+		scroller.scrollTo({ top: SCROLLED_AWAY })
+		await waitFor(() => expect(scroller.scrollTop).toBe(SCROLLED_AWAY))
+		await expect(firstLine.getBoundingClientRect().bottom).toBeLessThan(
+			bar.getBoundingClientRect().bottom,
+		)
+		await expectStaticHeaderBar(layout)
 	},
 })

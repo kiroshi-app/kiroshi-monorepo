@@ -46,10 +46,11 @@ export const commands = {
 	libraryTemplates: () => __TAURI_INVOKE<LibraryTemplate[]>("library_templates"),
 	libraryCreateDocument: (spaceId: string, name: string, templateId: string | null) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_document", { spaceId, name, templateId })),
 	libraryCreateBoard: (spaceId: string, name: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_create_board", { spaceId, name })),
+	libraryDuplicate: (spaceId: string, name: string) => typedError<LibraryItem, LibraryError>(__TAURI_INVOKE("library_duplicate", { spaceId, name })),
 	libraryBoardSummary: (spaceId: string, name: string) => typedError<LibraryBoardSummary, LibraryError>(__TAURI_INVOKE("library_board_summary", { spaceId, name })),
 	libraryOpenDocument: (spaceId: string, name: string) => typedError<LibraryDocumentState, LibraryError>(__TAURI_INVOKE("library_open_document", { spaceId, name })),
 	libraryApplyUpdate: (spaceId: string, name: string, update: string) => typedError<null, LibraryError>(__TAURI_INVOKE("library_apply_update", { spaceId, name, update })),
-	librarySharePresence: (spaceId: string, name: string, at: { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null } | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_presence", { spaceId, name, at })),
+	librarySharePresence: (spaceId: string, name: string, at: { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null } | { kind: "image" } | null) => typedError<null, LibraryError>(__TAURI_INVOKE("library_share_presence", { spaceId, name, at })),
 	libraryStopWriters: (spaceId: string, name: string, agentId: string | null) => typedError<CancelOutcome, LibraryError>(__TAURI_INVOKE("library_stop_writers", { spaceId, name, agentId })),
 	libraryReadThumbnail: (spaceId: string, name: string) => typedError<LibraryImage, LibraryError>(__TAURI_INVOKE("library_read_thumbnail", { spaceId, name })),
 	libraryScreenshotJob: () => typedError<ScreenshotJob, ScreenshotRequestError>(__TAURI_INVOKE("library_screenshot_job")),
@@ -1443,7 +1444,7 @@ export type LibraryOverwritten = {
 	modifiedAt: number,
 };
 
-export type LibraryPresenceAt = { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null };
+export type LibraryPresenceAt = { kind: "text"; anchor: string } | { kind: "board"; point: LibraryBoardPoint; nodeId: string | null } | { kind: "image" };
 
 export type LibraryTemplate = {
 	id: string,

@@ -4,6 +4,7 @@ import {
 	ArchiveIcon,
 	ArrowDownIcon,
 	ArrowRightIcon,
+	ArrowRightLeftIcon,
 	ArrowUpIcon,
 	ArrowUpRightIcon,
 	AtIcon,
@@ -217,6 +218,25 @@ const ConnectorElbow = ({ size = 24, ...props }: IconProps) => (
 	</svg>
 )
 
+const Duplicate = ({ size = 24, ...props }: IconProps) => (
+	<svg
+		aria-hidden="true"
+		fill="none"
+		focusable="false"
+		height={size}
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		viewBox="0 0 24 24"
+		width={size}
+		xmlns="http://www.w3.org/2000/svg"
+		{...props}
+	>
+		<rect height="12" rx="2.625" width="12" x="8.25" y="8.25" />
+		<path d="M15.75 8.25V6.375A2.625 2.625 0 0 0 13.125 3.75h-6.75A2.625 2.625 0 0 0 3.75 6.375v6.75A2.625 2.625 0 0 0 6.375 15.75H8.25" />
+	</svg>
+)
+
 const GitHub = ({ size = 24, ...props }: IconProps) => (
 	<svg
 		aria-hidden="true"
@@ -231,6 +251,24 @@ const GitHub = ({ size = 24, ...props }: IconProps) => (
 	</svg>
 )
 
+const LibraryImport = ({ size = 24, ...props }: IconProps) => (
+	<svg
+		aria-hidden="true"
+		fill="none"
+		focusable="false"
+		height={size}
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		viewBox="0 0 24 24"
+		width={size}
+		xmlns="http://www.w3.org/2000/svg"
+		{...props}
+	>
+		<path d="M12 3.75V15M7.125 10.125 12 15l4.875-4.875M4.5 20.25h15" />
+	</svg>
+)
+
 const Linear = ({ size = 24, ...props }: IconProps) => (
 	<svg
 		aria-hidden="true"
@@ -242,6 +280,25 @@ const Linear = ({ size = 24, ...props }: IconProps) => (
 		{...props}
 	>
 		<path d="M1.22541 61.5228c-.2-.9086.87652-1.5125 1.53266-.8563l36.5471 36.5471c.6562.6562.0523 1.7327-.8563 1.5327-9.5313-2.098-18.4276-6.6428-25.7566-13.9718-7.32893-7.3289-11.87373-16.2252-13.9718-25.7567zM.00189135 46.8891c-.01764375.2833.08887215.5599.28957165.7606l52.0501 52.0501c.2007.2007.4773.3072.7606.2896 2.3692-.1476 4.6938-.46 6.9624-.9259.7645-.157 1.0301-1.0963.4782-1.6481L2.57343 39.4485c-.55184-.5518-1.49109-.2863-1.648174.4782-.465915 2.2686-.77835 4.5932-.92598465 6.9624zM4.21093 29.7054c-.16649.3738-.08169.8106.20765 1.1l64.77602 64.776c.2894.2894.7262.3742 1.1.2077 1.7861-.7956 3.5171-1.6927 5.1855-2.684.5521-.328.6373-1.0867.1832-1.5407L8.43566 24.3865c-.45409-.4541-1.21271-.3689-1.54074.1832-.99132 1.6684-1.88843 3.3994-2.68399 5.1857zM12.6587 18.074c-.3701-.3701-.393-.9637-.0443-1.3541C21.7795 6.45931 35.1114 0 49.9519 0 77.5927 0 100 22.4073 100 50.0481c0 14.8405-6.4593 28.1724-16.7199 37.3375-.3903.3487-.984.3258-1.354-.0443L12.6587 18.074z" />
+	</svg>
+)
+
+const NewBoard = ({ size = 24, ...props }: IconProps) => (
+	<svg
+		aria-hidden="true"
+		fill="none"
+		focusable="false"
+		height={size}
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		viewBox="0 0 24 24"
+		width={size}
+		xmlns="http://www.w3.org/2000/svg"
+		{...props}
+	>
+		<rect height="16.5" rx="3" width="18" x="3" y="3.75" />
+		<path d="M7.5 9H12M7.5 13.5h9" />
 	</svg>
 )
 
@@ -333,6 +390,7 @@ const Icons = {
 	Docs: BookOpenIcon,
 	Download: DownloadIcon,
 	Drag: GripVerticalIcon,
+	Duplicate,
 	Edit: PenIcon,
 	Ellipse: CircleIcon,
 	Error: CircleXIcon,
@@ -361,6 +419,7 @@ const Icons = {
 	Language: LanguageIcon,
 	Laptop: LaptopIcon,
 	Leave: BracketArrowRightIcon,
+	LibraryImport,
 	LightScheme: SunIcon,
 	Linear,
 	Link: LinkIcon,
@@ -375,6 +434,7 @@ const Icons = {
 	Minimize: MinusIcon,
 	More: MoreHorizontalIcon,
 	Navigation: NavigationIcon,
+	NewBoard,
 	NewTab: SquarePlusIcon,
 	NewWindow: AppWindowPlusIcon,
 	Next: ChevronRightIcon,
@@ -418,6 +478,7 @@ const Icons = {
 	Strikethrough: StrikethroughIcon,
 	Success: CircleCheckIcon,
 	Superset,
+	Switch: ArrowRightLeftIcon,
 	SystemScheme: MonitorIcon,
 	Table: TableIcon,
 	Template: LayoutDashboardIcon,

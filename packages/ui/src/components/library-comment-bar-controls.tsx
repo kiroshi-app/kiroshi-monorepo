@@ -23,7 +23,7 @@ type LibraryCommentBarControlsProps = {
 const COMMENT_TOGGLE_SLOT = "library-comment-toggle"
 
 const BAR_PILL =
-	"h-8 gap-1.5 rounded-full p-2 font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8"
+	"h-8 gap-1.5 p-2 font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/8 active:bg-foreground/12 dark:hover:bg-foreground/8"
 
 const KEYCAP =
 	"h-auto min-w-4.5 rounded-[0.25rem] bg-transparent p-0.5 text-[11px]/3.5 inset-ring inset-ring-foreground/17 group-aria-pressed/button:text-primary group-aria-pressed/button:inset-ring-primary/35 dark:inset-ring-foreground/20 dark:group-aria-pressed/button:inset-ring-primary/40"

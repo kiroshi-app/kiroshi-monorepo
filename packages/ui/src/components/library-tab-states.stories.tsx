@@ -2,22 +2,12 @@ import type { ReactNode } from "react"
 import { expect, fn, userEvent, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	expectSkeletonFilledTo,
-	hueScopeOf,
-	slotIn,
-} from "@workspace/storybook/story-utils"
+import { hueScopeOf, slotIn } from "@workspace/storybook/story-utils"
 import { ContentCard } from "@workspace/ui/components/content-card"
-import {
-	LibraryDocumentSkeleton,
-	LibraryImageSkeleton,
-	LibraryItemUnavailable,
-} from "@workspace/ui/components/library-tab-states"
+import { LibraryItemUnavailable } from "@workspace/ui/components/library-tab-states"
 
 const LONG_NAME =
 	"Quarterly planning notes for the spring launch, with every decision the team took across the three workshops and the follow-ups each owner committed to"
-
-const DOCUMENT_COLUMN_WIDTH = 794
 
 type LibraryFrameProps = {
 	children: ReactNode
@@ -37,30 +27,6 @@ const expectFillsFrameHeight = async (root: HTMLElement) => {
 	if (!frame) throw new Error("No Library frame around the tab state")
 	await expect(root.getBoundingClientRect().height).toBeGreaterThan(0)
 	await expect(root.getBoundingClientRect().height).toBe(frame.clientHeight)
-}
-
-const expectShapesHidden = async (region: HTMLElement) => {
-	const shapes = region.querySelectorAll('[data-slot="skeleton"]')
-	await expect(shapes.length).toBeGreaterThan(0)
-	for (const shape of shapes) {
-		await expect(shape.closest('[aria-hidden="true"]')).not.toBe(null)
-	}
-}
-
-const DOCUMENT_LOADING_STORY =
-	"A document tab before its text lands. Check the document bar, the title line, the detail line and the body lines in the 794px reading column, the lines reaching the bottom of the card, and the one busy region a screen reader hears. Pick ImageLoading for an image tab."
-
-const expectDocumentLoading = async (canvasElement: HTMLElement) => {
-	const region = within(canvasElement).getByRole("region", {
-		name: "Loading the document…",
-	})
-	await expect(region).toHaveAttribute("aria-busy", "true")
-	await expectShapesHidden(region)
-	await expectFillsFrameHeight(region)
-	await expectSkeletonFilledTo(canvasElement, "bottom")
-	await expect(
-		slotIn(canvasElement, "list-skeleton").getBoundingClientRect().width,
-	).toBe(DOCUMENT_COLUMN_WIDTH)
 }
 
 const MISSING_ITEM_STORY =
@@ -159,64 +125,9 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a Library tab shows before its item is on screen: the document editor skeleton while a document loads, the image viewer skeleton while an image loads, and the can't-open state when the item is no longer in the Library or can't be read. Each fills the tab's card from top to bottom, so the Library grid never flashes in between.",
+					"What a Library tab shows when its item never gets on screen: the can't-open state, when the item is no longer in the Library or can't be read. It fills the tab's card from top to bottom, so the Library grid never flashes in between. The skeletons a tab shows while its item loads sit next to the screens they turn into: `Loading` and `LoadingDark` in Navigation/LibraryDocumentView, `Loading` in Overlays/LibraryLightbox.",
 			},
 		},
-	},
-})
-
-export const DocumentLoading = meta.story({
-	render: () => (
-		<LibraryFrame>
-			<LibraryDocumentSkeleton />
-		</LibraryFrame>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story: `${DOCUMENT_LOADING_STORY} Pick \`DocumentLoadingDark\` for the dark theme.`,
-			},
-		},
-	},
-	play: ({ canvasElement }) => expectDocumentLoading(canvasElement),
-})
-
-export const DocumentLoadingDark = meta.story({
-	globals: { theme: "dark", theme_layout: "single" },
-	render: () => (
-		<LibraryFrame>
-			<LibraryDocumentSkeleton />
-		</LibraryFrame>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story: `${DOCUMENT_LOADING_STORY} Pick \`DocumentLoading\` for the light theme.`,
-			},
-		},
-	},
-	play: ({ canvasElement }) => expectDocumentLoading(canvasElement),
-})
-
-export const ImageLoading = meta.story({
-	render: () => (
-		<LibraryFrame>
-			<LibraryImageSkeleton />
-		</LibraryFrame>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"An image tab before its file lands, drawn on the viewer's dark surface. Check the bar with back, name and actions, the two step buttons around the stage and the zoom bar at the bottom, all as placeholders inside one busy region. Pick DocumentLoading for a document tab.",
-			},
-		},
-	},
-	play: async ({ canvas }) => {
-		const region = canvas.getByRole("region", { name: "Loading the image…" })
-		await expect(region).toHaveAttribute("aria-busy", "true")
-		await expectShapesHidden(region)
-		await expectFillsFrameHeight(region)
 	},
 })
 

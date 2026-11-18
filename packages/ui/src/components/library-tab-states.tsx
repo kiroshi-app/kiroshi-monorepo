@@ -3,14 +3,17 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
+import { AppHeader, AppHeaderText } from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	FAILURE_CARD,
 	FAILURE_LINE,
 	FAILURE_PRIMARY_PILL,
 } from "@workspace/ui/components/library-document-states"
-import { DOCUMENT_COLUMN_MEASURE } from "@workspace/ui/components/library-document-view"
-import { LIBRARY_BAR } from "@workspace/ui/components/library-item-menu"
+import {
+	BLOCK_HANDLE_ROOM,
+	DOCUMENT_COLUMN_MEASURE,
+} from "@workspace/ui/components/library-document-view"
 import { LIGHTBOX_SURFACE } from "@workspace/ui/components/library-lightbox"
 import {
 	ListSkeleton,
@@ -33,24 +36,49 @@ const SkeletonCircle = ({ className }: SkeletonCircleProps) => (
 	/>
 )
 
-const SkeletonBarActions = () => (
-	<div className="flex shrink-0 items-center gap-1">
-		<SkeletonCircle className="size-8" />
-		<SkeletonCircle className="size-8" />
-		<SkeletonCircle className="size-8" />
-	</div>
+type SkeletonHeaderProps = {
+	className?: string
+}
+
+const SkeletonHeader = ({ className }: SkeletonHeaderProps) => (
+	<AppHeader
+		aria-hidden="true"
+		className={className}
+		close={
+			<div
+				className={cn("flex shrink-0 items-center gap-2", PULSE)}
+				data-slot="library-skeleton-bar-actions"
+			>
+				<Skeleton className="h-8 w-23 animate-none rounded-full bg-border" />
+				<SkeletonCircle className="size-8" />
+			</div>
+		}
+		leading={
+			<div className={cn("min-w-0", PULSE)}>
+				<AppHeaderText
+					topLine={
+						<div className="flex h-4 min-w-0 items-center">
+							<SkeletonBar className="w-40" isFaint />
+						</div>
+					}
+				>
+					<div
+						className="flex h-4.5 items-center"
+						data-slot="library-skeleton-bar-title"
+					>
+						<SkeletonBar className="w-32" />
+					</div>
+				</AppHeaderText>
+			</div>
+		}
+	/>
 )
 
 const PARAGRAPH_ENDS = ["w-3/5", "w-4/5", "w-2/5"] as const
 
 const SkeletonDocumentHeader = () => (
-	<div className="flex flex-col gap-1.5 pb-5">
-		<div className="flex h-8.5 items-center">
-			<SkeletonBar className="h-5 w-72 max-w-full" />
-		</div>
-		<div className="flex h-4.5 items-center">
-			<SkeletonBar className="w-48 max-w-full" isFaint />
-		</div>
+	<div className="flex h-8.5 items-center">
+		<SkeletonBar className="h-5 w-72 max-w-full" />
 	</div>
 )
 
@@ -59,7 +87,7 @@ type SkeletonParagraphProps = {
 }
 
 const SkeletonParagraph = ({ end }: SkeletonParagraphProps) => (
-	<div className="flex flex-col pb-3.5">
+	<div className="flex flex-col">
 		<div className="flex h-6 items-center">
 			<SkeletonBar className="w-full" />
 		</div>
@@ -89,14 +117,13 @@ const LibraryDocumentSkeleton = () => {
 			className="flex size-full min-h-0 flex-col"
 			data-slot="library-document-skeleton"
 		>
-			<div aria-hidden="true" className={cn(LIBRARY_BAR, PULSE)}>
-				<div className="flex min-w-0 items-center gap-3">
-					<SkeletonBar className="w-16" />
-					<SkeletonBar className="w-32" />
-				</div>
-				<SkeletonBarActions />
-			</div>
-			<div className="flex min-h-0 flex-1 flex-col px-10 pt-10 pb-10">
+			<SkeletonHeader />
+			<div
+				className={cn(
+					"flex min-h-0 flex-1 flex-col pt-(--screen-inset) pb-10",
+					BLOCK_HANDLE_ROOM,
+				)}
+			>
 				<div
 					className={cn(
 						"mx-auto flex min-h-0 w-full flex-1 flex-col",
@@ -104,7 +131,7 @@ const LibraryDocumentSkeleton = () => {
 					)}
 				>
 					<ListSkeleton
-						className="min-h-0 flex-1 gap-0"
+						className="min-h-0 flex-1 gap-3.5"
 						row={documentSkeletonRowAt}
 					/>
 				</div>
@@ -123,27 +150,22 @@ const LibraryImageSkeleton = () => {
 			className={cn(LIGHTBOX_SURFACE, "flex size-full min-h-0 flex-col")}
 			data-slot="library-image-skeleton"
 		>
+			<SkeletonHeader className="bg-lightbox-bar" />
 			<div
 				aria-hidden="true"
-				className={cn("relative flex min-h-0 flex-1 flex-col", PULSE)}
+				className={cn(
+					"relative flex min-h-0 flex-1 px-(--screen-inset) pb-(--screen-inset)",
+					PULSE,
+				)}
 			>
-				<div className={LIBRARY_BAR}>
-					<div className="flex min-w-0 items-center gap-2">
-						<SkeletonCircle className="size-8" />
-						<div className="flex min-w-0 items-center gap-2.5">
-							<SkeletonBar className="w-40" />
-							<SkeletonBar className="w-24" isFaint />
-						</div>
-					</div>
-					<SkeletonBarActions />
-				</div>
-				<div className="flex min-h-0 flex-1 items-center gap-5 px-5 pb-18">
-					<SkeletonCircle className="size-10" />
-					<Skeleton className="h-full min-w-0 flex-1 animate-none rounded-md bg-border/60" />
-					<SkeletonCircle className="size-10" />
-				</div>
+				<Skeleton
+					className="min-w-0 flex-1 animate-none rounded-none rounded-b-md bg-border/60"
+					data-slot="library-image-skeleton-stage"
+				/>
+				<SkeletonCircle className="absolute start-4 top-1/2 size-10 -translate-y-1/2 bg-input" />
+				<SkeletonCircle className="absolute end-4 top-1/2 size-10 -translate-y-1/2 bg-input" />
 				<div className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center">
-					<Skeleton className="h-9 w-56 animate-none rounded-full bg-border" />
+					<Skeleton className="h-9 w-56 animate-none rounded-full bg-input" />
 				</div>
 			</div>
 		</section>

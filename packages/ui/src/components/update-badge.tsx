@@ -33,8 +33,6 @@ const BADGE_SIZE = "size-9"
 
 const BADGE_FRAME = "inline-flex items-center justify-center"
 
-const BADGE_BUTTON = "rounded-full"
-
 interface UpdateActionProps {
 	status: Extract<UpdateBadgeStatus, "available" | "downloading" | "error">
 	progress: number
@@ -62,7 +60,6 @@ const UpdateAction = ({
 			variant={status === "error" ? "destructive" : "default"}
 			disabled={isDownloading}
 			onClick={onDownload}
-			className={BADGE_BUTTON}
 		>
 			{status === "error" ? <Icons.Retry /> : <Icons.ArrowUp />}
 		</TooltipButton>
@@ -119,7 +116,7 @@ const UpdateReady = ({
 				disabled={isBlocked}
 				focusableWhenDisabled
 				onClick={onRestart}
-				className={cn(BADGE_BUTTON, "data-disabled:opacity-50")}
+				className="data-disabled:opacity-50"
 			>
 				<Icons.Restart />
 			</TooltipButton>

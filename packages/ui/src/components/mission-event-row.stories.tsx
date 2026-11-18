@@ -24,9 +24,7 @@ import {
 	MISSION_EVENTS,
 	MISSION_NOW,
 	MISSION_OBJECTIVE,
-	MISSION_OPENED_AT,
 	MISSION_PULL_REQUEST,
-	MISSION_TICKET,
 	MISSION_TOOLS,
 	MISSION_TOOLS_WITHOUT_A_MARK,
 } from "@workspace/ui/components/missions.fixtures"
@@ -455,7 +453,7 @@ export const InAMissionThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"The header and the rows a mission thread is made of, in a container squeezed to 480 pixels. Check that no row is wider than the container, that the bubbles stop at 85 percent of the width left beside the gutter, and that the header bands hold their two lines. Pick this one before shipping any change to either component. `apps/app/src/components/thread-screen.tsx:308` draws the header and `apps/app/src/components/thread-screen.tsx:923` the rows under it.",
+					"The header and the rows a mission thread is made of, in a container squeezed to 480 pixels. Check that no row is wider than the container, that the bubbles stop at 85 percent of the width left beside the gutter, and that the header bar keeps its path, its objective and its state on one row. Pick this one before shipping any change to either component. `apps/app/src/components/thread-screen.tsx:308` draws the header and `apps/app/src/components/thread-screen.tsx:923` the rows under it.",
 			},
 		},
 	},
@@ -464,13 +462,9 @@ export const InAMissionThread = meta.story({
 			<MissionHeader
 				bot={MISSION_BOT}
 				isWorking={false}
-				now={MISSION_NOW}
 				objective={MISSION_OBJECTIVE}
 				onBack={fn()}
-				openedAt={MISSION_OPENED_AT}
 				state="waiting_human"
-				ticket={MISSION_TICKET}
-				tools={MISSION_TOOLS}
 			/>
 			{MISSION_EVENTS.map((event) => (
 				<MissionEventRow {...args} event={event} key={event.id} />

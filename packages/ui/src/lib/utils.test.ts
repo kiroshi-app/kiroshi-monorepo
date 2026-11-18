@@ -4,6 +4,8 @@ import { join } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
+import { cn } from "@workspace/ui/lib/utils"
+
 const VENDORED_DIRECTORY = join(import.meta.dirname, "../components/ui")
 const FOREIGN_CN_IMPORT = /from\s+["']cn["']/
 const DEPENDENCY_FIELDS = [
@@ -44,5 +46,9 @@ describe("cn", () => {
 
 	it("is a dependency of no package.json in the repository", () => {
 		expect(manifestsDeclaringCn()).toEqual([])
+	})
+
+	it("lets the button radius replace the radius of a vendored primitive", () => {
+		expect(cn("rounded-2xl px-2", "rounded-button")).toBe("px-2 rounded-button")
 	})
 })

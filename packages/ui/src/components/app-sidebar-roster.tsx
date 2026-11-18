@@ -59,7 +59,7 @@ const FAILURE_WITH_RETRY =
 	"flex flex-col items-center gap-2 p-3 text-center text-compact text-muted-foreground leading-5"
 
 const RETRY =
-	"h-auto rounded-sm border-input bg-transparent p-1.5 font-medium text-sidebar-foreground text-xs leading-4"
+	"h-auto border-input bg-transparent p-1.5 font-medium text-sidebar-foreground text-xs leading-4"
 
 const ZONES = "flex flex-col gap-3"
 

@@ -71,7 +71,7 @@ const SURFACE =
 	"rounded-control border border-selection-toolbar-border bg-card-raised p-1 text-foreground shadow-selection-toolbar"
 
 const BUTTON =
-	"size-7 min-w-7 rounded-md px-0 transition-none hover:bg-selection-toolbar-highlight aria-pressed:bg-user-bubble/15 aria-pressed:text-user-bubble hover:aria-pressed:bg-user-bubble/15 hover:aria-pressed:text-user-bubble"
+	"size-7 min-w-7 px-0 transition-none hover:bg-selection-toolbar-highlight aria-pressed:bg-user-bubble/15 aria-pressed:text-user-bubble hover:aria-pressed:bg-user-bubble/15 hover:aria-pressed:text-user-bubble"
 
 const PLAIN_BUTTON = cn(
 	BUTTON,
@@ -238,7 +238,7 @@ const LinkField = ({ link = "", onConfirm, onCancel }: LinkFieldProps) => {
 			</Kbd>
 			<Button
 				aria-label={t("library.editor.toolbar.confirmLink")}
-				className="rounded-md transition-none hover:bg-selection-toolbar-highlight dark:hover:bg-selection-toolbar-highlight"
+				className="transition-none hover:bg-selection-toolbar-highlight dark:hover:bg-selection-toolbar-highlight"
 				size="icon-sm"
 				type="submit"
 				variant="ghost"

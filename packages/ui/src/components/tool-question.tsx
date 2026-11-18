@@ -22,9 +22,9 @@ import {
 	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 } from "@workspace/ui/components/settings-styles"
+import { SlidingTab, SlidingTabs } from "@workspace/ui/components/sliding-tabs"
 import { Button } from "@workspace/ui/components/ui/button"
 import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
-import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { useDigitKeys } from "@workspace/ui/hooks/use-digit-keys"
 import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invalid"
@@ -35,12 +35,6 @@ const QUESTION_SURFACE_CLASS =
 	"w-full rounded-[24px] border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
 const QUESTION_PANEL_CLASS = cn("flex flex-col gap-3", QUESTION_SURFACE_CLASS)
-
-const QUESTION_SEGMENTS_CLASS =
-	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
-
-const QUESTION_SEGMENT_CLASS =
-	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] dark:data-active:bg-card"
 
 const QUESTION_GROUP_CLASS = "flex flex-col gap-1.5"
 
@@ -333,29 +327,31 @@ const ToolQuestion = ({
 				>
 					{askedBy}
 					{hasSegments ? (
-						<Tabs onValueChange={setShownIndex} value={shownIndex}>
-							<TabsList activateOnFocus className={QUESTION_SEGMENTS_CLASS}>
-								{questions.map((candidate, index) => (
-									<TabsTrigger
-										className={QUESTION_SEGMENT_CLASS}
-										key={
-											candidate.isNotice
-												? `notice:${candidate.header}`
-												: candidate.question
-										}
-										value={index}
-									>
-										{!candidate.isNotice && answers[candidate.question] ? (
-											<Icons.Check
-												aria-hidden="true"
-												className="size-3 text-bot-badge-done"
-											/>
-										) : null}
-										<span className="truncate">{candidate.header}</span>
-									</TabsTrigger>
-								))}
-							</TabsList>
-						</Tabs>
+						<SlidingTabs
+							activateOnFocus
+							kind="segments"
+							onValueChange={setShownIndex}
+							value={shownIndex}
+						>
+							{questions.map((candidate, index) => (
+								<SlidingTab
+									key={
+										candidate.isNotice
+											? `notice:${candidate.header}`
+											: candidate.question
+									}
+									value={index}
+								>
+									{!candidate.isNotice && answers[candidate.question] ? (
+										<Icons.Check
+											aria-hidden="true"
+											className="size-3 text-bot-badge-done"
+										/>
+									) : null}
+									<span className="truncate">{candidate.header}</span>
+								</SlidingTab>
+							))}
+						</SlidingTabs>
 					) : askedBy ? null : (
 						<p className="truncate font-medium text-muted-foreground text-xs">
 							{item.header}
@@ -392,7 +388,7 @@ const ToolQuestion = ({
 				{onMinimise ? (
 					<Button
 						aria-label={t("toolQuestion.minimise")}
-						className="size-7 shrink-0 rounded-md text-muted-foreground"
+						className="size-7 shrink-0 text-muted-foreground"
 						onClick={onMinimise}
 						size="icon-sm"
 						type="button"

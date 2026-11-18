@@ -33,6 +33,7 @@ import {
 	type SpaceInvitation,
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
 import type { SettingsSearch } from "@/lib/navigation/settings-search"
 import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
@@ -454,6 +455,27 @@ describe("SpaceSettingsScreen on a joined space", () => {
 })
 
 describe("SpaceSettingsScreen on a local space", () => {
+	it("wears the header of the shown entry as the static bar dragging the window, above the page", async () => {
+		const gear = await gearWithGarage()
+
+		const dialog = openSettingsOf(gear, gear.home.id)
+		const page = dialog.querySelector(
+			'[data-slot="settings-screen-page"]',
+		) as HTMLElement
+		const bar = page.querySelector('[data-slot="app-header"]') as HTMLElement
+		const scroller = page.querySelector(
+			'[data-slot="screen-layout-scroller"]',
+		) as HTMLElement
+
+		expect(page.firstElementChild).toBe(bar)
+		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
+		expect(startsWindowDrag(within(bar).getByRole("heading"))).toBe(true)
+		for (const control of within(bar).queryAllByRole("button"))
+			expect(startsWindowDrag(control)).toBe(false)
+		expect(startsWindowDrag(scroller)).toBe(false)
+	})
+
 	it("opens the local mode with its editable Name field, its transfer actions and Danger zone pinned", async () => {
 		const gear = await gearWithGarage()
 

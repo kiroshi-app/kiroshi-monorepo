@@ -36,7 +36,7 @@ const HomeApplicationsBand = ({
 			</span>
 			<Button
 				aria-label={t("home.band.dismiss")}
-				className="relative size-5 rounded-sm text-faint-foreground transition-none after:absolute after:-inset-0.5 [&_svg:not([class*='size-'])]:size-3.5"
+				className="relative size-5 text-faint-foreground transition-none after:absolute after:-inset-0.5 [&_svg:not([class*='size-'])]:size-3.5"
 				onClick={onDismiss}
 				size="icon-xs"
 				variant="ghost"

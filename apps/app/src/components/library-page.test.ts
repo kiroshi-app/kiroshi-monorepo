@@ -130,6 +130,14 @@ const createFakeLibraryHost = () => {
 	}
 
 	const commands: Record<string, (call: LibraryCall) => unknown> = {
+		library_duplicate: ({ name }) => {
+			const copy = libraryItemOf(
+				name.replace(BOARD_EXTENSION, ` copy${BOARD_EXTENSION}`),
+				"board",
+			)
+			harness.libraryItems = [...harness.libraryItems, copy]
+			return copy
+		},
 		library_create_document: ({ name }) => {
 			if (harness.libraryItems.some((item) => item.name === name)) {
 				throw { kind: "alreadyExists", name }
@@ -547,7 +555,7 @@ const buttonNamed = (name: string) => screen.queryByRole("button", { name })
 const findButtonNamed = (name: string) => screen.findByRole("button", { name })
 
 describe("the More action of an opened Library item", () => {
-	it("shows Download and Copy but no More on an image of a joined Space", async () => {
+	it("shows Download and More, Copy in More but no Show in folder, on an image of a joined Space", async () => {
 		await mountLibraryScreen(true)
 
 		await openLibraryItem(IMAGE)
@@ -555,11 +563,22 @@ describe("the More action of an opened Library item", () => {
 		expect(
 			await findButtonNamed(i18n.t("common:library.lightbox.download")),
 		).toBeInstanceOf(HTMLElement)
-		expect(buttonNamed(i18n.t("common:library.lightbox.copy"))).toBeInstanceOf(
-			HTMLElement,
-		)
+		await act(async () => {
+			fireEvent.click(
+				await findButtonNamed(i18n.t("common:library.lightbox.more")),
+			)
+		})
+
+		const menu = await screen.findByRole("menu")
 		expect(
-			buttonNamed(i18n.t("common:library.itemMenu.showInFolder")),
+			within(menu).getByRole("menuitem", {
+				name: i18n.t("common:library.itemMenu.copy"),
+			}),
+		).toBeInstanceOf(HTMLElement)
+		expect(
+			within(menu).queryByRole("menuitem", {
+				name: i18n.t("common:library.itemMenu.showInFolder"),
+			}),
 		).toBeNull()
 	})
 
@@ -1366,7 +1385,12 @@ describe("an image opened from the Library grid", () => {
 })
 
 const librarySidebarButton = () =>
-	screen.getByRole("button", {
+	within(
+		screen.getByRole("navigation", {
+			name: i18n.t("bots:rail.label"),
+			hidden: true,
+		}),
+	).getByRole("button", {
 		name: i18n.t("bots:rail.library"),
 		hidden: true,
 	})
@@ -1416,7 +1440,7 @@ const stickyAt = (id: string, x: number): LibraryBoardNode => ({
 const ROADMAP_NODES = [stickyAt("a", 0), stickyAt("b", 200), stickyAt("c", 240)]
 
 const filterNamed = (label: string) =>
-	within(screen.getByRole("group", { name: common("library.filters.label") }))
+	within(document.querySelector('[data-slot="library-filters"]') as HTMLElement)
 		.getAllByRole("button")
 		.find((button) => button.textContent?.startsWith(label)) as HTMLElement
 
@@ -1568,6 +1592,27 @@ describe("a board opened from the Library grid", () => {
 			screen.queryByRole("heading", { name: common("board.empty.title") }),
 		).toBeNull()
 		expect(boardCanvas()).toBeNull()
+	})
+
+	it("duplicates the open board from its bar, keeps it open and lists the copy", async () => {
+		const { router } = await mountApp()
+		await showLibraryOf(router, [ROADMAP])
+		await click(tileNamed(titleOf(ROADMAP)))
+
+		await click(
+			screen.getByRole("button", {
+				name: common("library.document.duplicate"),
+			}),
+		)
+
+		expect(boardCanvas()).toBeInstanceOf(HTMLElement)
+		expect(selectedTabName()).toBe(titleOf(ROADMAP))
+		await click(
+			within(breadcrumbOf(titleOf(ROADMAP))).getByRole("button", {
+				name: common("library.document.back"),
+			}),
+		)
+		expect(isTileShown("Roadmap copy")).toBe(true)
 	})
 
 	it("turns its tab back into the Library on the board's Back", async () => {

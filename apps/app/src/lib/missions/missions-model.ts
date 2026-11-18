@@ -11,6 +11,7 @@ import type {
 	MissionPullRequest,
 	MissionEventKind as ShownEventKind,
 } from "@workspace/ui/components/mission"
+import type { MissionPropertiesProps } from "@workspace/ui/components/mission-properties"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import type {
 	EarlierTodayRow,
@@ -399,6 +400,26 @@ export const toMissionHeaderActivity = (
 	mission: Mission,
 ): MissionHeaderActivity => ({
 	...agentActivityOf(mission),
+	pullRequest: pullRequestOf(mission.pullRequestUrl),
+})
+
+type MissionPropertiesRead = Pick<
+	MissionPropertiesProps,
+	"ticket" | "openedAt" | "status" | "commitsAhead" | "pullRequest"
+>
+
+export const toMissionProperties = (
+	mission: Mission,
+): MissionPropertiesRead => ({
+	ticket: {
+		externalId: mission.ticket.externalId,
+		title: mission.ticket.title,
+		platform: mission.ticket.platform,
+		url: mission.ticket.url,
+	},
+	openedAt: mission.openedAt,
+	status: mission.status ?? undefined,
+	commitsAhead: mission.commitsAhead ?? undefined,
 	pullRequest: pullRequestOf(mission.pullRequestUrl),
 })
 

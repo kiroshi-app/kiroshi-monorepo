@@ -85,6 +85,15 @@ const renameListed = ({ name, newName }: RenameCall) => {
 	return renamed
 }
 
+const copyNameOf = (name: string) => name.replace(/(\.[^.]+)$/, " copy$1")
+
+const duplicateListed = ({ name }: NamedCall) => {
+	const original = harness.listed.find((item) => item.name === name)
+	const copy = itemNamed(copyNameOf(name), original?.kind ?? "document")
+	harness.listed = [...harness.listed, copy]
+	return copy
+}
+
 const stateWith = (markdown: string) => {
 	const doc = new Y.Doc()
 	doc.getText("markdown").insert(0, markdown)
@@ -111,6 +120,7 @@ const LIBRARY_ANSWERS: Record<string, (args: NamedCall) => unknown> = {
 	library_apply_update: () => null,
 	library_share_presence: () => null,
 	library_rename_document: (args) => renameListed(args as RenameCall),
+	library_duplicate: duplicateListed,
 	library_delete: ({ name }) => {
 		harness.listed = harness.listed.filter((item) => item.name !== name)
 		return null
@@ -242,18 +252,27 @@ const pickInLightboxMore = async (action: MenuAction) => {
 	await press(await screen.findByRole("menuitem", { name: menuItemOf(action) }))
 }
 
+const lightboxBack = () =>
+	screen
+		.queryAllByRole("button", { name: common("library.lightbox.back") })
+		.find((button) => button.closest('[data-slot="library-lightbox"]')) ?? null
+
+const findLightboxBack = () =>
+	waitFor(() => {
+		const back = lightboxBack()
+		if (!back) throw new Error("The image viewer is not open")
+		return back
+	})
+
 const openImage = async () => {
 	await press(await tileOf("diagram.png"))
-	return screen.findByRole("button", { name: common("library.lightbox.back") })
+	return findLightboxBack()
 }
 
 const titleField = async () =>
 	(await screen.findByRole("textbox", {
 		name: common("library.editor.title"),
 	})) as HTMLInputElement
-
-const lightboxBack = () =>
-	screen.queryByRole("button", { name: common("library.lightbox.back") })
 
 const callsOf = (command: string) =>
 	harness.calls
@@ -320,11 +339,7 @@ describe("Open in the menu of a Library item", () => {
 
 		await pickInMenuOf("diagram.png", "open")
 
-		expect(
-			await screen.findByRole("button", {
-				name: common("library.lightbox.back"),
-			}),
-		).toBeInstanceOf(HTMLElement)
+		expect(await findLightboxBack()).toBeInstanceOf(HTMLElement)
 	})
 })
 
@@ -437,11 +452,7 @@ describe("a tab opening a Library item", () => {
 			await waitFor(() => expect(skeletonShown("loadingImage")).toBe(true))
 
 			await releaseList()
-			expect(
-				await screen.findByRole("button", {
-					name: common("library.lightbox.back"),
-				}),
-			).toBeInstanceOf(HTMLElement)
+			expect(await findLightboxBack()).toBeInstanceOf(HTMLElement)
 		},
 	)
 
@@ -975,7 +986,7 @@ describe("the Back button of the lightbox", () => {
 	})
 })
 
-type DocumentBarButton = "copy" | "download" | "more"
+type DocumentBarButton = "download" | "duplicate" | "more"
 
 const documentBarButton = (button: DocumentBarButton) =>
 	screen.getByRole("button", { name: common(`library.document.${button}`) })
@@ -1312,12 +1323,12 @@ describe("the document bar", () => {
 		["the host", false, "library_copy"],
 		["a joined Space", true, "library_copy_bytes"],
 	] as const)(
-		"copies the open document on %s as the grid does and shows Copied",
+		"copies the open document on %s from More as the grid does and shows Copied",
 		async (_space, isJoined, command) => {
 			await renderLibraryScreen({ isJoined })
 			await openNotes()
 
-			await press(documentBarButton("copy"))
+			await pickInDocumentMore("copy")
 
 			await waitFor(() => expect(callsOf(command)).toHaveLength(1))
 			expect(
@@ -1367,8 +1378,12 @@ describe("the document bar", () => {
 	})
 
 	it.each([
-		["the host", false, ["openInNewTab", "rename", "showInFolder", "delete"]],
-		["a joined Space", true, ["openInNewTab", "rename", "delete"]],
+		[
+			"the host",
+			false,
+			["openInNewTab", "rename", "copy", "showInFolder", "delete"],
+		],
+		["a joined Space", true, ["openInNewTab", "rename", "copy", "delete"]],
 	] as const)(
 		"offers in More on %s Rename and not Open",
 		async (_space, isJoined, actions) => {
@@ -1414,16 +1429,21 @@ describe("the document bar", () => {
 	})
 
 	it.each([
-		["copy", "library_copy", "copy"],
-		["download", "library_save", "save"],
+		["copy", "library_copy", "copy", () => pickInDocumentMore("copy")],
+		[
+			"download",
+			"library_save",
+			"save",
+			() => press(documentBarButton("download")),
+		],
 	] as const)(
 		"raises the grid's notice and keeps the document open when the host refuses %s",
-		async (button, command, failure) => {
+		async (_action, command, failure, choose) => {
 			harness.refused = command
 			await renderLibraryScreen({ isJoined: false })
 			await openNotes()
 
-			await press(documentBarButton(button))
+			await choose()
 
 			await waitFor(() =>
 				expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf(failure)),
@@ -1444,5 +1464,205 @@ describe("the document bar", () => {
 			expect(raiseFailureNotice).toHaveBeenCalledWith(failureOf("delete")),
 		)
 		expect(documentOpen()).toBeInstanceOf(HTMLElement)
+	})
+})
+
+describe("the presence of an open Library image", () => {
+	const CHART = itemNamed("chart.png", "image")
+	const MEMBER_LEASE_MS = 30_000
+
+	const sharesOn = (name: string) =>
+		callsOf("library_share_presence").filter(
+			(args) => (args as NamedCall).name === name,
+		)
+
+	const imageSeatOn = (name: string) => ({
+		spaceId: SPACE_ID,
+		name,
+		at: { kind: "image" },
+	})
+
+	const clearedSeatOn = (name: string) => ({
+		spaceId: SPACE_ID,
+		name,
+		at: null,
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it.each(SPACES)(
+		"is shared on the image the lightbox opens, on %s",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+
+			await openImage()
+
+			await waitFor(() =>
+				expect(sharesOn("diagram.png")).toEqual([imageSeatOn("diagram.png")]),
+			)
+		},
+	)
+
+	it("is renewed before the member lease ends while the image stays open", async () => {
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: true })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS - 1)
+		})
+
+		expect(sharesOn("diagram.png").length).toBeGreaterThan(1)
+		expect(sharesOn("diagram.png")).not.toContainEqual(
+			clearedSeatOn("diagram.png"),
+		)
+	})
+
+	it("moves to the next image and clears the one left", async () => {
+		harness.listed = [DOCUMENT, IMAGE, CHART]
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+
+		await press(
+			screen.getByRole("button", { name: common("library.lightbox.next") }),
+		)
+
+		await waitFor(() =>
+			expect(sharesOn("chart.png")).toEqual([imageSeatOn("chart.png")]),
+		)
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS)
+		})
+		expect(sharesOn("diagram.png")).toHaveLength(2)
+	})
+
+	it("is cleared when the lightbox closes, and no longer renewed", async () => {
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
+		await renderLibraryScreen({ isJoined: false })
+
+		await press(await openImage())
+
+		await waitFor(() => expect(lightboxBack()).toBeNull())
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+		await act(async () => {
+			vi.advanceTimersByTime(MEMBER_LEASE_MS)
+		})
+		expect(sharesOn("diagram.png")).toHaveLength(2)
+	})
+
+	it("is cleared when the screen unmounts with the image open", async () => {
+		await renderLibraryScreen({ isJoined: false })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		cleanup()
+
+		expect(sharesOn("diagram.png")).toEqual([
+			imageSeatOn("diagram.png"),
+			clearedSeatOn("diagram.png"),
+		])
+	})
+
+	it("is shared once however often the screen renders", async () => {
+		const { rerender } = await renderLibraryScreen({ isJoined: false })
+		await openImage()
+		await waitFor(() => expect(sharesOn("diagram.png")).toHaveLength(1))
+
+		rerender()
+		rerender()
+
+		expect(sharesOn("diagram.png")).toEqual([imageSeatOn("diagram.png")])
+		expect(lightboxBack()).toBeInstanceOf(HTMLElement)
+	})
+
+	it("is logged when the host refuses it, and the image stays open with no notice", async () => {
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		harness.refused = "library_share_presence"
+		await renderLibraryScreen({ isJoined: true })
+
+		await openImage()
+
+		await waitFor(() => expect(logged).toHaveBeenCalled())
+		expect(lightboxBack()).toBeInstanceOf(HTMLElement)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
+	})
+})
+
+const lightboxDuplicate = () =>
+	screen
+		.getAllByRole("button", { name: common("library.lightbox.duplicate") })
+		.find((button) =>
+			button.closest('[data-slot="library-lightbox"]'),
+		) as HTMLElement
+
+describe("Duplicate in the bar of an open Library item", () => {
+	it.each(SPACES)(
+		"duplicates the open document on %s, keeps it open and lists the copy",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openNotes()
+
+			await press(documentBarButton("duplicate"))
+
+			await waitFor(() =>
+				expect(callsOf("library_duplicate")).toEqual([
+					{ spaceId: SPACE_ID, name: "notes.txt" },
+				]),
+			)
+			expect(shownTitle()).toBe("notes")
+			await leaveDocument()
+			await waitFor(() => expect(tileShown("notes copy")).toBe(true))
+		},
+	)
+
+	it.each(SPACES)(
+		"duplicates the open image on %s, keeps it open and lists the copy",
+		async (_space, isJoined) => {
+			await renderLibraryScreen({ isJoined })
+			await openImage()
+
+			await press(lightboxDuplicate())
+
+			await waitFor(() =>
+				expect(callsOf("library_duplicate")).toEqual([
+					{ spaceId: SPACE_ID, name: "diagram.png" },
+				]),
+			)
+			await press(await findLightboxBack())
+			await waitFor(() => expect(tileShown("diagram copy.png")).toBe(true))
+		},
+	)
+
+	it("raises the duplicate notice naming the document and keeps it open when the host refuses", async () => {
+		harness.refused = "library_duplicate"
+		await renderLibraryScreen({ isJoined: false })
+		await openNotes()
+
+		await press(documentBarButton("duplicate"))
+
+		await waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: common("library.itemMenu.duplicateFailure", {
+						name: "notes",
+					}),
+				}),
+			),
+		)
+		expect(shownTitle()).toBe("notes")
+		expect(tileShown("notes copy")).toBe(false)
 	})
 })

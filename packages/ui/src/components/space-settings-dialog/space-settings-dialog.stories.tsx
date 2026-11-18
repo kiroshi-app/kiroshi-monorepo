@@ -13,6 +13,7 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
@@ -1924,7 +1925,9 @@ const expectRowAction = async (action: HTMLElement) => {
 	const box = action.getBoundingClientRect()
 	await expect([box.width, box.height]).toEqual([28, 28])
 	await expect(action).toHaveTextContent("")
-	await expect(getComputedStyle(action).borderRadius).toBe("12px")
+	await expect(getComputedStyle(action).borderRadius).toBe(
+		tokenStyleIn(action, "rounded-button", "borderTopLeftRadius"),
+	)
 	await expect(action.querySelector("svg")?.getBoundingClientRect().width).toBe(
 		16,
 	)

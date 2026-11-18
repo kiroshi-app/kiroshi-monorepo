@@ -1,71 +1,50 @@
-import { useTranslation } from "react-i18next"
-
-import { AppHeader } from "@workspace/ui/components/app-header"
-import { Icons } from "@workspace/ui/components/icons"
+import { AppHeader, AppHeaderText } from "@workspace/ui/components/app-header"
 import {
 	SkeletonBar,
 	SkeletonHexagon,
 } from "@workspace/ui/components/list-skeleton"
-import type { MissionHeaderProps } from "@workspace/ui/components/mission-header"
-import { Button } from "@workspace/ui/components/ui/button"
+import {
+	MissionHeaderPath,
+	type MissionHeaderProps,
+} from "@workspace/ui/components/mission-header"
 import { cn } from "@workspace/ui/lib/utils"
+
+const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none"
 
 type MissionHeaderSkeletonProps = Pick<
 	MissionHeaderProps,
-	"onBack" | "windowControls" | "dragRegion" | "className"
+	"onBack" | "pathLabel" | "dragRegion" | "className"
 >
 
 const MissionHeaderSkeleton = ({
 	onBack,
-	windowControls,
+	pathLabel,
 	dragRegion,
 	className,
-}: MissionHeaderSkeletonProps) => {
-	const { t } = useTranslation("chat")
-
-	return (
-		<div
-			aria-busy="true"
-			className={cn("flex w-full shrink-0 flex-col", className)}
-			data-slot="mission-header-skeleton"
-		>
-			<AppHeader
-				data-tauri-drag-region={dragRegion}
-				leading={
-					<>
-						<Button
-							aria-label={t("missions.header.back")}
-							onClick={onBack}
-							size="icon"
-							variant="ghost"
-						>
-							<Icons.Previous aria-hidden="true" />
-						</Button>
-						<span
-							aria-hidden="true"
-							className="flex min-w-0 animate-pulse items-center gap-2 motion-reduce:animate-none"
-						>
-							<SkeletonHexagon className="size-6" />
-							<SkeletonBar className="w-48" />
+}: MissionHeaderSkeletonProps) => (
+	<div
+		aria-busy="true"
+		className={className}
+		data-slot="mission-header-skeleton"
+	>
+		<AppHeader
+			data-tauri-drag-region={dragRegion}
+			leading={
+				<>
+					<SkeletonHexagon className={cn("size-8", SKELETON_PULSE)} />
+					<AppHeaderText
+						topLine={
+							<MissionHeaderPath onBack={onBack} pathLabel={pathLabel} />
+						}
+					>
+						<span className="flex h-4.5 items-center">
+							<SkeletonBar className={cn("w-48", SKELETON_PULSE)} />
 						</span>
-					</>
-				}
-				windowControls={windowControls}
-			/>
-			<div
-				className="flex h-8.5 shrink-0 items-center gap-2 border-border border-b pe-4 ps-12.5"
-				data-slot="mission-ticket-band-skeleton"
-			>
-				<span
-					aria-hidden="true"
-					className="flex min-w-0 flex-1 animate-pulse items-center gap-2 motion-reduce:animate-none"
-				>
-					<SkeletonBar className="w-40" />
-					<SkeletonBar className="ms-auto w-16 shrink-0" isFaint />
-				</span>
-			</div>
-		</div>
-	)
-}
+					</AppHeaderText>
+				</>
+			}
+		/>
+	</div>
+)
 
 export { MissionHeaderSkeleton, type MissionHeaderSkeletonProps }

@@ -3,6 +3,8 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	columnContentOf,
+	expectCentredColumn,
 	expectLaptopWindow,
 	expectRailSpaceHost,
 	expectSettingsChrome,
@@ -181,7 +183,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a column centred and capped at 800px, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and colour field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
+					"A space's settings as a whole window instead of an overlay. The settings menu takes the place of the conversations panel: the space's avatar and name, then its entries, Danger zone pinned at the foot. The content column draws the same panels the space settings dialog draws. Each page sits under a header bar the height of a conversation's header carrying the entry's label, its first row where a conversation's first message starts: forms in a 640px column centred in the card, 24px from the bar and from both card edges, lists across the whole card. Members, Companions, Skills, Applications and History are lists; an open application is a form. Space opens on the space's own header: its avatar, name, standing and Open, then its Name field and colour field and, while it is yours and not shared, the Not shared yet card. A joined space pins Leave space instead of Danger zone and, while its host is not connected, greys every entry but Space; an invitation reduces the menu to one Invitation entry and pins Decline. Applications opens onto the space's installed applications, one sub-entry each with its mark and connection dot, then Add an application.",
 			},
 		},
 	},
@@ -927,7 +929,7 @@ export const SpaceFormPage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to see a form page in a laptop window: the Space page of a space of yours, not shared yet. Check the Space header bar, then the space's own header and its Name field in a column centred and capped at 800px, its first row where a conversation's first message starts. Pick `SpaceCompanions` for a list page. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
+					"Reach for this to see a form page in a laptop window: the Space page of a space of yours, not shared yet. Check the Space header bar, then the space's own header and its Name field in a 640px column centred in the card, its first row 24px under the bar. Pick `SpaceCompanions` for a list page. The screen in a 1280 by 800 window, the size the review screenshot is taken at.",
 			},
 		},
 	},
@@ -957,6 +959,103 @@ export const SpaceCompanions = meta.story({
 		await expectLaptopWindow()
 		await menuIn()
 		await expectSettingsPage(screen.getByRole("main"), "Agents", "full")
+	},
+})
+
+export const SpaceFormPageDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	args: YOURS_NOT_SHARED,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`SpaceFormPage` in the dark theme, artboard I8b. Check that the column keeps its 640px and its centred place on the dark card.",
+			},
+		},
+	},
+	play: async () => {
+		await expectLaptopWindow()
+		await menuIn()
+		await expectSettingsPage(screen.getByRole("main"), "Space", "column")
+	},
+})
+
+const SCROLLED_AWAY = 120
+
+export const SpaceFormPageScrolled = meta.story({
+	globals: { viewport: { value: "laptopShort" } },
+	args: YOURS_NOT_SHARED,
+	parameters: {
+		viewport: {
+			options: {
+				laptopShort: {
+					name: "Laptop, short",
+					styles: { width: "1280px", height: "360px" },
+				},
+			},
+		},
+		docs: {
+			description: {
+				story:
+					"`SpaceFormPage` scrolled in a short window, artboard I8c. Check that the rows slide under the bar while the column keeps its 640px and its centred place.",
+			},
+		},
+	},
+	play: async () => {
+		await menuIn()
+		const page = slotIn(screen.getByRole("main"), "settings-screen-page")
+		const scroller = slotIn(page, "screen-layout-scroller")
+		const resting = await expectCentredColumn(page)
+
+		await waitFor(() =>
+			expect(scroller.scrollHeight - scroller.clientHeight).toBeGreaterThan(
+				SCROLLED_AWAY,
+			),
+		)
+		scroller.scrollTo({ top: SCROLLED_AWAY })
+		await waitFor(() => expect(scroller.scrollTop).toBe(SCROLLED_AWAY))
+
+		await expect(columnContentOf(slotIn(page, "screen-layout-column"))).toEqual(
+			resting,
+		)
+		await expectSettingsPage(screen.getByRole("main"), "Space", "column")
+	},
+})
+
+const NARROW_CARD = 480
+
+export const SpaceFormPageInNarrowCard = meta.story({
+	globals: { viewport: { value: "narrowCard" } },
+	args: YOURS_NOT_SHARED,
+	parameters: {
+		viewport: {
+			options: {
+				narrowCard: {
+					name: "480px card",
+					styles: { width: "836px", height: "800px" },
+				},
+			},
+		},
+		docs: {
+			description: {
+				story:
+					"`SpaceFormPage` in a window that leaves the content card 480px wide. Check that the column shrinks to the card less 24px on each side, with no horizontal scroll.",
+			},
+		},
+	},
+	play: async () => {
+		await menuIn()
+		const page = slotIn(screen.getByRole("main"), "settings-screen-page")
+		const scroller = slotIn(page, "screen-layout-scroller")
+
+		await expect(
+			Math.round(
+				(page.closest("[data-content-card]") ?? page).getBoundingClientRect()
+					.width,
+			),
+		).toBe(NARROW_CARD)
+		await expectSettingsPage(screen.getByRole("main"), "Space", "column")
+		await expect(scroller.scrollWidth).toBe(scroller.clientWidth)
 	},
 })
 

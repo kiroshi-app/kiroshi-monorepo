@@ -1,8 +1,13 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
+import {
+	APP_HEADER_TITLE,
+	AppHeaderButton,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
@@ -12,12 +17,42 @@ import {
 	type ConnectionStatusState,
 } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
-import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
-const AVATAR_SIZE = 24
+const AVATAR_SIZE = 32
 
-const HEADER_IDENTITY_CLASS = "h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5"
+type HeaderSubjectButtonProps = {
+	"aria-label": string
+	"data-slot": string
+	isSettingsOpen: boolean
+	onOpenSettings?: () => void
+	className?: string
+	children: ReactNode
+}
+
+const HeaderSubjectButton = ({
+	"aria-label": settingsLabel,
+	isSettingsOpen,
+	onOpenSettings,
+	className,
+	children,
+	...props
+}: HeaderSubjectButtonProps) => (
+	<div
+		className={cn("flex min-w-0 items-center gap-2.5", className)}
+		{...props}
+	>
+		{children}
+		<AppHeaderButton
+			aria-expanded={isSettingsOpen}
+			aria-label={settingsLabel}
+			kind="subject"
+			onClick={onOpenSettings}
+		>
+			<Icons.Settings aria-hidden="true" />
+		</AppHeaderButton>
+	</div>
+)
 
 type HeaderIdentityButtonProps = {
 	name: string
@@ -50,14 +85,26 @@ const HeaderIdentityButton = ({
 }: HeaderIdentityButtonProps) => {
 	const { t } = useTranslation("chat")
 
+	const shownName = <span className={APP_HEADER_TITLE}>{name}</span>
+	const besidePresence = (line: ReactNode) => (
+		<span className="flex min-w-0 items-center gap-1.5">
+			{line}
+			<ConnectionStatus
+				className="shrink-0"
+				name={name}
+				state={connection}
+				version={version}
+			/>
+		</span>
+	)
+
 	return (
-		<Button
-			aria-expanded={isSettingsOpen}
+		<HeaderSubjectButton
 			aria-label={t("screen.identity", { name })}
-			className={cn(HEADER_IDENTITY_CLASS, className)}
+			className={className}
 			data-slot="header-identity-button"
-			onClick={onOpenSettings}
-			variant="ghost"
+			isSettingsOpen={isSettingsOpen}
+			onOpenSettings={onOpenSettings}
 		>
 			<BotIdentityAvatar
 				hue={blot}
@@ -68,17 +115,17 @@ const HeaderIdentityButton = ({
 				size={AVATAR_SIZE}
 				working={working}
 			/>
-			<span className="min-w-0 truncate">{name}</span>
-			<BotTitleBadge title={title} variant="line" />
-			<ConnectionStatus
-				className="shrink-0"
-				name={name}
-				state={connection}
-				version={version}
-			/>
-			<Icons.Settings aria-hidden="true" className="text-muted-foreground" />
-		</Button>
+			<AppHeaderText
+				topLine={
+					title
+						? besidePresence(<span className="truncate">{title}</span>)
+						: undefined
+				}
+			>
+				{title ? shownName : besidePresence(shownName)}
+			</AppHeaderText>
+		</HeaderSubjectButton>
 	)
 }
 
-export { HEADER_IDENTITY_CLASS, HeaderIdentityButton }
+export { HeaderIdentityButton, HeaderSubjectButton }

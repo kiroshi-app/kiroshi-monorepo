@@ -9,7 +9,6 @@ import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { ActivityPanel } from "@/components/thread-routines"
 import { ThreadScreen } from "@/components/thread-screen"
-import { titleBarDragRegion } from "@/components/window-caption-controls"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
@@ -21,7 +20,11 @@ import type {
 	OpenMissionInNewTab,
 } from "@/lib/missions/mission-actions"
 import type { Mission } from "@/lib/missions/mission-contract"
-import { toMissionConversation } from "@/lib/missions/mission-thread-model"
+import {
+	type MissionOrigins,
+	missionPathLabelOf,
+	toMissionConversation,
+} from "@/lib/missions/mission-thread-model"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import { useMissionDetail } from "@/lib/missions/use-mission-detail"
 import { useMissionReadFailure } from "@/lib/missions/use-mission-failure-notices"
@@ -50,6 +53,7 @@ type MissionThreadProps = {
 	activityPanel: ActivityPanel
 	mission: Mission
 	opening: OpenedMission
+	pathLabel?: string
 	bot: Bot
 	bots: Bot[]
 	events: MissionEventModel[]
@@ -69,6 +73,7 @@ const MissionThread = ({
 	activityPanel,
 	mission,
 	opening,
+	pathLabel,
 	bot,
 	bots,
 	events,
@@ -93,9 +98,9 @@ const MissionThread = ({
 			conversation: toMissionConversation({ mission, bot }),
 			runtimes,
 			onOpenSettings: () => undefined,
-			mission: { mission, events, now, opening, onLeave },
+			mission: { mission, events, now, opening, pathLabel, onLeave },
 		}),
-		[mission, bot, events, now, opening, runtimes, onLeave],
+		[mission, bot, events, now, opening, pathLabel, runtimes, onLeave],
 	)
 
 	return (
@@ -118,6 +123,7 @@ const MissionThread = ({
 type MissionThreadScreenProps = {
 	activityPanel: ActivityPanel
 	opening: OpenedMission
+	origins: MissionOrigins
 	bots: Bot[]
 	runtimes: ConversationRuntimes
 	attachments: AttachmentsController
@@ -132,6 +138,7 @@ type MissionThreadScreenProps = {
 export function MissionThreadScreen({
 	activityPanel,
 	opening,
+	origins,
 	bots,
 	runtimes,
 	attachments,
@@ -145,6 +152,11 @@ export function MissionThreadScreen({
 	const { read, isPending, hasFailedToRead, readError, onRetry } =
 		useMissionDetail(opening.missionId, opening.spaceId)
 	const detailSkeleton = useSkeletonSlot(isPending, MISSION_DETAIL_SKELETON)
+	const pathLabel = missionPathLabelOf(
+		opening.missionId,
+		read?.mission,
+		origins,
+	)
 
 	const bot = read
 		? bots.find(({ id }) => id === read.mission.botId)
@@ -156,8 +168,9 @@ export function MissionThreadScreen({
 			<ThreadLayout
 				header={
 					<MissionHeaderSkeleton
-						dragRegion={titleBarDragRegion()}
+						dragRegion="deep"
 						onBack={onLeave}
+						pathLabel={pathLabel}
 					/>
 				}
 				skeleton={detailSkeleton}
@@ -183,6 +196,7 @@ export function MissionThreadScreen({
 			onOpenMission={onOpenMission}
 			onOpenMissionInNewTab={onOpenMissionInNewTab}
 			opening={opening}
+			pathLabel={pathLabel}
 			readerName={readerName}
 			runtimes={runtimes}
 		/>

@@ -569,7 +569,11 @@ export const SeveralQuestions = meta.story({
 			const shown = card.getByRole("tab", { name: CHANNELS_QUESTION.header })
 			await expect(shown).toHaveAttribute("aria-selected", "true")
 			const lifted = tokenStyleIn(shown, "bg-card", "backgroundColor")
-			await waitFor(() => expect(backgroundOf(shown)).toBe(lifted))
+			const pill = slotIn(
+				shown.parentElement as HTMLElement,
+				"sliding-tabs-pill",
+			)
+			await waitFor(() => expect(backgroundOf(pill)).toBe(lifted))
 			const check = answered.querySelector("svg") as SVGElement
 			await expect(getComputedStyle(check).color).toBe(
 				tokenStyleIn(answered, "text-bot-badge-done", "color"),

@@ -10,6 +10,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+		"dev:replay": "KIROSHI_REPLAY=on tauri dev --config src-tauri/tauri.dev.conf.json",
 		"dev:web": "vite",
 		"build": "tsc -b && vite build",
 		"serve": "vite preview",

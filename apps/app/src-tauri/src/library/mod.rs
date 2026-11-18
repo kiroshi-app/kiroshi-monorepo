@@ -69,6 +69,8 @@ const STAGED_PREFIX: &str = ".import-";
 
 const UNTITLED: &str = "Untitled";
 
+const COPY_SUFFIX: &str = " copy";
+
 const MAX_TITLE_CHARS: usize = 100;
 
 const UNSAFE_IN_A_NAME: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
@@ -203,6 +205,15 @@ fn a_document(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryErro
 		AcceptedType::Document(_) => Ok(()),
 		AcceptedType::Image { .. } | AcceptedType::Board => {
 			Err(LibraryError::NotADocument { name: name.to_owned() })
+		}
+	}
+}
+
+fn an_image(root: &Path, space_id: &str, name: &str) -> Result<(), LibraryError> {
+	match resolve(root, space_id, name)?.accepted {
+		AcceptedType::Image { .. } => Ok(()),
+		AcceptedType::Document(_) | AcceptedType::Board => {
+			Err(LibraryError::NotAnImage { name: name.to_owned() })
 		}
 	}
 }
@@ -720,6 +731,35 @@ pub(crate) async fn delete_item<R: Runtime>(
 	Ok(())
 }
 
+pub(crate) fn duplicate_item<R: Runtime>(
+	app: &AppHandle<R>,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let copy = duplicated(&documents(app), root, space_id, name)?;
+	announce_change(app, space_id);
+	Ok(copy)
+}
+
+fn duplicated(
+	documents: &Documents,
+	root: &Path,
+	space_id: &str,
+	name: &str,
+) -> Result<LibraryItem, LibraryError> {
+	let content = documents.content(root, space_id, name)?;
+	let dir = space_dir(root, space_id);
+	let copy_name = landed(&dir, name, &content, copy_named)?;
+	let path = dir.join(&copy_name);
+	let listed = item_at(&path, copy_name.clone())
+		.and_then(|item| item.ok_or(LibraryError::Missing { name: copy_name }));
+	if listed.is_err() {
+		discarded(&path);
+	}
+	listed
+}
+
 fn announce_change<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 	announced(app, LibraryChanged { space_id: space_id.to_owned(), overwritten: None });
 }
@@ -967,7 +1007,7 @@ fn imported(
 	};
 	let dir = space_dir(root, space_id);
 	fs::create_dir_all(&dir).map_err(unwritable)?;
-	let landed_name = landed(&dir, name, bytes)?;
+	let landed_name = landed(&dir, name, bytes, numbered)?;
 	let path = dir.join(&landed_name);
 	let listed = thumbnail
 		.map_or(Ok(()), |png| {
@@ -981,10 +1021,12 @@ fn imported(
 	listed
 }
 
-fn landed(dir: &Path, name: &str, bytes: &[u8]) -> Result<String, LibraryError> {
+type Naming = fn(&str, u32) -> String;
+
+fn landed(dir: &Path, name: &str, bytes: &[u8], naming: Naming) -> Result<String, LibraryError> {
 	let staged = staged_path(dir);
-	let landed =
-		staged_with(&staged, bytes).and_then(|()| linked_under_free_name(&staged, dir, name));
+	let landed = staged_with(&staged, bytes)
+		.and_then(|()| linked_under_free_name(&staged, dir, name, naming));
 	discarded(&staged);
 	landed
 }
@@ -999,10 +1041,15 @@ fn staged_with(staged: &Path, bytes: &[u8]) -> Result<(), LibraryError> {
 	file.write_all(bytes).and_then(|()| file.sync_all()).map_err(unwritable)
 }
 
-fn linked_under_free_name(staged: &Path, dir: &Path, name: &str) -> Result<String, LibraryError> {
+fn linked_under_free_name(
+	staged: &Path,
+	dir: &Path,
+	name: &str,
+	naming: Naming,
+) -> Result<String, LibraryError> {
 	let mut copy = 1;
 	loop {
-		let candidate = numbered(name, copy);
+		let candidate = naming(name, copy);
 		match fs::hard_link(staged, dir.join(&candidate)) {
 			Ok(()) => return Ok(candidate),
 			Err(error) if error.kind() == io::ErrorKind::AlreadyExists => copy += 1,
@@ -1016,6 +1063,17 @@ fn numbered(name: &str, copy: u32) -> String {
 		(1, _) => name.to_owned(),
 		(_, Some((stem, extension))) => format!("{stem} ({copy}).{extension}"),
 		(_, None) => format!("{name} ({copy})"),
+	}
+}
+
+fn copy_named(name: &str, copy: u32) -> String {
+	let suffix = match copy {
+		1 => COPY_SUFFIX.to_owned(),
+		_ => format!("{COPY_SUFFIX} {copy}"),
+	};
+	match name.rsplit_once('.') {
+		Some((stem, extension)) => format!("{stem}{suffix}.{extension}"),
+		None => format!("{name}{suffix}"),
 	}
 }
 

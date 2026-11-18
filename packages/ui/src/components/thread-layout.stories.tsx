@@ -1,28 +1,48 @@
-import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+	botIdentityAvatars,
+	colourTransitionsOf,
+	expectHeaderTitleStep,
+	expectHeaderTopLineStep,
+	expectStaticHeaderBar,
+	LAPTOP_WINDOW,
 	mergeA11y,
 	probedStyleOf,
 	slotIn,
 	slotsIn,
 	tokenLengthOf,
+	tokenStyleIn,
+	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
+import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { LIBRARY_LIGHTBOX_IMAGES } from "@workspace/ui/components/library.fixtures"
 import { LibraryLightbox } from "@workspace/ui/components/library-lightbox"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
+import { MissionProperties } from "@workspace/ui/components/mission-properties"
+import {
+	MISSION_NOW,
+	MISSION_PULL_REQUEST,
+	MISSION_TICKET,
+	NO_EARLIER_TODAY,
+} from "@workspace/ui/components/missions.fixtures"
 import { Notice } from "@workspace/ui/components/notice"
 import { PinnedMessages } from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptQueue } from "@workspace/ui/components/prompt-queue"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import {
+	RoutinesPanel,
+	RoutinesPanelTrigger,
+} from "@workspace/ui/components/routines-panel"
 import {
 	ThreadLayout,
 	type ThreadLayoutProps,
@@ -256,7 +276,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. A transcript shorter than its viewport rests its last row against the composer and leaves the free space above its first row, the way a conversation reads. The transcript region still stretches, so a lone child that centres itself with `m-auto` stays centred in the free space. It owns no data and no scroll logic of its own: it wraps MessageScroller and lets the transcript run the full width of the shell. `opening` is handed to the transcript as it is, to stand at the top of the thread over the first row, takes no room when it renders nothing, and is not drawn while `skeleton` stands in for the transcript.",
 			},
 		},
 	},
@@ -648,8 +668,11 @@ export const ForwardedRegion = meta.story({
 
 const PROMPT_OVERHANG = 20
 
-const overhangOf = (frame: HTMLElement) => {
-	const column = slotIn(frame, "message-scroller-content")
+const overhangOf = (
+	frame: HTMLElement,
+	columnSlot = "message-scroller-content",
+) => {
+	const column = slotIn(frame, columnSlot)
 	const { paddingLeft, paddingRight } = getComputedStyle(column)
 	const columnBox = column.getBoundingClientRect()
 	const promptBox = slotIn(frame, "prompt-input").getBoundingClientRect()
@@ -663,23 +686,46 @@ const overhangOf = (frame: HTMLElement) => {
 	}
 }
 
-export const PromptOverhangsTheThread = meta.story({
-	render: (args) => (
-		<div className="flex flex-col gap-6">
-			<div data-slot="overhang-frame" className="h-100 w-[1072px]">
-				<ThreadLayout {...args} label="Widest thread" />
-			</div>
-			<div data-slot="overhang-frame" className="h-100 w-120">
-				<ThreadLayout {...args} header={null} label="Narrow thread" />
-			</div>
+const columnWidthOf = (
+	frame: HTMLElement,
+	columnSlot = "message-scroller-content",
+) => {
+	const column = slotIn(frame, columnSlot)
+	const { paddingLeft, paddingRight } = getComputedStyle(column)
+	return Math.round(
+		column.getBoundingClientRect().width -
+			Number.parseFloat(paddingLeft) -
+			Number.parseFloat(paddingRight),
+	)
+}
+
+const SOLO_COLUMN_WIDTH = 680
+
+const MISSION_COLUMN_WIDTH = 640
+
+const NARROW_FRAME_WIDTH = 480
+
+const HISTORY_LOADED = { hasNextPage: false, isFetchingNextPage: false }
+
+const inOverhangFrames = (args: ThreadLayoutProps) => (
+	<div className="flex flex-col gap-6">
+		<div data-slot="overhang-frame" className="h-100 w-[1072px]">
+			<ThreadLayout {...args} label="Widest thread" />
 		</div>
-	),
-	args: { rows: CONVERSATION_ROWS, children: null },
+		<div data-slot="overhang-frame" className="h-100 w-120">
+			<ThreadLayout {...args} header={null} label="Narrow thread" />
+		</div>
+	</div>
+)
+
+export const PromptOverhangsTheThread = meta.story({
+	render: inOverhangFrames,
+	args: { rows: CONVERSATION_ROWS, children: null, older: HISTORY_LOADED },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges.",
+					"Measured on the Final page, artboard 1b Solo a long message the input grows: the bubbles column is 680 wide and the prompt 720, so the prompt overhangs it by 20 on each side and the bubbles edge meets the start of its rounded corner. Check the 20 at the widest thread and at a 480 wide one, where the prompt still keeps the shell inset from the thread card's edges, and that a thread with no `opening` keeps its start of history line once the last page has landed. Pick `PromptOverhangsTheMissionThread` for a mission thread.",
 			},
 		},
 	},
@@ -692,6 +738,8 @@ export const PromptOverhangsTheThread = meta.story({
 		await expect(
 			slotIn(widest, "prompt-input").getBoundingClientRect().width,
 		).toBe(720)
+		await expect(columnWidthOf(widest)).toBe(SOLO_COLUMN_WIDTH)
+		await expect(slotsIn(widest, "transcript-start-of-history")).toHaveLength(1)
 		await expect(overhangOf(narrow)).toEqual({
 			start: PROMPT_OVERHANG,
 			end: PROMPT_OVERHANG,
@@ -822,10 +870,25 @@ const COLUMN_FRAME_WIDTHS = [
 	{ label: "Narrow", className: "w-120" },
 ]
 
+const MISSION_OPENING = (
+	<MissionProperties
+		now={MISSION_NOW}
+		onOpenCodingSession={fn()}
+		openedAt={MISSION_NOW - 7_200_000}
+		pullRequest={MISSION_PULL_REQUEST}
+		ticket={MISSION_TICKET}
+	/>
+)
+
 const COLUMN_FRAMES = [
 	{ label: "conversation skeleton", skeleton: <ThreadTranscriptSkeleton /> },
+	{ label: "loaded conversation", columnWidth: SOLO_COLUMN_WIDTH },
 	{ label: "mission skeleton", skeleton: <MissionDetailSkeleton /> },
-	{ label: "loaded thread" },
+	{
+		label: "loaded mission",
+		opening: MISSION_OPENING,
+		columnWidth: MISSION_COLUMN_WIDTH,
+	},
 ]
 
 const columnOf = (element: HTMLElement, frame: HTMLElement) => {
@@ -859,6 +922,7 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 								{...args}
 								header={null}
 								label={`${label} ${frame.label}`}
+								opening={frame.opening}
 								skeleton={frame.skeleton}
 							/>
 						</div>
@@ -874,7 +938,7 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		docs: {
 			description: {
 				story:
-					"The conversation skeleton and the mission skeleton beside the loaded transcript, at 1072 wide then at 480 wide, in both themes. Every skeleton takes the column the layout hands the loaded transcript, so check that the bubbles start and end on the same edges across a row, and that each skeleton fills the whole surface down to the composer. Pick `Default` for the loaded transcript alone.",
+					"The conversation skeleton beside the loaded conversation, then the mission skeleton, given no `opening` as the app gives it none, beside the loaded mission, at 1072 wide then at 480 wide, in both themes. Every skeleton takes the column the layout hands its loaded transcript, 680 for a conversation and 640 for a mission, so check that the bubbles start and end on the same edges within each pair, that at 480 wide both columns shrink inside the same gutters, and that each skeleton fills the whole surface down to the composer. Pick `Default` for the loaded transcript alone.",
 			},
 		},
 	},
@@ -882,23 +946,576 @@ export const SkeletonInTheTranscriptColumn = meta.story({
 		const rows = slotsIn(canvasElement, "column-frame-row")
 		await expect(rows).toHaveLength(COLUMN_FRAME_WIDTHS.length * BOTH_THEMES)
 
+		const gutter =
+			Number.parseFloat(tokenLengthOf("--shell-inset")) + PROMPT_OVERHANG
+
 		for (const row of rows) {
 			const frames = slotsIn(row, "column-frame")
-			const loadedFrame = frames.at(-1) as HTMLElement
-			const loadedColumn = columnOf(
-				slotIn(loadedFrame, "message-scroller-content"),
-				loadedFrame,
-			)
-			const loadedSurface = surfaceOf(
-				slotIn(loadedFrame, "message-scroller-viewport"),
-				loadedFrame,
-			)
 
-			for (const frame of frames.slice(0, -1)) {
-				const skeleton = slotIn(frame, "list-skeleton")
-				await expect(columnOf(skeleton, frame)).toEqual(loadedColumn)
-				await expect(surfaceOf(skeleton, frame)).toEqual(loadedSurface)
+			for (let index = 0; index < frames.length; index += 2) {
+				const skeletonFrame = frames[index]
+				const loadedFrame = frames[index + 1]
+				const { columnWidth = 0 } = COLUMN_FRAMES[index + 1]
+				const skeleton = slotIn(skeletonFrame, "list-skeleton")
+				const loadedColumn = columnOf(
+					slotIn(loadedFrame, "message-scroller-content"),
+					loadedFrame,
+				)
+
+				await expect(columnOf(skeleton, skeletonFrame)).toEqual(loadedColumn)
+				await expect(surfaceOf(skeleton, skeletonFrame)).toEqual(
+					surfaceOf(
+						slotIn(loadedFrame, "message-scroller-viewport"),
+						loadedFrame,
+					),
+				)
+				await expect(Math.round(loadedColumn.width)).toBe(
+					Math.min(
+						columnWidth,
+						loadedFrame.getBoundingClientRect().width - 2 * gutter,
+					),
+				)
 			}
 		}
+	},
+})
+
+const NARROW_CONVERSATION_WIDTH = 400
+
+const HEADER_BAR_INSET = 12
+
+const CAPSULE_BUTTON = 28
+
+const TWO_BUTTON_CAPSULE_WIDTH = 62
+
+const CONVERSATION_CONTENT_TOP = "32px"
+
+const SOLO_NAME = "Ichi"
+
+const SOLO_ROLE = "Frontend engineer"
+
+const GROUP_TITLE = "Launch checklist"
+
+const LONG_GROUP_TITLE =
+	"Launch checklist for the 0.42 release and the notes that ship with it"
+
+const openSubjectSettings = fn()
+
+const CAPSULE_CONTROLS = (
+	<>
+		<PinnedMessages messages={[]} onJump={fn()} onUnpin={fn()} />
+		<RoutinesPanelTrigger />
+	</>
+)
+
+const SOLO_BAR = (
+	<AppHeader
+		leading={
+			<HeaderIdentityButton
+				blot={BOT.blot}
+				connection="ready"
+				name={SOLO_NAME}
+				onOpenSettings={openSubjectSettings}
+				seed={BOT.id}
+				title={SOLO_ROLE}
+				version="2.1.233"
+			/>
+		}
+		trailing={CAPSULE_CONTROLS}
+	/>
+)
+
+const groupBar = (name: string) => (
+	<AppHeader
+		leading={
+			<HeaderConversationButton
+				color={BLOT_HUES.blue}
+				icon="FileText"
+				name={name}
+				onOpenSettings={openSubjectSettings}
+			/>
+		}
+		trailing={CAPSULE_CONTROLS}
+	/>
+)
+
+const LONG_CONVERSATION_ROWS: TranscriptItem[] = [
+	...LONG_TRANSCRIPT,
+	...LONG_TRANSCRIPT,
+	...LONG_TRANSCRIPT,
+].map((question, turn) => ({
+	key: `turn-${turn}`,
+	render: () => <UserTurn>{question}</UserTurn>,
+}))
+
+const THREAD_UNDER_THE_BAR = {
+	rows: CONVERSATION_ROWS,
+	children: null,
+}
+
+const inRoutinesShell = (Story: () => ReactNode) => (
+	<div className="h-svh bg-card" data-content-card="">
+		<RoutinesPanel
+			failure={null}
+			isOpen={false}
+			missions={{ open: [], earlierToday: NO_EARLIER_TODAY, onOpen: fn() }}
+			onDelete={fn()}
+			onEnabledChange={fn()}
+			onOpenChange={fn()}
+			onRetry={fn()}
+			routines={[]}
+		>
+			<Story />
+		</RoutinesPanel>
+	</div>
+)
+
+const inNarrowConversation = (Story: () => ReactNode) => (
+	<div style={{ width: NARROW_CONVERSATION_WIDTH }}>
+		<Story />
+	</div>
+)
+
+const boxOf = (element: Element) => element.getBoundingClientRect()
+
+const centreOf = (element: Element) =>
+	(boxOf(element).top + boxOf(element).bottom) / 2
+
+const expectConversationBar = async (
+	canvasElement: HTMLElement,
+	subjectSlot: string,
+	name: string,
+	settingsName: string,
+) => {
+	const layout = slotIn(canvasElement, "chat-layout")
+	const frame = boxOf(layout)
+	const bar = await expectStaticHeaderBar(layout)
+	const leading = slotIn(bar, "app-header-leading")
+	const subject = slotIn(leading, subjectSlot)
+	const gear = within(subject).getByRole("button", { name: settingsName })
+	const capsule = slotIn(bar, "app-header-capsule")
+	const [pins, handoff] = within(capsule).getAllByRole("button")
+	const title = within(subject).getByText(name)
+
+	await expect(within(leading).getAllByRole("button")).toEqual([gear])
+	await expect(gear).toHaveAttribute("aria-expanded", "false")
+	await expect([
+		boxOf(subject).left - frame.left,
+		getComputedStyle(subject).columnGap,
+	]).toEqual([HEADER_BAR_INSET, "10px"])
+	await expect([boxOf(gear).width, boxOf(gear).height]).toEqual([
+		CAPSULE_BUTTON,
+		CAPSULE_BUTTON,
+	])
+	await expect(boxOf(gear.firstElementChild as Element).width).toBe(14)
+	await expect(getComputedStyle(gear).color).toBe(
+		tokenStyleIn(gear, "text-muted-foreground", "color"),
+	)
+	await expectHeaderTitleStep(title)
+
+	await expect([
+		frame.right - boxOf(capsule).right,
+		boxOf(capsule).width,
+		boxOf(capsule).height,
+		getComputedStyle(capsule).padding,
+		getComputedStyle(capsule).columnGap,
+	]).toEqual([HEADER_BAR_INSET, TWO_BUTTON_CAPSULE_WIDTH, 32, "2px", "2px"])
+	await expect(getComputedStyle(capsule).backgroundColor).toBe(
+		tokenStyleIn(
+			capsule,
+			capsule.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
+			"backgroundColor",
+		),
+	)
+	await expect(pins).toHaveAccessibleName("Pinned messages")
+	for (const control of [pins, handoff]) {
+		await expect([boxOf(control).width, boxOf(control).height]).toEqual([
+			CAPSULE_BUTTON,
+			CAPSULE_BUTTON,
+		])
+		await expect(boxOf(control.firstElementChild as Element).width).toBe(16)
+		await expect(getComputedStyle(control).color).toBe(
+			tokenStyleIn(control, "text-soft-foreground", "color"),
+		)
+	}
+	await withMotionAllowed(async () => {
+		await expect(colourTransitionsOf(gear)).toEqual([])
+		await expect(colourTransitionsOf(pins)).toEqual([])
+	})
+	await waitFor(() =>
+		expect(
+			getComputedStyle(slotIn(layout, "message-scroller-content")).paddingTop,
+		).toBe(CONVERSATION_CONTENT_TOP),
+	)
+
+	return { layout, frame, bar, subject, gear, capsule, title }
+}
+
+const expectSoloBar = async (canvasElement: HTMLElement) => {
+	const parts = await expectConversationBar(
+		canvasElement,
+		"header-identity-button",
+		SOLO_NAME,
+		`${SOLO_NAME} · agent settings`,
+	)
+	const [avatar] = botIdentityAvatars(parts.subject)
+	const topLine = slotIn(parts.subject, "app-header-top-line")
+	const role = within(topLine).getByText(SOLO_ROLE)
+	const dot = slotIn(topLine, "connection-status")
+		.firstElementChild as HTMLElement
+
+	await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([32, 32])
+	await expectHeaderTopLineStep(topLine)
+	await expect(boxOf(topLine).bottom).toBe(boxOf(parts.title).top)
+	await expect([boxOf(dot).width, boxOf(dot).height]).toEqual([6, 6])
+	await expect(Math.round(boxOf(dot).left - boxOf(role).right)).toBe(6)
+
+	return { ...parts, role }
+}
+
+const expectGroupBar = async (canvasElement: HTMLElement, name: string) => {
+	const parts = await expectConversationBar(
+		canvasElement,
+		"header-conversation-button",
+		name,
+		`${name} · conversation settings`,
+	)
+	const tile = slotIn(parts.subject, "conversation-subject-icon-tile")
+
+	await expect([boxOf(tile).width, boxOf(tile).height]).toEqual([32, 32])
+	await expect(getComputedStyle(tile).borderTopLeftRadius).toBe("8px")
+	await expect(slotsIn(parts.subject, "app-header-top-line")).toHaveLength(0)
+	await expect(slotsIn(parts.subject, "connection-status")).toHaveLength(0)
+	await expect(centreOf(parts.title)).toBe(centreOf(tile))
+
+	return parts
+}
+
+const expectTurnsLeaveAtTheBarEdge = async (
+	layout: HTMLElement,
+	bar: HTMLElement,
+) => {
+	const content = slotIn(layout, "message-scroller-content")
+
+	await waitFor(() =>
+		expect(boxOf(content).top).toBeLessThan(boxOf(bar).bottom),
+	)
+	await expectStaticHeaderBar(layout)
+}
+
+const WORN_BY_THE_APP =
+	"`apps/app/src/components/thread-screen.tsx:477` assembles it."
+
+export const Solo1a = meta.story({
+	args: { ...THREAD_UNDER_THE_BAR, header: SOLO_BAR },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I1a, a conversation with one agent. Check the one bar across the top, 56px tall on the content surface with a 1px rule under it and no fade: the 32px hexagonal avatar 12px from the side, the role and the 6px presence dot on the 12px top line over the agent name in 14px semibold, then the 28px settings button with its 14px gear; on the other side the capsule, 12px from the edge, holding the pins control then the handoff, two 28px circles 2px apart. Check the transcript starts 32px under the bar and that no control animates its colours. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const { gear, role } = await expectSoloBar(canvasElement)
+
+		await expect(role).toBeVisible()
+		await userEvent.click(gear)
+		await expect(openSubjectSettings).toHaveBeenCalledOnce()
+	},
+})
+
+export const SoloDark1b = meta.story({
+	args: Solo1a.input.args,
+	decorators: [inRoutinesShell],
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I1b, the conversation with one agent in the dark theme. Check that the bar keeps the geometry of `Solo1a`, its rule and its capsule drawn in white at 8 and 6 percent. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectSoloBar(canvasElement)
+	},
+})
+
+export const SoloScrolled1c = meta.story({
+	args: { ...Solo1a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I1c, a conversation with one agent long enough to scroll. Check that the turns leave at the edge of the bar and that the bar stays as it is in `Solo1a`: same place, no fade, no shadow. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { layout, bar } = await expectSoloBar(canvasElement)
+
+		await expectTurnsLeaveAtTheBarEdge(layout, bar)
+	},
+})
+
+export const SoloNarrow1d = meta.story({
+	args: Solo1a.input.args,
+	decorators: [inRoutinesShell, inNarrowConversation],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I1d, the conversation with one agent in a thread 400px wide. Check the same bar: the role, the name and the settings button whole on the leading side, and the capsule at its full width, 12px from the edge. Pick `GroupNarrow2d` for a title too long to fit. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { frame, gear, capsule, title } = await expectSoloBar(canvasElement)
+
+		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
+		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
+		await expect(boxOf(gear).right).toBeLessThan(boxOf(capsule).left)
+	},
+})
+
+export const Group2a = meta.story({
+	args: { ...THREAD_UNDER_THE_BAR, header: groupBar(GROUP_TITLE) },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I2a, a group conversation. Check the same bar as `Solo1a` with no top line: the 32px subject tile, a square with 8px corners in the conversation colour, the title alone on the tile's centre line, then the settings button and the capsule. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const { gear } = await expectGroupBar(canvasElement, GROUP_TITLE)
+
+		await userEvent.click(gear)
+		await expect(openSubjectSettings).toHaveBeenCalledOnce()
+	},
+})
+
+export const GroupDark2b = meta.story({
+	args: Group2a.input.args,
+	decorators: [inRoutinesShell],
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I2b, the group conversation in the dark theme. Check that the bar keeps the geometry of `Group2a`, its rule and its capsule drawn in white at 8 and 6 percent. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectGroupBar(canvasElement, GROUP_TITLE)
+	},
+})
+
+export const GroupScrolled2c = meta.story({
+	args: { ...Group2a.input.args, rows: LONG_CONVERSATION_ROWS },
+	decorators: [inRoutinesShell],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I2c, a group conversation long enough to scroll. Check that the turns leave at the edge of the bar and that the bar stays as it is in `Group2a`: same place, no fade, no shadow. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { layout, bar } = await expectGroupBar(canvasElement, GROUP_TITLE)
+
+		await expectTurnsLeaveAtTheBarEdge(layout, bar)
+	},
+})
+
+export const GroupNarrow2d = meta.story({
+	args: { ...THREAD_UNDER_THE_BAR, header: groupBar(LONG_GROUP_TITLE) },
+	decorators: [inRoutinesShell, inNarrowConversation],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard I2d, a group conversation with a title written as a sentence, in a thread 400px wide. Check that the title ends in an ellipsis before the settings button, and that the settings button and the capsule keep their full size, the capsule 12px from the edge. Pick `Group2a` for a title that fits. " +
+					WORN_BY_THE_APP,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { frame, gear, capsule, title } = await expectGroupBar(
+			canvasElement,
+			LONG_GROUP_TITLE,
+		)
+
+		await expect(frame.width).toBe(NARROW_CONVERSATION_WIDTH)
+		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
+		await expect(boxOf(gear).right).toBeLessThan(boxOf(capsule).left)
+	},
+})
+
+const OPENING_UNDER_THE_BAR = 24
+
+const OPENING_OVER_THE_FIRST_TURN = 16
+
+export const Opening = meta.story({
+	args: { ...THREAD_UNDER_THE_BAR, opening: MISSION_OPENING },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread given an `opening`, here the properties of a mission, under the static bar. Check that the properties block stands 24px under the bar, not the 32px a thread without an opening keeps, that the first turn follows 16px under its rule, and that the two turns read from the top of the thread instead of resting against the composer. Pick `Default` for a thread without an opening. Nothing in `apps/app` passes `opening` yet.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		const content = slotIn(layout, "message-scroller-content")
+		const opening = slotIn(content, "transcript-opening")
+		const block = boxOf(slotIn(opening, "mission-properties"))
+		const [firstTurn] = slotsIn(content, "message-scroller-item")
+
+		await expect(content.firstElementChild).toBe(opening)
+		await expect([
+			block.top - boxOf(slotIn(layout, "app-header")).bottom,
+			boxOf(firstTurn).top - block.bottom,
+		]).toEqual([OPENING_UNDER_THE_BAR, OPENING_OVER_THE_FIRST_TURN])
+	},
+})
+
+export const PromptOverhangsTheMissionThread = meta.story({
+	render: inOverhangFrames,
+	args: {
+		rows: CONVERSATION_ROWS,
+		children: null,
+		older: HISTORY_LOADED,
+		opening: MISSION_OPENING,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Measured on the Final page, artboards 3a to 3e: a thread given an `opening`, the properties of a mission, lays its column at 640 instead of the 680 of `PromptOverhangsTheThread`, and opens on the properties block with no start of history line above it. Check that the prompt still overhangs that column by 20 on each side, so it is 680 wide, and that in a 480 wide thread the column shrinks inside the same gutters a solo thread keeps. The app assembles it at `apps/app/src/components/thread-screen.tsx:1977`.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [widest, narrow] = slotsIn(canvasElement, "overhang-frame")
+		const gutter =
+			Number.parseFloat(tokenLengthOf("--shell-inset")) + PROMPT_OVERHANG
+
+		for (const frame of [widest, narrow]) {
+			await expect(slotsIn(frame, "transcript-start-of-history")).toHaveLength(
+				0,
+			)
+			await expect(overhangOf(frame)).toEqual({
+				start: PROMPT_OVERHANG,
+				end: PROMPT_OVERHANG,
+			})
+		}
+		await expect(columnWidthOf(widest)).toBe(MISSION_COLUMN_WIDTH)
+		await expect(
+			slotIn(widest, "prompt-input").getBoundingClientRect().width,
+		).toBe(MISSION_COLUMN_WIDTH + 2 * PROMPT_OVERHANG)
+		await expect(columnWidthOf(narrow)).toBe(NARROW_FRAME_WIDTH - 2 * gutter)
+	},
+})
+
+const EMPTY_MISSION_OPENING = (
+	<MissionProperties
+		now={MISSION_NOW}
+		openedAt={MISSION_NOW - 7_200_000}
+		ticket={{ externalId: "", title: "", platform: "", url: "" }}
+	/>
+)
+
+const ThreadWithDroppedOpening = (props: ThreadLayoutProps) => {
+	const [isDropped, setDropped] = useState(false)
+
+	return (
+		<ThreadLayout
+			{...props}
+			notice={
+				<Button onClick={() => setDropped(true)}>Drop the opening</Button>
+			}
+			opening={isDropped ? undefined : props.opening}
+		/>
+	)
+}
+
+const firstTurnUnderTheBar = (layout: HTMLElement) => {
+	const [firstTurn] = slotsIn(layout, "message-scroller-item")
+	return boxOf(firstTurn).top - boxOf(slotIn(layout, "app-header")).bottom
+}
+
+export const OpeningThatRendersNothing = meta.story({
+	tags: ["test-only"],
+	args: { ...THREAD_UNDER_THE_BAR, opening: EMPTY_MISSION_OPENING },
+	render: (args) => <ThreadWithDroppedOpening {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread under the static bar given the properties of a mission with no ticket, no status and no pull request, which render nothing. Check that no properties block is drawn and that the first turn stands as far under the bar as once *Drop the opening* leaves the thread with no opening at all, the two turns resting against the composer.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		await expect(slotsIn(layout, "mission-properties")).toHaveLength(0)
+		const withEmptyOpening = firstTurnUnderTheBar(layout)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Drop the opening" }),
+		)
+
+		await expect(slotsIn(layout, "transcript-opening")).toHaveLength(0)
+		await expect(firstTurnUnderTheBar(layout)).toBe(withEmptyOpening)
+	},
+})
+
+export const OpeningHeldBackBySkeleton = meta.story({
+	args: { ...Opening.input.args, skeleton: <MissionDetailSkeleton /> },
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A thread given an `opening` while its `skeleton` still stands in for the transcript. Check that the skeleton holds the surface alone and that the opening is not drawn over it: it comes with the transcript, as `Opening` shows. Check too that the skeleton already lays the 640 column of `PromptOverhangsTheMissionThread`, under a prompt 680 wide overhanging it by 20 on each side, so the thread does not narrow when the transcript lands.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+
+		await expect(slotsIn(canvasElement, "thread-skeleton")).toHaveLength(1)
+		await expect(slotsIn(canvasElement, "transcript-opening")).toHaveLength(0)
+		await expect(slotsIn(canvasElement, "mission-properties")).toHaveLength(0)
+		await expect(columnWidthOf(layout, "thread-skeleton-column")).toBe(
+			MISSION_COLUMN_WIDTH,
+		)
+		await expect(overhangOf(layout, "thread-skeleton-column")).toEqual({
+			start: PROMPT_OVERHANG,
+			end: PROMPT_OVERHANG,
+		})
+		await expect(
+			slotIn(layout, "prompt-input").getBoundingClientRect().width,
+		).toBe(MISSION_COLUMN_WIDTH + 2 * PROMPT_OVERHANG)
 	},
 })

@@ -25,9 +25,23 @@ const ScreenLayout = ({
 	...props
 }: ScreenLayoutProps) => {
 	const columnClassName = cn(
-		"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
-		width === "column" && "mx-auto max-w-200",
+		"flex min-h-full w-full flex-col px-(--screen-inset) pt-(--screen-inset) pb-4",
+		width === "column" &&
+			"mx-auto max-w-[calc(--spacing(160)_+_2*var(--screen-inset))] pb-6",
 		contentClassName,
+	)
+
+	const scrollArea = scroller ? (
+		scroller(columnClassName)
+	) : (
+		<div
+			className="min-h-0 flex-1 overflow-y-auto"
+			data-slot="screen-layout-scroller"
+		>
+			<div className={columnClassName} data-slot="screen-layout-column">
+				{children}
+			</div>
+		</div>
 	)
 
 	return (
@@ -41,18 +55,7 @@ const ScreenLayout = ({
 		>
 			{header}
 
-			{scroller ? (
-				scroller(columnClassName)
-			) : (
-				<div
-					className="min-h-0 flex-1 overflow-y-auto"
-					data-slot="screen-layout-scroller"
-				>
-					<div className={columnClassName} data-slot="screen-layout-column">
-						{children}
-					</div>
-				</div>
-			)}
+			{scrollArea}
 
 			{footer ? (
 				<div

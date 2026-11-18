@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	A11Y_SUBMENU_PORTAL_GUARD,
+	expectContentAtBarInset,
 	expectLaptopWindow,
 	expectSkeletonFilledTo,
 	FRAME_POLL,
@@ -15,6 +16,7 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
+	tokenLengthOf,
 	withMotionAllowed,
 } from "@workspace/storybook/story-utils"
 import {
@@ -126,7 +128,7 @@ const CARD_HEIGHT = 171
 
 const COLUMN_GAP = 16
 
-const BODY_PADDING = 24
+const BODY_PADDING = 12
 
 const CAPTION_LINE = 18
 
@@ -196,6 +198,25 @@ const changesColourAtOnce = (control: Element) => {
 	return transitionProperty === "none" || transitionDuration === "0s"
 }
 
+const expectAppHeaderBar = async (canvasElement: HTMLElement) => {
+	const page = slotIn(canvasElement, "agents-page")
+	const bar = slotIn(page, "app-header")
+	await expect(Array.from(page.querySelectorAll("header"))).toEqual([bar])
+	await expect(bar).toHaveAttribute("data-tauri-drag-region", "deep")
+	await expect(slotsIn(bar, "library-action")).toHaveLength(0)
+	await expect(slotsIn(bar, "agents-page-create")).toHaveLength(1)
+	await expect(page).toHaveAccessibleName("Agents")
+	await expect(
+		within(slotIn(bar, "app-header-leading")).getByRole("heading", {
+			name: "Agents",
+			level: 1,
+		}),
+	).toBeVisible()
+	await expect(
+		within(bar).getByRole("button", { name: "Create an agent" }),
+	).toBeVisible()
+}
+
 const meta = preview.meta({
 	title: "Navigation/AgentsPage",
 	component: AgentsPage,
@@ -241,12 +262,10 @@ export const Default = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		await expectLaptopWindow()
+		await expectAppHeaderBar(canvasElement)
 		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
-		await expect(slotIn(canvasElement, "agents-page-count")).toHaveTextContent(
-			/^6$/,
-		)
+			slotIn(slotIn(canvasElement, "app-header-leading"), "agents-page-count"),
+		).toHaveTextContent(/^6$/)
 		await expect(
 			canvas.getByText(
 				"Every agent in Kiroshi. Pick one to change how it works.",
@@ -265,6 +284,10 @@ export const Default = meta.story({
 			LOADED_FIRST_CARD_TOP,
 		)
 		await expect(scrollsSideways(body)).toBe(false)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "agents-page"),
+			body.firstElementChild as Element,
+		)
 
 		await expect(
 			cards.map((card) => slotIn(card, "companion-card-name").textContent),
@@ -327,9 +350,7 @@ export const Empty = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
+		await expectAppHeaderBar(canvasElement)
 		await expect(
 			canvasElement.querySelector('[data-slot="agents-page-count"]'),
 		).toBeNull()
@@ -347,17 +368,27 @@ export const Empty = meta.story({
 		await expect(cardsIn(canvasElement)).toHaveLength(0)
 
 		const empty = boxOf(slotIn(canvasElement, "agents-page-empty"))
-		const body = boxOf(
-			slotIn(canvasElement, "agents-page-empty").parentElement as Element,
-		)
+		const emptyColumn = slotIn(canvasElement, "agents-page-empty")
+			.parentElement as Element
+		const body = boxOf(emptyColumn)
+		const padding = getComputedStyle(emptyColumn)
 		await expect(empty.top + empty.height / 2).toBeCloseTo(
-			body.top + body.height / 2,
+			(body.top +
+				Number.parseFloat(padding.paddingTop) +
+				body.bottom -
+				Number.parseFloat(padding.paddingBottom)) /
+				2,
 			0,
 		)
 		await expect(empty.left + empty.width / 2).toBeCloseTo(
 			body.left + body.width / 2,
 			0,
 		)
+		const inset = tokenLengthOf("--screen-inset")
+		await expect([padding.paddingInlineStart, padding.paddingTop]).toEqual([
+			inset,
+			inset,
+		])
 
 		const creates = canvas.getAllByRole("button", { name: "Create an agent" })
 		await expect(creates).toHaveLength(2)
@@ -381,6 +412,7 @@ export const Loading = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
+		await expectAppHeaderBar(canvasElement)
 		await expectSkeletonFilledTo(canvasElement, "bottom")
 		await expect(
 			boxOf(slotIn(canvasElement, "agents-page-skeleton")).bottom,
@@ -398,6 +430,10 @@ export const Loading = meta.story({
 			boxOf(cards[0]).top - boxOf(slotIn(canvasElement, "list-skeleton")).top,
 		).toBe(LOADED_FIRST_CARD_TOP)
 		for (const card of cards) await expect(boxOf(card).height).toBe(CARD_HEIGHT)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "agents-page"),
+			slotIn(canvasElement, "list-skeleton-row"),
+		)
 
 		await expect(cardsIn(canvasElement)).toHaveLength(0)
 		await expect(
@@ -423,15 +459,17 @@ export const Failed = meta.story({
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await expect(
-			canvas.getByRole("heading", { name: "Agents", level: 1 }),
-		).toBeVisible()
+		await expectAppHeaderBar(canvasElement)
 		const alert = within(
 			slotIn(canvasElement, "agents-page-failure"),
 		).getByRole("alert")
 		await expect(alert).toHaveTextContent("Couldn’t load agents")
 		await expect(alert).toHaveTextContent(
 			"The agents are still there; only the list didn’t load.",
+		)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "agents-page"),
+			slotIn(canvasElement, "agents-page-failure").firstElementChild as Element,
 		)
 
 		for (const slot of [

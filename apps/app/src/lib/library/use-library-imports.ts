@@ -11,7 +11,7 @@ import {
 	type LibraryImageSource,
 	type LibraryImageUnreadable,
 } from "./library-image-source"
-import { type DroppedFile, toImportingItem } from "./library-items"
+import { type ImportingFile, toImportingItem } from "./library-items"
 import { libraryQueryKeys } from "./library-query-keys"
 import { importLibraryFile, importLibraryUrl } from "./library-reads"
 
@@ -290,54 +290,15 @@ const announceAdded = (count: number) => {
 	}
 }
 
-const droppedOf = (file: File): DroppedFile => ({
-	id: crypto.randomUUID(),
-	file,
-})
-
-export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
-	const queryClient = useQueryClient()
-	const [importing, setImporting] = useState<DroppedFile[]>([])
-	const forget = useCallback((ids: string[]) => {
-		setImporting((current) =>
-			current.filter((dropped) => !ids.includes(dropped.id)),
-		)
-	}, [])
-	const { mutateAsync } = useMutation({
-		mutationFn: ({ file }: DroppedFile) => importFile(spaceId, isJoined, file),
-		onError: (_error, { id }) => forget([id]),
-		meta: {
-			failureNotice: failureNoticeOf,
-			raisedIn: "use-library-imports",
-		},
-	})
-
-	const importDropped = useCallback(
-		async (files: readonly File[]) => {
-			const dropped = files.map(droppedOf)
-			setImporting((current) => [...dropped, ...current])
-			const settled = await Promise.allSettled(
-				dropped.map((file) => mutateAsync(file)),
-			)
-			await queryClient.invalidateQueries({
-				queryKey: libraryQueryKeys.itemsOf(spaceId),
-			})
-			forget(dropped.map(({ id }) => id))
-			const imported = settled.flatMap((landed) =>
-				landed.status === "fulfilled" ? [landed.value] : [],
-			)
-			announceAdded(imported.length)
-			return imported
-		},
-		[forget, mutateAsync, queryClient, spaceId],
-	)
-
-	return { importingItems: importing.map(toImportingItem), importDropped }
-}
-
 const GALLERY_IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"]
 
 const PATH_SEPARATOR = /[/\\]/
+
+const isImageNamed = (name: string) =>
+	GALLERY_IMAGE_EXTENSIONS.includes(name.split(".").pop()?.toLowerCase() ?? "")
+
+const pickFilePaths = async () =>
+	(await open({ multiple: true, directory: false })) ?? []
 
 const pickImagePaths = async () =>
 	(await open({
@@ -350,6 +311,13 @@ const pickImagePaths = async () =>
 			},
 		],
 	})) ?? []
+
+const pickImportPaths = (isJoined: boolean) =>
+	isJoined ? pickImagePaths() : pickFilePaths()
+
+const pickerFailureNotice = () => ({
+	title: i18n.t("common:library.failure.import.generic"),
+})
 
 const localFileAt = (path: string): LocalFile => ({
 	name: path.split(PATH_SEPARATOR).pop() ?? path,
@@ -371,6 +339,87 @@ const importPicked = (spaceId: string, isJoined: boolean, file: LocalFile) =>
 	isJoined
 		? importContent({ spaceId, isJoined, image: pickedImageOf(file) })
 		: importLocalFile({ spaceId, file })
+
+type QueuedImport = ImportingFile & { land: () => Promise<LibraryItem> }
+
+export const useLibraryImports = (spaceId: string, isJoined: boolean) => {
+	const queryClient = useQueryClient()
+	const [importing, setImporting] = useState<ImportingFile[]>([])
+	const forget = useCallback((ids: string[]) => {
+		setImporting((current) =>
+			current.filter((queued) => !ids.includes(queued.id)),
+		)
+	}, [])
+	const { mutateAsync } = useMutation({
+		mutationFn: ({ land }: QueuedImport) => land(),
+		onError: (_error, { id }) => forget([id]),
+		meta: {
+			failureNotice: failureNoticeOf,
+			raisedIn: "use-library-imports",
+		},
+	})
+
+	const importQueued = useCallback(
+		async (queued: QueuedImport[]) => {
+			setImporting((current) => [...queued, ...current])
+			const settled = await Promise.allSettled(
+				queued.map((file) => mutateAsync(file)),
+			)
+			await queryClient.invalidateQueries({
+				queryKey: libraryQueryKeys.itemsOf(spaceId),
+			})
+			forget(queued.map(({ id }) => id))
+			const imported = settled.flatMap((landed) =>
+				landed.status === "fulfilled" ? [landed.value] : [],
+			)
+			announceAdded(imported.length)
+			return imported
+		},
+		[forget, mutateAsync, queryClient, spaceId],
+	)
+
+	const importDropped = useCallback(
+		(files: readonly File[]) =>
+			importQueued(
+				files.map((file) => ({
+					id: crypto.randomUUID(),
+					name: file.name,
+					isImage: file.type.startsWith("image/"),
+					land: () => importFile(spaceId, isJoined, file),
+				})),
+			),
+		[importQueued, spaceId, isJoined],
+	)
+
+	const importPickedPaths = async (paths: string[]) => {
+		if (paths.length === 0) {
+			return
+		}
+		await importQueued(
+			paths.map(localFileAt).map((file) => ({
+				id: crypto.randomUUID(),
+				name: file.name,
+				isImage: isImageNamed(file.name),
+				land: () => importPicked(spaceId, isJoined, file),
+			})),
+		)
+	}
+
+	const { mutate: pickToImport } = useMutation({
+		mutationFn: () => pickImportPaths(isJoined),
+		onSuccess: importPickedPaths,
+		meta: {
+			failureNotice: pickerFailureNotice,
+			raisedIn: "use-library-imports",
+		},
+	})
+
+	return {
+		importingItems: importing.map(toImportingItem),
+		importDropped,
+		importFromPicker: () => pickToImport(),
+	}
+}
 
 const galleryImageOf = (
 	{ name }: LocalFile,

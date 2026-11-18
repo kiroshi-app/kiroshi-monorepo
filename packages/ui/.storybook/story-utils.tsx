@@ -235,13 +235,17 @@ export const SidebarFrame = ({
 export const expectSkeletonFilledTo = (root: Element, edge: "top" | "bottom") =>
 	waitFor(() => {
 		const edgeY = slotIn(root, "list-skeleton").getBoundingClientRect()[edge]
-		const lastRow = slotsIn(root, "list-skeleton-row")
-			.at(-1)
-			?.getBoundingClientRect()
+		const reachesEdge = (row: Element | undefined) => {
+			const farSide = row?.getBoundingClientRect()[edge]
+			if (farSide === undefined) return false
+			return edge === "top" ? farSide <= edgeY : farSide >= edgeY
+		}
+		const rows = slotsIn(root, "list-skeleton-row")
 
-		expect(
-			lastRow !== undefined && lastRow.top <= edgeY && lastRow.bottom >= edgeY,
-		).toBe(true)
+		expect([reachesEdge(rows.at(-1)), reachesEdge(rows.at(-2))]).toEqual([
+			true,
+			false,
+		])
 	}, FRAME_POLL)
 
 export const slotsIn = (root: Element, slot: string) =>
@@ -597,11 +601,230 @@ export const LAPTOP_WINDOW = { viewport: { value: "laptop" } }
 export const expectLaptopWindow = () =>
 	expect([window.innerWidth, window.innerHeight]).toEqual([1280, 800])
 
-const THREAD_HEADER_HEIGHT = 48
+const HEADER_BAR = { height: 56, row: 32, padding: "12px", gap: "12px" }
 
-const THREAD_FIRST_ROW = { top: 32, inline: 24 }
+export const expectStaticHeaderBar = async (layout: Element) => {
+	const bar = slotIn(layout, "app-header")
+	const frame = layout.getBoundingClientRect()
+	const box = bar.getBoundingClientRect()
+	const style = getComputedStyle(bar)
 
-export const COLUMN_WIDTH_CAP = 800
+	await expect([
+		box.left - frame.left,
+		box.top - frame.top,
+		box.width,
+		box.height,
+	]).toEqual([0, 0, frame.width, HEADER_BAR.height])
+	await expect([
+		style.position,
+		style.boxShadow,
+		style.paddingTop,
+		style.paddingInline,
+		style.columnGap,
+		style.borderBottomWidth,
+		bar.clientHeight -
+			Number.parseFloat(style.paddingTop) -
+			Number.parseFloat(style.paddingBottom),
+	]).toEqual([
+		"static",
+		"none",
+		HEADER_BAR.padding,
+		HEADER_BAR.padding,
+		HEADER_BAR.gap,
+		"1px",
+		HEADER_BAR.row,
+	])
+	await expect(style.borderBottomColor).toBe(
+		tokenStyleIn(
+			bar,
+			bar.closest(".dark")
+				? "border border-white/8"
+				: "border border-foreground/8",
+			"borderTopColor",
+		),
+	)
+
+	return bar
+}
+
+const WINDOW_DRAG_REGION = "data-tauri-drag-region"
+
+export const expectBarDragsTheWindow = async (bar: HTMLElement) => {
+	await expect(bar).toHaveAttribute(WINDOW_DRAG_REGION, "deep")
+	for (const control of within(bar).queryAllByRole("button")) {
+		await expect(control.tagName).toBe("BUTTON")
+		await expect(control).not.toHaveAttribute(WINDOW_DRAG_REGION)
+	}
+}
+
+export const expectBarLeavesTheWindowInPlace = (bar: HTMLElement) =>
+	expect(bar).not.toHaveAttribute(WINDOW_DRAG_REGION)
+
+export const expectHeaderTitleStep = async (title: Element) => {
+	const style = getComputedStyle(title)
+
+	await expect([
+		style.fontSize,
+		style.lineHeight,
+		style.fontWeight,
+		style.textOverflow,
+		style.whiteSpace,
+	]).toEqual(["14px", "18px", "600", "ellipsis", "nowrap"])
+	await expect(style.color).toBe(
+		probedStyleOf("text-foreground", "color", title),
+	)
+}
+
+export const expectHeaderTopLineStep = async (topLine: Element) => {
+	const style = getComputedStyle(topLine)
+
+	await expect([style.fontSize, style.lineHeight, style.fontWeight]).toEqual([
+		"12px",
+		"16px",
+		"400",
+	])
+	await expect(style.color).toBe(
+		probedStyleOf("text-muted-foreground", "color", topLine),
+	)
+}
+
+const SKELETON_BAR = {
+	inset: 12,
+	pathLine: 16,
+	titleLine: 18,
+	capsule: [92, 32],
+	close: [32, 32],
+	gap: 8,
+}
+
+export const expectLibrarySkeletonBar = async (region: HTMLElement) => {
+	await expect(region).toHaveAttribute("aria-busy", "true")
+	await expect(region.getBoundingClientRect().height).toBe(
+		region.closest<HTMLElement>("[data-content-card]")?.clientHeight,
+	)
+
+	const shapes = slotsIn(region, "skeleton")
+	await expect(shapes.length).toBeGreaterThan(0)
+	for (const shape of shapes)
+		await expect(shape.closest('[aria-hidden="true"]')).not.toBe(null)
+	if (isInBrowserRunner())
+		await expect(region.getAnimations({ subtree: true })).toEqual([])
+
+	const bar = await expectStaticHeaderBar(region)
+	await expect(slotsIn(region, "app-header")).toEqual([bar])
+	await expect(bar).toHaveAttribute("aria-hidden", "true")
+
+	const frame = bar.getBoundingClientRect()
+	const path = slotIn(bar, "app-header-top-line").getBoundingClientRect()
+	const title = slotIn(
+		bar,
+		"library-skeleton-bar-title",
+	).getBoundingClientRect()
+	const [capsule, close, ...others] = Array.from(
+		slotIn(bar, "library-skeleton-bar-actions").children,
+		(placeholder) => placeholder.getBoundingClientRect(),
+	)
+	if (!capsule || !close)
+		throw new Error("The skeleton bar does not draw its capsule and its close")
+	await expect(others).toEqual([])
+
+	await expect([
+		path.left - frame.left,
+		path.height,
+		title.top - path.bottom,
+		title.height,
+	]).toEqual([
+		SKELETON_BAR.inset,
+		SKELETON_BAR.pathLine,
+		0,
+		SKELETON_BAR.titleLine,
+	])
+	await expect([
+		[capsule.width, capsule.height],
+		[close.width, close.height],
+		close.left - capsule.right,
+		frame.right - close.right,
+		capsule.top - frame.top,
+		close.top - frame.top,
+	]).toEqual([
+		SKELETON_BAR.capsule,
+		SKELETON_BAR.close,
+		SKELETON_BAR.gap,
+		SKELETON_BAR.inset,
+		SKELETON_BAR.inset,
+		SKELETON_BAR.inset,
+	])
+	await expect(path.top + title.bottom).toBe(capsule.top + capsule.bottom)
+
+	return bar
+}
+
+export const COLUMN_WIDTH = 640
+
+export const expectContentAtBarInset = async (
+	surface: Element,
+	content: Element,
+	inlineStart: Element = slotIn(surface, "app-header"),
+) => {
+	const bar = slotIn(surface, "app-header").getBoundingClientRect()
+	const title = slotIn(surface, "app-header-leading").getBoundingClientRect()
+	const box = content.getBoundingClientRect()
+	const scrolled =
+		content.closest('[data-slot="screen-layout-scroller"]')?.scrollTop ?? 0
+	const inset = Math.round(title.left - bar.left)
+
+	await expect(`${inset}px`).toBe(tokenLengthOf("--screen-inset"))
+	await expect([
+		Math.round(box.left - inlineStart.getBoundingClientRect().left),
+		Math.round(box.top + scrolled - bar.bottom),
+	]).toEqual([inset, inset])
+}
+
+export const DOCUMENT_COLUMN_WIDTH = 794
+
+const BLOCK_HANDLE_ROOM = 40
+
+export const expectDocumentTextStart = async (
+	column: Element,
+	text: Element,
+) => {
+	const centring = Math.max(
+		0,
+		(column.clientWidth - 2 * BLOCK_HANDLE_ROOM - DOCUMENT_COLUMN_WIDTH) / 2,
+	)
+
+	await expect(
+		Math.round(
+			text.getBoundingClientRect().left - column.getBoundingClientRect().left,
+		),
+	).toBe(Math.round(BLOCK_HANDLE_ROOM + centring))
+}
+
+export const columnContentOf = (column: Element) => {
+	const box = column.getBoundingClientRect()
+	const style = getComputedStyle(column)
+	const left = box.left + Number.parseFloat(style.paddingLeft)
+	const right = box.right - Number.parseFloat(style.paddingRight)
+
+	return { left, width: right - left }
+}
+
+export const expectCentredColumn = async (layout: Element) => {
+	const card = (
+		layout.closest("[data-content-card]") ?? layout
+	).getBoundingClientRect()
+	const room = slotIn(layout, "screen-layout-scroller").clientWidth
+	const gutter = Number.parseFloat(tokenLengthOf("--screen-inset"))
+	const width = Math.min(COLUMN_WIDTH, room - 2 * gutter)
+	const column = columnContentOf(slotIn(layout, "screen-layout-column"))
+
+	await expect(Math.round(column.width)).toBe(width)
+	await expect(
+		Math.abs(column.left - card.left - (card.width - width) / 2),
+	).toBeLessThanOrEqual(1)
+
+	return column
+}
 
 export const expectSettingsPage = async (
 	root: Element,
@@ -609,31 +832,23 @@ export const expectSettingsPage = async (
 	width: ScreenLayoutWidth,
 ) => {
 	const page = slotIn(root, "settings-screen-page")
-	const header = slotIn(page, "app-header")
+	const header = await expectStaticHeaderBar(page)
 	const scroller = slotIn(page, "screen-layout-scroller")
 	const column = slotIn(page, "screen-layout-column")
 	const firstRow = column.firstElementChild
 	if (!firstRow) throw new globalThis.Error("The settings page is empty")
-	const headerBox = header.getBoundingClientRect()
 	const columnBox = column.getBoundingClientRect()
-	const firstRowBox = firstRow.getBoundingClientRect()
 
-	await expect(headerBox.height).toBe(THREAD_HEADER_HEIGHT)
 	await expect(
 		within(header).getByRole("heading", { level: 2, name: label }),
 	).toBeVisible()
 	await expect(hasOverlayScrollbars(scroller)).toBe(true)
-	await expect(Math.round(firstRowBox.top - headerBox.bottom)).toBe(
-		THREAD_FIRST_ROW.top,
-	)
-	await expect(Math.round(firstRowBox.left - columnBox.left)).toBe(
-		THREAD_FIRST_ROW.inline,
-	)
-	await expect(Math.round(columnBox.width)).toBe(
-		width === "column"
-			? Math.min(COLUMN_WIDTH_CAP, scroller.clientWidth)
-			: scroller.clientWidth,
-	)
+	await expectContentAtBarInset(page, firstRow, column)
+	if (width === "column") {
+		await expectCentredColumn(page)
+		return
+	}
+	await expect(Math.round(columnBox.width)).toBe(scroller.clientWidth)
 }
 
 export const expectCentredInWindow = async (root: Element) => {
@@ -944,7 +1159,10 @@ export const expectSubjectIconInBothThemes = async (
 	await expect(slotsIn(root, "bot-identity-avatar")).toHaveLength(0)
 	const fills = []
 	for (const icon of icons) {
-		const fill = getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
+		const [tile] = slotsIn(icon, "conversation-subject-icon-tile")
+		const fill = tile
+			? getComputedStyle(tile).backgroundColor
+			: getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
 		await expect(icon).toHaveAttribute("aria-hidden", "true")
 		await expect(sidesOf(icon)).toEqual([side, side])
 		await expect(icon).toHaveAttribute("data-hue", String(hue ?? ""))

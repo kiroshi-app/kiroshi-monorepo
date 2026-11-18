@@ -1,43 +1,54 @@
-import { expect, fn, within } from "storybook/test"
+import { type ReactNode, useState } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
 	companionGlyphsIn,
-	findHoverTooltip,
+	expectHeaderTitleStep,
+	expectHeaderTopLineStep,
+	expectStaticHeaderBar,
 	holderOf,
+	LAPTOP_WINDOW,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import type { MissionState } from "@workspace/ui/components/mission"
+import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import {
 	MissionHeader,
 	type MissionHeaderProps,
 } from "@workspace/ui/components/mission-header"
 import { MissionHeaderSkeleton } from "@workspace/ui/components/mission-header-skeleton"
 import {
-	LONG_MISSION_STATUS,
+	MissionProperties,
+	type MissionPropertiesProps,
+} from "@workspace/ui/components/mission-properties"
+import {
+	LONG_MISSION_TICKET_TITLE,
 	MISSION_BOT,
 	MISSION_NOW,
 	MISSION_OBJECTIVE,
-	MISSION_OPENED_AT,
 	MISSION_PULL_REQUEST,
 	MISSION_STATES,
 	MISSION_STATES_WITHOUT_A_PILL,
-	MISSION_STATUS,
 	MISSION_TICKET,
-	MISSION_TOOL_CALL_SLOTS,
-	MISSION_TOOLS,
 } from "@workspace/ui/components/missions.fixtures"
+import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import type { TranscriptItem } from "@workspace/ui/components/transcript"
+import { UserTurn } from "@workspace/ui/components/turn"
+import { Button } from "@workspace/ui/components/ui/button"
+import { cn } from "@workspace/ui/lib/utils"
+
+const ORIGIN_CONVERSATION = "Sidecar release"
 
 const WORKING_HEADER: Omit<MissionHeaderProps, "onBack"> = {
 	bot: MISSION_BOT,
 	objective: MISSION_OBJECTIVE,
-	ticket: MISSION_TICKET,
-	tools: MISSION_TOOLS,
+	pathLabel: ORIGIN_CONVERSATION,
 	state: "working",
 	isWorking: true,
-	openedAt: MISSION_OPENED_AT,
-	now: MISSION_NOW,
 }
 
 const ACTIVITIES = [true, false]
@@ -47,8 +58,37 @@ const PILLS_THE_MATRIX_DRAWS = 10
 const LONG_OBJECTIVE =
 	"Rework the mission thread so a reader can follow a run that spans several days without ever losing the ticket it answers"
 
+const LONG_ORIGIN_CONVERSATION =
+	"Sidecar release, packaging and signing on every desktop target this quarter"
+
 const FILLED_BY_THE_THREAD =
-	"`apps/app/src/components/thread-screen.tsx:308` is the header of every mission thread, filled from the stored mission."
+	"`apps/app/src/components/thread-screen.tsx:451` is the header of every mission thread, filled from the stored mission."
+
+const AVATAR_SIZE = 32
+
+const LEADING_GAP = 10
+
+const PATH_LINE_TOP = 11
+
+const TITLE_LINE_TOP = 27
+
+const STATE_PILL = { height: 36, top: 10, padding: "10px", radius: "16px" }
+
+const boxOf = (element: Element) => element.getBoundingClientRect()
+
+const pathLinkIn = (root: Element) => slotIn(root, "app-header-path-link")
+
+const expectLeadingCluster = async (bar: HTMLElement) => {
+	const [avatar, text] = Array.from(slotIn(bar, "app-header-leading").children)
+
+	await expect([boxOf(avatar).width, boxOf(avatar).height]).toEqual([
+		AVATAR_SIZE,
+		AVATAR_SIZE,
+	])
+	await expect(boxOf(text).left - boxOf(avatar).right).toBe(LEADING_GAP)
+	await expectHeaderTopLineStep(slotIn(bar, "app-header-top-line"))
+	await expectHeaderTitleStep(slotIn(bar, "mission-objective"))
+}
 
 const meta = preview.meta({
 	title: "Conversation/Missions/MissionHeader",
@@ -58,7 +98,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The top of a mission thread, in two bands: the way out of it, who runs it, what it was asked to do and where it stands, then the ticket it answers, what it is allowed to reach for and how long it has been open. Reach for it as the header of a mission thread; on its own it is useful to check that a long objective and a long ticket title truncate before the state pill, the tool marks or the opening time lose room.",
+					"The top of a mission thread, as the one static bar every screen wears: the avatar of the agent running it, a path link over the objective, and the state at the trailing end. The path link is the way out of the mission: `pathLabel` names the conversation it goes back to, and `onBack` goes there. The ticket, the status and the pull request are not here: `MissionProperties` lists them at the top of the thread, where they scroll away. Reach for it as the header of a mission thread; on its own it is useful to check that a long path and a long objective truncate before the state loses room.",
 			},
 		},
 	},
@@ -75,67 +115,28 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mission a companion is working on right now. Check that the back control is the first thing the keyboard reaches, that the objective titles the thread rather than the companion name, and that the ticket, the tool marks and the opening time read as one line under the avatar. " +
+					"A mission an agent is working on right now, opened from the `Sidecar release` conversation. Check that the header is one bar with no second row, that the 32px avatar sits 10px before the text, that the path link reads the name of that conversation over the objective and is the first thing the keyboard reaches, and that activating it leaves the mission. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Back to the conversation" }),
+		const header = slotIn(canvasElement, "mission-header")
+		const bar = slotIn(header, "app-header")
+		const path = canvas.getByRole("button", { name: ORIGIN_CONVERSATION })
+
+		await expect(header.children).toHaveLength(1)
+		await expect(boxOf(bar).height).toBe(56)
+		await expectLeadingCluster(bar)
+		await expect(path).toBe(pathLinkIn(bar))
+		await expect(slotsIn(bar, "app-header-path-separator")).toHaveLength(1)
+		await expect(slotIn(bar, "mission-objective")).toHaveTextContent(
+			MISSION_OBJECTIVE,
 		)
 
-		await expect(args.onBack).toHaveBeenCalled()
-		await expect(slotsIn(canvasElement, "mission-status")).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "mission-activity")).toHaveLength(0)
-	},
-})
-
-const heightOf = (element: HTMLElement) =>
-	element.getBoundingClientRect().height
-
-export const Loading = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The header of a mission thread while the mission is still on its way, drawn above the loaded header it stands in for, in the same width. Check that the two bands keep the height and the edges of the loaded ones so nothing jumps when the mission lands, that the back control is already live, and that the avatar, the objective, the ticket line and the opening time are shapes with no text, no pill, no tool mark and no activity line. `apps/app/src/components/mission-thread-screen.tsx:146` renders the mission-loading branch of a thread.",
-			},
-		},
-	},
-	render: (args) => (
-		<div className="flex w-[36rem] max-w-full flex-col gap-4">
-			<section data-holds="loading">
-				<MissionHeaderSkeleton onBack={args.onBack} />
-			</section>
-			<section data-holds="loaded">
-				<MissionHeader {...args} />
-			</section>
-		</div>
-	),
-	play: async ({ args, canvasElement, userEvent }) => {
-		const loading = holderOf(canvasElement, "loading")
-		const loaded = holderOf(canvasElement, "loaded")
-		const skeleton = slotIn(loading, "mission-header-skeleton")
-		const header = slotIn(loaded, "mission-header")
-		const skeletonTicketBand = slotIn(loading, "mission-ticket-band-skeleton")
-		const ticketBand = slotIn(loaded, "mission-ticket-band")
-
-		await expect(heightOf(skeleton)).toBe(heightOf(header))
-		await expect(heightOf(slotIn(loading, "app-header"))).toBe(
-			heightOf(slotIn(loaded, "app-header")),
-		)
-		await expect(heightOf(skeletonTicketBand)).toBe(heightOf(ticketBand))
-		await expect(skeletonTicketBand.className).toBe(ticketBand.className)
-		await expect(skeleton).toHaveAttribute("aria-busy", "true")
-		await expect(skeleton).toHaveTextContent("")
-		for (const shape of slotsIn(skeleton, "skeleton")) {
-			await expect(shape.closest('[aria-hidden="true"]')).not.toBeNull()
-		}
-
-		await userEvent.click(
-			within(loading).getByRole("button", { name: "Back to the conversation" }),
-		)
+		await userEvent.tab()
+		await expect(path).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
 
 		await expect(args.onBack).toHaveBeenCalledOnce()
 	},
@@ -146,7 +147,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"The seven states a mission can be in, exhaustively, each one drawn twice: with a companion at work on it, then with nobody on it. Check that the pill names the five states it speaks for at the trailing edge of the first band and leaves that edge empty for `working` and `waiting_bot`, that the avatar holds the working pose in the first column and rests in the second whatever the state beside it says, that only `waiting_human` adds the attention dot, and that the two bands keep their height throughout. " +
+					"The seven states a mission can be in, exhaustively, each one drawn twice: with an agent at work on it, then with nobody on it. Check that the state names the five states it speaks for at the trailing end of the bar and is not drawn at all for `working` and `waiting_bot`, that the avatar holds the working pose in the first column and rests in the second whatever the state beside it says, that only `waiting_human` adds the attention dot, and that the bar keeps its height throughout. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -182,6 +183,9 @@ export const States = meta.story({
 		await expect(companionGlyphsIn(canvasElement, "idle")).toHaveLength(
 			MISSION_STATES.length,
 		)
+		for (const bar of slotsIn(canvasElement, "app-header")) {
+			await expect(boxOf(bar).height).toBe(56)
+		}
 	},
 })
 
@@ -191,7 +195,7 @@ export const WithoutAPill = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first band of a mission nobody can act on yet, beside the band of one waiting on its reader. Check that the trailing edge of the `working` header holds nothing at all: `packages/ui/src/components/app-header.tsx:33` mounts its trailing container on the truthiness of the node it is handed, so a pill left to render nothing would still reserve width beside the objective. " +
+					"The bar of a mission nobody can act on yet, above the bar of one waiting on its reader. Check that the `working` bar draws nothing after its leading cluster, no empty pill and no gap held open for one, while the bar under it ends on its state. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -215,189 +219,18 @@ export const WithoutAPill = meta.story({
 	},
 })
 
-export const TicketLink = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The ticket band on a mission whose ticket carries a url. Check that the link opens in a new tab, that it names the platform, the identifier and the title, and that tabbing to it draws a visible ring. Pick `Empty` for a mission whose ticket names nothing. " +
-					FILLED_BY_THE_THREAD,
-			},
-		},
-	},
-	play: async ({ canvas, userEvent }) => {
-		const link = canvas.getByRole("link", {
-			name: new RegExp(MISSION_TICKET.externalId),
-		})
-
-		await expect(link).toHaveAttribute("target", "_blank")
-		await expect(link).toHaveAttribute("href", MISSION_TICKET.url)
-
-		await userEvent.tab()
-		await userEvent.tab()
-
-		await expect(link).toHaveFocus()
-		await expect(link.className).toContain("focus-visible:ring-2")
-	},
-})
-
-export const Empty = meta.story({
-	args: {
-		ticket: { externalId: "", title: "", platform: "linear", url: "" },
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A mission opened with no ticket behind it. Check that the ticket line and the rule that follows it are left out entirely rather than drawn empty, and that the tool marks keep their place under the avatar with the opening time still on the trailing edge. `apps/app/src/components/thread-screen.tsx:316` passes the stored ticket through, empty fields included.",
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expect(slotsIn(canvasElement, "mission-ticket-line")).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "mission-ticket-rule")).toHaveLength(0)
-	},
-})
-
-export const WithoutATool = meta.story({
-	args: { tools: [] },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A mission carrying a ticket and no tool. Check that the rule that separates the ticket from the tool marks is left out rather than drawn against nothing, and that the opening time keeps the trailing edge. Pick `Default` for the band that draws both. " +
-					FILLED_BY_THE_THREAD,
-			},
-		},
-	},
-	play: async ({ canvasElement }) => {
-		await expect(slotsIn(canvasElement, "mission-ticket-line")).toHaveLength(1)
-		await expect(slotsIn(canvasElement, "mission-ticket-rule")).toHaveLength(0)
-		await expect(slotsIn(canvasElement, "mission-tool-mark")).toHaveLength(0)
-	},
-})
-
 export const LongContent = meta.story({
 	args: {
 		bot: { ...MISSION_BOT, name: "Anastasia Konstantinopoulou-Whitfield" },
 		objective: LONG_OBJECTIVE,
-		ticket: {
-			...MISSION_TICKET,
-			externalId: "OPE-1042",
-			title:
-				"Rework the mission thread so a reader can follow a run that spans several days without losing the ticket it answers",
-		},
-		tools: [...MISSION_TOOLS, "Repository read and write", "Screenshot"],
+		pathLabel: LONG_ORIGIN_CONVERSATION,
 		state: "waiting_human",
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"An objective and a ticket title written as sentences, in a container squeezed to 480 pixels. Check that both truncate on one line, that the state pill, every tool mark and the opening time keep their room, and that neither band scrolls sideways. Read it at 200 percent zoom too. " +
-					FILLED_BY_THE_THREAD,
-			},
-		},
-	},
-	render: (args) => (
-		<div className="w-[30rem] max-w-full">
-			<MissionHeader {...args} />
-		</div>
-	),
-	play: async ({ canvasElement }) => {
-		const header = slotIn(canvasElement, "mission-header")
-		const objective = slotIn(canvasElement, "mission-objective")
-
-		await expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth + 1)
-		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
-	},
-})
-
-export const WithStatus = meta.story({
-	args: { status: MISSION_STATUS },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A mission whose companion wrote a last status. Check that it reads in the ticket band after the tool marks and before the opening time, behind the same rule the band draws between the ticket and the tools, in the muted foreground with its relative time in tabular figures, and that its tooltip hands the text over. Pick `Default` for the band with no status. Nothing on main feeds this prop yet.",
-			},
-		},
-	},
-	play: async ({ canvasElement, userEvent }) => {
-		const band = slotIn(canvasElement, "mission-ticket-band")
-		const status = slotIn(band, "mission-status")
-		const time = slotIn(status, "mission-status-time")
-
-		await expect(status.previousElementSibling).toHaveAttribute(
-			"data-slot",
-			"mission-ticket-rule",
-		)
-		await expect(status.nextElementSibling?.tagName).toBe("TIME")
-		await expect(time).toHaveAttribute(
-			"datetime",
-			new Date(MISSION_STATUS.writtenAt).toISOString(),
-		)
-		await expect(time).toHaveTextContent("4 minutes ago")
-		await expect(getComputedStyle(time).fontVariantNumeric).toBe("tabular-nums")
-
-		await userEvent.hover(status.firstElementChild as HTMLElement)
-		await expect(await findHoverTooltip()).toHaveTextContent(
-			MISSION_STATUS.text,
-		)
-	},
-})
-
-export const LongStatus = meta.story({
-	args: { status: LONG_MISSION_STATUS },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A status written as several sentences, in a container squeezed to 480 pixels. Check that the band stays one line high, that the status text alone truncates while its time and the opening time stay whole, and that the tooltip raised from the status hands the whole text over. Pick `WithStatus` for a status that fits.",
-			},
-		},
-	},
-	render: (args) => (
-		<div className="w-[30rem] max-w-full">
-			<MissionHeader {...args} />
-		</div>
-	),
-	play: async ({ canvasElement, userEvent }) => {
-		const band = slotIn(canvasElement, "mission-ticket-band")
-		const status = slotIn(band, "mission-status")
-		const text = status.firstElementChild as HTMLElement
-		const opened = band.lastElementChild as HTMLElement
-
-		await expect(band.scrollWidth).toBeLessThanOrEqual(band.clientWidth + 1)
-		await expect(text.scrollWidth).toBeGreaterThan(text.clientWidth)
-		await expect(opened.scrollWidth).toBeLessThanOrEqual(opened.clientWidth)
-		await expect(
-			slotIn(status, "mission-status-time").getBoundingClientRect().height,
-		).toBe(text.getBoundingClientRect().height)
-
-		await userEvent.hover(text)
-		await expect(await findHoverTooltip()).toHaveTextContent(
-			LONG_MISSION_STATUS.text,
-		)
-	},
-})
-
-const expectNoToolCall = async (line: HTMLElement) => {
-	for (const slot of MISSION_TOOL_CALL_SLOTS) {
-		await expect(slotsIn(line, slot)).toHaveLength(0)
-	}
-}
-
-export const WithPullRequest = meta.story({
-	args: {
-		commitsAhead: 3,
-		pullRequest: MISSION_PULL_REQUEST,
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A mission on a branch with an open pull request, in a container squeezed to 320 pixels. Check that a line under the ticket band reads the commits ahead in tabular figures, a dot, then the pull request number as a link opening in a new tab, with no tool, target or age; that the line stays one row high with every part whole; and that the link shows a ring on keyboard focus and names the pull request it opens. Pick `Default` for a mission with neither, which draws no line. " +
+					"A path label and an objective written as sentences, in a container squeezed to 320 pixels. Check that each truncates on its own line, that the avatar and the state keep their room, and that the bar never scrolls sideways. Read it at 200 percent zoom too. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
@@ -407,58 +240,571 @@ export const WithPullRequest = meta.story({
 			<MissionHeader {...args} />
 		</div>
 	),
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const line = slotIn(canvasElement, "mission-activity")
-		const commits = slotIn(line, "mission-commits-ahead")
-		const link = canvas.getByRole("link", { name: "Open pull request #482" })
+	play: async ({ canvasElement }) => {
+		const bar = slotIn(canvasElement, "app-header")
+		const path = pathLinkIn(bar)
+		const objective = slotIn(bar, "mission-objective")
+		const state = slotIn(bar, "mission-state-pill")
+		const avatar = slotIn(bar, "app-header-leading").firstElementChild
 
-		await expectNoToolCall(line)
-		await expect(line).toHaveTextContent(/^3 commits ahead#482$/)
-		await expect(getComputedStyle(commits).fontVariantNumeric).toBe(
-			"tabular-nums",
-		)
-		await expect(link).toHaveTextContent("#482")
-		await expect(
-			getComputedStyle(link.parentElement as HTMLElement, "::before").content,
-		).toBe('"·"')
-		await expect(link).toHaveAttribute("href", MISSION_PULL_REQUEST.url)
-		await expect(link).toHaveAttribute("target", "_blank")
-		await expect(line.getBoundingClientRect().height).toBe(28)
-		await expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth + 1)
-		for (const whole of [commits, link]) {
-			await expect(whole.scrollWidth).toBeLessThanOrEqual(whole.clientWidth)
-		}
-
-		for (let step = 0; step < 10 && document.activeElement !== link; step++) {
-			await userEvent.tab()
-		}
-		await expect(link).toHaveFocus()
-		await expect(getComputedStyle(link).boxShadow).not.toBe("none")
+		await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth)
+		await expect(path).toHaveTextContent(LONG_ORIGIN_CONVERSATION)
+		await expect(path.scrollWidth).toBeGreaterThan(path.clientWidth)
+		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
+		await expect(state.scrollWidth).toBeLessThanOrEqual(state.clientWidth)
+		await expect(boxOf(avatar as Element).width).toBe(AVATAR_SIZE)
 	},
 })
 
-export const PullRequestOnly = meta.story({
-	args: {
-		pullRequest: MISSION_PULL_REQUEST,
+const ARTBOARD_HEADER = {
+	objective: "Move the sidecar build into the release workflow",
+	state: "ready_to_merge",
+	isWorking: false,
+} satisfies Partial<MissionHeaderProps>
+
+const ARTBOARD_PROPERTIES: MissionPropertiesProps = {
+	ticket: {
+		...MISSION_TICKET,
+		externalId: "OPE-2140",
+		title: "Release builds ship without the sidecar binary",
 	},
+	status: {
+		text: "Checks green, waiting for the queue",
+		writtenAt: MISSION_NOW - 240_000,
+	},
+	commitsAhead: 2,
+	pullRequest: { ...MISSION_PULL_REQUEST, number: 2291 },
+	openedAt: MISSION_NOW - 7_200_000,
+	now: MISSION_NOW,
+	onOpenCodingSession: fn(),
+}
+
+const TWO_MESSAGES = ["Where does the mission stand?", "Is the queue moving?"]
+
+const SCROLLING_MESSAGES = Array.from(
+	{ length: 24 },
+	(_, turn) => `Checkpoint ${turn + 1}: where does the mission stand?`,
+)
+
+const COLUMN_WIDTH = 640
+
+const NARROW_FRAME_WIDTH = 480
+
+const NARROW_COLUMN_WIDTH = 424
+
+const BAR_TO_BLOCK = 24
+
+const BLOCK_TO_FIRST_MESSAGE = 16
+
+const HISTORY_LOADED = { hasNextPage: false, isFetchingNextPage: false }
+
+const turnsOf = (messages: string[]): TranscriptItem[] =>
+	messages.map((message) => ({
+		key: message,
+		render: () => <UserTurn>{message}</UserTurn>,
+	}))
+
+type MissionFrameProps = {
+	header: ReactNode
+	properties?: Partial<MissionPropertiesProps>
+	messages?: string[]
+	isNarrow?: boolean
+}
+
+const MissionFrame = ({
+	header,
+	properties,
+	messages = TWO_MESSAGES,
+	isNarrow = false,
+}: MissionFrameProps) => (
+	<div
+		className={cn("h-svh bg-card", isNarrow && "w-120")}
+		data-content-card=""
+		data-holds="frame"
+	>
+		<ThreadLayout
+			header={header}
+			older={HISTORY_LOADED}
+			opening={<MissionProperties {...ARTBOARD_PROPERTIES} {...properties} />}
+			rows={turnsOf(messages)}
+		>
+			{null}
+		</ThreadLayout>
+	</div>
+)
+
+const inMissionFrame = (args: MissionHeaderProps) => (
+	<MissionFrame header={<MissionHeader {...args} />} />
+)
+
+const expectStatePill = async (bar: HTMLElement) => {
+	const pill = slotIn(bar, "mission-state-pill")
+
+	await expect(pill).toHaveTextContent("Ready to merge")
+	await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
+	await expect([
+		boxOf(slotIn(bar, "app-header-top-line")).top - boxOf(bar).top,
+		boxOf(slotIn(bar, "mission-objective")).top - boxOf(bar).top,
+	]).toEqual([PATH_LINE_TOP, TITLE_LINE_TOP])
+	await expect([
+		boxOf(pill).height,
+		boxOf(pill).top - boxOf(bar).top,
+		boxOf(bar).right - boxOf(pill).right,
+		getComputedStyle(pill).padding,
+		getComputedStyle(pill).borderRadius,
+	]).toEqual([
+		STATE_PILL.height,
+		STATE_PILL.top,
+		12,
+		STATE_PILL.padding,
+		STATE_PILL.radius,
+	])
+	await expect(getComputedStyle(pill).backgroundColor).toBe(
+		tokenStyleIn(
+			pill,
+			pill.closest(".dark") ? "bg-white/6" : "bg-foreground/5",
+			"backgroundColor",
+		),
+	)
+}
+
+const expectOpenMission = async (canvasElement: HTMLElement) => {
+	const frame = holderOf(canvasElement, "frame")
+	const bar = await expectStaticHeaderBar(frame)
+	const thread = slotIn(frame, "message-scroller-viewport")
+	const content = slotIn(thread, "message-scroller-content")
+	const block = slotIn(
+		slotIn(content, "transcript-opening"),
+		"mission-properties",
+	)
+	const messages = slotsIn(content, "message-scroller-item")
+	const firstMessage = boxOf(messages[0])
+
+	await expect(slotsIn(frame, "transcript-start-of-history")).toHaveLength(0)
+	await expect(slotIn(frame, "mission-header").children).toHaveLength(1)
+	await expectLeadingCluster(bar)
+	await expectStatePill(bar)
+	await expect([firstMessage.left, firstMessage.width]).toEqual([
+		boxOf(block).left,
+		boxOf(block).width,
+	])
+	await expect([
+		boxOf(block).top - boxOf(content).top,
+		firstMessage.top - boxOf(block).bottom,
+	]).toEqual([BAR_TO_BLOCK, BLOCK_TO_FIRST_MESSAGE])
+	await expect(getComputedStyle(block).borderBottomColor).toBe(
+		tokenStyleIn(
+			block,
+			block.closest(".dark")
+				? "border border-white/8"
+				: "border border-foreground/8",
+			"borderTopColor",
+		),
+	)
+
+	return { frame, bar, thread, block, messages }
+}
+
+const propertiesIn = (block: Element) =>
+	Array.from(
+		block.querySelectorAll<HTMLElement>("[data-property]"),
+		(row) => row.dataset.property,
+	)
+
+export const Mission3a = meta.story({
+	args: ARTBOARD_HEADER,
+	globals: LAPTOP_WINDOW,
 	parameters: {
+		layout: "fullscreen",
 		docs: {
 			description: {
 				story:
-					"A mission with an open pull request and no commit ahead. Check that the line reads the pull request link alone, with no leading dot and no tool, target or age. Pick `WithPullRequest` for a branch with commits ahead. " +
+					"Artboard 3a, the open mission, its properties block in the `opening` of the transcript. Check the static bar over the thread, the avatar then the path link over the objective and the state as a dot and its label in a 36px pill at the trailing end, the bar still 56px tall, then, 24px under the bar at the top of the 640px thread column and with no start of history line above it, the properties block reading the ticket with its Open the coding session icon button, the last status and the pull request, a rule under it and the first of two messages 16px below. " +
 					FILLED_BY_THE_THREAD,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const line = slotIn(canvasElement, "mission-activity")
-		const link = canvas.getByRole("link", { name: "Open pull request #482" })
+	render: inMissionFrame,
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const { bar, block, messages } = await expectOpenMission(canvasElement)
 
-		await expectNoToolCall(line)
-		await expect(slotsIn(line, "mission-commits-ahead")).toHaveLength(0)
-		await expect(line).toHaveTextContent(/^#482$/)
+		await expect(boxOf(block).width).toBe(COLUMN_WIDTH)
+		await expect(boxOf(block).top - boxOf(bar).bottom).toBe(BAR_TO_BLOCK)
+		await expect(propertiesIn(block)).toEqual([
+			"ticket",
+			"activity",
+			"pull-request",
+		])
+		await expect(messages).toHaveLength(2)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: ORIGIN_CONVERSATION }),
+		)
+		await expect(args.onBack).toHaveBeenCalledOnce()
+	},
+})
+
+export const MissionWithoutActivity3b = meta.story({
+	args: ARTBOARD_HEADER,
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Artboard 3b, a mission whose agent wrote no status. Check that the properties block leaves the Activity row out and keeps the Ticket and Pull request rows 4px apart, with the bar unchanged. Pick `Mission3a` for the three rows. " +
+					FILLED_BY_THE_THREAD,
+			},
+		},
+	},
+	render: (args) => (
+		<MissionFrame
+			header={<MissionHeader {...args} />}
+			properties={{ status: undefined }}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		const { block } = await expectOpenMission(canvasElement)
+		const [ticket, pullRequest] = Array.from(block.children)
+
+		await expect(propertiesIn(block)).toEqual(["ticket", "pull-request"])
+		await expect(boxOf(pullRequest).top - boxOf(ticket).bottom).toBe(4)
+	},
+})
+
+export const MissionDark3c = meta.story({
+	args: ARTBOARD_HEADER,
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Artboard 3c, the open mission in the dark theme. Check that the bar, the state and the properties block keep the geometry of `Mission3a` and take every colour from the dark tokens: the labels in the muted foreground, the values in the soft foreground, both rules at white 8 percent and the state on white 6 percent. " +
+					FILLED_BY_THE_THREAD,
+			},
+		},
+	},
+	render: inMissionFrame,
+	play: async ({ canvasElement }) => {
+		const { frame, block } = await expectOpenMission(canvasElement)
+		const label = block.querySelector("dt") as HTMLElement
+		const value = block.querySelector("dd") as HTMLElement
+
+		await expect(frame.closest(".dark")).not.toBeNull()
+		await expect(getComputedStyle(label).color).toBe(
+			tokenStyleIn(label, "text-muted-foreground", "color"),
+		)
+		await expect(getComputedStyle(value).color).toBe(
+			tokenStyleIn(value, "text-soft-foreground", "color"),
+		)
+	},
+})
+
+export const MissionScrolled3d = meta.story({
+	args: ARTBOARD_HEADER,
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Artboard 3d, a mission thread long enough to scroll, landed on its end as the transcript opens it. Check that the bar stays where it was while the properties block leaves under it with the messages, so only the path, the objective and the state stay in sight. Pick `Mission3a` for a thread short enough to rest whole. " +
+					FILLED_BY_THE_THREAD,
+			},
+		},
+	},
+	render: (args) => (
+		<MissionFrame
+			header={<MissionHeader {...args} />}
+			messages={SCROLLING_MESSAGES}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		const { bar, thread, block } = await expectOpenMission(canvasElement)
+		const landedBar = boxOf(bar)
+
+		await waitFor(() => expect(thread.scrollTop).toBeGreaterThan(0))
+		await expect(boxOf(block).bottom).toBeLessThan(landedBar.bottom)
+
+		thread.dispatchEvent(
+			new WheelEvent("wheel", { bubbles: true, deltaY: -200 }),
+		)
+		thread.scrollTop = 0
+		await waitFor(() =>
+			expect(boxOf(block).top - boxOf(bar).bottom).toBe(BAR_TO_BLOCK),
+		)
+		await expect([boxOf(bar).top, boxOf(bar).height]).toEqual([
+			landedBar.top,
+			landedBar.height,
+		])
+	},
+})
+
+export const MissionNarrow3e = meta.story({
+	args: {
+		...ARTBOARD_HEADER,
+		objective: LONG_OBJECTIVE,
+		pathLabel: LONG_ORIGIN_CONVERSATION,
+	},
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Artboard 3e, the open mission in a thread 480px wide, its column 424px between the gutters a solo thread keeps, with a long path, a long objective and a long ticket title. Check that the path and the objective each truncate on one line while the avatar and the state stay whole, and that the Ticket row wraps its title onto further lines, aligned to the top, with its buttons pinned to the end of the row. " +
+					FILLED_BY_THE_THREAD,
+			},
+		},
+	},
+	render: (args) => (
+		<MissionFrame
+			header={<MissionHeader {...args} />}
+			isNarrow
+			properties={{
+				ticket: {
+					...ARTBOARD_PROPERTIES.ticket,
+					title: LONG_MISSION_TICKET_TITLE,
+				},
+			}}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		const { frame, bar, block } = await expectOpenMission(canvasElement)
+		const path = pathLinkIn(bar)
+		const objective = slotIn(bar, "mission-objective")
+		const row = block.querySelector('[data-property="ticket"]') as HTMLElement
+		const line = slotIn(row, "mission-ticket-line")
+		const actions = slotIn(row, "mission-ticket-actions")
+
+		await expect([
+			boxOf(frame).width,
+			boxOf(block).width,
+			boxOf(block).top - boxOf(bar).bottom,
+		]).toEqual([NARROW_FRAME_WIDTH, NARROW_COLUMN_WIDTH, BAR_TO_BLOCK])
+		await expect(path.scrollWidth).toBeGreaterThan(path.clientWidth)
+		await expect(objective.scrollWidth).toBeGreaterThan(objective.clientWidth)
 		await expect(
-			getComputedStyle(link.parentElement as HTMLElement, "::before").content,
-		).toBe("none")
+			boxOf(slotIn(bar, "mission-state-pill")).right,
+		).toBeLessThanOrEqual(boxOf(frame).right - 12)
+		await expect(
+			boxOf(line.lastElementChild as Element).height,
+		).toBeGreaterThan(20)
+		await expect(getComputedStyle(row).alignItems).toBe("flex-start")
+		await expect([boxOf(line).top, boxOf(actions).top]).toEqual([
+			boxOf(row).top,
+			boxOf(row).top,
+		])
+		await expect(boxOf(actions).right).toBe(boxOf(block).right)
+		await expect(block.scrollWidth).toBeLessThanOrEqual(block.clientWidth)
+	},
+})
+
+const SHORT_THREAD = turnsOf(TWO_MESSAGES)
+
+type MissionThreadProps = {
+	header: ReactNode
+	notice?: ReactNode
+	opening?: ReactNode
+	skeleton?: ReactNode
+}
+
+const MissionThread = ({
+	header,
+	notice,
+	opening,
+	skeleton,
+}: MissionThreadProps) => (
+	<div className="h-svh bg-card" data-content-card="">
+		<ThreadLayout
+			composer={<PromptInput onSubmit={fn()} />}
+			header={header}
+			notice={notice}
+			opening={opening}
+			rows={SHORT_THREAD}
+			skeleton={skeleton}
+		>
+			{null}
+		</ThreadLayout>
+	</div>
+)
+
+const MissionOnItsWay = (args: MissionHeaderProps) => {
+	const [isLoaded, setIsLoaded] = useState(false)
+
+	return (
+		<MissionThread
+			header={
+				isLoaded ? (
+					<MissionHeader {...args} />
+				) : (
+					<MissionHeaderSkeleton
+						onBack={args.onBack}
+						pathLabel={args.pathLabel}
+					/>
+				)
+			}
+			notice={
+				isLoaded ? null : (
+					<Button onClick={() => setIsLoaded(true)}>Load the mission</Button>
+				)
+			}
+			opening={
+				isLoaded ? <MissionProperties {...ARTBOARD_PROPERTIES} /> : undefined
+			}
+			skeleton={isLoaded ? undefined : <MissionDetailSkeleton />}
+		/>
+	)
+}
+
+const PROMPT_OVERHANG = 20
+
+const columnOf = (layout: HTMLElement, columnSlot: string) => {
+	const column = slotIn(layout, columnSlot)
+	const { paddingLeft, paddingRight } = getComputedStyle(column)
+	const box = boxOf(column)
+	const left = box.left + Number.parseFloat(paddingLeft)
+	return {
+		left: Math.round(left),
+		width: Math.round(box.right - Number.parseFloat(paddingRight) - left),
+	}
+}
+
+const promptOverhangOf = (layout: HTMLElement, columnSlot: string) => {
+	const column = columnOf(layout, columnSlot)
+	const prompt = boxOf(slotIn(layout, "prompt-input"))
+	return {
+		start: Math.round(column.left - prompt.left),
+		end: Math.round(prompt.right - column.left - column.width),
+	}
+}
+
+const MissionSkeletonThread = (args: MissionHeaderProps) => (
+	<MissionThread
+		header={
+			<MissionHeaderSkeleton onBack={args.onBack} pathLabel={args.pathLabel} />
+		}
+		skeleton={<MissionDetailSkeleton />}
+	/>
+)
+
+const expectSkeletonInTheMissionColumn = async (layout: HTMLElement) => {
+	await expect(columnOf(layout, "thread-skeleton-column").width).toBe(
+		COLUMN_WIDTH,
+	)
+	await expect(promptOverhangOf(layout, "thread-skeleton-column")).toEqual({
+		start: PROMPT_OVERHANG,
+		end: PROMPT_OVERHANG,
+	})
+}
+
+const leadingGeometryOf = (bar: HTMLElement) => {
+	const [avatar, text] = Array.from(slotIn(bar, "app-header-leading").children)
+	const path = boxOf(pathLinkIn(bar))
+	const title = boxOf(text.lastElementChild as Element)
+
+	return {
+		bar: boxOf(bar).height,
+		avatar: [
+			boxOf(avatar).left,
+			boxOf(avatar).top,
+			boxOf(avatar).width,
+			boxOf(avatar).height,
+		],
+		text: [boxOf(text).left, boxOf(text).top, boxOf(text).height],
+		path: [path.left, path.top, path.width, path.height],
+		title: [title.left, title.top, title.height],
+	}
+}
+
+export const MissionSkeleton = meta.story({
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The mission thread while the mission is still on its way. Check that the skeleton header is the same static 56px bar as `Mission3a`, with the path link already live so the reader can leave, a 32px hexagon and a bar where the avatar and the objective land, and no state. Check too that the skeleton already lays the 640 column of `Mission3a` under a prompt overhanging it by 20 on each side, with no `opening` given. `apps/app/src/components/mission-thread-screen.tsx:162` renders the mission-loading branch of a thread. Pick `MissionSkeletonDark` for the dark theme.",
+			},
+		},
+	},
+	render: (args) => <MissionSkeletonThread {...args} />,
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		await expectSkeletonInTheMissionColumn(layout)
+		const bar = await expectStaticHeaderBar(layout)
+		const skeleton = slotIn(layout, "mission-header-skeleton")
+		const [hexagon] = slotsIn(bar, "skeleton")
+
+		await expect(skeleton).toHaveAttribute("aria-busy", "true")
+		await expect(slotsIn(bar, "skeleton")).toHaveLength(2)
+		await expect([boxOf(hexagon).width, boxOf(hexagon).height]).toEqual([
+			AVATAR_SIZE,
+			AVATAR_SIZE,
+		])
+		await expect(slotsIn(bar, "mission-state-pill")).toHaveLength(0)
+		await expect(slotsIn(bar, "mission-objective")).toHaveLength(0)
+
+		const path = canvas.getByRole("button", { name: ORIGIN_CONVERSATION })
+		await userEvent.click(path)
+		await expect(args.onBack).toHaveBeenCalledOnce()
+		path.blur()
+	},
+})
+
+export const MissionSkeletonDark = meta.story({
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The mission thread still on its way, in the dark theme. Check that the skeleton keeps the geometry of `MissionSkeleton`, its 640 column under the overhanging prompt, and draws its bars from the dark tokens.",
+			},
+		},
+	},
+	render: (args) => <MissionSkeletonThread {...args} />,
+	play: async ({ canvasElement }) => {
+		await expectSkeletonInTheMissionColumn(slotIn(canvasElement, "chat-layout"))
+	},
+})
+
+export const MissionSkeletonThenLoaded = meta.story({
+	tags: ["test-only"],
+	args: ARTBOARD_HEADER,
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The mission thread first on its skeleton, then loaded once *Load the mission* is pressed. Check that the bar keeps its 56px, that the avatar, the path link and the objective land exactly where the hexagon, the path link and the bar stood, and that the 640 column keeps its left edge and its width, so nothing moves when the mission arrives.",
+			},
+		},
+	},
+	render: (args) => <MissionOnItsWay {...args} />,
+	play: async ({ canvasElement, userEvent }) => {
+		const layout = slotIn(canvasElement, "chat-layout")
+		const loading = leadingGeometryOf(
+			slotIn(slotIn(layout, "mission-header-skeleton"), "app-header"),
+		)
+
+		const loadingColumn = columnOf(layout, "thread-skeleton-column")
+
+		await expect(loading.bar).toBe(56)
+		await expect(loadingColumn.width).toBe(COLUMN_WIDTH)
+
+		await userEvent.click(
+			within(canvasElement).getByRole("button", { name: "Load the mission" }),
+		)
+		const header = await waitFor(() => slotIn(layout, "mission-header"))
+
+		await expect(leadingGeometryOf(slotIn(header, "app-header"))).toEqual(
+			loading,
+		)
+		await expect(columnOf(layout, "message-scroller-content")).toEqual(
+			loadingColumn,
+		)
+		await expectStaticHeaderBar(layout)
 	},
 })

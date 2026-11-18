@@ -13,7 +13,7 @@ const MARK_SIZE = {
 const MARK_TONE = {
 	waiting: "text-mission-glyph-waiting",
 	failed: "text-mission-glyph-failed",
-	ready: "text-mission-glyph-ready",
+	ready: "text-success",
 	working: "text-soft-foreground",
 	waiting_agent: "text-muted-foreground",
 } as const satisfies Record<BotMissionState, string>

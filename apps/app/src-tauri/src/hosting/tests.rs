@@ -4426,6 +4426,11 @@ fn a_member_creates_a_library_board_in_the_shared_space_only() {
 	run(kept_in_the_space_named("library_create_board", a_library_entry_of("plan")));
 }
 
+#[test]
+fn a_member_duplicates_a_library_item_in_the_shared_space_only() {
+	run(kept_in_the_space_named("library_duplicate", a_library_entry_of("notes.md")));
+}
+
 const A_LIBRARY_BOARD: &str = r#"{"nodes":[{"id":"a","type":"text","text":"","x":0,"y":0,"width":10,"height":10}],"edges":[]}"#;
 
 const A_JOINED_SPACE: &str = "joined-1";

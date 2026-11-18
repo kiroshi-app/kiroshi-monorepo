@@ -20,7 +20,7 @@ const START_ICONS = {
 } satisfies Record<LibraryDocumentStartKind, typeof Icons.Checklist>
 
 const SMALL_PILL = cn(
-	"h-6 rounded-full font-medium text-xs leading-4 transition-none",
+	"h-6 font-medium text-xs leading-4 transition-none",
 	FOCUS_OUTLINE,
 )
 
@@ -61,7 +61,7 @@ const LibraryDocumentStart = ({ onStart }: LibraryDocumentStartProps) => {
 				return (
 					<Button
 						className={cn(
-							"h-7 gap-1.5 rounded-full border-border ps-2 pe-2.5 font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
+							"h-7 gap-1.5 border-border ps-2 pe-2.5 font-medium text-compact text-foreground leading-4 transition-none hover:bg-foreground/4 active:bg-foreground/8 dark:hover:bg-foreground/4",
 							FOCUS_OUTLINE,
 						)}
 						key={kind}

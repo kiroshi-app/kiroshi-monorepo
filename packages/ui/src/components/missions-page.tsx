@@ -9,6 +9,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import type { BotMissionState } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
@@ -27,6 +32,7 @@ import type {
 } from "@workspace/ui/components/mission"
 import { MissionStateMark } from "@workspace/ui/components/mission-state-mark"
 import { Notice } from "@workspace/ui/components/notice"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import { toElapsedTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -56,9 +62,9 @@ const MISSIONS_PAGE_GROUPS: MissionsPageGroupShape[] = [
 const EMPHASISED_GROUP: MissionsPageGroupKey = "blockedOnYou"
 
 const MISSIONS_PAGE_FRAMES = {
-	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b p-3",
+	row: "flex w-full min-w-0 items-center gap-2.5 border-mission-list-divider border-b px-(--screen-inset) py-3",
 	groupHeader:
-		"flex w-full min-w-0 items-center gap-2 bg-mission-list-group p-3",
+		"flex w-full min-w-0 items-center gap-2 bg-mission-list-group px-(--screen-inset) py-3",
 	chip: "inline-flex h-5.5 shrink-0 items-center",
 	glyph: "flex size-4 shrink-0 items-center justify-center",
 }
@@ -102,6 +108,7 @@ type MissionsPageProps = {
 	status?: MissionsPageStatus
 	defaultFoldedGroups?: MissionsPageGroupKey[]
 	wrap?: MissionsPageRowWrap
+	dragRegion?: "deep"
 }
 
 type MissionGlyphProps = Pick<MissionsPageGroupShape, "mark">
@@ -307,7 +314,7 @@ const MissionsPageAgentHeading = ({
 	missions,
 }: MissionsPageAgentGroup) => (
 	<h3
-		className="flex items-center gap-2 px-3 pt-2 pb-1"
+		className="flex items-center gap-2 px-(--screen-inset) pt-2 pb-1"
 		data-slot="missions-page-agent"
 	>
 		<BotIdentityAvatar
@@ -475,6 +482,8 @@ const MissionsEmpty = () => {
 	)
 }
 
+type MissionsPageBodyProps = MissionsPageProps & { columnClassName: string }
+
 const MissionsPageBody = ({
 	missions,
 	now,
@@ -483,7 +492,8 @@ const MissionsPageBody = ({
 	status = "loaded",
 	defaultFoldedGroups = [],
 	wrap,
-}: MissionsPageProps) => {
+	columnClassName,
+}: MissionsPageBodyProps) => {
 	const { t } = useTranslation("chat")
 	const [foldedGroups, setFoldedGroups] = useState(
 		() => new Set(defaultFoldedGroups),
@@ -499,7 +509,10 @@ const MissionsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3" data-slot="missions-page-failure">
+			<div
+				className={cn(columnClassName, "min-h-0 flex-1")}
+				data-slot="missions-page-failure"
+			>
 				<Notice
 					description={t("activity.failure.missions.description")}
 					retry={{ onRetry }}
@@ -509,7 +522,12 @@ const MissionsPageBody = ({
 		)
 	}
 
-	if (missions.length === 0) return <MissionsEmpty />
+	if (missions.length === 0)
+		return (
+			<div className={cn(columnClassName, "min-h-0 flex-1")}>
+				<MissionsEmpty />
+			</div>
+		)
 
 	const toggle = (key: MissionsPageGroupKey) =>
 		setFoldedGroups((folded) => {
@@ -546,25 +564,33 @@ const MissionsPageBody = ({
 	)
 }
 
-const MissionsPage = (props: MissionsPageProps) => {
+const MissionsPage = ({ dragRegion, ...body }: MissionsPageProps) => {
 	const { t } = useTranslation("chat")
 	const titleId = useId()
 
 	return (
 		<section
 			aria-labelledby={titleId}
-			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden"
+			className="size-full min-h-0 min-w-0 overflow-hidden"
 			data-slot="missions-page"
 		>
-			<header className="flex shrink-0 items-center border-shell-border border-b p-3">
-				<h1
-					className={cn("font-semibold text-bubble-foreground", LINE)}
-					id={titleId}
-				>
-					{t("missions.page.title")}
-				</h1>
-			</header>
-			<MissionsPageBody {...props} />
+			<ScreenLayout
+				header={
+					<AppHeader
+						data-tauri-drag-region={dragRegion}
+						leading={
+							<AppHeaderText>
+								<h1 className={APP_HEADER_TITLE} id={titleId}>
+									{t("missions.page.title")}
+								</h1>
+							</AppHeaderText>
+						}
+					/>
+				}
+				scroller={(columnClassName) => (
+					<MissionsPageBody {...body} columnClassName={columnClassName} />
+				)}
+			/>
 		</section>
 	)
 }

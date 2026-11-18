@@ -1,8 +1,11 @@
 import type { MissionBot } from "@workspace/ui/components/mission"
 
 import type { Mission } from "./mission-contract"
+import type { MissionEntry } from "./missions-model"
 
+import type { SoloThreads } from "@/lib/bots/roster-line"
 import type { ThreadFace } from "@/lib/chat/thread-contract"
+import { conversationName } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 
 type MissionSeat = {
@@ -42,3 +45,41 @@ export const toMissionConversation = ({
 		},
 	],
 })
+
+export type MissionOrigins = {
+	conversations: Conversation[]
+	soloThreads: SoloThreads
+	bots: Bot[]
+	missionMarks: MissionEntry[]
+}
+
+const originLabelOf = (
+	originConversationId: string,
+	{ conversations, soloThreads, bots }: MissionOrigins,
+): string | undefined => {
+	const conversation = conversations.find(
+		({ id }) => id === originConversationId,
+	)
+	if (conversation) {
+		return conversationName(conversation, {})
+	}
+	const soloBotId = soloThreads[originConversationId]?.botId
+	return bots.find(({ id }) => id === soloBotId)?.name
+}
+
+const markedOriginOf = (missionId: string, missionMarks: MissionEntry[]) =>
+	missionMarks.find(({ mission }) => mission.id === missionId)?.mission
+		.originConversationId
+
+export const missionPathLabelOf = (
+	missionId: string,
+	readMission: Mission | undefined,
+	origins: MissionOrigins,
+): string | undefined => {
+	const originConversationId =
+		readMission?.originConversationId ??
+		markedOriginOf(missionId, origins.missionMarks)
+	return originConversationId === undefined
+		? undefined
+		: originLabelOf(originConversationId, origins)
+}

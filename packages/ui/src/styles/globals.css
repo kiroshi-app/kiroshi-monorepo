@@ -20,6 +20,7 @@
 	--radius-root: var(--radius);
 	--sidebar-rail: 4.25rem;
 	--shell-inset: calc(var(--spacing) * 2);
+	--screen-inset: calc(var(--spacing) * 3);
 	--popover-shadow:
 		0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06),
 		0 12px 28px rgb(0 0 0 / 0.12);
@@ -41,6 +42,10 @@
 	--selection-toolbar-highlight: oklch(0 0 0 / 6%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.08), 0 8px 20px rgb(0 0 0 / 0.12);
+	--control-hover: var(--muted);
+	--control-pressed: #e6e6e6;
+	--lightbox-control: rgb(24 24 26 / 0.85);
+	--lightbox-bar: rgb(11 11 12);
 	--icon-stroke: 0.09em;
 	--question-segment-foreground: color-mix(
 		in oklab,
@@ -71,6 +76,8 @@
 	--selection-toolbar-highlight: oklch(1 0 0 / 8%);
 	--selection-toolbar-shadow:
 		0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.35);
+	--control-hover: #1f1f21;
+	--control-pressed: var(--muted);
 	--question-segment-foreground: var(--muted-foreground);
 }
 
@@ -91,6 +98,10 @@
 	--shadow-sidebar-peek: var(--sidebar-peek-shadow);
 	--color-selection-toolbar-border: var(--selection-toolbar-border);
 	--color-selection-toolbar-highlight: var(--selection-toolbar-highlight);
+	--color-control-hover: var(--control-hover);
+	--color-control-pressed: var(--control-pressed);
+	--color-lightbox-control: var(--lightbox-control);
+	--color-lightbox-bar: var(--lightbox-bar);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary-strong: var(--primary-strong);
@@ -253,6 +264,24 @@
 	--radius-4xl: calc(var(--radius-root) * 2.6);
 	--radius-bubble: calc(var(--radius-root) * 1.6);
 	--radius-control: calc(var(--radius-root) * 1.2);
+	--radius-button: var(--radius-lg);
+	--radius-compact-control-inline: max(
+		0px,
+		var(--radius-control) -
+		2px -
+		var(--spacing) *
+		3
+	);
+	--radius-compact-control-block: max(
+		0px,
+		var(--radius-control) -
+		2px -
+		var(--spacing) *
+		2.75
+	);
+	--radius-compact-control:
+		var(--radius-compact-control-inline) / var(--radius-compact-control-block);
+	--radius-compact-segment: calc(var(--radius-lg) - var(--spacing) * 0.75);
 	--text-compact: 0.8125rem;
 	--text-reading: 0.9375rem;
 	--text-reading--line-height: 1.375rem;
@@ -716,8 +745,11 @@
 	transition-property: left, right, translate;
 }
 
+:is(.group\/button, .group\/toggle).rounded-2xl {
+	border-radius: var(--radius-button);
+}
+
 :is(
-	.group\/button,
 	[data-slot="input"],
 	[data-slot="item"],
 	[data-slot="tabs-list"]:not([data-variant="line"]),
@@ -735,6 +767,30 @@
 	[data-slot="popover-content"]
 ):not([data-closed]) {
 	animation: none;
+}
+
+/* Tabs sliding, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/cli/free/tabs-sliding.md */
+:root {
+	--tabs-dur: 250ms;
+	--tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="sliding-tabs-pill"] {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+	width: 0;
+	transform: translateX(0);
+	transition:
+		transform var(--tabs-dur) var(--tabs-ease),
+		width var(--tabs-dur) var(--tabs-ease);
+	will-change: transform, width;
+	pointer-events: none;
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
 }
 
 /* Tooltip open/close, adapted from https://raw.githubusercontent.com/Jakubantalik/transitions.dev/main/skills/transitions-dev/17-tooltip.md */

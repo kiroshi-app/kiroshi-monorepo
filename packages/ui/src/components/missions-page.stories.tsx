@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
 	expect,
 	fireEvent,
@@ -13,8 +14,14 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	A11Y_FLOATING_FOCUS_GUARDS,
 	A11Y_SUBMENU_PORTAL_GUARD,
+	expectBarDragsTheWindow,
+	expectBarLeavesTheWindowInPlace,
+	expectContentAtBarInset,
+	expectHeaderTitleStep,
 	expectSkeletonFilledTo,
+	expectStaticHeaderBar,
 	FRAME_POLL,
+	LAPTOP_WINDOW,
 	mergeA11y,
 	shown,
 	slotIn,
@@ -195,6 +202,10 @@ export const Default = meta.story({
 		const [firstRow] = rows
 		if (!firstRow) throw new Error("No row is drawn")
 		await expect(anatomyOf(firstRow)).toEqual(ROW_ANATOMY)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(headers[0] as Element, "missions-page-glyph"),
+		)
 		const rowWithoutPullRequest = canvas.getByRole("button", {
 			name: /OPE-2130/,
 		})
@@ -324,6 +335,10 @@ export const Empty = meta.story({
 		await expect(
 			slotsIn(canvasElement, "missions-page-group-header"),
 		).toHaveLength(0)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(canvasElement, "missions-panel-empty"),
+		)
 	},
 })
 
@@ -361,6 +376,11 @@ export const Loading = meta.story({
 		)) {
 			await expect(header.getBoundingClientRect().height).toBe(headerHeight)
 		}
+		await expectContentAtBarInset(
+			page,
+			slotIn(canvasElement, "missions-page-skeleton-group-header")
+				.firstElementChild as Element,
+		)
 	},
 })
 
@@ -373,9 +393,14 @@ export const Failed = meta.story({
 			},
 		},
 	},
-	play: async ({ args, canvas }) => {
+	play: async ({ args, canvas, canvasElement }) => {
 		await expect(canvas.getByRole("alert")).toHaveTextContent(
 			"Couldn’t load missions",
+		)
+		await expectContentAtBarInset(
+			slotIn(canvasElement, "missions-page"),
+			slotIn(canvasElement, "missions-page-failure")
+				.firstElementChild as Element,
 		)
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalledOnce()
@@ -480,7 +505,7 @@ export const InMainCard = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `Default inside the main card of the shell, artboard 2 Expanded, Missions. Check that the card draws the only border and the only radius around the page, that the page paints no background of its own, and that the line under the page header is the only line inside the card. ${WIRED_BY_NOBODY_YET}`,
+				story: `Default inside the main card of the shell, artboard 2 Expanded, Missions. Check that the card draws the only border and the only radius around the page, that the page paints no background of its own, and that the header bar draws the one rule that crosses the card, under itself. ${WIRED_BY_NOBODY_YET}`,
 			},
 		},
 	},
@@ -505,10 +530,12 @@ export const InMainCard = meta.story({
 
 		const header = page.querySelector("header")
 		if (!header) throw new Error("The page draws no header")
-		await expect(
-			Number.parseFloat(getComputedStyle(header).borderBottomWidth),
-		).toBeGreaterThan(0)
-		await expect(getComputedStyle(header).borderTopWidth).toBe("0px")
+		const headerStyle = getComputedStyle(header)
+		await expect([
+			headerStyle.borderTopWidth,
+			headerStyle.borderBottomWidth,
+			headerStyle.borderInlineWidth,
+		]).toEqual(["0px", "1px", "0px"])
 	},
 })
 
@@ -631,5 +658,149 @@ export const MenuOnARow = meta.story({
 		await expect(args.onOpen).toHaveBeenLastCalledWith("mission-ope-2118")
 		rightClick(workingRow)
 		await expect(await openedMenuEntries()).toEqual(WORKING_ROW_ENTRIES)
+	},
+})
+
+const MISSIONS_CONTENT_TOP = 56
+
+const NARROW_MISSIONS_WIDTH = 400
+
+const expectMissionsBar = async (canvasElement: HTMLElement) => {
+	const page = slotIn(canvasElement, "missions-page")
+	const frame = page.getBoundingClientRect()
+	const bar = await expectStaticHeaderBar(slotIn(page, "screen-layout"))
+	const title = within(bar).getByRole("heading", {
+		level: 1,
+		name: "Missions",
+	})
+	const titleBox = title.getBoundingClientRect()
+	const groups = slotIn(page, "missions-page-groups")
+
+	await expect(page).toHaveAttribute("aria-labelledby", title.id)
+	await expect(within(bar).queryAllByRole("button")).toHaveLength(0)
+	await expect(slotsIn(bar, "app-header-top-line")).toHaveLength(0)
+	await expect(slotsIn(bar, "app-header-capsule")).toHaveLength(0)
+	await expectHeaderTitleStep(title)
+	await expect([
+		titleBox.left - frame.left,
+		Math.round((titleBox.top + titleBox.bottom) / 2 - frame.top),
+	]).toEqual([12, MISSIONS_CONTENT_TOP / 2])
+	await expect(
+		slotsIn(groups, "missions-page-group-header")[0].getBoundingClientRect()
+			.top -
+			frame.top +
+			groups.scrollTop,
+	).toBe(MISSIONS_CONTENT_TOP)
+
+	return { page, bar, groups, title }
+}
+
+const onTheContentCard = (Story: () => ReactNode) => (
+	<div className="fixed inset-0 bg-card" data-content-card="">
+		<Story />
+	</div>
+)
+
+export const Missions4a = meta.story({
+	decorators: [onTheContentCard],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard I4a, Missions with no mission selected. Check the one bar across the top of the page, 56px tall on the content surface with a 1px rule under it: it holds Missions alone, the level 1 heading that names the page, in 14px semibold on the bar's centre line, 12px from the side, with no top line, no control and no capsule. Check the first group starts right under the bar. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { bar } = await expectMissionsBar(canvasElement)
+
+		await expectBarLeavesTheWindowInPlace(bar)
+	},
+})
+
+export const MissionsDark4b = meta.story({
+	decorators: [onTheContentCard],
+	globals: { ...LAPTOP_WINDOW, theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard I4b, Missions with no mission selected in the dark theme. Check that the bar keeps the geometry of \`Missions4a\`, its rule drawn in white at 8 percent. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectMissionsBar(canvasElement)
+	},
+})
+
+export const MissionsScrolled4c = meta.story({
+	args: { defaultFoldedGroups: [] },
+	globals: LAPTOP_WINDOW,
+	decorators: [
+		(Story) => (
+			<div className="h-100">
+				<Story />
+			</div>
+		),
+		onTheContentCard,
+	],
+	parameters: {
+		docs: {
+			description: {
+				story: `Artboard I4c, Missions scrolled away from its start, every group open in a page 400px high. Check that the groups leave at the edge of the bar and that the bar stays as it is in \`Missions4a\`: same place, no fade, no shadow. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { page, bar, groups } = await expectMissionsBar(canvasElement)
+
+		groups.scrollTo({ top: groups.scrollHeight })
+		await waitFor(() => expect(groups.scrollTop).toBeGreaterThan(0))
+		await expect(groups.getBoundingClientRect().top).toBe(
+			bar.getBoundingClientRect().bottom,
+		)
+		await expectStaticHeaderBar(slotIn(page, "screen-layout"))
+	},
+})
+
+export const MissionsNarrow4d = meta.story({
+	decorators: [
+		(Story) => (
+			<div style={{ width: NARROW_MISSIONS_WIDTH }}>
+				<Story />
+			</div>
+		),
+		onTheContentCard,
+	],
+	parameters: {
+		docs: {
+			description: {
+				story: `Missions with no mission selected in a page 400px wide. Check the same bar as \`Missions4a\`, the title whole on its one line. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { page, title } = await expectMissionsBar(canvasElement)
+
+		await expect(page.getBoundingClientRect().width).toBe(NARROW_MISSIONS_WIDTH)
+		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
+	},
+})
+
+export const BarDragsTheWindow = meta.story({
+	args: { dragRegion: "deep" },
+	decorators: [onTheContentCard],
+	globals: LAPTOP_WINDOW,
+	parameters: {
+		docs: {
+			description: {
+				story: `Missions given \`dragRegion\`, as the frameless window mounts it. Check that the bar is the bar of \`Missions4a\` and carries the deep drag region, so a press anywhere on it moves the window, and that it still holds no control to take that press. Leave \`dragRegion\` out wherever a title bar already moves the window. ${WIRED_BY_NOBODY_YET}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const { bar } = await expectMissionsBar(canvasElement)
+
+		await expectBarDragsTheWindow(bar)
 	},
 })

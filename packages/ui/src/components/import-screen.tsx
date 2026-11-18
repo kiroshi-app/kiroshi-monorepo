@@ -255,7 +255,7 @@ const ImportScreen = (props: ImportScreenProps) => {
 			</OnboardingContent>
 			<OnboardingControls>
 				<Button
-					className="rounded-full px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50"
+					className="px-5 leading-4.5 transition-none data-disabled:pointer-events-none data-disabled:opacity-50"
 					disabled={isPrimaryDisabled}
 					focusableWhenDisabled
 					onClick={primary.onPress}

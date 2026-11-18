@@ -118,6 +118,10 @@ import { hasCaptionWindowControls } from "@/lib/host"
 import { base64Of } from "@/lib/library/library-document-session"
 import type { Mission, MissionChanged } from "@/lib/missions/mission-contract"
 import { missionSummonsFor } from "@/lib/missions/mission-summons"
+import {
+	type MissionOrigins,
+	missionPathLabelOf,
+} from "@/lib/missions/mission-thread-model"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import {
 	createOpenedMissionController,
@@ -3446,6 +3450,23 @@ describe("ThreadScreen", () => {
 
 const HEADER_OF_WALLS = "Walls · conversation settings"
 
+const headerSubjectOfWalls = () => {
+	const settings = screen.getByRole("button", { name: HEADER_OF_WALLS })
+	const subject = settings.closest<HTMLElement>(
+		'[data-slot="header-conversation-button"]',
+	)
+
+	expect(settings.getAttribute("aria-expanded")).toBe("false")
+	expect(
+		settings.querySelector('[data-slot="conversation-subject-icon"]'),
+	).toBeNull()
+	expect(
+		subject?.querySelector('[data-slot="conversation-subject-icon-tile"]'),
+	).not.toBeNull()
+
+	return subject
+}
+
 const subjectIconIn = (surface: HTMLElement | null) =>
 	surface?.querySelector<HTMLElement>('[data-slot="conversation-subject-icon"]')
 
@@ -3578,6 +3599,141 @@ describe("ThreadScreen of a mission, which has no Space id of its own", () => {
 	})
 })
 
+describe("ThreadScreen of a mission saying where it came from", () => {
+	const ORIGIN_ID = SOLO_MISSION.originConversationId
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	const originsOf = (
+		room: Room,
+		more: Partial<MissionOrigins>,
+	): MissionOrigins => ({
+		bots: room.bots,
+		conversations: [],
+		missionMarks: [],
+		soloThreads: {},
+		...more,
+	})
+
+	const originNamed = (room: Room, title: string): Conversation => ({
+		...room.thread.conversation,
+		id: ORIGIN_ID,
+		title,
+	})
+
+	const missionScreenOf = (
+		room: Room,
+		origins: MissionOrigins,
+		onLeave: () => void = () => undefined,
+	) => {
+		const shown = room.thread.mission
+		if (!shown) {
+			throw new Error("the room holds no mission")
+		}
+		return screenOf(
+			{
+				...room.thread,
+				mission: {
+					...shown,
+					onLeave,
+					pathLabel: missionPathLabelOf(
+						shown.mission.id,
+						shown.mission,
+						origins,
+					),
+				},
+			},
+			room.bots,
+		)
+	}
+
+	const pathLink = (name: string) => screen.queryByRole("button", { name })
+
+	it("names the conversation of origin on the path line, and its new title once renamed", async () => {
+		const room = await missionRoomOf({ events: [] })
+		const { rerender } = render(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof")] }),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		expect(pathLink("Roof")).toBeTruthy()
+
+		rerender(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof works")] }),
+			),
+		)
+
+		expect(pathLink("Roof works")).toBeTruthy()
+		expect(pathLink("Roof")).toBeNull()
+	})
+
+	it("names the companion of a solo conversation of origin as the sidebar does", async () => {
+		const room = await missionRoomOf({ events: [] })
+		render(
+			missionScreenOf(
+				room,
+				originsOf(room, {
+					soloThreads: {
+						[ORIGIN_ID]: { spaceId: SPACE, botId: room.idOf("Ada") },
+					},
+				}),
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		expect(pathLink("Ada")).toBeTruthy()
+	})
+
+	it("falls back to Missions when the conversation of origin cannot be read", async () => {
+		const room = await missionRoomOf({ events: [] })
+		render(missionScreenOf(room, originsOf(room, {})), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(pathLink("Missions")).toBeTruthy()
+	})
+
+	it("leaves the mission from the path line naming its origin", async () => {
+		const room = await missionRoomOf({ events: [] })
+		const onLeave = vi.fn()
+		render(
+			missionScreenOf(
+				room,
+				originsOf(room, { conversations: [originNamed(room, "Roof")] }),
+				onLeave,
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		fireEvent.click(screen.getByRole("button", { name: "Roof" }))
+
+		expect(onLeave).toHaveBeenCalledOnce()
+	})
+})
+
 describe("ThreadScreen wearing the look of a group conversation", () => {
 	let layout: FakeLayout
 
@@ -3596,16 +3752,16 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		layout.restore()
 	})
 
-	it("redraws the header with the icon and the colour of a conversation updated while open", async () => {
+	it("redraws the subject tile of the header bar with the icon and the colour of a conversation updated while open", async () => {
 		const room = await roomOf({ names: ["Ada", "Zoe"] })
 		const { rerender } = render(
 			screenOf(wearing(room.thread, { icon: null, color: null }), room.bots),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
-		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
-		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
-		expect(subjectColourIn(header)).toEqual(UNCOLOURED_SUBJECT)
+		const subject = headerSubjectOfWalls()
+		expect(pictogramIn(subject)).toBe(drawnPictogramOf("MessageSquare"))
+		expect(subjectColourIn(subject)).toEqual(UNCOLOURED_SUBJECT)
 
 		for (const color of [BLOT_HUES.cyan, FREE_HUE]) {
 			rerender(
@@ -3613,13 +3769,13 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 			)
 			await settle()
 
-			const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
+			const redrawn = headerSubjectOfWalls()
 			expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
 			expect(subjectColourIn(redrawn)).toEqual(subjectColouredAt(color))
 		}
 	})
 
-	it("leads the header of a room with one agent seated with the conversation avatar", async () => {
+	it("leads the header bar of a room with one agent seated with the conversation avatar in its subject tile", async () => {
 		const room = await roomOf({ names: ["Ada"] })
 		render(
 			screenOf(
@@ -3630,8 +3786,7 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		)
 		await settle()
 
-		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
-		expect(pictogramIn(header)).toBe(drawnPictogramOf("Rocket"))
+		expect(pictogramIn(headerSubjectOfWalls())).toBe(drawnPictogramOf("Rocket"))
 	})
 
 	it.each([BLOT_HUES.cyan, FREE_HUE, null])(

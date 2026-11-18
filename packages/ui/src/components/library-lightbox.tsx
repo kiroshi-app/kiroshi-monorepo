@@ -4,6 +4,12 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderPathLink,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ImageMenu,
@@ -12,17 +18,19 @@ import {
 } from "@workspace/ui/components/image-menu"
 import { closeInnermostCommentLayer } from "@workspace/ui/components/library-comment-escape"
 import { LibraryCommentModeHint } from "@workspace/ui/components/library-comment-mode-hint"
+import { LibraryPresenceInBar } from "@workspace/ui/components/library-document-agents"
+import type { LibraryDocumentBarProps } from "@workspace/ui/components/library-document-view"
 import {
 	LibraryImageComments,
 	type LibraryImageCommentsProps,
 } from "@workspace/ui/components/library-image-comments"
 import {
 	handlersFor,
-	LIBRARY_BAR,
-	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	LIBRARY_OVERLAY_ISLAND,
 	type LibraryBarComments,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 } from "@workspace/ui/components/library-item-menu"
@@ -52,8 +60,13 @@ const ZOOM_STEPS = [MIN_ZOOM, 0.5, 0.75, 1, 1.5, 2, 3, MAX_ZOOM]
 
 const STEP = cn(
 	LIBRARY_BAR_ROUND,
-	"size-10 bg-foreground/10 hover:bg-foreground/16",
+	LIBRARY_OVERLAY_ISLAND,
+	"size-10 border border-selection-toolbar-border hover:bg-control-hover dark:hover:bg-control-hover",
 )
+
+const STEP_OVER_STAGE = "absolute top-1/2 flex -translate-y-1/2"
+
+const ZOOMED_CLEAR_OF_CONTROLS = "px-10 pb-10"
 
 const LIGHTBOX_SURFACE = "dark bg-lightbox-stage/93 text-foreground"
 
@@ -145,7 +158,10 @@ const ZoomStage = ({
 	return (
 		<>
 			<div
-				className="flex min-h-0 flex-1 overflow-auto rounded-md [container-type:size] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+				className={cn(
+					"flex min-h-0 flex-1 overflow-auto rounded-b-md pt-(--screen-inset) [container-type:size] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
+					zoom !== null && ZOOMED_CLEAR_OF_CONTROLS,
+				)}
 				data-lightbox-backdrop
 				data-slot={ZOOM_SLOT}
 				ref={setStage}
@@ -158,7 +174,7 @@ const ZoomStage = ({
 							<img
 								alt={image.name}
 								className={cn(
-									"block rounded-md shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
+									"block rounded-[4px] shadow-[0_16px_40px_rgb(0_0_0/0.4)] ring-1 ring-foreground/8",
 									zoom === null &&
 										"max-h-[100cqh] max-w-[100cqw] object-contain",
 								)}
@@ -190,12 +206,9 @@ const ZoomStage = ({
 					<LibraryCommentModeHint surface="image" />
 				</div>
 			) : null}
-			<div
-				className="absolute inset-x-0 bottom-0 flex h-18 items-center justify-center"
-				data-lightbox-backdrop
-			>
+			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-18 items-center justify-center">
 				<div
-					className="flex h-9 items-center gap-0.5 rounded-[18px] bg-[#1c1c1e] p-1 shadow-[0_8px_24px_rgb(0_0_0/0.4)] ring-1 ring-foreground/10"
+					className="pointer-events-auto flex h-9 items-center gap-0.5 rounded-[18px] bg-[#1c1c1e] p-1 shadow-[0_8px_24px_rgb(0_0_0/0.4)] ring-1 ring-foreground/10"
 					data-slot="library-lightbox-zoom-bar"
 				>
 					<TooltipButton
@@ -215,7 +228,7 @@ const ZoomStage = ({
 								? t("library.lightbox.fitToStage")
 								: t("library.lightbox.zoomThenFit", { percent })
 						}
-						className="h-7 w-13 rounded-full px-0 font-medium text-compact text-foreground leading-4 tabular-nums transition-none hover:bg-foreground/8"
+						className="h-7 w-13 px-0 font-medium text-compact text-foreground leading-4 tabular-nums transition-none hover:bg-foreground/8"
 						onClick={() => setZoom(null)}
 						tooltip={t("library.lightbox.fitToStage")}
 						variant="ghost"
@@ -260,8 +273,10 @@ type LibraryLightboxProps = LibraryItemActions<LibraryLightboxImage> &
 		onPrevious: () => void
 		onNext: () => void
 		isSavingToLibrary?: boolean
+		dragRegion?: "deep"
 		comments?: LibraryBarComments
 		imageComments?: LibraryLightboxImageComments
+		presence?: LibraryDocumentBarProps<LibraryLightboxImage>["presence"]
 	}
 
 const LibraryLightbox = ({
@@ -274,8 +289,10 @@ const LibraryLightbox = ({
 	onSaveToLibrary,
 	onCopyImage,
 	isSavingToLibrary,
+	dragRegion,
 	comments,
 	imageComments,
+	presence,
 	...actions
 }: LibraryLightboxProps) => {
 	const { t } = useTranslation("common")
@@ -344,49 +361,49 @@ const LibraryLightbox = ({
 						}}
 						ref={surfaceRef}
 					>
-						<div className={LIBRARY_BAR}>
-							<div className="flex min-w-0 items-center gap-2">
-								<DialogClose
-									render={
-										<TooltipButton
-											aria-label={t("library.lightbox.back")}
-											className={cn(LIBRARY_BAR_BARE, "shrink-0")}
-											size="icon"
-											tooltip={t("library.lightbox.back")}
-											tooltipSide="bottom"
-											variant="ghost"
-										/>
+						<AppHeader
+							className="bg-lightbox-bar"
+							close={
+								<LibraryItemBarActions
+									actions={handlers}
+									comments={comments}
+									item={image}
+									leading={
+										<LibraryPresenceInBar value={true}>
+											{presence}
+										</LibraryPresenceInBar>
+									}
+									onClose={onClose}
+									onConfirmingDeleteChange={setConfirmingDelete}
+									onMenuOpenChange={recordMenuToggle}
+									surface="lightbox"
+								/>
+							}
+							data-tauri-drag-region={dragRegion}
+							leading={
+								<AppHeaderText
+									topLine={
+										<>
+											<DialogClose
+												render={<AppHeaderPathLink className="shrink-0" />}
+											>
+												{t("library.lightbox.back")}
+											</DialogClose>
+											<LibraryBarMeta meta={image.detail} />
+										</>
 									}
 								>
-									<Icons.Previous aria-hidden="true" />
-								</DialogClose>
-								<div className="flex min-w-0 items-baseline gap-2.5">
-									<DialogTitle
-										className="truncate font-medium text-foreground text-sm leading-4.5"
-										title={image.name}
-									>
+									<DialogTitle className={APP_HEADER_TITLE} title={image.name}>
 										{image.name}
 									</DialogTitle>
-									<p className="shrink-0 text-compact text-muted-foreground leading-4.5 tabular-nums">
-										{image.detail}
-									</p>
-								</div>
-							</div>
-							<LibraryItemBarActions
-								actions={handlers}
-								comments={comments}
-								item={image}
-								onClose={onClose}
-								onConfirmingDeleteChange={setConfirmingDelete}
-								onMenuOpenChange={recordMenuToggle}
-								surface="lightbox"
-							/>
-						</div>
+								</AppHeaderText>
+							}
+						/>
 						<div
-							className="relative flex min-h-0 flex-1 items-center gap-5 px-5 pb-18"
+							className="relative flex min-h-0 flex-1 px-(--screen-inset) pb-(--screen-inset)"
 							data-lightbox-backdrop
 						>
-							<span className="flex">
+							<span className={cn(STEP_OVER_STAGE, "start-4")}>
 								<TooltipButton
 									aria-label={t("library.lightbox.previous")}
 									className={STEP}
@@ -423,7 +440,7 @@ const LibraryLightbox = ({
 									position={position}
 								/>
 							</div>
-							<span className="flex">
+							<span className={cn(STEP_OVER_STAGE, "end-4")}>
 								<TooltipButton
 									aria-label={t("library.lightbox.next")}
 									className={STEP}

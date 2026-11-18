@@ -267,7 +267,7 @@ const common = {
 	},
 	library: {
 		title: "Library",
-		subtitle: "Every image and document in this Space.",
+		description: "Every image and document in this Space.",
 		search: "Search the Library",
 		import: "Import",
 		newDocument: "New document",
@@ -572,6 +572,7 @@ const common = {
 			open: "Open",
 			openInNewTab: "Open in new tab",
 			rename: "Rename",
+			duplicateFailure: "Couldn’t duplicate {{name}}. Try Duplicate again.",
 			copy: "Copy",
 			download: "Download",
 			showInFolder: "Show in folder",
@@ -589,10 +590,10 @@ const common = {
 		},
 		lightbox: {
 			download: "Download",
-			copy: "Copy",
+			duplicate: "Duplicate",
 			copied: "Copied",
 			more: "More",
-			back: "Back",
+			back: "Library",
 			close: "Close",
 			previous: "Previous image",
 			next: "Next image",
@@ -608,7 +609,7 @@ const common = {
 			back: "Library",
 			more: "More",
 			download: "Download",
-			copy: "Copy",
+			duplicate: "Duplicate",
 			copied: "Copied",
 			close: "Close",
 			agents: {

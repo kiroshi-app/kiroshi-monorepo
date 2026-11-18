@@ -48,13 +48,7 @@ import {
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
-import {
-	MISSION_BOT,
-	MISSION_NOW,
-	MISSION_OPENED_AT,
-	MISSION_TICKET,
-	MISSION_TOOLS,
-} from "@workspace/ui/components/missions.fixtures"
+import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
 	type PinnedMessage,
 	PinnedMessages,
@@ -607,12 +601,8 @@ export const Conversations5 = meta.story({
 				<MissionHeader
 					bot={MISSION_BOT}
 					objective="Fix the Google sign-in redirect"
-					ticket={MISSION_TICKET}
-					tools={MISSION_TOOLS}
 					state="ready_to_merge"
 					isWorking={false}
-					openedAt={MISSION_OPENED_AT}
-					now={MISSION_NOW}
 					onBack={noop}
 				/>
 			}

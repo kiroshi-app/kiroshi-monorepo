@@ -402,7 +402,7 @@ const NotSent = ({ reason, onRetry }: NotSentProps) => {
 				{reason ? t("turn.notSentBecause", { reason }) : t("turn.notSent")}
 			</p>
 			{onRetry ? (
-				<Button variant="outline" onClick={onRetry} className="rounded-lg">
+				<Button variant="outline" onClick={onRetry}>
 					<Icons.Retry aria-hidden="true" className="size-3.5" />
 					{t("turn.retry")}
 				</Button>

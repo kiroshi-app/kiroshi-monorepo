@@ -14,7 +14,13 @@ import {
 	type AppFrameRailProps,
 	AppFrameShell,
 } from "@workspace/ui/components/app-frame"
-import { AppHeader } from "@workspace/ui/components/app-header"
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderButton,
+	AppHeaderPathSeparator,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import type { AppTitleBarProps } from "@workspace/ui/components/app-title-bar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
@@ -39,6 +45,7 @@ import { ParticipantsPanel } from "@workspace/ui/components/conversation-setting
 import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import type { SettingsPages } from "@workspace/ui/components/plugin-settings/settings-pages"
 import { HISTORY_TAB } from "@workspace/ui/components/plugin-settings/use-history-session"
@@ -520,9 +527,32 @@ const SettingsScreenBodyLayout = ({
 					data-slot="settings-screen-page"
 					header={
 						<AppHeader
-							className="pl-6"
 							data-tauri-drag-region="deep"
-							leading={<h2 className="truncate">{shown.label}</h2>}
+							close={
+								onBack ? (
+									<AppHeaderButton
+										aria-label={t("settings:screen.close")}
+										kind="close"
+										onClick={() => leaveThen(onBack)}
+									>
+										<Icons.Close aria-hidden="true" />
+									</AppHeaderButton>
+								) : null
+							}
+							leading={
+								<AppHeaderText
+									topLine={
+										<>
+											<span className="truncate">
+												{t("settings:breadcrumb.title")}
+											</span>
+											<AppHeaderPathSeparator />
+										</>
+									}
+								>
+									<h2 className={APP_HEADER_TITLE}>{shown.label}</h2>
+								</AppHeaderText>
+							}
 						/>
 					}
 					ref={(layout) => {

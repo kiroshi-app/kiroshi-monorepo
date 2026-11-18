@@ -26,6 +26,7 @@ import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type HomeVisits, visitOf } from "@/lib/home/home-visits"
 import type { TodayRoster } from "@/lib/home/today-conversations"
 import type { MissionLanding } from "@/lib/missions/mission-actions"
+import type { MissionOrigins } from "@/lib/missions/mission-thread-model"
 import type { OpenedMissionController } from "@/lib/missions/opened-mission-controller"
 import type { ThreadSearch } from "@/lib/navigation/thread-search"
 import type { OnboardingCreation } from "@/lib/onboarding/onboarding-flow-controller"
@@ -64,6 +65,7 @@ export type WorkspaceBodyProps = {
 	onOpenConversationSettings: (conversationId: string) => void
 	onOpenThreadInNewTab: (thread: ThreadSearch) => void
 	missions: OpenedMissionController
+	missionOrigins: MissionOrigins
 	onboardingCreation?: OnboardingCreation
 	signIn: SignIn
 	spaceId: string | null
@@ -226,6 +228,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 				onOpenMission={openMission}
 				onOpenMissionInNewTab={openMissionInNewTab}
 				opening={openedMission}
+				origins={props.missionOrigins}
 				readerName={props.readerName}
 				runtimes={props.conversationRuntimes}
 			/>

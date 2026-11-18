@@ -196,7 +196,7 @@ export function PromptInput({
 			data-empty={!hasPayload}
 			data-filled={looksFilled}
 			className={cn(
-				"size-8 rounded-full",
+				"size-8",
 				isLarge && "transition-none disabled:opacity-100",
 				!isLarge &&
 					looksFilled &&

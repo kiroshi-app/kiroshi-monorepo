@@ -20,8 +20,8 @@ import {
 	BACKDROP_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
+import { SlidingTab, SlidingTabs } from "@workspace/ui/components/sliding-tabs"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -98,11 +98,6 @@ const INPUT_CLASS =
 	"min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
 
 const TAB_ROW_CLASS = "flex h-11 shrink-0 items-center px-3"
-
-const TAB_STRIP_CLASS =
-	"scrollbar-hide max-w-full overflow-x-auto bg-transparent p-0"
-
-const TAB_TRIGGER_CLASS = "h-7.5 shrink-0 py-0 transition-none"
 
 const BODY_CLASS =
 	"flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:ring-inset"
@@ -361,23 +356,13 @@ const SearchPalette = ({
 					</div>
 
 					<div className={TAB_ROW_CLASS} data-slot="search-palette-tabs">
-						<Tabs
-							className="min-w-0"
-							onValueChange={(value) => onTabChange(value as SearchTab)}
-							value={tab}
-						>
-							<TabsList className={TAB_STRIP_CLASS}>
-								{TABS.map((candidate) => (
-									<TabsTrigger
-										className={TAB_TRIGGER_CLASS}
-										key={candidate}
-										value={candidate}
-									>
-										{t(`tab.${candidate}`)}
-									</TabsTrigger>
-								))}
-							</TabsList>
-						</Tabs>
+						<SlidingTabs kind="tabs" onValueChange={onTabChange} value={tab}>
+							{TABS.map((candidate) => (
+								<SlidingTab key={candidate} value={candidate}>
+									{t(`tab.${candidate}`)}
+								</SlidingTab>
+							))}
+						</SlidingTabs>
 					</div>
 
 					<div

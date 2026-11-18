@@ -166,7 +166,7 @@ const Failure = ({ agent }: FailureProps) => {
 				variant="ghost"
 				aria-label={t("workLine.retry", { name: agent.name })}
 				onClick={agent.onRetry}
-				className="relative z-1 h-5.5 shrink-0 rounded-sm border-foreground/15 px-2 font-medium text-foreground text-xs transition-none"
+				className="relative z-1 h-5.5 shrink-0 border-foreground/15 px-2 font-medium text-foreground text-xs transition-none"
 			>
 				{t("turn.retry")}
 			</Button>

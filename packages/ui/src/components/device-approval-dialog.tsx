@@ -31,7 +31,7 @@ const PRIMARY_LABEL = {
 	failed: "devices.approval.retry",
 } as const satisfies Record<DeviceApprovalStatus, string>
 
-const PILL_CLASS = "rounded-full leading-4.5 data-disabled:pointer-events-none"
+const PILL_CLASS = "leading-4.5 data-disabled:pointer-events-none"
 
 const DeviceApprovalDialog = ({
 	open,

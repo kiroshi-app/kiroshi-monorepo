@@ -116,6 +116,20 @@ const ZoneFrame = ({ zone, state }: ZoneFrameProps) => (
 	/>
 )
 
+const contentBoxOf = (stage: HTMLElement) => {
+	const frame = stage.getBoundingClientRect()
+	const padding = getComputedStyle(stage)
+	const left = frame.left + stage.clientLeft
+	const top = frame.top + stage.clientTop
+
+	return {
+		left: left + Number.parseFloat(padding.paddingLeft),
+		top: top + Number.parseFloat(padding.paddingTop),
+		right: left + stage.clientWidth - Number.parseFloat(padding.paddingRight),
+		bottom: top + stage.clientHeight - Number.parseFloat(padding.paddingBottom),
+	}
+}
+
 const keepCardInsideStage = (card: HTMLElement, stage: HTMLElement) => {
 	const marker = card.parentElement
 	const image = marker?.parentElement
@@ -123,18 +137,10 @@ const keepCardInsideStage = (card: HTMLElement, stage: HTMLElement) => {
 
 	const place = () => {
 		const pinTail = marker.getBoundingClientRect()
-		const frame = stage.getBoundingClientRect()
-		const left = frame.left + stage.clientLeft
-		const top = frame.top + stage.clientTop
 		const corner = imageCardCornerOf(
 			{ x: pinTail.left, y: pinTail.top },
 			{ width: card.offsetWidth, height: card.offsetHeight },
-			{
-				left,
-				top,
-				right: left + stage.clientWidth,
-				bottom: top + stage.clientHeight,
-			},
+			contentBoxOf(stage),
 		)
 		card.style.left = `${corner.x - pinTail.left}px`
 		card.style.top = `${corner.y - pinTail.top}px`

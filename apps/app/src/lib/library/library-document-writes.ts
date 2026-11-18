@@ -37,6 +37,9 @@ export const renameLibraryDocument = (
 export const deleteLibraryItem = (spaceId: string, name: string) =>
 	invoke<null>("library_delete", { spaceId, name })
 
+export const duplicateLibraryItem = (spaceId: string, name: string) =>
+	invoke<LibraryItem>("library_duplicate", { spaceId, name })
+
 export const shareLibraryCaret = (
 	spaceId: string,
 	name: string,
@@ -63,6 +66,16 @@ export const shareLibraryBoardSeat = (
 		name,
 		at: seat === null ? null : { kind: "board", ...seat },
 	})
+
+export const shareLibraryImageSeat = (spaceId: string, name: string) =>
+	invoke<null>("library_share_presence", {
+		spaceId,
+		name,
+		at: { kind: "image" },
+	})
+
+export const clearLibraryPresence = (spaceId: string, name: string) =>
+	invoke<null>("library_share_presence", { spaceId, name, at: null })
 
 const isRefusedAs = (reason: unknown, kind: NameRefusal) =>
 	typeof reason === "object" &&

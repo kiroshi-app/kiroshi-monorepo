@@ -5019,6 +5019,17 @@
             "nodeId"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -13066,6 +13077,29 @@
       },
       "ok": {
         "type": "null"
+      }
+    },
+    "library_duplicate": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/LibraryError"
+      },
+      "ok": {
+        "$ref": "#/$defs/LibraryItem"
       }
     },
     "library_import": {

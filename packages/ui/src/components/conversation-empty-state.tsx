@@ -74,7 +74,7 @@ const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 			<div className="flex max-w-full flex-wrap justify-center gap-2">
 				{bots.map((bot) => (
 					<Button
-						className="max-w-full rounded-full ps-1.5 text-foreground"
+						className="max-w-full ps-1.5 text-foreground"
 						data-slot="conversation-suggested-bot"
 						key={bot.id}
 						onClick={() => onPress(bot)}

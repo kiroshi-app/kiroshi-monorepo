@@ -28,8 +28,13 @@ import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 const THREAD_WIDTHS =
 	"[--prompt-overhang:calc(var(--spacing)*5)] [--thread-width:calc(var(--spacing)*184)]"
 
+const OPENING_THREAD_WIDTH = "[--thread-width:calc(var(--spacing)*174)]"
+
+const MISSION_SKELETON_THREAD_WIDTH =
+	"has-data-[slot=mission-detail-skeleton]:[--thread-width:calc(var(--spacing)*174)]"
+
 const THREAD_COLUMN =
-	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))]"
+	"[--thread-gutter:calc(max(0px,(100cqw-var(--thread-width))/2)+var(--shell-inset)+var(--prompt-overhang))] ps-(--thread-gutter) pe-[calc(var(--thread-gutter)-(100cqw-100%))] pt-8"
 
 const THREAD_PROMPT_COLUMN = "mx-auto max-w-(--thread-width)"
 
@@ -88,6 +93,7 @@ interface ThreadLayoutProps {
 	marksNewMessages?: boolean
 	older?: ListEnd
 	newer?: TranscriptNewer
+	opening?: ReactNode
 	rows?: TranscriptItem[]
 	onFollowChange?: (following: boolean) => void
 	children: ReactNode
@@ -116,6 +122,7 @@ function ThreadLayout({
 	marksNewMessages,
 	older,
 	newer,
+	opening,
 	rows,
 	onFollowChange,
 	children,
@@ -155,6 +162,8 @@ function ThreadLayout({
 					className={cn(
 						"relative",
 						THREAD_WIDTHS,
+						opening && OPENING_THREAD_WIDTH,
+						MISSION_SKELETON_THREAD_WIDTH,
 						aside && "min-w-0 flex-1",
 						className,
 					)}
@@ -186,6 +195,7 @@ function ThreadLayout({
 									marksNewMessages={marksNewMessages}
 									older={older}
 									newer={newer}
+									opening={opening}
 									rows={rows}
 									onFollowChange={onFollowChange}
 									highlightedMessageId={highlightedMessageId}

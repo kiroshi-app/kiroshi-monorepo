@@ -86,7 +86,7 @@ const PromptLibraryPicker = ({
 					render={
 						<Button
 							className={cn(
-								"size-8 rounded-full border-foreground/12 text-soft-foreground transition-none",
+								"size-8 border-foreground/12 text-soft-foreground transition-none",
 								hasLabel && LABELLED_PILL,
 							)}
 							size="icon"

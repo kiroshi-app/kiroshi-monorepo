@@ -83,7 +83,7 @@ const LibraryWebPageEditor = ({
 	return (
 		<div className="flex flex-col gap-2.5" data-slot="library-web-page-editor">
 			<div className="flex flex-col">
-				<label className="flex h-9 items-center gap-2 rounded-[10px] border border-foreground/15 bg-card p-1.75 text-muted-foreground focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/15">
+				<label className="flex h-9 items-center gap-2 rounded-lg border border-foreground/15 bg-card p-1.75 text-muted-foreground focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/15">
 					<Icons.Link aria-hidden="true" className="size-3.5 shrink-0" />
 					<input
 						aria-busy={isLoading}

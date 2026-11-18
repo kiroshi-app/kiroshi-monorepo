@@ -51,6 +51,7 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { message, seatBots } from "@/lib/conversations/transcript-fixtures"
 import { createHomeVisits } from "@/lib/home/home-visits"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import type { Invoke } from "@/lib/host/joined-hosts-invoke"
 import { base64Of } from "@/lib/library/library-document-session"
 import type {
@@ -189,7 +190,7 @@ const CLOSE_ACTIVITY = "Close activity"
 
 const A_MINUTE = 60_000
 
-const BACK = "Back to the conversation"
+const BACK = "Missions"
 
 const READ_FAILURE_TITLE = "Couldn’t load this mission"
 
@@ -348,6 +349,12 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			isLibraryOpen: false,
 			isOverlayOpen: false,
 			landings: createMessageLandingController(),
+			missionOrigins: {
+				bots: [bot],
+				conversations: [],
+				missionMarks: [],
+				soloThreads: {},
+			},
 			missions,
 			onOpenConversationSettings: () => undefined,
 			onOpenThreadInNewTab: () => undefined,
@@ -416,6 +423,9 @@ const framedSlot = (frame: string, slot: string) =>
 const screenSlot = (slot: string) => framedSlot("screen-layout", slot)
 
 const threadSlot = (slot: string) => framedSlot("chat-layout", slot)
+
+const barOf = (header: Element | null) =>
+	header?.querySelector('[data-slot="app-header"]') as HTMLElement
 
 const missionChanges = () => {
 	const listeners = new Set<(changed: MissionChanged) => void>()
@@ -488,7 +498,7 @@ describe("WorkspaceBody missions", () => {
 		await openMission()
 
 		expect(readMission).toHaveBeenCalledWith(null, "m-1")
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 		expect(missionHeader()?.textContent).toContain("Blocked on you")
 	})
 
@@ -642,6 +652,97 @@ describe("WorkspaceBody missions", () => {
 		expect(missionHeader()).toBeNull()
 	})
 
+	it("wears the header of the loading mission as the static bar dragging the window, Back excepted", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		readMission.mockReturnValue(new Promise(() => undefined))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		const back = screen.getByRole("button", { name: BACK })
+
+		expect(startsWindowDrag(barOf(missionHeaderSkeleton()))).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+	})
+
+	it("wears the header of the open mission as the static bar dragging the window, Back excepted", async () => {
+		const { workspace } = await seed((mission) => ({
+			mission,
+			events: [eventOf("opened", 0)],
+		}))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		const back = screen.getByRole("button", { name: BACK })
+
+		expect(startsWindowDrag(barOf(missionHeader()))).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+	})
+
+	const openReportedMission = async (held: Partial<Mission> = {}) => {
+		const { workspace } = await seed((mission) => ({
+			mission: { ...mission, ...held },
+			events: [eventOf("opened", 0)],
+		}))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+		await openMission()
+	}
+
+	it("opens the mission thread on its properties, ahead of every row of the thread", async () => {
+		const openedAt = Date.now() - 2 * 60 * 60 * 1000
+		await openReportedMission({
+			openedAt,
+			status: { text: "Parsing the 2.0 entries", writtenAt: openedAt },
+			commitsAhead: 3,
+			pullRequestUrl: "https://github.com/vocca/kiroshi/pull/4172",
+		})
+
+		const opening = threadSlot("transcript-opening") as HTMLElement
+		const block = threadSlot("mission-properties") as HTMLElement
+		const properties = within(block)
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+		const [firstRow] = feed.querySelectorAll(
+			'[data-slot="message-scroller-item"]',
+		)
+
+		expect(opening.contains(block)).toBe(true)
+		expect(
+			opening.compareDocumentPosition(firstRow) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		expect(properties.getByText("OPE-42")).toBeTruthy()
+		expect(properties.getByText("Changelog parser")).toBeTruthy()
+		expect(properties.getByText("Parsing the 2.0 entries")).toBeTruthy()
+		expect(properties.getByText("#4172")).toBeTruthy()
+		expect(properties.getByText("3 commits ahead")).toBeTruthy()
+		expect(properties.getByText("opened 2 hr. ago")).toBeTruthy()
+	})
+
+	it("scrolls the properties of the mission with its thread, under the bar that stays above it", async () => {
+		await openReportedMission()
+
+		const bar = barOf(missionHeader())
+		const properties = threadSlot("mission-properties") as HTMLElement
+		const feed = screen.getByRole("region", { name: "Mission conversation" })
+
+		expect(feed.contains(properties)).toBe(true)
+		expect(feed.contains(bar)).toBe(false)
+		expect(
+			bar.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+	})
+
+	it("draws no button after the ticket of the mission, the app opening no coding session and editing no mission", async () => {
+		await openReportedMission()
+
+		const properties = threadSlot("mission-properties") as HTMLElement
+
+		expect(within(properties).getByText("OPE-42")).toBeTruthy()
+		expect(within(properties).queryAllByRole("button")).toHaveLength(0)
+	})
+
 	it("returns to the origin conversation from Back while the mission loads", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
@@ -676,8 +777,45 @@ describe("WorkspaceBody missions", () => {
 		await act(async () => deliver({ mission, events: [] }))
 		await settle()
 
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 		expect(missionHeaderSkeleton()).toBeNull()
+	})
+
+	it("names the conversation of origin it already knows on the loading mission bar, and keeps it once the mission arrives", async () => {
+		const { workspace, mission } = await seed((opened) => ({
+			mission: opened,
+			events: [],
+		}))
+		let deliver: (detail: MissionDetail) => void = () => undefined
+		readMission.mockReturnValue(
+			new Promise((delivered) => {
+				deliver = delivered
+			}),
+		)
+		const pathOf = (header: Element | null) =>
+			header?.querySelector('[data-slot="app-header-path-link"]')?.textContent
+		render(
+			workspace.body({
+				overrides: {
+					missionOrigins: {
+						bots: [workspace.bot],
+						conversations: [workspace.conversation],
+						missionMarks: [{ mission }],
+						soloThreads: {},
+					},
+				},
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		await openMission()
+		expect(pathOf(missionHeaderSkeleton())).toBe("Walls")
+
+		await act(async () => deliver({ mission, events: [] }))
+		await settle()
+
+		expect(pathOf(missionHeader())).toBe("Walls")
 	})
 
 	it("reads the mission again when the read failure is retried", async () => {
@@ -696,7 +834,7 @@ describe("WorkspaceBody missions", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
 		await settle()
 
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 	})
 
 	it("raises a failure notice when the answer cannot reach the companion", async () => {
@@ -761,6 +899,90 @@ describe("WorkspaceBody frame", () => {
 
 		expect(onRetrySpaces).toHaveBeenCalledTimes(1)
 	})
+
+	const thread = () =>
+		document.querySelector('[data-slot="chat-layout"]') as HTMLElement
+
+	const staticBarAboveThread = () => {
+		const bar = threadSlot("app-header") as HTMLElement
+
+		expect(thread().firstElementChild).toBe(bar)
+		expect(takesPress(bar)).toBe(true)
+
+		return bar
+	}
+
+	it("wears the header of a solo conversation as the static bar above the thread", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+
+		staticBarAboveThread()
+	})
+
+	it("wears the header of a group conversation as the static bar above the thread", async () => {
+		const store = createFakeTranscriptStore()
+		const workspace = await workspaceOf(store)
+		const [ada] = await seatBots(store, SPACE, ["Ada"])
+		const group = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Garden",
+			botIds: [workspace.bot.id, ada.id],
+		})
+		render(
+			workspace.body({
+				selected: group,
+				overrides: { bots: [workspace.bot, ada] },
+			}),
+		)
+		await settle()
+
+		expect(within(staticBarAboveThread()).getByText("Garden")).toBeTruthy()
+	})
+
+	it("opens a conversation on its first row, with nothing above it", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+
+		expect(thread()).toBeTruthy()
+		expect(threadSlot("transcript-opening")).toBeNull()
+	})
+
+	it("drags the window from the leading side of the bar, never from one of its controls", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+		const bar = staticBarAboveThread()
+		const leading = bar.querySelector(
+			'[data-slot="app-header-leading"]',
+		) as HTMLElement
+		const title = bar.querySelector(
+			'[data-slot="app-header-text"]',
+		) as HTMLElement
+		const controls = within(bar).getAllByRole("button")
+
+		expect(startsWindowDrag(leading)).toBe(true)
+		expect(startsWindowDrag(title)).toBe(true)
+		expect(controls.length).toBeGreaterThan(1)
+		for (const control of controls)
+			expect(startsWindowDrag(control)).toBe(false)
+	})
+
+	it("drags the window from the room the bar leaves between its two sides, and nothing from the thread under it", async () => {
+		const workspace = await workspaceOf()
+		render(workspace.body())
+		await settle()
+		const bar = staticBarAboveThread()
+		const scroller = bar.nextElementSibling as HTMLElement
+
+		expect(startsWindowDrag(bar)).toBe(true)
+		expect(takesPress(thread())).toBe(true)
+		expect(startsWindowDrag(thread())).toBe(false)
+		expect(takesPress(scroller)).toBe(true)
+		expect(startsWindowDrag(scroller)).toBe(false)
+	})
 })
 
 describe("WorkspaceBody conversation header", () => {
@@ -777,7 +999,7 @@ describe("WorkspaceBody conversation header", () => {
 
 	const headerText = () =>
 		document
-			.querySelector('[data-slot="header-conversation-button"]')
+			.querySelector('[data-slot="header-conversation-button"] button')
 			?.getAttribute("aria-label")
 
 	it("labels a nameless conversation like its row, through pending and arrived", async () => {
@@ -1006,6 +1228,15 @@ describe("WorkspaceBody Home", () => {
 
 		expect(screen.getByRole("heading", { name: /What’s next/ })).toBeTruthy()
 		expect(homeSlot("home-applications-band")).toBeNull()
+	})
+
+	it("shows the Home with no header", async () => {
+		const home = await launchHome()
+
+		await home.open()
+
+		expect(homeSlot("home-layout")).not.toBeNull()
+		expect(homeSlot("app-header")).toBeNull()
 	})
 
 	it("shows the normal thread of an agent opened outside the Home, never a Home view", async () => {
@@ -1293,7 +1524,7 @@ describe("WorkspaceBody mission menu", () => {
 		await choose(panelCardIn("Waiting on you"), OPEN_ENTRY)
 
 		expect(readMission).toHaveBeenCalledWith(null, "m-1")
-		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeader()?.textContent).toContain(OBJECTIVE)
 	})
 
 	it("opens the pull request in the browser", async () => {
@@ -1659,6 +1890,14 @@ describe("WorkspaceBody library", () => {
 		return item
 	}
 
+	const filterNamed = (name: RegExp) => {
+		const filters = document.querySelector<HTMLElement>(
+			'[data-slot="library-filters"]',
+		)
+		if (!filters) throw new Error("no Library filters")
+		return within(filters).getByRole("button", { name })
+	}
+
 	const isBusy = () =>
 		document.querySelector('[data-slot="library-panel"] [aria-busy="true"]') !==
 		null
@@ -1677,6 +1916,12 @@ describe("WorkspaceBody library", () => {
 
 	const press = async (name: string) => {
 		fireEvent.click(screen.getByRole("button", { name }))
+		await settle()
+	}
+
+	const copyFromMore = async () => {
+		await press("More")
+		fireEvent.click(await screen.findByRole("menuitem", { name: "Copy" }))
 		await settle()
 	}
 
@@ -1702,6 +1947,44 @@ describe("WorkspaceBody library", () => {
 		)
 	})
 
+	it("tops the Library with the static bar dragging the window", async () => {
+		await openLibrary()
+		const layout = document.querySelector(
+			'[data-slot="library-panel"] [data-slot="screen-layout"]',
+		) as HTMLElement
+		const bar = layout.querySelector('[data-slot="app-header"]') as HTMLElement
+
+		expect(layout.firstElementChild).toBe(bar)
+		expect(bar.querySelector("h1")?.textContent).toBe("Library")
+		expect(takesPress(bar)).toBe(true)
+		expect(startsWindowDrag(bar)).toBe(true)
+	})
+
+	it("wears the static bar above an opened document, dragging the window, Back excepted", async () => {
+		await openLibrary()
+
+		await open("Spring launch brief")
+		const back = screen.getByRole("button", { name: "Library" })
+		const bar = back.closest('[data-slot="app-header"]')
+
+		expect(bar).not.toBeNull()
+		expect(takesPress(back)).toBe(true)
+		expect(startsWindowDrag(bar as HTMLElement)).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+	})
+
+	it("wears the static bar above an opened image, dragging the window", async () => {
+		await openLibrary()
+
+		await open("hero-dunes.png")
+		const lightbox = screen.getByRole("dialog", { name: "hero-dunes.png" })
+		const bar = lightbox.querySelector(
+			'[data-slot="app-header"]',
+		) as HTMLElement
+
+		expect(startsWindowDrag(bar)).toBe(true)
+	})
+
 	it("shows an empty Library with its header actions, a new document and its templates", async () => {
 		libraryHost.list.mockResolvedValue([])
 		await openLibrary()
@@ -1713,9 +1996,7 @@ describe("WorkspaceBody library", () => {
 		expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe(
 			"Library",
 		)
-		expect(
-			within(panel).getByRole("searchbox", { name: "Search the Library" }),
-		).toBeTruthy()
+		expect(within(panel).queryByRole("searchbox")).toBeNull()
 		for (const name of [
 			"New document",
 			"Blank document",
@@ -1769,18 +2050,14 @@ describe("WorkspaceBody library", () => {
 		expect(shownNames()).toEqual(["hero-dunes.png"])
 
 		await search("")
-		fireEvent.click(screen.getByRole("button", { name: /^Images/ }))
+		fireEvent.click(filterNamed(/^Images/))
 		await settle()
 
 		expect(shownNames()).toEqual(
 			["hero-dunes.png", "fern-study.jpg", "dusk.png"].sort(),
 		)
-		expect(screen.getByRole("button", { name: /^Images/ }).textContent).toBe(
-			"Images3",
-		)
-		expect(screen.getByRole("button", { name: /^Documents/ }).textContent).toBe(
-			"Documents2",
-		)
+		expect(filterNamed(/^Images/).textContent).toBe("Images3")
+		expect(filterNamed(/^Documents/).textContent).toBe("Documents2")
 	})
 
 	it("lists the folder again when the window regains focus or the panel opens again", async () => {
@@ -1838,7 +2115,7 @@ describe("WorkspaceBody library", () => {
 	it("edits an opened document and returns to the grid with its filter and query kept", async () => {
 		await openLibrary()
 		await search("brief")
-		fireEvent.click(screen.getByRole("button", { name: /^Documents/ }))
+		fireEvent.click(filterNamed(/^Documents/))
 		await settle()
 
 		await open("Spring launch brief")
@@ -1863,11 +2140,7 @@ describe("WorkspaceBody library", () => {
 		await press("Library")
 
 		expect(screen.getByRole("searchbox")).toHaveProperty("value", "brief")
-		expect(
-			screen
-				.getByRole("button", { name: /^Documents/ })
-				.getAttribute("aria-pressed"),
-		).toBe("true")
+		expect(filterNamed(/^Documents/).getAttribute("aria-pressed")).toBe("true")
 		expect(shownNames()).toEqual(["Spring launch brief"])
 	})
 
@@ -1919,9 +2192,9 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("fern-study.jpg")
 
-		await press("Copy")
+		await copyFromMore()
 		await press("Next image")
-		await press("Copy")
+		await copyFromMore()
 
 		expect(copyToClipboard.mock.calls).toEqual([
 			[SPACE, FERN.name],
@@ -1938,7 +2211,7 @@ describe("WorkspaceBody library", () => {
 		await openLibrary()
 		await open("hero-dunes.png")
 
-		await press("Copy")
+		await copyFromMore()
 
 		await noticeTitled(COPY_FAILURE)
 	})
@@ -1989,7 +2262,7 @@ describe("WorkspaceBody library", () => {
 		await open("hero-dunes.png")
 
 		await press("Download")
-		await press("Copy")
+		await copyFromMore()
 		await press("More")
 		fireEvent.click(
 			await screen.findByRole("menuitem", { name: "Show in folder" }),
@@ -2106,7 +2379,7 @@ describe("WorkspaceBody library", () => {
 			await openJoinedLibrary()
 			await open("fern-study.jpg")
 
-			await press("Copy")
+			await copyFromMore()
 
 			expect(libraryHost.readFile).toHaveBeenCalledExactlyOnceWith({
 				spaceId: HOST_SPACE,
@@ -2161,16 +2434,16 @@ describe("WorkspaceBody library", () => {
 		})
 
 		it.each([
-			["Download", SAVE_FAILURE],
-			["Copy", COPY_FAILURE],
+			["Download", SAVE_FAILURE, () => press("Download")],
+			["Copy", COPY_FAILURE, copyFromMore],
 		])(
 			"raises one notice when the host cannot read the file to %s",
-			async (action, failure) => {
+			async (_action, failure, choose) => {
 				libraryHost.readFile.mockRejectedValue(refusal)
 				await openJoinedLibrary()
 				await open("hero-dunes.png")
 
-				await press(action)
+				await choose()
 
 				expect(await announced(failure)).toHaveLength(1)
 				expect(saveBytes).not.toHaveBeenCalled()
@@ -2198,7 +2471,7 @@ describe("WorkspaceBody library", () => {
 			await openJoinedLibrary()
 			await open("hero-dunes.png")
 
-			await press("Copy")
+			await copyFromMore()
 
 			expect(await announced(COPY_FAILURE)).toHaveLength(1)
 			expectNoPathCommand()

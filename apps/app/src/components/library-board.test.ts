@@ -33,6 +33,7 @@ import {
 } from "@/lib/bindings"
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { invoke, listen } from "@/lib/host"
+import { startsWindowDrag, takesPress } from "@/lib/host/fake-window-drag"
 import {
 	boardStateOf,
 	TWO_NOTES_BOARD,
@@ -251,8 +252,13 @@ const COMMENT_PEOPLE: LibraryCommentPeople = {
 	workingAgentsOf: () => [],
 }
 
+const BOARD_DETAIL = "JSON · 2 KB · 3 min ago"
+
 type BoardElementOptions = {
 	onBack?: () => void
+	onDownload?: () => void
+	onCopy?: () => Promise<void>
+	onDuplicate?: () => void
 	name?: string
 	summary?: LibraryBoardSummary
 	isJoined?: boolean
@@ -260,6 +266,9 @@ type BoardElementOptions = {
 
 const boardElement = ({
 	onBack = vi.fn(),
+	onDownload = vi.fn(),
+	onCopy = vi.fn(async () => {}),
+	onDuplicate = vi.fn(),
 	name = NAME,
 	summary = SUMMARY,
 	isJoined = false,
@@ -272,7 +281,11 @@ const boardElement = ({
 		name,
 		title: "Roadmap",
 		summary,
+		detail: BOARD_DETAIL,
 		onBack,
+		onDownload,
+		onCopy,
+		onDuplicate,
 		onDelete: vi.fn(),
 	})
 
@@ -398,6 +411,94 @@ describe("a Library board on its live session", () => {
 		expect(
 			await screen.findByRole("option", { name: textNamed("First") }),
 		).toBeInstanceOf(HTMLElement)
+	})
+
+	it("wears the static bar above its canvas, dragging the window, the Library path link staying clickable", async () => {
+		const { onBack } = mountBoardOpening(async () => openedState())
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = document.querySelector(
+			'[data-slot="app-header"]',
+		) as HTMLElement
+		const canvas = document.querySelector(
+			'[data-slot="board-canvas"]',
+		) as HTMLElement
+		const back = within(header).getByRole("button", {
+			name: common("library.document.back"),
+		})
+
+		expect(canvas.closest('[data-slot="screen-layout-column"]')).toBeNull()
+		expect(takesPress(canvas)).toBe(true)
+		expect(takesPress(back)).toBe(true)
+		expect(startsWindowDrag(header)).toBe(true)
+		expect(startsWindowDrag(back)).toBe(false)
+
+		fireEvent.click(back)
+
+		expect(onBack).toHaveBeenCalledOnce()
+	})
+
+	it("shows Library then the board detail in its bar, and Download then More, Copy in More, calling their handlers", async () => {
+		fakeHost()
+		const onDownload = vi.fn()
+		const onCopy = vi.fn(async () => {})
+		render(boardElement({ onDownload, onCopy }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = within(
+			document.querySelector('[data-slot="app-header"]') as HTMLElement,
+		)
+		const download = header.getByRole("button", {
+			name: common("library.document.download"),
+		})
+		const more = header.getByRole("button", {
+			name: common("library.document.more"),
+		})
+
+		expect(
+			header.getByRole("button", { name: common("library.document.back") }),
+		).toBeInstanceOf(HTMLElement)
+		expect(header.getByText(BOARD_DETAIL)).toBeInstanceOf(HTMLElement)
+		expect(
+			download.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		fireEvent.click(download)
+		await act(async () => {
+			fireEvent.click(more, { detail: 1 })
+		})
+		const menu = await screen.findByRole("menu")
+		await act(async () => {
+			fireEvent.click(
+				within(menu).getByRole("menuitem", {
+					name: common("library.itemMenu.copy"),
+				}),
+				{ detail: 1 },
+			)
+		})
+
+		expect(onDownload).toHaveBeenCalledOnce()
+		await waitFor(() => expect(onCopy).toHaveBeenCalledOnce())
+	})
+
+	it("calls onDuplicate once from the Duplicate button of its bar", async () => {
+		fakeHost()
+		const onDuplicate = vi.fn()
+		render(boardElement({ onDuplicate }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await screen.findByRole("option", { name: textNamed("First") })
+		const header = within(
+			document.querySelector('[data-slot="app-header"]') as HTMLElement,
+		)
+
+		fireEvent.click(
+			header.getByRole("button", {
+				name: common("library.document.duplicate"),
+			}),
+		)
+
+		expect(onDuplicate).toHaveBeenCalledOnce()
 	})
 
 	it("deletes the focused object through the session and brings it back on undo", async () => {

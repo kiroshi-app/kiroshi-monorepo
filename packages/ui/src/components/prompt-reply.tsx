@@ -40,7 +40,7 @@ export function PromptReply({ quote, children, className }: PromptReplyProps) {
 						size="icon"
 						aria-label={t("reply.dismiss")}
 						onClick={quote.onDismiss}
-						className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+						className="size-8 text-muted-foreground hover:text-foreground"
 					>
 						<Icons.Close />
 					</Button>

@@ -66,7 +66,7 @@ const HEAD_SENTENCE_CLASS =
 const LIST_CLASS =
 	"flex flex-col px-3 pb-5 in-data-companion-page:gap-4 in-data-companion-page:p-0"
 
-const SEARCH_CONTROL_CLASS = "rounded-md text-muted-foreground"
+const SEARCH_CONTROL_CLASS = "text-muted-foreground"
 
 const DAY_CLASS =
 	"[&:not(:first-child)]:pt-2 in-data-companion-page:flex in-data-companion-page:flex-col in-data-companion-page:gap-1 in-data-companion-page:pt-0!"
@@ -94,7 +94,7 @@ const UNDO_SLOT_CLASS =
 	"relative z-10 grid size-6 shrink-0 place-items-center in-data-companion-page:order-last in-data-companion-page:size-3.5"
 
 const UNDO_CONTROL_CLASS =
-	"rounded-md bg-card text-muted-foreground transition-opacity duration-150 [@media(hover:hover)]:opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none in-data-companion-page:-m-1.25 in-data-companion-page:bg-transparent in-data-companion-page:[@media(hover:hover)]:opacity-100"
+	"bg-card text-muted-foreground transition-opacity duration-150 [@media(hover:hover)]:opacity-0 group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100 motion-reduce:transition-none in-data-companion-page:-m-1.25 in-data-companion-page:bg-transparent in-data-companion-page:[@media(hover:hover)]:opacity-100"
 
 const TIME_CLASS =
 	"w-10 shrink-0 text-end text-muted-foreground text-xs/4 tabular-nums"

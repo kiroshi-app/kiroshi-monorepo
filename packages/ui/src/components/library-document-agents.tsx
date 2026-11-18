@@ -2,8 +2,10 @@
 
 import {
 	type CSSProperties,
+	createContext,
 	type FocusEvent,
 	type ReactNode,
+	useContext,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -50,13 +52,17 @@ type LibraryDocumentPerson = {
 
 const STACK_LIMIT = 3
 
+const BAR_AVATAR_SIZE = 22
+
+const LibraryPresenceInBar = createContext(false)
+
 const CARD_CLOSE_DELAY = 150
 
 const FOCUS_OUTLINE =
 	"focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring focus-visible:outline-offset-2"
 
 const CHIP = cn(
-	"gap-1.5 rounded-full bg-foreground/8 ps-2 pe-2.5 font-medium text-foreground transition-none hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/12",
+	"gap-1.5 bg-foreground/8 ps-2 pe-2.5 font-medium text-foreground transition-none hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/12",
 	FOCUS_OUTLINE,
 )
 
@@ -95,18 +101,25 @@ type AgentStackProps = {
 	agents: LibraryDocumentAgent[]
 }
 
-const AgentStack = ({ agents }: AgentStackProps) => (
-	<span aria-hidden="true" className="flex shrink-0">
-		{agents.slice(0, STACK_LIMIT).map((agent, index) => (
-			<AgentAvatar
-				agent={agent}
-				className={cn(index > 0 && "-ms-1.5")}
-				key={agent.id}
-				size={24}
-			/>
-		))}
-	</span>
-)
+const AgentStack = ({ agents }: AgentStackProps) => {
+	const isInBar = useContext(LibraryPresenceInBar)
+
+	return (
+		<span
+			aria-hidden="true"
+			className={cn("flex shrink-0", isInBar && "gap-0.5")}
+		>
+			{agents.slice(0, STACK_LIMIT).map((agent, index) => (
+				<AgentAvatar
+					agent={agent}
+					className={cn(!isInBar && index > 0 && "-ms-1.5")}
+					key={agent.id}
+					size={isInBar ? BAR_AVATAR_SIZE : 24}
+				/>
+			))}
+		</span>
+	)
+}
 
 const StopSquare = () => (
 	<span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-current" />
@@ -118,25 +131,32 @@ type PeopleStackProps = {
 	people: PresencePerson[]
 }
 
-const PeopleStack = ({ people }: PeopleStackProps) => (
-	<span className="flex shrink-0" data-slot="library-document-people">
-		{people.slice(0, STACK_LIMIT).map((person, index) => (
-			<span
-				aria-label={person.name}
-				className={cn("flex", index > 0 && "-ms-1.5")}
-				key={person.id}
-				role="img"
-			>
-				<InitialsAvatar
-					className="border-2 border-card"
-					image={person.image}
-					name={person.name}
-					size={26}
-				/>
-			</span>
-		))}
-	</span>
-)
+const PeopleStack = ({ people }: PeopleStackProps) => {
+	const isInBar = useContext(LibraryPresenceInBar)
+
+	return (
+		<span
+			className={cn("flex shrink-0", isInBar && "gap-0.5")}
+			data-slot="library-document-people"
+		>
+			{people.slice(0, STACK_LIMIT).map((person, index) => (
+				<span
+					aria-label={person.name}
+					className={cn("flex", !isInBar && index > 0 && "-ms-1.5")}
+					key={person.id}
+					role="img"
+				>
+					<InitialsAvatar
+						className={cn(!isInBar && "border-2 border-card")}
+						image={person.image}
+						name={person.name}
+						size={isInBar ? BAR_AVATAR_SIZE : 26}
+					/>
+				</span>
+			))}
+		</span>
+	)
+}
 
 type PresenceActivity = "writing" | "drawing"
 
@@ -159,17 +179,26 @@ const LibraryDocumentPresence = ({
 	onStopAll,
 }: LibraryDocumentPresenceProps) => {
 	const { t } = useTranslation("common")
+	const isInBar = useContext(LibraryPresenceInBar)
 
 	return (
 		<>
 			{people.length > 0 ? <PeopleStack people={people} /> : null}
 			{writers.length > 0 ? (
 				<div
-					className="flex h-8 shrink-0 items-center gap-2 rounded-full border border-foreground/8 bg-foreground/4 ps-1 pe-2.5 has-[button]:pe-1"
+					className={cn(
+						"flex h-8 shrink-0 items-center rounded-full border border-foreground/8 bg-foreground/4",
+						isInBar ? "gap-0.5 p-1" : "gap-2 ps-1 pe-2.5 has-[button]:pe-1",
+					)}
 					data-slot="library-document-presence"
 				>
 					<AgentStack agents={writers.map(({ agent }) => agent)} />
-					<span className="whitespace-nowrap font-medium text-compact text-soft-foreground leading-4">
+					<span
+						className={cn(
+							"whitespace-nowrap font-medium text-compact text-soft-foreground leading-4",
+							isInBar && "px-1.5",
+						)}
+					>
 						{t(ACTIVITY_LABEL[activity], { count: writers.length })}
 					</span>
 					{onStopAll ? (
@@ -239,7 +268,7 @@ const AgentCard = ({ writer, onStop, onOpenConversation }: AgentCardProps) => {
 					{onOpenConversation ? (
 						<Button
 							className={cn(
-								"h-7 rounded-full px-2 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6",
+								"h-7 px-2 font-medium text-compact text-muted-foreground leading-4 transition-none hover:bg-foreground/6 hover:text-foreground dark:hover:bg-foreground/6",
 								FOCUS_OUTLINE,
 							)}
 							onClick={() => onOpenConversation(agent)}
@@ -378,6 +407,7 @@ export {
 	LibraryDocumentPresence,
 	type LibraryDocumentWriter,
 	LibraryDocumentWrittenRun,
+	LibraryPresenceInBar,
 	WRITTEN_RUN_LOOK,
 	type WriterActions,
 }

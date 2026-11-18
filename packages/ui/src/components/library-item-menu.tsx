@@ -11,14 +11,18 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	AppHeaderButton,
+	AppHeaderCapsule,
+	AppHeaderPathSeparator,
+} from "@workspace/ui/components/app-header"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { IconSwap } from "@workspace/ui/components/icon-swap"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	LibraryCommentBarControls,
 	type LibraryCommentBarControlsProps,
 } from "@workspace/ui/components/library-comment-bar-controls"
-import { TooltipButton } from "@workspace/ui/components/tooltip-button"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -33,7 +37,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@workspace/ui/components/ui/dropdown-menu"
-import { Separator } from "@workspace/ui/components/ui/separator"
 import { COPIED_RESET_MS } from "@workspace/ui/hooks/use-copy-text"
 import { libraryDisplayName } from "@workspace/ui/lib/library-display-name"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
@@ -49,6 +52,7 @@ type LibraryItemHandlers<Item> = {
 	onOpen?: LibraryItemAction<Item>
 	onOpenInNewTab?: LibraryItemAction<Item>
 	onRename?: LibraryItemAction<Item>
+	onDuplicate?: LibraryItemAction<Item>
 	onCopy?: LibraryItemAction<Item>
 	onDownload?: LibraryItemAction<Item>
 	onShowInFolder?: LibraryItemAction<Item>
@@ -92,6 +96,11 @@ const LIBRARY_ITEM_ACTIONS = [
 	label: string
 	Icon: ComponentType
 }[]
+
+const LIBRARY_ITEM_ACTION_NAMES: readonly LibraryItemActionName[] = [
+	...LIBRARY_ITEM_ACTIONS.map(({ handler }) => handler),
+	"onDuplicate",
+]
 
 const IMAGE_ACTIONS = [
 	{
@@ -148,7 +157,7 @@ const ImageMenuItems = <Item,>({
 
 type LibraryItemMenuEntry = (typeof LIBRARY_ITEM_ACTIONS)[number]
 
-const BAR_BUTTON_ORDER: readonly string[] = ["onDownload", "onCopy"]
+const BAR_BUTTON_ORDER: readonly string[] = ["onDownload"]
 
 const BAR_BUTTON_ACTIONS = new Set(BAR_BUTTON_ORDER)
 
@@ -185,9 +194,9 @@ const handlersFor = <Item,>(
 	item: Item,
 ): LibraryItemHandlers<Item> =>
 	Object.fromEntries(
-		LIBRARY_ITEM_ACTIONS.filter(({ handler }) =>
+		LIBRARY_ITEM_ACTION_NAMES.filter((handler) =>
 			isActionShown(item, handler),
-		).map(({ handler }) => [handler, handlers[handler]]),
+		).map((handler) => [handler, handlers[handler]]),
 	)
 
 type MenuItemPartProps = {
@@ -329,18 +338,39 @@ const LibraryItemContextMenu = <Item extends LibraryMenuSubject>({
 	)
 }
 
-const LIBRARY_BAR = "flex h-14 shrink-0 items-center justify-between gap-4 px-3"
-
 const LIBRARY_BAR_ROUND = "rounded-full text-foreground transition-none"
 
 const LIBRARY_BAR_BARE = cn(LIBRARY_BAR_ROUND, "size-8 hover:bg-foreground/8")
 
 const LIBRARY_BAR_DIVIDER = "bg-foreground/12 data-vertical:self-center"
 
-const BAR_ACTION = cn(
-	LIBRARY_BAR_ROUND,
-	"size-8 bg-foreground/8 hover:bg-foreground/14",
+const LIBRARY_ISLAND_CONTEXT = "min-w-0 shrink"
+
+const LIBRARY_OVERLAY_ISLAND =
+	"bg-lightbox-control backdrop-blur-lg dark:bg-lightbox-control"
+
+const LibraryBarButton = ({
+	"aria-label": label,
+	...props
+}: ComponentProps<typeof AppHeaderButton>) => (
+	<TooltipHint content={label} side="bottom">
+		<AppHeaderButton aria-label={label} {...props} />
+	</TooltipHint>
 )
+
+type LibraryBarMetaProps = {
+	meta?: string
+}
+
+const LibraryBarMeta = ({ meta }: LibraryBarMetaProps) =>
+	meta ? (
+		<>
+			<AppHeaderPathSeparator />
+			<span className="truncate tabular-nums" data-slot="library-bar-meta">
+				{meta}
+			</span>
+		</>
+	) : null
 
 const barMenuActionsOf = <Item,>(
 	handlers: LibraryItemHandlers<Item>,
@@ -357,6 +387,20 @@ const DROPDOWN_MENU_PARTS: LibraryItemMenuParts = {
 }
 
 type LibraryItemBarSurface = "lightbox" | "document"
+
+type LibraryBarSkin = {
+	fill?: string
+	control?: string
+}
+
+const LIBRARY_BAR_SKIN: Record<LibraryItemBarSurface, LibraryBarSkin> = {
+	document: {},
+	lightbox: {
+		fill: "dark:bg-white/8",
+		control:
+			"text-[#e5e5e5] focus-visible:ring-lightbox-bar in-data-content-card:focus-visible:ring-lightbox-bar",
+	},
+}
 
 type LibraryBarComments = Omit<LibraryCommentBarControlsProps, "isOnDarkStage">
 
@@ -387,8 +431,8 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 	const [copiedItem, setCopiedItem] = useState<Item | null>(null)
 	const [isConfirmingDelete, setConfirmingDelete] = useState(false)
 	const isCopied = copiedItem === item
-	const { onCopy, onDownload, onDelete } = actions
-	const menuActions = barMenuActionsOf(actions)
+	const { onCopy, onDownload, onDuplicate, onDelete } = actions
+	const { fill, control } = LIBRARY_BAR_SKIN[surface]
 
 	useEffect(() => {
 		if (copiedItem === null) return
@@ -396,22 +440,29 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 		return () => window.clearTimeout(timer)
 	}, [copiedItem])
 
+	const copy =
+		onCopy &&
+		(async () => {
+			try {
+				await onCopy(item)
+				setCopiedItem(item)
+			} catch {
+				setCopiedItem(null)
+			}
+		})
+	const menuActions = { ...barMenuActionsOf(actions), onCopy: copy }
+	const hasMenu = hasLibraryItemActions(menuActions)
+
 	const confirmDelete = (isConfirming: boolean) => {
 		setConfirmingDelete(isConfirming)
 		onConfirmingDeleteChange?.(isConfirming)
 	}
 
-	const copy = async () => {
-		try {
-			await onCopy?.(item)
-			setCopiedItem(item)
-		} catch {
-			setCopiedItem(null)
-		}
-	}
-
 	return (
-		<div className="flex shrink-0 items-center gap-2">
+		<div
+			className="flex shrink-0 items-center gap-2"
+			data-slot="library-bar-actions"
+		>
 			{leading}
 			{comments ? (
 				<LibraryCommentBarControls
@@ -419,90 +470,69 @@ const LibraryItemBarActions = <Item extends LibraryMenuSubject>({
 					isOnDarkStage={surface === "lightbox"}
 				/>
 			) : null}
-			{onDownload ? (
-				<TooltipButton
-					aria-label={t(`library.${surface}.download`)}
-					className={BAR_ACTION}
-					onClick={() => onDownload(item)}
-					size="icon"
-					tooltip={t(`library.${surface}.download`)}
-					tooltipSide="bottom"
-					variant="ghost"
-				>
-					<Icons.Download aria-hidden="true" />
-				</TooltipButton>
-			) : null}
-			{onCopy ? (
-				<TooltipButton
-					aria-label={t(`library.${surface}.copy`)}
-					className={BAR_ACTION}
-					onClick={copy}
-					size="icon"
-					tooltip={t(`library.${surface}.copy`)}
-					tooltipSide="bottom"
-					variant="ghost"
-				>
-					<IconSwap
-						icon={<Icons.Copy aria-hidden="true" />}
-						isSwapped={isCopied}
-						swappedIcon={<Icons.Check aria-hidden="true" />}
-					/>
-				</TooltipButton>
-			) : null}
-			{hasLibraryItemActions(menuActions) ? (
-				<>
-					<DropdownMenu onOpenChange={onMenuOpenChange}>
-						<DropdownMenuTrigger
-							render={
-								<TooltipButton
-									aria-label={t(`library.${surface}.more`)}
-									className={BAR_ACTION}
-									size="icon"
-									tooltip={t(`library.${surface}.more`)}
-									tooltipSide="bottom"
-									variant="ghost"
+			{onDownload || onDuplicate || hasMenu ? (
+				<AppHeaderCapsule className={fill}>
+					{onDownload ? (
+						<LibraryBarButton
+							aria-label={t(`library.${surface}.download`)}
+							className={control}
+							onClick={() => onDownload(item)}
+						>
+							<Icons.Download aria-hidden="true" />
+						</LibraryBarButton>
+					) : null}
+					{onDuplicate ? (
+						<LibraryBarButton
+							aria-label={t(`library.${surface}.duplicate`)}
+							className={control}
+							onClick={() => onDuplicate(item)}
+						>
+							<Icons.Duplicate aria-hidden="true" />
+						</LibraryBarButton>
+					) : null}
+					{hasMenu ? (
+						<DropdownMenu onOpenChange={onMenuOpenChange}>
+							<DropdownMenuTrigger
+								render={
+									<LibraryBarButton
+										aria-label={t(`library.${surface}.more`)}
+										className={control}
+									/>
+								}
+							>
+								<Icons.More aria-hidden="true" />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent
+								align="end"
+								aria-label={t("library.itemMenu.label", {
+									name: libraryDisplayName(item.name, t),
+								})}
+								className={cn(
+									"w-auto",
+									surface === "lightbox" && "dark",
+									STILL_UNDER_REDUCED_MOTION,
+								)}
+								finalFocus={menuFinalFocus}
+							>
+								<LibraryItemMenuItems
+									actions={menuActions}
+									item={item}
+									onPickDelete={() => confirmDelete(true)}
+									parts={DROPDOWN_MENU_PARTS}
 								/>
-							}
-						>
-							<Icons.More aria-hidden="true" />
-						</DropdownMenuTrigger>
-						<DropdownMenuContent
-							align="end"
-							aria-label={t("library.itemMenu.label", {
-								name: libraryDisplayName(item.name, t),
-							})}
-							className={cn(
-								"w-auto",
-								surface === "lightbox" && "dark",
-								STILL_UNDER_REDUCED_MOTION,
-							)}
-							finalFocus={menuFinalFocus}
-						>
-							<LibraryItemMenuItems
-								actions={menuActions}
-								item={item}
-								onPickDelete={() => confirmDelete(true)}
-								parts={DROPDOWN_MENU_PARTS}
-							/>
-						</DropdownMenuContent>
-					</DropdownMenu>
-					<Separator
-						className={cn(LIBRARY_BAR_DIVIDER, "h-5")}
-						orientation="vertical"
-					/>
-				</>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
+				</AppHeaderCapsule>
 			) : null}
-			<TooltipButton
+			<LibraryBarButton
 				aria-label={t(`library.${surface}.close`)}
-				className={LIBRARY_BAR_BARE}
+				className={cn(control, fill)}
+				kind="close"
 				onClick={onClose}
-				size="icon"
-				tooltip={t(`library.${surface}.close`)}
-				tooltipSide="bottom"
-				variant="ghost"
 			>
 				<Icons.Close aria-hidden="true" />
-			</TooltipButton>
+			</LibraryBarButton>
 			<span aria-live="polite" className="sr-only">
 				{isCopied ? t(`library.${surface}.copied`) : ""}
 			</span>
@@ -523,11 +553,13 @@ export {
 	hasLibraryItemActions,
 	type ImageHandlers,
 	ImageMenuItems,
-	LIBRARY_BAR,
 	LIBRARY_BAR_BARE,
 	LIBRARY_BAR_DIVIDER,
 	LIBRARY_BAR_ROUND,
+	LIBRARY_ISLAND_CONTEXT,
+	LIBRARY_OVERLAY_ISLAND,
 	type LibraryBarComments,
+	LibraryBarMeta,
 	type LibraryItemActions,
 	LibraryItemBarActions,
 	LibraryItemContextMenu,

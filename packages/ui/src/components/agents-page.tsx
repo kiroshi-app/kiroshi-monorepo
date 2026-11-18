@@ -3,15 +3,22 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
+import {
+	APP_HEADER_TITLE,
+	AppHeader,
+	AppHeaderText,
+} from "@workspace/ui/components/app-header"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
+import { BarAction } from "@workspace/ui/components/library-panel"
 import {
 	ListSkeleton,
 	SkeletonBar,
 } from "@workspace/ui/components/list-skeleton"
 import { Notice } from "@workspace/ui/components/notice"
 import { SpacesBranch } from "@workspace/ui/components/roster-menu-items"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	CompanionCard,
@@ -31,12 +38,9 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const LINE = "text-compact leading-4"
 
-const CREATE_BUTTON = cn(
-	"rounded-md border-input text-foreground transition-none",
-	LINE,
-)
+const CREATE_BUTTON = cn("border-input text-foreground transition-none", LINE)
 
-const ACTIONS_BUTTON = "rounded-sm text-muted-foreground transition-none"
+const ACTIONS_BUTTON = "text-muted-foreground transition-none"
 
 const GRID = "grid @4xl:grid-cols-3 @xl:grid-cols-2 grid-cols-1 gap-4"
 
@@ -66,20 +70,13 @@ type AgentsPageProps = {
 	onDelete: (id: string) => void
 }
 
-type CreateAgentButtonProps = Pick<AgentsPageProps, "onCreate"> & {
-	size?: "sm" | "default"
-}
+type CreateAgentButtonProps = Pick<AgentsPageProps, "onCreate">
 
-const CreateAgentButton = ({ onCreate, size }: CreateAgentButtonProps) => {
+const CreateAgentButton = ({ onCreate }: CreateAgentButtonProps) => {
 	const { t } = useTranslation("settings")
 
 	return (
-		<Button
-			className={CREATE_BUTTON}
-			onClick={onCreate}
-			size={size}
-			variant="outline"
-		>
+		<Button className={CREATE_BUTTON} onClick={onCreate} variant="outline">
 			<Icons.Add aria-hidden="true" className="size-3.5" />
 			{t("space.agents.create")}
 		</Button>
@@ -223,21 +220,24 @@ const skeletonRowAt = (index: number) => (
 	</div>
 )
 
+type AgentsPageBodyProps = AgentsPageProps & { columnClassName: string }
+
 const AgentsPageBody = ({
+	columnClassName,
 	agents,
 	spaceName,
 	status = "loaded",
 	onCreate,
 	onRetry,
 	...actions
-}: AgentsPageProps) => {
+}: AgentsPageBodyProps) => {
 	const { t } = useTranslation("settings")
 
 	if (status === "loading") {
 		return (
 			<div className="min-h-0 flex-1" data-slot="agents-page-skeleton">
 				<ListSkeleton
-					className="@container gap-4 px-6 pt-6"
+					className={cn(columnClassName, "@container gap-4")}
 					row={skeletonRowAt}
 				/>
 			</div>
@@ -246,7 +246,10 @@ const AgentsPageBody = ({
 
 	if (status === "failed") {
 		return (
-			<div className="p-3" data-slot="agents-page-failure">
+			<div
+				className={cn(columnClassName, "min-h-0 flex-1")}
+				data-slot="agents-page-failure"
+			>
 				<Notice
 					description={t("space.agents.failure.description")}
 					retry={onRetry && { onRetry }}
@@ -258,7 +261,7 @@ const AgentsPageBody = ({
 
 	if (agents.length === 0) {
 		return (
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+			<div className={cn(columnClassName, "min-h-0 flex-1 overflow-y-auto")}>
 				<EmptyStateShell
 					action={<CreateAgentButton onCreate={onCreate} />}
 					className="my-auto"
@@ -278,7 +281,10 @@ const AgentsPageBody = ({
 
 	return (
 		<div
-			className="@container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
+			className={cn(
+				columnClassName,
+				"@container min-h-0 flex-1 gap-4 overflow-y-auto",
+			)}
 			data-slot="agents-page-body"
 		>
 			<p className="wrap-break-word text-compact text-muted-foreground leading-4.5">
@@ -307,29 +313,45 @@ const AgentsPage = (props: AgentsPageProps) => {
 	return (
 		<section
 			aria-labelledby={titleId}
-			className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden"
+			className="size-full min-h-0 min-w-0 overflow-hidden"
 			data-slot="agents-page"
 		>
-			<header className="flex shrink-0 items-center justify-between gap-3 border-shell-border border-b p-3">
-				<div className="flex min-w-0 items-baseline gap-2">
-					<h1
-						className={cn("font-semibold text-bubble-foreground", LINE)}
-						id={titleId}
-					>
-						{t("space.agents.title")}
-					</h1>
-					{hasAgents ? (
-						<span
-							className={cn("text-muted-foreground tabular-nums", LINE)}
-							data-slot="agents-page-count"
-						>
-							{agents.length}
-						</span>
-					) : null}
-				</div>
-				<CreateAgentButton onCreate={onCreate} size="sm" />
-			</header>
-			<AgentsPageBody {...props} />
+			<ScreenLayout
+				header={
+					<AppHeader
+						close={
+							<BarAction
+								icon={<Icons.Add aria-hidden="true" />}
+								kind="secondary"
+								label={t("space.agents.create")}
+								onClick={onCreate}
+								slot="agents-page-create"
+							/>
+						}
+						data-tauri-drag-region="deep"
+						leading={
+							<>
+								<AppHeaderText>
+									<h1 className={APP_HEADER_TITLE} id={titleId}>
+										{t("space.agents.title")}
+									</h1>
+								</AppHeaderText>
+								{hasAgents ? (
+									<span
+										className="shrink-0 text-muted-foreground text-sm leading-4.5 tabular-nums"
+										data-slot="agents-page-count"
+									>
+										{agents.length}
+									</span>
+								) : null}
+							</>
+						}
+					/>
+				}
+				scroller={(columnClassName) => (
+					<AgentsPageBody {...props} columnClassName={columnClassName} />
+				)}
+			/>
 		</section>
 	)
 }

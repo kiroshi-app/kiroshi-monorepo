@@ -14,7 +14,7 @@ import { BLOT_HUES } from "@workspace/ui/components/companion-colour"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { Button } from "@workspace/ui/components/ui/button"
 
-const CELL_SIDE = 24
+const CELL_SIDE = 32
 
 const LONG_NAME =
 	"Migration of the legacy billing workspace and every archive it still answers for"
@@ -27,10 +27,14 @@ const PENDING_LABEL = "New conversation"
 
 const UNTITLED_LABEL = "Untitled conversation"
 
-const labelOf = (button: HTMLElement) => slotIn(button, "text-swap")
+const subjectOf = (button: HTMLElement) =>
+	button.closest<HTMLElement>('[data-slot="header-conversation-button"]') ??
+	button
+
+const labelOf = (button: HTMLElement) => slotIn(subjectOf(button), "text-swap")
 
 const iconOf = (button: HTMLElement) =>
-	slotIn(button, "conversation-subject-icon")
+	slotIn(subjectOf(button), "conversation-subject-icon")
 
 const meta = preview.meta({
 	title: "Navigation/HeaderConversationButton",
@@ -40,7 +44,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The leading control of a conversation header: the room's subject icon whatever the number of agents seated, the name of the conversation, and the way into its settings, in one ghost button. It wears the same height and padding as `HeaderIdentityButton`, so a room and a one-to-one chat sit their identity at exactly the same place. Reach for it in an app header; a one-to-one conversation takes `HeaderIdentityButton` instead.",
+					"The leading control of a conversation header: the room's subject icon whatever the number of agents seated, the name of the conversation, and the way into its settings, through the one settings button after the name. It has no top line: the title sits alone on the tile's centre line, where `HeaderIdentityButton` stacks the role over the name, and both start at the same place in the bar. Reach for it in an app header; a one-to-one conversation takes `HeaderIdentityButton` instead.",
 			},
 		},
 	},
@@ -55,7 +59,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the nominal room header: two companions seated, a short name, the settings closed. Check that the 24px subject icon, name and settings glyph read left to right on one row, that the whole thing is a single tab stop, and that activating it asks for the conversation settings. Pick `InLayout` to see it in the header it belongs to. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
+					"Reach for this for the nominal room header: two companions seated, a short name, the settings closed. Check that the 32px subject tile, name and settings glyph read left to right on one row, that the whole thing is a single tab stop, and that activating it asks for the conversation settings. Pick `InLayout` to see it in the header it belongs to. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
 			},
 		},
 	},
@@ -63,7 +67,7 @@ export const Default = meta.story({
 		const button = canvas.getByRole("button", {
 			name: "Billing migration · conversation settings",
 		})
-		const icon = slotIn(button, "conversation-subject-icon")
+		const icon = slotIn(canvasElement, "conversation-subject-icon")
 
 		await expect(icon.getBoundingClientRect().width).toBe(CELL_SIDE)
 		await expect(slotsIn(canvasElement, "bot-identity-avatar")).toHaveLength(0)
@@ -97,7 +101,7 @@ export const SingleBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a room where one agent is left seated. Check that it still reads as a conversation: the 24px subject icon leads, never the agent's face, the name is the room's, and the settings glyph opens the room. Pick `HeaderIdentityButton` for a true one-to-one conversation, which also carries the connection mark.",
+					"Reach for this for a room where one agent is left seated. Check that it still reads as a conversation: the 32px subject tile leads, never the agent's face, the name is the room's, and the settings glyph opens the room. Pick `HeaderIdentityButton` for a true one-to-one conversation, which also carries the connection mark.",
 			},
 		},
 	},
@@ -107,7 +111,8 @@ export const SingleBot = meta.story({
 		})
 
 		await expect(
-			slotIn(button, "conversation-subject-icon").getBoundingClientRect().width,
+			slotIn(canvasElement, "conversation-subject-icon").getBoundingClientRect()
+				.width,
 		).toBe(CELL_SIDE)
 		await expect(slotsIn(canvasElement, "bot-identity-avatar")).toHaveLength(0)
 		await expect(button).toHaveAttribute("aria-expanded", "false")
@@ -120,7 +125,7 @@ export const ThemesGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupPickedIcon` for a preset hue, `ThemesGroupFreeHue` for a free hue.",
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject tile on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupPickedIcon` for a preset hue, `ThemesGroupFreeHue` for a free hue.",
 			},
 		},
 	},
@@ -135,7 +140,7 @@ export const ThemesGroupPickedIcon = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 24px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject tile wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
 			},
 		},
 	},
@@ -150,7 +155,7 @@ export const ThemesGroupFreeHue = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to read a room of several companions coloured at a hue outside the eight presets, 210, in light and dark at once. Check that the 24px subject icon wears the recipe tones of 210 in each theme rather than the nearest preset. Pick `ThemesGroupPickedIcon` for a preset hue.",
+					"Reach for this to read a room of several companions coloured at a hue outside the eight presets, 210, in light and dark at once. Check that the 32px subject tile wears the recipe tones of 210 in each theme rather than the nearest preset. Pick `ThemesGroupPickedIcon` for a preset hue.",
 			},
 		},
 	},
@@ -188,21 +193,26 @@ export const InLayout = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to check the button in the header it ships in, with an empty trailing slot. Check that it lands at the very same height, offset and padding as `HeaderIdentityButton` does in the companion chat: a 48px header, a 36px button, six pixels in from the leading edge. Pick `Default` to inspect the button alone.",
+					"Reach for this to check the button in the header it ships in, with an empty trailing slot. Check that it lands at the very same height, offset and padding as `HeaderIdentityButton` does in the companion chat: a 56px header, a 36px button, six pixels in from the leading edge. Pick `Default` to inspect the button alone.",
 			},
 		},
 	},
 	render: (args) => (
 		<AppHeader leading={<HeaderConversationButton {...args} />} />
 	),
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		const header = canvas.getByRole("banner").getBoundingClientRect()
-		const button = canvas.getByRole("button").getBoundingClientRect()
+		const tile = slotIn(
+			canvasElement,
+			"conversation-subject-icon",
+		).getBoundingClientRect()
+		const gear = canvas.getByRole("button").getBoundingClientRect()
 
-		await expect(header.height).toBe(48)
-		await expect(button.height).toBe(36)
-		await expect(button.left - header.left).toBe(6)
-		await expect(Math.abs(button.top - header.top - 6)).toBeLessThan(1)
+		await expect(header.height).toBe(56)
+		await expect([tile.left - header.left, tile.top - header.top]).toEqual([
+			12, 12,
+		])
+		await expect([gear.width, gear.height]).toEqual([28, 28])
 	},
 })
 
@@ -246,7 +256,7 @@ export const NamingArrived = meta.story({
 			name: "Billing migration · conversation settings",
 		})
 
-		await expect(slotsIn(button, "shimmer-text")).toHaveLength(0)
+		await expect(slotsIn(subjectOf(button), "shimmer-text")).toHaveLength(0)
 		await expect(getComputedStyle(labelOf(button)).color).toBe(
 			tokenStyleIn(labelOf(button), "text-foreground", "color"),
 		)
@@ -273,7 +283,7 @@ export const NamingFailed = meta.story({
 			name: `${UNTITLED_LABEL} · conversation settings`,
 		})
 
-		await expect(slotsIn(button, "shimmer-text")).toHaveLength(0)
+		await expect(slotsIn(subjectOf(button), "shimmer-text")).toHaveLength(0)
 		await expect(iconOf(button)).toHaveAttribute("data-hue", "")
 		await expect(iconOf(button).style.color).toBe(
 			"var(--conversation-icon-foreground)",

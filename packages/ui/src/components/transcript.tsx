@@ -73,6 +73,7 @@ export interface TranscriptProps extends ComponentPropsWithRef<"div"> {
 	highlightedMessageId?: string
 	older?: ListEnd
 	newer?: TranscriptNewer
+	opening?: ReactNode
 	scrollerRef?: Ref<TranscriptHandle>
 	contentClassName?: string
 }
@@ -82,6 +83,11 @@ const NO_ROWS: TranscriptItem[] = []
 const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
 const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
+
+const OPENING_AT_THE_TOP =
+	"has-[>[data-slot=transcript-opening]:not(:empty)]:justify-start has-[>[data-slot=transcript-opening]:not(:empty)]:pt-6"
+
+const OPENING_OVER_THE_FIRST_MESSAGE = "-mb-3 pb-4 empty:hidden"
 
 const keyAfter = (rows: TranscriptItem[], key: string | null) => {
 	const index = key === null ? -1 : rows.findIndex((row) => row.key === key)
@@ -327,6 +333,7 @@ const TranscriptBody = ({
 	highlightedMessageId,
 	older,
 	newer,
+	opening,
 	scrollerRef,
 	contentClassName,
 	className,
@@ -352,6 +359,7 @@ const TranscriptBody = ({
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
 	const arrived = useLiveArrivals(rows)
 	const jumpToLatest = t("transcript.jumpToLatest")
+	const shownOpening = older?.hasNextPage ? null : opening
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -364,7 +372,7 @@ const TranscriptBody = ({
 					"scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 				)}
 			>
-				{older ? (
+				{older && !shownOpening ? (
 					<TranscriptOlderEdge
 						contentClassName={contentClassName}
 						older={older}
@@ -374,8 +382,20 @@ const TranscriptBody = ({
 				<MessageScrollerContent
 					aria-busy={busy}
 					aria-relevant="additions text"
-					className={cn("justify-end gap-3", contentClassName)}
+					className={cn(
+						"justify-end gap-3",
+						contentClassName,
+						shownOpening && OPENING_AT_THE_TOP,
+					)}
 				>
+					{shownOpening ? (
+						<div
+							className={OPENING_OVER_THE_FIRST_MESSAGE}
+							data-slot="transcript-opening"
+						>
+							{shownOpening}
+						</div>
+					) : null}
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
