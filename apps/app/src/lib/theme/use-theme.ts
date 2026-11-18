@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useSyncExternalStore } from "react"
 
 import type { ColorScheme } from "@/lib/user/preferences-contract"
 
-export type ResolvedScheme = Exclude<ColorScheme, "system">
+type ResolvedScheme = Exclude<ColorScheme, "system">
 
 export type ThemeApplication = {
 	colorScheme: ColorScheme
