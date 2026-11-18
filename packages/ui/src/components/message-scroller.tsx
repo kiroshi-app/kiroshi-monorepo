@@ -68,6 +68,8 @@ type HeldReader = {
 	scrollTop: number
 }
 
+const LEAST_VISIBLE_DRIFT = 0.5
+
 const firstStartingInView = (
 	parent: Element,
 	top: number,
@@ -93,6 +95,7 @@ const holdReaderInPlace = (content: HTMLDivElement | null) => {
 	const pickReader = () => {
 		const { top, bottom } = viewport.getBoundingClientRect()
 		const element = firstStartingInView(content, top, bottom)
+		if (element && element === held?.element) return
 		held = element
 			? {
 					element,
@@ -103,22 +106,28 @@ const holdReaderInPlace = (content: HTMLDivElement | null) => {
 	}
 
 	const restoreReader = () => {
-		if (held?.element.isConnected && viewport.scrollTop === held.scrollTop) {
-			const drift =
+		if (held?.element.isConnected) {
+			const offset =
 				held.element.getBoundingClientRect().top -
-				viewport.getBoundingClientRect().top -
-				held.offset
-			if (drift !== 0) viewport.scrollTop += drift
+				viewport.getBoundingClientRect().top
+			const isStillInPlace =
+				Math.abs(offset - held.offset) < LEAST_VISIBLE_DRIFT
+			if (!isStillInPlace) {
+				held.offset -= viewport.scrollTop - held.scrollTop
+				const drift = offset - held.offset
+				if (Math.abs(drift) >= LEAST_VISIBLE_DRIFT) viewport.scrollTop += drift
+			}
+			held.scrollTop = viewport.scrollTop
 		}
 		pickReader()
 	}
 
 	const resizes = new ResizeObserver(restoreReader)
 	resizes.observe(content)
-	viewport.addEventListener("scroll", pickReader, { passive: true })
+	viewport.addEventListener("scroll", restoreReader, { passive: true })
 	return () => {
 		resizes.disconnect()
-		viewport.removeEventListener("scroll", pickReader)
+		viewport.removeEventListener("scroll", restoreReader)
 	}
 }
 
