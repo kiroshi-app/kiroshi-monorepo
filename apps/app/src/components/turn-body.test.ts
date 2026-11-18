@@ -651,7 +651,12 @@ describe("an html block of an agent reply", () => {
 			]),
 		)
 		expect(liveHtmlCallsOf("live_html_mount")).toEqual([
-			{ id: expect.any(String), html: PAGE, rectangle: SLOT_VIEW_BOX },
+			{
+				id: expect.any(String),
+				html: PAGE,
+				rectangle: SLOT_VIEW_BOX,
+				theme: null,
+			},
 		])
 		expect(htmlCodeBlock()).toBeNull()
 	})
@@ -802,7 +807,12 @@ describe("an html file an agent attaches to its reply", () => {
 				]),
 			)
 			expect(liveHtmlCallsOf("live_html_mount_attachment")).toEqual([
-				{ id: expect.any(String), path: STORED_PAGE, rectangle: SLOT_VIEW_BOX },
+				{
+					id: expect.any(String),
+					path: STORED_PAGE,
+					rectangle: SLOT_VIEW_BOX,
+					theme: null,
+				},
 			])
 			expect(screen.getByRole("button", { name: open })).toBeTruthy()
 		},

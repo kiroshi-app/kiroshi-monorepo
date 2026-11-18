@@ -209,6 +209,42 @@
 				await expectUnscrolled("scrolling-body", SCROLLING_BODY_PAGE)
 			}
 
+			const BARE_PAGE = `<div style="height:120px"></div>`
+			const OWN_PAGE = `<!doctype html><html><head><style>body { background: #ff00ff }</style></head><body><div style="height:120px"></div></body></html>`
+			const DARK = { appearance: "dark", hue: null }
+			const LIGHT = { appearance: "light", hue: 257 }
+			const DARK_BACKGROUND = [0, 0, 0]
+			const LIGHT_BACKGROUND = [245, 245, 245]
+			const SHADE_TOLERANCE = 8
+			const isShade = (color, expected) => expected.every((channel, index) => Math.abs(color[index] - channel) <= SHADE_TOLERANCE)
+			const expectBackground = async (step, expected) => {
+				await pause(600)
+				const [color] = await invoke("probe_colors", { step, probes: [[SHOWN.x + SHOWN.width / 2, SHOWN.y + 60]] })
+				expect(isShade(color, expected), `${step}: the page background is ${JSON.stringify(color)}, expected ${JSON.stringify(expected)}`)
+			}
+
+			const theme = async () => {
+				paint(NOWHERE)
+				await invoke("live_html_mount", { id: "themed", html: BARE_PAGE, rectangle: SHOWN, theme: DARK })
+				await expectSizes("themed", [[SHOWN.width, 120]])
+				await expectBackground("themed-dark", DARK_BACKGROUND)
+				const { content_loads: loadsBefore } = await capture("themed-before", SHOWN, null)
+				await invoke("live_html_theme", { id: "themed", theme: LIGHT })
+				await expectBackground("themed-light", LIGHT_BACKGROUND)
+				const { content_loads: loadsAfter } = await capture("themed-after", SHOWN, null)
+				expect(loadsAfter === loadsBefore, `the page loaded ${loadsAfter - loadsBefore} more times to change its theme`)
+				const unknown = await answer(invoke("live_html_theme", { id: "missing", theme: LIGHT }))
+				expect(unknown.kind === "unknownView", `theming an unknown view answered ${JSON.stringify(unknown)}`)
+				await invoke("live_html_remove", { id: "themed" })
+
+				await invoke("live_html_mount", { id: "own", html: OWN_PAGE, rectangle: SHOWN, theme: DARK })
+				await expectSizes("own", [[SHOWN.width, 120]])
+				const { magenta_drawn_in_window_points: own } = await capture("own-background", SHOWN, null)
+				const drawn = JSON.stringify(own)
+				expect(own && near(own.width, SHOWN.width) && near(own.height, SHOWN.height), `the page drew its own background on ${drawn}`)
+				await invoke("live_html_remove", { id: "own" })
+			}
+
 			const SLOT_PAGE = PAGE(`<div style="height:160px;background:#ff00ff"></div>`)
 			const COMPOSED = "composed"
 			const RADIUS = 24
@@ -370,6 +406,7 @@
 				await pause(1000)
 				await capture("after-reload", SHOWN, null)
 				await measure()
+				await theme()
 				await compose()
 				await invoke("finish_run")
 			}

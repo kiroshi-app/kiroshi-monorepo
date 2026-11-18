@@ -4,9 +4,9 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
-#[cfg(target_os = "macos")]
-use super::contract::LiveHtmlCorners;
 use super::contract::LiveHtmlError;
+#[cfg(target_os = "macos")]
+use super::contract::{LiveHtmlAppearance, LiveHtmlCorners, LiveHtmlRectangle, LiveHtmlTheme};
 use super::server::ContentServer;
 use super::watch::LoggedWatch;
 use super::LiveViews;
@@ -17,7 +17,7 @@ const SQUARE: LiveHtmlCorners =
 	LiveHtmlCorners { top_left: 0.0, top_right: 0.0, bottom_right: 0.0, bottom_left: 0.0 };
 
 async fn show(views: &LiveViews, id: &str) {
-	let server = ContentServer::open(id, String::new(), Arc::new(LoggedWatch))
+	let server = ContentServer::open(id, String::new(), None, Arc::new(LoggedWatch))
 		.expect("the content server opens");
 	views.servers.lock().await.insert(id.to_owned(), server);
 }
@@ -96,4 +96,20 @@ async fn a_live_html_corner_radius_that_is_negative_or_not_finite_is_refused() {
 			assert_eq!(rounded, Err(LiveHtmlError::InvalidRadius), "{corners:?} was taken");
 		}
 	}
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_live_html_theme_naming_an_unknown_view_is_refused_like_its_placement() {
+	let app = tauri::test::mock_app();
+	let views = LiveViews::default();
+	show(&views, "a").await;
+	let rectangle = LiveHtmlRectangle { x: 0.0, y: 0.0, width: 480.0, height: 300.0 };
+	let theme = LiveHtmlTheme { appearance: LiveHtmlAppearance::Dark, hue: None };
+
+	let themed = views.theme(app.handle(), "missing".to_owned(), theme).await;
+	let placed = views.place(app.handle(), "missing".to_owned(), rectangle, None).await;
+
+	assert_eq!(themed, Err(LiveHtmlError::UnknownView { id: "missing".to_owned() }));
+	assert_eq!(themed, placed);
 }

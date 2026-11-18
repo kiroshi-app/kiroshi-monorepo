@@ -129,6 +129,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		live_html::commands::live_html_mount::<tauri::Wry>,
 		live_html::commands::live_html_mount_attachment::<tauri::Wry>,
 		live_html::commands::live_html_place::<tauri::Wry>,
+		live_html::commands::live_html_theme::<tauri::Wry>,
 		live_html::commands::live_html_round::<tauri::Wry>,
 		live_html::commands::live_html_still::<tauri::Wry>,
 		live_html::commands::live_html_hide::<tauri::Wry>,

@@ -19,6 +19,7 @@ use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::Request;
 use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder, WebViewExtMacOS};
 
+use super::base;
 use super::contract::{LiveHtmlCorners, LiveHtmlError, LiveHtmlMeasured, LiveHtmlRectangle};
 use super::measure::{self, PageSize, SizeReport};
 use super::placement::{ContentView, Frame, Placement};
@@ -402,7 +403,8 @@ fn guarded<R: Runtime>(app: AppHandle<R>, view: ViewToMount) -> WebViewBuilder<'
 		WebViewBuilder::new()
 			.with_url(url)
 			.with_incognito(true)
-			.with_initialization_script_for_main_only(measure::SCRIPT, false),
+			.with_initialization_script_for_main_only(measure::SCRIPT, false)
+			.with_initialization_script_for_main_only(base::RETHEMED_SCRIPT, false),
 		|builder, script| builder.with_initialization_script_for_main_only(script, false),
 	);
 	builder
