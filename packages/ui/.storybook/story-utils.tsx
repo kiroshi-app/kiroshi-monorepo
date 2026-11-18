@@ -780,7 +780,7 @@ export const expectContentAtBarInset = async (
 	]).toEqual([inset, inset])
 }
 
-const DOCUMENT_MEASURE = 794
+export const DOCUMENT_COLUMN_WIDTH = 794
 
 const BLOCK_HANDLE_ROOM = 40
 
@@ -790,7 +790,7 @@ export const expectDocumentTextStart = async (
 ) => {
 	const centring = Math.max(
 		0,
-		(column.clientWidth - 2 * BLOCK_HANDLE_ROOM - DOCUMENT_MEASURE) / 2,
+		(column.clientWidth - 2 * BLOCK_HANDLE_ROOM - DOCUMENT_COLUMN_WIDTH) / 2,
 	)
 
 	await expect(

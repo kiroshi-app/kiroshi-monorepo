@@ -9,6 +9,7 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	DOCUMENT_COLUMN_WIDTH,
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
 	expectDocumentTextStart,
@@ -350,8 +351,6 @@ export const Dark = meta.story({
 	},
 	play: ({ canvasElement }) => expectBarAtRest(canvasElement, DARK_SURFACE),
 })
-
-const DOCUMENT_COLUMN_WIDTH = 794
 
 const COLUMN_BLOCK_END = 40
 

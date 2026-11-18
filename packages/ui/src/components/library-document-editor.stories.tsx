@@ -20,6 +20,7 @@ import {
 
 import preview from "@workspace/storybook/preview"
 import {
+	DOCUMENT_COLUMN_WIDTH,
 	expectBarDragsTheWindow,
 	expectBarLeavesTheWindowInPlace,
 	expectCommentThreadCapped,
@@ -876,8 +877,6 @@ export const ExistingDocument = meta.story({
 		await expect(args.onTitleChange).not.toHaveBeenCalled()
 	},
 })
-
-const DOCUMENT_COLUMN_WIDTH = 794
 
 const DECISIONS_TABLE = {
 	title: "Launch decisions",
