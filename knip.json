@@ -15,6 +15,7 @@
 				"scripts/ios-stalls.ts",
 				"scripts/ios-stalls.test.ts",
 				"scripts/backport.test.ts",
+				"scripts/rewrite-updater-feed.test.ts",
 				"apps/ios/scripts/space-avatar-vectors.ts"
 			]
 		},
