@@ -467,6 +467,10 @@ const chat = {
 				description:
 					"Its computer is offline. Try again once it’s back online.",
 			},
+			noConnection: {
+				title: "Connection lost",
+				description: "This turn runs again once you’re back online.",
+			},
 			describeRefused: {
 				title: "Couldn’t save the name and colour",
 				description: "{{reason}} The space kept its previous name and colour.",
