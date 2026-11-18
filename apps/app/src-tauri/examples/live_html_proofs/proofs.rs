@@ -14,6 +14,8 @@ use crate::sensors::{
 	TripwireReading, ViewRecord,
 };
 use kiroshi_app::live_html::contract::LiveHtmlRectangle;
+use kiroshi_app::live_html::EVENTS_FOR_THE_MAIN_WEBVIEW;
+use objc2_app_kit::NSEventType;
 
 const HEARTBEAT_GAP_LIMIT: Duration = Duration::from_millis(500);
 pub const SCALES_FORCED_IN_TURN: [f64; 3] = [1.0, 2.0, 1.0];
@@ -184,6 +186,21 @@ impl ScrolledGesture {
 	fn is_sent_to_the_main_webview(&self) -> bool {
 		self.sent.iter().all(|(_, target)| *target == ScrollTarget::MainWebview)
 	}
+}
+
+fn event_type_name(event_type: NSEventType) -> String {
+	let named = [
+		(NSEventType::ScrollWheel, "scroll_wheel"),
+		(NSEventType::Magnify, "magnify"),
+		(NSEventType::SmartMagnify, "smart_magnify"),
+		(NSEventType::Rotate, "rotate"),
+		(NSEventType::BeginGesture, "begin_gesture"),
+		(NSEventType::EndGesture, "end_gesture"),
+	];
+	named
+		.iter()
+		.find(|(named_type, _)| *named_type == event_type)
+		.map_or_else(|| format!("{event_type:?}"), |(_, name)| (*name).to_owned())
 }
 
 pub struct AttemptAlone {
@@ -998,6 +1015,7 @@ impl Observations {
 			result: devices.into_iter().all(moves_as_beside_the_view).into(),
 			attempts: Vec::new(),
 			evidence: json!({
+				"event_types_the_holder_hands_to_the_main_webview": EVENTS_FOR_THE_MAIN_WEBVIEW.map(event_type_name),
 				"gestures": match &self.scrolled {
 					Ok(scrolled) => scrolled.iter().map(|gesture| json!({
 						"device": gesture.device,

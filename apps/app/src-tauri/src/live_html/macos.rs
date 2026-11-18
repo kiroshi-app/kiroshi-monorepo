@@ -33,8 +33,14 @@ const SCRIPT_ANSWER: Deadline = Deadline {
 	missed: "the view did not answer the script in time",
 };
 pub const HOLDER_IDENTIFIER: &str = "kiroshi-live-html-holder";
-const EVENTS_FOR_THE_MAIN_WEBVIEW: [NSEventType; 2] =
-	[NSEventType::ScrollWheel, NSEventType::Magnify];
+pub const EVENTS_FOR_THE_MAIN_WEBVIEW: [NSEventType; 6] = [
+	NSEventType::ScrollWheel,
+	NSEventType::Magnify,
+	NSEventType::SmartMagnify,
+	NSEventType::Rotate,
+	NSEventType::BeginGesture,
+	NSEventType::EndGesture,
+];
 
 define_class!(
 	#[unsafe(super(NSView))]
