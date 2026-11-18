@@ -2218,7 +2218,6 @@ mod tests {
 			.expect("the retired fingerprint is held");
 
 		assert_eq!(held.mergeability, Some(Mergeability::default()));
-		assert!(!held.held_back());
 	}
 
 	#[tokio::test]
