@@ -16,12 +16,14 @@ const SCREEN_REASON = {
 	unknown: "crash",
 } as const satisfies Record<WindowDeathReason, WindowRecoveryReason>
 
-export type RecoveryScreenReason = (typeof SCREEN_REASON)[WindowDeathReason]
-
 export const recoveryScreenReasonOf = (
 	recovery: WindowRecovery | null,
-): RecoveryScreenReason | null =>
-	recovery ? SCREEN_REASON[recovery.reason] : null
+): WindowRecoveryReason | null => {
+	if (!recovery) {
+		return null
+	}
+	return recovery.exhausted ? "gave-up" : SCREEN_REASON[recovery.reason]
+}
 
 const hasBeenShown = (recovery: WindowRecovery) =>
 	localStorage.getItem(SHOWN_RECOVERY_KEY) === String(recovery.occurredAtMs)
@@ -42,4 +44,9 @@ export const readWindowRecoveryToShow = async () => {
 		console.error("window recovery read at start failed", reason)
 		return null
 	}
+}
+
+export const reloadRecoveredWindow = async () => {
+	const answer = await commands.windowRecoveryReload()
+	if (answer.status === "error") throw answer.error
 }

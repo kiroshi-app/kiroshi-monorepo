@@ -1,10 +1,14 @@
-import { WindowRecoveryScreen } from "@workspace/ui/components/window-recovery-screen"
+import { NoticeSurface } from "@workspace/ui/components/notice-surface"
+import {
+	type WindowRecoveryReason,
+	WindowRecoveryScreen,
+} from "@workspace/ui/components/window-recovery-screen"
 
 import { useWindowRevealOnMount } from "@/lib/host/launch-reveal"
-import type { RecoveryScreenReason } from "@/lib/host/window-recovery"
+import { useRecoveredWindowReload } from "@/lib/host/use-recovered-window-reload"
 
 type RecoveredWindowScreenProps = {
-	reason: RecoveryScreenReason
+	reason: WindowRecoveryReason
 	onContinue: () => void
 }
 
@@ -13,6 +17,16 @@ export const RecoveredWindowScreen = ({
 	onContinue,
 }: RecoveredWindowScreenProps) => {
 	useWindowRevealOnMount()
+	const reloadWindow = useRecoveredWindowReload()
 
-	return <WindowRecoveryScreen onContinue={onContinue} reason={reason} />
+	return (
+		<>
+			{reason === "gave-up" ? (
+				<WindowRecoveryScreen onReload={reloadWindow} reason={reason} />
+			) : (
+				<WindowRecoveryScreen onContinue={onContinue} reason={reason} />
+			)}
+			<NoticeSurface />
+		</>
+	)
 }
