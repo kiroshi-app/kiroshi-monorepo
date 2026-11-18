@@ -104,9 +104,9 @@ impl LiveViews {
 		let Some(server) = servers.get(&id) else {
 			return;
 		};
-		let loaded = LiveHtmlLoaded { failure: server.content_failure(), id };
+		let loaded = LiveHtmlLoaded { id: id.clone(), failure: server.content_failure() };
 		if let Err(failure) = events::emit(app, events::LIVE_HTML_LOADED, loaded) {
-			log::error!("a live view's page load reached no window: {failure}");
+			log::error!("live view {id}: its page load reached no window: {failure}");
 		}
 	}
 
