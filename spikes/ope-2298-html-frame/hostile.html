@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>OPE-2298 hostile view</title>
+	</head>
+	<body>
+		<iframe name="form-sink" title="form sink" hidden></iframe>
+		<script id="targets" type="application/json">"__TARGETS__"</script>
+		<script>
+			const TARGETS = JSON.parse(document.getElementById("targets").textContent);
+			const BASE = location.pathname.slice(0, location.pathname.lastIndexOf("/") + 1);
+			const VIEW_VALUE = BASE.split("/")[1];
+			const ATTEMPT_TIMEOUT_MS = 2000;
+			const NETWORK_TIMEOUT_MS = 8000;
+			const BUSY_LOOP_MS = 10000;
+			const NAVIGATION_PAUSE_MS = 700;
+			const MAIN_SENTINEL_KEY = "spike-main-sentinel";
+			const VIEW_KEY = "spike-view-value";
+			const VIEW_STORE = "spike-view";
+			const PROBE_ROLE = "probe-";
+			const PROBE_QUIET_MS = 250;
+			const PROBE_WINDOW_MS = 1000;
+			const PROBE_EVENTS = [
+				"securitypolicyviolation",
+				"error",
+				"load",
+				"pagehide",
+				"beforeunload",
+				"unload",
+				"visibilitychange",
+			];
+
+			const urlSafe = (text) => String(text).replace(/[^A-Za-z0-9.~-]/g, "_").slice(0, 160);
+
+			const beacon = (attempt, segment) =>
+				new Promise((resolve) => {
+					const image = new Image();
+					image.onload = resolve;
+					image.onerror = resolve;
+					image.src = `${BASE}beacon/${attempt}/${segment}`;
+				});
+
+			const signal = (attempt, outcome) => beacon(attempt, urlSafe(outcome));
+
+			const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+			const failure = (cause) => `blocked-${cause?.name ?? cause}`;
+
+			const attempt = async (id, action, timeoutMs = ATTEMPT_TIMEOUT_MS) => {
+				const outcome = await Promise.race([
+					Promise.resolve().then(action).catch(failure),
+					pause(timeoutMs).then(() => "timeout"),
+				]);
+				await signal(id, outcome ?? "ok");
+			};
+
+			const forgedMessage = () =>
+				JSON.stringify({
+					cmd: "spike_secret",
+					callback: 1,
+					error: 2,
+					payload: {},
+					options: {},
+					__TAURI_INVOKE_KEY__: "forged",
+				});
+
+			const forgedRequest = () => ({
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Tauri-Callback": "1",
+					"Tauri-Error": "2",
+					"Tauri-Invoke-Key": "forged",
+				},
+				body: "{}",
+			});
+
+			const postForgedMessage = () => {
+				const message = forgedMessage();
+				const channels = [
+					["ipc", () => window.ipc.postMessage(message)],
+					["webkit", () => window.webkit.messageHandlers.ipc.postMessage(message)],
+					["chrome", () => window.chrome.webview.postMessage(message)],
+					["parent", () => parent.postMessage(message, "*")],
+					["top", () => top.postMessage(message, "*")],
+				];
+				const sent = channels.filter(([, post]) => {
+					try {
+						post();
+						return true;
+					} catch (cause) {
+						return false;
+					}
+				});
+				return `sent-${sent.map(([name]) => name).join("-") || "nowhere"}`;
+			};
+
+			const tryHostCommands = () =>
+				Promise.all([
+					attempt("ipc-tauri-global", () => window.__TAURI__.core.invoke("spike_secret").then(() => "ok")),
+					attempt("ipc-tauri-internals", () => window.__TAURI_INTERNALS__.invoke("spike_secret").then(() => "ok")),
+					attempt("ipc-forged-postmessage", postForgedMessage),
+					attempt("ipc-forged-fetch-ipc-localhost", () =>
+						fetch("http://ipc.localhost/spike_secret", forgedRequest()).then((response) => `status-${response.status}`),
+					),
+					attempt("ipc-forged-custom-protocol", () =>
+						fetch("ipc://localhost/spike_secret", forgedRequest()).then((response) => `status-${response.status}`),
+					),
+				]);
+
+			const tryMainWindow = () =>
+				Promise.all([
+					attempt("parent-dom-read", () => `read-${parent.document.getElementById("sentinel").textContent}`),
+					attempt("parent-dom-write", () => {
+						parent.document.title = "altered by the view";
+						return "written";
+					}),
+					attempt("top-dom-read", () => `read-${top.document.getElementById("sentinel").textContent}`),
+					attempt("top-dom-write", () => {
+						top.document.getElementById("sentinel").textContent = "altered by the view";
+						return "written";
+					}),
+					attempt("parent-cookie-read", () => `read-${parent.document.cookie}`),
+					attempt("parent-cookie-write", () => {
+						parent.document.cookie = "spike_main_sentinel=altered";
+						return "written";
+					}),
+					attempt("parent-storage-read", () => `read-${parent.localStorage.getItem(MAIN_SENTINEL_KEY)}`),
+					attempt("parent-storage-write", () => {
+						parent.localStorage.setItem(MAIN_SENTINEL_KEY, "altered");
+						return "written";
+					}),
+				]);
+
+			const loadImage = (url) =>
+				new Promise((resolve) => {
+					const image = new Image();
+					image.onload = () => resolve("ok");
+					image.onerror = () => resolve("blocked-error");
+					image.src = url;
+				});
+
+			const openSocket = (url) =>
+				new Promise((resolve) => {
+					const socket = new WebSocket(url);
+					socket.onopen = () => resolve("ok");
+					socket.onerror = () => resolve("blocked-error");
+				});
+
+			const postForm = (url) => {
+				const form = document.createElement("form");
+				form.method = "post";
+				form.action = url;
+				form.target = "form-sink";
+				const field = document.createElement("input");
+				field.name = "value";
+				field.value = VIEW_VALUE;
+				form.append(field);
+				document.body.append(form);
+				form.submit();
+				return "submitted";
+			};
+
+			const tripwireAttempts = (name, host) => ({
+				[`tripwire-${name}-fetch`]: () => fetch(`http://${host}/fetch`, { mode: "no-cors" }).then(() => "ok"),
+				[`tripwire-${name}-img`]: () => loadImage(`http://${host}/img`),
+				[`tripwire-${name}-websocket`]: () => openSocket(`ws://${host}/websocket`),
+				[`tripwire-${name}-form-post`]: () => postForm(`http://${host}/form-post`),
+			});
+
+			const tryTripwire = (name, host) =>
+				Promise.all(
+					Object.entries(tripwireAttempts(name, host)).map(([id, action]) =>
+						host ? attempt(id, action) : signal(id, "no-address"),
+					),
+				);
+
+			const tryEgress = () =>
+				Promise.all([
+					attempt(
+						"allowlist-fetch-cdn-jsdelivr",
+						() =>
+							fetch("https://cdn.jsdelivr.net/npm/lodash@4.17.21/package.json").then((response) =>
+								response.ok ? "ok" : `status-${response.status}`,
+							),
+						NETWORK_TIMEOUT_MS,
+					),
+					attempt(
+						"allowlist-fetch-example-com",
+						() => fetch("https://example.com/", { mode: "no-cors" }).then(() => "ok"),
+						NETWORK_TIMEOUT_MS,
+					),
+				]);
+
+			const openDatabase = () =>
+				new Promise((resolve, reject) => {
+					const opening = indexedDB.open(VIEW_STORE, 1);
+					let isNew = false;
+					opening.onupgradeneeded = () => {
+						isNew = true;
+						opening.result.createObjectStore("values");
+					};
+					opening.onsuccess = () => resolve({ database: opening.result, isNew });
+					opening.onerror = () => reject(opening.error);
+				});
+
+			const settled = (request) =>
+				new Promise((resolve, reject) => {
+					request.onsuccess = () => resolve(request.result);
+					request.onerror = () => reject(request.error);
+				});
+
+			const writeStorage = () =>
+				Promise.all([
+					attempt("storage-write-localstorage", () => {
+						localStorage.setItem(VIEW_KEY, VIEW_VALUE);
+						return localStorage.getItem(VIEW_KEY) === VIEW_VALUE ? "ok" : "not-stored";
+					}),
+					attempt("storage-write-indexeddb", async () => {
+						const { database } = await openDatabase();
+						await settled(database.transaction("values", "readwrite").objectStore("values").put(VIEW_VALUE, VIEW_KEY));
+						return "ok";
+					}),
+					attempt("storage-write-cookie", () => {
+						// biome-ignore lint/suspicious/noDocumentCookie: the cookie jar is the store under test
+						document.cookie = `spike_view_value=${VIEW_VALUE}; path=/`;
+						// biome-ignore lint/suspicious/noDocumentCookie: the cookie jar is the store under test
+						document.cookie = `spike_view_value_cross_site=${VIEW_VALUE}; path=/; SameSite=None; Secure`;
+						return document.cookie.includes(VIEW_VALUE) ? "ok" : "not-stored";
+					}),
+					attempt("storage-write-cache", async () => {
+						const cache = await caches.open(VIEW_STORE);
+						await cache.put(`${BASE}${VIEW_KEY}`, new Response(VIEW_VALUE));
+						return "ok";
+					}),
+				]);
+
+			const found = (value) => (value ? `read-${value}` : "none");
+
+			const readStorage = () =>
+				Promise.all([
+					attempt("storage-read-localstorage", () => found(localStorage.getItem(VIEW_KEY))),
+					attempt("storage-read-indexeddb", async () => {
+						const { database, isNew } = await openDatabase();
+						if (isNew) {
+							return "none";
+						}
+						return found(await settled(database.transaction("values").objectStore("values").get(VIEW_KEY)));
+					}),
+					attempt("storage-read-cookie", () => found(document.cookie)),
+					attempt("storage-read-cache", async () => {
+						const cache = await caches.open(VIEW_STORE);
+						const [first] = await cache.keys();
+						return first ? found(await (await cache.match(first)).text()) : "none";
+					}),
+				]);
+
+			const spin = async () => {
+				await signal("busy-loop", "started");
+				const end = performance.now() + BUSY_LOOP_MS;
+				while (performance.now() < end) {}
+				await signal("busy-loop", "finished");
+			};
+
+			const leave = async (id, url) => {
+				await signal(id, "attempted");
+				try {
+					departures[departureOf(id)](url);
+				} catch (cause) {
+					await signal(id, failure(cause));
+				}
+				await pause(NAVIGATION_PAUSE_MS);
+			};
+
+			const departures = {
+				"navigation-window-open": (url) => window.open(url),
+				"navigation-anchor-download": (url) => {
+					const anchor = document.createElement("a");
+					anchor.href = url;
+					anchor.download = "spike.txt";
+					document.body.append(anchor);
+					anchor.click();
+				},
+				"navigation-top": (url) => {
+					top.location.href = url;
+				},
+				"navigation-self": (url) => {
+					location.href = url;
+				},
+				"navigation-meta-refresh": (url) => {
+					const refresh = document.createElement("meta");
+					refresh.httpEquiv = "refresh";
+					refresh.content = `0; url=${url}`;
+					document.head.append(refresh);
+				},
+			};
+
+			const TRIPWIRE_DEPARTURES = [
+				"navigation-window-open",
+				"navigation-top",
+				"navigation-self",
+				"navigation-meta-refresh",
+			];
+
+			const departureOf = (id) => Object.keys(departures).find((departure) => id.endsWith(departure));
+
+			const sinkDestinations = () =>
+				Object.fromEntries(Object.keys(departures).map((id) => [id, `${TARGETS.navigationSink}/${id}`]));
+
+			const tripwireDestinations = (name, host) =>
+				Object.fromEntries(
+					TRIPWIRE_DEPARTURES.map((departure) => [`tripwire-${name}-${departure}`, `http://${host}/${departure}`]),
+				);
+
+			const hex = (text) =>
+				Array.from(new TextEncoder().encode(text), (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+			const primitiveFields = (event) => {
+				const fields = {};
+				for (const name in event) {
+					if (["string", "number", "boolean"].includes(typeof event[name])) {
+						fields[name] = event[name];
+					}
+				}
+				return fields;
+			};
+
+			const loaded = () =>
+				document.readyState === "complete"
+					? Promise.resolve()
+					: new Promise((resolve) => addEventListener("load", resolve, { once: true }));
+
+			const probe = async (id, url) => {
+				await loaded();
+				await pause(PROBE_QUIET_MS);
+				await signal(id, "attempted");
+				const beaconUrl = new URL(`${BASE}beacon/`, location.href).href;
+				const sent = [];
+				let attemptedAt = 0;
+				let isObserving = true;
+				const report = (record) => {
+					if (!isObserving) {
+						return;
+					}
+					const stamped = { ...record, index: sent.length, atMs: performance.now() - attemptedAt };
+					sent.push(beacon(id, `${PROBE_ROLE}${hex(JSON.stringify(stamped))}`));
+				};
+				for (const [on, target] of Object.entries({ window, document })) {
+					for (const type of PROBE_EVENTS) {
+						target.addEventListener(type, (event) =>
+							report({
+								kind: "event",
+								on,
+								type,
+								fields: type === "securitypolicyviolation" ? primitiveFields(event) : undefined,
+							}),
+						);
+					}
+				}
+				const observer = new PerformanceObserver((list) => {
+					for (const entry of list.getEntries()) {
+						if (!entry.name.startsWith(beaconUrl)) {
+							report({ kind: "entry", startMs: entry.startTime - attemptedAt, entry: entry.toJSON() });
+						}
+					}
+				});
+				observer.observe({ entryTypes: PerformanceObserver.supportedEntryTypes });
+				attemptedAt = performance.now();
+				try {
+					departures[id](url);
+				} catch (cause) {
+					report({ kind: "thrown", name: String(cause?.name ?? cause) });
+				}
+				await pause(PROBE_WINDOW_MS);
+				report({ kind: "alive" });
+				isObserving = false;
+				observer.disconnect();
+				await Promise.all(sent);
+			};
+
+			const tryNavigation = async () => {
+				for (const [id, url] of Object.entries(sinkDestinations())) {
+					await leave(id, url);
+				}
+			};
+
+			const write = async () => {
+				await writeStorage();
+				await tryHostCommands();
+				await tryMainWindow();
+				await tryTripwire("loopback", TARGETS.loopbackTripwire);
+				await tryTripwire("lan", TARGETS.lanTripwire);
+				await tryEgress();
+				await spin();
+				await tryNavigation();
+			};
+
+			const play = () => {
+				if (TARGETS.role === "reader") {
+					return readStorage();
+				}
+				if (TARGETS.role.startsWith(PROBE_ROLE)) {
+					const id = TARGETS.role.slice(PROBE_ROLE.length);
+					return probe(id, sinkDestinations()[id]);
+				}
+				const destinations = {
+					...sinkDestinations(),
+					...tripwireDestinations("loopback", TARGETS.loopbackTripwire),
+					...tripwireDestinations("lan", TARGETS.lanTripwire),
+				};
+				if (TARGETS.role in destinations) {
+					return leave(TARGETS.role, destinations[TARGETS.role]);
+				}
+				const tripwires = {
+					...tripwireAttempts("loopback", TARGETS.loopbackTripwire),
+					...tripwireAttempts("lan", TARGETS.lanTripwire),
+				};
+				if (TARGETS.role in tripwires) {
+					return attempt(TARGETS.role, tripwires[TARGETS.role]);
+				}
+				return write();
+			};
+
+			play().then(
+				() => signal("run", "done"),
+				(cause) => signal("run", `crashed-${cause}`),
+			);
+		</script>
+	</body>
+</html>

@@ -1,0 +1,146 @@
+mod behaviours;
+mod host;
+mod http;
+mod placement;
+mod port_reading;
+mod port_target;
+mod probe;
+mod proofs;
+mod scenario;
+mod sensors;
+mod windows;
+
+use std::process::ExitCode;
+use std::sync::Arc;
+
+use tauri_plugin_dialog as _;
+use tauri_plugin_log as _;
+use tauri_plugin_opener as _;
+use tauri_plugin_os as _;
+use tauri_plugin_process as _;
+use tauri_plugin_updater as _;
+
+use host::HostState;
+use sensors::WRAPPER_CSP;
+
+const USAGE_ERROR: u8 = 2;
+const SANDBOX_DIRECTIVE: &str = "sandbox allow-scripts";
+const INCOGNITO_MITIGATION: &str =
+	"each view webview is built with incognito(true), so every view has its own storage";
+const CHILD_WEBVIEW_MITIGATION: &str =
+	"each view is a child webview of the main window, without a window of its own and without a capability, behind the navigation, new-window and download guards of the view windows";
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Mode {
+	Frame,
+	Window,
+	WindowIsolated,
+	WindowSandboxed,
+	InThread,
+}
+
+impl Mode {
+	fn parse(argument: &str) -> Option<Self> {
+		match argument {
+			"frame" => Some(Self::Frame),
+			"window" => Some(Self::Window),
+			"window-isolated" => Some(Self::WindowIsolated),
+			"window-sandboxed" => Some(Self::WindowSandboxed),
+			"in-thread" => Some(Self::InThread),
+			_ => None,
+		}
+	}
+
+	pub fn name(self) -> &'static str {
+		match self {
+			Self::Frame => "frame",
+			Self::Window => "window",
+			Self::WindowIsolated => "window-isolated",
+			Self::WindowSandboxed => "window-sandboxed",
+			Self::InThread => "in-thread",
+		}
+	}
+
+	pub fn shows_views_in_windows(self) -> bool {
+		matches!(self, Self::Window | Self::WindowIsolated | Self::WindowSandboxed)
+	}
+
+	pub fn places_views_in_the_thread(self) -> bool {
+		self == Self::InThread
+	}
+
+	pub fn isolates_view_storage(self) -> bool {
+		matches!(self, Self::WindowIsolated | Self::WindowSandboxed | Self::InThread)
+	}
+
+	pub fn decides_from_host_observations(self) -> bool {
+		matches!(self, Self::WindowIsolated | Self::WindowSandboxed | Self::InThread)
+	}
+
+	pub fn frames_view_documents(self) -> bool {
+		matches!(self, Self::WindowSandboxed | Self::InThread)
+	}
+
+	pub fn mitigations(self) -> Vec<String> {
+		let incognito = self.isolates_view_storage().then(|| INCOGNITO_MITIGATION.to_owned());
+		let directives = self
+			.view_csp_directives()
+			.iter()
+			.map(|directive| format!("hostile.html is served with the CSP directive {directive}"));
+		let wrapper = self.frames_view_documents().then(|| {
+			format!("the view webview loads a script-less wrapper page from the view server that frames hostile.html, served with the CSP {WRAPPER_CSP}, the containment the main window frame-src gives in frame mode")
+		});
+		let child = self.places_views_in_the_thread().then(|| CHILD_WEBVIEW_MITIGATION.to_owned());
+		incognito.into_iter().chain(directives).chain(wrapper).chain(child).collect()
+	}
+
+	pub fn view_csp_directives(self) -> &'static [&'static str] {
+		match self {
+			Self::WindowSandboxed | Self::InThread => &[SANDBOX_DIRECTIVE],
+			Self::Frame | Self::Window | Self::WindowIsolated => &[],
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+pub enum Play {
+	Proofs,
+	Probe,
+}
+
+impl Play {
+	fn parse(argument: &str) -> Option<(Self, Mode)> {
+		match argument {
+			"probe-window-sandboxed" => Some((Self::Probe, Mode::WindowSandboxed)),
+			"probe-in-thread" => Some((Self::Probe, Mode::InThread)),
+			mode => Mode::parse(mode).map(|mode| (Self::Proofs, mode)),
+		}
+	}
+}
+
+#[tauri::command]
+fn spike_secret(webview: tauri::Webview, host: tauri::State<'_, Arc<HostState>>) -> usize {
+	host.count_secret_call(webview.label())
+}
+
+fn main() -> ExitCode {
+	let Some((play, mode)) = std::env::args().nth(1).as_deref().and_then(Play::parse) else {
+		eprintln!(
+			"usage: ope-2298-html-frame <frame|window|window-isolated|window-sandboxed|in-thread|probe-window-sandboxed|probe-in-thread>"
+		);
+		return ExitCode::from(USAGE_ERROR);
+	};
+	let host = Arc::new(HostState::default());
+	let started = tauri::Builder::default()
+		.manage(Arc::clone(&host))
+		.invoke_handler(tauri::generate_handler![spike_secret])
+		.setup(move |app| scenario::start(app.handle().clone(), host, mode, play))
+		.run(tauri::generate_context!());
+	match started {
+		Ok(()) => ExitCode::SUCCESS,
+		Err(cause) => {
+			eprintln!("the harness could not start: {cause}");
+			ExitCode::FAILURE
+		}
+	}
+}
