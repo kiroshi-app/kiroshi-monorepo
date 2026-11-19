@@ -1,4 +1,4 @@
-const CI_EVENTS = ["pull_request", "push"] as const
+const CI_EVENTS = ["pull_request", "push", "schedule"] as const
 
 type CiEvent = (typeof CI_EVENTS)[number]
 
@@ -25,7 +25,23 @@ const SHARED_ROOT_FILES = [
 
 const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
 
-const IOS_ROOT_FILES = [".swift-format", ".xcode-version"]
+export const PATHS_IOS_READS_OUTSIDE_APPS_IOS = [
+	".github/workflows/ci.yml",
+	".swift-format",
+	".xcode-version",
+	"apps/app/src-tauri/tests/vectors/v2-crypto.json",
+	"package.json",
+	"packages/shared/conversation-icons.json",
+	"packages/ui/src/components/companion-avatar.fixture.jsonl",
+	"packages/ui/tokens.json",
+	"scripts/ci-changes.ts",
+	"scripts/ci.ts",
+	"scripts/ios-quiet-host.sh",
+	"scripts/ios-sampler.sh",
+	"scripts/ios-shard-seconds.json",
+	"scripts/slot.sh",
+	"scripts/test-importers.ts",
+]
 
 export const PATHS_RUST_READS_OUTSIDE_SRC_TAURI = [
 	".claude/settings.json",
@@ -44,12 +60,12 @@ export const PATHS_RUST_READS_OUTSIDE_SRC_TAURI = [
 	"packages/ui/src/components/markdown",
 ]
 
-const EVERY_JOB: FilteredJobs = {
+const EVERY_DESKTOP_JOB: FilteredJobs = {
 	rust: true,
 	vitest: true,
 	website: true,
 	storybook: true,
-	ios: true,
+	ios: false,
 }
 
 const NO_JOB: FilteredJobs = {
@@ -59,6 +75,8 @@ const NO_JOB: FilteredJobs = {
 	storybook: false,
 	ios: false,
 }
+
+const IOS_ALONE: FilteredJobs = { ...NO_JOB, ios: true }
 
 const isUnder = (path: string, directories: string[]) =>
 	directories.some((directory) => path.startsWith(directory))
@@ -91,24 +109,31 @@ const touchesStorybook = (path: string) =>
 	isUnder(path, ["packages/ui/", "packages/shared/", "scripts/", "baselines/"])
 
 const touchesIos = (path: string) =>
-	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
+	path.startsWith("apps/ios/") ||
+	PATHS_IOS_READS_OUTSIDE_APPS_IOS.includes(path)
 
 export const touchedJobs = (paths: string[]): FilteredJobs => {
-	if (paths.some(isShared)) return EVERY_JOB
+	const ios = paths.some(touchesIos)
+	if (paths.some(isShared)) return { ...EVERY_DESKTOP_JOB, ios }
 	return {
 		rust: paths.some(touchesRust),
 		vitest: paths.some(touchesVitest),
 		website: paths.some(touchesWebsite),
 		storybook: paths.some(touchesStorybook),
-		ios: paths.some(touchesIos),
+		ios,
 	}
 }
 
 export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
+	if (event === "schedule") return IOS_ALONE
 	const touched = touchedJobs(paths)
-	if (event === "pull_request")
-		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
-	return { ...touched, ios: true }
+	if (event === "push") return { ...touched, ios: false }
+	return {
+		...NO_JOB,
+		vitest: touched.vitest,
+		rust: touched.rust,
+		ios: touched.ios,
+	}
 }
 
 const readEvent = (name: string | undefined): CiEvent => {
@@ -161,14 +186,14 @@ const pathsChangedSince = (greenBase: string) => {
 	return paths.filter((path) => path !== LOCKFILE)
 }
 
-const everyJobBecause = (reason: string) => {
-	console.error(`ci-changes  ${reason}: every job runs`)
-	return EVERY_JOB
+const everyDesktopJobBecause = (reason: string) => {
+	console.error(`ci-changes  ${reason}: every desktop job runs`)
+	return EVERY_DESKTOP_JOB
 }
 
 const jobsOfPush = (greenBase: string | undefined) => {
 	if (!greenBase)
-		return everyJobBecause(
+		return everyDesktopJobBecause(
 			// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci-changes.ts runs outside turbo, its cache never reads this variable
 			`no CI push run on ${process.env.GITHUB_REF_NAME} concluded success`,
 		)
@@ -180,16 +205,16 @@ const jobsOfPush = (greenBase: string | undefined) => {
 		greenBase,
 	])
 	if (!fetched.success)
-		return everyJobBecause(
+		return everyDesktopJobBecause(
 			`fetching the last green sha ${greenBase} failed (${fetched.stderr.toString().trim()})`,
 		)
 	return decideJobs({ event: "push", paths: pathsChangedSince(greenBase) })
 }
 
 const jobsOf = (event: CiEvent, base: string | undefined) => {
-	if (event === "pull_request")
-		return decideJobs({ event, paths: changedPaths(base) })
-	return jobsOfPush(base)
+	if (event === "schedule") return decideJobs({ event, paths: [] })
+	if (event === "push") return jobsOfPush(base)
+	return decideJobs({ event, paths: changedPaths(base) })
 }
 
 const main = ([eventName, base]: string[]) => {

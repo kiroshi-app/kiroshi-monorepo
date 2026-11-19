@@ -277,7 +277,7 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a push to main and on a v* tag",
 	storybook:
 		"on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
-	ios: "on a push to main and on a pull_request labelled ci:ios",
+	ios: "on a pull_request whose diff touches an iOS input, on a pull_request labelled ci:ios, and once a night on main",
 }
 
 // ci:fast is the pre-push check and must stay green and under 120 s with a

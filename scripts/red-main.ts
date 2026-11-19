@@ -57,10 +57,7 @@ export type GitHub = {
 	readJobs: (runId: string) => Promise<Job[]>
 	rerunFailedJobs: (runId: string) => Promise<void>
 	readPullRequests: (sha: string) => Promise<PullRequest[]>
-	readLastGreenSha: (
-		branch: string,
-		createdBefore: string,
-	) => Promise<string | undefined>
+	readLastGreenSha: (red: Run) => Promise<string | undefined>
 	readCommits: (base: string, head: string) => Promise<Commit[]>
 }
 
@@ -90,6 +87,10 @@ const FAILED_JOB_CONCLUSIONS = ["failure", "timed_out"]
 
 const RUNNER_FAILURE_STEP = "Runner failure"
 
+const NIGHT_EVENT = "schedule"
+
+const REPORTED_EVENTS = ["push", NIGHT_EVENT]
+
 const REQUEST_TIMEOUT_MS = 30_000
 
 const ISSUES_REPORTING_RUN = `query IssuesReportingRun($teamId: ID!, $runUrl: String!) {
@@ -107,7 +108,8 @@ const isReportedRef = (headBranch: string) =>
 
 export const skipReason = (run: Run): string | undefined => {
 	if (run.name !== "CI") return `run ${run.id} belongs to ${run.name}, not CI`
-	if (run.event !== "push") return `run ${run.id} is a ${run.event} run`
+	if (!REPORTED_EVENTS.includes(run.event))
+		return `run ${run.id} is a ${run.event} run`
 	if (!isReportedRef(run.headBranch))
 		return `run ${run.id} ran on ${run.headBranch}, not main or a release/** branch`
 	if (run.conclusion !== "failure")
@@ -160,7 +162,7 @@ const commitLine = ({ sha, message, pullRequests }: MergedCommit) =>
 const rangeSections = (run: Run, sinceGreen: SinceGreen) => {
 	if (sinceGreen.kind === "none")
 		return [
-			`Last green: none, no CI push run on ${run.headBranch} concluded success before this run`,
+			`Last green: none, no CI ${run.event} run on ${run.headBranch} concluded success before this run`,
 		]
 	if (sinceGreen.kind === "unavailable")
 		return [`Last green: unavailable (${sinceGreen.reason})`]
@@ -187,12 +189,15 @@ const commitLines = ({ run, pullRequests }: FailedRun) => [
 	`Commit author: ${run.commitAuthor}`,
 ]
 
+const redTitle = ({ event, headBranch }: Run) =>
+	event === NIGHT_EVENT ? "Red night" : `Red ${headBranch}`
+
 export const redMainIssue = (report: RunReport): IssueInput => {
 	const { run, jobs, sinceGreen } = report
 	const { redJobs, runnerFailures } = classifiedFailures(jobs)
 	return {
 		...FILED_IN,
-		title: `Red ${run.headBranch}: ${redJobs.join(", ")} at ${shortSha(run.headSha)}`,
+		title: `${redTitle(run)}: ${redJobs.join(", ")} at ${shortSha(run.headSha)}`,
 		description: [
 			`Run: ${run.url}`,
 			...(runnerFailures.length > 0
@@ -271,7 +276,7 @@ const readGreenRange = async (
 	github: GitHub,
 	run: Run,
 ): Promise<SinceGreen> => {
-	const greenSha = await github.readLastGreenSha(run.headBranch, run.createdAt)
+	const greenSha = await github.readLastGreenSha(run)
 	if (!greenSha) return { kind: "none" }
 	const commits = await github.readCommits(greenSha, run.headSha)
 	const merged = await Promise.all(
@@ -430,16 +435,16 @@ export const createGitHub = (repository: string, token: string): GitHub => {
 				authorLogin: user.login,
 			}))
 		},
-		readLastGreenSha: async (branch, createdBefore) => {
+		readLastGreenSha: async ({ headBranch, event, createdAt }) => {
 			const filters = new URLSearchParams({
-				branch,
-				event: "push",
+				branch: headBranch,
+				event,
 				status: "success",
-				created: `<${createdBefore}`,
+				created: `<${createdAt}`,
 				per_page: "1",
 			})
 			const { workflow_runs } = await read<{ workflow_runs: GitHubRun[] }>(
-				`read the last green push run on ${branch}`,
+				`read the last green ${event} run on ${headBranch}`,
 				`/actions/workflows/ci.yml/runs?${filters}`,
 			)
 			return workflow_runs[0]?.head_sha

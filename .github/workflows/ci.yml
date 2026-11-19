@@ -5,6 +5,8 @@ on:
     branches: [main, "release/**"]
   pull_request:
     branches: [main, "feature/**", "release/**"]
+  schedule:
+    - cron: "17 2 * * *"
 
 permissions:
   contents: read
@@ -13,18 +15,20 @@ env:
   CARGO_BUILD_JOBS: default
 
 # A push to main or a release/** branch lets the run in progress conclude, a newer push replacing only the run still pending, the next run diffing against the last green head of that branch.
+# A scheduled run stands in a group of its own, neither cancelling nor replacing a push to main, nor cancelled or replaced by one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # lint runs on every event, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request into main, a feature/** or a release/** branch: changes, lint, vitest on the test files the diff changed against that base, rust on its library tests, verify.
 # pull_request labelled ci:storybook: storybook too, on the full story set, its browser debug output uploaded as an artifact.
-# pull_request labelled ci:ios: ios-build and ios too.
-# push to main: changes, lint with its Types step checking every TypeScript workspace, vitest, website, rust, storybook on the paths changed since the last green push to main, ios-build, ios testing its products over eleven jobs, verify.
+# pull_request whose diff touches apps/ios or a path the iOS build or its tests read outside it, or labelled ci:ios: ios-build and ios testing its products over eleven jobs too.
+# push to main: changes, lint with its Types step checking every TypeScript workspace, vitest, website, rust, storybook on the paths changed since the last green push to main, verify, never ios-build nor ios.
 # push to a release/** branch: the jobs of a push to main on the paths changed since the last green push to that branch, ios-build and ios skipped.
 # push: a bun.lock whose diff only bumps a workspace version, like the release commit of bun run release, selects no job of its own, lint still installing from it.
+# schedule, once a night on main: changes, lint, ios-build, ios testing its products over eleven jobs, verify.
 # v* tag: no run, release.yml waits on the push run of the tagged commit on its release/X.Y branch.
 jobs:
   lint:
@@ -210,13 +214,13 @@ jobs:
 
       - name: Find the head of the last green push to this branch
         id: green
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch "$GITHUB_REF_NAME" --status success --limit 1 \
             --json headSha --jq '.[0].headSha // ""') || {
-            echo "::warning::gh run list exited $? reading the last green push to $GITHUB_REF_NAME: every job runs"
+            echo "::warning::gh run list exited $? reading the last green push to $GITHUB_REF_NAME: every desktop job runs"
             sha=""
           }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"

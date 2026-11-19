@@ -317,14 +317,24 @@ const storybookEnvOn = (github: GitHubContext) =>
 		),
 	)
 
+const A_NIGHT: GitHubContext = {
+	event_name: "schedule",
+	ref: "refs/heads/main",
+	run_id: "15",
+}
+
+const AN_IOS_SOURCE = "apps/ios/Kiroshi/App.swift"
+
+const IOS_JOBS = ["ios", IOS_BUILD_JOB]
+
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
 const REQUIRED_CHECKS_OF_MAIN = ["verify", "changes", "lint", "vitest", "rust"]
 
+const NIGHT_JOB_SET = ["changes", "ios", "ios-build", "lint", "verify"]
+
 const PUSH_TO_MAIN_JOB_SET = [
 	"changes",
-	"ios",
-	"ios-build",
 	"lint",
 	"rust",
 	"storybook",
@@ -462,7 +472,7 @@ describe("the gate", () => {
 			"storybook skips a pull_request, CI runs it on a push to main, on a v* tag and on a pull_request labelled ci:storybook",
 		)
 		expect(offPullRequestNote("ios")).toBe(
-			"ios skips a pull_request, CI runs it on a push to main and on a pull_request labelled ci:ios",
+			"ios skips a pull_request, CI runs it on a pull_request whose diff touches an iOS input, on a pull_request labelled ci:ios, and once a night on main",
 		)
 	})
 
@@ -1580,14 +1590,16 @@ describe("the jobs of ci.yml", () => {
 	it.each([
 		[A_PULL_REQUEST, "pull_request"],
 		[A_PUSH_TO_MAIN, "push"],
+		[A_NIGHT, "schedule"],
 	])("hands changes the event of %p as %s", (github, event) => {
 		expect(ciEventOf(github)).toBe(event)
 	})
 
-	it("triggers on a push to main or a release/** branch, never a v* tag, and a pull_request into main, a feature/** or a release/** branch, whatever its paths", () => {
+	it("triggers on a push to main or a release/** branch, never a v* tag, a pull_request into main, a feature/** or a release/** branch, whatever its paths, and once a night only", () => {
 		expect(workflow.on).toEqual({
 			push: { branches: ["main", "release/**"] },
 			pull_request: { branches: ["main", "feature/**", "release/**"] },
+			schedule: [{ cron: "17 2 * * *" }],
 		})
 	})
 
@@ -1672,9 +1684,82 @@ describe("the jobs of ci.yml", () => {
 			[...PULL_REQUEST_JOB_SET, "ios", IOS_BUILD_JOB].sort(),
 		)
 		expect(failingVerifySteps(github, passed)).toEqual([])
-		for (const job of ["ios", IOS_BUILD_JOB]) {
+		for (const job of IOS_JOBS) {
 			expect(
 				failingVerifySteps(github, { ...passed, [job]: "failure" }),
+			).not.toEqual([])
+		}
+	})
+
+	const iosSelectionOn = (github: GitHubContext, paths: string[]) => {
+		const outputs = outputsOn(github, paths)
+		const scopeWhenIosEnded = (result: string) => ({
+			github,
+			needs: {
+				...Object.fromEntries(IOS_JOBS.map((job) => [job, { result }])),
+				changes: { result: "success", outputs },
+			},
+		})
+		const verifyRefuses = (result: string) =>
+			IOS_JOBS.map((job) =>
+				evaluate(verifyCondition(job) ?? "false", scopeWhenIosEnded(result)),
+			)
+		return {
+			runs: IOS_JOBS.map((job) =>
+				evaluate(workflow.jobs[job]?.if ?? "true", scopeWhenIosEnded("")),
+			),
+			verifyRefusesSuccess: verifyRefuses("success"),
+			verifyRefusesSkipped: verifyRefuses("skipped"),
+		}
+	}
+
+	const IOS_SELECTED = {
+		runs: [true, true],
+		verifyRefusesSuccess: [false, false],
+		verifyRefusesSkipped: [true, true],
+	}
+
+	const IOS_UNSELECTED = {
+		runs: [false, false],
+		verifyRefusesSuccess: [true, true],
+		verifyRefusesSkipped: [false, false],
+	}
+
+	it.each([
+		AN_IOS_SOURCE,
+		".xcode-version",
+		"packages/ui/tokens.json",
+		"scripts/ci.ts",
+	])(
+		"adds ios-build and ios on an unlabelled pull_request whose diff touches %s, and has verify require them",
+		(path) => {
+			expect(iosSelectionOn(A_PULL_REQUEST, [path])).toEqual(IOS_SELECTED)
+		},
+	)
+
+	it.each(["bun.lock", "packages/ui/src/components/button.tsx"])(
+		"leaves ios-build and ios out of an unlabelled pull_request whose diff touches only %s, and has verify require their skip",
+		(path) => {
+			expect(iosSelectionOn(A_PULL_REQUEST, [path])).toEqual(IOS_UNSELECTED)
+		},
+	)
+
+	it.each([AN_IOS_SOURCE, ".xcode-version", "package.json"])(
+		"leaves ios-build and ios out of a push to main changing %s, and has verify require their skip",
+		(path) => {
+			expect(iosSelectionOn(A_PUSH_TO_MAIN, [path])).toEqual(IOS_UNSELECTED)
+		},
+	)
+
+	it("runs changes, lint, ios-build and ios once a night, whatever the paths, and has verify require ios-build and ios", () => {
+		const passed = resultsByRule(A_NIGHT)
+
+		expect(jobsRunningOn(A_NIGHT)).toEqual(NIGHT_JOB_SET)
+		expect(iosSelectionOn(A_NIGHT, [])).toEqual(IOS_SELECTED)
+		expect(failingVerifySteps(A_NIGHT, passed)).toEqual([])
+		for (const job of IOS_JOBS) {
+			expect(
+				failingVerifySteps(A_NIGHT, { ...passed, [job]: "failure" }),
 			).not.toEqual([])
 		}
 	})
@@ -1720,7 +1805,7 @@ describe("the jobs of ci.yml", () => {
 		expect(gate?.run).toContain('tee "$RUNNER_TEMP/storybook-debug.log"')
 	})
 
-	it("runs every desktop job and ios on a push to main", () => {
+	it("runs every desktop job on a push to main, never ios", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(PUSH_TO_MAIN_JOB_SET)
 	})
 
@@ -1741,6 +1826,7 @@ describe("the jobs of ci.yml", () => {
 		A_PULL_REQUEST_INTO_A_RELEASE_BRANCH,
 		A_PUSH_TO_MAIN,
 		A_PUSH_TO_A_RELEASE_BRANCH,
+		A_NIGHT,
 	])(
 		"has verify pass on %p when every job succeeded or was skipped by rule",
 		(github) => {
@@ -1888,17 +1974,20 @@ describe("the jobs of ci.yml", () => {
 		expect(lookup.exitCode).toBe(0)
 		expect(lookup.output).toBe("sha=\n")
 		expect(lookup.log).toBe(
-			"::warning::gh run list exited 4 reading the last green push to main: every job runs\n",
+			"::warning::gh run list exited 4 reading the last green push to main: every desktop job runs\n",
 		)
 	})
 
-	it("looks up no green push run on a pull_request", () => {
-		const green = (workflow.jobs.changes?.steps ?? []).find(
-			(step) => step.id === "green",
-		)
+	it.each([A_PULL_REQUEST, A_NIGHT])(
+		"looks up no green push run on %p",
+		(github) => {
+			const green = (workflow.jobs.changes?.steps ?? []).find(
+				(step) => step.id === "green",
+			)
 
-		expect(evaluate(green?.if ?? "true", scopeOf(A_PULL_REQUEST))).toBe(false)
-	})
+			expect(evaluate(green?.if ?? "true", scopeOf(github))).toBe(false)
+		},
+	)
 
 	it("fetches the base of a pull_request only, a push to main fetching its green base in scripts/ci-changes.ts", () => {
 		const fetch = (workflow.jobs.changes?.steps ?? []).find(
@@ -1926,6 +2015,7 @@ describe("the jobs of ci.yml", () => {
 		[pushToMain(7), "CI-refs/heads/main", "false"],
 		[pushToReleaseBranch(8), "CI-refs/heads/release/0.27", "false"],
 		[pullRequest(7, 11), "CI-refs/pull/7/merge", "true"],
+		[A_NIGHT, "CI-15", "false"],
 		[
 			{ event_name: "workflow_dispatch", ref: "refs/heads/main", run_id: "12" },
 			"CI-refs/heads/main",
@@ -1941,6 +2031,19 @@ describe("the jobs of ci.yml", () => {
 	it("queues a push to main behind the run of an earlier push to main still in progress", () => {
 		expect(concurrencyOf(pushToMain(8))).toEqual(concurrencyOf(pushToMain(7)))
 		expect(concurrencyOf(pushToMain(8)).cancelsInProgress).toBe("false")
+	})
+
+	it("lets neither a scheduled run nor a push to main on the same ref cancel or replace the other", () => {
+		const night = concurrencyOf(A_NIGHT)
+		const push = concurrencyOf(pushToMain(15))
+
+		expect(A_NIGHT.ref).toBe(pushToMain(15).ref)
+		expect(night.group).not.toBe(push.group)
+		expect(night.cancelsInProgress).toBe("false")
+		expect(push.cancelsInProgress).toBe("false")
+		expect(concurrencyOf({ ...A_NIGHT, run_id: "16" }).group).not.toBe(
+			night.group,
+		)
 	})
 
 	it("keeps one concurrency group per pull_request ref", () => {
