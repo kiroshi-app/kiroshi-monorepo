@@ -1,0 +1,112 @@
+name: Spike OPE-2355
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-ope-2355-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  in-thread:
+    if: github.head_ref == 'feature/ope-2355-the-live-html-view-can-be-placed-in-the'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            run: macos-ci
+            setup: ""
+          - os: ubuntu-latest
+            run: linux
+            setup: xvfb
+          - os: ubuntu-latest
+            run: linux-xvfb-openbox
+            setup: xvfb-openbox
+          - os: ubuntu-latest
+            run: linux-weston-headless
+            setup: weston-headless
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: spikes/ope-2298-html-frame
+    env:
+      RUSTC_WRAPPER: ""
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the Linux webview, the display servers and the capture tool
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            imagemagick \
+            libwebkit2gtk-4.1-dev \
+            openbox \
+            pkg-config \
+            weston \
+            xvfb
+
+      - name: Read the Rust version pinned in rust-toolchain.toml
+        id: rust
+        working-directory: .
+        run: |
+          version=$(sed -n 's/^channel = "\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' rust-toolchain.toml)
+          [ -n "$version" ] || { echo "::error::rust-toolchain.toml pins no x.y.z channel"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: spikes/ope-2298-html-frame
+
+      - name: Build the harness
+        run: cargo build --locked
+
+      - name: Play the hostile view as a child webview in the thread
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        env:
+          SPIKE_RUN_NAME: ${{ matrix.run }}
+          SPIKE_DISPLAY_SETUP: ${{ matrix.setup }}
+        run: |
+          harness="$PWD/target/debug/ope-2298-html-frame"
+          mkdir -p ci-results && cd ci-results
+          case "$SPIKE_DISPLAY_SETUP" in
+            xvfb)
+              xvfb-run -a "$harness" in-thread
+              ;;
+            xvfb-openbox)
+              xvfb-run -a bash -c "openbox & sleep 2; exec '$harness' in-thread"
+              ;;
+            weston-headless)
+              export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg-spike"
+              mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+              weston --backend=headless --socket=wl-spike --width=1280 --height=1024 &
+              sleep 3
+              WAYLAND_DISPLAY=wl-spike GDK_BACKEND=wayland "$harness" in-thread
+              ;;
+            *)
+              "$harness" in-thread
+              ;;
+          esac
+
+      - name: Upload the results and the captures
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results-${{ matrix.run }}
+          path: |
+            spikes/ope-2298-html-frame/ci-results/results-*.json
+            spikes/ope-2298-html-frame/ci-results/capture-*
+          if-no-files-found: error

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>OPE-2298 main window</title>
+		<style>
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+			}
+
+			body {
+				display: flex;
+				flex-direction: column;
+				font: 13px/16px system-ui, sans-serif;
+			}
+
+			#sentinel {
+				margin: 8px 16px;
+			}
+
+			#thread {
+				flex: 1;
+				min-height: 0;
+				margin: 0 16px 16px;
+				overflow-y: auto;
+				border: 1px solid #999;
+			}
+
+			.reply {
+				height: 120px;
+				margin: 12px;
+				background: #eee;
+			}
+
+			#view-placeholder {
+				height: 160px;
+				margin: 12px;
+				background: #ccd;
+			}
+
+			.overlay {
+				position: fixed;
+				border: 1px solid #333;
+				background: #fff;
+			}
+
+			#menu {
+				width: 160px;
+				height: 120px;
+			}
+
+			#popover {
+				width: 180px;
+				height: 110px;
+			}
+
+			#sheet {
+				right: 0;
+				bottom: 0;
+				left: 0;
+				height: 60%;
+			}
+		</style>
+	</head>
+	<body>
+		<p id="sentinel"></p>
+		<div id="view"></div>
+		<main id="thread">
+			<article class="reply">Reply 1</article>
+			<article class="reply">Reply 2</article>
+			<article class="reply">Reply 3</article>
+			<article class="reply">Reply 4</article>
+			<div id="view-placeholder"></div>
+			<article class="reply">Reply 5</article>
+			<article class="reply">Reply 6</article>
+			<article class="reply">Reply 7</article>
+			<article class="reply">Reply 8</article>
+		</main>
+		<div id="menu" class="overlay" hidden>Menu</div>
+		<div id="popover" class="overlay" hidden>Popover</div>
+		<div id="sheet" class="overlay" hidden>Sheet</div>
+		<script>
+			const SENTINEL_KEY = "spike-main-sentinel"
+			const PLACEHOLDER_REST_OFFSET = 24
+			const OVERLAY_ANCHORS = {
+				menu: (anchor) => ({ left: anchor.x + 24, top: anchor.y + 24 }),
+				popover: (anchor) => ({
+					left: anchor.x + anchor.width - 90,
+					top: anchor.y - 40,
+				}),
+				sheet: () => ({}),
+			}
+
+			const { invoke } = window.__TAURI_INTERNALS__
+
+			const randomHex = () =>
+				Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+					byte.toString(16).padStart(2, "0"),
+				).join("")
+
+			const instance = randomHex()
+			const secret = randomHex()
+			const sentinel = document.getElementById("sentinel")
+			const viewSlot = document.getElementById("view")
+			const thread = document.getElementById("thread")
+			const placeholder = document.getElementById("view-placeholder")
+
+			sentinel.textContent = secret
+			localStorage.setItem(SENTINEL_KEY, secret)
+			// biome-ignore lint/suspicious/noDocumentCookie: the cookie is one of the sentinels the view tries to alter
+			document.cookie = `spike_main_sentinel=${secret}`
+
+			const integritySnapshot = () =>
+				JSON.stringify({
+					href: location.href,
+					title: document.title,
+					sentinel: sentinel.outerHTML,
+					sentinelAttached: sentinel.isConnected,
+					storage: localStorage.getItem(SENTINEL_KEY),
+					cookie: document.cookie,
+				})
+
+			const beat = () => {
+				const payload = { instance, secret, snapshot: integritySnapshot() }
+				invoke("plugin:event|emit", { event: "spike-heartbeat", payload }).catch(
+					(cause) => {
+						document.title = `heartbeat failed: ${cause}`
+					},
+				)
+			}
+
+			const rectangleOf = (element) => {
+				const { x, y, width, height } = element.getBoundingClientRect()
+				return { x, y, width, height }
+			}
+
+			const visibleColumn = () => {
+				const box = thread.getBoundingClientRect()
+				return {
+					x: box.x + thread.clientLeft,
+					y: box.y + thread.clientTop,
+					width: thread.clientWidth,
+					height: thread.clientHeight,
+				}
+			}
+
+			let placementSequence = 0
+
+			const reportPlacement = (cause) => {
+				placementSequence += 1
+				const payload = {
+					sequence: placementSequence,
+					cause,
+					causedAtEpochMs: Date.now(),
+					viewport: { width: innerWidth, height: innerHeight },
+					placeholder: rectangleOf(placeholder),
+					column: visibleColumn(),
+					overlays: Array.from(
+						document.querySelectorAll(".overlay:not([hidden])"),
+						(overlay) => ({ kind: overlay.id, rectangle: rectangleOf(overlay) }),
+					),
+				}
+				invoke("plugin:event|emit", {
+					event: "spike-view-placement",
+					payload,
+				}).catch((failure) => {
+					document.title = `placement failed: ${failure}`
+				})
+			}
+
+			const scrollPlaceholderTo = (offset) => {
+				thread.scrollTop += rectangleOf(placeholder).y - visibleColumn().y - offset
+			}
+
+			let scrollTopBeforeEnlarging = 0
+
+			window.__spikeThread = {
+				scrollPlaceholderTo,
+				openOverlay: (kind) => {
+					const overlay = document.getElementById(kind)
+					const { left, top } = OVERLAY_ANCHORS[kind](rectangleOf(placeholder))
+					if (left !== undefined) {
+						overlay.style.left = `${left}px`
+						overlay.style.top = `${top}px`
+					}
+					overlay.hidden = false
+					reportPlacement("overlay-opened")
+				},
+				closeOverlay: (kind) => {
+					document.getElementById(kind).hidden = true
+					reportPlacement("overlay-closed")
+				},
+				enlarge: () => {
+					scrollTopBeforeEnlarging = thread.scrollTop
+					placeholder.style.height = `${thread.clientHeight}px`
+					scrollPlaceholderTo(0)
+				},
+				paintPlaceholder: (colour) => {
+					placeholder.style.background = colour
+				},
+				bringBack: () => {
+					placeholder.style.height = ""
+					thread.scrollTop = scrollTopBeforeEnlarging
+				},
+			}
+
+			window.__spikeOpenView = (url) => {
+				const frame = document.createElement("iframe")
+				frame.src = url
+				frame.width = "520"
+				frame.height = "260"
+				viewSlot.replaceChildren(frame)
+			}
+
+			window.__spikeCloseView = () => {
+				viewSlot.replaceChildren()
+			}
+
+			thread.addEventListener("scroll", () => reportPlacement("scroll"))
+			const resizes = new ResizeObserver(() => reportPlacement("resize"))
+			resizes.observe(thread)
+			resizes.observe(placeholder)
+			scrollPlaceholderTo(PLACEHOLDER_REST_OFFSET)
+
+			invoke("spike_secret").then(
+				() => {
+					window.__spikeBeat = beat
+				},
+				(cause) => {
+					document.title = `control call failed: ${cause}`
+				},
+			)
+		</script>
+	</body>
+</html>
